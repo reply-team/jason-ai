@@ -34,9 +34,10 @@ run `jason profile create <name> --host gemini_cli --program gemini`.
 
 For Antigravity CLI, install `agy` from the CLI tab of [Google's quickstart](https://antigravity.google/docs/getting-started?tab=cli),
 run `agy` once to sign in as yourself ([how Google describes signing in](https://antigravity.google/docs/install/)), and
-`jason profile create <name> --host antigravity_cli --program agy`. It reads its permission rules from your own
-`~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array, so add `command(jason)` (on Windows shells,
-`command(regex:jason .*)`) and `read_file(<harness folder>)` there; the
+`jason profile create <name> --host antigravity_cli --program agy`. Each run is given its permissions by a workspace hook the launch
+writes (built from the host's hooks page, not yet run on an account). If a role is refused on `antigravity_cli`, add two
+rules to your own `~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array: `command(jason)` (on Windows
+shells, `command(regex:jason .*)`) and `read_file(<harness folder>)`; the
 [host matrix](execution-profiles.md#12-the-hosts) has the two lines of JSON and the details.
 
 ### If an agent installs it
@@ -367,9 +368,10 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of eight names in
+One question — "can this installation start work?" — answered check by check. It is one of nine names in
 this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and
-`update` nouns, and `ui install` and `plugin install`, which change this installation's files as those two do — and it cannot be
+`update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and
+`session open`, which starts your own agent host in a terminal — and it cannot be
 otherwise: half of what it reports is not the runtime's to know.
 
 | Required — a failure exits 1 | Optional — absent never fails |
@@ -515,8 +517,9 @@ receipt, so it is removed by nobody — including this. The rest of the installa
 order: this account's logon registration first — on Windows including the task `\Jason` an earlier version
 registered for it — so a logon part-way through cannot start what is going; then the runtime, and if it will not
 stop — or is running and does not answer — nothing after that is removed; then, on Windows, the notification
-registration — the AppUserModelID key the toast was shown under, and the two entries Windows made for it at the
-first toast — after the runtime, so its next toast cannot write them back; then the recorded skills; then the
+registration — the AppUserModelID key the toast was shown under, the two entries Windows made for it at the
+first toast, and the `jason:` link where its command names this executable — after the runtime, so its next toast
+cannot write them back; then the recorded skills; then the
 PATH entry, only where the installer wrote it; then the executable, its two notice files, its install directory,
 and the native libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
 `~/.net` on macOS and Linux. On Windows what every other build of Jason unpacked beside them goes too: the versions
@@ -551,8 +554,8 @@ runtime stopped first.
 
 **Three things are this account's rather than this installation's**: the logon registration, the notification
 registration on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from
-source beside a release, a copy — takes the registrations and the harness skills the first one made as well. Look
-at the dry run first. The notifications already in the notification center stay: they are yours to dismiss.
+source beside a release, a copy — takes the registrations and the harness skills the first one made as well. The
+`jason:` link goes only where its command names this executable. Look at the dry run first. The notifications already in the notification center stay: they are yours to dismiss.
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason
 wrote and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway:

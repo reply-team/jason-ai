@@ -360,6 +360,7 @@ public class DefaultActorTests
         ["runtime autostart status"] = "reads this machine's logon registration and asks the runtime nothing",
         ["plugin install"] = "reads a release before it asks for a reload; PluginInstallCommandTests holds the reload's actor",
         ["ui install"] = "places a release's build and asks the runtime nothing",
+        ["session open"] = "asks the runtime only reads and starts a terminal; SessionOpenerTests holds what it asks",
         ["update check"] = "reads a release and asks the runtime nothing",
         ["update apply"] = "replaces the executable",
         ["update rollback"] = "replaces the executable",

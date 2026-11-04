@@ -1,0 +1,7 @@
+{
+  "key": "agent.interactive_host",
+  "version": 1,
+  "case": "the person's host is claude_code",
+  "value": { "host": "claude_code" },
+  "expect": "valid"
+}

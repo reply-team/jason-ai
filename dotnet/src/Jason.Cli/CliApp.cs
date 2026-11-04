@@ -15,7 +15,7 @@ namespace Jason.Cli;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Eight names are not one-to-one with anything, and they are named here because this is where the rule is
+/// <b>Nine names are not one-to-one with anything, and they are named here because this is where the rule is
 /// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
 /// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
 /// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
@@ -62,9 +62,18 @@ namespace Jason.Cli;
 /// starts one. <c>plugin list</c> and <c>plugin reload</c> stay operations.
 /// </para>
 /// <para>
-/// Guards hold the list to these: the verb-map tests to the four verbs, the two nouns, the <c>ui</c> group's three
-/// operations and <c>install</c>, and the <c>plugin</c> group's two operations and <c>install</c>. A ninth has to be
-/// added in the open rather than arriving as one more verb somebody thought was obviously fine.
+/// <c>session open</c> is the ninth, and the noun is the third with no operation behind it. It starts the person's own
+/// agent host — the one the named preference <c>agent.interactive_host</c> names — in a new terminal window at the
+/// campaign's folder, with the brief <c>approval get --prompt</c> or <c>decision get --prompt</c> prints as its first
+/// input. A terminal on this machine is not the runtime's to start or to know about, so the runtime is asked nothing new:
+/// only what those two renderings ask, and <c>preference.list</c>. Jason's brief asks the agent to propose only and not
+/// to approve, reject or answer; what it may run is the host's own permission settings' to decide.
+/// </para>
+/// <para>
+/// Guards hold the list to these: the verb-map tests to the four verbs, the three nouns, the <c>ui</c> group's three
+/// operations and <c>install</c>, the <c>plugin</c> group's two operations and <c>install</c>, and the <c>session</c>
+/// noun's one verb, <c>open</c>. A tenth has to be added in the open rather than arriving as one more verb somebody
+/// thought was obviously fine.
 /// </para>
 /// </remarks>
 public static class CliApp
@@ -206,6 +215,7 @@ public static class CliApp
         root.Subcommands.Add(RouteCommands.Build(env, actor));
         root.Subcommands.Add(EventsCommands.Build(env, actor));
         root.Subcommands.Add(UiCommands.Build(env, actor));
+        root.Subcommands.Add(Session.SessionCommands.Build(env, actor));
         root.Subcommands.Add(UpdateCommands.Build(env, actor));
         root.Subcommands.Add(SkillsCommands.Build(env));
         root.Subcommands.Add(StatusCommand.Build(env));

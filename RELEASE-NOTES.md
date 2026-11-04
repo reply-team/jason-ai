@@ -20,94 +20,102 @@ replaces the title and the body together.
 -->
 
 
-# Jason 0.26.0
+# Jason 0.27.0
 
-## What is new since 0.25.0
+## What is new since 0.26.0
 
-A launched role no longer has to run on Claude Code. Each host below is a program you install yourself and sign in to as
-yourself, under your own plan: Jason holds no key for any of them. `jason skills install --host <host>` deploys the
-skills into that host's folder, and Codex CLI, GitHub Copilot CLI, Cursor CLI and Gemini CLI all read `~/.agents/skills`, so
-they share one deployment; Antigravity CLI keeps its own folder, `~/.gemini/antigravity-cli/skills`. `jason status` says which hosts it found on the machine and whether every enabled profile names
-one, and the file `jason doctor` writes carries that check too, its profiles counted by host and never named. Every host added in this release is built from the host's own documentation, and from its source or installed files
-where there are any, for the version [the host matrix](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#12-the-hosts)
-names; none has yet been run on a signed-in account. The tests prove the command Jason composes and the launch around it
-against a stand-in program.
+A notification now lands on what waits, and one click each takes you from it to a brief and to your own agent. The agent
+proposes; approving, rejecting and answering stay yours.
 
-- **Codex CLI.** Install it from [its own page](https://github.com/openai/codex), sign in with `codex login`, then
-  `jason profile create local-codex --host codex --program codex`. A role is confined by a Codex sandbox rather than by a
-  list of commands: the runtime names a permissions profile of its own on the command line, and every command the role
-  runs is held by it. On Windows an administrator sets up Codex's elevated sandbox once first. [The Codex
-  section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#codex-cli) says what it reads
-  and what it cannot hold.
-- **Cursor CLI.** Install it from [Cursor's installation page](https://cursor.com/docs/cli/installation.md), sign in with
-  `agent login`, then `jason profile create local-cursor --host cursor_cli --program agent`. A role is confined by
-  permission rules Jason writes to `.cursor/cli.json` in the attempt's work directory: the one shell command Jason allows
-  is the runtime's own, the memory files are the reads, and every write is denied. On Windows, Jason starts what the
-  host's `agent.cmd` launcher would start, without a shell, and a profile names the launcher by its full path where the
-  runtime's search path does not find `agent`. [The Cursor section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#cursor-cli)
-  says what it reads and what was not measured.
-- **GitHub Copilot CLI.** Install it from [GitHub's installation page](https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli), sign in with
-  `copilot login`, then `jason profile create copilot --host copilot_cli --program copilot`. A role is confined by the
-  tool set and the allow and deny rules Jason composes on the host's command line, with no configuration written into the work
-  directory, and a profile's own arguments are limited to the few documented options a person owns, such as `--model=`.
-  [The Copilot section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#github-copilot-cli)
-  lists them.
-- **Gemini CLI.** Install it from [its own page](https://github.com/google-gemini/gemini-cli), sign in as yourself, then
-  `jason profile create <name> --host gemini_cli --program gemini`. It runs on a Code Assist Standard or Enterprise
-  sign-in; individual Google plans run Antigravity CLI. A role is confined by a policy file,
-  `.jason-policy/jason.toml` in the work directory, which the host reads above the person's own rules: everything is
-  denied first, then the reads, the runtime's own command and the tools the profile grants are allowed, and writing is
-  denied above every allow. The host reads a memory file through a `GEMINI.md` that imports `AGENTS.md`. A role's run sends no telemetry, whatever your own setting says. [The Gemini
-  section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#gemini-cli) says what was not
-  measured.
-- **Antigravity CLI.** Install it from [Google's quickstart](https://antigravity.google/docs/getting-started?tab=cli), run
-  `agy` once and sign in as yourself, then `jason profile create antigravity --host antigravity_cli --program agy`. It
-  is the host individual Google plans run. Jason cannot give a launched session its permissions run by run on this host,
-  so for a role to work you add two rules to your own `~/.gemini/antigravity-cli/settings.json`, in `permissions.allow`:
-  `command(jason)` so the role can call the runtime back (on Windows shells `command(regex:jason .*)`) and
-  `read_file(<your harness folder>)` so it can read the memory files. [The Antigravity
-  section](https://github.com/reply-team/jason-ai/blob/v0.26.0/docs/execution-profiles.md#antigravity-cli) shows both and says what was not measured.
-- **Claude Code refuses more arguments in a profile.** A host's parser reads a short flag with more letters, or with a
-  value after it, as several flags or as a flag and its value, so a reserved flag could stand inside one: `-pf` is `-p`
-  and `-f`. A short flag with more letters or a value after it, a lone dash and a double dash are now refused when a
-  profile's `args` are written, naming the host. A flag and its value as two words are still taken. A profile stored
-  before this release is not read again.
-- **`cli_command` is a bare word of letters, digits, dots, dashes and underscores,** starting with a letter or a digit.
-  That is the word a role calls the runtime back with, and it is refused when it holds anything else.
-- **A profile moved to another host must name a program that host can run.** `jason profile update` with a new `--host` and
-  no `--program` keeps the stored program only if it is that host's own command word, or its launcher where the host is
-  installed as one; otherwise it is refused, and the arguments the profile carries are held to the new host's rules too.
-- **A host that is not signed in ends the attempt as `host_not_available`,** with one sentence of Jason's own and none of
-  the host's words, on every host whose row names the signal Jason reads. Only you can sign in to it, as yourself.
-- **A harness folder holds one import file for every host that reads a file of another name:** `CLAUDE.md` for Claude Code
-  and `GEMINI.md` for Gemini CLI, each a single line importing `AGENTS.md`, and neither written over where it is there.
+- **A click on a Windows notification opens what waits.** With one approval or question waiting, a click on the banner
+  or on its entry in the notification centre opens that item in your UI; with several, it opens the list. Jason registers
+  a `jason:` link scheme under your account for this, and a link that is not one of its few forms is refused before
+  anything is asked of the runtime. Only the item's opaque id travels, never anything of what it says. A toast for one
+  item also has a **Copy prompt** button, which puts that item's brief on the clipboard. This is Windows only; on macOS
+  and Linux a notification opens nothing of Jason's, and `jason ui open` reaches the same page. [The notifications
+  page](https://github.com/reply-team/jason-ai/blob/v0.27.0/docs/notifications.md) says what a click opens on each platform.
+- **Copy prompt.** `jason approval get <id> --prompt` and `jason decision get <id> --prompt` print, in place of the JSON
+  answer, a short brief for an agent session on that one item: what waits, its campaign and the folder to work from, the
+  `approvals-and-questions` skill and the line that installs it, what to read and bring back, and that the session
+  decides nothing. The brief holds nothing of the item itself; the session reads it through the command line. It cannot be
+  combined with `--human`. The UI has the same text behind a **Copy prompt** button on an open approval or question.
+- **Open an AI session.** `jason session open --approval <id>` or `--question <id>` starts your own agent host in a new
+  terminal window at the campaign's folder (the home folder where none is recorded), with that brief as its first
+  message; `--dry-run` prints the command and starts nothing. The host is the one your named preference
+  `agent.interactive_host` says, and Claude Code when it is not set. The preference is optional, and you set it as
+  yourself, for example `jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`
+  with a file `host.json` holding `{"host":"codex"}`; `jason preference unset agent.interactive_host --actor human:<your-name>` takes it back.
+  [The preference's page](https://github.com/reply-team/jason-ai/blob/v0.27.0/docs/contracts/preferences/agent.interactive_host.md) lists the host words. The attention
+  screen of the UI shows this command beside Copy prompt, and on Windows an **Open an AI session** link that runs it.
+  [The UI page](https://github.com/reply-team/jason-ai/blob/v0.27.0/docs/ui.md#open-an-ai-session) says how each system opens the terminal.
+- **Antigravity CLI roles no longer need your two settings rules.** Each attempt's work directory now carries a workspace
+  hook, and the host asks it about the tools a role uses: the role may call `jason` back, read its memory files and write
+  its `result.json`, may not edit any other file, and gets web fetch and search only where its profile grants them. The
+  hook route is built from the host's own hooks page and has not yet been run on an account. The two rules of 0.26.0
+  stay as the fallback, and [the Antigravity
+  section](https://github.com/reply-team/jason-ai/blob/v0.27.0/docs/execution-profiles.md#antigravity-cli) says what is not measured.
 
-## Upgrading from 0.25.0
+## Fixed since 0.26.0
+
+- **An agent host installed with npm is found on Windows.** Claude Code, Codex CLI, Gemini CLI and GitHub Copilot CLI,
+  installed with `npm install -g`, were answered `host_not_available` by a role's launch and not found by
+  `jason status`. Jason now reads npm's shim of a scoped package, and the shim that starts an executable the package ships,
+  without starting either through a shell.
+- **A profile stored under an older build is checked again when work launches.** A profile revision written before an update
+  can hold a word this build's rules for its host refuse, such as a reserved argument. Work under it now ends before
+  any child starts with the code `profile_revision_refused`, naming the field and never the value; `jason profile get`
+  and `jason profile list` show it as `problems`, and `jason status` names the profile. `jason profile update` is the repair.
+- **A runtime start writes the import files a recorded folder lacks.** The `GEMINI.md` that imports `AGENTS.md` is now
+  written, at every start, into the harness root and every recorded project and campaign folder that lacks it, where 0.26.0
+  wrote it only at a create. A file that is there is never opened.
+
+## Upgrading from 0.26.0
 
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
   lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
   install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
   and `jason plugin install reply --replace` follow.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`. Three skills changed in their wording. The manager, the campaign-work skill and the troubleshooting skill say that
-  `host_not_available` can also come after a host started and said it is not signed in, which only you can repair by
-  signing in; the troubleshooting skill also says that on Antigravity CLI an `executor_exited` after the host exited 0
-  usually means your `command` rule is missing from its settings. The skills' READMEs point to the host matrix for the
-  other hosts' skill folders.
+  `brew upgrade jason`, run `jason skills update`. The approvals, installation, campaign-work, troubleshooting, in-session
+  planner skills and the nine role skills changed in their wording.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle stay
   as they were.
-- **Harness folders:** the root gains a missing import file, `GEMINI.md`, at the next project or campaign create, over no file
-  that is there. A project's or a campaign's folder made before 0.26.0 keeps its `CLAUDE.md` alone unless you add a
-  `GEMINI.md` holding `@AGENTS.md`. Jason writes no word of a memory file.
-- **`--host` on the skills verbs:** `jason skills install --host` and `jason skills update --host` take the host's own word
-  only, such as `claude_code`; `ClaudeCode` and `claudecode`, which 0.25.0 took, are refused. Without `--root`, a host that is
-  not detected on the machine is refused with exit 1.
+- **The preference `agent.interactive_host`** is new and optional; without it `jason session open` starts Claude Code.
+- **Antigravity CLI:** if you added the two rules to your own settings in 0.26.0, you may keep them; they remain the
+  fallback. The hook refuses web fetch, web search and the browser tools a profile does not grant, and a profile
+  stored under 0.26.0 grants none on this host, so an upgraded Antigravity profile loses web fetch and web search
+  until `jason profile update <name> --tool web_fetch --tool web_search`.
 - **The Reply plugin** is unchanged.
-- **From 0.24.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
+- **From 0.25.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
 
 ## Known issues
+
+The click on a notification and its Copy prompt button are Windows only. Where another program already holds `jason:` links,
+Jason leaves that registration alone and the toast shows without a click or a button.
+
+On Windows, `jason session open` starts the console host, which hands the window to Windows Terminal where that is
+your default terminal; where your default terminal is the console host itself, you get a plain console window; neither
+is yet measured on a machine.
+
+The macOS form of `jason session open`, a script opened in Terminal, has not been watched on a Mac.
+
+Antigravity CLI's hook route has not been run on an account. The host also reads your own global `AGENTS.md` and
+`GEMINI.md` under `~/.gemini` for every role.
+
+Two installations on one account, a build of a checkout and the installed one, take the `jason:` link from each other at
+each toast, since the registration rewrites a key that is Jason's and names another executable. Uninstall leaves a key
+that names another installation alone, so nothing is lost.
+
+On Linux, kitty, foot, gnome-terminal, xfce4-terminal, mate-terminal and wezterm are started in the form each takes;
+any other terminal program is given the host after `-e` as separate arguments.
+
+Under Windows PowerShell 5.1 and cmd.exe the inner quotes of `--value '{"host":"codex"}'` are lost, which is why the
+example above reads the value from a file.
+
+If Claude Code's npm postinstall never replaced its placeholder executable, `jason session open` reports that it started the host
+and the window closes at once.
 
 Codex CLI on Windows needs its elevated sandbox set up once by an administrator before a role can run a command; until
 then every command a role runs is refused, so the role cannot report, and the attempt ends as `executor_exited` and is retried against the same refusal; Jason does not check for the
@@ -137,19 +145,9 @@ reference and not from a run.
 A role on Copilot CLI runs under your own user-level hooks, and a `COPILOT_ALLOW_ALL` in your environment reaches it as the
 host's own allow-all, minus what the deny list names.
 
-A role on Antigravity CLI works only once you have added the two rules to your own settings, `command(jason)` and
-`read_file(<your harness folder>)`; per-run permissions for that host are not built in this release. Without the
-`command` rule a role is denied the call that reports, ends with the host's exit 0 and without a report, and the
-attempt is retried against the same denial. Whether the host runs an allowed command unattended, and whether the plain
-`command(jason)` covers the report on Windows, has not been seen on a signed-in run. The host also reads your own global
-`AGENTS.md` and `GEMINI.md` under `~/.gemini` for every role.
-
 A proxy flag or a proxy variable is yours to set: Jason sets none of them and reserves none of them. A flag that names a
 host's own server, its credentials or its certificate check is reserved where the host has one, as the Cursor CLI section
 says, and a host whose arguments are an allowlist takes no flag outside it.
-
-A profile is held to its host's rules when it is written, not when a run starts, so a profile stored under one release is
-not read again by a later release whose rules for its host are stricter.
 
 On a build older than 0.18.0, the update through 0.19.0 can stop at `started`, saying that a library failed to load.
 That update is still performed by the older build, and it happens when the two builds carry different .NET patches.

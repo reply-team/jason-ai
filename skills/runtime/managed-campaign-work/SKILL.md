@@ -288,7 +288,7 @@ different actor on such a call breaks the chain, so do not.
 
 **If the runtime cannot tell where your work should run, it stops rather than guessing.** An item that
 fails with `lineage_resolution_unsupported`, `profile_not_found`, `profile_disabled`,
-`host_not_available` or `role_skill_invalid` is a configuration problem, not a refusal by a model:
+`profile_revision_refused`, `host_not_available` or `role_skill_invalid` is a configuration problem, not a refusal by a model:
 nothing was started and nothing was spent. One case of `host_not_available` comes after a start: the host
 ran and answered that it is not signed in, and only the person can sign in to it on this machine. The
 message names what to change. Fix it and ask for the

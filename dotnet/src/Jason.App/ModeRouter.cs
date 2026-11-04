@@ -1,9 +1,12 @@
 using System.Runtime.CompilerServices;
 using Jason.Cli;
+using Jason.Cli.Link;
 using Jason.Contracts;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Notifications;
 using Jason.Contracts.Update;
 using Jason.PluginHost;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Notifications.Desktop;
 
@@ -15,6 +18,8 @@ public enum Mode
     RuntimeService,
     PluginHost,
     ToastHost,
+    HostHook,
+    Link,
     Cli,
 }
 
@@ -24,6 +29,9 @@ public enum Mode
 /// </summary>
 public static class ModeRouter
 {
+    /// <summary>What a link the shell hands this executable starts with: no verb does, so a click is never read as one.</summary>
+    private const string LinkPrefix = AttentionLinks.Scheme + ":";
+
     public static Mode Select(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -33,6 +41,8 @@ public static class ModeRouter
             ["runtime", "run", ..] => Mode.RuntimeService,
             ["plugin-host", ..] => Mode.PluginHost,
             ["toast-host", ..] => Mode.ToastHost,
+            ["host-hook", ..] => Mode.HostHook,
+            [var first, ..] when first.StartsWith(LinkPrefix, StringComparison.OrdinalIgnoreCase) => Mode.Link,
             _ => Mode.Cli,
         };
     }
@@ -43,6 +53,8 @@ public static class ModeRouter
         Mode.RuntimeService => RunRuntimeService(args, cancellationToken),
         Mode.PluginHost => RunPluginHost(args, cancellationToken),
         Mode.ToastHost => RunToastHost(args, cancellationToken),
+        Mode.HostHook => RunHostHook(args, cancellationToken),
+        Mode.Link => RunLink(args, cancellationToken),
         _ => RunCli(args, cancellationToken),
     };
 
@@ -133,6 +145,26 @@ public static class ModeRouter
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunToastHost(string[] args, CancellationToken cancellationToken) =>
         ToastHost.RunAsync(args[1..], Console.In, Console.Out, Console.Error, cancellationToken);
+
+    /// <summary>
+    /// The short-lived child an agent host starts to ask whether one tool call is allowed: the call on stdin, one answer
+    /// line on stdout, no runtime, no child, no environment read and no file but one look at what stands at the result
+    /// path.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Task<int> RunHostHook(string[] args, CancellationToken cancellationToken) =>
+        AntigravityHook.RunAsync(args[1..], HostHookInput(), Console.Out, Console.Error, cancellationToken);
+
+    /// <summary>Where the hook reads its call: the process's standard input as bytes, never a console reader. A test swaps it.</summary>
+    internal static Func<Stream> HostHookInput { get; set; } = Console.OpenStandardInput;
+
+    /// <summary>
+    /// A click on a <c>jason:</c> link: the shell starts this executable with the link as its one argument, and the CLI
+    /// reads it against the link table. Its own mode, so the link is never parsed as a verb.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Task<int> RunLink(string[] args, CancellationToken cancellationToken) =>
+        LinkHandler.RunAsync(args, CliEnvironment.Default(), cancellationToken);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunCli(string[] args, CancellationToken cancellationToken) =>

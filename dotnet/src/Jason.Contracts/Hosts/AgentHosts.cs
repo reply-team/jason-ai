@@ -33,6 +33,11 @@ public enum HomeMarkerKind
 /// <param name="WorkSkills">Where under a work directory the host reads skills, so a role's skill is placed there.</param>
 /// <param name="Instructions">The file the host reads instead of the memory file, or null when it reads the memory file itself.</param>
 /// <param name="MarkerKind">Whether <paramref name="HomeMarker"/> is a directory or a file: a path of the other kind detects nothing.</param>
+/// <param name="InteractivePromptFlag">
+/// The option an interactive session's first prompt follows when a person's host is started on an item
+/// (<c>jason session open</c>), or null where the host takes that prompt as its one positional word. Read from each
+/// host's own command-line reference; the table in <c>docs/execution-profiles.md</c> names the page and version.
+/// </param>
 public sealed record AgentHostFacts(
     AgentHostKind Kind,
     string CommandWord,
@@ -40,7 +45,8 @@ public sealed record AgentHostFacts(
     string HomeSkills,
     string WorkSkills,
     HostInstructionFile? Instructions,
-    HomeMarkerKind MarkerKind = HomeMarkerKind.Directory);
+    HomeMarkerKind MarkerKind = HomeMarkerKind.Directory,
+    string? InteractivePromptFlag = null);
 
 /// <summary>
 /// The one table of agent hosts: one row per <see cref="AgentHostKind"/>, held to the enum by tests and to the runtime's
@@ -59,16 +65,16 @@ public static class AgentHosts
         // Codex keeps its sign-in and settings in ~/.codex and reads skills from ~/.agents/skills and from the
         // .agents/skills folder of the directory it runs in; it reads AGENTS.md itself, so it needs no import file.
         new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null, HomeMarkerKind.Directory),
-        new(AgentHostKind.CopilotCli, "copilot", ".copilot/config.json", ".agents/skills", ".agents/skills", null, HomeMarkerKind.File),
+        new(AgentHostKind.CopilotCli, "copilot", ".copilot/config.json", ".agents/skills", ".agents/skills", null, HomeMarkerKind.File, "-i"),
         new(AgentHostKind.CursorCli, "agent", ".cursor/cli-config.json", ".agents/skills", ".agents/skills", null, HomeMarkerKind.File),
 
         // Gemini CLI, from its documentation and source at 0.66.0. The marker is the settings file the host keeps in its own
         // folder: that folder is also where Antigravity keeps files of its own, so the folder alone would detect Gemini CLI
         // on every Antigravity install, where this file is written by Gemini CLI only.
-        new(AgentHostKind.GeminiCli, "gemini", ".gemini/settings.json", ".agents/skills", ".agents/skills", new("GEMINI.md", "@" + MemoryFile), HomeMarkerKind.File),
+        new(AgentHostKind.GeminiCli, "gemini", ".gemini/settings.json", ".agents/skills", ".agents/skills", new("GEMINI.md", "@" + MemoryFile), HomeMarkerKind.File, "-i"),
 
         // Antigravity CLI keeps its sign-in and settings in its own folder under ~/.gemini and reads AGENTS.md itself.
-        new(AgentHostKind.AntigravityCli, "agy", ".gemini/antigravity-cli", ".gemini/antigravity-cli/skills", ".agents/skills", null, HomeMarkerKind.Directory),
+        new(AgentHostKind.AntigravityCli, "agy", ".gemini/antigravity-cli", ".gemini/antigravity-cli/skills", ".agents/skills", null, HomeMarkerKind.Directory, "-i"),
     ];
 
     /// <summary>The instruction files a harness folder holds beside the memory file, each name once.</summary>
@@ -108,6 +114,17 @@ public static class AgentHosts
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// What follows the host's program to start an interactive session with <paramref name="prompt"/> as its first
+    /// input: the prompt as one argument, whole, after the host's flag where it takes one. Nothing else is passed — no
+    /// permission, no model, no folder — since the session is the person's own, under their own settings.
+    /// </summary>
+    public static IReadOnlyList<string> InteractiveArguments(AgentHostKind kind, string prompt)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(prompt);
+        return Of(kind).InteractivePromptFlag is { } flag ? [flag, prompt] : [prompt];
     }
 
     /// <summary>A relative path of the table resolved under <paramref name="folder"/>, with the platform's separator.</summary>

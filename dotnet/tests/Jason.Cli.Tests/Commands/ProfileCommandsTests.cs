@@ -271,6 +271,22 @@ public class ProfileCommandsTests
         Assert.Contains("1 (in force: 3)", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>A profile this build's rules refuse says which field and why; a clean one prints no such line.</summary>
+    [Fact]
+    public async Task Human_mode_names_what_the_current_revision_is_refused_for_and_prints_nothing_for_a_clean_one()
+    {
+        var refused = Profile("local-claude", revision: 3) with { Problems = [new ProfileProblemDto("args[2]", "reserved")] };
+        using var refusedRun = new CliRun(JsonSerializer.Serialize(refused, JasonJson.Options));
+        using var cleanRun = new CliRun(JsonSerializer.Serialize(Profile("local-claude", revision: 3), JasonJson.Options));
+
+        await refusedRun.RunAsync("profile", "get", "local-claude", "--human");
+        await cleanRun.RunAsync("profile", "get", "local-claude", "--human");
+
+        Assert.Contains("Refused:", refusedRun.Text, StringComparison.Ordinal);
+        Assert.Contains("args[2] (reserved)", refusedRun.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Refused:", cleanRun.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_mode_falls_back_to_the_raw_body_when_the_shape_is_unknown()
     {
@@ -317,5 +333,6 @@ public class ProfileCommandsTests
             new ExecutionProfileRevisionDto(
                 revision, AgentHostKind.ClaudeCode, "claude", ["--model", "sonnet"], ["Write"], [AgentTool.WebSearch, AgentTool.WebFetch], "jason", "2.1.275", Moment),
             Moment,
-            Moment);
+            Moment,
+            []);
 }

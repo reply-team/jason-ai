@@ -147,6 +147,19 @@ public interface IInstallationRemover
 
     /// <summary>Removes one of those keys, and everything under it, from this account's registry.</summary>
     void RemoveNotificationKey(string key);
+
+    /// <summary>
+    /// The <c>jason:</c> link registration in this account's classes, as it stands, or null where there is no such key.
+    /// None elsewhere than Windows.
+    /// </summary>
+    LinkRegistrationRead? ReadLinkRegistration();
+
+    /// <summary>
+    /// Removes the <c>jason:</c> link registration, and everything under it, from this account's classes, the one key
+    /// this may delete there: read again first, and refused unless it still carries Jason's marker and
+    /// <paramref name="command"/> or no command at all (<see cref="LinkRegistrationPlan.Require"/>).
+    /// </summary>
+    void RemoveLinkRegistration(string? command);
 }
 
 /// <summary>What became of the executable, which is the one step that can honestly half-succeed.</summary>
@@ -520,6 +533,39 @@ public static class InstallationRemovers
             if (OperatingSystem.IsWindows())
             {
                 Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(key, throwOnMissingSubKey: false);
+            }
+        }
+
+        /// <summary>
+        /// By rule: the one class the toast host writes, under the current user, read without the merged view so a
+        /// machine-wide <c>jason</c> is never taken for this account's.
+        /// </summary>
+        public LinkRegistrationRead? ReadLinkRegistration()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return null;
+            }
+
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(Jason.Contracts.Notifications.LinkRegistration.Key, writable: false);
+            if (key is null)
+            {
+                return null;
+            }
+
+            using var command = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(Jason.Contracts.Notifications.LinkRegistration.CommandKey, writable: false);
+            return new LinkRegistrationRead(
+                key.GetValue(Jason.Contracts.Notifications.LinkRegistration.MarkerValue) as string,
+                command?.GetValue(Jason.Contracts.Notifications.LinkRegistration.DefaultValue) as string);
+        }
+
+        public void RemoveLinkRegistration(string? command)
+        {
+            LinkRegistrationPlan.Require(ReadLinkRegistration(), command);
+
+            if (OperatingSystem.IsWindows())
+            {
+                Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(Jason.Contracts.Notifications.LinkRegistration.Key, throwOnMissingSubKey: false);
             }
         }
 

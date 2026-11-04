@@ -63,8 +63,13 @@ A person may arrive because Jason told them something is waiting: a toast on the
 notification plugin on their phone. A notification says how many approvals and questions wait, and may add that
 protective actions failed in campaigns it names by id. The approvals and questions are yours here: list both —
 `jason approval list` and `jason decision list` — and present them as this skill says; a failed action is not a
-decision, and `troubleshooting-jason` is where it is read. It names no item, so do not guess which one it meant,
+decision, and `troubleshooting-jason` is where it is read. The notification itself names no item, so do not guess which one it meant,
 and the counts may already be smaller: something may have been answered since it was sent.
+
+A person may instead arrive with a prompt that names one item — an approval id or a question id — from the UI's Copy
+prompt button or from `jason approval get <approval-id> --prompt`, or the prompt may be the first message of a session
+`jason session open` or the UI's Open an AI session started for them. Read that one first, as this skill says, and
+present it with what you found; the lists still show the rest, and arriving with a prompt decides nothing either.
 
 Nothing is approved by reacting to a notification: an approval is a person's decision, recorded as theirs. Dismissing
 a toast, or reading the message, decides nothing; what decides is the person's word on that item, once they have read

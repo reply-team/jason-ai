@@ -183,6 +183,55 @@ public class ProgramResolverTests : IDisposable
     }
 
     /// <summary>
+    /// The hosts that npm installs under a scope, each as <c>cmd-shim</c> writes its shim: the package two directories
+    /// under <c>node_modules</c>, the scope and the name, and the entry script its <c>bin</c> declares for the command.
+    /// The scope, the package and the <c>bin</c> entry are each host's own, read from the npm registry at the version
+    /// the hosts table names (Codex CLI 0.166.0, Gemini CLI 0.66.0, GitHub Copilot CLI 1.0.105), where each entry
+    /// begins <c>#!/usr/bin/env node</c>, which is what makes <c>cmd-shim</c> write the interpreter form read here.
+    /// </summary>
+    [Theory]
+    [InlineData(@"@openai\codex", @"bin\codex.js", "codex")]
+    [InlineData(@"@google\gemini-cli", @"bundle\gemini.js", "gemini")]
+    [InlineData(@"@github\copilot", "npm-loader.js", "copilot")]
+    public void A_host_npm_installed_under_a_scope_resolves_to_its_interpreter_and_entry_script(string package, string bin, string command)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "npm writes a .cmd shim only on Windows.");
+        using var programs = new Plugins.TestPrograms();
+        var node = programs.AddInterpreter("node.exe");
+        var entry = programs.AddNested(Path.Combine("node_modules", package, bin), "// the host");
+        programs.AddNested(
+            Path.Combine("node_modules", package, "package.json"),
+            "{\"name\":\"" + package.Replace('\\', '/') + "\",\"bin\":{\"" + command + "\":\"" + bin.Replace('\\', '/') + "\"}}");
+        programs.Add(command + ".cmd", Plugins.TestPrograms.NpmShim(package, bin));
+
+        var launch = new ProgramResolver(Search(programs.Root)).Resolve(command);
+
+        Assert.Equal([node, entry], launch);
+    }
+
+    /// <summary>
+    /// Claude Code as npm installs it: its <c>bin</c> is <c>bin/claude.exe</c>, an executable the package ships (read
+    /// from the npm registry at 2.1.317), so cmd-shim writes the form with no interpreter, and what starts is that
+    /// executable itself — never the shim, and no node at all. The package's postinstall puts the real binary at that
+    /// path; this row is about where the shim leads, which is the same before and after.
+    /// </summary>
+    [Fact]
+    public void Claude_Code_installed_by_npm_resolves_to_the_executable_its_package_ships()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "npm writes a .cmd shim only on Windows.");
+        using var programs = new Plugins.TestPrograms();
+        var executable = programs.AddNested(@"node_modules\@anthropic-ai\claude-code\bin\claude.exe", "the binary");
+        programs.AddNested(
+            @"node_modules\@anthropic-ai\claude-code\package.json",
+            """{"name":"@anthropic-ai/claude-code","bin":{"claude":"bin/claude.exe"}}""");
+        programs.Add("claude.cmd", Plugins.TestPrograms.NpmNativeShim(@"@anthropic-ai\claude-code", @"bin\claude.exe"));
+
+        var launch = new ProgramResolver(Search(programs.Root)).Resolve("claude");
+
+        Assert.Equal([executable], launch);
+    }
+
+    /// <summary>
     /// A host installed as a launcher script that starts an interpreter, as Cursor's is on Windows: the script itself is
     /// never started, since that would hand a command line to a shell, but its host knows what the script starts, so the
     /// answer for the script is the interpreter and the entry script. A path to the script names the file the way a

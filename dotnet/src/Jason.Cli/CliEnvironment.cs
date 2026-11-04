@@ -85,6 +85,11 @@ namespace Jason.Cli;
 /// <see cref="Default()"/>, and the default for the reason <paramref name="Harnesses"/> gives: a test that walked up from
 /// its own folder would read whatever folders the person running the suite has above it.
 /// </param>
+/// <param name="Clipboard">
+/// How text reaches the person's clipboard — the sixth seam whose default is the refusal, for the reason
+/// <paramref name="Opener"/> gives: a verb that wrote the clipboard for itself would replace what whoever runs the suite
+/// had copied. Null puts nothing there and says so; <see cref="Default()"/> names Windows' own, and nothing elsewhere.
+/// </param>
 /// <param name="AccountName">
 /// The name of the account the CLI runs as, which a write that names no actor is made as — <c>human:&lt;name&gt;</c>, the
 /// name the runtime's browser door issues its tokens to, so a person carries one name whichever of the two they wrote
@@ -92,7 +97,13 @@ namespace Jason.Cli;
 /// for the reason <paramref name="Identity"/> gives: a test that read the real name would write the developer's own into
 /// the requests it checks.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null)
+/// <param name="Terminals">
+/// How a new terminal window is started — the seventh seam whose default is the refusal, for the reason
+/// <paramref name="Opener"/> gives: a verb that started a terminal for itself would open a window, and the person's own
+/// agent host in it, on whoever runs the suite. Null starts nothing and says how to do it by hand;
+/// <see cref="Default()"/> names this platform's.
+/// </param>
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null, IClipboard? Clipboard = null, Session.ITerminalStarter? Terminals = null)
 {
     public static CliEnvironment Default() => Default(Console.Out, Console.Error, Console.OutputEncoding);
 
@@ -116,7 +127,9 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             Managers: ManagerRecords.ForThisMachine(),
             Opener: new PlatformUrlOpener(),
             WorkingDirectory: WorkingDirectoryOf(() => Environment.CurrentDirectory),
-            AccountName: AccountNameOf(() => Environment.UserName));
+            AccountName: AccountNameOf(() => Environment.UserName),
+            Clipboard: OperatingSystem.IsWindows() ? new WindowsClipboard() : null,
+            Terminals: new Session.PlatformTerminalStarter());
 
     /// <summary>
     /// The folder the command was typed in, or null where the platform cannot name it — on Linux and macOS, a folder

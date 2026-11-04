@@ -1,10 +1,12 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Programs;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Harness;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Profiles;
 
 namespace Jason.Runtime.Dispatch;
 
@@ -136,6 +138,16 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
                 Chosen(launch));
         }
 
+        // The profile's own words, held to this build's rules for the host as a write would hold them: a revision stored
+        // under an older build's wider rules is refused here, before anything is resolved or started, and not rewritten.
+        if (ProfileValidation.StoredProblems(revision, host).FirstOrDefault() is { } refusedWord)
+        {
+            return new AgentLaunchDecision.Refused(
+                AttemptErrors.ProfileRevisionRefused,
+                RevisionRefused(launch, host, refusedWord),
+                Chosen(launch));
+        }
+
         // A machine fact, decided here rather than by a child that fails to start: the profile names a program,
         // and either this machine has it or the work cannot run and says which program was missing.
         // A script is the other way to have no program: a profile stored before the rule keeps its program, and the
@@ -215,6 +227,22 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             composed.Unreadable,
             projectPublicId,
             revision.Host));
+    }
+
+    /// <summary>
+    /// The first refused field and its code in Jason's own words, never the value, which is the person's. The repair is the
+    /// profile's: <c>profile get</c> lists every problem, <c>profile update</c> writes a revision without them.
+    /// </summary>
+    private static string RevisionRefused(AgentVerdict.Launch launch, IAgentHost host, ProfileProblemDto problem)
+    {
+        var what = problem.Code switch
+        {
+            "reserved" => "is a flag the runtime composes for every attempt",
+            "denied" => "is granted and denied by the profile itself",
+            _ => "is refused by the host's rules",
+        };
+        return $"The execution profile '{launch.Profile.Name}' (revision {launch.Revision.Number}) is refused by this build's rules for {AgentHosts.Word(host.Kind)}: "
+            + $"{problem.Field} ({problem.Code}) {what}. 'jason profile get {launch.Profile.Name}' lists what to change and 'jason profile update {launch.Profile.Name}' changes it.";
     }
 
     /// <summary>What a host's own code throwing ends an item with: one fixed sentence, none of the exception's words.</summary>

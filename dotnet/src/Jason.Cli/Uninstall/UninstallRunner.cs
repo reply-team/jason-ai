@@ -111,6 +111,7 @@ public static class UninstallRunner
 
             // 3. The notification registration, after the runtime that could write it back has stopped.
             StepRemoveNotificationRegistration(env, plan, done, problems);
+            StepRemoveLinkRegistration(env, done, kept, problems);
 
             // 4. Everything a receipt names, and nothing else.
             Step3RemoveByReceipt(env, plan, options, done, kept, problems);
@@ -652,6 +653,54 @@ public static class UninstallRunner
             {
                 problems.Add($@"'HKCU\{key}' could not be removed: {exception.Message} Remove it by hand; the steps after this one still ran, and each is listed.");
             }
+        }
+    }
+
+    /// <summary>
+    /// Removes the <c>jason:</c> link registration where it carries Jason's marker and this installation's command; keeps
+    /// one whose command is other than this installation's, naming it, since it may be another installation's or a
+    /// spelling of this one; and leaves another program's.
+    /// </summary>
+    /// <remarks>
+    /// In the notification step and for its reason: a runtime still running when the plan was read could show one more
+    /// toast, whose host writes the key, so it is read again here. The remover makes the same decision once more just
+    /// before the delete. A key that cannot be read is a problem, never an account without one.
+    /// </remarks>
+    private static void StepRemoveLinkRegistration(CliEnvironment env, List<string> done, List<string> kept, List<string> problems)
+    {
+        const string Key = Jason.Contracts.Notifications.LinkRegistration.Key;
+        var command = UninstallReader.LinkCommand(env);
+        LinkRegistrationPlan? link;
+        try
+        {
+            link = LinkRegistrationPlan.Of(env.Removes!.ReadLinkRegistration(), command);
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            problems.Add($@"The jason: link registration could not be read: {exception.Message} Remove HKCU\{Key} by hand where its command names this executable; the steps after this one still ran, and each is listed.");
+            return;
+        }
+
+        switch (link?.Fate)
+        {
+            case LinkRegistrationFate.Removed:
+                try
+                {
+                    env.Removes!.RemoveLinkRegistration(command);
+                    done.Add($@"Removed the jason: link registration at HKCU\{Key}.");
+                }
+                catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException or System.Security.SecurityException)
+                {
+                    problems.Add($@"'HKCU\{Key}' could not be removed: {exception.Message} Remove it by hand where its command names this executable; the steps after this one still ran, and each is listed.");
+                }
+
+                break;
+            case LinkRegistrationFate.Kept:
+                kept.Add($@"Kept the jason: link registration at HKCU\{Key}: it holds a command other than this installation's: {link.Command}");
+                break;
+            case LinkRegistrationFate.Untouched:
+                kept.Add($@"Left the jason: link registration at HKCU\{Key}: it is another program's.");
+                break;
         }
     }
 

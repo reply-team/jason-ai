@@ -293,7 +293,7 @@ public class ExecutableResolverTests
         programs.AddNested(Path.Combine("node_modules", package, entry), "// the entry point");
         programs.AddNested(
             Path.Combine("node_modules", package, "package.json"),
-            "{\"name\":\"" + package + "\",\"bin\":{\"vendor\":\"" + (declared ?? entry).Replace('\\', '/') + "\"}}");
+            "{\"name\":\"" + package.Replace('\\', '/') + "\",\"bin\":{\"vendor\":\"" + (declared ?? entry).Replace('\\', '/') + "\"}}");
         programs.Add("vendor.cmd", TestPrograms.NpmShim(package, entry));
     }
 
@@ -302,7 +302,7 @@ public class ExecutableResolverTests
     /// hold: a symbolic link needs <c>SeCreateSymbolicLink</c>, and what the test is about is the reparse point
     /// rather than which kind of one it is.
     /// </summary>
-    private static bool TryJunction(string link, string target)
+    internal static bool TryJunction(string link, string target)
     {
         try
         {
@@ -405,23 +405,413 @@ public class ExecutableResolverTests
         Assert.Contains("its package does not declare", resolved.Problem.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A scoped package is two directories under <c>node_modules</c>, the scope and the name, and its shim is read the
+    /// way an unscoped one is, through the same lookup every caller asks.
+    /// </summary>
     [Fact]
-    public void A_shim_for_a_scoped_package_is_refused_and_says_so()
+    public void A_shim_for_a_scoped_package_resolves_to_the_interpreter_and_the_entry_script_it_names()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        var node = programs.AddInterpreter("node.exe");
+        InstallVendorCli(programs, package: @"@vendor\cli");
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Problem);
+        Assert.Equal(node, resolved.Path);
+        Assert.Equal([Path.Combine(programs.Root, "node_modules", "@vendor", "cli", "dist", "index.js")], resolved.Launch);
+    }
+
+    /// <summary>
+    /// A bare <c>bin</c> string names one command, and npm names it after the package without its scope: the package
+    /// <c>@vendor/vendor</c> answers for <c>vendor</c>, and only a package whose own name is the scope and the directory
+    /// the shim names does.
+    /// </summary>
+    [Theory]
+    [InlineData("@vendor/vendor", true)]
+    [InlineData("@other/vendor", false)]
+    [InlineData("vendor", false)]
+    public void A_scoped_package_whose_bin_is_a_bare_string_answers_for_its_name_without_the_scope(string packageName, bool read)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
         using var programs = new TestPrograms();
         programs.AddInterpreter("node.exe");
-        programs.AddNested(@"node_modules\@vendor\cli\dist\index.js", "// the entry point");
-        programs.AddNested(@"node_modules\@vendor\cli\package.json", """{"name":"@vendor/cli","bin":{"vendor":"dist/index.js"}}""");
+        programs.AddNested(@"node_modules\@vendor\vendor\cli.js", "// the entry point");
+        programs.AddNested(@"node_modules\@vendor\vendor\package.json", "{\"name\":\"" + packageName + "\",\"bin\":\"cli.js\"}");
+        programs.Add("vendor.cmd", TestPrograms.NpmShim(@"@vendor\vendor", "cli.js"));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Equal(read, resolved.Problem is null);
+        if (!read)
+        {
+            Assert.Contains("its package does not declare", resolved.Problem!.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Each of a scoped install's two directories reads as a name before any path is built from it: the scope as
+    /// <c>@</c> and a package name, the package as a package name. <c>..</c> climbs, a drive letter leaves the tree, a
+    /// bare <c>@</c> is no scope, a scope inside a scope is a directory npm never writes, and a scope with nothing
+    /// under it names no package; each is refused with its rule, never by where it would have landed.
+    /// </summary>
+    [Theory]
+    [InlineData(@"@..\cli", "names a scope whose name is not one npm could have written")]
+    [InlineData(@"@C:\cli", "names a scope whose name is not one npm could have written")]
+    [InlineData(@"@\cli", "names a scope whose name is not one npm could have written")]
+    [InlineData(@"@vendor\..", "names a package whose name is not one npm could have written")]
+    [InlineData(@"@vendor\C:", "names a package whose name is not one npm could have written")]
+    [InlineData(@"@vendor\@other", "names a package whose name is not one npm could have written")]
+    [InlineData("@vendor", "names a scope and no package under it")]
+    public void A_shim_whose_scope_or_scoped_package_is_not_a_name_is_refused(string package, string rule)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        programs.AddInterpreter("node.exe");
+        programs.Add("evil.js", "// outside node_modules altogether");
+        programs.Add("package.json", """{"name":"vendor","bin":{"vendor":"evil.js"}}""");
+        Directory.CreateDirectory(Path.Combine(programs.Root, "node_modules", "@vendor"));
+        programs.Add("vendor.cmd", TestPrograms.NpmShim(package, "evil.js"));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains(rule, resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // The same shim for a target with no shebang: cmd-shim then writes no interpreter at all, and the shim starts an
+    // executable the package ships. What starts is that executable, by itself and with nothing in front of it; the
+    // shim is still only read.
+    // ---------------------------------------------------------------------------------------------------------
+
+    /// <summary>A package that ships its own executable, declared by its <c>bin</c>, and the shim npm writes for it.</summary>
+    private static string InstallNativeCli(TestPrograms programs, string target = @"bin\vendor.exe", string? shimTarget = null)
+    {
+        var file = programs.AddNested(Path.Combine("node_modules", "@vendor", "cli", target), "the binary");
+        programs.AddNested(
+            @"node_modules\@vendor\cli\package.json",
+            "{\"name\":\"@vendor/cli\",\"bin\":{\"vendor\":\"" + (shimTarget ?? target).Replace('\\', '/') + "\"}}");
+        programs.Add("vendor.cmd", TestPrograms.NpmNativeShim(@"@vendor\cli", shimTarget ?? target));
+        return file;
+    }
+
+    [Theory]
+    [InlineData(@"bin\vendor.exe")]
+    [InlineData(@"bin\vendor.COM")]
+    public void A_shim_with_no_interpreter_resolves_to_the_executable_it_names_and_nothing_in_front_of_it(string target)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        var file = InstallNativeCli(programs, target);
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Problem);
+        Assert.Equal(file, resolved.Path);
+        Assert.Empty(resolved.Launch);
+    }
+
+    /// <summary>
+    /// Only a file the search path itself would count as a program image counts here, by its name: an <c>.exe</c> or a
+    /// <c>.com</c>. A <c>.cmd</c>, a <c>.bat</c> or a <c>.ps1</c> stays a shell's, and so does anything else.
+    /// </summary>
+    [Theory]
+    [InlineData(@"bin\vendor.cmd")]
+    [InlineData(@"bin\vendor.bat")]
+    [InlineData(@"bin\vendor.ps1")]
+    [InlineData(@"bin\vendor.js")]
+    [InlineData(@"bin\vendor")]
+    [InlineData(@"bin\vendor.EXE.cmd")]
+    [InlineData(@"bin\vendor.")]
+    public void A_shim_with_no_interpreter_whose_target_is_not_a_program_image_is_refused(string target)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        InstallNativeCli(programs, target);
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("Jason starts programs, never shells", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The target is held inside the package's own tree exactly as the interpreter form's entry is: a package segment
+    /// that climbs or names a drive is no name, and an entry that climbs out of the package is outside it.
+    /// </summary>
+    [Theory]
+    [InlineData("..", "evil.exe", "names a package whose name is not one npm could have written")]
+    [InlineData("C:", "evil.exe", "names a package whose name is not one npm could have written")]
+    [InlineData(@"@..\cli", "evil.exe", "names a scope whose name is not one npm could have written")]
+    [InlineData(@"@vendor\cli", @"..\..\..\evil.exe", "outside the package")]
+    [InlineData("..", "evil.cmd", "names a package whose name is not one npm could have written")]
+    [InlineData(@"@vendor\cli", @"..\..\..\evil.cmd", "outside the package")]
+    public void A_shim_with_no_interpreter_whose_target_leaves_the_package_is_refused(string package, string target, string rule)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        programs.Add("evil.exe", "outside node_modules altogether");
+        programs.Add("package.json", """{"name":"vendor","bin":{"vendor":"evil.exe"}}""");
+        programs.AddNested(@"node_modules\@vendor\cli\package.json", """{"name":"@vendor/cli","bin":{"vendor":"../../../evil.exe"}}""");
+        programs.Add("vendor.cmd", TestPrograms.NpmNativeShim(package, target));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains(rule, resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An executable the disk does not hold is a program that is not there, the same answer a name nothing answers for
+    /// gets, rather than a shim that broke a rule.
+    /// </summary>
+    [Fact]
+    public void A_shim_with_no_interpreter_whose_executable_is_not_there_is_not_found()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        File.Delete(InstallNativeCli(programs));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableMissing, resolved.Problem!.Code);
+        // The file is named as the search path's walk spelled it, with PATHEXT's case, as every refusal here names it.
+        Assert.Equal("'vendor' resolves to 'vendor.cmd', npm's shim, whose executable is not there.", resolved.Problem.Message, ignoreCase: true);
+    }
+
+    [Fact]
+    public void A_shim_with_no_interpreter_naming_a_target_its_package_does_not_declare_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        InstallNativeCli(programs);
+        programs.AddNested(@"node_modules\@vendor\cli\package.json", """{"name":"@vendor/cli","bin":{"vendor":"bin/other.exe"}}""");
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Contains("its package does not declare", resolved.Problem!.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The form with no interpreter is read only as cmd-shim writes it, the eight lines above the call and nothing
+    /// else: a line added anywhere makes it a file this reader does not know.
+    /// </summary>
+    [Fact]
+    public void A_shim_with_no_interpreter_and_a_line_npm_never_writes_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        InstallNativeCli(programs);
+        programs.Add("vendor.cmd", TestPrograms.NpmNativeShim(@"@vendor\cli", @"bin\vendor.exe").Replace("CALL :find_dp0\r\n", "CALL :find_dp0\r\ncmd /c whatever\r\n", StringComparison.Ordinal));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Contains("is not the shim npm writes", resolved.Problem!.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The eight lines above the call are cmd-shim's own, each as it writes it: one altered is a file this reader does not know.</summary>
+    [Fact]
+    public void A_shim_with_no_interpreter_whose_head_line_npm_never_writes_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        InstallNativeCli(programs);
+        programs.Add("vendor.cmd", TestPrograms.NpmNativeShim(@"@vendor\cli", @"bin\vendor.exe").Replace("SETLOCAL\r\n", "SETLOCAL EnableDelayedExpansion\r\n", StringComparison.Ordinal));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("is not the shim npm writes", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// cmd.exe expands a <c>%NAME%</c> in the shim's call before it starts anything, so a target holding one would be a
+    /// file other than the one the line spells. npm never writes such a target, in either form, and a line holding one is
+    /// not the shim npm writes.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_shim_whose_target_holds_a_variable_cmd_would_expand_is_not_the_shim_npm_writes(bool throughNode)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        if (throughNode)
+        {
+            programs.AddInterpreter("node.exe");
+            programs.AddNested(@"node_modules\@vendor\cli\dist\%X%.js", "// the entry point");
+            programs.AddNested(@"node_modules\@vendor\cli\package.json", """{"name":"@vendor/cli","bin":{"vendor":"dist/%X%.js"}}""");
+            programs.Add("vendor.cmd", TestPrograms.NpmShim(@"@vendor\cli", @"dist\%X%.js"));
+        }
+        else
+        {
+            InstallNativeCli(programs, @"bin\%X%.exe");
+        }
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("is not the shim npm writes", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// cmd.exe also expands a <c>!NAME!</c> where delayed expansion is on, which the account's Command Processor settings
+    /// can turn on for every shim, so a target holding a <c>!</c> is held as one holding a <c>%</c> is, in either form.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_shim_whose_target_holds_a_delayed_variable_is_not_the_shim_npm_writes(bool throughNode)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        if (throughNode)
+        {
+            programs.AddInterpreter("node.exe");
+            programs.AddNested(@"node_modules\@vendor\cli\dist\!X!.js", "// the entry point");
+            programs.AddNested(@"node_modules\@vendor\cli\package.json", """{"name":"@vendor/cli","bin":{"vendor":"dist/!X!.js"}}""");
+            programs.Add("vendor.cmd", TestPrograms.NpmShim(@"@vendor\cli", @"dist\!X!.js"));
+        }
+        else
+        {
+            InstallNativeCli(programs, @"bin\!X!.exe");
+        }
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("is not the shim npm writes", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A <c>%</c> in the package or the scope segment of the form with no interpreter is a variable cmd.exe would expand
+    /// before it started anything, as it is in the entry, and no name npm could have written: the files it spells are on
+    /// disk and declared, and the shim is still refused.
+    /// </summary>
+    [Theory]
+    [InlineData("v%X%", "names a package whose name is not one npm could have written")]
+    [InlineData(@"@v%X%\cli", "names a scope whose name is not one npm could have written")]
+    public void A_shim_with_no_interpreter_whose_package_or_scope_holds_a_variable_is_refused(string package, string rule)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        programs.AddNested(Path.Combine("node_modules", package, "bin", "vendor.exe"), "the binary");
+        programs.AddNested(
+            Path.Combine("node_modules", package, "package.json"),
+            "{\"name\":\"" + package.Replace('\\', '/') + "\",\"bin\":{\"vendor\":\"bin/vendor.exe\"}}");
+        programs.Add("vendor.cmd", TestPrograms.NpmNativeShim(package, @"bin\vendor.exe"));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains(rule, resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The call of the form with no interpreter ends at <c>%*</c>: a command after it is a line npm never writes.</summary>
+    [Fact]
+    public void A_shim_with_no_interpreter_with_text_after_its_arguments_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        InstallNativeCli(programs);
+        programs.Add("vendor.cmd", TestPrograms.NpmNativeShim(@"@vendor\cli", @"bin\vendor.exe").Replace("%*\r\n", "%* & whatever\r\n", StringComparison.Ordinal));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("is not the shim npm writes", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The package's own directory a junction out of the tree, for the shim that starts an executable: the target
+    /// would read as inside <c>node_modules\@vendor\cli</c> while the executable lived anywhere.
+    /// </summary>
+    [Fact]
+    [Critical(Family.X2, "a junction cannot leave the package")]
+    public void A_package_directory_that_is_a_junction_out_of_the_tree_is_refused_for_a_shim_with_no_interpreter()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        using var elsewhere = new TestPrograms();
+        elsewhere.AddNested(@"bin\vendor.exe", "the binary, in somebody else's tree");
+        elsewhere.AddNested("package.json", """{"name":"@vendor/cli","bin":{"vendor":"bin/vendor.exe"}}""");
+        Directory.CreateDirectory(Path.Combine(programs.Root, "node_modules", "@vendor"));
+        Assert.SkipUnless(
+            TryJunction(Path.Combine(programs.Root, "node_modules", "@vendor", "cli"), elsewhere.Root),
+            "this machine would not create a directory junction.");
+        programs.Add("vendor.cmd", TestPrograms.NpmNativeShim(@"@vendor\cli", @"bin\vendor.exe"));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("outside the package", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same junction for a scoped package's shim that hands an entry script to node.</summary>
+    [Fact]
+    [Critical(Family.X2, "a junction cannot leave the package")]
+    public void A_scoped_package_directory_that_is_a_junction_out_of_the_tree_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        using var elsewhere = new TestPrograms();
+        programs.AddInterpreter("node.exe");
+        elsewhere.AddNested(@"dist\index.js", "// the entry point, in somebody else's tree");
+        elsewhere.AddNested("package.json", """{"name":"@vendor/cli","bin":{"vendor":"dist/index.js"}}""");
+        Directory.CreateDirectory(Path.Combine(programs.Root, "node_modules", "@vendor"));
+        Assert.SkipUnless(
+            TryJunction(Path.Combine(programs.Root, "node_modules", "@vendor", "cli"), elsewhere.Root),
+            "this machine would not create a directory junction.");
         programs.Add("vendor.cmd", TestPrograms.NpmShim(@"@vendor\cli", @"dist\index.js"));
 
         var resolved = Resolve(programs, "vendor");
 
-        // A scoped package is two directories under node_modules, and the reader knows one. Saying so is the
-        // difference between an author reading why and an author guessing.
         Assert.Null(resolved.Path);
         Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
-        Assert.Contains("scoped package", resolved.Problem.Message, StringComparison.Ordinal);
+        Assert.Contains("outside the package", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The scope's directory is one more place a junction could stand: the entry would still read as inside
+    /// <c>node_modules\@vendor\cli</c> while the file lived anywhere, so the package's real directory is followed
+    /// through the scope as well.
+    /// </summary>
+    [Fact]
+    [Critical(Family.X2, "a junction cannot leave the package")]
+    public void A_scope_directory_that_is_a_junction_out_of_the_tree_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        using var elsewhere = new TestPrograms();
+        programs.AddInterpreter("node.exe");
+        elsewhere.AddNested(@"cli\dist\index.js", "// the entry point, in somebody else's tree");
+        elsewhere.AddNested(@"cli\package.json", """{"name":"@vendor/cli","bin":{"vendor":"dist/index.js"}}""");
+        Directory.CreateDirectory(Path.Combine(programs.Root, "node_modules"));
+        Assert.SkipUnless(
+            TryJunction(Path.Combine(programs.Root, "node_modules", "@vendor"), elsewhere.Root),
+            "this machine would not create a directory junction.");
+        programs.Add("vendor.cmd", TestPrograms.NpmShim(@"@vendor\cli", @"dist\index.js"));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("outside the package", resolved.Problem.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

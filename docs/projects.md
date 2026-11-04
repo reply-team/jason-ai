@@ -180,10 +180,11 @@ A named preference is a structured fact about the client that a person states, w
 skill can check that it is set before it writes for a person to send and a screen can show it. The catalog is a contract
 family of its own, one document per key under `docs/contracts/preferences/`, embedded into the runtime and read by a
 catalog of its own, never the operation catalog: no work item names a key, no route carries one and no plugin is
-invoked for one ([the contracts README](contracts/README.md) describes the family). It holds two keys:
+invoked for one ([the contracts README](contracts/README.md) describes the family). It holds three keys:
 
 | Key | What it says |
 |---|---|
+| `agent.interactive_host` | The agent host `jason session open` starts for the person in a terminal of their own: one of the host words. Unset means `claude_code`. |
 | `sender.identity` | Who messages are written as: one or more senders, the first of whom writes whenever a campaign names no other — each with the name they sign with, the forms a message uses for them in a language that marks them, and what else a writer needs. |
 | `tone_of_voice` | How the company sounds: the tone in words, how formal it is, how a first message opens and closes, and up to three messages the person likes. |
 
@@ -202,7 +203,9 @@ schema.
   outside ASCII takes six bytes and one outside the Basic Multilingual Plane twelve; a chronicle line written now can so
   carry an `old` size in that measure beside a `new` one in UTF-8. A key's schema changes only by
   gaining an optional field, which raises the document's version, so a skill reading the document knows which fields
-  may be present; anything else is a new key.
+  may be present; anything else is a new key. The one other change is a list of host words, as
+  `agent.interactive_host` holds: it may gain a word, raising the key's version, since a wider list never makes a
+  stored value invalid; a test holds that list equal to the hosts Jason knows.
 - **A person's word.** Only a person sets or unsets a preference, and the request names them, as a decision on an
   approval does: an actor that is not a person is refused as `preference_not_human`, and one that names nobody as
   `actor_required`. In the planner's session, on the person's answer, the session skill runs
@@ -251,7 +254,7 @@ What a person tells Jason about their business in their own words is kept in pla
 memory file, `AGENTS.md`, for the client, for each project and for each campaign, each in a folder of its own, nested in
 that order under the harness root. Each level carries, beside its `AGENTS.md`, a one-line import file for every host
 that reads a file of another name — `CLAUDE.md` for Claude Code and `GEMINI.md` for Gemini CLI (the [host matrix](execution-profiles.md#12-the-hosts)
-lists them). A folder made before a host's import file existed has the files it had: the root gains a missing import file at the next project or campaign create, and a project's or a campaign's folder keeps what it has until the person adds the file. Claude Code loads the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in
+lists them). A folder made before a host's import file existed has the files it had until the runtime next starts: at every start it writes each missing import file into the root and into every folder recorded for a project or a campaign, over nothing, and skips (saying only the level and the identifier in its log) a folder that is not there or no longer carries its marker; the root also gains a missing import file at the next project or campaign create. Claude Code loads the `CLAUDE.md` of the folder a session starts in and of every folder above it; but in
 print mode it drops, without asking, an import of a file outside the folder it started in, so a session started in a
 campaign's folder is given the
 campaign's file and neither the project's nor the client's (measured with Claude Code 2.1.309; its documentation says
@@ -379,7 +382,7 @@ It writes structure only: a directory, its marker, and, where none is there, an 
 and an empty `AGENTS.md`. Then it leaves them to the person. The import files are `CLAUDE.md` for Claude Code and `GEMINI.md` for Gemini CLI.
 
 - It never reads, writes or deletes a word of any `AGENTS.md`, and never writes over an import file that is there, the
-  person's own included: whether one is there is asked of its name, and it is never opened.
+  person's own included: whether one is there is asked of its name, and it is never opened. The same holds for the sweep at start.
 - It never deletes a folder or a file. Archiving a campaign leaves its folder where it is.
 - It never runs `git` and never writes a `.gitignore`: the root is a repository only if the person makes it one.
 - A rename changes the name and nothing else; the folder keeps its name, since a session may have it open and a person's

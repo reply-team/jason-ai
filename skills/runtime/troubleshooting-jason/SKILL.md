@@ -121,7 +121,7 @@ moves when a person decides, and a session must not decide for them. Presenting 
 ### 4. Missing configuration
 
 **How you recognise it.** The error code is one of `no_route`, `profile_not_found`, `profile_disabled`,
-`host_not_available` or `role_skill_invalid`. To see where one operation would go for one campaign, and why
+`profile_revision_refused`, `host_not_available` or `role_skill_invalid`. To see where one operation would go for one campaign, and why
 it goes nowhere:
 
 ```
@@ -133,13 +133,16 @@ write a route, enable a profile, make an agent host available, correct a role's 
 operator's deliberate act. Nothing was started and nothing was spent — except where `host_not_available`
 says the host ran and answered that it is not signed in: the child started and stopped there, and the repair
 is the person's own, signing in to that host on this machine under their own plan. Name what is missing and
-hand it over; setting it up is `operating-the-installation`.
+hand it over; setting it up is `operating-the-installation`. For `profile_revision_refused` the profile exists but its
+current revision holds a word this build refuses: read the profile's `problems` with `jason profile get <name>`, then
+change it with `jason profile update`.
 
 Not this state, but a repair of the same kind, the person's own: on `antigravity_cli`, `executor_exited` after the host exited 0
-usually means the person's own `command(<cli word>)` permission rule is missing from `~/.gemini/antigravity-cli/settings.json`
-(on Windows shells the rule is `command(regex:<cli word> .*)`), so the role was denied the call that reports. The attempt
-is retried, and each retry meets the same denial. Jason cannot write that rule; the person adds it, with
-`read_file(<harness folder>)` beside it for the memory files.
+means the role was denied the call that reports. Each run carries a workspace hook that approves it (the first route, built
+from the host's pages and not yet run on an account); if the role is refused anyway, the fallback is the person's own
+`command(<cli word>)` permission rule in `~/.gemini/antigravity-cli/settings.json` (on Windows shells the rule is
+`command(regex:<cli word> .*)`). The attempt is retried, and each retry meets the same denial. Jason cannot write that rule;
+the person adds it, with `read_file(<harness folder>)` beside it for the memory files.
 
 ### 5. The person is on the do-not-contact register
 

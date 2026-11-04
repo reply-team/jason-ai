@@ -96,7 +96,10 @@ public partial class ShippedRoleSkillTests
         Assert.Contains("no file-writing tool", skill, StringComparison.Ordinal);
         Assert.Contains("--note '", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("--note-file", skill, StringComparison.Ordinal);
-        Assert.DoesNotContain("--result-file", skill, StringComparison.Ordinal);
+        // The one place the result file is named is the sentence for a host that cannot pass the JSON on a command line,
+        // which says where the file is written; the inline form above stays the one every other host is taught.
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Count(skill, "--result-file", System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.Contains("Where your host cannot pass the JSON on a command line, write it to `result.json` in the work directory and pass `--result-file result.json` instead.", skill, StringComparison.Ordinal);
 
         // INV-MEM-001, in the skill the role actually reads rather than only in a document nobody hands it.
         Assert.Contains("not authoritative", skill, StringComparison.OrdinalIgnoreCase);
@@ -211,7 +214,10 @@ public partial class ShippedRoleSkillTests
         Assert.Contains("--note '", skill, StringComparison.Ordinal);
         Assert.Contains("--result '", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("--note-file", skill, StringComparison.Ordinal);
-        Assert.DoesNotContain("--result-file", skill, StringComparison.Ordinal);
+        // The one place the result file is named is the sentence for a host that cannot pass the JSON on a command line,
+        // which says where the file is written; the inline form above stays the one every other host is taught.
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Count(skill, "--result-file", System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.Contains("Where your host cannot pass the JSON on a command line, write it to `result.json` in the work directory and pass `--result-file result.json` instead.", skill, StringComparison.Ordinal);
 
         // 10. The outcome a review is allowed to have. A manager that believes it must act to have reviewed
         // will act, and the campaign will be managed by a role looking for something to report.
@@ -233,6 +239,28 @@ public partial class ShippedRoleSkillTests
         // And no actor on any of it: the environment attributes a launched role's calls to its attempt, and a
         // manager that typed one would break the chain the work it creates inherits.
         Assert.DoesNotContain("--actor", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every role is taught the same two sentences about the result file: that it has no file-writing tool in this
+    /// version, except the one result file on a host whose callback is a file, and, once, where a host that cannot pass
+    /// the JSON on a command line has it written.
+    /// </summary>
+    [Fact]
+    public async Task Every_role_skill_carries_the_one_result_file_sentence_and_the_qualified_no_file_sentence()
+    {
+        var roles = Directory.GetDirectories(RoleSkillsPack());
+        Assert.Equal(9, roles.Length);
+
+        foreach (var pack in roles)
+        {
+            var skill = Whitespace().Replace(await File.ReadAllTextAsync(Path.Combine(pack, WorkDirectory.SkillFile), Ct), " ");
+            var role = Path.GetFileName(pack);
+
+            Assert.True(skill.Contains("you have **no file-writing tool** in this version; on a host whose callback is a file, the one result file it names. On any other host there is no file to write first", StringComparison.Ordinal), role);
+            Assert.True(Regex.Count(skill, "--result-file") == 1, role);
+            Assert.True(skill.Contains("Where your host cannot pass the JSON on a command line, write it to `result.json` in the work directory and pass `--result-file result.json` instead.", StringComparison.Ordinal), role);
+        }
     }
 
     /// <summary>

@@ -15,6 +15,15 @@ instead, for an agent to hand to you). The link carries a ticket that pairs one 
 after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts.
 `jason ui open --approval <id>` and `--question <id>` open on one item.
 
+On Windows a toast opens the same page when clicked, through a `jason:` link: `jason://attention` for the list of what
+waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item. Each pairs as
+`jason ui open` does, and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7).
+`jason://attention/approvals/<id>/prompt` and `jason://attention/questions/<id>/prompt`, the toast's Copy prompt button,
+put that item's prompt on the clipboard and open nothing: the text of [Copy prompt](#copy-prompt) below.
+`jason://attention/approvals/<id>/session` and `jason://attention/questions/<id>/session` start an agent session on
+that item, as `jason session open` does ([Open an AI session](#open-an-ai-session) below). Windows learns these links when
+the first toast is shown; before that a browser has no program for them.
+
 If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 
 ## Where the page comes from
@@ -113,6 +122,53 @@ operation, and the route's binding passes its checks, and skips the rest of it, 
 journal, pins, approval and retry; it has no bound of its own, running outside the handler pool `Dispatcher:MaxParallel`
 sizes, one child each. The runtime passes a message's body through as the provider holds it; the page parses it where
 nothing can run or load, and shows only its structure, emphasis and web or mail links.
+
+## Copy prompt
+
+The panel of an open approval or question on Attention has a **Copy prompt** button. It puts on the clipboard the text
+that briefs an agent session on that one item, so a person can paste it into whichever agent host they use: what waits
+and its id, the campaign's id and the folder recorded for it (the project's folder when the campaign has none, the
+harness root when neither does), the skill `approvals-and-questions` and the line that installs it for the host, what to
+read through the command line and what to bring back, and that the session decides nothing — approving, rejecting and
+answering stay with the person, and so does a standing approval. The text holds nothing of the item itself, not what it
+is about, a preview, the question's words or its options: the session reads the item live. The command line prints the
+same words with `jason approval get <approval-id> --prompt` and `jason decision get <decision-id> --prompt`. The text
+for an approval is [prompts/approval.txt](prompts/approval.txt) and for a question [prompts/question.txt](prompts/question.txt),
+as the command line prints them for the recorded exchanges under `docs/api/fixtures/`; the page's test holds the button to
+those two files, and the command line's test holds them to the command line.
+
+## Open an AI session
+
+Beside Copy prompt, the panel shows the command that starts your own agent host on that one item —
+`jason session open --approval <approval-id>` or `jason session open --question <decision-id>` — to run in a terminal,
+and on Windows an **Open an AI session** link that does the same when clicked. Either opens a new terminal window at the
+folder Copy prompt names (your home folder when none is recorded), running the host the named preference
+`agent.interactive_host` names (`claude_code` when it is unset), with the Copy prompt text as its first message.
+Opening it decides nothing. Jason's brief asks the agent to propose only and not to approve, reject or answer; what it
+may run is your host's own permission settings' to decide. An item that no longer waits starts nothing, and a host that
+is not on the search path is named, never replaced by another. When a click opens nothing, the command beside it says
+why: run it in a terminal and it prints the refusal and how to do the same by hand.
+
+- **Windows** starts the console host, `conhost.exe` from the system folder, which hands the window to Windows Terminal
+  where that is your default terminal; where your default terminal is the console host itself, you get a plain console
+  window. The console host's window and its hand-off to Windows Terminal are not yet measured on a machine.
+  The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
+  ([notifications.md](notifications.md), §7); until then the command beside it is the way.
+- **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
+  folder, readable by your account alone, which removes itself and its folder when it runs. This is composed and checked
+  by tests here; it has not been watched on a Mac.
+- **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, and gives it the host in the
+  form that program documents, decided by its file name: `kitty` and `foot` take the host's words after the program,
+  `gnome-terminal` after `--`, `xfce4-terminal` and `mate-terminal` after `-x`, `wezterm` after
+  `start --cwd <folder> --`. A name outside that table is given the host after `-e` as separate arguments, the form
+  Debian Policy 11.8.3 requires of `x-terminal-emulator`. An emulator whose `-e` takes the command as one string and
+  that offers no other form, `tilix` among them, cannot take the host that way: leave `TERMINAL` unset so
+  `x-terminal-emulator` is used. A `TERMINAL` that holds whitespace, is a relative path, or names a program that is not
+  found falls back to `x-terminal-emulator`, and the answer names the terminal that was used.
+
+The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
+and prints the whole command, the brief included, and on macOS the script. Each host's own form for a first message is in
+[execution-profiles.md](execution-profiles.md), §12.
 
 ## What the page may do
 

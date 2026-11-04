@@ -20,9 +20,17 @@ public sealed record ExecutionProfileRevisionDto(
     DateTimeOffset CreatedAt);
 
 /// <summary>
+/// One thing this build's rules for a profile's host refuse in the revision an answer carries: the field, as a
+/// request would name it (<c>args[0]</c>, <c>deny[1]</c>, <c>tools[0]</c>), and the code a request naming it would be
+/// refused with (<c>reserved</c>, <c>invalid</c>). Never the value, which is the person's.
+/// </summary>
+public sealed record ProfileProblemDto(string Field, string Code);
+
+/// <summary>
 /// A named, non-secret description of a launchable agent host. <c>revision</c> is the one in force; an earlier
 /// one is fetched by asking for it. There is no field for a credential: the host is already authenticated by
-/// whoever installed it.
+/// whoever installed it. <c>problems</c> is what this build's rules for the host refuse in the revision answered,
+/// worked out on every read and stored nowhere; empty when the revision is clean.
 /// </summary>
 public sealed record ExecutionProfileDto(
     string Id,
@@ -32,7 +40,8 @@ public sealed record ExecutionProfileDto(
     int CurrentRevision,
     ExecutionProfileRevisionDto Revision,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<ProfileProblemDto> Problems);
 
 /// <summary>
 /// A new profile and its first revision, written together.

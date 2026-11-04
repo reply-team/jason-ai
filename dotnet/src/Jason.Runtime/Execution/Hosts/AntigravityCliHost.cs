@@ -1,4 +1,7 @@
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Runtime.Persistence;
@@ -20,16 +23,19 @@ namespace Jason.Runtime.Execution.Hosts;
 /// </para>
 /// <para>
 /// What the host may do is decided by permission rules, and the host reads those from the person's own files under their
-/// home folder and from nowhere a run could carry: no flag, no file of a work directory. The runtime never writes that
-/// folder. So this host composes no allow and no deny, refuses every grant and every deny where a profile is written, and
-/// says every memory file outside the work directory unreadable. The person states two rules of their own, for the command
-/// word that calls the runtime back and for the harness folder, and the documentation of this host says how. A headless run
-/// the person's rules do not allow is denied without stopping, and ends without reporting.
+/// home folder and from nowhere a run could carry them: no flag, no file of a work directory. The runtime never writes that
+/// folder. What a work directory can carry is a workspace hook, <c>.agents/hooks.json</c>, whose pre-tool-use handler is
+/// asked about each tool call and may answer that the call is approved, refused, or left to the person's own rules. So
+/// this host writes one such hook, whose command is this executable's own <c>host-hook</c> mode with the rules of the
+/// attempt in base64url (<see cref="AntigravityHook"/>): the role may call the runtime back, view the memory files the
+/// launch names, and write its result file, and a tool of the profile that is not granted is refused. The person's own
+/// deny and ask rules still win over an approval, and their allow rules still add.
 /// </para>
 /// <para>
-/// Not measured, because the host's pages do not say: whether a run in a folder the host does not know stops to ask,
-/// whether an allowed command runs unattended, whether the work directory's skills load there, and the exit code and text
-/// of a run that is not signed in beyond the two phrases read below.
+/// Not measured, because the host's pages do not say and no run on an account has been made: whether the hook is honoured
+/// in a headless run in a folder the host has not been told to trust, whether an approval lifts the headless refusal of a
+/// call, whether the person's own deny still wins, whether a written file is seen by the hook, which shell runs the hook's
+/// command, and an end to end run of a role on each operating system.
 /// </para>
 /// </summary>
 public sealed class AntigravityCliHost : IAgentHost
@@ -46,8 +52,6 @@ public sealed class AntigravityCliHost : IAgentHost
     /// Only these are looked for; an exit the pages give another meaning, a failure of the model service say, is not one.
     /// </summary>
     private static readonly string[] SignInWords = ["authentication required", "authentication expired"];
-
-    private static readonly string[] Levels = ["client", "project", "campaign"];
 
     /// <summary>
     /// Everything this host reads that would change the shape composed below, plus everything that would undo it. A profile
@@ -89,9 +93,13 @@ public sealed class AntigravityCliHost : IAgentHost
             throw new ArgumentException("A launch names at least the program to start.", nameof(launch));
         }
 
-        // A file outside the work directory is read only where the person's own rule allows it, which this cannot write.
-        string[] unreadable =
-            [.. Levels.Zip([memoryFiles.Client, memoryFiles.Project, memoryFiles.Campaign]).Where(level => level.Second is not null).Select(level => level.First)];
+        // What the role may do goes through the work directory's hook: the command that calls this runtime back, each named
+        // memory file as a file, and a tool the person granted. What it may not: a tool the profile does not grant. The
+        // capability token and the envelope are in none of it.
+        var allow = new List<string> { $"command({ProgramResolver.CliCommandFor(revision.CliCommand)})" };
+        allow.AddRange(memoryFiles.NamedLevels().Select(level => $"{ReadPrefix}{level.Path})"));
+        allow.AddRange(revision.Tools.Select(ToolRule).OfType<string>());
+        string[] deny = [.. Enum.GetValues<AgentTool>().Except(revision.Tools).Select(ToolRule).OfType<string>()];
 
         return new HostLaunch(
             [
@@ -109,20 +117,76 @@ public sealed class AntigravityCliHost : IAgentHost
                 .. revision.Args,
             ],
             null,
-            unreadable,
             [],
-            []);
+            deny,
+            allow);
     }
 
+    private const string ReadPrefix = "view_file(";
+
+    private const string CommandPrefix = "command(";
+
+    /// <summary>The tools whose call the hook always decides about, whether or not a profile names them.</summary>
+    private static readonly string[] HookedTools = ["run_command", "view_file", "write_to_file", "read_url_content", "search_web", .. AntigravityHook.FloorTools];
+
     /// <summary>
-    /// Nothing: the host takes its permission rules from the person's own files and none from a work directory, and the
-    /// role's skill is placed by the work directory where the host reads skills.
+    /// Every tool the host's hooks page lists, which is the whole vocabulary a profile's deny may use here. The two a role
+    /// cannot work without, the one it calls back with and the one it reads its memory files with, are in
+    /// <see cref="Essential"/> and cannot be denied.
+    /// </summary>
+    private static readonly string[] HostTools =
+    [
+        "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content", "list_dir", "find_by_name",
+        "grep_search", "search_web", "read_url_content", "run_command", "manage_task", "schedule", "list_permissions",
+        "ask_permission", "invoke_subagent", "define_subagent", "send_message", "manage_subagents", "ask_question", "generate_image",
+    ];
+
+    private static readonly string[] Essential = ["run_command", "view_file", "write_to_file"];
+
+    /// <summary>
+    /// The workspace hook: <c>.agents/hooks.json</c> in the directory the host works in, one pre-tool-use handler whose
+    /// matcher is the hooked tools and the ones the profile denies, and whose command is this executable's hook mode with the
+    /// attempt's rules as one base64url word. Nothing else is written, and nothing under the person's home. The command
+    /// word and the rules are bare words in every shell, so no path or quote of a person's reaches one.
     /// </summary>
     public void WriteWorkDirectory(string workDir, IReadOnlyList<string> allow, IReadOnlyList<string> deny)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workDir);
         ArgumentNullException.ThrowIfNull(allow);
         ArgumentNullException.ThrowIfNull(deny);
+
+        var cli = allow.Where(rule => rule.StartsWith(CommandPrefix, StringComparison.Ordinal) && rule.EndsWith(')')).Select(rule => rule[CommandPrefix.Length..^1]).FirstOrDefault()
+            ?? ProgramResolver.DefaultCliCommand;
+        var rules = new AntigravityHookRules(
+            cli,
+            [.. allow.Where(rule => rule.StartsWith(ReadPrefix, StringComparison.Ordinal) && rule.EndsWith(')')).Select(rule => rule[ReadPrefix.Length..^1])],
+            [.. allow.Where(rule => HostTools.Contains(rule, StringComparer.Ordinal)).Distinct(StringComparer.Ordinal)],
+            [.. deny.Where(rule => HostTools.Contains(rule, StringComparer.Ordinal)).Distinct(StringComparer.Ordinal)],
+            Path.Combine(Path.GetFullPath(workDir), "result.json"));
+
+        var names = HookedTools.Concat(rules.Deny).Distinct(StringComparer.Ordinal).Select(Regex.Escape).Append("browser_.*");
+        var document = new JsonObject
+        {
+            ["jason-attempt"] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray(
+                    new JsonObject
+                    {
+                        ["matcher"] = $"^({string.Join('|', names)})$",
+                        ["hooks"] = new JsonArray(
+                            new JsonObject
+                            {
+                                ["type"] = "command",
+                                ["command"] = $"{cli} host-hook antigravity-cli {AntigravityHookRules.Encode(rules)}",
+                                ["timeout"] = 10,
+                            }),
+                    }),
+            },
+        };
+
+        var directory = Path.Combine(workDir, ".agents");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "hooks.json"), document.ToJsonString(), new UTF8Encoding(false));
     }
 
     /// <summary>
@@ -135,21 +199,38 @@ public sealed class AntigravityCliHost : IAgentHost
             : null;
 
     /// <summary>
-    /// The host's rule word for a fetch of a page, <c>read_url(*)</c>, which Jason can neither grant nor deny; a search has
-    /// no rule in the host's table at all.
+    /// The host's own name of the tool, which the hook is told to approve where the profile grants it and to refuse where it
+    /// does not: a fetch of a page is <c>read_url_content</c> and a search is <c>search_web</c>.
     /// </summary>
     public string? ToolRule(AgentTool tool) => tool switch
     {
-        AgentTool.WebSearch => null,
-        AgentTool.WebFetch => "read_url(*)",
+        AgentTool.WebSearch => "search_web",
+        AgentTool.WebFetch => "read_url_content",
         _ => throw new ArgumentOutOfRangeException(nameof(tool), tool, "A tool outside the vocabulary has no rule."),
     };
 
-    public string? GrantProblem(AgentTool tool) =>
-        "the host reads its permission rules from the person's own settings files and from nowhere a run can carry them, so a grant of a tool is a rule the person adds there; see the host's section of the execution-profiles document.";
+    /// <summary>A grant is a tool the hook approves, so there is nothing a grant cannot make true here.</summary>
+    public string? GrantProblem(AgentTool tool) => null;
 
-    public string? DenyProblem(string word) =>
-        "the host reads its permission rules from the person's own settings files and from nowhere a run can carry them, so a deny is a rule the person adds there; see the host's section of the execution-profiles document.";
+    /// <summary>
+    /// A deny is the host's name of a tool, as its hooks page lists them, and the hook refuses a call of it. A rule of the host's
+    /// own form, <c>action(target)</c>, is not read, since matching its target would be a second copy of the host's own
+    /// matcher; and the tool the role calls back with and the one it reads its memory files with cannot be denied, since
+    /// neither can work without them.
+    /// </summary>
+    public string? DenyProblem(string word)
+    {
+        ArgumentNullException.ThrowIfNull(word);
+
+        if (Essential.Contains(word, StringComparer.Ordinal))
+        {
+            return $"'{word}' is one of the tools a role needs for its callback, which runs the CLI and writes its result file, and for its memory files, so it cannot be denied.";
+        }
+
+        return HostTools.Contains(word, StringComparer.Ordinal)
+            ? null
+            : "only the host's own tool name is read, as its hooks page lists them (list_dir, grep_search, search_web, read_url_content and the rest), never a rule of the form action(target); a tool name is written exactly, in lower case.";
+    }
 
     /// <summary>
     /// The options of the host's documentation that a person owns, each in long form with its value joined by an equals

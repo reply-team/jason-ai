@@ -2,6 +2,8 @@ import { useState } from 'preact/hooks';
 import type { Decision } from '../../api/types';
 import { relative } from '../../time/format';
 import { ActionsRow } from '../../layout/actions-row';
+import { CopyPromptButton } from './copy-prompt-button';
+import { SessionLink } from './session-link';
 import { PanelHeader } from '../../layout/panel-header';
 
 type Props = {
@@ -112,16 +114,25 @@ export function QuestionPanel({
                 )}
                 <ActionsRow>
                     {pending && (
-                        <button
-                            class="btn primary"
-                            type="button"
-                            disabled={!canAnswer}
-                            onClick={() =>
-                                onAnswer(option ? { option } : { text: text.trim() }, reason.trim() || undefined)
-                            }
-                        >
-                            Answer
-                        </button>
+                        <>
+                            <button
+                                class="btn primary"
+                                type="button"
+                                disabled={!canAnswer}
+                                onClick={() =>
+                                    onAnswer(option ? { option } : { text: text.trim() }, reason.trim() || undefined)
+                                }
+                            >
+                                Answer
+                            </button>
+                            <CopyPromptButton
+                                kind="question"
+                                itemId={decision.id}
+                                campaignId={decision.campaign_id}
+                                workItemId={decision.work_item_id}
+                            />
+                            <SessionLink kind="question" itemId={decision.id} />
+                        </>
                     )}
                 </ActionsRow>
                 {decision.references && decision.references.length > 0 && (

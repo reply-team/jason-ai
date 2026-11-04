@@ -41,14 +41,14 @@ internal static partial class CriticalTier
         [Family.B6] =  [  0,   1,   2,   0,   3],
         [Family.B7] =  [  3,   3,   3,   3,  13],
         [Family.B8] =  [  0,   0,   0,   0,   1],
-        [Family.B9] =  [  2,   0,   0,   0,   5],
+        [Family.B9] =  [  3,   0,   0,   0,   5],
         [Family.W1] =  [  0,   0,   0,   0,   7],
         [Family.W2] =  [  0,   2,   0,   0,  19],
         [Family.W3] =  [  0,   0,   0,   0,  15],
         [Family.W4] =  [  0,   0,   0,   0,  17],
         [Family.W5] =  [  0,   0,   6,   2,  22],
         [Family.W6] =  [  0,   0,   0,   0,  10],
-        [Family.W7] =  [  0,   0,   2,   0,  21],
+        [Family.W7] =  [  0,   0,   2,   0,  22],
         [Family.W8] =  [  0,   1,   1,   0,  12],
         [Family.W9] =  [  0,   0,   0,   0,   7],
         [Family.W10] = [  0,   0,   0,   0,  15],
@@ -58,10 +58,10 @@ internal static partial class CriticalTier
         [Family.P3] =  [  0,   0,   0,   0,   3],
         [Family.S1] =  [  0,   1,   9,   0,  23],
         [Family.S2] =  [  2,   1,  10,   0,  39],
-        [Family.S3] =  [  0,   3,   3,   3,  22],
+        [Family.S3] =  [  0,   3,   3,   3,  23],
         [Family.S4] =  [  0,  29,   0,   0,   3],
         [Family.S5] =  [  0,   0,   0,   0,  17],
-        [Family.S6] =  [  0,   0,   0,   0,  39],
+        [Family.S6] =  [  0,   0,   0,   0, 133],
         [Family.R1] =  [  0,   0,  12,   9,  21],
         [Family.R2] =  [  0,  25,   8,   0,  14],
         [Family.R3] =  [  0,   1,  30,   0,  14],
@@ -87,7 +87,7 @@ internal static partial class CriticalTier
         [Family.D1] =  [  1,   4,   0,   0,   1],
         [Family.D2] =  [  4,   0,   0,   0,   0],
         [Family.X1] =  [  0,  10,   3,   1,  14],
-        [Family.X2] =  [  0,  20,   4,   1,  21],
+        [Family.X2] =  [  0,  20,   4,   1,  24],
         [Family.X3] =  [  0,   1,   0,   0,   6],
     };
 
@@ -100,11 +100,11 @@ internal static partial class CriticalTier
     /// </summary>
     public static readonly (int TierMethods, int Methods, int Cases)[] Sizes =
     [
-        (23, 203, 298),       // Jason.App.Tests
-        (148, 1688, 2790),    // Jason.Cli.Tests
-        (102, 513, 2069),     // Jason.Contracts.Tests
-        (41, 185, 277),       // Jason.PluginHost.Tests
-        (559, 4725, 9214),    // Jason.Runtime.Tests
+        (24, 360, 516),       // Jason.App.Tests
+        (148, 2186, 3750),    // Jason.Cli.Tests
+        (102, 737, 3372),     // Jason.Contracts.Tests
+        (41, 199, 302),       // Jason.PluginHost.Tests
+        (583, 4841, 9487),    // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>

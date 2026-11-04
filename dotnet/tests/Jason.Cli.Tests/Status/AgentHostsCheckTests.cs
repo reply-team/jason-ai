@@ -293,6 +293,43 @@ public sealed class AgentHostsCheckTests
         Assert.DoesNotContain($"Nothing is deployed into {deployed}", check.Fact, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A profile whose current revision this build's rules for its host refuse fails the check beside a host that is here:
+    /// it is named (or counted, where a bundle names none), and the repair reads what is refused; the act is the update.
+    /// </summary>
+    [Fact]
+    public void A_profile_whose_current_revision_is_refused_fails_the_check_and_says_to_read_it()
+    {
+        var named = StatusChecks.AgentHostsCheck(Detected, [new("local-claude", Claude), new("older", Claude, Refused: true)], names: true);
+        var counted = StatusChecks.AgentHostsCheck(Detected, [new("local-claude", Claude), new("older", Claude, Refused: true)], names: false);
+
+        Assert.Equal(CheckState.Failed, named.State);
+        Assert.Contains("The current revision of older is refused by this build's rules for its host; 'jason profile update' changes it.", named.Fact, StringComparison.Ordinal);
+        Assert.Equal("jason profile get older", named.Fix);
+        Assert.Equal(CheckState.Failed, counted.State);
+        Assert.Contains("1 of them have a current revision", counted.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("older", counted.Fact, StringComparison.Ordinal);
+        Assert.Equal("jason profile get <name>", counted.Fix);
+    }
+
+    [Fact]
+    public async Task Status_reads_the_problems_a_profile_carries_and_a_runtime_that_sends_none_means_none()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        StatusCommandTests.Running(dir);
+        StatusCommandTests.Profiles(dir, ("local-claude", Claude), ("older", Claude));
+        StatusCommandTests.RefusedProfiles(dir, "older");
+        var locator = new Roots(Detected);
+
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, harnesses: locator), Ct);
+
+        var check = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "agent_hosts");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal("jason profile get older", check.Fix);
+        Assert.DoesNotContain("local-claude is refused", check.Fact, StringComparison.Ordinal);
+    }
+
     private sealed class Roots(IReadOnlyList<HarnessRoot> roots) : IHarnessLocator
     {
         public IReadOnlyList<HarnessRoot> Detect() => roots;

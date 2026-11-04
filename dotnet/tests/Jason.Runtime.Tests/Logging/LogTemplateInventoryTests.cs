@@ -55,7 +55,7 @@ public sealed class LogTemplateInventoryTests
     /// How many templates the scan finds. Exact on purpose: a template added, removed or no longer read changes it,
     /// and the failure lists every template found so the change can be seen and the number moved knowingly.
     /// </summary>
-    private const int TemplateCount = 110;
+    private const int TemplateCount = 115;
 
     private static readonly Regex Marker = new(
         @"LoggerMessage\.Define(?<scope>Scope)?(?:<[^<>()]*>)?\s*\(|\[\s*LoggerMessage\s*\(|new\s+(?:Serilog\.Events\.)?(?<property>LogEventProperty)\s*\(|\??\.\s*(?<method>LogTrace|LogDebug|LogInformation|LogWarning|LogError|LogCritical|Log|Verbose|Debug|Information|Warning|Error|Fatal|Write|BeginScope)\s*(?:<(?:[^<>()]|<[^<>()]*>)*>\s*)?\(",

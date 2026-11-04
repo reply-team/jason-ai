@@ -9,7 +9,8 @@ public sealed record ToastHostPayload(
     [property: JsonPropertyName("aumid")] string Aumid,
     [property: JsonPropertyName("display_name")] string DisplayName,
     [property: JsonPropertyName("title")] string Title,
-    [property: JsonPropertyName("lines")] IReadOnlyList<string> Lines);
+    [property: JsonPropertyName("lines")] IReadOnlyList<string> Lines,
+    [property: JsonPropertyName("item"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Item = null);
 
 /// <summary>One call the child made, as its outcome reports it.</summary>
 public sealed record ToastHostCall(
@@ -28,7 +29,9 @@ public sealed record ToastHostOutcome(
     [property: JsonPropertyName("failed_step")] string? FailedStep,
     [property: JsonPropertyName("show_hr")] string? ShowHr,
     [property: JsonPropertyName("setting_after_hr")] string? SettingAfterHr,
-    [property: JsonPropertyName("setting_after")] int? SettingAfter);
+    [property: JsonPropertyName("setting_after")] int? SettingAfter,
+    [property: JsonPropertyName("scheme")] string? Scheme = null,
+    [property: JsonPropertyName("scheme_hr")] string? SchemeHr = null);
 
 /// <summary>
 /// How the payload and the outcome are written: compact JSON with every character outside ASCII escaped, so the wire is

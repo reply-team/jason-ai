@@ -15,13 +15,16 @@ public sealed record ProgramSearchPath(string? Path, string? PathExt);
 /// <summary>What a bare name came to on the search path.</summary>
 public enum ProgramLookupOutcome
 {
-    /// <summary>A program the operating system starts by itself: an <c>.exe</c> or a <c>.com</c> on Windows, a file with an execute bit elsewhere.</summary>
+    /// <summary>
+    /// A program the operating system starts by itself: an <c>.exe</c> or a <c>.com</c> on Windows, a file with an execute bit
+    /// elsewhere, or the <c>.exe</c> or <c>.com</c> a package ships that npm's shim starts with no interpreter in front of it.
+    /// </summary>
     Program,
 
     /// <summary>npm's own <c>.cmd</c> shim, read rather than started: what runs is the interpreter it names, handed the entry script.</summary>
     NpmShim,
 
-    /// <summary>Nothing on the search path answers for the name.</summary>
+    /// <summary>Nothing on the search path answers for the name, or npm's shim for it names an executable that is not there.</summary>
     NotFound,
 
     /// <summary>Only a script a shell would have to interpret answers for it, and no <c>.cmd</c> among them.</summary>
@@ -33,17 +36,17 @@ public enum ProgramLookupOutcome
 
 /// <summary>A bare name as this machine answers for it, with nothing started.</summary>
 /// <param name="Path">
-/// The program that is actually started — the file itself, or for npm's shim the interpreter it names — so a reader
-/// who knows only this keeps telling the truth. Null where nothing may be started.
+/// The program that is actually started — the file itself, or for npm's shim the interpreter or the executable it
+/// names — so a reader who knows only this keeps telling the truth. Null where nothing may be started.
 /// </param>
 /// <param name="Launch">
 /// What goes on the command line before anything a caller asks for: empty for a program, the entry script for npm's
 /// shim, where the program is the interpreter that runs it.
 /// </param>
 /// <param name="File">
-/// The file the name resolved to on the search path: the program, the shim, or the first script that was refused. Null
-/// where nothing answered. It is what a person looks for in a directory listing, which <paramref name="Path"/> is not
-/// for a shim.
+/// The file the name resolved to on the search path: the program, the shim (also where it starts an executable), or
+/// the first script that was refused; null where nothing answered. It is what a person looks for in a directory
+/// listing, which <paramref name="Path"/> is not for a shim.
 /// </param>
 /// <param name="Refusal">For a refused shim, the rule it broke, worded to follow "which": "is not the shim npm writes".</param>
 /// <param name="InterpreterPathRead">
@@ -91,8 +94,9 @@ public static partial class ProgramLookup
     /// Walks the search path in order. On Windows a name resolves to an <c>.exe</c> or a <c>.com</c>, or — only
     /// when the whole path yielded neither — to the cmd shim npm writes, which is read rather than started:
     /// starting a <c>.cmd</c> or a <c>.bat</c> means <c>cmd.exe</c> interprets the arguments, which is the shell
-    /// the argument-array invariant exists to exclude, so what runs is the interpreter and entry script the shim
-    /// named. Every other <c>.cmd</c>, and every <c>.bat</c> and <c>.ps1</c>, is refused as it always was.
+    /// the argument-array invariant exists to exclude, so what runs is what the shim starts: the interpreter and entry
+    /// script it names, or, in the form npm writes for a target with no shebang, the executable the package ships, by
+    /// itself. Every other <c>.cmd</c>, and every <c>.bat</c> and <c>.ps1</c>, is refused as it always was.
     /// </summary>
     /// <param name="interpreterSearchPath">
     /// Where a shim's interpreter is looked for when npm placed none beside it. A caller looking a bare name up passes
@@ -155,10 +159,15 @@ public static partial class ProgramLookup
         {
             // The whole search path yielded neither an .exe nor a .com, so the first `.cmd` it did yield is
             // read — and only now.
-            var shim = ReadNpmShim(shims[0], name, interpreterSearchPath, out var rule, out var pathRead);
-            return shim is not null
-                ? new FoundProgram(name, ProgramLookupOutcome.NpmShim, shim.Interpreter, [shim.Entry], shims[0], null, pathRead)
-                : new FoundProgram(name, ProgramLookupOutcome.RefusedShim, null, [], shims[0], rule, pathRead);
+            var shim = ReadNpmShim(shims[0], name, interpreterSearchPath, out var rule, out var pathRead, out var missing);
+            return shim switch
+            {
+                // An executable the package ships starts by itself, with nothing in front of what a caller asks for.
+                { Entry: null } => new FoundProgram(name, ProgramLookupOutcome.Program, shim.Program, [], shims[0], null),
+                { Entry: { } entry } => new FoundProgram(name, ProgramLookupOutcome.NpmShim, shim.Program, [entry], shims[0], null, pathRead),
+                null when missing => new FoundProgram(name, ProgramLookupOutcome.NotFound, null, [], shims[0], null),
+                null => new FoundProgram(name, ProgramLookupOutcome.RefusedShim, null, [], shims[0], rule, pathRead),
+            };
         }
 
         return script is not null
@@ -170,8 +179,11 @@ public static partial class ProgramLookup
     // npm's cmd shim, and nothing else.
     // ---------------------------------------------------------------------------------------------------------
 
-    /// <summary>What a shim resolved to: the program that is started, and the one argument it is handed first.</summary>
-    private sealed record NpmShimTarget(string Interpreter, string Entry);
+    /// <summary>
+    /// What a shim resolved to: the program that is started, and the one argument it is handed first — the entry
+    /// script, for the interpreter the shim names, or nothing, for an executable the package ships.
+    /// </summary>
+    private sealed record NpmShimTarget(string Program, string? Entry);
 
     /// <summary>A shim npm wrote is a few hundred bytes; anything larger is not the file this reader knows.</summary>
     public const int MaxShimBytes = 8 * 1024;
@@ -192,18 +204,41 @@ public static partial class ProgramLookup
     ];
 
     /// <summary>
+    /// Every line cmd-shim writes above the call when the target has no shebang: an executable the package ships, which
+    /// the shim starts with no interpreter. Nothing else stands in that file, so it is read only as exactly these, each
+    /// compared once its trailing blanks are dropped and with the empty lines between them dropped too. That is loose
+    /// enough for a file an editor touched and costs nothing, since the shim itself is never started.
+    /// </summary>
+    private static readonly string[] NativeShimHead =
+    [
+        "@ECHO off",
+        "GOTO start",
+        ":find_dp0",
+        "SET dp0=%~dp0",
+        "EXIT /b",
+        ":start",
+        "SETLOCAL",
+        "CALL :find_dp0",
+    ];
+
+    /// <summary>
     /// npm's own shim, and nothing else. A <c>.cmd</c> is refused because starting it means <c>cmd.exe</c>
     /// parses the arguments; the way out is not to escape them but to start what the shim would have started.
     /// The file is read, held to npm's exact template, held inside the package directory it names, and
     /// cross-checked against that package's own <c>bin</c> entry — so "resolve a program out of a file" never
-    /// becomes "run whatever the file says". Nothing here is remembered: a file that decides what runs is read
+    /// becomes "run whatever the file says". cmd-shim writes two forms: one that hands an entry script to node,
+    /// and, for a target with no shebang, one that starts the target itself, which counts only where it is a
+    /// program image by its name. Nothing here is remembered: a file that decides what runs is read
     /// again at every lookup rather than trusted from last time. The answer is null and <paramref name="rule"/>
-    /// names the rule that was broken, because a refusal an operator cannot act on is barely a refusal at all.
+    /// names the rule that was broken, because a refusal an operator cannot act on is barely a refusal at all;
+    /// <paramref name="missing"/> says instead that the executable a shim of the second form names is not there.
     /// </summary>
-    private static NpmShimTarget? ReadNpmShim(string shim, string name, ProgramSearchPath interpreterSearchPath, out string rule, out bool pathRead)
+    private static NpmShimTarget? ReadNpmShim(
+        string shim, string name, ProgramSearchPath interpreterSearchPath, out string rule, out bool pathRead, out bool missing)
     {
         rule = "is not the shim npm writes";
         pathRead = false;
+        missing = false;
         var directory = Path.GetDirectoryName(shim);
         if (directory is null)
         {
@@ -211,44 +246,80 @@ public static partial class ProgramLookup
         }
 
         var text = ReadCapped(shim, MaxShimBytes);
-        if (text is null || !ShimMarkers.All(marker => text.Contains(marker, StringComparison.Ordinal)))
+        if (text is null)
         {
             return null;
         }
 
-        var lines = text.Split('\n');
-        var last = lines.Select(line => line.TrimEnd('\r', ' ', '\t')).LastOrDefault(line => line.Length > 0) ?? string.Empty;
-        var call = NpmShimCall().Match(last);
+        var lines = text.Split('\n').Select(line => line.TrimEnd('\r', ' ', '\t')).Where(line => line.Length > 0).ToList();
+        var last = lines.LastOrDefault() ?? string.Empty;
+        Match call;
+        bool native;
+        if (ShimMarkers.All(marker => text.Contains(marker, StringComparison.Ordinal)))
+        {
+            call = NpmShimCall().Match(last);
+            native = false;
+        }
+        else if (lines.Count == NativeShimHead.Length + 1 && lines.Take(NativeShimHead.Length).SequenceEqual(NativeShimHead, StringComparer.Ordinal))
+        {
+            call = NpmNativeShimCall().Match(last);
+            native = true;
+        }
+        else
+        {
+            return null;
+        }
+
         if (!call.Success)
         {
             return null;
         }
 
+        // A scoped install is two directories under node_modules, `@scope` and the name, and an unscoped one is one;
+        // the entry is what follows them.
+        string? scope = null;
         var package = call.Groups["package"].Value;
+        var rest = call.Groups["entry"].Value;
         if (package.StartsWith('@'))
         {
-            // A scoped install is two directories under node_modules and this reader knows one. Saying which
-            // rule that is beats leaving the author of a scoped CLI to guess.
-            rule = "names a scoped package, and only a package one directory under node_modules is read";
-            return null;
+            if (!PackageName().IsMatch(package[1..]))
+            {
+                // The scope reads as a name before any path is built from it, for the reason the package does below;
+                // a bare `@` is no scope at all.
+                rule = "names a scope whose name is not one npm could have written";
+                return null;
+            }
+
+            var separator = rest.IndexOf('\\', StringComparison.Ordinal);
+            if (separator < 0)
+            {
+                rule = "names a scope and no package under it";
+                return null;
+            }
+
+            scope = package;
+            package = rest[..separator];
+            rest = rest[(separator + 1)..];
         }
 
         if (!PackageName().IsMatch(package))
         {
             // A segment is a package name or it is nothing: `..` would climb out of node_modules and a drive
-            // letter would leave the tree altogether, both while still reading as one segment.
+            // letter would leave the tree altogether, both while still reading as one segment. A scope under a
+            // scope fails here too, since a name never begins with `@`.
             rule = "names a package whose name is not one npm could have written";
             return null;
         }
 
-        var relative = NormalizeEntry(call.Groups["entry"].Value);
+        string[] segments = scope is null ? [package] : [scope, package];
+        var relative = NormalizeEntry(rest);
         var modules = Path.Combine(directory, "node_modules");
-        var root = Path.Combine(modules, package);
+        var root = Path.Combine([modules, .. segments]);
 
         // The entry as the shim means it, and the package root as the disk really holds it. A junction at
-        // node_modules or at the package leaves the entry lexically inside while the file lives anywhere at
-        // all, so the two sides are computed differently on purpose and then have to agree.
-        var realRoot = FinalDirectory(Path.Combine(FinalDirectory(modules) ?? modules, package));
+        // node_modules, at the scope or at the package leaves the entry lexically inside while the file lives
+        // anywhere at all, so the two sides are computed differently on purpose and then have to agree.
+        var realRoot = RealDirectory(modules, segments);
         string entry;
         try
         {
@@ -272,17 +343,36 @@ public static partial class ProgramLookup
             return null;
         }
 
+        if (native && !IsProgramImage(relative))
+        {
+            // Asked only once the target is held inside the package, so a target that climbs or names a drive is refused
+            // by the rule the other form's entry is. What the shim would start is then a file only a shell, or nothing,
+            // could run; it never counts by its content.
+            rule = "names a target that is not an .exe or a .com, and " + ProgramsNotShells;
+            return null;
+        }
+
         if (!File.Exists(entry))
         {
+            // An executable that is not there is a program that is not there; an entry script that is not there is a
+            // shim that broke a rule, since its program, node, may well be.
+            missing = native;
             rule = "names an entry that is not there";
             return null;
         }
 
         var manifest = ReadCapped(Path.Combine(root, "package.json"), MaxPackageJsonBytes);
-        if (manifest is null || !Declares(manifest, name, relative))
+        if (manifest is null || !Declares(manifest, name, relative, scope))
         {
             rule = "names an entry its package does not declare";
             return null;
+        }
+
+        if (native)
+        {
+            // The executable itself starts, never the shim, so neither its text nor its `%*` reaches a child.
+            rule = string.Empty;
+            return new NpmShimTarget(entry, null);
         }
 
         var interpreter = FindInterpreter(directory, interpreterSearchPath, out pathRead);
@@ -298,10 +388,25 @@ public static partial class ProgramLookup
 
     /// <summary>
     /// The shim's last line, exactly as cmd-shim writes it. The package is one segment — a scoped install
-    /// therefore captures its scope here and is refused by name above rather than by accident.
+    /// therefore captures its scope here, and the name under the scope is taken from the entry above. No <c>%</c>
+    /// and no <c>!</c> stands in the entry, in this form or the other: cmd.exe would expand a variable there before it
+    /// started anything, a <c>!</c> one where delayed expansion is on, so the line would name a file other than the one
+    /// it spells, and npm never writes one.
     /// </summary>
-    [GeneratedRegex("""^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" +"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"]+)" %\*\z""")]
+    [GeneratedRegex("""^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" +"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"%!]+)" %\*\z""")]
     private static partial Regex NpmShimCall();
+
+    /// <summary>
+    /// The call of the form with no interpreter, exactly as cmd-shim writes it: the target, quoted, then <c>%*</c>, and
+    /// nothing in front of the target.
+    /// </summary>
+    [GeneratedRegex("""^"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"%!]+)" +%\*\z""")]
+    private static partial Regex NpmNativeShimCall();
+
+    /// <summary>Whether a target is a file the search path itself counts as a program image, read by its name alone.</summary>
+    private static bool IsProgramImage(string target) =>
+        Path.GetExtension(target) is var extension
+        && (extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) || extension.Equals(".com", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>An npm package name as npm itself allows one, which is also everything a directory may be here.</summary>
     [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,213}\z")]
@@ -309,11 +414,13 @@ public static partial class ProgramLookup
 
     /// <summary>
     /// The package's own <c>bin</c>, in the two shapes npm publishes: a map from command name to script, and a
-    /// bare string for a package whose single command is its own name. Anything else is a shape this reader
-    /// does not know, which is a refusal rather than a guess.
+    /// bare string for a package whose single command is its own name, without its scope where it has one, so the
+    /// package's own name is then the scope and the command. Anything else is a shape this reader does not know,
+    /// which is a refusal rather than a guess.
     /// </summary>
-    private static bool Declares(string manifest, string name, string entry)
+    private static bool Declares(string manifest, string name, string entry, string? scope)
     {
+        var packageNamed = scope is null ? name : scope + "/" + name;
         try
         {
             using var document = JsonDocument.Parse(manifest);
@@ -333,7 +440,7 @@ public static partial class ProgramLookup
             return bin.ValueKind == JsonValueKind.String
                 && document.RootElement.TryGetProperty("name", out var packageName)
                 && packageName.ValueKind == JsonValueKind.String
-                && string.Equals(packageName.GetString(), name, StringComparison.Ordinal)
+                && string.Equals(packageName.GetString(), packageNamed, StringComparison.Ordinal)
                 && SameEntry(bin.GetString(), entry);
         }
         catch (JsonException)
@@ -355,6 +462,26 @@ public static partial class ProgramLookup
         }
 
         return normalized;
+    }
+
+    /// <summary>
+    /// The package's directory as the disk really holds it: <c>node_modules</c>, then each directory under it, every
+    /// one followed to its end before the next is joined to it, so a link at any level is where the walk goes on from.
+    /// Null where a directory on the way is not there.
+    /// </summary>
+    private static string? RealDirectory(string modules, IEnumerable<string> segments)
+    {
+        string? current = FinalDirectory(modules) ?? modules;
+        foreach (var segment in segments)
+        {
+            current = FinalDirectory(Path.Combine(current, segment));
+            if (current is null)
+            {
+                return null;
+            }
+        }
+
+        return current;
     }
 
     /// <summary>A directory as the disk really holds it, with every link on the way followed to its end.</summary>

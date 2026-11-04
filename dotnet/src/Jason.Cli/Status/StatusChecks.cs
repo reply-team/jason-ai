@@ -147,6 +147,12 @@ internal static class StatusChecks
         public const string UpdateSkills = "jason skills update";
 
         /// <summary>
+        /// The repair for a profile whose current revision this build's rules for its host refuse: read what is refused. The
+        /// act is <c>jason profile update</c>, said in the fact.
+        /// </summary>
+        public static string ReadProfile(string profile) => $"jason profile get {profile}";
+
+        /// <summary>
         /// The repair for a profile that names a host this machine does not have: the profile, moved to a host it has, with
         /// that host's own program. The runtime refuses a move that keeps the program written for another host, and a
         /// profile made as the README says carries one. A bundle's report names no profile, so there it is
@@ -1074,10 +1080,16 @@ internal static class StatusChecks
         }
 
         // What the name came to is said first: a person reading "did not answer" has to know which file did not, and
-        // on Windows that is often not the file the name suggests.
-        var resolved = found.Outcome == ProgramLookupOutcome.NpmShim
-            ? $"'{providerCli}' resolves to {Listed(found.File!)}, npm's shim, which runs {found.Launch[0]} with {program}."
-            : $"'{providerCli}' resolves to {Listed(found.File!)}.";
+        // on Windows that is often not the file the name suggests. A program found as itself has File equal to Path; only
+        // npm's shim sets them apart, by the interpreter it names or by the executable it starts.
+        var resolved = found.Outcome switch
+        {
+            ProgramLookupOutcome.NpmShim =>
+                $"'{providerCli}' resolves to {Listed(found.File!)}, npm's shim, which runs {found.Launch[0]} with {program}.",
+            _ when !string.Equals(found.File, program, StringComparison.OrdinalIgnoreCase) =>
+                $"'{providerCli}' resolves to {Listed(found.File!)}, npm's shim, which starts {program}.",
+            _ => $"'{providerCli}' resolves to {Listed(found.File!)}.",
+        };
 
         var result = await runner.RunAsync(program, [.. found.Launch, .. ProviderArguments], null, ProviderTimeout, cancellationToken).ConfigureAwait(false);
         if (result.NotStarted)
@@ -1097,7 +1109,8 @@ internal static class StatusChecks
 
     /// <summary>
     /// The provider CLI as Jason finds every program it starts by name (<see cref="ProgramLookup"/>): on Windows an
-    /// <c>.exe</c> or a <c>.com</c>, or npm's shim read for the interpreter and entry script it names, and never a script
+    /// <c>.exe</c> or a <c>.com</c>, or npm's shim read for what it starts (the interpreter and entry script it names, or
+    /// the executable its package ships), and never a script
     /// a shell would have to interpret. A value with a directory in it is a path, looked up in that directory alone by
     /// the same rule; the directory comes back with the answer, so a name not found there says where it was looked for.
     /// A shim found there takes its interpreter from the search path, as the shim itself would when it runs.
@@ -1191,6 +1204,8 @@ internal static class StatusChecks
             $"'{providerCli}' resolves only to {Listed(found.File!)}, {ProgramLookup.ShellScript}, so '{command}' was not run: {ProgramLookup.ProgramsNotShells}; {Instead(found.Name)}",
         ProgramLookupOutcome.RefusedShim =>
             $"'{providerCli}' resolves only to {Listed(found.File!)}, which {found.Refusal}, so '{command}' was not run: starting it would mean cmd.exe interprets the arguments; {Instead(found.Name)}",
+        ProgramLookupOutcome.NotFound when found.File is { } shim =>
+            $"'{providerCli}' resolves to {Listed(shim)}, npm's shim, whose executable is not there, so '{command}' was not run.",
         _ when script is not null =>
             $"'{providerCli}' resolves only to {Listed(script)}, {ProgramLookup.ShellScript}, so '{command}' was not run: {ProgramLookup.ProgramsNotShells}; give '{providerCli[..^System.IO.Path.GetExtension(providerCli).Length]}', the name without its extension, and Jason looks for an .exe, a .com or npm's own shim for it.",
         _ when directory is not null => $"'{found.Name}' was not found in {directory}, so '{command}' was not run.",
@@ -1370,10 +1385,26 @@ internal static class StatusChecks
                 .Select(group => string.Create(CultureInfo.InvariantCulture, $"{group.Key} {group.Count()}") + (Why(group.Key) is { } why ? ", " + why : string.Empty))) + ".";
         }
 
+        // A profile whose current revision this build's rules for its host refuse: the runtime says so on the profile, and
+        // work that runs under it ends before a child exists. The repair reads what to change; the act is the update.
+        var refused = profiles.Where(profile => profile.Refused).ToList();
+        if (refused.Count > 0)
+        {
+            said += names
+                ? " The current revision of " + string.Join(", ", refused.Select(profile => profile.Name)) + " is refused by this build's rules for its host; 'jason profile update' changes it."
+                : string.Create(CultureInfo.InvariantCulture, $" {refused.Count} of them have a current revision this build's rules for its host refuse; 'jason profile update' changes one.");
+        }
+
         var astray = profiles.FirstOrDefault(profile => !Here(profile.Host));
         if (astray is null)
         {
-            return new StatusCheck(Name, false, CheckState.Ok, hosts + " " + said, null);
+            if (refused.Count == 0)
+            {
+                return new StatusCheck(Name, false, CheckState.Ok, hosts + " " + said, null);
+            }
+
+            var toRead = names ? refused[0].Name : "<name>";
+            return new StatusCheck(Name, false, CheckState.Failed, hosts + " " + said, Repair.ReadProfile(toRead));
         }
 
         // The repair moves the profile to a host that is here; with none here there is no command to give, since installing
@@ -1430,7 +1461,10 @@ internal static class StatusChecks
                         return (null, "a profile names its host by something that is not a host word");
                     }
 
-                    profiles.Add(new ProfileHost(name, host));
+                    // A runtime that predates the field sends none, which is no problem; one that sends something this cannot
+                    // read as a list is not guessed at.
+                    var refused = item?["problems"] is JsonArray problems && problems.Count > 0;
+                    profiles.Add(new ProfileHost(name, host, refused));
                 }
 
                 cursor = Text(answer["next_cursor"]);
@@ -1627,4 +1661,4 @@ internal static class StatusChecks
 }
 
 /// <summary>One enabled profile as the <c>agent_hosts</c> check reads it: its name, and its host as the runtime wrote it.</summary>
-internal sealed record ProfileHost(string Name, string Host);
+internal sealed record ProfileHost(string Name, string Host, bool Refused = false);

@@ -235,9 +235,10 @@ would later refuse to launch, rather than writing one.
 [`skills/README.md`](skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
 browser UI, the page `jason ui open` opens; a runtime works without it.
 
-One question, answered check by check. It is one of eight names in this CLI with no API operation behind
-it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, and `ui install` and
-`plugin install`, which change this installation's files as those two do — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
+One question, answered check by check. It is one of nine names in this CLI with no API operation behind
+it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and
+`plugin install`, which change this installation's files as those two do, and `session open`, which starts your own
+agent host in a terminal — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
 answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
 
@@ -265,8 +266,8 @@ a log and never explains a failure, which is what keeps it from growing into a d
 
 The provider check runs only a program **you** name — `jason status --provider-cli <program>`, run as
 `<program> --version` with a ten-second bound. The program is found the way Jason finds every program it starts
-by name, and on Windows an npm-installed CLI runs as the interpreter and entry script its shim names, then
-`--version`. Which provider you use is yours, and a readiness check that knew one vendor's command by heart would
+by name, and on Windows an npm-installed CLI runs as what its shim starts, the interpreter and entry script it names
+or the executable its package ships, then `--version`. Which provider you use is yours, and a readiness check that knew one vendor's command by heart would
 be this product naming a vendor in its own sources, which it does not. In its own output it names the file the
 name resolved to and, for npm's shim, what that runs, and, whenever it read a PATH, whose it was: the CLI's,
 which the runtime's may differ from. It prints no credential — not the key, not a prefix of it, not its length.
@@ -453,8 +454,10 @@ then name it:
 jason profile create local-antigravity --host antigravity_cli --program agy
 ```
 
-The host takes its permission rules from your own settings file, `~/.gemini/antigravity-cli/settings.json`, in its
-`permissions.allow` array, and from nowhere a run can carry them, so you add two rules there once, `command(jason)` and
+Each run is given its permissions by a workspace hook the launch writes, which approves the call back to the runtime,
+the memory files and the result file; that route is built from the host's hooks page and has not yet been run on an
+account. If a role is refused on `antigravity_cli`, add two rules to your own settings file,
+`~/.gemini/antigravity-cli/settings.json`, in its `permissions.allow` array: `command(jason)` and
 `read_file(<your harness folder>)`; on Windows shells write the first as `command(regex:jason .*)`. The
 [host matrix](docs/execution-profiles.md#12-the-hosts) gives the two lines of JSON, says why, and says what was built from
 documentation and has not yet been run on an account.
@@ -520,8 +523,23 @@ dispatcher. It waits, with a record of exactly what would be done, until somebod
 ```sh
 jason approval list --human
 jason approval get <approval-id> --human
+jason approval get <approval-id> --prompt
 jason approval approve <approval-id> --actor human:you@example.com --reason "checked the list"
 ```
+
+`--prompt` prints, in place of the item, the text that briefs an agent session on it: what waits, the campaign and its
+folder, the skill to use and what to bring back, and that the session decides nothing. It holds nothing of the item
+itself, and it is the text the UI's Copy prompt button copies (`docs/ui.md`). To start your own agent host on the item
+with that text as its first message, in a new terminal at the campaign's folder:
+
+```sh
+jason session open --approval <approval-id>
+jason session open --question <decision-id> --dry-run
+```
+
+The named preference `agent.interactive_host` says which host (`claude_code` while it is unset); `--dry-run` starts
+nothing and prints the whole command. The session proposes, and the decision stays yours. The UI's Open an AI session
+link does the same on Windows (`docs/ui.md`).
 
 A launched role that cannot decide something for itself asks a person instead, and the answer wakes the
 review that carries the work on:
@@ -529,6 +547,7 @@ review that carries the work on:
 ```sh
 jason decision list --human
 jason decision get <decision-id> --human
+jason decision get <decision-id> --prompt
 jason decision answer <decision-id> --answer "pause it" --actor human:you@example.com
 ```
 

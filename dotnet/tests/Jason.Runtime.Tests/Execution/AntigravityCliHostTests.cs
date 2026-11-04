@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Hosts;
@@ -231,72 +232,200 @@ public class AntigravityCliHostTests
         Assert.Null(Host.Compose(Revision(), ["agy"], NoFiles).SessionId);
     }
 
+    private static readonly string Base = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "jason-tests", "agy-host"));
+
+    private static string Memory(string level) => Path.Combine(Base, "memory", level, "AGENTS.md");
+
+    private static MemoryFileLocations AllFiles => new(Memory("client"), Memory("project"), Memory("campaign"));
+
     /// <summary>
-    /// The host takes its permission rules from the person's own settings files under the home folder and from nowhere
-    /// a run could carry them, and the runtime never writes that folder: so nothing is allowed or denied through a
-    /// launch, and the work directory is left as it was.
+    /// What the launch gives the role goes through the work directory: the command word that calls back, each memory file
+    /// the launch names as a file, and a tool the person granted by the host's own name; and what it refuses, a tool the
+    /// profile does not grant. Nothing of it is on the command line.
     /// </summary>
     [Fact]
-    [Critical(Family.S6, "the launch allows nothing and writes nothing into the work directory")]
-    public void No_rule_is_allowed_or_denied_through_the_launch_or_written_into_the_work_directory()
+    [Critical(Family.S6, "the launch allows the callback, the named memory files and the granted tools, and denies the rest of the tools")]
+    public void The_launch_allows_the_callback_the_named_files_and_the_granted_tools_and_denies_the_ones_not_granted()
     {
-        var launch = Host.Compose(Revision(tools: [AgentTool.WebFetch]), ["agy"], new("/h/AGENTS.md", "/p/AGENTS.md", "/c/AGENTS.md"));
+        var launch = Host.Compose(Revision(tools: [AgentTool.WebFetch], cliCommand: "jason"), ["agy"], AllFiles);
+
+        Assert.Equal(
+            ["command(jason)", $"view_file({Memory("client")})", $"view_file({Memory("project")})", $"view_file({Memory("campaign")})", "read_url_content"],
+            launch.Allow);
+        Assert.Equal(["search_web"], launch.Deny);
+        Assert.Equal(["agy", "--input-format", "stream-json", "--output-format", "stream-json", "--print-timeout=0s"], launch.Command);
+    }
+
+    [Fact]
+    public void A_profile_that_grants_nothing_denies_both_web_tools_and_a_launch_that_names_no_file_allows_the_callback_alone()
+    {
+        var launch = Host.Compose(Revision(cliCommand: "jason"), ["agy"], NoFiles);
+
+        Assert.Equal(["command(jason)"], launch.Allow);
+        Assert.Equal(["read_url_content", "search_web"], launch.Deny.Order());
+    }
+
+    /// <summary>The hook approves each memory file as a file, so no named level is left unreadable.</summary>
+    [Fact]
+    public void No_memory_file_the_launch_names_is_unreadable()
+    {
+        Assert.Empty(Host.Compose(Revision(), ["agy"], AllFiles).Unreadable);
+        Assert.Empty(Host.Compose(Revision(), ["agy"], new(null, null, Memory("campaign"))).Unreadable);
+        Assert.Empty(Host.Compose(Revision(), ["agy"], NoFiles).Unreadable);
+    }
+
+    private static string HookCommand(string workDir)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(workDir, ".agents", "hooks.json")));
+        return document.RootElement.EnumerateObject().Single().Value.GetProperty("PreToolUse")[0].GetProperty("hooks")[0].GetProperty("command").GetString()!;
+    }
+
+    /// <summary>
+    /// The one file written is the workspace hook: a pre-tool-use hook whose matcher is the hooked set and whose command is
+    /// the command word's own hook mode with the rules in base64url, so no path or quote reaches a shell. Nothing is
+    /// written anywhere else, and nothing of the launch envelope or the capability token is in it.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S6, "the work directory gets exactly one hook file, whose command line holds the word and the rules and nothing secret")]
+    public void The_work_directory_gets_exactly_the_hook_file_with_the_rules_in_its_command()
+    {
+        var launch = Host.Compose(Revision(tools: [AgentTool.WebSearch], cliCommand: "jason"), ["agy"], AllFiles);
         using var directory = new TempDirectory();
 
         Host.WriteWorkDirectory(directory.Path, launch.Allow, launch.Deny);
 
-        Assert.Empty(launch.Allow);
-        Assert.Empty(launch.Deny);
-        Assert.Empty(Directory.GetFileSystemEntries(directory.Path));
+        var files = Directory.GetFiles(directory.Path, "*", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(directory.Path, file).Replace('\\', '/')).ToList();
+        Assert.Equal([".agents/hooks.json"], files);
+
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory.Path, ".agents", "hooks.json")));
+        var hook = Assert.Single(document.RootElement.EnumerateObject());
+        var events = Assert.Single(hook.Value.EnumerateObject());
+        Assert.Equal("PreToolUse", events.Name);
+        var entry = Assert.Single(events.Value.EnumerateArray());
+        var handler = Assert.Single(entry.GetProperty("hooks").EnumerateArray());
+        Assert.Equal("command", handler.GetProperty("type").GetString());
+        Assert.Equal(10, handler.GetProperty("timeout").GetInt32());
+
+        var words = HookCommand(directory.Path).Split(' ');
+        Assert.Equal(["jason", "host-hook", "antigravity-cli"], words[..3]);
+        Assert.Equal(4, words.Length);
+        Assert.Matches("^[A-Za-z0-9_-]+$", words[3]);
+
+        var rules = AntigravityHookRules.Decode(words[3]);
+        Assert.NotNull(rules);
+        Assert.Equal("jason", rules.Cli);
+        Assert.Equal([Memory("client"), Memory("project"), Memory("campaign")], rules.Read);
+        Assert.Equal(["search_web"], rules.Approve);
+        Assert.Equal(["read_url_content"], rules.Deny);
+        Assert.Equal(Path.Combine(directory.Path, "result.json"), rules.Write);
+    }
+
+    /// <summary>The matcher holds the tools the hook decides about, any browser tool, and what the profile denies by name, and no other tool.</summary>
+    [Fact]
+    public void The_matcher_is_the_gated_set_and_the_tools_the_profile_denies_by_name()
+    {
+        using var directory = new TempDirectory();
+        Host.WriteWorkDirectory(directory.Path, ["command(jason)"], ["list_dir", "search_web"]);
+
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory.Path, ".agents", "hooks.json")));
+        var matcher = document.RootElement.EnumerateObject().Single().Value.GetProperty("PreToolUse")[0].GetProperty("matcher").GetString()!;
+        var pattern = new System.Text.RegularExpressions.Regex(matcher);
+
+        string[] hooked =
+        [
+            "run_command", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content", "ask_question",
+            "read_url_content", "search_web", "browser_navigate", "browser_click", "list_dir",
+            "invoke_subagent", "define_subagent", "manage_subagents", "send_message", "schedule", "manage_task", "ask_permission", "generate_image",
+        ];
+        Assert.All(hooked, tool => Assert.Matches(pattern, tool));
+        string[] left = ["find_by_name", "grep_search", "list_permissions", "run_commands", "xrun_command", "my_browser_x", "browser"];
+        Assert.All(left, tool => Assert.DoesNotMatch(pattern, tool));
     }
 
     /// <summary>
-    /// A memory file outside the work directory is read only where the person's own rule allows it, which Jason cannot
-    /// write, so every level the launch names is reported unreadable and the role says it was refused.
+    /// The file and the function agree: the command in the file, handed one call of the role's own callback, approves it,
+    /// and the one file the role may write is its result.
     /// </summary>
     [Fact]
-    public void Every_memory_file_the_launch_names_is_unreadable_and_a_level_it_does_not_is_not_named()
+    public void The_rules_in_the_file_approve_the_callback_a_named_file_and_the_result_and_nothing_else()
     {
-        Assert.Equal(["client", "project", "campaign"], Host.Compose(Revision(), ["agy"], new("/h/AGENTS.md", "/p/AGENTS.md", "/c/AGENTS.md")).Unreadable);
-        Assert.Equal(["campaign"], Host.Compose(Revision(), ["agy"], new(null, null, "/c/AGENTS.md")).Unreadable);
-        Assert.Empty(Host.Compose(Revision(), ["agy"], NoFiles).Unreadable);
+        var launch = Host.Compose(Revision(cliCommand: "jason"), ["agy"], new(null, null, Memory("campaign")));
+        using var directory = new TempDirectory();
+        Host.WriteWorkDirectory(directory.Path, launch.Allow, launch.Deny);
+        var rules = HookCommand(directory.Path).Split(' ')[3];
+
+        static string Call(string tool, string name, string value) =>
+            new JsonObject { ["toolCall"] = new JsonObject { ["name"] = tool, ["args"] = new JsonObject { [name] = value } } }.ToJsonString();
+
+        Assert.Equal("auto_approve", AntigravityHook.Decide(rules, Call("run_command", "CommandLine", "jason workitem complete wi_1 --attempt att_1 --status succeeded --result-file result.json"), false).Decision);
+        Assert.Equal("auto_approve", AntigravityHook.Decide(rules, Call("view_file", "AbsolutePath", Memory("campaign")), false).Decision);
+        Assert.Equal("auto_approve", AntigravityHook.Decide(rules, Call("write_to_file", "TargetFile", Path.Combine(directory.Path, "result.json")), false).Decision);
+        Assert.Equal("deny", AntigravityHook.Decide(rules, Call("write_to_file", "TargetFile", Path.Combine(directory.Path, ".agents", "hooks.json")), false).Decision);
+        Assert.Equal("deny", AntigravityHook.Decide(rules, Call("read_url_content", "Url", "https://example.test/"), false).Decision);
+        Assert.Equal("allow", AntigravityHook.Decide(rules, Call("view_file", "AbsolutePath", Memory("client")), false).Decision);
     }
 
+    /// <summary>A fetch and a search have the host's own tool names, which the hook is told to approve or to refuse.</summary>
     [Fact]
-    public void A_fetch_has_the_hosts_name_and_a_search_has_none()
+    public void A_fetch_and_a_search_have_the_hosts_tool_names()
     {
-        Assert.Equal("read_url(*)", Host.ToolRule(AgentTool.WebFetch));
-        Assert.Null(Host.ToolRule(AgentTool.WebSearch));
+        Assert.Equal("read_url_content", Host.ToolRule(AgentTool.WebFetch));
+        Assert.Equal("search_web", Host.ToolRule(AgentTool.WebSearch));
     }
 
-    /// <summary>
-    /// A grant is a rule the host would have to be given, and it can be given none: the person's own settings decide
-    /// what the session may do. So a grant of either tool is refused, and the refusal says whose rule it is; the host is named where the profile is written.
-    /// </summary>
+    /// <summary>A grant is a tool the hook approves, so neither is refused where a profile is written.</summary>
     [Theory]
     [InlineData(AgentTool.WebFetch)]
     [InlineData(AgentTool.WebSearch)]
-    public void A_grant_of_either_tool_is_refused_naming_the_host(AgentTool tool)
+    public void A_grant_of_either_tool_is_taken(AgentTool tool)
     {
-        var problem = Host.GrantProblem(tool);
-
-        Assert.NotNull(problem);
-        Assert.Contains("settings", problem, StringComparison.Ordinal);
+        Assert.Null(Host.GrantProblem(tool));
     }
 
-    /// <summary>A deny is a rule too, in a file Jason does not write and a run cannot carry, so every word is refused.</summary>
+    /// <summary>A deny is the host's name of a tool; any other word, a rule of the host's own form among them, is refused.</summary>
+    [Theory]
+    [InlineData("list_dir")]
+    [InlineData("grep_search")]
+    [InlineData("find_by_name")]
+    [InlineData("invoke_subagent")]
+    [InlineData("generate_image")]
+    [InlineData("read_url_content")]
+    [InlineData("search_web")]
+    public void A_deny_of_a_tool_name_of_the_hooks_table_is_taken(string word)
+    {
+        Assert.Null(Host.DenyProblem(word));
+    }
+
     [Theory]
     [InlineData("web_fetch")]
     [InlineData("read_url(*)")]
     [InlineData("command(rm)")]
     [InlineData("write_file(.env)")]
+    [InlineData("list_dir(/tmp)")]
     [InlineData("any words at all")]
-    public void A_deny_of_any_word_is_refused_naming_the_host(string word)
+    [InlineData("")]
+    [InlineData("LIST_DIR")]
+    [InlineData("browser_.*")]
+    public void A_deny_of_any_other_word_is_refused_saying_what_is_taken(string word)
     {
         var problem = Host.DenyProblem(word);
 
         Assert.NotNull(problem);
-        Assert.Contains("settings", problem, StringComparison.Ordinal);
+        Assert.Contains("tool name", problem, StringComparison.Ordinal);
+    }
+
+    /// <summary>The callback and the memory files are the two things a role cannot work without, and both go through these tools, so a profile cannot deny them.</summary>
+    [Theory]
+    [InlineData("run_command")]
+    [InlineData("view_file")]
+    [InlineData("write_to_file")]
+    public void A_deny_of_the_tool_the_callback_or_the_memory_files_go_through_is_refused_saying_so(string word)
+    {
+        var problem = Host.DenyProblem(word);
+
+        Assert.NotNull(problem);
+        Assert.Contains(word, problem, StringComparison.Ordinal);
+        Assert.Contains("callback", problem, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -359,13 +488,14 @@ public class AntigravityCliHostTests
         Assert.Equal(["event", "message"], line.RootElement.EnumerateObject().Select(property => property.Name));
     }
 
-    private static ExecutionProfileRevision Revision(string[]? args = null, List<AgentTool>? tools = null) => new()
+    private static ExecutionProfileRevision Revision(string[]? args = null, List<AgentTool>? tools = null, string? cliCommand = null) => new()
     {
         Number = 1,
         Host = AgentHostKind.AntigravityCli,
         Program = "agy",
         Args = [.. args ?? []],
         Tools = tools ?? [],
+        CliCommand = cliCommand,
     };
 
     private static ExecutionProfileRevision Revision(params string[] args) => Revision(args, null);

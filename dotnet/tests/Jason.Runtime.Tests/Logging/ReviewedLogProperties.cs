@@ -43,6 +43,10 @@ internal static class ReviewedLogProperties
         // is a DurationMs, above.
         "Finished", "Unfinished",
 
+        // The import-file sweep at start: how many recorded folders it checked and skipped, and the public id of one it skipped
+        // (ImportFilesSweep; Level above is a closed word, root, project or campaign).
+        "Folders", "Skipped", "EntityId",
+
         // The port the settings asked for and the one the API listens on, both numbers (RuntimeHost).
         "ConfiguredPort", "Port",
 
@@ -100,6 +104,10 @@ internal static class ReviewedLogProperties
 
         // ToastChannel: why there is no desktop, one of the channel's own presence words.
         "Detail",
+
+        // ToastChannel: the toast host's jason: link state, "foreign" or "failed" and never another word, and the HRESULT
+        // of a refused write, 0x and eight hex digits, or "none": both checked by the channel before the line is written.
+        "Scheme", "Hr",
 
         // LiveSettings: validator and binding sentences, which name a setting by its path and describe a refused text
         // by its length. ParseFailure: a read failure's type and where the reader stopped, and for a stored value the

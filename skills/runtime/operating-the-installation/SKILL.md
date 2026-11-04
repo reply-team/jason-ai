@@ -57,6 +57,13 @@ its README says and unzipped into `ui/custom`, and do not build anything yoursel
 the person says a browser should no longer have access. `jason status`'s `ui_module` check says which build is served,
 names `jason ui install` where none is or the default one is another release's, and never decides readiness.
 
+`jason session open --approval <id>` (or `--question <id>`) opens a new terminal on the person's desktop running their
+own agent host on that one item, so run it only when they ask for a session on it. Which host it starts is the named
+preference `agent.interactive_host`, a person's own word like every preference:
+`jason preference set agent.interactive_host --value-file host.json --actor human:<their-name>`, with `host.json`
+holding `{"host":"codex"}`, and `unset` goes back to `claude_code`.
+`--dry-run` prints what would start and starts nothing.
+
 ## Starting and stopping it
 
 ```
@@ -282,7 +289,7 @@ starts it, what it may not do, and the command word it calls home with. `profile
 can launch work; disabled ones are left out unless you ask for them.
 
 This is what to read when role work is failing for reasons no model produced — `profile_not_found`,
-`profile_disabled` and `host_not_available` are all answered here rather than by asking for the work again.
+`profile_disabled`, `profile_revision_refused` and `host_not_available` are all answered here rather than by asking for the work again.
 Registering or editing a profile is an operator's act, and it names a program on this machine: do not invent one.
 
 ## Keeping it current

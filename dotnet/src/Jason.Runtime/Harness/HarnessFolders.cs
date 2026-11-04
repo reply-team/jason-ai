@@ -279,6 +279,31 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
     }
 
     /// <summary>
+    /// Gives a recorded folder the import files it lacks, each only where nothing of that name is there: an existing one is
+    /// never opened, read or written, and no memory file, no marker and nothing else is touched. Done only where
+    /// <paramref name="folder"/> is there as a folder and carries the marker of <paramref name="kind"/> and
+    /// <paramref name="id"/> (null for the root); false, with nothing written, where it is not or the disk refuses.
+    /// </summary>
+    public static bool CompleteImportFiles(string folder, string kind, string? id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
+        try
+        {
+            if (File.Exists(folder) || !Directory.Exists(folder) || HarnessMarker.In(folder)?.Names(kind, id) != true)
+            {
+                return false;
+            }
+
+            WriteImportFilesIfAbsent(folder);
+            return true;
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Takes a folder of the person's own, one with no marker, as a project's: its marker first, then the import files and
     /// an <c>AGENTS.md</c> where it has none, and not a word of anything it holds. A marker of something else that turned out
     /// to be there first is refused as taken, with nothing written.
