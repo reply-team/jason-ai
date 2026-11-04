@@ -666,6 +666,47 @@ public class ExecutableResolverTests
     }
 
     /// <summary>
+    /// A <c>%</c> in the package or the scope segment of the form with no interpreter is a variable cmd.exe would expand
+    /// before it started anything, as it is in the entry, and no name npm could have written: the files it spells are on
+    /// disk and declared, and the shim is still refused.
+    /// </summary>
+    [Theory]
+    [InlineData("v%X%", "names a package whose name is not one npm could have written")]
+    [InlineData(@"@v%X%\cli", "names a scope whose name is not one npm could have written")]
+    public void A_shim_with_no_interpreter_whose_package_or_scope_holds_a_variable_is_refused(string package, string rule)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        programs.AddNested(Path.Combine("node_modules", package, "bin", "vendor.exe"), "the binary");
+        programs.AddNested(
+            Path.Combine("node_modules", package, "package.json"),
+            "{\"name\":\"" + package.Replace('\\', '/') + "\",\"bin\":{\"vendor\":\"bin/vendor.exe\"}}");
+        programs.Add("vendor.cmd", TestPrograms.NpmNativeShim(package, @"bin\vendor.exe"));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains(rule, resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The call of the form with no interpreter ends at <c>%*</c>: a command after it is a line npm never writes.</summary>
+    [Fact]
+    public void A_shim_with_no_interpreter_with_text_after_its_arguments_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        InstallNativeCli(programs);
+        programs.Add("vendor.cmd", TestPrograms.NpmNativeShim(@"@vendor\cli", @"bin\vendor.exe").Replace("%*\r\n", "%* & whatever\r\n", StringComparison.Ordinal));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("is not the shim npm writes", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The package's own directory a junction out of the tree, for the shim that starts an executable: the target
     /// would read as inside <c>node_modules\@vendor\cli</c> while the executable lived anywhere.
     /// </summary>

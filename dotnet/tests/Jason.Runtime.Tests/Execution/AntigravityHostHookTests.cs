@@ -242,6 +242,14 @@ public sealed class AntigravityHostHookTests
 
         Assert.Equal("auto_approve", Decide(Call("write_to_file", ("TargetFile", slashed)), windows: true));
         Assert.Equal("auto_approve", Decide(Call("view_file", ("AbsolutePath", MemoryFile("client").Replace('\\', '/'))), windows: true));
+        if (!OperatingSystem.IsWindows())
+        {
+            // Elsewhere a backslash is a character of a name, not a separator, so the other slash is another file.
+            static string Backslashed(string path) => "/" + path[1..].Replace('/', '\\');
+
+            Assert.Equal("deny", Decide(Call("write_to_file", ("TargetFile", Backslashed(ResultFile))), windows: false));
+            Assert.Equal("allow", Decide(Call("view_file", ("AbsolutePath", Backslashed(MemoryFile("client")))), windows: false));
+        }
     }
 
     [Theory]
