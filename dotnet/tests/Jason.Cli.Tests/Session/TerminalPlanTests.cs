@@ -249,7 +249,7 @@ public sealed class TerminalPlanTests : IDisposable
     [InlineData(TerminalPlatform.Linux, true)]
     [InlineData(TerminalPlatform.MacOs, true)]
     [InlineData(TerminalPlatform.Windows, false)]
-    public void On_linux_and_macos_the_terminal_is_started_on_pipes_of_its_own(TerminalPlatform os, bool redirected)
+    public void On_linux_and_macos_the_terminal_is_given_a_start_on_pipes_of_its_own(TerminalPlatform os, bool redirected)
     {
         var start = TerminalStartInfo.For(os, ["/usr/bin/x-terminal-emulator", "-e", "/usr/local/bin/codex", Prompt], "/home/marta/Jason");
 
