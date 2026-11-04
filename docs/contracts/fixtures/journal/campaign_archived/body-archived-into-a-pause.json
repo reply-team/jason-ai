@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_archived",
+  "version": 1,
+  "case": "archiving ends in archived, never in a pause",
+  "body": { "key": "status", "old": "active", "new": "paused" },
+  "expect": { "invalid": [{ "pointer": "/new", "reason": "const" }] }
+}

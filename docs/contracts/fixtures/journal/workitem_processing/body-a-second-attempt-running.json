@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_processing",
+  "version": 1,
+  "case": "the second attempt of a work item starts running",
+  "body": { "key": "attempt", "old": null, "new": 2 },
+  "expect": "valid"
+}

@@ -1,0 +1,27 @@
+{
+  "kind": "contact_updated",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A person's details in the contact directory changed; the line names the fields that changed and never their values.",
+  "subscribable": true,
+  "entities": {
+    "contact": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^cnt_", "description": "The person's id." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": { "enum": ["first_name", "last_name", "company", "title", "time_zone", "channels", "custom"] },
+        "description": "The fields that changed, in this order; the person read again says to what."
+      }
+    }
+  }
+}

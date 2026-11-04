@@ -1,0 +1,28 @@
+{
+  "kind": "preference_unset",
+  "version": 1,
+  "since": "0.14.0",
+  "summary": "A person took a named preference's value back, recorded by the size and hash of the value it had.",
+  "subscribable": true,
+  "entities": {},
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The preference's key." },
+      "old": {
+        "type": "object",
+        "description": "The value taken back, by size and hash.",
+        "additionalProperties": false,
+        "required": ["bytes", "hash"],
+        "properties": {
+          "bytes": { "type": "integer", "minimum": 0, "description": "The size of the value's canonical form, in bytes." },
+          "hash": { "type": "string", "pattern": "^sha256:", "description": "The sha256: of the value's canonical form." }
+        }
+      },
+      "new": { "type": "null" }
+    }
+  }
+}

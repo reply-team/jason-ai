@@ -1,0 +1,11 @@
+{
+  "kind": "standing_approval_set",
+  "version": 1,
+  "case": "a standing approval covers a reply or a message, never another operation",
+  "body": {
+    "key": "interested",
+    "old": null,
+    "new": { "category": "interested", "operations": ["campaign.enroll"], "expires_at": null, "max_releases": null }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/operations/0", "reason": "enum" }] }
+}

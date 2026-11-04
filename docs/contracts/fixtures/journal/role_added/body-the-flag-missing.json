@@ -1,0 +1,7 @@
+{
+  "kind": "role_added",
+  "version": 1,
+  "case": "the line says whether the role has its own command",
+  "body": { "key": "researcher", "old": null, "new": {} },
+  "expect": { "invalid": [{ "pointer": "/new/entry_command_present", "reason": "required" }] }
+}

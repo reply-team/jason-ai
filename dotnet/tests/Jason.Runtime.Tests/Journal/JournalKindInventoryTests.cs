@@ -1,5 +1,6 @@
 using System.Reflection;
 using Jason.Cli.Doctor;
+using Jason.Contracts.Journal;
 using Jason.Runtime.Journal;
 
 namespace Jason.Runtime.Tests.Journal;
@@ -149,5 +150,26 @@ public sealed class JournalKindInventoryTests
         Assert.True(
             unnamed.Count == 0,
             $"What the journal flag adds does not say what {unnamed.Count} carrier(s) hold:{Environment.NewLine}{string.Join(Environment.NewLine, unnamed)}");
+    }
+
+    /// <summary>
+    /// Every kind the runtime reserves is published under <c>docs/contracts/journal/</c>, and every document there is of
+    /// a kind the runtime reserves. A kind written without its document is a line nobody outside can read by its
+    /// contract; a document without a writer promises lines that never come.
+    /// </summary>
+    [Fact]
+    public void Every_reserved_kind_has_its_document_and_every_document_is_of_a_reserved_kind()
+    {
+        var published = JournalKindCatalog.Kinds.ToHashSet(StringComparer.Ordinal);
+
+        var undocumented = JournalKinds.Reserved.Except(published).Order(StringComparer.Ordinal).ToList();
+        var unwritten = published.Except(JournalKinds.Reserved).Order(StringComparer.Ordinal).ToList();
+
+        Assert.True(
+            undocumented.Count == 0,
+            $"{undocumented.Count} reserved kind(s) have no document under docs/contracts/journal/: {string.Join(", ", undocumented)}");
+        Assert.True(
+            unwritten.Count == 0,
+            $"{unwritten.Count} document(s) under docs/contracts/journal/ name a kind the runtime does not reserve: {string.Join(", ", unwritten)}");
     }
 }

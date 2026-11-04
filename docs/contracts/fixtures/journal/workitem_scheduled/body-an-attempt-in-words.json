@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_scheduled",
+  "version": 1,
+  "case": "an attempt is numbered",
+  "body": { "key": "attempt", "old": null, "new": "1" },
+  "expect": { "invalid": [{ "pointer": "/new", "reason": "type" }] }
+}

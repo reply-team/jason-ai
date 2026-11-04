@@ -1,0 +1,37 @@
+{
+  "kind": "message_sent_observed",
+  "version": 1,
+  "since": "0.22.0",
+  "summary": "A read of a send found that the message went out, with the moment it went and the provider's identifier for it.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^wi_", "description": "The work item that made the send: one line per send." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["plugin", "reference", "channel", "sent_at", "message_id", "observed_by", "read_work_item"],
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin that answered the read." },
+          "reference": { "type": "string", "minLength": 1, "description": "The provider's reference for the send, as the send returned it." },
+          "channel": { "type": "string", "enum": ["email", "linkedin"] },
+          "sent_at": { "type": ["null", "string"], "format": "date-time", "description": "When the message went, or null where the provider gives no moment known to be UTC." },
+          "message_id": { "type": ["null", "string"], "minLength": 1, "description": "The provider's identifier for the message that went, or null where it gives none." },
+          "observed_by": { "const": "status", "description": "How the send was found gone: a read of its status." },
+          "read_work_item": { "type": "string", "pattern": "^wi_", "description": "The work item that read the send's status." }
+        }
+      }
+    }
+  }
+}

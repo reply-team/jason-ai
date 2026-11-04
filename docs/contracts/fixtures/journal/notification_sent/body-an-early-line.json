@@ -1,0 +1,20 @@
+{
+  "kind": "notification_sent",
+  "version": 1,
+  "case": "a line of a release before the later counts: two counts and no delivered_through",
+  "body": {
+    "key": "notification",
+    "old": null,
+    "new": {
+      "notification_id": "ntf_01JC000000000000000000000A",
+      "counts": { "approvals": 1, "decisions": 0 },
+      "covered_through": null,
+      "channels": [
+        { "channel": "desktop", "kind": "toast", "outcome": "not_attempted", "reason": "no_desktop" },
+        { "channel": "phone", "kind": "plugin", "outcome": "failed", "code": "plugin_unreachable", "class": "transient", "attempts": 3 }
+      ],
+      "last_delivered_at": null
+    }
+  },
+  "expect": "valid"
+}

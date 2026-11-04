@@ -1,0 +1,36 @@
+{
+  "kind": "workitem_created",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A work item was created; the line says what it was asked to be, so where the work came from is answered without reading the item.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "kind" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "role", "operation", "contact_id", "priority", "not_before", "due_at"],
+        "properties": {
+          "kind": { "enum": ["ai_role", "provider_op"] },
+          "role": { "type": ["string", "null"], "description": "The role that performs ai_role work; null for a provider operation." },
+          "operation": { "type": ["string", "null"], "description": "The canonical operation a provider_op item performs; null for a role's work." },
+          "contact_id": { "type": ["string", "null"], "pattern": "^cnt_", "description": "The person the work is about, or null." },
+          "priority": { "type": "integer" },
+          "not_before": { "type": ["string", "null"], "format": "date-time", "description": "The moment before which the work does not start, or null." },
+          "due_at": { "type": ["string", "null"], "format": "date-time", "description": "The moment the work expires if it has not finished, or null." }
+        }
+      }
+    }
+  }
+}

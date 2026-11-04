@@ -1,0 +1,11 @@
+{
+  "kind": "provider_event_observed",
+  "version": 1,
+  "case": "every line says when the provider event happened",
+  "body": {
+    "key": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "old": null,
+    "new": { "kind": "reply_detected", "plugin": "example-mail", "event_id": "evt_01JC0000000000000000000004", "channel": "linkedin", "contact_id": null, "thread": null }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/occurred_at", "reason": "required" }] }
+}

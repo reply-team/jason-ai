@@ -1,0 +1,7 @@
+{
+  "kind": "external_id_pinned",
+  "version": 1,
+  "case": "a contact's identifier pinned",
+  "body": { "key": "contact/example-provider/person", "old": null, "new": "48213" },
+  "expect": "valid"
+}

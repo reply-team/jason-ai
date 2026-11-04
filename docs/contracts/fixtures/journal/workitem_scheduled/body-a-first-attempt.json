@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_scheduled",
+  "version": 1,
+  "case": "the first attempt of a work item is opened",
+  "body": { "key": "attempt", "old": null, "new": 1 },
+  "expect": "valid"
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "contact_updated",
+  "version": 1,
+  "case": "channels change as one field, never an address by name",
+  "body": { "key": "cnt_01JC0000000000000000000001", "old": null, "new": ["email"] },
+  "expect": { "invalid": [{ "pointer": "/new/0", "reason": "enum" }] }
+}

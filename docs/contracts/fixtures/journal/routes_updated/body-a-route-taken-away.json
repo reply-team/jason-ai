@@ -1,0 +1,7 @@
+{
+  "kind": "routes_updated",
+  "version": 1,
+  "case": "a campaign's route taken away",
+  "body": { "key": "contact.find", "old": { "plugin": "example-provider", "binding": { "account": "sender@example.com" } }, "new": null },
+  "expect": "valid"
+}

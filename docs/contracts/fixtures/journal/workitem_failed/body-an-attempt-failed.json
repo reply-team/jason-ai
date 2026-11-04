@@ -1,0 +1,17 @@
+{
+  "kind": "workitem_failed",
+  "version": 1,
+  "case": "a plugin's attempt failed for good, classified permanent, about one field",
+  "body": {
+    "key": "att_01JC0000000000000000000005",
+    "old": null,
+    "new": {
+      "code": "invalid_input",
+      "message": "The provider refused the address.",
+      "retriable": false,
+      "class": "permanent",
+      "details": [{ "field": "email", "code": "invalid", "message": "email is not an address the provider accepts." }]
+    }
+  },
+  "expect": "valid"
+}

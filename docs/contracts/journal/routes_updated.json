@@ -1,0 +1,60 @@
+{
+  "kind": "routes_updated",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A campaign's route was set or taken away, so an operation, or the campaign's default, goes to the plugin it names or back to the routes above it.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "plugin": { "at": "/new/plugin", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The operation the route is for, or `default` for the campaign's default route."
+      },
+      "old": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["plugin", "binding"],
+        "description": "The route the campaign had for the key before, or null where it had none.",
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1 },
+          "binding": {
+            "type": ["object", "null"],
+            "description": "The binding the route carried, or null. Its shape is the plugin's own; it names an account and never a credential."
+          }
+        }
+      },
+      "new": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["plugin", "binding"],
+        "description": "The route the campaign has for the key now, or null where it was taken away.",
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1 },
+          "binding": {
+            "type": ["object", "null"],
+            "description": "The binding the route carries, or null. Its shape is the plugin's own; it names an account and never a credential."
+          }
+        }
+      }
+    },
+    "anyOf": [
+      {
+        "description": "A route set: there may have been one before.",
+        "properties": { "new": { "type": "object" } }
+      },
+      {
+        "description": "A route taken away: there was one, and there is none now.",
+        "properties": { "old": { "type": "object" }, "new": { "type": "null" } }
+      }
+    ]
+  }
+}

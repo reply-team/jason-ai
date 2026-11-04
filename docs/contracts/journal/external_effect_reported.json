@@ -1,0 +1,38 @@
+{
+  "kind": "external_effect_reported",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "Somebody reported an effect that happened outside Jason, and the report was admitted.",
+  "subscribable": true,
+  "entities": {
+    "report": { "at": "/new/id", "presence": "always" },
+    "campaign": { "at": "/campaign_id", "presence": "sometimes" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "report" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "effect", "tool", "operation", "campaign_id", "contact_id", "work_item_id"],
+        "description": "The report's id, the effect, tool and operation as the reporter wrote them, and the ids of what it is about. The summary, the provider and the account are kept on the report.",
+        "properties": {
+          "id": { "type": "string", "pattern": "^rpt_" },
+          "effect": { "type": "string", "minLength": 1 },
+          "tool": { "type": "string", "minLength": 1 },
+          "operation": { "type": ["string", "null"], "description": "The operation the reporter named, or null where none was named." },
+          "campaign_id": { "type": ["string", "null"], "pattern": "^cmp_" },
+          "contact_id": { "type": ["string", "null"], "pattern": "^cnt_" },
+          "work_item_id": { "type": ["string", "null"], "pattern": "^wi_" }
+        }
+      }
+    }
+  }
+}

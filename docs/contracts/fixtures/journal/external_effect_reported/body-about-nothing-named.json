@@ -1,0 +1,7 @@
+{
+  "kind": "external_effect_reported",
+  "version": 1,
+  "case": "a report that names no campaign, contact, work item or operation",
+  "body": { "key": "report", "old": null, "new": { "id": "rpt_01JC0000000000000000000005", "effect": "reply_sent", "tool": "phone", "operation": null, "campaign_id": null, "contact_id": null, "work_item_id": "wi_01JC0000000000000000000002" } },
+  "expect": "valid"
+}

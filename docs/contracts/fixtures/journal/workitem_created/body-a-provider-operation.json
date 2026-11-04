@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_created",
+  "version": 1,
+  "case": "a provider operation is created about one person, not before a moment",
+  "body": { "key": "kind", "old": null, "new": { "kind": "provider_op", "role": null, "operation": "campaign.enroll", "contact_id": "cnt_01JC0000000000000000000001", "priority": 5, "not_before": "2026-11-05T09:00:00Z", "due_at": "2026-11-06T09:00:00Z" } },
+  "expect": "valid"
+}

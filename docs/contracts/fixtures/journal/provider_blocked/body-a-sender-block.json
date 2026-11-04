@@ -1,0 +1,11 @@
+{
+  "kind": "provider_blocked",
+  "version": 1,
+  "case": "one mailbox reached its daily limit",
+  "body": {
+    "key": "blk_01JC0000000000000000000008",
+    "old": null,
+    "new": { "provider_block_id": "blk_01JC0000000000000000000008", "plugin_id": "example-mail", "scope": "sender", "sender_external_id": "mbx-301", "reason": "limit", "clears_at": "2026-10-30T00:00:00.000Z", "work_item_id": "wi_01JC0000000000000000000002" }
+  },
+  "expect": "valid"
+}

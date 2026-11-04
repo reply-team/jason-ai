@@ -1,0 +1,7 @@
+{
+  "kind": "role_updated",
+  "version": 1,
+  "case": "a role that named no profile is given one",
+  "body": { "key": "researcher", "old": null, "new": "local-agent" },
+  "expect": "valid"
+}

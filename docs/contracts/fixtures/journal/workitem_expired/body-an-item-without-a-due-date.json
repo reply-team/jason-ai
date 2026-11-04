@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_expired",
+  "version": 1,
+  "case": "only an item with a due date expires, so the line always names it",
+  "body": { "key": "due_at", "old": null, "new": null },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "type" }] }
+}

@@ -1,0 +1,35 @@
+{
+  "kind": "project_updated",
+  "version": 1,
+  "since": "0.14.0",
+  "summary": "A project's name changed.",
+  "subscribable": true,
+  "entities": {
+    "project": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^prj_", "description": "The project." },
+      "old": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 }
+        }
+      },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

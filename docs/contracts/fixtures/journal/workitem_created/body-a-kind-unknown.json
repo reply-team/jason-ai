@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_created",
+  "version": 1,
+  "case": "a work item is a role's work or a provider operation",
+  "body": { "key": "kind", "old": null, "new": { "kind": "provider", "role": null, "operation": "campaign.enroll", "contact_id": null, "priority": 0, "not_before": null, "due_at": null } },
+  "expect": { "invalid": [{ "pointer": "/new/kind", "reason": "enum" }] }
+}

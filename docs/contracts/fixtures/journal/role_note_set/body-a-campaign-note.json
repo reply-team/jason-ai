@@ -1,0 +1,7 @@
+{
+  "kind": "role_note_set",
+  "version": 1,
+  "case": "a campaign's first note for a role",
+  "body": { "key": "researcher", "old": null, "new": { "campaign_id": "cmp_01JC0000000000000000000001", "role": "researcher", "bytes": 42, "hash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } },
+  "expect": "valid"
+}

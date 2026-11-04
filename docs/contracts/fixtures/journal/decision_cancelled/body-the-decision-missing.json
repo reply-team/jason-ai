@@ -1,0 +1,7 @@
+{
+  "kind": "decision_cancelled",
+  "version": 1,
+  "case": "the line names the decision",
+  "body": { "key": "decision", "old": null, "new": {} },
+  "expect": { "invalid": [{ "pointer": "/new/decision_id", "reason": "required" }] }
+}

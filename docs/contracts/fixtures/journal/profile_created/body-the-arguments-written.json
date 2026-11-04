@@ -1,0 +1,7 @@
+{
+  "kind": "profile_created",
+  "version": 1,
+  "case": "the arguments are kept on the revision, not on the line",
+  "body": { "key": "local-agent", "old": null, "new": { "revision": 1, "host": "codex", "program": "codex", "host_version_verified": "1.0.0", "args": ["--quiet"] } },
+  "expect": { "invalid": [{ "pointer": "/new/args", "reason": "additional_properties" }] }
+}

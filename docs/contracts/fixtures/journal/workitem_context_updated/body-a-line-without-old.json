@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_context_updated",
+  "version": 1,
+  "case": "every line carries old, null when the key was not there",
+  "body": { "key": "brief", "new": "Ask about the pilot." },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "required" }] }
+}

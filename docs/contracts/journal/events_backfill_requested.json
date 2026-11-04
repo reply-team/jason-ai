@@ -1,0 +1,35 @@
+{
+  "kind": "events_backfill_requested",
+  "version": 1,
+  "since": "0.12.0",
+  "summary": "A span of an account's provider events was asked to be read again.",
+  "subscribable": true,
+  "entities": {
+    "backfill": { "at": "/key", "presence": "always" },
+    "event_source": { "at": "/new/source", "presence": "always" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^evb_", "description": "The span asked for." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["backfill", "source", "plugin", "binding_identity", "from", "to"],
+        "properties": {
+          "backfill": { "type": "string", "pattern": "^evb_", "description": "The span asked for, as its key says." },
+          "source": { "type": "string", "pattern": "^evs_", "description": "The account." },
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin the account is read through." },
+          "binding_identity": { "type": "string", "minLength": 1, "description": "The account's binding, as the sha256: of its canonical form, or none for a route that names no binding." },
+          "from": { "type": "string", "format": "date-time", "description": "Where the span starts." },
+          "to": { "type": "string", "format": "date-time", "description": "Where it ends." }
+        }
+      }
+    }
+  }
+}

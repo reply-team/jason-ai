@@ -1,0 +1,11 @@
+{
+  "kind": "project_linked",
+  "version": 1,
+  "case": "the campaigns are a map from a campaign's id to its folder",
+  "body": {
+    "key": "prj_01JC0000000000000000000009",
+    "old": { "folder_path": "/home/someone/Jason/projects/spring-launch", "campaigns": {} },
+    "new": { "folder_path": "/home/someone/Jason/projects/spring-launch", "campaigns": ["cmp_01JC000000000000000000000F"] }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/campaigns", "reason": "type" }] }
+}

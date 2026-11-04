@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_removed",
+  "version": 1,
+  "case": "two people are removed and one was never a member",
+  "body": { "key": null, "old": null, "new": { "removed": 2, "not_member": 1, "already_excluded": 0, "rejected": 0, "contact_ids": ["cnt_01JC0000000000000000000001", "cnt_01JC0000000000000000000003"] } },
+  "expect": "valid"
+}

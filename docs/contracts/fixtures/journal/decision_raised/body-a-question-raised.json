@@ -1,0 +1,7 @@
+{
+  "kind": "decision_raised",
+  "version": 1,
+  "case": "an attempt raised a question",
+  "body": { "key": "decision", "old": null, "new": { "decision_id": "dec_01JC0000000000000000000006" } },
+  "expect": "valid"
+}

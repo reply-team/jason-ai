@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_processing",
+  "version": 1,
+  "case": "the line keys the attempt, never the status",
+  "body": { "key": "status", "old": null, "new": 2 },
+  "expect": { "invalid": [{ "pointer": "/key", "reason": "const" }] }
+}
