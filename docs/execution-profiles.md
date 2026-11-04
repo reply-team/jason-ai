@@ -521,7 +521,8 @@ each runs under the person's own plan, signed in by them. On Windows npm's shim 
 `@openai/codex`, as for an unscoped one, whether it starts a script through node or an executable the package ships, and
 what runs is the interpreter and entry script, or that executable, it names; an executable that a package's postinstall
 never put in place of its placeholder starts and fails as any program that cannot run does
-([plugins](plugins.md#13-known-limitations-of-this-version)). A host whose program is not on this machine ends the attempt
+([plugins](plugins.md#13-known-limitations-of-this-version)). A real npm install of Claude Code, the form with no
+interpreter, is not yet measured on a machine. A host whose program is not on this machine ends the attempt
 with `host_not_available`; so does a host that stops because it is not signed in, where that host's row names the
 signal Jason reads for it; a host whose row names none ends such an attempt as any exit of it ends. A
 `host_not_available` carries one sentence of Jason's own, never the host's words.
