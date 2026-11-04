@@ -15,10 +15,21 @@ export function CopyPromptButton({ kind, itemId, campaignId, workItemId }: Props
     useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
 
     const copy = async () => {
+        if (timer.current) clearTimeout(timer.current);
         setState('working');
         try {
-            const folder = await resolveFolder(api, campaignId);
-            await navigator.clipboard.writeText(composePrompt(kind, itemId, campaignId, workItemId, folder));
+            // The clipboard is asked inside this click, before any read is awaited: a browser takes a write only
+            // within the gesture's call stack, so the text is handed over as a promise it resolves when it is ready.
+            const text = resolveFolder(api, campaignId).then((folder) =>
+                composePrompt(kind, itemId, campaignId, workItemId, folder),
+            );
+            text.catch(() => undefined);
+            if (typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard?.write === 'function') {
+                const blob = text.then((value) => new Blob([value], { type: 'text/plain' }));
+                await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+            } else {
+                await navigator.clipboard.writeText(await text);
+            }
             setState('copied');
         } catch {
             setState('failed');
