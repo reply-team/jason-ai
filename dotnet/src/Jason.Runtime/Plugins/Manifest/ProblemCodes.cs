@@ -44,6 +44,12 @@ public static class ProblemCodes
     /// </summary>
     public const string SettlesByKeyInvalid = "settles_by_key_invalid";
 
+    /// <summary>A declared subscription names a kind the runtime does not write to its journal.</summary>
+    public const string SubscriptionKindUnknown = "subscription_kind_unknown";
+
+    /// <summary>A declared subscription names a kind the runtime writes that no plugin may subscribe to.</summary>
+    public const string SubscriptionKindNotSubscribable = "subscription_kind_not_subscribable";
+
     /// <summary>A notification plugin declares the events contract: it delivers pointers and reads no account.</summary>
     public const string EventsNotAllowed = "events_not_allowed";
     public const string EntryModuleMissing = "entry_module_missing";

@@ -76,7 +76,7 @@ is answered with three problems rather than one per reload.
 manifest_version: 1              # required; this runtime reads 1
 id: fake-provider                # required; must equal the directory name
 version: 1.0.0                   # required; SemVer core, optional prerelease, no build metadata
-kind: provider                   # required; provider | notification
+kind: provider                   # required; provider | notification | subscriber
 name: Fake provider              # optional
 description: The test double every plugin-host test drives; copy its shape.
 homepage: https://example.com    # optional; absolute https URL
@@ -84,7 +84,7 @@ contracts:
   protocol: [1]                  # required; plugin-host protocol versions this plugin speaks
   operations: [1]                # required for a provider; canonical-operation contract versions
   events: [1]                    # optional, a provider only: the events contract versions it reads accounts by
-operations: [echo.run, exec.run] # required non-empty for a provider; absent/empty for notification
+operations: [echo.run, exec.run] # required non-empty for a provider; absent/empty for notification and subscriber
 entry:                           # optional; defaults to main.js / invoke
   module: main.js
   function: invoke
@@ -109,6 +109,7 @@ binding:                         # optional; a schema, in the published dialect,
   required: [workspace]
   properties:
     workspace: { type: string }
+subscriptions: [workitem_failed] # optional; required for a subscriber: the journal kinds the plugin handles
 ```
 
 | Field | Rule | Problem code |
@@ -116,15 +117,15 @@ binding:                         # optional; a schema, in the published dialect,
 | `manifest_version` | required; must be `1` | `field_required`, `manifest_version_unsupported` |
 | `id` | required; `^[a-z][a-z0-9-]{1,63}$` (2–64 characters); must equal the directory name | `field_required`, `field_invalid`, `id_mismatch` |
 | `version` | required; `major.minor.patch` with an optional `-prerelease`, no build metadata | `field_required`, `version_invalid` |
-| `kind` | required; `provider` or `notification` | `field_required`, `kind_invalid` |
+| `kind` | required; `provider`, `notification` or `subscriber` | `field_required`, `kind_invalid` |
 | `name` | optional text, at most 100 characters | `field_invalid` |
 | `description` | optional text, at most 1000 characters | `field_invalid` |
 | `homepage` | optional; absolute `https` URL | `field_invalid` |
 | `contracts.protocol` | required non-empty list of whole numbers; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
-| `contracts.operations` | required for a provider, optional for a notification; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
+| `contracts.operations` | required for a provider, optional for a notification, absent on a subscriber; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
 | `contracts.events` | optional, and only on a provider; when present, must include `1` | `field_invalid`, `contract_unsupported`, `events_not_allowed` |
 | `operations` | required non-empty for a provider; each `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$` — at least one dot — and unique | `field_required`, `field_invalid`, `operation_invalid`, `operation_duplicate` |
-| `operations` on a `notification` | must be absent or empty | `operations_not_allowed` |
+| `operations` on a `notification` or a `subscriber` | must be absent or empty | `operations_not_allowed` |
 | `entry.module` | `.js` or `.mjs`, relative, no `..` segments, inside the package, must exist | `field_invalid`, `entry_module_outside_package`, `entry_module_missing` |
 | `entry.function` | `^[A-Za-z_$][A-Za-z0-9_$]*$` | `entry_function_invalid` |
 | `capabilities.exec.executables` | required inside `exec`; 1..16 entries | `field_required`, `field_invalid` |
@@ -142,6 +143,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `arguments` | optional, and only on a provider; a mapping of operations to the arguments the plugin takes on some of that operation's channels, each a non-empty list of channels without duplicates. An operation the plugin does not implement or this build publishes no document for, an argument the operation's document does not name under `channel_arguments`, and a channel the operation's arguments do not take are refused | `field_invalid`, `argument_invalid` |
 | `settles_by_key` | optional, and only on a provider; a non-empty list of the operations whose lost answer the plugin settles by the work item's key, without duplicates. An operation the plugin does not implement, one this build publishes no document for, and one whose document's recovery read does not rest on the key (`recovery_read.by_key`) are refused | `field_invalid`, `settles_by_key_invalid` |
 | `templates` | optional, and only on a provider; a mapping of operations to the channels the plugin writes that operation's message on as a template, each a non-empty list without duplicates. An operation the plugin does not implement or this build publishes no document for, one whose document names no channel under `channel_templates`, and a channel the document does not name there are refused | `field_invalid`, `template_invalid` |
+| `subscriptions` | optional on a provider and a notification plugin, required on a subscriber; a non-empty list of the journal kinds the plugin handles, each named once. A kind the runtime does not write to its journal, and one it writes that no plugin may subscribe to, are refused. Declaring a kind is not being given it: the grant decides (§9) | `field_required`, `field_invalid`, `subscription_kind_unknown`, `subscription_kind_not_subscribable` |
 
 `binding` says what an installation has to tell this plugin before it can act — which account, which
 workspace, which mailbox. It never carries the credential: the plugin reaches that through the

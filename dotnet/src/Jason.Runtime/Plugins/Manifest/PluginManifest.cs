@@ -100,6 +100,12 @@ public sealed record PluginManifest(
     /// </summary>
     public bool SettlesByKey(string operation) => KeyedOperations.Contains(operation, StringComparer.Ordinal);
 
+    /// <summary>
+    /// The journal kinds the plugin subscribes to, as <c>subscriptions</c> declares them, in the manifest's order; none
+    /// unless the manifest lists them. Declaring a kind is not being given it: the grants decide that, at every load.
+    /// </summary>
+    public IReadOnlyList<string> Subscriptions { get; init; } = [];
+
     /// <summary>Whether this is a provider that reads its accounts' events, in a version of the events contract this build speaks.</summary>
     public bool ReadsEvents => Kind == PluginKind.Provider && Contracts.Events.Contains(EventsContract.CurrentVersion);
 }
