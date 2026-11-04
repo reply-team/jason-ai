@@ -312,9 +312,20 @@ public sealed record JournalKindContract(
             }
 
             var segments = pointer.StartsWith('/') ? Segments(pointer) : [];
-            if (segments.Count < 2 || !BodyMembers.Contains(segments[0], StringComparer.Ordinal) || segments.Contains("*", StringComparer.Ordinal))
+            if (segments.Count < 2 || !BodyMembers.Contains(segments[0], StringComparer.Ordinal) || segments[^1] == "*")
             {
                 throw new InvalidOperationException($"{source}: `field_since` names `{pointer}`, which is not a member of an object inside `key`, `old` or `new`.");
+            }
+
+            // A `*` stands for any index of an array, so the place before it is an array the body describes.
+            for (var star = segments.IndexOf("*"); star > 0; star = segments.IndexOf("*", star + 1))
+            {
+                var arrays = Resolve(body, segments[..star]) ?? [];
+                if (!arrays.Exists(schema => schema["items"] is JsonObject))
+                {
+                    throw new InvalidOperationException(
+                        $"{source}: `field_since` names `{pointer}`, where `*` stands for any index of an array, and the body describes no array at `/{string.Join('/', segments.Take(star))}`.");
+                }
             }
 
             var parents = Resolve(body, segments[..^1]) ?? [];

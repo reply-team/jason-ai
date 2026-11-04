@@ -202,12 +202,29 @@ public sealed class JournalKindContractTests
     [InlineData("/new/note", "0.1.0", "which is not after 0.1.0")]
     [InlineData("/new/note", "0.12", "something other than a release's version")]
     [InlineData("/new/contacts", "0.12.0", "the body cannot require it")]
+    [InlineData("/new/note/*/id", "0.12.0", "stands for any index of an array, and the body describes no array at `/new/note`")]
+    [InlineData("/new/contacts/*", "0.12.0", "not a member of an object")]
     public void A_field_added_later_is_a_member_the_body_describes_and_does_not_require(string pointer, string version, string refusal)
     {
         var document = Document();
         document["field_since"] = new JsonObject { [pointer] = version };
 
         Refused(document, refusal);
+    }
+
+    /// <summary>
+    /// A field added to every item of an array is named with <c>*</c> for the item's index, and found through the
+    /// array's <c>items</c>.
+    /// </summary>
+    [Fact]
+    public void A_field_added_to_every_item_of_an_array_is_named_with_a_star_for_its_index()
+    {
+        var document = Document();
+        document["field_since"] = new JsonObject { ["/new/contacts/*/id"] = "0.12.0" };
+
+        var contract = JournalKindContract.Parse(Source, document);
+
+        Assert.Equal("0.12.0", contract.FieldSince["/new/contacts/*/id"]);
     }
 
     /// <summary>
