@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
@@ -205,6 +206,7 @@ public sealed class DoorServiceTests : IDisposable
         Assert.Equal(400, error.Details!["status"]!.GetValue<int>());
     }
 
+    /// <summary>Where nothing accepted the connection, the request never left, so trying again is safe.</summary>
     [Fact]
     public void A_runtime_that_is_not_listening_is_transient_and_unreachable()
     {
@@ -215,6 +217,28 @@ public sealed class DoorServiceTests : IDisposable
         Assert.Equal("transient", caught["class"]!.GetValue<string>());
         Assert.Equal(DoorService.RuntimeUnreachable, caught["code"]!.GetValue<string>());
         Assert.True(caught["retryable"]!.GetValue<bool>());
+    }
+
+    /// <summary>
+    /// A connection that breaks once the request has left may break after the runtime acted, so the plugin is told the
+    /// answer was lost and that the call may have acted, never that it may simply repeat it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_connection_that_breaks_after_the_request_left_is_ambiguous_and_lost(bool midBody)
+    {
+        using var runtime = new BreakingRuntime(midBody);
+        using var harness = Harness(DoorTo(runtime.BaseUrl));
+
+        var caught = Caught(harness, "host.call(\"journal.append\", { campaign_id: \"cmp_1\", kind: \"acme_seen\" })");
+
+        Assert.True(caught["caught"]!.GetValue<bool>());
+        Assert.Equal("ambiguous", caught["class"]!.GetValue<string>());
+        Assert.Equal(DoorService.RuntimeAnswerLost, caught["code"]!.GetValue<string>());
+        Assert.False(caught["retryable"]!.GetValue<bool>());
+        Assert.Equal("journal.append", caught["details"]!["operation"]!.GetValue<string>());
+        Assert.True(runtime.RequestRead, "the request did not reach the listener");
     }
 
     [Fact]
@@ -315,6 +339,92 @@ public sealed class DoorServiceTests : IDisposable
         Assert.Equal((int)HttpStatusCode.OK, line["data"]!["status"]!.GetValue<int>());
         Assert.DoesNotContain(Capability, harness.Stderr, StringComparison.Ordinal);
         Assert.Contains(Redactor.Mask, harness.Stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A listener on loopback that reads one whole request and then resets the connection: before a byte of the answer, or
+    /// partway through its body.
+    /// </summary>
+    private sealed class BreakingRuntime : IDisposable
+    {
+        private const string Crlf = "\r\n";
+
+        private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+        private readonly Task _serving;
+        private volatile bool _requestRead;
+
+        public BreakingRuntime(bool midBody)
+        {
+            _listener.Start();
+            BaseUrl = string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}");
+            _serving = Task.Run(() => ServeAsync(midBody));
+        }
+
+        public string BaseUrl { get; }
+
+        public bool RequestRead => _requestRead;
+
+        private async Task ServeAsync(bool midBody)
+        {
+            try
+            {
+                using var client = await _listener.AcceptTcpClientAsync().ConfigureAwait(false);
+                var stream = client.GetStream();
+                var received = new StringBuilder();
+                var buffer = new byte[4096];
+                var expected = -1;
+                while (true)
+                {
+                    var read = await stream.ReadAsync(buffer).ConfigureAwait(false);
+                    if (read == 0)
+                    {
+                        return;
+                    }
+
+                    received.Append(Encoding.ASCII.GetString(buffer, 0, read));
+                    var text = received.ToString();
+                    var end = text.IndexOf(Crlf + Crlf, StringComparison.Ordinal);
+                    if (end < 0)
+                    {
+                        continue;
+                    }
+
+                    if (expected < 0)
+                    {
+                        var header = text[..end].Split(Crlf).First(line => line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase));
+                        expected = int.Parse(header["Content-Length:".Length..].Trim(), CultureInfo.InvariantCulture);
+                    }
+
+                    if (Encoding.UTF8.GetByteCount(text[(end + 4)..]) >= expected)
+                    {
+                        break;
+                    }
+                }
+
+                _requestRead = true;
+                if (midBody)
+                {
+                    var head = Encoding.ASCII.GetBytes(
+                        "HTTP/1.1 200 OK" + Crlf + "Content-Type: application/json" + Crlf + "Content-Length: 4096" + Crlf + Crlf + "{\"items\":[");
+                    await stream.WriteAsync(head).ConfigureAwait(false);
+                    await stream.FlushAsync().ConfigureAwait(false);
+                    await Task.Delay(100).ConfigureAwait(false);
+                }
+
+                client.Client.LingerState = new LingerOption(true, 0);
+                client.Client.Close();
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or ObjectDisposedException)
+            {
+                // The listener was stopped, or the host gave up first: nothing more to serve.
+            }
+        }
+
+        public void Dispose()
+        {
+            _listener.Stop();
+            _serving.Wait(TimeSpan.FromSeconds(5));
+        }
     }
 
     [Fact]

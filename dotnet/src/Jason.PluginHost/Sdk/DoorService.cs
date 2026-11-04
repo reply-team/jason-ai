@@ -26,6 +26,9 @@ public sealed class DoorService(HostServices services, InvocationDoor door) : ID
     /// <summary>The runtime did not answer: nothing was listening, or the connection broke before an answer came.</summary>
     public const string RuntimeUnreachable = "runtime_unreachable";
 
+    /// <summary>The connection broke after the request left, before the whole answer came; the call may have acted.</summary>
+    public const string RuntimeAnswerLost = "runtime_answer_lost";
+
     /// <summary>The answer was larger than the door reads; the call may have acted all the same.</summary>
     public const string ResponseTooLarge = "response_too_large";
 
@@ -153,8 +156,9 @@ public sealed class DoorService(HostServices services, InvocationDoor door) : ID
                 Details(operation, null),
                 retryable: false);
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException)
+        catch (HttpRequestException ex) when (ex.HttpRequestError is HttpRequestError.ConnectionError or HttpRequestError.NameResolutionError)
         {
+            // Nothing accepted the connection, so the request never left and trying again is safe.
             Unanswered(operation, watch);
             throw Failure(
                 engine,
@@ -163,6 +167,18 @@ public sealed class DoorService(HostServices services, InvocationDoor door) : ID
                 $"The runtime could not be reached for '{operation}'.",
                 Details(operation, null),
                 retryable: true);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
+        {
+            // The connection broke once the request had left: the runtime may have acted before it did.
+            Unanswered(operation, watch);
+            throw Failure(
+                engine,
+                "ambiguous",
+                RuntimeAnswerLost,
+                $"The connection broke after the request for '{operation}' left; the call may have acted.",
+                Details(operation, status: null),
+                retryable: false);
         }
 
         services.Diagnostics.Host(

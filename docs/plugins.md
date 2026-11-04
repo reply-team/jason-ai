@@ -668,7 +668,8 @@ not settings. A call that fails otherwise throws an error you can catch, with `c
 | Code | Class | Means |
 |---|---|---|
 | an API error code, such as `not_found` | `transient` where the API said `retryable`, else `permanent` | the API refused the call; its own `details` are under `details.details` |
-| `runtime_unreachable` | `transient`, `retryable` | nothing answered, or the connection broke before an answer came |
+| `runtime_unreachable` | `transient`, `retryable` | nothing accepted the connection, so the request never left |
+| `runtime_answer_lost` | `ambiguous` | the connection broke after the request left; the call may have acted |
 | `runtime_timeout` | `ambiguous` | no answer within the call's bound; the call may have acted |
 | `response_too_large` | `permanent` | the answer is over 1 MiB; the call may have acted |
 | `runtime_answer_invalid` | `permanent` | what came back is not the Runtime API's answer or its error |
