@@ -64,7 +64,7 @@ public sealed class JournalLineInterceptor(JournalLines lines, PatternTiming tim
     }
 
     /// <summary>The columns the document says every line of the kind names and this line leaves empty.</summary>
-    private static IEnumerable<string> MissingColumns(JournalKindContract contract, JournalEntry line)
+    internal static IEnumerable<string> MissingColumns(JournalKindContract contract, JournalEntry line)
     {
         foreach (var entity in contract.Entities.Values)
         {

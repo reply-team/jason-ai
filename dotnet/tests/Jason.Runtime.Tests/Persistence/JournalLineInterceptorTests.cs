@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Journal;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
@@ -125,6 +126,39 @@ public sealed class JournalLineInterceptorTests
         Assert.Contains("/new", refused.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A contact is named through its navigation as a campaign is: no reserved kind names a contact on its column on every
+    /// line yet, so the row reads a document of its own.
+    /// </summary>
+    [Fact]
+    public void A_contact_named_through_its_navigation_counts_as_named()
+    {
+        var contract = JournalKindContract.Parse("contact_noted.json", (JsonObject)JsonNode.Parse("""
+            {
+              "kind": "contact_noted",
+              "version": 1,
+              "since": "0.1.0",
+              "summary": "A person was noted.",
+              "subscribable": true,
+              "entities": { "contact": { "at": "/contact_id", "presence": "always" } },
+              "field_since": {},
+              "body": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["key", "old", "new"],
+                "properties": { "key": { "type": "null" }, "old": { "type": "null" }, "new": { "type": "null" } }
+              }
+            }
+            """)!);
+        var now = DateTime.UtcNow;
+        var person = new Contact { PublicId = "cnt_01JC0000000000000000000001", FirstName = "Ada", LastName = "Example", CreatedAt = now, UpdatedAt = now };
+
+        var named = Line("contact_noted", null, null, null, contact: person);
+
+        Assert.Empty(JournalLineInterceptor.MissingColumns(contract, named));
+        Assert.Equal(["/contact_id"], JournalLineInterceptor.MissingColumns(contract, Line("contact_noted", null, null, null)));
+    }
+
     [Fact]
     public void A_kind_of_somebody_elses_own_is_not_held_to_any_document()
     {
@@ -217,9 +251,10 @@ public sealed class JournalLineInterceptorTests
             .AddInterceptors(new JournalLineInterceptor(lines, timing))
             .Options);
 
-    private static JournalEntry Line(string kind, string? key, JsonNode? old, JsonNode? updated, Campaign? campaign = null) => new()
+    private static JournalEntry Line(string kind, string? key, JsonNode? old, JsonNode? updated, Campaign? campaign = null, Contact? contact = null) => new()
     {
         Campaign = campaign,
+        Contact = contact,
         PublicId = "jrn_" + Guid.NewGuid().ToString("N"),
         Ts = DateTime.UtcNow,
         ActorType = ActorType.System,
