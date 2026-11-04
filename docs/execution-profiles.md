@@ -928,8 +928,8 @@ reaches a shell, and the capability token and the envelope are in none of it. Th
   quote in it is left to the person.
 - **a view of a file** is approved for exactly the memory files the launch names and left to the person's rules for any
   other.
-- **a write** is approved for `result.json` in the work directory, a relative path being read against the work directory,
-  and only as a write that does not overwrite; nothing else is written. An edit of a file, a question to the person, a
+- **a write** is approved for `result.json` in the work directory, a relative path being read against the work directory:
+  the one result file, written as often as the role needs; nothing else is written. An edit of a file, a question to the person, a
   sub-agent, a message, a schedule, a task, a permission request and an image are refused. One reach is left: under the
   host's proceed-in-sandbox or auto mode a command the person's rules allow may plant a link in the work directory that the
   host's later write follows, and the hook cannot see it, because it reads no file. "Never writable" holds for the host's

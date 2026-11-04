@@ -147,8 +147,10 @@ public static class AntigravityHook
                 return Text(args, "AbsolutePath") is not { } viewed ? Unreadable : rules.Read.Any(file => SamePath(viewed, file, windows)) ? Approved : Delegated;
 
             case "write_to_file":
-                // A relative path is read against the work directory, the one the host runs in; and a write that
-                // overwrites is never approved.
+                // A relative path is read against the work directory, the one the host runs in. The result file is
+                // approved with or without Overwrite, so a role whose first result was refused can write it again: the
+                // path pins the target, and a link planted there needs a writer in the work directory, who could do
+                // anything already. Every other write is denied.
                 if (Text(args, "TargetFile") is not { } target)
                 {
                     return Unreadable;
@@ -156,7 +158,7 @@ public static class AntigravityHook
 
                 var workDirectory = Path.GetDirectoryName(rules.Write) ?? "";
                 var full = Path.IsPathFullyQualified(target) || workDirectory.Length == 0 ? target : Path.Combine(workDirectory, target);
-                return SamePath(full, rules.Write, windows) && IsFalseOrAbsent(args, "Overwrite") ? Approved : Floor;
+                return SamePath(full, rules.Write, windows) ? Approved : Floor;
 
             case "read_url_content":
             case "search_web":

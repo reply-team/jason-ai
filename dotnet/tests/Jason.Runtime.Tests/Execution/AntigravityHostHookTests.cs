@@ -203,14 +203,20 @@ public sealed class AntigravityHostHookTests
         Assert.Equal("deny", Decide(Call("write_to_file", ("TargetFile", "../result.json"))));
     }
 
-    /// <summary>A write that replaces a file is not the one the role was given, so only a fresh write is approved.</summary>
+    /// <summary>
+    /// A role whose first result the runtime refuses writes the file again, so the result file is approved with or without
+    /// <c>Overwrite</c>: the path pins the target, and a link planted there needs a writer in the work directory, who
+    /// could do anything already. Every other write, overwriting or not, stays denied.
+    /// </summary>
     [Fact]
-    [Critical(Family.S6, "the result is written once, never over a file that is there")]
-    public void A_write_that_overwrites_is_denied_even_for_the_result_file()
+    [Critical(Family.S6, "the result file is written as often as the role needs, and no other file is")]
+    public void A_second_write_of_the_result_file_is_approved()
     {
         Assert.Equal("auto_approve", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = ResultFile, ["Overwrite"] = false })));
-        Assert.Equal("deny", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = ResultFile, ["Overwrite"] = true })));
-        Assert.Equal("deny", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = ResultFile, ["Overwrite"] = "true" })));
+        Assert.Equal("auto_approve", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = ResultFile, ["Overwrite"] = true })));
+        Assert.Equal("auto_approve", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = "result.json", ["Overwrite"] = true })));
+        Assert.Equal("deny", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = Path.Combine(WorkDir, "other.json"), ["Overwrite"] = true })));
+        Assert.Equal("deny", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = Path.Combine(WorkDir, "other.json"), ["Overwrite"] = false })));
     }
 
     /// <summary>A command is approved only as a foreground one in the work directory.</summary>
