@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Jason.Cli;
 using Jason.Runtime.Tests;
 
@@ -74,7 +75,7 @@ public class SkillsHomeTests
         var root = SkillPack.RepositoryRoot();
         var text = File.ReadAllText(Path.Combine(root, "skills", "README.md"));
 
-        using var manifest = System.Text.Json.JsonDocument.Parse(
+        using var manifest = JsonDocument.Parse(
             File.ReadAllText(Path.Combine(root, ".claude-plugin", "marketplace.json")));
         var plugin = manifest.RootElement.GetProperty("plugins").EnumerateArray()
             .Single(entry => entry.GetProperty("source").GetString() == "./skills/business")
@@ -88,6 +89,7 @@ public class SkillsHomeTests
         var section = next < 0 ? text[start..] : text[start..next];
         Assert.Contains("skills/business", section, StringComparison.Ordinal);
         Assert.Contains(plugin, section, StringComparison.Ordinal);
+        Assert.Contains("skills marketplace", section, StringComparison.Ordinal);
         Assert.Contains("no separate skills repository", section, StringComparison.OrdinalIgnoreCase);
     }
 
