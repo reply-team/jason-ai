@@ -97,6 +97,7 @@ public class SubscriptionReloadTests
     /// chains, exactly as they were — even when the order section has been edited since.
     /// </summary>
     [Fact]
+    [Critical(Family.W11, "routes are read only at a reload")]
     public async Task A_route_set_leaves_the_chains_where_they_were()
     {
         await using var api = await StartAsync(paths =>
@@ -117,6 +118,7 @@ public class SubscriptionReloadTests
     }
 
     [Theory]
+    [Critical(Family.R1, "a rejected reload keeps the snapshot")]
     [InlineData("gone", "no plugin with id 'gone' is in the candidate set")]
     [InlineData("quiet", "plugin 'quiet' does not declare workitem_failed")]
     [InlineData("held", "plugin 'held' declares workitem_failed but Plugins:Grants:held:Subscriptions does not grant it")]
@@ -207,6 +209,7 @@ public class SubscriptionReloadTests
     /// the report says why, and the runtime runs on, as it does for a bad route.
     /// </summary>
     [Fact]
+    [Critical(Family.R1, "a rejected reload keeps the snapshot")]
     public async Task A_start_whose_order_names_a_plugin_not_granted_the_kind_activates_nothing_and_says_why()
     {
         await using var api = await StartAsync(paths =>

@@ -44,6 +44,7 @@ public sealed class SubscriptionGrantTests
     }
 
     [Fact]
+    [Critical(Family.R5, "declaration then grant")]
     public void A_grant_naming_a_kind_the_manifest_does_not_declare_admits_nothing_and_says_so()
     {
         var grants = GrantResolver.Resolve(Declares, new PluginGrant { Subscriptions = ["contacts_added", "workitem_failed", "Workitem_Failed"] });
