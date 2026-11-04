@@ -204,6 +204,28 @@ public sealed class TerminalPlanTests : IDisposable
         Assert.ThrowsAny<ArgumentException>(() => TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/tmp", Host, id));
     }
 
+    /// <summary>
+    /// On Linux and macOS the terminal holds none of the CLI's own streams: a caller that captures the CLI's output reads
+    /// its end when the CLI exits, not when the person closes the window. Windows' console host is started as it was.
+    /// Making a start info starts nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(TerminalPlatform.Linux, true)]
+    [InlineData(TerminalPlatform.MacOs, true)]
+    [InlineData(TerminalPlatform.Windows, false)]
+    public void On_linux_and_macos_the_terminal_is_started_on_pipes_of_its_own(TerminalPlatform os, bool redirected)
+    {
+        var start = TerminalStartInfo.For(os, ["/usr/bin/x-terminal-emulator", "-e", "/usr/local/bin/codex", Prompt], "/home/marta/Jason");
+
+        Assert.Equal(redirected, start.RedirectStandardInput);
+        Assert.Equal(redirected, start.RedirectStandardOutput);
+        Assert.Equal(redirected, start.RedirectStandardError);
+        Assert.False(start.UseShellExecute);
+        Assert.Equal("/usr/bin/x-terminal-emulator", start.FileName);
+        Assert.Equal(["-e", "/usr/local/bin/codex", Prompt], start.ArgumentList);
+        Assert.Equal("/home/marta/Jason", start.WorkingDirectory);
+    }
+
     private string Folder(string name) => Directory.CreateDirectory(Path.Combine(_root, name)).FullName;
 
     private static string StandIn(string folder, string name)

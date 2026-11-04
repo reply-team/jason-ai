@@ -24,7 +24,10 @@ public interface ITerminalStarter
 
 /// <summary>
 /// The terminal of this machine, started as every child of Jason's is: through <see cref="ChildProcess"/>, with an argument
-/// list and no shell. On Windows and Linux the terminal is never waited for. On macOS the script Terminal runs is written
+/// list and no shell, by the start <see cref="TerminalStartInfo"/> composes. On Linux and macOS the terminal's three
+/// standard streams are pipes of its own, whose ends this process closes as soon as it has started, so a caller that
+/// captures the CLI's output is not kept waiting until the person closes the window. On Windows and Linux the terminal is
+/// never waited for. On macOS the script Terminal runs is written
 /// first, into a folder of its own under the temporary folder that only this account can read, and it removes itself and
 /// that folder when it runs; <c>/usr/bin/open</c> hands the script to Terminal and exits, so it is waited for, for ten
 /// seconds at most, and an exit other than zero is a start that failed: the folder is removed and the problem returned.
@@ -58,19 +61,21 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
                 argv[^1] = path;
             }
 
-            var start = ChildProcess.StartInfo(argv[0]);
-            foreach (var argument in argv.Skip(1))
-            {
-                start.ArgumentList.Add(argument);
-            }
-
-            start.WorkingDirectory = launch.WorkingDirectory;
+            var start = TerminalStartInfo.For(Platform, argv, launch.WorkingDirectory);
             using var process = ChildProcess.Start(start);
             if (process is null)
             {
                 problem = "no process was started";
             }
-            else if (launch.Script is not null && process.WaitForExit(OpenerWait) && process.ExitCode != 0)
+            else if (start.RedirectStandardOutput)
+            {
+                // Nothing is read: the window keeps its own console, and the pipes only keep the CLI's from it.
+                process.StandardInput.Close();
+                process.StandardOutput.Close();
+                process.StandardError.Close();
+            }
+
+            if (process is not null && launch.Script is not null && process.WaitForExit(OpenerWait) && process.ExitCode != 0)
             {
                 problem = $"{Path.GetFileName(argv[0])} exited with code {process.ExitCode}";
             }
@@ -113,5 +118,35 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
         {
             // A script that cannot be removed was never run; the temporary folder is the system's to clear.
         }
+    }
+}
+
+/// <summary>
+/// The start a terminal is given, made at Jason's one door. On Windows no stream is redirected: the console host opens a
+/// console of its own, and what it does with redirected handles has not been read. On Linux and macOS the door's kind
+/// with all three streams redirected, so the terminal holds none of the CLI's own: a caller that captures the CLI's
+/// output (an agent's shell tool, a script) reads its end of file when the CLI exits, not when the window closes.
+/// </summary>
+public static class TerminalStartInfo
+{
+    public static System.Diagnostics.ProcessStartInfo For(TerminalPlatform platform, IReadOnlyList<string> argv, string workingDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(argv);
+        ArgumentException.ThrowIfNullOrEmpty(workingDirectory);
+        if (argv.Count == 0)
+        {
+            throw new ArgumentException("A terminal cannot be started from nothing.", nameof(argv));
+        }
+
+        var start = platform == TerminalPlatform.Windows
+            ? ChildProcess.StartInfo(argv[0])
+            : ChildProcess.StartInfo(argv[0], ChildKind.SystemToolWithInput);
+        foreach (var argument in argv.Skip(1))
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        start.WorkingDirectory = workingDirectory;
+        return start;
     }
 }
