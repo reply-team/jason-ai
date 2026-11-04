@@ -14,6 +14,8 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Hosting;
+using Jason.Runtime.Plugins.Door;
 using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 using Microsoft.Extensions.Logging;
@@ -29,7 +31,8 @@ namespace Jason.Runtime.Plugins.Invocation;
 /// </summary>
 /// <remarks>
 /// Stateless and reentrant: several invocations may run at once, each with its own child, and nothing is pooled
-/// or kept warm. Nothing in production calls this yet — routing provider operations is the next increment.
+/// or kept warm. Nothing in production calls this yet — routing provider operations is the next increment. A handler's
+/// door is the one thing an invocation holds open, and its state is <see cref="HandlerCapabilities"/>'s, not the invoker's.
 /// </remarks>
 public sealed partial class PluginInvoker(
     PluginRegistry registry,
@@ -38,7 +41,9 @@ public sealed partial class PluginInvoker(
     JasonPaths paths,
     RuntimeInfo info,
     TimeProvider clock,
-    ILogger<PluginInvoker> logger)
+    ILogger<PluginInvoker> logger,
+    HandlerCapabilities capabilities,
+    ListeningEndpoint endpoint)
 {
     /// <summary>How much of the child's stderr travels back with a protocol failure: enough to explain it.</summary>
     public const int StderrTailChars = 4096;
@@ -257,6 +262,44 @@ public sealed partial class PluginInvoker(
             1,
             plugin.Limits.TimeoutMs);
 
+        // A door opens only where the caller asked for one and the plugin was granted a family of the Runtime API: the
+        // operations it opens are that frozen grant, never the caller's to name. It lives no longer than the child can,
+        // the deadline and the kill grace together, should the revocation below never run; it is revoked when the child's
+        // life is over, however it ended.
+        var operations = plugin.Grants.ApiOperations;
+        var ticket = request.Door is { } asked && operations.Count > 0
+            ? capabilities.Mint(plugin.Manifest.Id, operations, asked.LineId, clock.GetUtcNow().AddMilliseconds(timeoutMs + settings.Invoker.KillGraceMs))
+            : null;
+        try
+        {
+            var door = ticket is null
+                ? null
+                : new InvocationDoor(
+                    string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{endpoint.Port}"),
+                    ticket.Capability,
+                    request.Door!.LineId,
+                    [.. operations.Order(StringComparer.Ordinal)],
+                    DoorLimits.Standard);
+            return await RunChildAsync(request, plugin, provenance, settings, timeoutMs, door, kill).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (ticket is not null)
+            {
+                capabilities.Revoke(ticket);
+            }
+        }
+    }
+
+    private async Task<PluginInvocationResult> RunChildAsync(
+        PluginInvocationRequest request,
+        LoadedPlugin plugin,
+        InvocationProvenance provenance,
+        PluginsOptions settings,
+        int timeoutMs,
+        InvocationDoor? door,
+        CancellationToken kill)
+    {
         var grants = Grants(plugin);
         var invocation = new PluginInvocation(
             PluginProtocol.CurrentVersion,
@@ -282,7 +325,8 @@ public sealed partial class PluginInvoker(
                 request.UnsettledSince,
                 request.UnsettledReference),
             grants,
-            Limits(settings, plugin, timeoutMs));
+            Limits(settings, plugin, timeoutMs),
+            door);
 
         var workDir = paths.PluginInvocationDirectory(provenance.InvocationId);
         Directory.CreateDirectory(workDir);
@@ -328,7 +372,7 @@ public sealed partial class PluginInvoker(
 
             var stderr = new StderrSink(
                 Path.Combine(workDir, "stderr.log"),
-                new Redactor((grants.Env?.Variables ?? []).Select(Environment.GetEnvironmentVariable)),
+                new Redactor([.. (grants.Env?.Variables ?? []).Select(Environment.GetEnvironmentVariable), door?.Capability]),
                 settings.Invoker.StderrBytes,
                 StderrTailChars);
 
