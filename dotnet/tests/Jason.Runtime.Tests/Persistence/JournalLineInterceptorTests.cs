@@ -159,6 +159,31 @@ public sealed class JournalLineInterceptorTests
         Assert.Equal(["/contact_id"], JournalLineInterceptor.MissingColumns(contract, Line("contact_noted", null, null, null)));
     }
 
+    /// <summary>An entity listed in several places is named where any one of them holds a value.</summary>
+    [Fact]
+    public void An_entity_named_in_several_places_is_named_by_any_one()
+    {
+        var contract = JournalKindContract.Parse("campaign_noted.json", (JsonObject)JsonNode.Parse("""
+            {
+              "kind": "campaign_noted",
+              "version": 1,
+              "since": "0.1.0",
+              "summary": "A campaign was noted.",
+              "subscribable": true,
+              "entities": { "campaign": { "at": ["/campaign_id", "/key"], "presence": "always" } },
+              "field_since": {},
+              "body": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["key", "old", "new"],
+                "properties": { "key": { "type": "string" }, "old": { "type": "null" }, "new": { "type": "null" } }
+              }
+            }
+            """)!);
+
+        Assert.Empty(JournalLineInterceptor.MissingColumns(contract, Line("campaign_noted", "cmp_01JC0000000000000000000001", null, null)));
+    }
+
     [Fact]
     public void A_kind_of_somebody_elses_own_is_not_held_to_any_document()
     {

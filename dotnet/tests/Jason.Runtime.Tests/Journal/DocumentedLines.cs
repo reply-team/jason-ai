@@ -85,7 +85,7 @@ internal static class DocumentedLines
         bool attempt = false)
     {
         var contract = JournalKindCatalog.Find(kind) ?? throw new InvalidOperationException($"Kind {kind} has no document.");
-        bool Names(string at) => contract.Entities.Values.Any(entity => entity.At == at && entity.Presence == JournalEntityPresence.Always);
+        bool Names(string at) => contract.Entities.Values.Any(entity => entity.At.Contains(at) && entity.Presence == JournalEntityPresence.Always);
         var needsAttempt = attempt || Names("/attempt_id");
         var needsItem = needsAttempt || Names("/work_item_id");
         if (!needsItem && !Names("/campaign_id"))

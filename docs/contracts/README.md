@@ -245,8 +245,10 @@ A document is `{kind, version, since, summary, subscribable, entities, field_sin
   `contact`, `work_item`, `attempt`, `approval`, `role`, `plugin`, `account`, `decision`, `report`, `profile`,
   `provider_block`, `event_source`, `backfill`) and is `{at, presence, each?}`: `at` is a JSON pointer into the line as
   `journal.list` returns it, either one of its columns (`/campaign_id`, `/work_item_id`, `/attempt_id`, `/contact_id`)
-  or a place in its body (`/key`, `/new/...`); `presence` is `always` or `sometimes`; and `each: true` says the pointer
-  names an array of ids, one per item.
+  or a place in its body (`/key`, `/new/...`), or a list of such pointers where a line may name the entity in more than
+  one place (`routes_updated` names its plugin at `["/new/plugin", "/old/plugin"]`), each held to the same rules and
+  the entity named by every one that holds a value, and never an empty list; `presence` is `always` or `sometimes`;
+  and `each: true` says a pointer names an array of ids, one per item.
 - `field_since` — a map from a pointer into the body to the release that added the field there, for every field a
   release after `since` added; a line written before that release does not have it. In such a pointer `*` stands for
   any index of an array (`/new/plugins/*/subscriptions`), and names the field in every item the array's `items`

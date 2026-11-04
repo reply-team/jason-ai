@@ -6,7 +6,7 @@
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
-    "plugin": { "at": "/new/plugin", "presence": "sometimes" }
+    "plugin": { "at": ["/new/plugin", "/old/plugin"], "presence": "sometimes" }
   },
   "field_since": {},
   "body": {

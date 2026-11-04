@@ -13,11 +13,30 @@ public enum JournalEntityPresence
 }
 
 /// <summary>
-/// Where a line names one entity: a JSON pointer into the line as <c>journal.list</c> serializes it — one of the four
-/// entity columns, or a place inside <c>key</c>, <c>old</c> or <c>new</c> — whether every line names it, and whether the
-/// pointer names many of them (an array of ids, or a member of every item of one, written <c>*</c>).
+/// Where a line names one entity: the JSON pointers into the line as <c>journal.list</c> serializes it — each one of the
+/// four entity columns, or a place inside <c>key</c>, <c>old</c> or <c>new</c> — every one of which names it where it
+/// holds a value; whether every line names it; and whether a pointer names many of them (an array of ids, or a member
+/// of every item of one, written <c>*</c>).
 /// </summary>
-public sealed record JournalKindEntity(string At, JournalEntityPresence Presence, bool Each);
+public sealed record JournalKindEntity(IReadOnlyList<string> At, JournalEntityPresence Presence, bool Each)
+{
+    /// <summary>Two entities are the same where they name the same places in the same order, the same way.</summary>
+    public bool Equals(JournalKindEntity? other) =>
+        other is not null && At.SequenceEqual(other.At, StringComparer.Ordinal) && Presence == other.Presence && Each == other.Each;
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var at in At)
+        {
+            hash.Add(at, StringComparer.Ordinal);
+        }
+
+        hash.Add(Presence);
+        hash.Add(Each);
+        return hash.ToHashCode();
+    }
+}
 
 /// <summary>
 /// The contract of one kind the runtime reserves for its own journal lines: the release that first wrote it, the one
@@ -238,9 +257,13 @@ public sealed record JournalKindContract(
                 }
             }
 
-            var at = place["at"] is JsonValue pointer && pointer.TryGetValue(out string? text) && text.StartsWith('/')
-                ? text
-                : throw new InvalidOperationException($"{source}: `entities.{name}.at` is a JSON pointer into the line, starting with `/`.");
+            var places = place["at"] switch
+            {
+                JsonArray { Count: 0 } => throw new InvalidOperationException(
+                    $"{source}: `entities.{name}.at` lists no place, so it names the entity nowhere; an entity a kind never names is left out."),
+                JsonArray listed => listed.Select(item => Pointer(source, name, item)).ToList(),
+                var one => [Pointer(source, name, one)],
+            };
 
             var presence = place["presence"] is JsonValue said && said.TryGetValue(out string? word)
                 ? word switch
@@ -259,15 +282,18 @@ public sealed record JournalKindContract(
                     : throw new InvalidOperationException($"{source}: `entities.{name}.each` is true where present; a line naming one of them leaves it out.");
             }
 
-            if (Columns.TryGetValue(at, out var column))
+            foreach (var at in places)
             {
-                if (column != name || each)
+                if (Columns.TryGetValue(at, out var column))
                 {
-                    throw new InvalidOperationException($"{source}: `{at}` is the column that names one {column}, so `entities.{name}` cannot point at it.");
+                    if (column != name || each)
+                    {
+                        throw new InvalidOperationException($"{source}: `{at}` is the column that names one {column}, so `entities.{name}` cannot point at it.");
+                    }
+
+                    continue;
                 }
-            }
-            else
-            {
+
                 var segments = Segments(at);
                 if (segments.Count < 1 || !BodyMembers.Contains(segments[0], StringComparer.Ordinal))
                 {
@@ -286,11 +312,17 @@ public sealed record JournalKindContract(
                 }
             }
 
-            entities.Add(name, new JournalKindEntity(at, presence, each));
+            entities.Add(name, new JournalKindEntity(places, presence, each));
         }
 
         return entities;
     }
+
+    /// <summary>One place an entity is named: a JSON pointer into the line.</summary>
+    private static string Pointer(string source, string name, JsonNode? node) =>
+        node is JsonValue pointer && pointer.TryGetValue(out string? text) && text.StartsWith('/')
+            ? text
+            : throw new InvalidOperationException($"{source}: `entities.{name}.at` is a JSON pointer into the line, starting with `/`, or a list of them.");
 
     private static Dictionary<string, string> FieldSinceOf(string source, JsonNode node, JsonObject body, string since)
     {

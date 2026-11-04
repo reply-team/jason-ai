@@ -62,8 +62,8 @@ public sealed class JournalKindContractTests
         Assert.Equal(1, contract.Version);
         Assert.Equal("0.1.0", contract.Since);
         Assert.True(contract.Subscribable);
-        Assert.Equal(new JournalKindEntity("/campaign_id", JournalEntityPresence.Always, false), contract.Entities["campaign"]);
-        Assert.Equal(new JournalKindEntity("/new/contacts/*/id", JournalEntityPresence.Sometimes, true), contract.Entities["contact"]);
+        Assert.Equal(new JournalKindEntity(["/campaign_id"], JournalEntityPresence.Always, false), contract.Entities["campaign"]);
+        Assert.Equal(new JournalKindEntity(["/new/contacts/*/id"], JournalEntityPresence.Sometimes, true), contract.Entities["contact"]);
         Assert.Equal("0.12.0", contract.FieldSince["/new/note"]);
     }
 
@@ -187,12 +187,49 @@ public sealed class JournalKindContractTests
     [InlineData("""{ "at": "/campaign_id", "presence": "always", "each": false }""", "is true where present")]
     [InlineData("""{ "at": "/campaign_id", "presence": "always", "column": "campaign_id" }""", "is not part of where a line names an entity")]
     [InlineData("""{ "at": "campaign_id", "presence": "always" }""", "is a JSON pointer into the line")]
+    [InlineData("""{ "at": ["/campaign_id", "campaign_id"], "presence": "always" }""", "is a JSON pointer into the line")]
+    [InlineData("""{ "at": ["/campaign_id", 3], "presence": "always" }""", "is a JSON pointer into the line")]
+    [InlineData("""{ "at": ["/campaign_id", "/new/nothing"], "presence": "always" }""", "the body describes nothing there")]
+    [InlineData("""{ "at": ["/campaign_id", "/work_item_id"], "presence": "always" }""", "is the column that names one work_item")]
     public void An_entity_is_named_where_the_line_names_it(string place, string refusal)
     {
         var document = Document();
         document["entities"]!["campaign"] = JsonNode.Parse(place);
 
         Refused(document, refusal);
+    }
+
+    /// <summary>
+    /// An entity a line may name in more than one place — the plugin a route had and the plugin it has — lists them, and
+    /// each is held to the rules one place is.
+    /// </summary>
+    [Fact]
+    public void An_entity_named_in_several_places_lists_every_one()
+    {
+        var document = Document();
+        document["entities"]!["campaign"] = JsonNode.Parse("""{ "at": ["/campaign_id", "/key"], "presence": "always" }""");
+
+        var contract = JournalKindContract.Parse(Source, document);
+
+        Assert.Equal(new JournalKindEntity(["/campaign_id", "/key"], JournalEntityPresence.Always, false), contract.Entities["campaign"]);
+    }
+
+    [Fact]
+    public void An_entity_named_in_no_place_is_refused()
+    {
+        var document = Document();
+        document["entities"]!["campaign"] = JsonNode.Parse("""{ "at": [], "presence": "always" }""");
+
+        Refused(document, "`entities.campaign.at` lists no place");
+    }
+
+    /// <summary>A route taken away names the plugin it went to in what it was, so the kind names its plugin in both.</summary>
+    [Fact]
+    public void A_route_names_its_plugin_where_it_was_and_where_it_is()
+    {
+        var contract = JournalKindCatalog.Find("routes_updated");
+
+        Assert.Equal(["/new/plugin", "/old/plugin"], Assert.IsType<JournalKindContract>(contract).Entities["plugin"].At);
     }
 
     [Theory]

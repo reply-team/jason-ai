@@ -73,19 +73,23 @@ public sealed class JournalLineInterceptor(JournalLines lines, PatternTiming tim
                 continue;
             }
 
-            var named = entity.At switch
+            if (!entity.At.Any(at => Holds(line, at)))
             {
-                "/campaign_id" => line.CampaignId is not null || line.Campaign is not null,
-                "/contact_id" => line.ContactId is not null || line.Contact is not null,
-                "/work_item_id" => line.WorkItemId is not null,
-                "/attempt_id" => line.AttemptId is not null,
-                _ => true,
-            };
-
-            if (!named)
-            {
-                yield return entity.At;
+                foreach (var at in entity.At)
+                {
+                    yield return at;
+                }
             }
         }
     }
+
+    /// <summary>Whether the line holds a value at one place an entity is named; a place in the body is the body check's.</summary>
+    private static bool Holds(JournalEntry line, string at) => at switch
+    {
+        "/campaign_id" => line.CampaignId is not null || line.Campaign is not null,
+        "/contact_id" => line.ContactId is not null || line.Contact is not null,
+        "/work_item_id" => line.WorkItemId is not null,
+        "/attempt_id" => line.AttemptId is not null,
+        _ => true,
+    };
 }
