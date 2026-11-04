@@ -101,7 +101,7 @@ The macOS form of `jason session open`, a script opened in Terminal, has not bee
 Antigravity CLI's hook route has not been run on an account.
 
 Under Windows PowerShell 5.1 and cmd.exe the inner quotes of `--value '{"host":"codex"}'` are lost, which is why the
-example above reads the value from a file; where `jason session open` suggests the inline form, use `--value-file` there.
+example above reads the value from a file.
 
 If Claude Code's npm postinstall never replaced its placeholder executable, `jason session open` reports that it started the host
 and the window closes at once.

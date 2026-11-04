@@ -44,11 +44,12 @@ A preference is the person's word, so only a person sets it, and the request nam
 launches is refused when it sets or unsets one (`preference_not_human`).
 
 ```sh
-jason preference set agent.interactive_host --value '{"host":"codex"}' --actor human:Marta
+jason preference set agent.interactive_host --value-file host.json --actor human:Marta
 jason preference unset agent.interactive_host --actor human:Marta
 ```
 
-Unsetting removes the value, and the host is Claude Code again. The installation's record of what changed keeps that it
+The file `host.json` holds the value shown above, so the inner quotes reach the runtime on every shell. Unsetting
+removes the value, and the host is Claude Code again. The installation's record of what changed keeps that it
 was set and unset, by whom and when, with the value's size and a hash of it — never the value itself.
 
 ## The fields
