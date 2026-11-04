@@ -54,6 +54,11 @@ public static class SessionCommands
                 throw new UsageException("Say which: --approval <id> or --question <id>, one of them.");
             }
 
+            if ((approvalId ?? questionId) is { Length: 0 })
+            {
+                throw new UsageException($"{(approvalId is not null ? "--approval" : "--question")} was given an empty id; it takes the id {(approvalId is not null ? "approval list" : "decision list")} shows.");
+            }
+
             return approvalId is not null
                 ? SessionOpener.OpenAsync(env, PromptKind.Approval, approvalId, parseResult.GetValue(dryRun), parseResult.GetValue(human), cancellationToken)
                 : SessionOpener.OpenAsync(env, PromptKind.Question, questionId!, parseResult.GetValue(dryRun), parseResult.GetValue(human), cancellationToken);

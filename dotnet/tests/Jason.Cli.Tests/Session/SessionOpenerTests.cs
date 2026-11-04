@@ -289,6 +289,20 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Empty(_run.Terminals.Launches);
     }
 
+    /// <summary>An empty id is a usage error like a missing one, said in the CLI's own words, and nothing is asked.</summary>
+    [Theory]
+    [InlineData("--approval")]
+    [InlineData("--question")]
+    public async Task An_empty_id_is_a_usage_error_that_asks_nothing(string option)
+    {
+        var exit = await _run.Cli("session", "open", option, "");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Empty(_run.Asked);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Contains(option + " was given an empty id", _run.Error.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>A decided item has nothing for a session to propose: refused in one line, and its brief is still printed by --prompt.</summary>
     [Theory]
     [InlineData("approved")]
