@@ -585,7 +585,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      # The whole history and its tags: the journal's kind documents are compared with the last published release's,
+      # read from its tag, and a test that finds no tag under CI fails rather than skip.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-dotnet
         with:

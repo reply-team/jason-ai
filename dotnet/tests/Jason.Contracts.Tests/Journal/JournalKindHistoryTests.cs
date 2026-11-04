@@ -51,6 +51,7 @@ public sealed class JournalKindHistoryTests
         Assert.NotNull(failure);
         Assert.Contains("actions/checkout", failure, StringComparison.Ordinal);
         Assert.Contains("fetch-depth: 0", failure, StringComparison.Ordinal);
+        Assert.Contains("release-stamp", failure, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -175,8 +176,8 @@ public sealed class JournalKindHistoryTests
     /// <summary>Why a missing release tag fails the test, or null where it only skips it.</summary>
     private static string? NoReleaseTagFailure(bool underCi) => underCi
         ? "No release tag is reachable from this checkout under CI, so nothing would compare the documents with the last "
-          + "published release's: the build-test-publish job's actions/checkout in .github/workflows/ci.yml must keep "
-          + "fetch-depth: 0, which brings the tags."
+          + "published release's: the actions/checkout of each job in .github/workflows/ci.yml that runs the suite, "
+          + "build-test-publish and release-stamp, must keep fetch-depth: 0, which brings the tags."
         : null;
 
     /// <summary>
