@@ -380,7 +380,7 @@ public static class UninstallCommand
 
         if (plan.Link is { Fate: LinkRegistrationFate.Kept } kept)
         {
-            env.Out.WriteLine($@"  NOT touched: the jason: link registration at HKCU\{Jason.Contracts.Notifications.LinkRegistration.Key}, whose command names another installation: {kept.Command}");
+            env.Out.WriteLine($@"  NOT touched: the jason: link registration at HKCU\{Jason.Contracts.Notifications.LinkRegistration.Key}, which holds a command other than this installation's: {kept.Command}");
         }
         else if (plan.Link is { Fate: LinkRegistrationFate.Untouched })
         {

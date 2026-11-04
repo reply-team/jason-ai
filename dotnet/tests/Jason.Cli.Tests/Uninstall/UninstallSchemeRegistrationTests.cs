@@ -101,7 +101,7 @@ public sealed class UninstallSchemeRegistrationTests
             DryRun,
             Ct);
         Assert.Contains(
-            $@"  NOT touched: the jason: link registration at HKCU\{LinkRegistration.Key}, whose command names another installation: {Elsewhere}",
+            $@"  NOT touched: the jason: link registration at HKCU\{LinkRegistration.Key}, which holds a command other than this installation's: {Elsewhere}",
             planned.ToString(),
             StringComparison.Ordinal);
 
