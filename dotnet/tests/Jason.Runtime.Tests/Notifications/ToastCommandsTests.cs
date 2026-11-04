@@ -41,6 +41,31 @@ public sealed class ToastCommandsTests
         Assert.DoesNotContain("\"item\"", ToastCommands.Windows(["C:\\jason\\jason.exe"], Message).Stdin, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The item that waits is never in a toast on macOS or Linux: a message that carries one is said there by its counts
+    /// and where to look alone, in no argument and on no stdin.
+    /// </summary>
+    [Theory]
+    [InlineData("osascript")]
+    [InlineData("notify-send")]
+    [InlineData("gdbus")]
+    public void A_message_carrying_an_item_puts_no_id_in_a_mac_os_or_linux_toast(string command)
+    {
+        var one = NotificationComposer.Compose(1, 0, item: "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6");
+        Assert.Equal("apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6", one.Item);
+
+        var launch = command switch
+        {
+            "osascript" => ToastCommands.MacOs(one),
+            "notify-send" => ToastCommands.LinuxNotifySend(one),
+            _ => ToastCommands.LinuxGdbus(one),
+        };
+
+        Assert.Equal(command, launch.Command[0]);
+        Assert.All(launch.Command, argument => Assert.DoesNotContain("apr_", argument, StringComparison.Ordinal));
+        Assert.DoesNotContain("apr_", launch.Stdin ?? string.Empty, StringComparison.Ordinal);
+    }
+
     /// <summary>The same executable may be a dll run by dotnet, as it is under test: the mode follows whatever starts it.</summary>
     [Fact]
     public void Windows_follows_the_command_that_starts_this_executable() =>
