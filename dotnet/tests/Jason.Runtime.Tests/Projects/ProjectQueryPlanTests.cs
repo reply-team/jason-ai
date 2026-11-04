@@ -185,7 +185,7 @@ public class ProjectQueryPlanTests
     private static JasonDbContext Open(TestDatabase database, Recorder recorder)
     {
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, database.File).AddInterceptors(recorder);
+        JasonDbContext.Configure(builder, database.File, JournalLines.Strict).AddInterceptors(recorder);
         return new JasonDbContext(builder.Options);
     }
 

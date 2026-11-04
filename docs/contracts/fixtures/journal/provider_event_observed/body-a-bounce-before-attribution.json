@@ -1,0 +1,11 @@
+{
+  "kind": "provider_event_observed",
+  "version": 1,
+  "case": "a bounce said by a release before attributed_by",
+  "body": {
+    "key": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "old": null,
+    "new": { "kind": "bounce", "plugin": "example-mail", "event_id": "evt_01JC0000000000000000000004", "occurred_at": "2026-10-28T10:01:00.000Z", "channel": null, "contact_id": null, "message": "msg-88120", "bounce": "hard" }
+  },
+  "expect": "valid"
+}

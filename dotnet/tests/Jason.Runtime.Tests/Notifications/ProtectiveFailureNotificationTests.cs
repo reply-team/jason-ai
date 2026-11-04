@@ -9,6 +9,7 @@ using Jason.Runtime.Journal;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Tests.Dispatch;
+using Jason.Runtime.Tests.Journal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -363,7 +364,25 @@ internal static class ProtectiveWork
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(ct);
 
-        var line = new JournalWriter(harness.Clock).Append(db, Actors.Dispatcher, kind, campaign: null, key: "status", workItem: item);
+        // The line the ending writes: a failure by the attempt that ended it, an expiry by the due date the item passed,
+        // a cancellation by the status the item left.
+        var writer = new JournalWriter(harness.Clock);
+        JournalEntry line;
+        if (kind == JournalKinds.WorkItemFailed)
+        {
+            var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Failed, now);
+            await db.SaveChangesAsync(ct);
+            line = writer.Append(db, Actors.Dispatcher, kind, campaign: null, key: attempt.PublicId, updated: DocumentedLines.Failure(), workItem: item, attempt: attempt);
+        }
+        else if (kind == JournalKinds.WorkItemExpired)
+        {
+            line = writer.Append(db, Actors.Dispatcher, kind, campaign: null, key: "due_at", old: JsonValue.Create(now.AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture)), workItem: item);
+        }
+        else
+        {
+            line = writer.Append(db, Actors.Dispatcher, kind, campaign: null, key: "status", old: JsonValue.Create("created"), updated: JsonValue.Create("cancelled"), workItem: item);
+        }
+
         await db.SaveChangesAsync(ct);
         return (campaign.PublicId, item, line);
     }

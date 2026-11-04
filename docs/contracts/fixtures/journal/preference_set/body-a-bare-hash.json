@@ -1,0 +1,11 @@
+{
+  "kind": "preference_set",
+  "version": 1,
+  "case": "a hash is spelled with its algorithm",
+  "body": {
+    "key": "tone_of_voice",
+    "old": null,
+    "new": { "bytes": 212, "hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1" }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/hash", "reason": "pattern" }] }
+}

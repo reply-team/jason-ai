@@ -1,0 +1,32 @@
+{
+  "kind": "decision_raised",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "An attempt raised a question it cannot answer itself, and the question waits for a person; what was asked is kept on the decision.",
+  "subscribable": true,
+  "entities": {
+    "decision": { "at": "/new/decision_id", "presence": "always" },
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "decision" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision_id"],
+        "properties": {
+          "decision_id": { "type": "string", "pattern": "^dec_" }
+        }
+      }
+    }
+  }
+}

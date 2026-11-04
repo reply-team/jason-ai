@@ -235,15 +235,21 @@ public class ReplyVerdictReferenceTests
             new ActorRef(ActorType.Human, "operator"),
             JournalKinds.ReplyClassified,
             campaign,
-            key: message,
+            key: Jason.Runtime.Dispatch.InboundSync.VerdictKey("stand-in-provider", "501", message),
             updated: new JsonObject
             {
                 ["plugin"] = "stand-in-provider",
                 ["thread"] = "501",
                 ["message_id"] = message,
+                ["message_at"] = "2026-09-14T11:00:00.000Z",
                 ["contact_id"] = contact?.PublicId,
                 ["category"] = "interested",
+                ["confidence"] = 0.9,
                 ["reaction"] = "draft",
+                ["goal_id"] = null,
+                ["goal_kind"] = null,
+                ["decision_id"] = null,
+                ["answered_by"] = null,
             },
             contact: contact);
 

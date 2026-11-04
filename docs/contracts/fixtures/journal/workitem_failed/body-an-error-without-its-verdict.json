@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_failed",
+  "version": 1,
+  "case": "the error always says whether it was worth another attempt",
+  "body": { "key": "att_01JC0000000000000000000005", "old": null, "new": { "code": "timeout", "message": "The attempt ran out of time." } },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

@@ -1,0 +1,107 @@
+{
+  "kind": "workitem_waiting",
+  "version": 1,
+  "since": "0.18.0",
+  "summary": "A work item stopped to wait for other work items to end, for a moment, or for a provider block to clear, and is not claimed until what it waits for happens or its bound comes.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "provider_block": { "at": "/new/blocked_by/provider_block_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": ["null", "string"], "pattern": "^att_", "description": "The attempt that ended by waiting, by its id; null where no attempt ended: an item written already waiting, or one the claim parked on a provider block." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["on", "mode", "until", "deadline"],
+        "properties": {
+          "on": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "type": "string", "pattern": "^wi_" },
+            "description": "The work items it waits on, by their ids; empty where it waits on none."
+          },
+          "mode": { "enum": ["all", "any", null], "description": "Whether it waits for all of them to end or for any one; null where it waits on none." },
+          "until": { "type": ["null", "string"], "format": "date-time", "description": "The moment it waits for; null where it names none." },
+          "deadline": { "type": ["null", "string"], "format": "date-time", "description": "The latest moment it waits: its own moment, or else the ceiling counted from when it began; null for a wait on a provider block, which the item's own due date bounds." },
+          "blocked_by": {
+            "type": "object",
+            "description": "The provider block it waits on, in the provider-block contract's words.",
+            "additionalProperties": false,
+            "required": ["provider_block_id", "scope", "reason"],
+            "properties": {
+              "provider_block_id": { "type": "string", "pattern": "^blk_" },
+              "scope": { "enum": ["account", "sender"] },
+              "reason": { "enum": ["billing", "limit", "credential", "channel", "other"] }
+            }
+          }
+        }
+      }
+    },
+    "anyOf": [
+      {
+        "properties": {
+          "key": { "type": "string" },
+          "new": {
+            "properties": {
+              "on": { "minItems": 1 },
+              "mode": { "enum": ["all", "any"] },
+              "deadline": { "type": "string" }
+            },
+            "required": ["on", "mode", "until", "deadline"]
+          }
+        }
+      },
+      {
+        "properties": {
+          "key": { "type": "string" },
+          "new": {
+            "properties": {
+              "on": { "maxItems": 0 },
+              "mode": { "type": "null" },
+              "until": { "type": "string" },
+              "deadline": { "type": "string" }
+            },
+            "required": ["on", "mode", "until", "deadline"]
+          }
+        }
+      },
+      {
+        "properties": {
+          "key": { "type": "null" },
+          "new": {
+            "properties": {
+              "on": { "minItems": 1 },
+              "mode": { "const": "all" },
+              "until": { "type": "null" },
+              "deadline": { "type": "string" }
+            },
+            "required": ["on", "mode", "until", "deadline"]
+          }
+        }
+      },
+      {
+        "properties": {
+          "new": {
+            "properties": {
+              "on": { "maxItems": 0 },
+              "mode": { "type": "null" },
+              "until": { "type": "null" },
+              "deadline": { "type": "null" }
+            },
+            "required": ["on", "mode", "until", "deadline", "blocked_by"]
+          }
+        }
+      }
+    ]
+  }
+}

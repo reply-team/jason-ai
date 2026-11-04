@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Journal;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Tests;
@@ -24,6 +25,8 @@ public class GeneratedBlockTests
     private const string End = "<!-- END GENERATED properties -->";
     private const string TableBegin = "<!-- BEGIN GENERATED operations -->";
     private const string TableEnd = "<!-- END GENERATED operations -->";
+    private const string KindsBegin = "<!-- BEGIN GENERATED journal-kinds -->";
+    private const string KindsEnd = "<!-- END GENERATED journal-kinds -->";
     private const string Unknown = "schema_keyword_unknown";
 
     /// <summary>
@@ -158,6 +161,26 @@ public class GeneratedBlockTests
         var expected = OperationsTable();
 
         Assert.True(found == expected, $"docs/contracts/README.md's table of operations is out of step with the documents. It should read:\n\n{expected}\n");
+    }
+
+    /// <summary>
+    /// The same README lists every kind the runtime reserves for its own journal lines in one table, rendered from the
+    /// kinds' documents and compared whole: the release that first wrote the kind, whether a program may subscribe to it,
+    /// the things its lines name, and its summary.
+    /// </summary>
+    [Fact]
+    public void The_readme_s_table_of_journal_kinds_is_rendered_from_the_documents()
+    {
+        var readme = File.ReadAllText(Path.Combine(ContractFiles.Package, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf(KindsBegin, StringComparison.Ordinal);
+        var finish = readme.IndexOf(KindsEnd, StringComparison.Ordinal);
+
+        Assert.True(start >= 0 && finish > start, "docs/contracts/README.md carries no generated table of the journal's kinds.");
+
+        var found = readme[start..(finish + KindsEnd.Length)];
+        var expected = JournalKindsTable();
+
+        Assert.True(found == expected, $"docs/contracts/README.md's table of the journal's kinds is out of step with the documents. It should read:\n\n{expected}\n");
     }
 
     /// <summary>The delivery contract's page carries a block rendered from its own document, as an operation's does.</summary>
@@ -362,6 +385,27 @@ public class GeneratedBlockTests
         }
 
         table.Append('\n').Append(TableEnd);
+        return table.ToString();
+    }
+
+    /// <summary>The table of the journal's kinds, in the catalog's own order, each kind's names in the vocabulary's.</summary>
+    private static string JournalKindsTable()
+    {
+        var table = new StringBuilder();
+        table.Append(KindsBegin).Append('\n');
+        table.Append("<!-- Rendered from each kind's document. Edit those; this table follows them. -->\n\n");
+        table.Append("| Kind | Since | Subscribable | Names | What a line records |\n|---|---|---|---|---|\n");
+        foreach (var contract in JournalKindCatalog.All)
+        {
+            var names = JournalKindContract.EntityNames.Where(contract.Entities.ContainsKey).ToList();
+            table.Append("| [`").Append(contract.Kind).Append("`](journal/").Append(contract.Kind).Append(".json) | `")
+                .Append(contract.Since).Append("` | ")
+                .Append(contract.Subscribable ? "yes" : "no").Append(" | ")
+                .Append(names.Count == 0 ? "none" : string.Join(", ", names)).Append(" | ")
+                .Append(contract.Summary).Append(" |\n");
+        }
+
+        table.Append('\n').Append(KindsEnd);
         return table.ToString();
     }
 

@@ -47,7 +47,7 @@ public class JournalWriterTests
         using var db = database.Open();
         var writer = new JournalWriter(new FixedClock(Noon));
 
-        var entry = writer.Append(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null, key: "email");
+        var entry = writer.AppendDocumented(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null);
         db.SaveChanges();
 
         Assert.Null(entry.CampaignId);
@@ -126,6 +126,17 @@ public class JournalWriterTests
             UpdatedAt = Noon.UtcDateTime,
         };
         db.WorkItems.Add(item);
+        var attempt = new Attempt
+        {
+            PublicId = "att_P",
+            WorkItem = item,
+            Number = 1,
+            Command = WorkItemKind.AiRole,
+            Status = AttemptStatus.Succeeded,
+            ClaimedAt = Noon.UtcDateTime,
+            LockUntil = Noon.UtcDateTime.AddHours(1),
+        };
+        db.Attempts.Add(attempt);
         db.SaveChanges();
         // A person created in this same save has no id yet: the line takes them by reference, as it takes a new campaign.
         var grace = new Contact { PublicId = "cnt_GRACE", FirstName = "Grace", CreatedAt = Noon.UtcDateTime, UpdatedAt = Noon.UtcDateTime };
@@ -133,10 +144,10 @@ public class JournalWriterTests
 
         var entry = about switch
         {
-            "work item's person" => writer.Append(db, Actors.Runtime, JournalKinds.WorkItemSucceeded, campaign: null, workItem: item),
-            "new contact" => writer.Append(db, Actors.Runtime, JournalKinds.ContactCreated, campaign: null, key: grace.PublicId, contact: grace),
-            "line's person over item's" => writer.Append(db, Actors.Runtime, JournalKinds.InboundReplyObserved, campaign: null, workItem: item, contactId: ada.Id),
-            _ => writer.Append(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null, key: "email"),
+            "work item's person" => writer.AppendDocumented(db, Actors.Runtime, JournalKinds.WorkItemSucceeded, campaign: null, workItem: item, attempt: attempt),
+            "new contact" => writer.AppendDocumented(db, Actors.Runtime, JournalKinds.ContactCreated, campaign: null, key: grace.PublicId, contact: grace),
+            "line's person over item's" => writer.AppendDocumented(db, Actors.Runtime, JournalKinds.InboundReplyObserved, campaign: null, workItem: item, contactId: ada.Id),
+            _ => writer.AppendDocumented(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null),
         };
         db.SaveChanges();
 
@@ -155,7 +166,7 @@ public class JournalWriterTests
         using var database = new TestDatabase();
         using var db = database.Open();
 
-        var entry = new JournalWriter(new FixedClock(Noon)).Append(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null, key: "email");
+        var entry = new JournalWriter(new FixedClock(Noon)).AppendDocumented(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null);
         db.SaveChanges();
 
         Assert.Null(entry.WorkItemId);

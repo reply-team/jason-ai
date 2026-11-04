@@ -1,0 +1,18 @@
+{
+  "kind": "approval_standing_applied",
+  "version": 1,
+  "case": "an interested reply's drafted answer went out under the campaign's standing approval",
+  "body": {
+    "key": "jrn_01JC0000000000000000000007",
+    "old": null,
+    "new": {
+      "id": "apr_01JC0000000000000000000006",
+      "operation": "conversation.reply",
+      "subject_hash": "sha256:9f2c4e1a7b3d5f60817263544536271809a1b2c3d4e5f60718293a4b5c6d7e8f",
+      "standing": "jrn_01JC0000000000000000000007",
+      "verdict": "jrn_01JC0000000000000000000008",
+      "category": "interested"
+    }
+  },
+  "expect": "valid"
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_archived",
+  "version": 1,
+  "case": "an active campaign is archived",
+  "body": { "key": "status", "old": "active", "new": "archived" },
+  "expect": "valid"
+}

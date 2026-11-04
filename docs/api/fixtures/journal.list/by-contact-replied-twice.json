@@ -59,7 +59,7 @@
         "campaign_id": "cmp_2",
         "work_item_id": null,
         "attempt_id": null,
-        "key": "reply-t_501-0855",
+        "key": "sha256:recorded-3",
         "old": null,
         "new": {
           "plugin": "reply",
@@ -92,7 +92,7 @@
         "campaign_id": "cmp_1",
         "work_item_id": null,
         "attempt_id": null,
-        "key": "reply-t_501-0855",
+        "key": "sha256:recorded-3",
         "old": null,
         "new": {
           "plugin": "reply",
@@ -125,7 +125,7 @@
         "campaign_id": "cmp_2",
         "work_item_id": null,
         "attempt_id": null,
-        "key": "reply-t_501",
+        "key": "sha256:recorded-1",
         "old": null,
         "new": {
           "plugin": "reply",
@@ -155,7 +155,7 @@
         "kind": "workitem_succeeded",
         "campaign_id": "cmp_2",
         "work_item_id": "wi_4",
-        "attempt_id": null,
+        "attempt_id": "att_1",
         "key": "result_present",
         "old": null,
         "new": true,
@@ -183,7 +183,8 @@
         "old": null,
         "new": {
           "id": "apr_1",
-          "operation": "campaign.enroll"
+          "operation": "campaign.enroll",
+          "subject_hash": "sha256:recorded-2"
         },
         "reason": null,
         "contact_id": "cnt_1",
@@ -204,7 +205,7 @@
         "kind": "workitem_succeeded",
         "campaign_id": "cmp_2",
         "work_item_id": "wi_5",
-        "attempt_id": null,
+        "attempt_id": "att_5",
         "key": "result_present",
         "old": null,
         "new": true,
@@ -222,7 +223,7 @@
         "ts": "2026-10-15T16:40:00.000Z",
         "actor": {
           "type": "attempt",
-          "id": "att_4"
+          "id": "att_6"
         },
         "kind": "contact_updated",
         "campaign_id": null,
@@ -248,7 +249,7 @@
         "ts": "2026-10-01T09:24:00.000Z",
         "actor": {
           "type": "attempt",
-          "id": "att_4"
+          "id": "att_6"
         },
         "kind": "contact_created",
         "campaign_id": null,

@@ -1,0 +1,7 @@
+{
+  "kind": "external_id_pinned",
+  "version": 1,
+  "case": "a campaign's identifier pinned",
+  "body": { "key": "campaign/example-provider/sequence", "old": null, "new": "seq-9" },
+  "expect": "valid"
+}

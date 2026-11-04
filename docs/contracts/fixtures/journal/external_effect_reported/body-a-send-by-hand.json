@@ -1,0 +1,7 @@
+{
+  "kind": "external_effect_reported",
+  "version": 1,
+  "case": "a message sent by hand to a contact of a campaign",
+  "body": { "key": "report", "old": null, "new": { "id": "rpt_01JC0000000000000000000005", "effect": "message_sent", "tool": "mail client", "operation": "message.send", "campaign_id": "cmp_01JC0000000000000000000001", "contact_id": "cnt_01JC0000000000000000000004", "work_item_id": null } },
+  "expect": "valid"
+}

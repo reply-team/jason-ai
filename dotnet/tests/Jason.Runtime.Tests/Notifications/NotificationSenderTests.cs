@@ -289,7 +289,14 @@ public sealed class NotificationSenderTests
     {
         using var harness = Harness();
         var covered = await harness.WriteLineAsync(JournalKinds.WorkItemCreated, Ct);
-        await harness.WriteLineAsync(JournalKinds.NotificationSent, Ct, new JsonObject { ["covered_through"] = covered.PublicId });
+        await harness.WriteLineAsync(JournalKinds.NotificationSent, Ct, new JsonObject
+        {
+            ["notification_id"] = "ntf_earlier",
+            ["counts"] = new JsonObject { ["approvals"] = 1, ["decisions"] = 0 },
+            ["covered_through"] = covered.PublicId,
+            ["channels"] = new JsonArray(),
+            ["last_delivered_at"] = null,
+        });
         await Waiting.ApprovalsAsync(harness, 1, Ct);
 
         var channel = new FakeChannel("toast", ChannelKinds.Toast, ChannelOutcome.Delivered("toast", ChannelKinds.Toast)) { WaitUntilCancelled = true };

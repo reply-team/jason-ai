@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_created",
+  "version": 1,
+  "case": "a campaign is created under its name",
+  "body": { "key": "name", "old": null, "new": "Spring outreach" },
+  "expect": "valid"
+}

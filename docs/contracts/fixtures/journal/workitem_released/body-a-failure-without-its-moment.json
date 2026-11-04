@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_released",
+  "version": 1,
+  "case": "a failed attempt's release always says when the item may be claimed again, null or a moment",
+  "body": { "key": "att_01JC0000000000000000000005", "old": null, "new": { "code": "timeout" } },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

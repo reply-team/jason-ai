@@ -1,0 +1,11 @@
+{
+  "kind": "inbound_reply_observed",
+  "version": 1,
+  "case": "a line read from provider events by a release before attributed_by",
+  "body": {
+    "key": "sha256:3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+    "old": null,
+    "new": { "plugin": "example-mail", "thread": "thr-20931", "channel": "email", "last_activity_at": "2026-10-28T09:12:44.000Z", "unread": true, "has_meeting_intent": false, "contact_id": null, "event_id": "evt_01JC0000000000000000000004" }
+  },
+  "expect": "valid"
+}

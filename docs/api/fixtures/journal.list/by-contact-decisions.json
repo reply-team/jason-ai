@@ -30,7 +30,8 @@
         "old": null,
         "new": {
           "id": "apr_1",
-          "operation": "campaign.enroll"
+          "operation": "campaign.enroll",
+          "subject_hash": "sha256:recorded-2"
         },
         "reason": null,
         "contact_id": "cnt_1",

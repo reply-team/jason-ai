@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_updated",
+  "version": 1,
+  "case": "a campaign moves to another project",
+  "body": { "key": "project_id", "old": "prj_01JC0000000000000000000001", "new": "prj_01JC0000000000000000000002" },
+  "expect": "valid"
+}

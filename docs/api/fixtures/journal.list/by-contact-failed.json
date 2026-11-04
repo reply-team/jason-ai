@@ -35,7 +35,7 @@
         "kind": "workitem_failed",
         "campaign_id": "cmp_2",
         "work_item_id": "wi_1",
-        "attempt_id": null,
+        "attempt_id": "att_2",
         "key": "att_2",
         "old": null,
         "new": {
@@ -58,7 +58,7 @@
         "ts": "2026-10-15T16:00:00.000Z",
         "actor": {
           "type": "attempt",
-          "id": "att_5"
+          "id": "att_7"
         },
         "kind": "contact_created",
         "campaign_id": null,

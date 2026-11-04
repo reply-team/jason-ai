@@ -1,0 +1,11 @@
+{
+  "kind": "preference_unset",
+  "version": 1,
+  "case": "a preference's value taken back",
+  "body": {
+    "key": "sender.identity",
+    "old": { "bytes": 96, "hash": "sha256:7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e" },
+    "new": null
+  },
+  "expect": "valid"
+}

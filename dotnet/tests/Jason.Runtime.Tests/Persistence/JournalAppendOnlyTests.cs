@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Persistence;
 using Microsoft.Data.Sqlite;
@@ -59,8 +60,8 @@ public class JournalAppendOnlyTests
         db.Campaigns.Add(campaign);
         db.SaveChanges();
 
-        db.Journal.Add(new JournalEntry { PublicId = "jrn_C", Ts = now, ActorType = ActorType.System, ActorId = "runtime", Kind = "suppression_added" });
-        db.Journal.Add(new JournalEntry { PublicId = "jrn_D", Ts = now, ActorType = ActorType.Role, ActorId = "planner", Kind = "campaign_created", Campaign = campaign });
+        db.Journal.Add(new JournalEntry { PublicId = "jrn_C", Ts = now, ActorType = ActorType.System, ActorId = "runtime", Kind = "suppression_added", Key = "email", New = new JsonObject { ["channel"] = "email", ["value"] = "ada@example.com" } });
+        db.Journal.Add(new JournalEntry { PublicId = "jrn_D", Ts = now, ActorType = ActorType.Role, ActorId = "planner", Kind = "campaign_created", Campaign = campaign, Key = "name", New = JsonValue.Create("j") });
         db.SaveChanges();
         db.ChangeTracker.Clear();
 

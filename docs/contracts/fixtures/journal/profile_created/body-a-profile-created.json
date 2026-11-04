@@ -1,0 +1,7 @@
+{
+  "kind": "profile_created",
+  "version": 1,
+  "case": "a profile created at its first revision",
+  "body": { "key": "local-agent", "old": null, "new": { "revision": 1, "host": "claude_code", "program": "claude", "host_version_verified": null } },
+  "expect": "valid"
+}

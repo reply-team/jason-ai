@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_cancelled",
+  "version": 1,
+  "case": "a succeeded item is never left again, so it is never cancelled",
+  "body": { "key": "status", "old": "succeeded", "new": "cancelled" },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "enum" }] }
+}

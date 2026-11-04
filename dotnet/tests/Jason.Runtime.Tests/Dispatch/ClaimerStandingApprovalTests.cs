@@ -10,6 +10,7 @@ using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
 using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Journal;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
@@ -124,8 +125,19 @@ public partial class ClaimerTests
         };
         if (why == StandingApprovals.Why.CeilingReached)
         {
-            new JournalWriter(new FixedClock(new DateTimeOffset(Noon))).Append(
-                db, Actors.Dispatcher, JournalKinds.ApprovalStandingApplied, reading.Campaign, key: standing!.LineId, updated: new JsonObject { ["category"] = "interested" });
+            // The one release the ceiling allows, spent earlier on other work.
+            var released = WorkItemFactory.NewProviderOp(reading.Campaign, "conversation.reply", Noon);
+            released.Status = WorkItemStatus.Succeeded;
+            db.WorkItems.Add(released);
+            await db.SaveChangesAsync(Ct);
+            new JournalWriter(new FixedClock(new DateTimeOffset(Noon))).AppendDocumented(
+                db,
+                Actors.Dispatcher,
+                JournalKinds.ApprovalStandingApplied,
+                reading.Campaign,
+                key: standing!.LineId,
+                with: new JsonObject { ["standing"] = standing.LineId, ["verdict"] = verdict, ["category"] = "interested" },
+                workItem: released);
         }
 
         var cited = why == StandingApprovals.Why.VerdictUnknown ? PublicId.New("jrn") : verdict;
@@ -146,7 +158,7 @@ public partial class ClaimerTests
         if (why == StandingApprovals.Why.Edited)
         {
             new JournalWriter(new FixedClock(new DateTimeOffset(Noon))).Append(
-                db, RunOf(reading), JournalKinds.WorkItemContextUpdated, reading.Campaign, workItem: item, updated: new JsonObject { ["set"] = new JsonArray("input") });
+                db, RunOf(reading), JournalKinds.WorkItemContextUpdated, reading.Campaign, key: WorkItemService.InputKey, old: null, updated: new JsonObject { ["body"] = "Edited by hand." }, workItem: item);
         }
 
         await db.SaveChangesAsync(Ct);

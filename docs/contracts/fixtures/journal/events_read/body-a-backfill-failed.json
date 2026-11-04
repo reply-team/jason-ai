@@ -1,0 +1,11 @@
+{
+  "kind": "events_read",
+  "version": 1,
+  "case": "a read of a span asked for again, which failed",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": { "read_id": "evr_01JC0000000000000000000006", "source": "evs_01JC0000000000000000000005", "plugin": "example-mail", "binding_identity": "none", "mode": "backfill", "pages": 0, "stored": 0, "duplicates": 0, "said": 0, "outcome": "failed", "code": "plugin_unreachable", "class": "transient", "plugin_version": "1.4.0", "plugin_digest": "sha256:3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f", "plugin_snapshot_id": "pls_7", "routing_snapshot_id": "rts_7", "signaled": false, "backfill": "evb_01JC0000000000000000000007", "backfill_status": "pending" }
+  },
+  "expect": "valid"
+}

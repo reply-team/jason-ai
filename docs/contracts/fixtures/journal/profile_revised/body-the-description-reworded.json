@@ -1,0 +1,7 @@
+{
+  "kind": "profile_revised",
+  "version": 1,
+  "case": "a reworded description appends no revision",
+  "body": { "key": "local-agent", "old": { "revision": 3 }, "new": { "revision": 3, "fields": ["description"] } },
+  "expect": "valid"
+}

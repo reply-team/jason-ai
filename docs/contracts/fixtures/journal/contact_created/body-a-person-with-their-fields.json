@@ -1,0 +1,7 @@
+{
+  "kind": "contact_created",
+  "version": 1,
+  "case": "the line names the person and never their fields",
+  "body": { "key": "cnt_01JC0000000000000000000001", "old": null, "new": { "first_name": "Alex" } },
+  "expect": { "invalid": [{ "pointer": "/new", "reason": "type" }] }
+}

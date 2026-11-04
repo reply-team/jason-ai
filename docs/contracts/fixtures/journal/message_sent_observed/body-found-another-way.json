@@ -1,0 +1,11 @@
+{
+  "kind": "message_sent_observed",
+  "version": 1,
+  "case": "a send is found gone by a read of its status",
+  "body": {
+    "key": "wi_01JC0000000000000000000002",
+    "old": null,
+    "new": { "plugin": "example-mail", "reference": "snd-55102", "channel": "email", "sent_at": "2026-10-29T14:00:07.000Z", "message_id": "<a1b2c3@mail.example.com>", "observed_by": "webhook", "read_work_item": "wi_01JC000000000000000000000E" }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/observed_by", "reason": "const" }] }
+}

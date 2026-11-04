@@ -1,0 +1,11 @@
+{
+  "kind": "standing_approval_set",
+  "version": 1,
+  "case": "a person lets interested replies go out for a week, at most fifty of them",
+  "body": {
+    "key": "interested",
+    "old": null,
+    "new": { "category": "interested", "operations": ["conversation.reply"], "expires_at": "2026-10-08T10:00:00.000Z", "max_releases": 50 }
+  },
+  "expect": "valid"
+}

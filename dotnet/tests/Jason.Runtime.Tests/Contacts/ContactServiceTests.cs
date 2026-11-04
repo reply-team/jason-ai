@@ -6,6 +6,7 @@ using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Journal;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Contacts;
@@ -326,7 +327,7 @@ public class ContactServiceTests
         foreach (var letter in (string[])["a", "b", "d"])
         {
             clock.Advance(TimeSpan.FromHours(1));
-            writer.Append(db, Actors.Runtime, JournalKinds.ContactUpdated, campaign: null, key: people[letter].PublicId, contact: people[letter]);
+            writer.AppendDocumented(db, Actors.Runtime, JournalKinds.ContactUpdated, campaign: null, key: people[letter].PublicId, contact: people[letter]);
             await db.SaveChangesAsync(ct);
         }
 

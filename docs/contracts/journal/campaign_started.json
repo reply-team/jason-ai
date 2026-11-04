@@ -1,0 +1,21 @@
+{
+  "kind": "campaign_started",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A campaign became active, from a draft or from a pause, so its work can be dispatched.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "status" },
+      "old": { "enum": ["draft", "paused"], "description": "The status the campaign left: only a draft or a paused campaign is started." },
+      "new": { "const": "active" }
+    }
+  }
+}

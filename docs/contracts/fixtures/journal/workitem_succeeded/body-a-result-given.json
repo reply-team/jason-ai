@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_succeeded",
+  "version": 1,
+  "case": "the attempt succeeded and gave a result",
+  "body": { "key": "result_present", "old": null, "new": true },
+  "expect": "valid"
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "profile_disabled",
+  "version": 1,
+  "case": "a disabled profile carries no value on the line",
+  "body": { "key": "local-agent", "old": null, "new": { "revision": 1 } },
+  "expect": { "invalid": [{ "pointer": "/new", "reason": "type" }] }
+}

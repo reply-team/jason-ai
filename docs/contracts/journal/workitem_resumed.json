@@ -1,0 +1,31 @@
+{
+  "kind": "workitem_resumed",
+  "version": 1,
+  "since": "0.18.0",
+  "summary": "A waiting work item went back to the queue: what it waited for happened, its bound came, its provider block cleared or let a trial through, or a person resumed it.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": ["null", "string"], "pattern": "^att_", "description": "The attempt that ended by waiting, by its id; null where the wait began without one." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["because"],
+        "properties": {
+          "because": { "enum": ["children_ended", "moment_reached", "wait_ceiling", "block_cleared", "resumed_by_actor", "block_trial"], "description": "Why the wait was released." }
+        }
+      }
+    }
+  }
+}

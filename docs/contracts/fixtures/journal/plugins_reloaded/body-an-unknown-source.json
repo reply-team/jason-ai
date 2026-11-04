@@ -1,0 +1,7 @@
+{
+  "kind": "plugins_reloaded",
+  "version": 1,
+  "case": "a snapshot is made by a start or a reload",
+  "body": { "key": "snp_01JC0000000000000000000007", "old": null, "new": { "snapshot_id": "snp_01JC0000000000000000000007", "source": "schedule", "plugins": [], "routes": { "snapshot_id": "rts_01JC0000000000000000000008", "global_default": "example-provider", "override_count": 1, "campaign_route_count": 2 } } },
+  "expect": { "invalid": [{ "pointer": "/new/source", "reason": "enum" }] }
+}

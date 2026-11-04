@@ -1,0 +1,55 @@
+{
+  "kind": "campaign_updated",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "One setting of a campaign changed: its name, its execution profile, its review cadence or the project it is in; a change of several settings writes one line for each.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "project": { "at": "/new", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": {
+        "enum": ["name", "execution_profile", "review_seconds", "project_id"],
+        "description": "The setting that changed."
+      },
+      "old": { "type": ["string", "integer", "null"], "description": "The setting's value before the change." },
+      "new": { "type": ["string", "integer", "null"], "description": "The setting's value after the change." }
+    },
+    "anyOf": [
+      {
+        "properties": {
+          "key": { "const": "name" },
+          "old": { "type": "string" },
+          "new": { "type": "string" }
+        }
+      },
+      {
+        "properties": {
+          "key": { "const": "execution_profile" },
+          "old": { "type": ["string", "null"], "description": "The profile's name, or null for the installation's default." },
+          "new": { "type": ["string", "null"], "description": "The profile's name, or null for the installation's default." }
+        }
+      },
+      {
+        "properties": {
+          "key": { "const": "review_seconds" },
+          "old": { "type": ["integer", "null"], "description": "Seconds between the campaign's reviews, or null for the installation's cadence." },
+          "new": { "type": ["integer", "null"], "description": "Seconds between the campaign's reviews, or null for the installation's cadence." }
+        }
+      },
+      {
+        "properties": {
+          "key": { "const": "project_id" },
+          "old": { "type": "string", "pattern": "^prj_", "description": "The project the campaign left." },
+          "new": { "type": "string", "pattern": "^prj_", "description": "The project the campaign moved to." }
+        }
+      }
+    ]
+  }
+}

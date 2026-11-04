@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_added",
+  "version": 1,
+  "case": "an import adds two people, one of them new to the directory",
+  "body": { "key": null, "old": null, "new": { "added": 2, "already_member": 1, "rejected": 0, "contact_ids": ["cnt_01JC0000000000000000000001", "cnt_01JC0000000000000000000002"], "created_contact_ids": ["cnt_01JC0000000000000000000002"] } },
+  "expect": "valid"
+}

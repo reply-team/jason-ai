@@ -1,0 +1,7 @@
+{
+  "kind": "suppression_added",
+  "version": 1,
+  "case": "the address is the point of the line",
+  "body": { "key": "email", "old": null, "new": { "channel": "email" } },
+  "expect": { "invalid": [{ "pointer": "/new/value", "reason": "required" }] }
+}

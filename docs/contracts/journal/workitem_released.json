@@ -1,0 +1,64 @@
+{
+  "kind": "workitem_released",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A work item went back to the queue to be claimed again: its attempt failed in a way worth another attempt, a restart found its attempt never started, or a person approved the work it was waiting on.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "description": "The attempt that ended, by its id; `status` where a person's approval released the work." },
+      "old": { "type": ["null", "string"] },
+      "new": { "type": ["object", "string"] }
+    },
+    "anyOf": [
+      {
+        "properties": {
+          "key": { "type": "string", "pattern": "^att_" },
+          "old": { "type": "null" },
+          "new": {
+            "type": "object",
+            "description": "An attempt that failed and is worth another one.",
+            "additionalProperties": false,
+            "required": ["code", "retry_after"],
+            "properties": {
+              "code": { "type": "string", "description": "The code the attempt failed with." },
+              "retry_after": { "type": ["null", "string"], "format": "date-time", "description": "The moment before which the item is not claimed again; null where no delay is set." }
+            }
+          }
+        }
+      },
+      {
+        "properties": {
+          "key": { "type": "string", "pattern": "^att_" },
+          "old": { "type": "null" },
+          "new": {
+            "type": "object",
+            "description": "An attempt claimed before a restart and never started: nobody's fault, and not counted.",
+            "additionalProperties": false,
+            "required": ["code"],
+            "properties": {
+              "code": { "const": "interrupted" }
+            }
+          }
+        }
+      },
+      {
+        "properties": {
+          "key": { "const": "status" },
+          "old": { "const": "awaiting_approval" },
+          "new": { "const": "created" }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "kind": "context_updated",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "One key of a campaign's context was set, changed or removed; a change of several keys writes one line for each.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The context key that changed." },
+      "old": {
+        "type": ["string", "number", "boolean", "object", "array", "null"],
+        "description": "The key's value before the change, in whatever shape the person or agent gave it; null when the key was not there."
+      },
+      "new": {
+        "type": ["string", "number", "boolean", "object", "array", "null"],
+        "description": "The key's value after the change, in whatever shape the person or agent gave it; null both when it was set to null and when it was removed, which the context itself tells apart."
+      }
+    }
+  }
+}

@@ -22,6 +22,9 @@
     <!-- The provider block is one document every operation's failure of class `blocked` carries: no operation, delivery,
          read or preference, so it is read by name, by ProviderBlockContract. -->
     <EmbeddedResource Include="..\..\..\docs\contracts\block\*.json" Link="Blocks\%(Filename)%(Extension)" />
+    <!-- The kinds the runtime reserves for its own journal lines are a sixth family: a line is a fact the runtime wrote,
+         no work anybody performs, so each kind's document is read under a prefix of its own by JournalKindCatalog. -->
+    <EmbeddedResource Include="..\..\..\docs\contracts\journal\*.json" Link="Journal\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Friend assemblies so the tests that use the shared pattern timing read the form a schema pattern is compiled in

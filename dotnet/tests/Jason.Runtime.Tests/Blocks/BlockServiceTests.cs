@@ -586,7 +586,7 @@ public partial class BlockServiceTests
         var id = await BlockAsync(harness, campaign, openedAt: Noon, parked: 3);
         var recorder = new Recorder();
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, harness.DatabaseFile).AddInterceptors(recorder);
+        JasonDbContext.Configure(builder, harness.DatabaseFile, JournalLines.Strict).AddInterceptors(recorder);
         await using (var db = new JasonDbContext(builder.Options))
         {
             await NewWorkItems(db, Noon).ListAsync(new WorkItemListRequest(null, null, null, null, null, null, null, null, ProviderBlockId: id), Ct);
@@ -704,7 +704,7 @@ public partial class BlockServiceTests
     {
         var recorder = new Recorder();
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, harness.DatabaseFile).AddInterceptors(recorder);
+        JasonDbContext.Configure(builder, harness.DatabaseFile, JournalLines.Strict).AddInterceptors(recorder);
         await using (var db = new JasonDbContext(builder.Options))
         {
             await NewService(db, Noon).ListAsync(request, Ct);
@@ -860,7 +860,7 @@ public partial class BlockServiceTests
     private static JasonDbContext Impatient(DispatchHarness harness)
     {
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, harness.DatabaseFile).UseSqlite($"Data Source={harness.DatabaseFile};Default Timeout=1");
+        JasonDbContext.Configure(builder, harness.DatabaseFile, JournalLines.Strict).UseSqlite($"Data Source={harness.DatabaseFile};Default Timeout=1");
         return new JasonDbContext(builder.Options);
     }
 

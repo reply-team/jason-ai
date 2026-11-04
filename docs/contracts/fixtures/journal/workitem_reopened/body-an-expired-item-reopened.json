@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_reopened",
+  "version": 1,
+  "case": "an expired item given a new due date",
+  "body": { "key": "status", "old": "expired", "new": "created" },
+  "expect": "valid"
+}

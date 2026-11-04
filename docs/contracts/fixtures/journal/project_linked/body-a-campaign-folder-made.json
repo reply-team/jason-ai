@@ -1,0 +1,17 @@
+{
+  "kind": "project_linked",
+  "version": 1,
+  "case": "the folder stayed, and a campaign without one was given one",
+  "body": {
+    "key": "prj_01JC0000000000000000000009",
+    "old": {
+      "folder_path": "/home/someone/Jason/projects/spring-launch",
+      "campaigns": { "cmp_01JC000000000000000000000F": null }
+    },
+    "new": {
+      "folder_path": "/home/someone/Jason/projects/spring-launch",
+      "campaigns": { "cmp_01JC000000000000000000000F": "/home/someone/Jason/projects/spring-launch/campaigns/follow-up" }
+    }
+  },
+  "expect": "valid"
+}

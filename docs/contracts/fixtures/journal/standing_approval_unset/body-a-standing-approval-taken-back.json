@@ -1,0 +1,11 @@
+{
+  "kind": "standing_approval_unset",
+  "version": 1,
+  "case": "a person takes back the standing approval for interested replies",
+  "body": {
+    "key": "interested",
+    "old": { "category": "interested", "operations": ["conversation.reply"], "expires_at": null, "max_releases": 50 },
+    "new": null
+  },
+  "expect": "valid"
+}

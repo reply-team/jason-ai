@@ -1,0 +1,7 @@
+{
+  "kind": "external_id_pinned",
+  "version": 1,
+  "case": "an identifier belongs to a campaign or a contact",
+  "body": { "key": "account/example-provider/person", "old": null, "new": "48213" },
+  "expect": { "invalid": [{ "pointer": "/key", "reason": "pattern" }] }
+}

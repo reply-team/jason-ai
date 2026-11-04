@@ -1,0 +1,36 @@
+{
+  "kind": "decision_answered",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A person answered a question an attempt raised, and the review that continues the work is summoned from this line; the answer is kept on the decision.",
+  "subscribable": true,
+  "entities": {
+    "decision": { "at": "/new/decision_id", "presence": "always" },
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "decision" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision_id", "chosen_option"],
+        "properties": {
+          "decision_id": { "type": "string", "pattern": "^dec_" },
+          "chosen_option": {
+            "type": ["string", "null"],
+            "description": "The label of the offered option the person chose, or null where they answered in their own words alone."
+          }
+        }
+      }
+    }
+  }
+}

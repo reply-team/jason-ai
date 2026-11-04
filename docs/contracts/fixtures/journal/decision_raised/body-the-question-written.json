@@ -1,0 +1,7 @@
+{
+  "kind": "decision_raised",
+  "version": 1,
+  "case": "what was asked is kept on the decision, not on the line",
+  "body": { "key": "decision", "old": null, "new": { "decision_id": "dec_01JC0000000000000000000006", "question": "Which offer?" } },
+  "expect": { "invalid": [{ "pointer": "/new/question", "reason": "additional_properties" }] }
+}

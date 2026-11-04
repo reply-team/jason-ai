@@ -1,0 +1,39 @@
+{
+  "kind": "standing_approval_unset",
+  "version": 1,
+  "since": "0.25.0",
+  "summary": "A person took back a campaign's standing approval for one category of reply, so drafted replies of it wait for a decision again.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply, which the campaign's newest line for it decides." },
+      "old": {
+        "type": "object",
+        "description": "The standing approval taken back, as it was set.",
+        "additionalProperties": false,
+        "required": ["category", "operations", "expires_at", "max_releases"],
+        "properties": {
+          "category": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers." },
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": { "enum": ["conversation.reply", "message.send"] },
+            "description": "The operations it releases, in ordinal order."
+          },
+          "expires_at": { "type": ["null", "string"], "format": "date-time", "description": "When it stops releasing work; null where it does not expire." },
+          "max_releases": { "type": ["null", "integer"], "minimum": 1, "maximum": 10000, "description": "How many releases it makes before it stops; null where it has no ceiling." }
+        }
+      },
+      "new": { "type": "null" }
+    }
+  }
+}

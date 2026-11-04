@@ -1,0 +1,62 @@
+{
+  "kind": "notification_sent",
+  "version": 1,
+  "since": "0.2.0",
+  "summary": "A notification pointing at what waits for a person went out, with the counts it carried and what each channel did with it.",
+  "subscribable": true,
+  "entities": {},
+  "field_since": { "/new/counts/protective_failures": "0.5.0", "/new/delivered_through": "0.5.0", "/new/counts/event_gaps": "0.12.0", "/new/counts/blocks": "0.18.0" },
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "notification" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["notification_id", "counts", "covered_through", "channels", "last_delivered_at"],
+        "properties": {
+          "notification_id": { "type": "string", "pattern": "^ntf_" },
+          "counts": {
+            "type": "object",
+            "description": "How many things of each sort the notification pointed at; never what they said.",
+            "additionalProperties": false,
+            "required": ["approvals", "decisions"],
+            "properties": {
+              "approvals": { "type": "integer", "minimum": 0, "description": "Approvals parked for a person." },
+              "decisions": { "type": "integer", "minimum": 0, "description": "Questions raised for a person." },
+              "protective_failures": { "type": "integer", "minimum": 0, "description": "Protective work that failed since the last notification that reached anybody." },
+              "event_gaps": { "type": "integer", "minimum": 0, "description": "Accounts whose provider events went unread for a span." },
+              "blocks": { "type": "integer", "minimum": 0, "description": "Open provider blocks holding work." }
+            }
+          },
+          "covered_through": { "type": ["null", "string"], "pattern": "^jrn_", "description": "The journal line the notification counted through, or null where it counted none." },
+          "channels": {
+            "type": "array",
+            "description": "What each channel did with the notification.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "kind", "outcome"],
+              "properties": {
+                "channel": { "type": "string", "minLength": 1, "description": "The channel's name, as the notification settings give it." },
+                "kind": { "type": "string", "enum": ["toast", "plugin"], "description": "A desktop toast, or a plugin's delivery." },
+                "outcome": { "type": "string", "enum": ["delivered", "silenced", "failed", "not_attempted"] },
+                "code": { "type": "string", "minLength": 1, "description": "Why a failed delivery failed, as the channel reported it." },
+                "class": { "type": "string", "enum": ["transient", "permanent", "validation", "ambiguous"], "description": "The class of a failed delivery's failure." },
+                "reason": { "type": "string", "minLength": 1, "description": "Why a channel was silenced or not tried, such as off, no_desktop, not_declared, unavailable, binding_invalid or one of the operating system's disabled_ words." },
+                "detail": { "type": "string", "maxLength": 500, "description": "A diagnostic about the delivery, never what the notification said." },
+                "receipt": { "type": "string", "maxLength": 256, "description": "The plugin's own identifier for the message it sent." },
+                "attempts": { "type": "integer", "minimum": 0, "description": "How many times the channel was tried; absent where it was not tried." }
+              }
+            }
+          },
+          "last_delivered_at": { "type": ["null", "string"], "format": "date-time", "description": "When a notification last reached anybody, this one included, or null where none has yet." },
+          "delivered_through": { "type": ["null", "string"], "pattern": "^jrn_", "description": "The line the last notification that reached anybody counted through, carried forward by one that reached nobody." }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "routes_updated",
+  "version": 1,
+  "case": "a campaign's first route for an operation",
+  "body": { "key": "contact.find", "old": null, "new": { "plugin": "example-provider", "binding": { "account": "sender@example.com" } } },
+  "expect": "valid"
+}

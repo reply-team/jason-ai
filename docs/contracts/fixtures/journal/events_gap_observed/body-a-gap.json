@@ -1,0 +1,11 @@
+{
+  "kind": "events_gap_observed",
+  "version": 1,
+  "case": "a span older than the store's depth",
+  "body": {
+    "key": "gap/evs_01JC0000000000000000000005/2026-09-01T00:00:00.000Z",
+    "old": null,
+    "new": { "source": "evs_01JC0000000000000000000005", "plugin": "example-mail", "from": "2026-09-01T00:00:00.000Z", "to": "2026-09-28T08:00:00.000Z" }
+  },
+  "expect": "valid"
+}

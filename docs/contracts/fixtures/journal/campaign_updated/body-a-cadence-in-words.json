@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_updated",
+  "version": 1,
+  "case": "a review cadence is a number of seconds, never words",
+  "body": { "key": "review_seconds", "old": 3600, "new": "an hour" },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}
