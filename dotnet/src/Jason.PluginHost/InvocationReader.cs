@@ -72,6 +72,11 @@ public static class InvocationReader
             throw new InvocationRejectedException(RejectionCodes.EnvelopeInvalid, "the invocation envelope is missing parts every invocation has.");
         }
 
+        if (invocation.Door is { } door && !IsUsable(door))
+        {
+            throw new InvocationRejectedException(RejectionCodes.EnvelopeInvalid, "the door the invocation envelope carries is not one this host can use.");
+        }
+
         if (invocation.ProtocolVersion != PluginProtocol.CurrentVersion)
         {
             throw new InvocationRejectedException(
@@ -105,6 +110,20 @@ public static class InvocationReader
 
         return invocation;
     }
+
+    /// <summary>
+    /// A door the host can spend: an http address on loopback, where the runtime listens, a capability and a journal line
+    /// to speak about, an operation list, and limits that allow at least one call.
+    /// </summary>
+    private static bool IsUsable(InvocationDoor door) =>
+        Uri.TryCreate(door.BaseUrl, UriKind.Absolute, out var address)
+        && string.Equals(address.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
+        && Sdk.HttpService.IsLoopback(address)
+        && !string.IsNullOrEmpty(door.Capability)
+        && !string.IsNullOrEmpty(door.LineId)
+        && door.Operations is not null
+        && door.Operations.All(static operation => !string.IsNullOrEmpty(operation))
+        && door.Limits is { MaxCalls: > 0, ResponseBytes: > 0, TimeoutMs: > 0 };
 
     private static void VerifyDigest(PluginInvocation invocation, HostDiagnostics diagnostics, string root)
     {

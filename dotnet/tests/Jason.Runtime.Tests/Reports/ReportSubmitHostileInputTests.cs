@@ -75,6 +75,30 @@ public class ReportSubmitHostileInputTests
         Assert.Equal(0, await db.Reports.CountAsync(Ct));
     }
 
+    /// <summary>
+    /// A plugin that saw an effect may report it, under its own name and only through its own door: the scope its
+    /// capability opened admits it, and nothing else does.
+    /// </summary>
+    [Fact]
+    public async Task A_plugin_reports_under_its_own_name_through_its_own_door_alone()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var submission = ReportedWorld.Submission();
+        submission["actor"] = new JsonObject { ["type"] = "plugin", ["id"] = "acme-forwarder" };
+
+        var outside = await Assert.ThrowsAsync<ValidationException>(() => ReportedWorld.Service(db).SubmitAsync((JsonObject)submission.DeepClone(), Ct));
+        Assert.Equal("actor.type", Assert.Single(outside.Details!).Field);
+
+        using (ActorScope.ForPlugin("acme-forwarder"))
+        {
+            var admitted = await ReportedWorld.Service(db).SubmitAsync(submission, Ct);
+            Assert.Equal(new ActorRef(ActorType.Plugin, "acme-forwarder"), admitted.Reporter);
+        }
+
+        Assert.Equal(1, await db.Reports.CountAsync(Ct));
+    }
+
     /// <summary>The runtime performs effects; it does not report them.</summary>
     [Fact]
     [Critical(Family.R2, "system actor reserved")]

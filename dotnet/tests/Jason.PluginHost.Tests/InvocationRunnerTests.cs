@@ -358,6 +358,87 @@ public sealed class InvocationRunnerTests
         Assert.True(outcome.Diagnostics.DurationMs >= 300, "the invocation ran for at least its budget");
     }
 
+    /// <summary>A door to the Runtime API that answers every call with <paramref name="status"/> and <paramref name="body"/>.</summary>
+    private static LoopbackHttpServer DoorApi(int status = 200, string body = "{}") =>
+        new(async context =>
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(body);
+            context.Response.StatusCode = status;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
+            context.Response.OutputStream.Close();
+        });
+
+    private static Action<InvocationBuilder> WithDoor(LoopbackHttpServer api, int timeoutMs = 5_000) =>
+        builder =>
+        {
+            builder.Door = new InvocationDoor(
+                api.BaseUrl.TrimEnd('/'), "door-capability-0123456789abcdef", "jrn_01JDOORLINE", ["campaign.list"], DoorLimits.Standard);
+            builder.Limits = builder.Limits with { TimeoutMs = timeoutMs, MaxStatements = 1_000_000_000 };
+        };
+
+    [Fact]
+    public void An_outcome_counts_the_calls_made_through_the_door()
+    {
+        using var api = DoorApi();
+
+        var outcome = Run(
+            "export function invoke() { host.call(\"campaign.list\"); host.call(\"campaign.list\"); return { result: null }; }",
+            configure: WithDoor(api));
+
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.Equal(2, outcome.Diagnostics.ApiCalls);
+        Assert.Equal(2, api.Requests);
+    }
+
+    /// <summary>A call through the door may have changed the runtime's state, so running out of time after one is ambiguous.</summary>
+    [Fact]
+    public void A_plugin_that_runs_out_of_time_after_a_door_call_may_have_acted()
+    {
+        using var api = DoorApi();
+
+        var outcome = Run(
+            "export function invoke() { host.call(\"campaign.list\"); for (;;) { } }",
+            configure: WithDoor(api, timeoutMs: 1_000));
+
+        var error = Error(outcome);
+        Assert.Equal(HostOutcomeCodes.PluginTimeout, error.Code);
+        Assert.Equal(FailureClass.Ambiguous, error.Class);
+        Assert.Equal(1, outcome.Diagnostics.ApiCalls);
+    }
+
+    [Fact]
+    public void An_API_error_the_plugin_does_not_catch_ends_the_invocation_as_that_failure()
+    {
+        using var api = DoorApi(404, """{"error":{"code":"not_found","message":"No campaign cmp_01J.","retryable":false}}""");
+
+        var outcome = Run("export function invoke() { host.call(\"campaign.list\"); return { result: null }; }", configure: WithDoor(api));
+
+        var error = Error(outcome);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Equal("not_found", error.Code);
+        Assert.Equal("No campaign cmp_01J.", error.Message);
+    }
+
+    /// <summary>A handler that calls outside its door is misconfigured; catching the refusal does not hide it.</summary>
+    [Fact]
+    public void A_call_outside_the_door_ends_the_invocation_even_inside_a_catch()
+    {
+        using var api = DoorApi();
+
+        var outcome = Run(
+            "export function invoke() { try { host.call(\"contact.list\", {}); } catch (e) { } return { result: \"hidden\" }; }",
+            configure: WithDoor(api));
+
+        var error = Error(outcome);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Equal(HostOutcomeCodes.CapabilityNotGranted, error.Code);
+        Assert.Equal("api", error.Details!["capability"]!.GetValue<string>());
+        Assert.Equal("contact.list", error.Details!["operation"]!.GetValue<string>());
+        Assert.Equal(0, api.Requests);
+    }
+
     [Fact]
     public void Runaway_recursion_ends_the_invocation()
     {

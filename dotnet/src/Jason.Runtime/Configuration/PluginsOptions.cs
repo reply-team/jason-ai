@@ -1,8 +1,8 @@
 namespace Jason.Runtime.Configuration;
 
 /// <summary>
-/// What the user grants one plugin out of what its manifest requests: three lists naming executables, hosts and
-/// environment variables. <c>*</c> grants everything that plugin requested for that capability; an absent list
+/// What the user grants one plugin out of what its manifest requests: four lists naming executables, hosts,
+/// environment variables and Runtime API families. <c>*</c> grants everything that plugin requested for that capability; an absent list
 /// grants nothing, which is also the default for a plugin nobody has decided about. Declaration is not
 /// permission.
 /// </summary>
@@ -13,6 +13,9 @@ public sealed class PluginGrant
     public List<string> Http { get; set; } = [];
 
     public List<string> Env { get; set; } = [];
+
+    /// <summary>The Runtime API families a handler's door may open, out of those the manifest requests.</summary>
+    public List<string> Api { get; set; } = [];
 
     /// <summary>
     /// The journal kinds this plugin is admitted to, out of those its manifest's <c>subscriptions</c> declare. A kind

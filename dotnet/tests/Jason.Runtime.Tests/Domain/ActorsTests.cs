@@ -67,6 +67,42 @@ public class ActorsTests
     }
 
     [Fact]
+    public void A_plugin_actor_must_name_its_plugin()
+    {
+        using var scope = ActorScope.ForPlugin("acme-forwarder");
+
+        var ex = Assert.Throws<ValidationException>(() => Actors.Resolve(new ActorRef(ActorType.Plugin)));
+
+        Assert.Equal("actor.id", Assert.Single(ex.Details!).Field);
+        Assert.Equal("required", ex.Details![0].Code);
+    }
+
+    [Theory]
+    [Critical(Family.R2, "a plugin actor needs the plugin's own door")]
+    [InlineData(null)]
+    [InlineData("other-plugin")]
+    public void A_plugin_actor_is_refused_outside_its_own_door(string? scopedPlugin)
+    {
+        using var scope = scopedPlugin is null ? null : ActorScope.ForPlugin(scopedPlugin);
+
+        var ex = Assert.Throws<ValidationException>(() => Actors.Resolve(new ActorRef(ActorType.Plugin, "acme-forwarder")));
+
+        Assert.Equal("actor.type", Assert.Single(ex.Details!).Field);
+        Assert.Equal("not_allowed", ex.Details![0].Code);
+    }
+
+    [Fact]
+    public void A_plugin_actor_is_accepted_through_its_own_door()
+    {
+        using (ActorScope.ForPlugin("acme-forwarder"))
+        {
+            Assert.Equal(new ActorRef(ActorType.Plugin, "acme-forwarder"), Actors.Resolve(new ActorRef(ActorType.Plugin, "acme-forwarder")));
+        }
+
+        Assert.Throws<ValidationException>(() => Actors.Resolve(new ActorRef(ActorType.Plugin, "acme-forwarder")));
+    }
+
+    [Fact]
     public void An_attempt_actor_is_derived_from_the_attempt_itself()
     {
         var item = WorkItemFactory.NewAiRole(WorkItemFactory.NewCampaign());

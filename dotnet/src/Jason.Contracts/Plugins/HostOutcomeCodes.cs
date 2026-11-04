@@ -54,13 +54,16 @@ public static class HostOutcomeCodes
 
     public const string ModuleNotAllowed = "module_not_allowed";
 
+    /// <summary>The plugin asked the Runtime API through its door for more calls, or a larger request, than the door allows.</summary>
+    public const string ApiLimit = "api_limit";
+
     /// <summary>Every code above.</summary>
     public static IReadOnlySet<string> All { get; } = new[]
     {
         PluginException, BadReturn, ResultTooLarge, PluginSyntaxError, EntryFunctionMissing, PluginTimeout,
         PluginMemoryExceeded, PluginStatementLimit, PluginRecursionLimit, CapabilityNotGranted, ExecutableNotAllowed,
         ExecLimit, HttpHostNotAllowed, HttpSchemeNotAllowed, HttpMethodNotAllowed, HttpHeaderNotAllowed, HttpLimit,
-        ModuleNotAllowed,
+        ModuleNotAllowed, ApiLimit,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>

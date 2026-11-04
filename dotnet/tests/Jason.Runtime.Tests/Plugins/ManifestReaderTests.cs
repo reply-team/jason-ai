@@ -128,6 +128,16 @@ public class ManifestReaderTests : IDisposable
     [InlineData("capabilities:\n  env:\n    variables: [TOKEN, TOKEN]\n", "variable_name_invalid", "capabilities.env.variables[1]")]
     [InlineData("capabilities:\n  env:\n    variables: [TOKEN]\n", null, null)]
 
+    // The Runtime API a handler may reach through its door, by family.
+    [InlineData("capabilities:\n  api: [read, journal.append]\n", null, null)]
+    [InlineData("capabilities:\n  api: [read, workitem, campaign, contact, suppression, report, journal.append]\n", null, null)]
+    [InlineData("capabilities:\n  api: [read, everything]\n", "api_family_unknown", "capabilities.api[1]")]
+    [InlineData("capabilities:\n  api: [Read]\n", "api_family_unknown", "capabilities.api[0]")]
+    [InlineData("capabilities:\n  api: [system]\n", "api_family_unknown", "capabilities.api[0]")]
+    [InlineData("capabilities:\n  api: [read, read]\n", "field_invalid", "capabilities.api[1]")]
+    [InlineData("capabilities:\n  api: []\n", "field_invalid", "capabilities.api")]
+    [InlineData("capabilities:\n  api: read\n", "field_invalid", "capabilities.api")]
+
     // Limits.
     [InlineData("limits:\n  timeout_ms: 100\n", "field_invalid", "limits.timeout_ms")]
     [InlineData("limits:\n  timeout_ms: 99999999\n", "field_invalid", "limits.timeout_ms")]
@@ -892,6 +902,7 @@ public class ManifestReaderTests : IDisposable
         "capabilities", "capabilities.exec", "capabilities.exec.executables",
         "capabilities.http", "capabilities.http.hosts",
         "capabilities.env", "capabilities.env.variables",
+        "capabilities.api",
         "limits", "limits.timeout_ms", "limits.memory_mb",
         "binding", "binding.type", "binding.properties", "binding.required",
         "subscriptions",
@@ -915,6 +926,7 @@ public class ManifestReaderTests : IDisposable
         "capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        version_command: { a: 1 }\n",
         "capabilities:\n  http:\n    hosts: [[api.example.test]]\n",
         "capabilities:\n  env:\n    variables: [{ a: 1 }]\n",
+        "capabilities:\n  api: [[read]]\n",
         "binding:\n  type: object\n  required: [[workspace]]\n",
         "binding:\n  type: object\n  properties:\n    workspace: [a, b]\n",
         "subscriptions: [[workitem_failed], { a: 1 }]\n",

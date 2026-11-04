@@ -81,6 +81,45 @@ public class PluginServiceTests
         Assert.Equal(reloaded.Plugins[0].Digest, Assert.Single(listed.Plugins).Digest);
     }
 
+    [Fact]
+    public async Task The_api_families_a_plugin_requests_and_is_granted_are_listed()
+    {
+        await using var api = await StartAsync(new TestSearchPath(), paths =>
+        {
+            TestPlugins.Write(
+                paths,
+                "acme-forwarder",
+                TestPlugins.Manifest("acme-forwarder", extra: "capabilities:\n  api: [read, journal.append]\n"),
+                "export function invoke() { return { result: {} }; }");
+            TestPlugins.Grant(paths, "acme-forwarder", api: ["journal.append"]);
+        });
+
+        var plugin = Assert.Single((await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { Reason = "after installing" }, Ct)).Plugins);
+
+        Assert.Equal(PluginStatus.Valid, plugin.Status);
+        Assert.Equal(["read", "journal.append"], plugin.Capabilities.Api!.Requested);
+        Assert.Equal(["journal.append"], plugin.Capabilities.Api.Granted);
+        Assert.Null(plugin.Capabilities.Env);
+    }
+
+    [Fact]
+    public async Task A_family_no_runtime_knows_rejects_the_reload()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        TestPlugins.Write(
+            api.Paths,
+            "acme-forwarder",
+            TestPlugins.Manifest("acme-forwarder", extra: "capabilities:\n  api: [read, everything]\n"),
+            "export function invoke() { return { result: {} }; }");
+
+        var error = await api.PostErrorAsync(Operations.PluginReload, null, HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("plugin_reload_rejected", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("api_family_unknown", detail.Code);
+        Assert.Equal("acme-forwarder/plugin.yaml#capabilities.api[1]", detail.Field);
+    }
+
     [Theory]
     [InlineData(TestPlugins.BindingBoundTooLarge, "yaml_invalid")]
     [InlineData(TestPlugins.BindingTypeAsAList, "field_invalid")]

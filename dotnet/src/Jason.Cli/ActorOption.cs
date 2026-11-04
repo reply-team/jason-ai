@@ -94,6 +94,11 @@ public static class ActorOption
             throw new UsageException($"{Name} 'system' is reserved for the runtime's own writes; claim 'human' or 'role:<id>'.");
         }
 
+        if (type is "plugin")
+        {
+            throw new UsageException($"{Name} 'plugin' is set by the runtime on a plugin's own host.call and is never claimed from a command line; claim 'human' or 'role:<id>'.");
+        }
+
         if (type is not "human" and not "role" and not "attempt")
         {
             throw new UsageException($"{Name} must be 'human', 'human:<id>', 'role:<id>' or 'attempt:att_...'.");

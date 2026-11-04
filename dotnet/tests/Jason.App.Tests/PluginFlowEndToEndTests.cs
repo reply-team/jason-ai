@@ -7,6 +7,8 @@ using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
+using Jason.Runtime.Hosting;
+using Jason.Runtime.Plugins.Door;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Tests;
@@ -205,7 +207,9 @@ public class PluginFlowEndToEndTests
             paths,
             RuntimeInfo.Create(),
             TimeProvider.System,
-            NullLogger<PluginInvoker>.Instance);
+            NullLogger<PluginInvoker>.Instance,
+            new HandlerCapabilities(),
+            new ListeningEndpoint(0));
 
         return await invoker.InvokeAsync(
             new PluginInvocationRequest(PluginId, "echo.run", new JsonObject { ["hello"] = "world" }, null, "att_01K0E2E"),

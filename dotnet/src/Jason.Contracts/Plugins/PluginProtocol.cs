@@ -29,6 +29,15 @@ public static class PluginProtocol
     public const int MaxExternalIdLength = 256;
     public const int MaxCorrelationIdLength = 128;
 
+    /// <summary>The most Runtime API calls one handler invocation may make through its door.</summary>
+    public const int MaxDoorCalls = 100;
+
+    /// <summary>The largest answer one call through a door may bring back.</summary>
+    public const int MaxDoorResponseBytes = 1_048_576;
+
+    /// <summary>How long one call through a door may take, at most; less where the invocation has less time left.</summary>
+    public const int DoorCallTimeoutMs = 30_000;
+
     /// <summary>
     /// The only commands a manifest may declare to ask an executable for its version, each a one-element argv.
     /// A reload runs a program the user granted; letting the manifest name the arguments would make that a way

@@ -33,16 +33,17 @@ public sealed class SdkHarness : IDisposable
             Invocation.InvocationId,
             TimeProvider.System);
 
-        Budget = new CallBudget(Invocation.Limits.Exec.MaxCalls, Invocation.Limits.Http.MaxCalls);
+        Budget = new CallBudget(Invocation.Limits.Exec.MaxCalls, Invocation.Limits.Http.MaxCalls, Invocation.Door?.Limits.MaxCalls ?? 0);
         var left = remaining ?? TimeSpan.FromMilliseconds(Invocation.Limits.TimeoutMs);
         Kills = new UnfinishedKills();
         Services = new HostServices(Invocation, Diagnostics, Budget, Kills, () => left, packageRoot, CancellationToken.None);
 
         Engine = EngineFactory.Create(Invocation.Limits, new PackageModuleLoader(packageRoot), CancellationToken.None);
         Http = new HttpService(Services);
+        Door = Invocation.Door is null ? null : new DoorService(Services, Invocation.Door);
         var defaults = new ExecService(Services);
         var exec = new ExecService(Services) { EndedWithin = endedWithin ?? defaults.EndedWithin, Kill = kill ?? defaults.Kill, Spending = spending };
-        Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new LogService(Services)));
+        Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new LogService(Services), Door));
     }
 
     public Engine Engine { get; }
@@ -59,6 +60,9 @@ public sealed class SdkHarness : IDisposable
     public UnfinishedKills Kills { get; }
 
     public HttpService Http { get; }
+
+    /// <summary>The door's client, where the envelope carries a door.</summary>
+    public DoorService? Door { get; }
 
     /// <summary>Every JSON Lines record the host has written so far, in order.</summary>
     public IReadOnlyList<JsonObject> Lines =>
@@ -83,15 +87,12 @@ public sealed class SdkHarness : IDisposable
     public void Dispose()
     {
         Http.Dispose();
+        Door?.Dispose();
         _stderr.Dispose();
     }
 
-    /// <summary>The same rule the mode applies: the values of granted variables are the host's known secrets.</summary>
-    public static Redactor GrantedSecrets(PluginInvocation invocation)
-    {
-        ArgumentNullException.ThrowIfNull(invocation);
-        return new Redactor((invocation.Grants.Env?.Variables ?? []).Select(Environment.GetEnvironmentVariable));
-    }
+    /// <summary>The rule the mode applies, the mode's own: the values of granted variables and a door's capability.</summary>
+    public static Redactor GrantedSecrets(PluginInvocation invocation) => PluginHostMode.KnownSecrets(invocation);
 
     public static HostDiagnostics DiagnosticsFor(TextWriter stderr, PluginInvocation invocation) =>
         new(stderr, GrantedSecrets(invocation), invocation.Limits.Log, invocation.Plugin.Id, invocation.InvocationId, TimeProvider.System);

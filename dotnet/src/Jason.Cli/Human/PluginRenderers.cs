@@ -113,7 +113,8 @@ public static class PluginRenderers
     private static string? Grants(PluginCapabilitiesDto? capabilities)
     {
         if (capabilities is null
-            || (capabilities.Exec is null && capabilities.Http is null && capabilities.Env is null && capabilities.Subscriptions is null))
+            || (capabilities.Exec is null && capabilities.Http is null && capabilities.Env is null && capabilities.Api is null
+                && capabilities.Subscriptions is null))
         {
             return null;
         }
@@ -125,7 +126,14 @@ public static class PluginRenderers
             ? Absent
             : Counts(capabilities.Subscriptions.Granted?.Count ?? 0, capabilities.Subscriptions.Requested?.Count ?? 0);
 
-        return $"exec {exec} | http {http} | env {env} | subscriptions {subscriptions}";
+        // The door is a handler's alone, so a plugin that asks for none keeps the line it always had.
+        var line = $"exec {exec} | http {http} | env {env}";
+        if (capabilities.Api is not null)
+        {
+            line += $" | api {Counts(capabilities.Api.Granted?.Count ?? 0, capabilities.Api.Requested?.Count ?? 0)}";
+        }
+
+        return line + $" | subscriptions {subscriptions}";
     }
 
     private static string Counts(int granted, int requested) =>

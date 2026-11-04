@@ -1,3 +1,4 @@
+using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Tests.Fixtures;
 using Jason.Runtime.Tests;
@@ -26,6 +27,19 @@ public sealed class HostObjectTests : IDisposable
         Assert.Equal("function", harness.Evaluate("typeof host.log").AsString());
         Assert.Equal("function", harness.Evaluate("typeof host.fail").AsString());
         Assert.Equal("function", harness.Evaluate("typeof host.channelKey").AsString());
+    }
+
+    /// <summary>The one addition there is: a door to the Runtime API, where the invocation was given one.</summary>
+    [Fact]
+    public void With_a_door_the_host_object_is_those_six_and_call()
+    {
+        using var harness = Harness(builder => builder.Door = new InvocationDoor(
+            "http://127.0.0.1:9", "door-capability-0123456789abcdef", "jrn_01JDOORLINE", [Operations.CampaignList], DoorLimits.Standard));
+
+        Assert.Equal("exec,http,env,log,fail,channelKey,call", harness.Evaluate("Object.keys(host).join(',')").AsString());
+        Assert.Equal("function", harness.Evaluate("typeof host.call").AsString());
+        Assert.Equal(2, (int)harness.Evaluate("host.call.length").AsNumber());
+        Assert.Equal("TypeError", harness.Caught("host.call = 1"));
     }
 
     [Fact]

@@ -131,6 +131,60 @@ public class PluginContractsShapeTests
         Assert.Equal(30_000, back.Limits.Http.TimeoutMs);
     }
 
+    /// <summary>
+    /// A handler's door travels in the envelope only where the invocation has one, so every envelope without it reads
+    /// exactly as it did before the member existed; with it, the address, the capability, the line, the operations and
+    /// the bounds all reach the child, and back.
+    /// </summary>
+    [Fact]
+    public void An_envelope_carries_a_door_only_where_the_invocation_has_one()
+    {
+        var without = JsonSerializer.Serialize(SampleInvocation(), JasonJson.Options);
+        Assert.DoesNotContain("\"door\"", without, StringComparison.Ordinal);
+
+        var door = new InvocationDoor("http://127.0.0.1:4100", "capability-value", "jrn_01J", [Operations.CampaignList], DoorLimits.Standard);
+        var json = JsonSerializer.Serialize(SampleInvocation() with { Door = door }, JasonJson.Options);
+        Assert.Contains(
+            "\"door\":{\"base_url\":\"http://127.0.0.1:4100\",\"capability\":\"capability-value\",\"line_id\":\"jrn_01J\",\"operations\":[\"campaign.list\"],\"limits\":{\"max_calls\":100,\"response_bytes\":1048576,\"timeout_ms\":30000}}",
+            json,
+            StringComparison.Ordinal);
+
+        var back = JsonSerializer.Deserialize<PluginInvocation>(json, JasonJson.Options)!;
+        Assert.Equal("capability-value", back.Door!.Capability);
+        Assert.Equal([Operations.CampaignList], back.Door.Operations);
+        Assert.Equal(DoorLimits.Standard, back.Door.Limits);
+        Assert.Null(JsonSerializer.Deserialize<PluginInvocation>(without, JasonJson.Options)!.Door);
+    }
+
+    /// <summary>The capability is the envelope's one secret: a door, and an envelope holding one, never print it.</summary>
+    [Fact]
+    public void A_door_never_prints_its_capability()
+    {
+        var door = new InvocationDoor("http://127.0.0.1:4100", "capability-value", "jrn_01J", [Operations.CampaignList], DoorLimits.Standard);
+
+        Assert.DoesNotContain("capability-value", door.ToString(), StringComparison.Ordinal);
+        Assert.Contains("jrn_01J", door.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("capability-value", (SampleInvocation() with { Door = door }).ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>The door's bounds are fixed numbers of the protocol, not settings.</summary>
+    [Fact]
+    public void A_door_is_bounded_by_fixed_numbers()
+    {
+        Assert.Equal(100, PluginProtocol.MaxDoorCalls);
+        Assert.Equal(1_048_576, PluginProtocol.MaxDoorResponseBytes);
+        Assert.Equal(30_000, PluginProtocol.DoorCallTimeoutMs);
+        Assert.Equal(new DoorLimits(100, 1_048_576, 30_000), DoorLimits.Standard);
+    }
+
+    /// <summary>An outcome counts the Runtime API calls only where the invocation made any, so every other reads as before.</summary>
+    [Fact]
+    public void An_outcome_counts_api_calls_only_where_there_were_some()
+    {
+        Assert.DoesNotContain("api_calls", JsonSerializer.Serialize(new OutcomeDiagnostics(5, 0, 0, 0), JasonJson.Options), StringComparison.Ordinal);
+        Assert.Contains("\"api_calls\":3", JsonSerializer.Serialize(new OutcomeDiagnostics(5, 0, 0, 0, 3), JasonJson.Options), StringComparison.Ordinal);
+    }
+
     [Fact]
     [Critical(Family.R1, "the failure class on the wire")]
     public void A_failed_outcome_carries_its_class_and_omits_what_it_does_not_have()

@@ -101,12 +101,13 @@ public class StandingApprovalServiceTests
     }
 
     /// <summary>
-    /// Only a person sets or takes back a standing approval, and a request has to name them: a role or a run is refused
+    /// Only a person sets or takes back a standing approval, and a request has to name them: a role, a run or a plugin in its own door's scope is refused
     /// the way it is refused a decision, and a request with no actor, or one naming nobody, is refused for want of a name.
     /// </summary>
     [Theory]
     [InlineData(ActorType.Role, "manager", "approval_not_human")]
     [InlineData(ActorType.Attempt, "att_01K52JR0000000000000000001", "approval_not_human")]
+    [InlineData(ActorType.Plugin, "acme-forwarder", "approval_not_human")]
     [InlineData(ActorType.Human, "  ", "actor_required")]
     [InlineData(null, null, "actor_required")]
     [Critical(Family.S2, "only a named person sets a standing approval")]
@@ -117,6 +118,8 @@ public class StandingApprovalServiceTests
         var campaign = await SeedAsync(db);
         var actor = type is { } kind ? new ActorRef(kind, id) : null;
 
+        // A plugin is admitted as an actor only in the scope its own door opened, and refused there all the same.
+        using var door = type == ActorType.Plugin ? ActorScope.ForPlugin(id!) : null;
         var set = await Assert.ThrowsAsync<InvalidRequestException>(() => Service(db).SetAsync(Set(campaign) with { Actor = actor }, Ct));
         var unset = await Assert.ThrowsAsync<InvalidRequestException>(
             () => Service(db).UnsetAsync(new ApprovalUnsetStandingRequest(campaign.PublicId, "interested", actor), Ct));

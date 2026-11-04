@@ -1274,6 +1274,36 @@ public sealed class DoctorComposerTests
         AssertAbsent(bundle, MadeUp.User);
     }
 
+    /// <summary>
+    /// A handler writes as <c>plugin:&lt;its id&gt;</c>, so an entry's actor can name a plugin of the person's own; with the
+    /// journal asked for, that id travels as the plugin's alias, as a <c>plugin_id</c> does.
+    /// </summary>
+    [Fact]
+    public async Task With_the_journal_asked_for_a_plugin_actor_s_id_is_its_alias()
+    {
+        const string Own = "sentinelforwarder";
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) =>
+        {
+            if (operation != Operations.JournalList)
+            {
+                return null;
+            }
+
+            var entry = runtime.Entry(0);
+            entry["actor"] = new JsonObject { ["type"] = "plugin", ["id"] = Own };
+            return Respond(HttpStatusCode.OK, new JsonObject { ["items"] = new JsonArray(entry), ["next_cursor"] = null }.ToJsonString());
+        };
+
+        var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
+
+        var actor = Section(bundle, "journal_entries")["entries"]![0]!["actor"]!;
+        Assert.Equal("plugin", Text(actor["type"]));
+        Assert.Matches("^<plugin-[0-9]+>$", Text(actor["id"]));
+        AssertAbsent(bundle, Own);
+    }
+
     /// <summary>Entries of most of a mebibyte each: as many of the newest as sixteen mebibytes of the bundle hold.</summary>
     [Fact]
     public async Task The_journals_entries_stop_at_sixteen_mebibytes_in_the_bundle_and_keep_the_newest()

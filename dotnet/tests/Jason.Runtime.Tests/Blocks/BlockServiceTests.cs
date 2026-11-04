@@ -183,8 +183,11 @@ public partial class BlockServiceTests
     [Theory]
     [InlineData(ActorType.Role, "planner")]
     [InlineData(ActorType.Attempt, "att_01K52JR0000000000000000001")]
+    [InlineData(ActorType.Plugin, "acme-forwarder")]
     public async Task Only_a_person_clears_a_block(ActorType type, string id)
     {
+        // A plugin is admitted as an actor only in the scope its own door opened, and refused there all the same.
+        using var door = type == ActorType.Plugin ? ActorScope.ForPlugin(id) : null;
         using var harness = new DispatchHarness(Noon);
         var campaign = await CampaignAsync(harness);
         var block = await BlockAsync(harness, campaign, openedAt: Noon, parked: 1);

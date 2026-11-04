@@ -28,7 +28,7 @@ public sealed record ListCapabilityDto(IReadOnlyList<string> Requested, IReadOnl
 /// Requested against granted, for every capability: declaration is not permission, and it shows. <c>Subscriptions</c> is
 /// the journal kinds the manifest declares against the kinds the settings grant, null when it declares none.
 /// </summary>
-public sealed record PluginCapabilitiesDto(ExecCapabilityDto? Exec, ListCapabilityDto? Http, ListCapabilityDto? Env)
+public sealed record PluginCapabilitiesDto(ExecCapabilityDto? Exec, ListCapabilityDto? Http, ListCapabilityDto? Env, ListCapabilityDto? Api = null)
 {
     public ListCapabilityDto? Subscriptions { get; init; }
 }

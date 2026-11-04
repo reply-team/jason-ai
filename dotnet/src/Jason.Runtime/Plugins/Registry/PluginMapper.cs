@@ -52,7 +52,8 @@ public static class PluginMapper
                             executable.Launch.Count == 0 ? null : executable.Launch))],
                         plugin.Grants.Exec),
                 manifest.Capabilities.Http is null ? null : new ListCapabilityDto(manifest.Capabilities.Http.Hosts, plugin.Grants.Http),
-                manifest.Capabilities.Env is null ? null : new ListCapabilityDto(manifest.Capabilities.Env.Variables, plugin.Grants.Env))
+                manifest.Capabilities.Env is null ? null : new ListCapabilityDto(manifest.Capabilities.Env.Variables, plugin.Grants.Env),
+                manifest.Capabilities.Api is null ? null : new ListCapabilityDto(manifest.Capabilities.Api.Families, plugin.Grants.Api))
             {
                 Subscriptions = manifest.Subscriptions.Count == 0 ? null : new ListCapabilityDto(manifest.Subscriptions, plugin.Grants.Subscriptions),
             },

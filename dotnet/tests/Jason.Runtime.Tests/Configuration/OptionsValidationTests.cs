@@ -102,7 +102,7 @@ public class OptionsValidationTests
 
         Assert.True(result.Failed);
         Assert.Equal(
-            "Plugins:Grants:fake:Http[1] must be \"*\" or the name of an executable, a host or a variable the manifest requests; "
+            "Plugins:Grants:fake:Http[1] must be \"*\" or the name of an executable, a host, a variable or an api family the manifest requests; "
                 + "the value written is 1 character of white space.",
             Assert.Single(result.Failures!));
     }

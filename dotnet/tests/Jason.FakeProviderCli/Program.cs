@@ -206,6 +206,29 @@ switch (args[0])
             return 0;
         }
 
+    case "record-launch" when args.Length > 1:
+        {
+            // Started where a plugin host would be: what it was handed — every argument, every variable of its
+            // environment and its whole standard input — written to the file named, the input said again on stderr,
+            // and nothing answered.
+            var variables = new SortedDictionary<string, string>(StringComparer.Ordinal);
+            foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+            {
+                variables[(string)entry.Key] = entry.Value as string ?? string.Empty;
+            }
+
+            var input = await Console.In.ReadToEndAsync();
+            var launch = new Dictionary<string, object>
+            {
+                ["argv"] = handed,
+                ["env"] = variables,
+                ["stdin"] = input,
+            };
+            await File.WriteAllTextAsync(args[1], JsonSerializer.Serialize(launch), utf8);
+            await Console.Error.WriteAsync(input);
+            return 0;
+        }
+
     case "echo-stdin":
         {
             // Its standard input said back on both of its outputs, character for character: whatever was lost on the
