@@ -114,8 +114,9 @@ public sealed class TerminalPlanTests : IDisposable
         Assert.Equal(quoted, TerminalPlan.ShellQuote(word));
     }
 
+    /// <summary>kitty takes the program to run as its positional arguments and has no <c>-e</c>, so the host follows its name.</summary>
     [Fact]
-    public void Linux_starts_the_terminal_the_terminal_variable_names_with_the_host_after_dash_e()
+    public void Linux_starts_the_terminal_the_terminal_variable_names_with_the_host_in_its_own_form()
     {
         var bin = Folder("bin");
         var kitty = StandIn(bin, "kitty");
@@ -129,9 +130,44 @@ public sealed class TerminalPlanTests : IDisposable
         var launch = TerminalPlan.Compose(TerminalPlatform.Linux, found, "/home/marta/Jason/campaigns/spring launch", ["/usr/local/bin/codex", Prompt], Item);
 
         Assert.Equal("kitty", launch.Terminal);
-        Assert.Equal([kitty, "-e", "/usr/local/bin/codex", Prompt], launch.Argv);
+        Assert.Equal([kitty, "/usr/local/bin/codex", Prompt], launch.Argv);
         Assert.Equal("/home/marta/Jason/campaigns/spring launch", launch.WorkingDirectory);
         Assert.Null(launch.Script);
+    }
+
+    /// <summary>
+    /// Each terminal is given the host in the form it takes, by the program's file name: kitty and foot take the program
+    /// as positional arguments, gnome-terminal after <c>--</c>, wezterm after <c>start --</c>, and every other name after
+    /// <c>-e</c>, as xterm, konsole, alacritty, xfce4-terminal, urxvt and Debian's <c>x-terminal-emulator</c> (Debian
+    /// Policy 11.8.3) take it.
+    /// </summary>
+    [Theory]
+    [InlineData("kitty", new string[0])]
+    [InlineData("foot", new string[0])]
+    [InlineData("gnome-terminal", new[] { "--" })]
+    [InlineData("wezterm", new[] { "start", "--" })]
+    [InlineData("xterm", new[] { "-e" })]
+    [InlineData("konsole", new[] { "-e" })]
+    [InlineData("alacritty", new[] { "-e" })]
+    [InlineData("xfce4-terminal", new[] { "-e" })]
+    [InlineData("urxvt", new[] { "-e" })]
+    [InlineData("x-terminal-emulator", new[] { "-e" })]
+    public void Linux_gives_each_terminal_the_host_in_the_form_it_takes(string name, string[] before)
+    {
+        var program = "/usr/bin/" + name;
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.Linux, new TerminalFound(name, program), "/home/marta/Jason", ["/usr/local/bin/codex", Prompt], Item);
+
+        Assert.Equal([program, .. before, "/usr/local/bin/codex", Prompt], launch.Argv);
+    }
+
+    /// <summary>The form is chosen by the program's file name, wherever the program is and whatever the variable called it.</summary>
+    [Fact]
+    public void Linux_chooses_the_form_by_the_programs_file_name()
+    {
+        var launch = TerminalPlan.Compose(TerminalPlatform.Linux, new TerminalFound("term", "/opt/wezterm/bin/wezterm"), "/home/marta/Jason", ["/usr/local/bin/codex"], Item);
+
+        Assert.Equal(["/opt/wezterm/bin/wezterm", "start", "--", "/usr/local/bin/codex"], launch.Argv);
     }
 
     [Fact]

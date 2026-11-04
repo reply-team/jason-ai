@@ -23,7 +23,8 @@ public sealed record TerminalLaunch(string Terminal, IReadOnlyList<string> Argv,
 /// hands the console to the person's default terminal (Windows Terminal where it is the default), and gives it the host
 /// after <c>--</c>; macOS opens a <c>.command</c> script in Terminal through <c>/usr/bin/open</c>, since
 /// <c>open -a Terminal</c> takes no command; Linux starts the program the <c>TERMINAL</c> variable names, else
-/// <c>x-terminal-emulator</c>, with the host after <c>-e</c> as several arguments (Debian Policy 11.8.3). A terminal the
+/// <c>x-terminal-emulator</c>, with the host as several arguments in the form that program takes, chosen by its file name
+/// (<see cref="LinuxForm"/>). A terminal the
 /// operating system keeps in a fixed place is never taken from the search path: a click runs under the person's PATH, and
 /// a program of that name planted earlier on it must not be what the click starts.
 /// </summary>
@@ -73,13 +74,32 @@ public static class TerminalPlan
             case TerminalPlatform.Windows:
                 return new TerminalLaunch(terminal.Name, [terminal.Program, "--", .. host], folder, null, null);
             case TerminalPlatform.Linux:
-                return new TerminalLaunch(terminal.Name, [terminal.Program, "-e", .. host], folder, null, null);
+                return new TerminalLaunch(terminal.Name, [terminal.Program, .. LinuxForm(terminal.Program), .. host], folder, null, null);
             case TerminalPlatform.MacOs:
                 var name = ScriptNameFor(itemId);
                 return new TerminalLaunch(terminal.Name, [terminal.Program, "-a", "Terminal", name], folder, Script(folder, host), name);
             default:
                 throw new ArgumentOutOfRangeException(nameof(os), os, null);
         }
+    }
+
+    /// <summary>
+    /// What a Linux terminal is given before the program it runs, by the program's file name: kitty and foot take the
+    /// program as positional arguments and have no <c>-e</c>; gnome-terminal takes it after <c>--</c>; wezterm after
+    /// <c>start --</c>; every other name after <c>-e</c>, as xterm, konsole, alacritty, xfce4-terminal, urxvt and
+    /// <c>x-terminal-emulator</c> (Debian Policy 11.8.3) take it.
+    /// </summary>
+    public static IReadOnlyList<string> LinuxForm(string program)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(program);
+        // Either separator: the plan's Linux rows run on Windows too, where a stand-in's path is written with backslashes.
+        return program[(program.AsSpan().LastIndexOfAny('/', '\\') + 1)..] switch
+        {
+            "kitty" or "foot" => [],
+            "gnome-terminal" => ["--"],
+            "wezterm" => ["start", "--"],
+            _ => ["-e"],
+        };
     }
 
     /// <summary>One word in single quotes, each apostrophe written as <c>'\''</c>: nothing inside single quotes is special to a POSIX shell.</summary>
