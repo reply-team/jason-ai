@@ -31,6 +31,27 @@ public class OperationFamiliesTests
         });
     }
 
+    /// <summary>
+    /// The reads a <c>read</c> grant opens, written out: an operation the API adds later that the verb rule takes for a
+    /// read is red here until it is listed on purpose.
+    /// </summary>
+    [Fact]
+    public void The_read_family_opens_exactly_these_operations()
+    {
+        string[] reads =
+        [
+            "approval.get", "approval.list", "approval.list_standing", "block.get", "block.list", "campaign.activity",
+            "campaign.activity_by_period", "campaign.get", "campaign.list", "campaign.list_contacts", "campaign.summary",
+            "contact.get", "contact.list", "decision.get", "decision.list", "events.sources", "journal.list", "plugin.list",
+            "preference.list", "profile.get", "profile.list", "project.get", "project.list", "report.get", "report.list",
+            "role.list", "rolenote.get", "rolenote.list", "route.list", "route.resolve", "suppression.list",
+            "workitem.count", "workitem.get", "workitem.list",
+        ];
+
+        Assert.Equal(34, reads.Length);
+        Assert.Equal(reads, OperationFamilies.OperationsOf([OperationFamilies.Read]).Order(StringComparer.Ordinal));
+    }
+
     [Theory]
     [InlineData("campaign.get")]
     [InlineData("campaign.list")]
