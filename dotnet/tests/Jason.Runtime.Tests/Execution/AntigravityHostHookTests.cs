@@ -5,9 +5,10 @@ using Jason.Runtime.Execution.Hosts;
 namespace Jason.Runtime.Tests.Execution;
 
 /// <summary>
-/// The decision the <c>host-hook</c> mode gives for one Antigravity CLI tool call: a pure function of the rules the work
-/// directory's hook file carries and the one JSON document the host writes on standard input. Nothing here starts a
-/// process or reads a file; the paths are only compared as text.
+/// The decision the <c>host-hook</c> mode gives for one Antigravity CLI tool call: a function of the rules the work
+/// directory's hook file carries and the one JSON document the host writes on standard input, and of one look at what
+/// stands at the result path. The paths are compared as text; the rows about that one look make what stands there in a
+/// temporary folder of their own.
 /// </summary>
 public sealed class AntigravityHostHookTests
 {
@@ -21,8 +22,20 @@ public sealed class AntigravityHostHookTests
 
     private static string MemoryFile(string name) => Path.Combine(Root, "memory", name, "AGENTS.md");
 
-    private static string Rules(string[]? approve = null, string[]? deny = null, string cli = Cli) =>
-        AntigravityHookRules.Encode(new AntigravityHookRules(cli, [MemoryFile("client"), MemoryFile("campaign")], approve ?? [], deny ?? [], ResultFile));
+    private static string Rules(string[]? approve = null, string[]? deny = null, string cli = Cli, string? write = null) =>
+        AntigravityHookRules.Encode(new AntigravityHookRules(cli, [MemoryFile("client"), MemoryFile("campaign")], approve ?? [], deny ?? [], write ?? ResultFile));
+
+    /// <summary>The error Windows gives a symbolic link it refuses for want of a privilege: <c>ERROR_PRIVILEGE_NOT_HELD</c>.</summary>
+    private const int PrivilegeNotHeld = unchecked((int)0x80070522);
+
+    /// <summary>A work directory of its own in a temporary tree, and the decision for a write of its result file.</summary>
+    private static string WriteOfTheResult(TempTree tree, Action<string> plant)
+    {
+        var work = tree.NewDirectory("work");
+        var result = Path.Combine(work, "result.json");
+        plant(result);
+        return Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = result, ["Overwrite"] = true }), Rules(write: result), OperatingSystem.IsWindows());
+    }
 
     private static string Call(string tool, params (string Name, string Value)[] args)
     {
@@ -205,8 +218,8 @@ public sealed class AntigravityHostHookTests
 
     /// <summary>
     /// A role whose first result the runtime refuses writes the file again, so the result file is approved with or without
-    /// <c>Overwrite</c>: the path pins the target, and a link planted there needs a writer in the work directory, who
-    /// could do anything already. Every other write, overwriting or not, stays denied.
+    /// <c>Overwrite</c>: the path pins the target and the hook refuses a link or a directory there, so a planted link
+    /// gains nothing but a race against the role's own write. Every other write, overwriting or not, stays denied.
     /// </summary>
     [Fact]
     [Critical(Family.S6, "the result file is written as often as the role needs, and no other file is")]
@@ -217,6 +230,74 @@ public sealed class AntigravityHostHookTests
         Assert.Equal("auto_approve", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = "result.json", ["Overwrite"] = true })));
         Assert.Equal("deny", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = Path.Combine(WorkDir, "other.json"), ["Overwrite"] = true })));
         Assert.Equal("deny", Decide(CallWith("write_to_file", new JsonObject { ["TargetFile"] = Path.Combine(WorkDir, "other.json"), ["Overwrite"] = false })));
+    }
+
+    /// <summary>Nothing at the result path, or a plain file the role wrote before: the write is approved.</summary>
+    [Fact]
+    [Critical(Family.S6, "the result file is written where nothing or a plain file stands at its path")]
+    public void Nothing_or_a_plain_file_at_the_result_path_is_written()
+    {
+        using var tree = new TempTree();
+
+        Assert.Equal("auto_approve", WriteOfTheResult(tree, _ => { }));
+        Assert.Equal("auto_approve", WriteOfTheResult(tree, result => File.WriteAllText(result, "{\"summary\":\"a first try\"}")));
+    }
+
+    /// <summary>A directory at the result path is not the result file, and a write there is denied.</summary>
+    [Fact]
+    public void A_directory_at_the_result_path_is_denied()
+    {
+        using var tree = new TempTree();
+
+        Assert.Equal("deny", WriteOfTheResult(tree, result => Directory.CreateDirectory(result)));
+    }
+
+    /// <summary>
+    /// A symbolic link at the result path would carry the host's write to wherever it points, so it is denied, whether its
+    /// target is there or not.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S6, "a link at the result path is never written through")]
+    public void A_symbolic_link_at_the_result_path_is_denied()
+    {
+        using var tree = new TempTree();
+        var elsewhere = Path.Combine(tree.NewDirectory("elsewhere"), "settings.json");
+        File.WriteAllText(elsewhere, "{}");
+
+        bool Linked(string result, string target)
+        {
+            try
+            {
+                File.CreateSymbolicLink(result, target);
+                return true;
+            }
+            catch (IOException refused) when (OperatingSystem.IsWindows() && refused.HResult == PrivilegeNotHeld)
+            {
+                return false;
+            }
+        }
+
+        var linked = true;
+        var toAFile = WriteOfTheResult(tree, result => linked = Linked(result, elsewhere));
+        Assert.SkipUnless(linked, "A file symbolic link needs a privilege this account does not hold (ERROR_PRIVILEGE_NOT_HELD).");
+
+        Assert.Equal("deny", toAFile);
+        Assert.Equal("deny", WriteOfTheResult(tree, result => Linked(result, Path.Combine(Path.GetDirectoryName(elsewhere)!, "missing.json"))));
+    }
+
+    /// <summary>A directory junction at the result path is a link too, and the one Windows makes without a privilege.</summary>
+    [Fact]
+    public void A_junction_at_the_result_path_is_denied()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A directory junction is made only on Windows.");
+        using var tree = new TempTree();
+        var elsewhere = tree.NewDirectory("elsewhere");
+
+        var junction = true;
+        var decision = WriteOfTheResult(tree, result => junction = Plugins.ExecutableResolverTests.TryJunction(result, elsewhere));
+        Assert.SkipUnless(junction, "this machine would not create a directory junction.");
+
+        Assert.Equal("deny", decision);
     }
 
     /// <summary>A command is approved only as a foreground one in the work directory.</summary>

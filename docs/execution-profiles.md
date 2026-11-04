@@ -912,10 +912,11 @@ are the person's own, in `~/.gemini/antigravity-cli/settings.json` under `permis
 the runtime never writes that folder. What a work directory can carry is a workspace hook: the host reads
 `<work directory>/.agents/hooks.json`, and the pre-tool-use handler it names is asked about each tool call and answers
 that the call is approved, refused, or left to the person's own rules. The launch writes one such file, with one handler
-(`jason-attempt`) whose command is this executable's own `host-hook antigravity-cli <rules>` mode: a pure function of the
-call and the attempt's rules, with no runtime, no child, no file and no environment, which answers one JSON line and
-exits 0 whatever it was given. The rules travel in the command line as one base64url word, so no shell metacharacter
-reaches a shell, and the capability token and the envelope are in none of it. The hook answers:
+(`jason-attempt`) whose command is this executable's own `host-hook antigravity-cli <rules>` mode: a function of the
+call, the attempt's rules and one look at what stands at the result path, with no runtime, no child, no other file and
+no environment, which answers one JSON line and exits 0 whatever it was given. The rules travel in the command line as
+one base64url word, so no shell metacharacter reaches a shell, and the capability token and the envelope are in none of
+it. The hook answers:
 
 - **a command** is approved only when it is exactly one call of the runtime's command word (`jason`, unless the
   installation names another) in bare words or single-quoted spans, on a foreground command that runs in the work
@@ -929,11 +930,12 @@ reaches a shell, and the capability token and the envelope are in none of it. Th
 - **a view of a file** is approved for exactly the memory files the launch names and left to the person's rules for any
   other.
 - **a write** is approved for `result.json` in the work directory, a relative path being read against the work directory:
-  the one result file, written as often as the role needs; nothing else is written. An edit of a file, a question to the person, a
-  sub-agent, a message, a schedule, a task, a permission request and an image are refused. One reach is left: under the
-  host's proceed-in-sandbox or auto mode a command the person's rules allow may plant a link in the work directory that the
-  host's later write follows, and the hook cannot see it, because it reads no file. "Never writable" holds for the host's
-  write tools.
+  the one result file, written as often as the role needs, and only where nothing or a plain file stands at its path. A
+  link or a directory there is refused, and nothing else is written. An edit of a file, a question to the person, a
+  sub-agent, a message, a schedule, a task, a permission request and an image are refused. One reach is left: a command
+  that plants a link between the hook's look and the host's write. Under the host's proceed-in-sandbox mode that is a
+  matter for the person's sandbox, and under auto mode it is a command that could write anywhere already. "Never
+  writable" holds for the host's write tools.
 - **a fetch of a page or a search** is approved where the profile grants `web_fetch` or `web_search` and refused where it
   does not; the browser tools are refused unless the fetch is granted.
 - **a tool the profile denies by name** is refused. A deny is one of the host's own tool names, as its hooks page lists

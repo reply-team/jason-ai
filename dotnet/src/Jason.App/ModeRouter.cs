@@ -148,7 +148,8 @@ public static class ModeRouter
 
     /// <summary>
     /// The short-lived child an agent host starts to ask whether one tool call is allowed: the call on stdin, one answer
-    /// line on stdout, no runtime, no child, no file and no environment read.
+    /// line on stdout, no runtime, no child, no environment read and no file but one look at what stands at the result
+    /// path.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunHostHook(string[] args, CancellationToken cancellationToken) =>

@@ -302,7 +302,7 @@ public class ExecutableResolverTests
     /// hold: a symbolic link needs <c>SeCreateSymbolicLink</c>, and what the test is about is the reparse point
     /// rather than which kind of one it is.
     /// </summary>
-    private static bool TryJunction(string link, string target)
+    internal static bool TryJunction(string link, string target)
     {
         try
         {
