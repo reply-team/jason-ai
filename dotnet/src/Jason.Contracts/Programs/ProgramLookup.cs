@@ -389,17 +389,18 @@ public static partial class ProgramLookup
     /// <summary>
     /// The shim's last line, exactly as cmd-shim writes it. The package is one segment — a scoped install
     /// therefore captures its scope here, and the name under the scope is taken from the entry above. No <c>%</c>
-    /// stands in the entry, in this form or the other: cmd.exe would expand a variable there before it started
-    /// anything, so the line would name a file other than the one it spells, and npm never writes one.
+    /// and no <c>!</c> stands in the entry, in this form or the other: cmd.exe would expand a variable there before it
+    /// started anything, a <c>!</c> one where delayed expansion is on, so the line would name a file other than the one
+    /// it spells, and npm never writes one.
     /// </summary>
-    [GeneratedRegex("""^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" +"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"%]+)" %\*\z""")]
+    [GeneratedRegex("""^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" +"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"%!]+)" %\*\z""")]
     private static partial Regex NpmShimCall();
 
     /// <summary>
     /// The call of the form with no interpreter, exactly as cmd-shim writes it: the target, quoted, then <c>%*</c>, and
     /// nothing in front of the target.
     /// </summary>
-    [GeneratedRegex("""^"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"%]+)" +%\*\z""")]
+    [GeneratedRegex("""^"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"%!]+)" +%\*\z""")]
     private static partial Regex NpmNativeShimCall();
 
     /// <summary>Whether a target is a file the search path itself counts as a program image, read by its name alone.</summary>

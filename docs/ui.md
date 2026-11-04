@@ -151,7 +151,8 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
 
 - **Windows** starts the console host, `conhost.exe` from the system folder, which hands the window to Windows Terminal
   where that is your default terminal; where your default terminal is the console host itself, you get a plain console
-  window. The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
+  window. The console host's window and its hand-off to Windows Terminal are not yet measured on a machine.
+  The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
   folder, readable by your account alone, which removes itself and its folder when it runs. This is composed and checked

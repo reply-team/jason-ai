@@ -18,7 +18,7 @@ public sealed class ProfileRevisionCheck(IServiceScopeFactory scopes, IEnumerabl
     private static readonly Action<ILogger, int, Exception?> Refused = LoggerMessage.Define<int>(
         LogLevel.Warning,
         new EventId(1, nameof(Refused)),
-        "{Refused} execution profiles have a current revision this build's rules for its host refuse; work that runs under them ends profile_revision_refused");
+        "Execution profiles whose current revision this build's rules for its host refuse: {Refused}; work that runs under them ends profile_revision_refused");
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {

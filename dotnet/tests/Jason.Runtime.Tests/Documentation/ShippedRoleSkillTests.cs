@@ -242,8 +242,9 @@ public partial class ShippedRoleSkillTests
     }
 
     /// <summary>
-    /// Every role is taught the same two sentences about the result file: that it has no file-writing tool beyond the one
-    /// result file the callback names, and, once, where a host that cannot pass the JSON on a command line has it written.
+    /// Every role is taught the same two sentences about the result file: that it has no file-writing tool in this
+    /// version, except the one result file on a host whose callback is a file, and, once, where a host that cannot pass
+    /// the JSON on a command line has it written.
     /// </summary>
     [Fact]
     public async Task Every_role_skill_carries_the_one_result_file_sentence_and_the_qualified_no_file_sentence()
@@ -256,7 +257,7 @@ public partial class ShippedRoleSkillTests
             var skill = Whitespace().Replace(await File.ReadAllTextAsync(Path.Combine(pack, WorkDirectory.SkillFile), Ct), " ");
             var role = Path.GetFileName(pack);
 
-            Assert.True(skill.Contains("you have **no file-writing tool** in this version beyond the one result file the callback names, so there is no file to write first", StringComparison.Ordinal), role);
+            Assert.True(skill.Contains("you have **no file-writing tool** in this version; on a host whose callback is a file, the one result file it names. On any other host there is no file to write first", StringComparison.Ordinal), role);
             Assert.True(Regex.Count(skill, "--result-file") == 1, role);
             Assert.True(skill.Contains("Where your host cannot pass the JSON on a command line, write it to `result.json` in the work directory and pass `--result-file result.json` instead.", StringComparison.Ordinal), role);
         }

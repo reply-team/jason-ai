@@ -131,6 +131,29 @@ public sealed class ToastHostTests
         Assert.Contains($"arguments=\"jason://attention/approvals/{Approval}/prompt\"", made.Xml, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The toast after the first finds both keys as it left them: nothing is written, and the link present is a link
+    /// the click launches, with the item's Copy prompt button, as a link just written is.
+    /// </summary>
+    [Fact]
+    public void A_link_registration_already_present_launches_the_item_and_writes_nothing()
+    {
+        var registry = new FakeUserRegistry();
+        AppUserModelIdRegistration.Ensure(registry);
+        SchemeRegistration.Ensure(registry, Self);
+        registry.Writes.Clear();
+        var toast = new OrderedToast();
+        var made = new Made();
+
+        var outcome = ToastHost.Show(Shown(Approval), registry, Self, made.Prepare(registry, toast));
+
+        Assert.Equal(("present", "present", (string?)null), (outcome.Registration, outcome.Scheme, outcome.SchemeHr));
+        Assert.Empty(registry.Writes);
+        Assert.StartsWith($"<toast activationType=\"protocol\" launch=\"jason://attention/approvals/{Approval}\">", made.Xml, StringComparison.Ordinal);
+        Assert.Contains($"arguments=\"jason://attention/approvals/{Approval}/prompt\"", made.Xml, StringComparison.Ordinal);
+        Assert.Equal(["show", "setting"], toast.Order);
+    }
+
     [Fact]
     public void A_toast_with_no_item_launches_the_list()
     {

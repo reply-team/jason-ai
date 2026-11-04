@@ -77,12 +77,14 @@ proposes; approving, rejecting and answering stay yours.
   and `jason plugin install reply --replace` follow.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
   `brew upgrade jason`, run `jason skills update`. The approvals, installation, campaign-work, troubleshooting, in-session
-  planner and in-session researcher skills and the nine role skills changed in their wording.
+  planner skills and the nine role skills changed in their wording.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle stay
   as they were.
 - **The preference `agent.interactive_host`** is new and optional; without it `jason session open` starts Claude Code.
 - **Antigravity CLI:** if you added the two rules to your own settings in 0.26.0, you may keep them; they remain the
-  fallback.
+  fallback. The hook refuses web fetch, web search and the browser tools a profile does not grant, and a profile
+  stored under 0.26.0 grants none on this host, so an upgraded Antigravity profile loses web fetch and web search
+  until `jason profile update <name> --tool web_fetch --tool web_search`.
 - **The Reply plugin** is unchanged.
 - **From 0.25.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
@@ -93,15 +95,24 @@ proposes; approving, rejecting and answering stay yours.
 The click on a notification and its Copy prompt button are Windows only. Where another program already holds `jason:` links,
 Jason leaves that registration alone and the toast shows without a click or a button.
 
-On Windows, `jason session open` starts the console host, which hands the window to Windows Terminal where that is your
-default terminal; where your default terminal is the console host itself, you get a plain console window.
+On Windows, `jason session open` starts the console host, which hands the window to Windows Terminal where that is
+your default terminal; where your default terminal is the console host itself, you get a plain console window; neither
+is yet measured on a machine.
 
 The macOS form of `jason session open`, a script opened in Terminal, has not been watched on a Mac.
 
-Antigravity CLI's hook route has not been run on an account.
+Antigravity CLI's hook route has not been run on an account. The host also reads your own global `AGENTS.md` and
+`GEMINI.md` under `~/.gemini` for every role.
+
+Two installations on one account, a build of a checkout and the installed one, take the `jason:` link from each other at
+each toast, since the registration rewrites a key that is Jason's and names another executable. Uninstall leaves a key
+that names another installation alone, so nothing is lost.
+
+On Linux, kitty, foot, gnome-terminal, xfce4-terminal, mate-terminal and wezterm are started in the form each takes;
+any other terminal program is given the host after `-e` as separate arguments.
 
 Under Windows PowerShell 5.1 and cmd.exe the inner quotes of `--value '{"host":"codex"}'` are lost, which is why the
-example above reads the value from a file; where `jason session open` suggests the inline form, use `--value-file` there.
+example above reads the value from a file.
 
 If Claude Code's npm postinstall never replaced its placeholder executable, `jason session open` reports that it started the host
 and the window closes at once.
