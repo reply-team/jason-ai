@@ -67,8 +67,9 @@ public sealed class HandlerCapabilities
     }
 
     /// <summary>
-    /// Recognises <paramref name="bearer"/> as a live capability. The lookup is by a hash of the bearer and the stored
-    /// key is compared in fixed time; a capability whose moment has come is removed and refused.
+    /// Recognises <paramref name="bearer"/> as a live capability. The lookup is by a hash of the bearer, so what the
+    /// lookup's time could tell is about the hash and never the token; a capability whose moment has come is removed
+    /// and refused.
     /// </summary>
     public bool TryRecognise(string bearer, DateTimeOffset now, out DoorGrant grant)
     {
@@ -79,24 +80,19 @@ public sealed class HandlerCapabilities
         }
 
         var key = KeyOf(bearer);
-        foreach (var entry in grants)
+        if (!grants.TryGetValue(key, out var found))
         {
-            if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(entry.Key), Encoding.ASCII.GetBytes(key)))
-            {
-                continue;
-            }
-
-            if (now >= entry.Value.ExpiresAt)
-            {
-                grants.TryRemove(entry.Key, out _);
-                return false;
-            }
-
-            grant = entry.Value;
-            return true;
+            return false;
         }
 
-        return false;
+        if (now >= found.ExpiresAt)
+        {
+            grants.TryRemove(key, out _);
+            return false;
+        }
+
+        grant = found;
+        return true;
     }
 
     private static string KeyOf(string capability) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(capability)));
