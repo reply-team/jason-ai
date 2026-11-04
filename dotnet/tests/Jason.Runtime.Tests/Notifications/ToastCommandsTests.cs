@@ -43,7 +43,7 @@ public sealed class ToastCommandsTests
 
     /// <summary>
     /// The item that waits is never in a toast on macOS or Linux: a message that carries one is said there by its counts
-    /// and where to look alone, in no argument and on no stdin.
+    /// and where to look alone, in no argument, on no stdin and in no value of its environment.
     /// </summary>
     [Theory]
     [InlineData("osascript")]
@@ -64,6 +64,7 @@ public sealed class ToastCommandsTests
         Assert.Equal(command, launch.Command[0]);
         Assert.All(launch.Command, argument => Assert.DoesNotContain("apr_", argument, StringComparison.Ordinal));
         Assert.DoesNotContain("apr_", launch.Stdin ?? string.Empty, StringComparison.Ordinal);
+        Assert.All(launch.Environment.Values, value => Assert.DoesNotContain("apr_", value, StringComparison.Ordinal));
     }
 
     /// <summary>The same executable may be a dll run by dotnet, as it is under test: the mode follows whatever starts it.</summary>

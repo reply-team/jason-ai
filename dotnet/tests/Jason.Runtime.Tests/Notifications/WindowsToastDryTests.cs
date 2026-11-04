@@ -4,10 +4,10 @@ using Jason.Runtime.Notifications.Desktop;
 namespace Jason.Runtime.Tests.Notifications;
 
 /// <summary>
-/// The one test that calls the toast interop, and the suite's one named exception to "no test touches the desktop": it
-/// performs every call on the path to Show, for a test-only AppUserModelID, and never calls Show itself. It writes no
-/// key and shows nothing; what it proves is that every vtable slot and interface id answers on a real Windows, so a
-/// wrong one fails CI on the Windows leg rather than on a person's desktop.
+/// The one class whose rows call the toast interop, and the suite's one named exception to "no test touches the
+/// desktop": it performs every call on the path to Show, for a test-only AppUserModelID, and never calls Show itself. It
+/// writes no key and shows nothing; what it proves is that every vtable slot and interface id answers on a real Windows,
+/// so a wrong one fails CI on the Windows leg rather than on a person's desktop.
 /// </summary>
 public sealed class WindowsToastDryTests
 {
