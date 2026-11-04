@@ -159,18 +159,15 @@ public static class SessionOpener
         {
             var read = RenderText.Read<ApprovalDto>(json);
             return read is { Id: { Length: > 0 } id, CampaignId: { Length: > 0 } campaign, WorkItemId: { Length: > 0 } workItem }
-                ? new Item(id, campaign, workItem, read.Status == ApprovalStatus.Pending ? null : Word(read.Status))
+                ? new Item(id, campaign, workItem, PromptRenderers.Decided(read.Status, ApprovalStatus.Pending))
                 : null;
         }
 
         var decision = RenderText.Read<DecisionDto>(json);
         return decision is { Id: { Length: > 0 } decisionId, CampaignId: { Length: > 0 } decisionCampaign, WorkItemId: { Length: > 0 } decisionWorkItem }
-            ? new Item(decisionId, decisionCampaign, decisionWorkItem, decision.Status == DecisionStatus.Pending ? null : Word(decision.Status))
+            ? new Item(decisionId, decisionCampaign, decisionWorkItem, PromptRenderers.Decided(decision.Status, DecisionStatus.Pending))
             : null;
     }
-
-    private static string Word<T>(T status)
-        where T : struct, Enum => JsonSerializer.Serialize(status, JasonJson.Options).Trim('"');
 
     /// <summary>The word the preference holds, or null when it is unset; a read the runtime refused is its exit code.</summary>
     private static async Task<(int Exit, string? Word)> PreferredHostAsync(CliEnvironment env, CancellationToken cancellationToken)

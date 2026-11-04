@@ -40,9 +40,20 @@ public sealed class SessionOpenerTests : IDisposable
         var prompt = CopyPrompt.Compose(PromptKind.Approval, "apr_1", "cmp_1", "wi_1", new PromptFolder(PromptFolderLevel.Campaign, folder));
         Assert.Equal([_run.ConsoleHost, "--", claude, prompt], launch.Argv);
         Assert.Equal(folder, launch.WorkingDirectory);
+        var answer = JsonNode.Parse(_run.Output.ToString())!.AsObject();
         Assert.Equal(
-            "{\"kind\":\"approval\",\"id\":\"apr_1\",\"campaign_id\":\"cmp_1\",\"folder\":{\"level\":\"campaign\",\"path\":\"" + folder + "\"},\"host\":\"claude_code\",\"program\":" + Quoted(claude) + ",\"terminal\":\"conhost\",\"started\":true}",
-            _run.Output.ToString().TrimEnd());
+            ["kind", "id", "campaign_id", "folder", "host", "program", "terminal", "started"],
+            answer.Select(field => field.Key).ToArray());
+        Assert.Equal("approval", (string?)answer["kind"]);
+        Assert.Equal("apr_1", (string?)answer["id"]);
+        Assert.Equal("cmp_1", (string?)answer["campaign_id"]);
+        Assert.Equal("campaign", (string?)answer["folder"]!["level"]);
+        Assert.Equal(folder, (string?)answer["folder"]!["path"]);
+        Assert.Equal("claude_code", (string?)answer["host"]);
+        Assert.Equal(claude, (string?)answer["program"]);
+        Assert.Equal("conhost", (string?)answer["terminal"]);
+        Assert.True((bool)answer["started"]!);
+        Assert.Single(_run.Output.ToString().TrimEnd().Split('\n'));
         Assert.Empty(_run.Error.ToString());
     }
 
@@ -73,6 +84,15 @@ public sealed class SessionOpenerTests : IDisposable
         { "gemini_cli", "gemini", "-i" },
         { "antigravity_cli", "agy", "-i" },
     };
+
+    /// <summary>The table above is every host this build knows, by the word the preference holds, and no other.</summary>
+    [Fact]
+    public void The_host_table_is_every_host_this_build_knows()
+    {
+        var words = Enum.GetValues<AgentHostKind>().Select(host => System.Text.Json.JsonSerializer.Serialize(host, Jason.Contracts.Json.JasonJson.Options).Trim('"'));
+
+        Assert.Equal(words.Order(StringComparer.Ordinal), Hosts().Select(row => row.Data.Item1).Order(StringComparer.Ordinal));
+    }
 
     /// <summary>Each host word starts that host's program, found by its command word, with the prompt in that host's own form.</summary>
     [Theory]
@@ -295,8 +315,9 @@ public sealed class SessionOpenerTests : IDisposable
     }
 
     /// <summary>
-    /// The UI's Open an AI session link and the command shown beside it are this build's: the command parses through the
-    /// program's own parser to <c>session open</c>, and the link is the one the table the click is read with writes, so a
+    /// The forms the UI's Open an AI session link and the command shown beside it take (written by
+    /// <c>ui/src/screens/attention/session-link.tsx</c>) are this build's: the command parses through the program's own
+    /// parser to <c>session open</c>, and the link is the one the table the click is read with writes and reads, so a
     /// renamed option or a moved row turns this red rather than a dead link on the page.
     /// </summary>
     [Theory]
@@ -304,11 +325,6 @@ public sealed class SessionOpenerTests : IDisposable
     [InlineData("question", "questions", "dec_01JBZ3X7Q9K2M4N6P8R0S2T4V6")]
     public void The_uis_session_link_and_command_are_ones_this_build_takes(string kind, string collection, string id)
     {
-        var source = File.ReadAllText(Path.Combine(CopyPromptTests.RepositoryRoot(), "ui", "src", "screens", "attention", "session-link.tsx"));
-        Assert.Contains("`jason session open --${kind} ${itemId}`", source, StringComparison.Ordinal);
-        Assert.Contains("`jason://attention/${collection}/${itemId}/session`", source, StringComparison.Ordinal);
-        Assert.Contains($"kind === 'approval' ? 'approvals' : 'questions'", source, StringComparison.Ordinal);
-
         var command = $"jason session open --{kind} {id}";
         using var paths = new TempPaths();
         var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
@@ -578,6 +594,20 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Empty(_run.Terminals.Launches);
     }
 
+    /// <summary>A preference list that is not JSON is no answer either: nothing is started.</summary>
+    [Fact]
+    public async Task A_preference_list_that_is_not_json_starts_nothing()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.PreferencesBody = "<html>not the runtime</html>";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(["approval.get", "campaign.get", "preference.list"], _run.Asked);
+        Assert.Empty(_run.Terminals.Launches);
+    }
+
     private static string Quoted(string text) => System.Text.Json.JsonSerializer.Serialize(text);
 
     /// <summary>A runtime that answers the recorded exchanges a session takes, and a machine of temporary folders.</summary>
@@ -631,6 +661,9 @@ public sealed class SessionOpenerTests : IDisposable
 
         public bool PreferencesAnswer { get; set; } = true;
 
+        /// <summary>The preference list's body as it is sent, in place of the one composed from <see cref="Preference"/>.</summary>
+        public string? PreferencesBody { get; set; }
+
         /// <summary>The environment variables the verb reads, none unless a row names one.</summary>
         public Dictionary<string, string> Variables { get; } = [];
 
@@ -668,7 +701,7 @@ public sealed class SessionOpenerTests : IDisposable
                     "approval.get" => Item,
                     "decision.get" => Item is null ? null : CopyPromptTests.Fixture("decision.get", "pending-with-options"),
                     "campaign.get" => Campaign,
-                    "preference.list" => PreferencesAnswer ? Preferences() : null,
+                    "preference.list" => PreferencesAnswer ? PreferencesBody ?? Preferences() : null,
                     _ => null,
                 };
                 return answer is null

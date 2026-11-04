@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Jason.Contracts.Api;
+using Jason.Contracts.Json;
 
 namespace Jason.Cli.Human;
 
@@ -39,6 +41,10 @@ public static class PromptRenderers
         return CopyPrompt.Compose(PromptKind.Question, id, campaign, workItem, folder, Decided(decision.Status, DecisionStatus.Pending));
     };
 
-    private static string? Decided<T>(T status, T pending)
-        where T : struct, Enum => EqualityComparer<T>.Default.Equals(status, pending) ? null : status.ToString().ToLowerInvariant();
+    /// <summary>
+    /// The word an item that no longer waits was decided with, in the form the runtime's JSON spells it, or null while it
+    /// still waits: the brief and <c>session open</c>'s answer say it alike.
+    /// </summary>
+    public static string? Decided<T>(T status, T pending)
+        where T : struct, Enum => EqualityComparer<T>.Default.Equals(status, pending) ? null : JsonSerializer.Serialize(status, JasonJson.Options).Trim('"');
 }

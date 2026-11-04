@@ -103,7 +103,7 @@ public sealed class LinkHandlerTests
     [InlineData("jason://attention/questions/" + Question + "/prompt", "decision.get", "pending-with-options", "question.txt", "{\"decision_id\":\"" + Question + "\"}")]
     public async Task A_prompt_link_copies_the_published_prompt_and_prints_nothing(string link, string operation, string fixture, string published, string body)
     {
-        var run = new PromptRuntime(CopyPromptTests.Fixture(operation, fixture), CopyPromptTests.Fixture("campaign.get", "in-project-with-folder"));
+        using var run = new PromptRuntime(CopyPromptTests.Fixture(operation, fixture), CopyPromptTests.Fixture("campaign.get", "in-project-with-folder"));
         var clipboard = new RecordingClipboard();
 
         var exit = await LinkHandler.RunAsync([link], run.Environment(clipboard), Ct);
@@ -121,7 +121,7 @@ public sealed class LinkHandlerTests
     [Fact]
     public async Task A_prompt_link_with_no_clipboard_asks_nothing_and_exits_1()
     {
-        var run = new PromptRuntime(CopyPromptTests.Fixture("approval.get", "pending-with-preview"));
+        using var run = new PromptRuntime(CopyPromptTests.Fixture("approval.get", "pending-with-preview"));
 
         var exit = await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval + "/prompt"], run.Environment(clipboard: null), Ct);
 
@@ -134,7 +134,7 @@ public sealed class LinkHandlerTests
     [Fact]
     public async Task A_clipboard_that_refuses_exits_1_and_says_why()
     {
-        var run = new PromptRuntime(CopyPromptTests.Fixture("approval.get", "pending-with-preview"), CopyPromptTests.Fixture("campaign.get", "in-project-with-folder"));
+        using var run = new PromptRuntime(CopyPromptTests.Fixture("approval.get", "pending-with-preview"), CopyPromptTests.Fixture("campaign.get", "in-project-with-folder"));
         var clipboard = new RecordingClipboard { Refusal = "clipboard_busy" };
 
         var exit = await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval + "/prompt"], run.Environment(clipboard), Ct);
@@ -148,7 +148,7 @@ public sealed class LinkHandlerTests
     [Fact]
     public async Task An_item_the_runtime_refuses_copies_nothing_and_exits_1()
     {
-        var run = new PromptRuntime(item: null);
+        using var run = new PromptRuntime(item: null);
         var clipboard = new RecordingClipboard();
 
         var exit = await LinkHandler.RunAsync(["jason://attention/questions/" + Question + "/prompt"], run.Environment(clipboard), Ct);
@@ -163,7 +163,7 @@ public sealed class LinkHandlerTests
     [Fact]
     public async Task An_answer_the_prompt_cannot_read_copies_nothing_and_exits_1()
     {
-        var run = new PromptRuntime(item: "{}");
+        using var run = new PromptRuntime(item: "{}");
         var clipboard = new RecordingClipboard();
 
         var exit = await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval + "/prompt"], run.Environment(clipboard), Ct);
@@ -175,7 +175,7 @@ public sealed class LinkHandlerTests
     [Fact]
     public async Task A_prompt_link_with_no_runtime_exits_3()
     {
-        var run = new PromptRuntime(item: null, descriptor: false);
+        using var run = new PromptRuntime(item: null, descriptor: false);
         var clipboard = new RecordingClipboard();
 
         var exit = await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval + "/prompt"], run.Environment(clipboard), Ct);

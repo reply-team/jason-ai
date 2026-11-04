@@ -45,6 +45,19 @@ public sealed partial class CopyPromptTests
         Assert.DoesNotContain("jason approval get", text, StringComparison.Ordinal);
     }
 
+    /// <summary>The skill the brief names is one this repository ships, by the name its folder and its page give it.</summary>
+    [Fact]
+    public void The_skill_the_prompt_names_is_one_the_repository_ships()
+    {
+        var text = CopyPrompt.Compose(PromptKind.Approval, "apr_9", "cmp_8", "wi_7", null);
+        var named = Regex.Match(text, @"Use the skill ([a-z-]+)\.").Groups[1].Value;
+        var page = Path.Combine(RepositoryRoot(), "skills", "runtime", named, "SKILL.md");
+
+        Assert.Equal("approvals-and-questions", named);
+        Assert.True(File.Exists(page), $"The brief names the skill {named}, and {page} is not in the tree.");
+        Assert.Contains($"name: {named}\n", File.ReadAllText(page).Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_host_list_is_written_out_whole_from_the_hosts_the_build_knows()
     {
@@ -257,10 +270,12 @@ public sealed partial class CopyPromptTests
 
     private const string YouDecideNothing = "You decide nothing. Approving, rejecting and answering stay with the person, and so does a standing approval: setting one is the person's own act. Do not run jason approval approve, jason approval reject, jason approval set-standing or jason decision answer.";
 
-    [Fact]
-    public async Task The_two_renderings_are_not_asked_for_together()
+    [Theory]
+    [InlineData("approval", "apr_1", "approval.get", "pending-with-preview")]
+    [InlineData("decision", "dec_1", "decision.get", "pending-with-options")]
+    public async Task The_two_renderings_are_not_asked_for_together(string noun, string id, string operation, string fixture)
     {
-        var run = await Run(["approval", "get", "apr_1", "--human", "--prompt"], Fixture("approval.get", "pending-with-preview"));
+        var run = await Run([noun, "get", id, "--human", "--prompt"], Fixture(operation, fixture));
 
         Assert.Equal(ExitCodes.Usage, run.Exit);
         Assert.Contains("--human and --prompt", run.Error, StringComparison.Ordinal);
