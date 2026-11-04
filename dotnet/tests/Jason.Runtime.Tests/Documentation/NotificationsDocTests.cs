@@ -187,7 +187,7 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/notifications.md", "a development runtime that shows one re-points it to its own executable until the installed one shows the next")]
     [InlineData("docs/notifications.md", "The check reads the class key, the merged view Windows resolves a class through, and the program this account chose for `jason:` links (`HKCU\\" + LinkRegistration.UserChoiceKey + "`, `" + LinkRegistration.ProgIdValue + "`), which Windows sends a link to whatever the class key says: a choice other than Jason's own class is another program's too, even where the key is Jason's.")]
     [InlineData("docs/notifications.md", "A machine-wide `jason` another program installs after Jason's per-user key is shadowed by it, which is Windows' own rule for a class both hold.")]
-    [InlineData("docs/notifications.md", "on Windows 11 24H2 and later a click opens no window, and on earlier Windows a console window shows while the link is handled")]
+    [InlineData("docs/notifications.md", "on Windows 11 24H2 and later a click should open no window, and on earlier Windows a console window should show while the link is handled")]
     [InlineData("docs/notifications.md", "and the `jason:` link where its command names that installation's executable; another installation's is named and kept for its own uninstall, and another program's is never touched.")]
     [InlineData("plugins/ntfy/README.md", "`http_scheme_not_allowed`")]
     [InlineData("plugins/ntfy/README.md", "a server other than on the loopback interface is reached over `https`")]

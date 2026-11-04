@@ -913,7 +913,8 @@ are the person's own, in `~/.gemini/antigravity-cli/settings.json` under `permis
 the runtime never writes that folder. What a work directory can carry is a workspace hook: the host reads
 `<work directory>/.agents/hooks.json`, and the pre-tool-use handler it names is asked about each tool call and answers
 that the call is approved, refused, or left to the person's own rules. The launch writes one such file, with one handler
-(`jason-attempt`) whose command is the installation's command word, found on the host's search path, with the `host-hook antigravity-cli <rules>` mode of the same executable: a pure function of the
+(`jason-attempt`) whose command is the installation's command word, found on the host's search path, with the
+`host-hook antigravity-cli <rules>` mode of the same executable: a pure function of the
 call and the attempt's rules, with no runtime, no child, no file and no environment, which answers one JSON line and
 exits 0 whatever it was given. The rules travel in the command line as one base64url word, so no shell metacharacter
 reaches a shell, and the capability token and the envelope are in none of it. The hook answers:
@@ -936,9 +937,9 @@ reaches a shell, and the capability token and the envelope are in none of it. Th
   host's later write follows, and the hook cannot see it, because it reads no file. "Never writable" holds for the host's
   write tools.
 - **a fetch of a page or a search** is approved where the profile grants `web_fetch` or `web_search` and refused where it
-  does not; the browser tools are refused unless the fetch is granted. A profile stored under 0.26.0 grants no tool on this
-  host, since 0.26.0 refused every grant here, so the hook refuses web fetch and web search for it until
-  `jason profile update <name> --tool web_fetch --tool web_search`.
+  does not; the browser tools are refused unless the fetch is granted. A profile stored under 0.26.0 grants no tool on
+  this host, since 0.26.0 refused every grant here, so the hook refuses web fetch, web search and the browser tools for
+  it until `jason profile update <name> --tool web_fetch --tool web_search`.
 - **a tool the profile denies by name** is refused. A deny is one of the host's own tool names, as its hooks page lists
   them; `run_command`, `view_file` and `write_to_file` cannot be denied, since the callback, its result file and the memory files go through them, and a
   rule of the form `action(target)` is refused where the profile is written.
@@ -972,9 +973,9 @@ array, beside what is already there:
 
 - **`command(<cli word>)`**, with the word the runtime calls back with, so the role can report what it did. **On Windows
   shells** the host's permissions page says a command it cannot split cleanly into words needs an exact match, and that a
-  command and its subcommands are matched with the `regex:` prefix, so write `command(regex:jason .*)`. Not measured: whether an allowed `command(<cli word>)` runs unattended in a
-  headless run, and whether the plain `command(jason)` covers the report call on Windows, where the pages ask for the
-  `regex:` form.
+  command and its subcommands are matched with the `regex:` prefix, so write `command(regex:jason .*)`.
+  Not measured: whether an allowed `command(<cli word>)` runs unattended in a headless run, and
+  whether the plain `command(jason)` covers the report call on Windows, where the pages ask for the `regex:` form.
 - **`read_file(<harness folder>)`**, the harness root and so every memory file under it.
 
 **The three forms.** What a role may read is the hook's approval of the files the launch names, or the person's

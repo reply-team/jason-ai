@@ -1358,8 +1358,8 @@ are the operations' own examples; §7 says how to drive one through the host by 
   breaks one is refused with that rule named:
   - the file is at most 8 KiB and matches one of npm's two current `:find_dp0` templates —
     the one that hands an entry script to node, held to its four marker lines and its call line, or the one
-    whose call is the target alone, held line for line — so an older template, or a line either never holds, is
-    refused;
+    whose call is the target alone, held line for line — so an older template, whose markers are missing, or a call
+    line neither form holds, is refused;
   - the package is one directory under `node_modules`, or two for a **scoped package**
     (`node_modules\@scope\name\…`), and each of them reads as a name before any path is built from it —
     the scope as `@` and a package name, the package as a package name — so a segment that is not a

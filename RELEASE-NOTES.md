@@ -82,7 +82,7 @@ proposes; approving, rejecting and answering stay yours.
   as they were.
 - **The preference `agent.interactive_host`** is new and optional; without it `jason session open` starts Claude Code.
 - **Antigravity CLI:** if you added the two rules to your own settings in 0.26.0, you may keep them; they remain the
-  fallback. The hook refuses every tool a profile does not grant, and a profile stored under 0.26.0 grants none on this
+  fallback. The hook refuses web fetch, web search and the browser tools a profile does not grant, and a profile stored under 0.26.0 grants none on this
   host, so an upgraded Antigravity profile loses web fetch and web search until
   `jason profile update <name> --tool web_fetch --tool web_search`.
 - **The Reply plugin** is unchanged.
@@ -96,7 +96,7 @@ The click on a notification and its Copy prompt button are Windows only. Where a
 Jason leaves that registration alone and the toast shows without a click or a button.
 
 On Windows, `jason session open` starts the console host, which hands the window to Windows Terminal where that is your
-default terminal; where your default terminal is the console host itself, you get a plain console window.
+default terminal; where your default terminal is the console host itself, you get a plain console window; neither is yet measured on a machine.
 
 The macOS form of `jason session open`, a script opened in Terminal, has not been watched on a Mac.
 
