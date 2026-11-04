@@ -280,9 +280,10 @@ jason journal list --kind notification_sent
 - **What Windows adds**: at the first toast, Windows writes two entries of its own for that AppUserModelID, under
   `…\Notifications\Settings\` and `…\PushNotifications\Backup\` in the same account.
 - **What `jason uninstall` removes**: all three keys, after the runtime has stopped, and the `jason:` link where its
-  command names that installation's executable; another installation's is named and kept for its own uninstall, and
-  another program's is never touched. **What stays**: the notifications
-  already in the notification center, which are the person's to dismiss, and Windows' own database of them.
+  command names that installation's executable; one whose command is other than that installation's is named and kept,
+  since it may be another installation's or a spelling of that one, and another program's is never touched.
+  **What stays**: the notifications already in the notification center, which are the person's to dismiss, and Windows'
+  own database of them.
 
 ## 8. ntfy and other plugins
 
