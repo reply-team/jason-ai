@@ -50,4 +50,17 @@ public sealed record LinkRegistrationPlan(LinkRegistrationFate Fate, string? Com
             ? new LinkRegistrationPlan(LinkRegistrationFate.Removed, read.Command)
             : new LinkRegistrationPlan(LinkRegistrationFate.Kept, read.Command);
     }
+
+    /// <summary>
+    /// The remover's check just before the delete: <see cref="Of"/> made again over the registration as it stands now,
+    /// refusing anything but <see cref="LinkRegistrationFate.Removed"/>, no key included.
+    /// </summary>
+    /// <exception cref="RemovalRefused">The registration is no longer this installation's to remove.</exception>
+    public static void Require(LinkRegistrationRead? read, string? command)
+    {
+        if (Of(read, command) is not { Fate: LinkRegistrationFate.Removed })
+        {
+            throw new RemovalRefused(CliErrors.UninstallRefused, "The jason: link registration no longer carries Jason's marker and this installation's command, so it is not this verb's to remove.");
+        }
+    }
 }

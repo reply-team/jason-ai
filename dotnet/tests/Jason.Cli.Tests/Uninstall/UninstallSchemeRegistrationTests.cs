@@ -228,6 +228,31 @@ public sealed class UninstallSchemeRegistrationTests
     public void No_key_is_no_plan() => Assert.Null(LinkRegistrationPlan.Of(null, Ours_));
 
     /// <summary>
+    /// The remover's own check just before the delete: the same decision, read again, and anything but Removed refused, so
+    /// a key another installation or another program wrote between the plan and the step is never deleted.
+    /// </summary>
+    [Theory]
+    [InlineData(true, LinkRegistration.Marker, Ours_, true)]
+    [InlineData(true, LinkRegistration.Marker, Elsewhere, false)]
+    [InlineData(true, "another.program", Ours_, false)]
+    [InlineData(false, null, null, false)]
+    public void The_remover_deletes_only_what_the_decision_removes(bool key, string? marker, string? command, bool removes)
+    {
+        var read = key ? new LinkRegistrationRead(marker, command) : null;
+
+        var refused = Record.Exception(() => LinkRegistrationPlan.Require(read, Ours_));
+
+        if (removes)
+        {
+            Assert.Null(refused);
+        }
+        else
+        {
+            Assert.Equal(CliErrors.UninstallRefused, Assert.IsType<RemovalRefused>(refused).Code);
+        }
+    }
+
+    /// <summary>
     /// An installation whose path holds a <c>%</c> writes no link, so a key of ours naming any command is another
     /// installation's, and one naming none is a half-written key of ours.
     /// </summary>
