@@ -71,7 +71,9 @@ public static class UninstallCommand
                                    any provider CLI, any model credential, a PATH entry the installer did
                                    not write, another account's logon registration, the notifications
                                    already in the notification center, which are the person's to dismiss,
-                                   a jason: link registration another program or another installation owns.
+                                   a jason: link registration another program owns, and one whose command is
+                                   other than this installation's: it may be another installation's or a
+                                   spelling of this one.
                                    And the harness root (Harness:Root, ~/Jason by default) with every
                                    folder and file in it, --purge-data included: the purge empties the
                                    data directory, never the root. A link in the data directory is

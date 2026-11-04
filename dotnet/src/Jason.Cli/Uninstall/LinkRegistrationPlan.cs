@@ -13,7 +13,10 @@ public enum LinkRegistrationFate
     /// <summary>Jason's marker, and this installation's command or none: it goes.</summary>
     Removed,
 
-    /// <summary>Jason's marker and another installation's command: that one's own uninstall removes it.</summary>
+    /// <summary>
+    /// Jason's marker and a command other than this installation's: kept, since it may be another installation's or a
+    /// spelling of this one.
+    /// </summary>
     Kept,
 
     /// <summary>No Jason marker: another program's, never touched.</summary>

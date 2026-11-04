@@ -76,8 +76,8 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// </param>
 /// <param name="Link">
 /// The <c>jason:</c> link registration and what becomes of it, or null where this account has none: removed where it
-/// carries Jason's marker and this installation's command, kept where another installation's, untouched where another
-/// program's.
+/// carries Jason's marker and this installation's command, kept where its command is other than this installation's
+/// (it may be another installation's or a spelling of this one), untouched where another program's.
 /// </param>
 /// <param name="LinkUnreadable">Why the link registration could not be read, never taken for an account without one.</param>
 public sealed record UninstallPlan(

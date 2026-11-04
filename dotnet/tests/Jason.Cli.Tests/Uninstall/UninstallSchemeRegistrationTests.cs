@@ -90,7 +90,10 @@ public sealed class UninstallSchemeRegistrationTests
         Assert.Null(remover.Link);
     }
 
-    /// <summary>Another installation on this account wrote the key last: that one's own uninstall removes it.</summary>
+    /// <summary>
+    /// Another installation on this account wrote the key last. A command other than this installation's is kept, since
+    /// it may be another installation's or a spelling of this one.
+    /// </summary>
     [Fact]
     public async Task Another_installation_s_link_is_named_and_kept()
     {
@@ -268,7 +271,7 @@ public sealed class UninstallSchemeRegistrationTests
 
     [Theory]
     [InlineData("on Windows, the notification registration: the AppUserModelID key the toast was shown under, the two entries Windows made for it, and the jason: link registration where its command names this executable")]
-    [InlineData("a jason: link registration another program or another installation owns")]
+    [InlineData("a jason: link registration another program owns, and one whose command is other than this installation's: it may be another installation's or a spelling of this one.")]
     [InlineData("This account's, not this installation's: the logon registration, the notification registration and the agent harnesses. Uninstalling a second installation on one account takes the first one's registrations and harness skills too. The jason: link goes only where its command names this executable.")]
     public async Task The_help_says_what_it_takes_away_and_what_it_leaves(string published)
     {
