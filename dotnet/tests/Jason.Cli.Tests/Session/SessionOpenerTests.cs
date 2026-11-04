@@ -318,7 +318,8 @@ public sealed class SessionOpenerTests : IDisposable
     /// The forms the UI's Open an AI session link and the command shown beside it take (written by
     /// <c>ui/src/screens/attention/session-link.tsx</c>) are this build's: the command parses through the program's own
     /// parser to <c>session open</c>, and the link is the one the table the click is read with writes and reads, so a
-    /// renamed option or a moved row turns this red rather than a dead link on the page.
+    /// renamed option or a moved row turns this red rather than a dead link on the page. That the UI writes these forms is
+    /// its own screen test's to hold (<c>session-link.screen.test.tsx</c>).
     /// </summary>
     [Theory]
     [InlineData("approval", "approvals", "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6")]
