@@ -666,6 +666,36 @@ public class ExecutableResolverTests
     }
 
     /// <summary>
+    /// cmd.exe also expands a <c>!NAME!</c> where delayed expansion is on, which the account's Command Processor settings
+    /// can turn on for every shim, so a target holding a <c>!</c> is held as one holding a <c>%</c> is, in either form.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_shim_whose_target_holds_a_delayed_variable_is_not_the_shim_npm_writes(bool throughNode)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        if (throughNode)
+        {
+            programs.AddInterpreter("node.exe");
+            programs.AddNested(@"node_modules\@vendor\cli\dist\!X!.js", "// the entry point");
+            programs.AddNested(@"node_modules\@vendor\cli\package.json", """{"name":"@vendor/cli","bin":{"vendor":"dist/!X!.js"}}""");
+            programs.Add("vendor.cmd", TestPrograms.NpmShim(@"@vendor\cli", @"dist\!X!.js"));
+        }
+        else
+        {
+            InstallNativeCli(programs, @"bin\!X!.exe");
+        }
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("is not the shim npm writes", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A <c>%</c> in the package or the scope segment of the form with no interpreter is a variable cmd.exe would expand
     /// before it started anything, as it is in the entry, and no name npm could have written: the files it spells are on
     /// disk and declared, and the shim is still refused.
