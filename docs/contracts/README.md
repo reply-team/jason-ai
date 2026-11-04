@@ -269,8 +269,11 @@ line is written and nothing is said of it.
 grows by optional fields only, each named in `field_since` with the release that added it; a field never changes
 meaning, and no field is removed. A kind is never renamed or retired while a release that writes it is supported. A
 closed list of words in a body may gain a word when a later release writes one, so a line written before then holds
-only the words that release knew. A test reads the documents of the last published release and refuses a document
-removed, a `since` changed, or a body field removed or newly required.
+only the words that release knew. A test reads the documents and body fixtures of the last published release (at a
+release's own tag, the release before it) and refuses a document removed, a `since` changed, a body field removed or
+newly required, a `field_since` entry or an entity dropped, an entity once named on every line now named on some or
+changing `each`, a kind no longer subscribable, or a body the release published as valid that is refused now. A kind
+may become subscribable.
 
 Every kind this build reserves, rendered from the documents by a test and compared whole:
 
