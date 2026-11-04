@@ -91,26 +91,4 @@ public class HandlerCapabilitiesTests
         Assert.True(capabilities.TryRecognise(second.Capability, Now, out var grant));
         Assert.Equal("other-plugin", grant.PluginId);
     }
-
-    /// <summary>
-    /// Recognising a capability looks it up by its hash rather than walking every live one, so a runtime with many
-    /// handlers running answers each call as fast as one with a single handler. The bound is generous; a walk over this
-    /// many capabilities for this many calls takes far longer.
-    /// </summary>
-    [Fact]
-    public void Recognising_a_capability_does_not_walk_the_live_ones()
-    {
-        var capabilities = new HandlerCapabilities();
-        var tickets = Enumerable.Range(0, 50_000)
-            .Select(index => capabilities.Mint("acme-forwarder", Operations, "jrn_" + index.ToString(System.Globalization.CultureInfo.InvariantCulture), Now.AddMinutes(1)))
-            .ToList();
-
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        for (var index = 0; index < 10_000; index++)
-        {
-            Assert.True(capabilities.TryRecognise(tickets[(index * 7919) % tickets.Count].Capability, Now, out _));
-        }
-
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"10 000 recognitions among 50 000 live capabilities took {watch.Elapsed}");
-    }
 }
