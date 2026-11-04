@@ -61,7 +61,8 @@ names `jason ui install` where none is or the default one is another release's, 
 own agent host on that one item, so run it only when they ask for a session on it. Which host it starts is the named
 preference `agent.interactive_host`, a person's own word like every preference:
 `jason preference set agent.interactive_host --value-file host.json --actor human:<their-name>`, with `host.json`
-holding `{"host":"codex"}`, and `unset` goes back to `claude_code`. `--dry-run` prints what would start and starts nothing.
+holding `{"host":"codex"}`, and `unset` goes back to `claude_code`.
+`--dry-run` prints what would start and starts nothing.
 
 ## Starting and stopping it
 

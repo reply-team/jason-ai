@@ -242,8 +242,9 @@ public partial class ShippedRoleSkillTests
     }
 
     /// <summary>
-    /// Every role is taught the same two sentences about the result file: that it has no file-writing tool beyond the one
-    /// result file the callback names, and, once, where a host that cannot pass the JSON on a command line has it written.
+    /// Every role is taught the same two sentences about the result file: that it has no file-writing tool in this
+    /// version, except the one result file on a host whose callback is a file, and, once, where a host that cannot pass
+    /// the JSON on a command line has it written.
     /// </summary>
     [Fact]
     public async Task Every_role_skill_carries_the_one_result_file_sentence_and_the_qualified_no_file_sentence()
