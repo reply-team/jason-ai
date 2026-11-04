@@ -1289,8 +1289,8 @@ secret value is in the envelope but one: a handler's `door`, where the invocatio
 runtime minted for that invocation, beside the address, the journal line, the operations it opens and the limits. It
 travels on stdin only, never on argv, in the environment or in a file; the host masks it wherever it writes and the
 runtime redacts it from the stderr it copies; and it is dead when the invocation ends however it ends, at the latest at
-the invocation's deadline plus the kill grace, and with any restart of the runtime, which keeps capabilities in memory
-only. A capability the manifest never requested is `null` here. An
+the invocation's deadline plus the kill grace and one call's bound of 30 seconds, which covers the start of the child
+and a call in flight at the deadline, and with any restart of the runtime, which keeps capabilities in memory only. A capability the manifest never requested is `null` here. An
 executable's `launch` is `null` for an ordinary program and carries the arguments that go before the
 plugin's own where the name resolved to an interpreter and a script (§13).
 

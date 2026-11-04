@@ -263,12 +263,17 @@ public sealed partial class PluginInvoker(
             plugin.Limits.TimeoutMs);
 
         // A door opens only where the caller asked for one and the plugin was granted a family of the Runtime API: the
-        // operations it opens are that frozen grant, never the caller's to name. It lives no longer than the child can,
-        // the deadline and the kill grace together, should the revocation below never run; it is revoked when the child's
-        // life is over, however it ended.
+        // operations it opens are that frozen grant, never the caller's to name. Should the revocation below never run, it
+        // dies at the deadline and the kill grace together plus one call's bound: it is minted before the child starts,
+        // and the margin covers that start and a call still in flight when the deadline comes. It is revoked when the
+        // child's life is over, however it ended.
         var operations = plugin.Grants.ApiOperations;
         var ticket = request.Door is { } asked && operations.Count > 0
-            ? capabilities.Mint(plugin.Manifest.Id, operations, asked.LineId, clock.GetUtcNow().AddMilliseconds(timeoutMs + settings.Invoker.KillGraceMs))
+            ? capabilities.Mint(
+                plugin.Manifest.Id,
+                operations,
+                asked.LineId,
+                clock.GetUtcNow().AddMilliseconds((long)timeoutMs + settings.Invoker.KillGraceMs + PluginProtocol.DoorCallTimeoutMs))
             : null;
         try
         {

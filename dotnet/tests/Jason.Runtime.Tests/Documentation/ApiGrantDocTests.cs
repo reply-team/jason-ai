@@ -68,6 +68,7 @@ public sealed partial class ApiGrantDocTests
     [InlineData("docs/plugins.md", "| `runtime_answer_invalid` | `permanent` |")]
     [InlineData("docs/plugins.md", "No secret value is in the envelope but one: a handler's `door`, where the invocation has one, carries the capability the runtime minted for that invocation")]
     [InlineData("docs/plugins.md", "It travels on stdin only, never on argv, in the environment or in a file")]
+    [InlineData("docs/plugins.md", "at the latest at the invocation's deadline plus the kill grace and one call's bound of 30 seconds, which covers the start of the child and a call in flight at the deadline,")]
     [InlineData("docs/runtime-api.md", "One credential is narrower than the token, and never a person's: a **handler capability**.")]
     [InlineData("docs/runtime-api.md", "any other operation is answered `403` with the code `operation_not_granted`.")]
     [InlineData("docs/runtime-api.md", "The type `plugin` is refused the same way to every caller but a handler capability, which must name its own plugin as the id.")]

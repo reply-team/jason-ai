@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins.Door;
 using Jason.Runtime.Plugins.Invocation;
 using Microsoft.AspNetCore.Builder;
@@ -68,6 +69,28 @@ public class PluginInvokerDoorTests
         using var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
         using var after = await client.PostAsync(Operations.Route(Operations.CampaignList), content, Ct);
         Assert.Equal(HttpStatusCode.Unauthorized, after.StatusCode);
+    }
+
+    /// <summary>
+    /// A capability is minted before the child is started, so it outlives the invocation's deadline and kill grace by one
+    /// call's bound: the margin covers the start of the child and a call still in flight when the deadline comes.
+    /// </summary>
+    [Fact]
+    public async Task A_door_lives_past_the_invocation_s_deadline_and_kill_grace_by_one_call_s_bound()
+    {
+        var seen = new Bearers();
+        await using var api = await StartAsync(seen);
+        var grace = api.Resolve<LiveSettings<PluginsOptions>>().Current.Invoker.KillGraceMs;
+        var timeout = TimeSpan.FromSeconds(20);
+
+        var before = DateTimeOffset.UtcNow;
+        var result = await InvokeAsync(api, Request("echo.run") with { Timeout = timeout }, Ct);
+        var after = DateTimeOffset.UtcNow;
+
+        Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
+        var expires = Assert.Single(seen.Expiries);
+        var margin = timeout + TimeSpan.FromMilliseconds(grace + PluginProtocol.DoorCallTimeoutMs);
+        Assert.InRange(expires - margin, before, after);
     }
 
     [Fact]
@@ -243,6 +266,11 @@ public class PluginInvokerDoorTests
     {
         private readonly ConcurrentQueue<string> _seen = new();
 
+        private readonly ConcurrentQueue<DateTimeOffset> _expiries = new();
+
+        /// <summary>When each handler capability the runtime was shown was minted to die.</summary>
+        public IReadOnlyList<DateTimeOffset> Expiries => [.. _expiries];
+
         public IReadOnlyList<string> Other(string runToken) =>
             [.. _seen.Where(bearer => !string.Equals(bearer, runToken, StringComparison.Ordinal)).Distinct(StringComparer.Ordinal)];
 
@@ -254,7 +282,14 @@ public class PluginInvokerDoorTests
                 var header = context.Request.Headers.Authorization.ToString();
                 if (header.StartsWith(Scheme, StringComparison.Ordinal))
                 {
-                    _seen.Enqueue(header[Scheme.Length..]);
+                    var bearer = header[Scheme.Length..];
+                    _seen.Enqueue(bearer);
+
+                    // Asked as of the earliest moment, so the look never ends a capability it reads.
+                    if (context.RequestServices.GetRequiredService<HandlerCapabilities>().TryRecognise(bearer, DateTimeOffset.MinValue, out var grant))
+                    {
+                        _expiries.Enqueue(grant.ExpiresAt);
+                    }
                 }
 
                 await following(context);
