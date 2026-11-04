@@ -218,6 +218,7 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
             ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Exec", grant.Exec, installed);
             ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Http", grant.Http, installed);
             ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Env", grant.Env, installed);
+            ValidateSubscriptionGrant(failures, $"Plugins:Grants:{pluginId}:Subscriptions", grant.Subscriptions, installed);
         }
 
         return OptionRules.Result(failures);
@@ -236,6 +237,22 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
             failures.Add(string.Create(
                 CultureInfo.InvariantCulture,
                 $"{SettingKey.ShownPath(setting, installed.Value)}[{index}] must be \"*\" or the name of an executable, a host or a variable the manifest requests; {OptionRules.Written("value", entry, "is not one")}"));
+        }
+    }
+
+    private static void ValidateSubscriptionGrant(List<string> failures, string setting, List<string> entries, Lazy<IReadOnlySet<string>> installed)
+    {
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry = entries[index];
+            if (entry is "*" || (entry is not null && JournalKinds.IsWellFormed(entry)))
+            {
+                continue;
+            }
+
+            failures.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{SettingKey.ShownPath(setting, installed.Value)}[{index}] must be \"*\" or a journal kind the manifest declares; {OptionRules.Written("value", entry, "is not one")}"));
         }
     }
 

@@ -41,7 +41,7 @@ public static class SettingsVocabulary
         "DefaultExecutionProfile", "DefaultEntryCommand", "MaxStdoutBytes", "MaxSkillBytes",
 
         // Plugins: who is granted what, then the limits every invocation runs under.
-        "Grants", "Limits", "Exec", "Http", "Invoker", "Env",
+        "Grants", "Limits", "Exec", "Http", "Invoker", "Env", "Subscriptions",
         "TimeoutMs", "MaxTimeoutMs", "MemoryMb", "MaxMemoryMb", "MaxStatements", "MaxRecursion",
         "OutputBytes", "MaxCalls",
         "ResponseBytes", "RequestBytes",
@@ -79,9 +79,10 @@ public static class SettingsVocabulary
         "Manager:Triggers",
         "Roles:DefaultEntryCommand",
 
-        // A grant's three lists.
+        // A grant's four lists.
         "Plugins:Grants:*:Exec",
         "Plugins:Grants:*:Http",
         "Plugins:Grants:*:Env",
+        "Plugins:Grants:*:Subscriptions",
     ];
 }

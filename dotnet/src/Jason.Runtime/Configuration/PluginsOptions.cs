@@ -13,6 +13,12 @@ public sealed class PluginGrant
     public List<string> Http { get; set; } = [];
 
     public List<string> Env { get; set; } = [];
+
+    /// <summary>
+    /// The journal kinds this plugin is admitted to, out of those its manifest's <c>subscriptions</c> declare. A kind
+    /// granted and not declared admits nothing.
+    /// </summary>
+    public List<string> Subscriptions { get; set; } = [];
 }
 
 /// <summary>

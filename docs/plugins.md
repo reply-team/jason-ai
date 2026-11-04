@@ -1140,7 +1140,10 @@ grants everything requested for that capability. An absent list, an absent plugi
 copied package grants nothing — the default is nothing, and a plugin with no grants still loads as
 `valid`. An entry the manifest never requested grants nothing and is reported as a
 `grant_unrequested` warning at `grants.<capability>[i]`; it does not make the plugin unavailable.
-Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
+A fourth list, `Subscriptions`, grants journal kinds out of those the manifest's `subscriptions`
+declares, by the same rules: `*` admits every declared kind, a kind the manifest does not declare
+admits nothing and is a `grant_unrequested` warning at `grants.subscriptions[i]`, and a declared kind
+nobody granted is simply not admitted. Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
 the next `jason plugin reload`, and `plugin list` always shows requested next to granted. The reload
 reads `settings.json` itself before it resolves anything, and waits for an edit the settings watch is
 still applying. So a reload sent straight after an edit holds it, and after two quick saves it holds

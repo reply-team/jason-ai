@@ -15,6 +15,9 @@ public sealed record ResolvedGrants(
     IReadOnlyList<string> Env,
     IReadOnlyList<ManifestProblem> Warnings)
 {
+    /// <summary>The journal kinds this plugin is admitted to: those its manifest declares and the settings grant.</summary>
+    public IReadOnlyList<string> Subscriptions { get; init; } = [];
+
     /// <summary>The default for a plugin nobody has decided about: declaration is not permission.</summary>
     public static ResolvedGrants None { get; } = new([], [], [], []);
 }
@@ -41,11 +44,14 @@ public static class GrantResolver
             Match("exec", grant.Exec, executables, StringComparer.Ordinal, warnings),
             Match("http", grant.Http, manifest.Capabilities.Http?.Hosts ?? [], StringComparer.OrdinalIgnoreCase, warnings),
             Match("env", grant.Env, manifest.Capabilities.Env?.Variables ?? [], StringComparer.Ordinal, warnings),
-            warnings);
+            warnings)
+        {
+            Subscriptions = Match("subscriptions", grant.Subscriptions, manifest.Subscriptions, StringComparer.Ordinal, warnings),
+        };
     }
 
     /// <summary>
-    /// Hosts are compared the way hosts are compared, programs and variable names exactly. Whatever matches is
+    /// Hosts are compared the way hosts are compared, programs, variable names and journal kinds exactly. Whatever matches is
     /// recorded as the manifest spells it, so everything downstream compares one form.
     /// </summary>
     private static IReadOnlyList<string> Match(
