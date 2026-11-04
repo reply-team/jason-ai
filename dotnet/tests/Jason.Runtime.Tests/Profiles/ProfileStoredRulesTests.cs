@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Profiles;
 using Jason.Runtime.Execution.Hosts;
@@ -74,11 +75,65 @@ public class ProfileStoredRulesTests
             .StartAsync(Ct);
 
         var line = Assert.Single(logs.Warnings);
-        Assert.StartsWith("1 execution profiles have a current revision", line, StringComparison.Ordinal);
+        Assert.StartsWith("Execution profiles whose current revision this build's rules for its host refuse: 1;", line, StringComparison.Ordinal);
         Assert.DoesNotContain(logs.Lines, entry => entry.Message.Contains("private-name", StringComparison.Ordinal) || entry.Message.Contains("bypass", StringComparison.Ordinal));
     }
 
-    private static async Task StoreArgsAsync(RuntimeApiFixture api, string name, string[] args)
+    /// <summary>Disabling or enabling a profile answers with it as a read does, what this build's rules refuse included.</summary>
+    [Theory]
+    [InlineData(Operations.ProfileDisable)]
+    [InlineData(Operations.ProfileEnable)]
+    public async Task Disable_and_enable_carry_the_problems_of_a_revision_stored_under_wider_rules(string operation)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "older", host = "claude_code", program = "claude" }, Ct);
+        await StoreArgsAsync(api, "older", ["--permission-mode=bypassPermissions"]);
+        if (operation == Operations.ProfileEnable)
+        {
+            await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileDisable, new { name = "older" }, Ct);
+        }
+
+        var toggled = await api.PostOkAsync<ExecutionProfileDto>(operation, new { name = "older" }, Ct);
+
+        var problem = Assert.Single(toggled.Problems);
+        Assert.Equal(("args[0]", "reserved"), (problem.Field, problem.Code));
+    }
+
+    /// <summary>
+    /// A revision stored for a host this build does not register is not something to guess about: no host's rules are
+    /// read against it, so a read carries no problems, and the start counts nothing for it. Its launch is refused for the
+    /// host instead.
+    /// </summary>
+    [Fact]
+    public async Task A_stored_revision_for_a_host_this_build_does_not_register_carries_no_problems()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, configureServices: services =>
+        {
+            Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<IAgentHost>(services);
+            services.AddSingleton<IAgentHost, ClaudeCodeHost>();
+        });
+        await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate, new { name = "elsewhere", host = "claude_code", program = "claude" }, Ct);
+
+        // Codex composes --json for every attempt, so under Codex's rules this argument would be refused.
+        await StoreArgsAsync(api, "elsewhere", ["--json"], AgentHostKind.Codex);
+
+        var got = await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileGet, new { name = "elsewhere" }, Ct);
+        Assert.Equal(AgentHostKind.Codex, got.Revision.Host);
+        Assert.Empty(got.Problems);
+        Assert.Empty(Assert.Single((await api.PostOkAsync<Page<ExecutionProfileDto>>(Operations.ProfileList, new { }, Ct)).Items).Problems);
+
+        var logs = new RecordingLogs();
+        var services = new ServiceCollection();
+        services.AddScoped(_ => new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile)));
+        await using var provider = services.BuildServiceProvider();
+        await new ProfileRevisionCheck(provider.GetRequiredService<IServiceScopeFactory>(), [new ClaudeCodeHost()], new Logger<ProfileRevisionCheck>(new LoggerFactory([logs])))
+            .StartAsync(Ct);
+        Assert.Empty(logs.Warnings);
+    }
+
+    private static async Task StoreArgsAsync(RuntimeApiFixture api, string name, string[] args, AgentHostKind? host = null)
     {
         await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));
         var profile = await db.ExecutionProfiles.Include(p => p.Revisions).SingleAsync(p => p.Name == name, Ct);
@@ -88,7 +143,7 @@ public class ProfileStoredRulesTests
         profile.Revisions.Add(new ExecutionProfileRevision
         {
             Number = current.Number + 1,
-            Host = current.Host,
+            Host = host ?? current.Host,
             Program = current.Program,
             Args = [.. args],
             Deny = [.. current.Deny],
