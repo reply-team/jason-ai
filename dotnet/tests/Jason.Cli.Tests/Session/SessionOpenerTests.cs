@@ -218,6 +218,29 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Contains("cd -- '" + _run.CampaignFolder + "' || exit 1", script, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// On Linux the terminal is the one the <c>TERMINAL</c> variable names, found on the search path, given the host in
+    /// that program's own form: kitty takes it as its positional arguments.
+    /// </summary>
+    [Fact]
+    public async Task On_linux_the_terminal_the_terminal_variable_names_starts_the_host_at_the_campaigns_folder()
+    {
+        _run.Terminals.Platform = TerminalPlatform.Linux;
+        var claude = _run.Programs.AddProgram("claude");
+        var kitty = _run.Programs.Add("kitty", executable: true);
+        _run.Variables["TERMINAL"] = "kitty";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var launch = Assert.Single(_run.Terminals.Launches);
+        var prompt = CopyPrompt.Compose(PromptKind.Approval, "apr_1", "cmp_1", "wi_1", new PromptFolder(PromptFolderLevel.Campaign, _run.CampaignFolder));
+        Assert.Equal("kitty", launch.Terminal);
+        Assert.Equal([kitty, claude, prompt], launch.Argv);
+        Assert.Equal(_run.CampaignFolder, launch.WorkingDirectory);
+        Assert.Null(launch.Script);
+    }
+
     [Fact]
     public async Task Human_says_what_was_started_and_where()
     {
@@ -608,6 +631,9 @@ public sealed class SessionOpenerTests : IDisposable
 
         public bool PreferencesAnswer { get; set; } = true;
 
+        /// <summary>The environment variables the verb reads, none unless a row names one.</summary>
+        public Dictionary<string, string> Variables { get; } = [];
+
         public bool Descriptor { get; set; } = true;
 
         public List<string> Asked { get; } = [];
@@ -656,7 +682,7 @@ public sealed class SessionOpenerTests : IDisposable
                 handler,
                 SearchPath: Programs.Root,
                 Identity: new IdentityFacts(GivenHome ?? Home, "marta", "DESK-1", null, null),
-                Variables: new Dictionary<string, string>(),
+                Variables: Variables,
                 Terminals: terminals ? Terminals : null);
         }
 
