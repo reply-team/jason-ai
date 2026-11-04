@@ -13,6 +13,11 @@
     <ProjectReference Include="../Jason.Runtime/Jason.Runtime.csproj" />
     <ProjectReference Include="../Jason.PluginHost/Jason.PluginHost.csproj" />
   </ItemGroup>
+  <!-- A friend assembly so a test can hand the hook mode its call without the seam being part of the program's surface:
+       where the hook reads its standard input is swapped by the mode router's tests only. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Jason.App.Tests" />
+  </ItemGroup>
 
   <!-- Whether the SDK writes the application manifest into a Windows executable it builds on another host has not
        been measured for this project (earlier SDKs warned, NETSDK1074, that they did not), and an executable
