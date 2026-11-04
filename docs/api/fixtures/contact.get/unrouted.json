@@ -45,7 +45,7 @@
       "kind": "workitem_processing",
       "campaign_id": "cmp_1",
       "work_item_id": "wi_2",
-      "attempt_id": null,
+      "attempt_id": "att_4",
       "key": "attempt",
       "old": null,
       "new": 1,

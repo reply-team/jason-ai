@@ -31,7 +31,7 @@
     "campaign_id": "cmp_1",
     "work_item_id": "wi_1",
     "attempt_id": "att_1",
-    "key": "sha256:recorded-2",
+    "key": "sha256:recorded-1",
     "old": null,
     "new": {
       "plugin": "mailbox",

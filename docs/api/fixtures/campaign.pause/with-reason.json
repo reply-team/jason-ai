@@ -26,7 +26,7 @@
         "kind": "campaign",
         "value": "4711",
         "recorded_at": "2026-10-01T10:00:00.000Z",
-        "recorded_by_attempt_id": "att_1"
+        "recorded_by_attempt_id": "att_3"
       }
     ],
     "execution_profile": null,

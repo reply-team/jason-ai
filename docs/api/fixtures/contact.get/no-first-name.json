@@ -45,7 +45,7 @@
       "kind": "workitem_failed",
       "campaign_id": "cmp_2",
       "work_item_id": "wi_1",
-      "attempt_id": null,
+      "attempt_id": "att_2",
       "key": "att_2",
       "old": null,
       "new": {

@@ -83,7 +83,7 @@
           "campaign_id": "cmp_2",
           "work_item_id": null,
           "attempt_id": null,
-          "key": "reply-t_501",
+          "key": "sha256:recorded-1",
           "old": null,
           "new": {
             "plugin": "reply",

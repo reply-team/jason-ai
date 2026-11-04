@@ -12,7 +12,7 @@
       {
         "id": "blk_2",
         "plugin_id": "reply",
-        "binding_identity": "sha256:recorded-2",
+        "binding_identity": "sha256:recorded-1",
         "scope": "sender",
         "sender_external_id": "snd_1",
         "reason": "billing",
