@@ -16,6 +16,12 @@ public sealed class PluginGrant
 
     /// <summary>The Runtime API families a handler's door may open, out of those the manifest requests.</summary>
     public List<string> Api { get; set; } = [];
+
+    /// <summary>
+    /// The journal kinds this plugin is admitted to, out of those its manifest's <c>subscriptions</c> declare. A kind
+    /// granted and not declared admits nothing.
+    /// </summary>
+    public List<string> Subscriptions { get; set; } = [];
 }
 
 /// <summary>

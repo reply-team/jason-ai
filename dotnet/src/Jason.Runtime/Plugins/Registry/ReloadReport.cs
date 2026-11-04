@@ -15,7 +15,8 @@ public sealed record CandidateReport(string Directory, string? Id, CandidateStat
 /// the route. It is a field of its own rather than a candidate called "routes", because a candidate is a package
 /// and a route is not one. <see cref="Settings"/> is the same again for the settings: the section a load reads its
 /// own ceilings from, edited into something the validator refuses, or a settings file a reload could not read at all.
-/// Neither is a package's fault nor a route's.
+/// Neither is a package's fault nor a route's. <see cref="Subscriptions"/> is what the order of a kind's subscribers
+/// was refused for, each detail's <c>Field</c> naming the setting.
 /// </para>
 /// </summary>
 public sealed record ReloadReport(
@@ -24,7 +25,10 @@ public sealed record ReloadReport(
     bool Activated,
     IReadOnlyList<CandidateReport> Candidates,
     IReadOnlyList<ErrorDetail> Routes,
-    IReadOnlyList<ErrorDetail>? Settings = null);
+    IReadOnlyList<ErrorDetail>? Settings = null)
+{
+    public IReadOnlyList<ErrorDetail> Subscriptions { get; init; } = [];
+}
 
 /// <summary>A load: the snapshot it would activate, or none when some candidate's package is not valid.</summary>
 public sealed record LoadResult(PluginSnapshot? Snapshot, ReloadReport Report);

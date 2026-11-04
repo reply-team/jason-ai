@@ -1,10 +1,15 @@
 namespace Jason.Contracts.Plugins;
 
-/// <summary>What a plugin is for. Only a provider is invocable; a notification plugin reserves its kind.</summary>
+/// <summary>
+/// What a plugin is for. A provider performs canonical operations and is the only kind a route reaches; a notification
+/// plugin delivers notifications; a subscriber implements no operation, is no channel and reads no account, and only
+/// handles the journal kinds it subscribes to. Any kind may subscribe; a subscriber must.
+/// </summary>
 public enum PluginKind
 {
     Provider,
     Notification,
+    Subscriber,
 }
 
 /// <summary>

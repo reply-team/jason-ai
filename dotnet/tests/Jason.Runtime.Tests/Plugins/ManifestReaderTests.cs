@@ -905,6 +905,7 @@ public class ManifestReaderTests : IDisposable
         "capabilities.api",
         "limits", "limits.timeout_ms", "limits.memory_mb",
         "binding", "binding.type", "binding.properties", "binding.required",
+        "subscriptions",
     ];
 
     /// <summary>
@@ -928,6 +929,7 @@ public class ManifestReaderTests : IDisposable
         "capabilities:\n  api: [[read]]\n",
         "binding:\n  type: object\n  required: [[workspace]]\n",
         "binding:\n  type: object\n  properties:\n    workspace: [a, b]\n",
+        "subscriptions: [[workitem_failed], { a: 1 }]\n",
     ];
 
     /// <summary>

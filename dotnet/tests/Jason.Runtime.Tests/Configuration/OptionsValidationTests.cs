@@ -486,6 +486,7 @@ public class OptionsValidationTests
                 typeof(UpdateOptions),
                 typeof(NotificationsOptions),
                 typeof(InboundOptions),
+                typeof(SubscriptionOrderOptions),
             },
             ValidatedSections(services).ToHashSet());
     }
@@ -655,6 +656,15 @@ public class OptionsValidationTests
         private IDictionary Map(IDictionary map, Type type, bool withNullEntry)
         {
             var entry = type.GetGenericArguments()[1];
+            if (entry == typeof(List<string>))
+            {
+                // A map of lists, the order of a kind's subscribers: each key a sentinel, each list one sentinel long.
+                map.Clear();
+                map[Next("sentinel{0:D3}_key")] = new List<string> { Next("ghp_SENTINEL{0:D3} entry") };
+                map[Next("SENTINEL{0:D3} KEY")] = new List<string> { Next("ghp_SENTINEL{0:D3} entry") };
+                return map;
+            }
+
             if (!IsOptionClass(entry))
             {
                 throw new InvalidOperationException($"A map of {entry.Name} is not one this test fills.");

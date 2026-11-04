@@ -244,6 +244,9 @@ public static partial class DoctorComposer
     /// <summary>The most problem codes listed for one plugin; <c>problem_codes_truncated</c> says where there were more.</summary>
     public const int MaxProblemCodes = 20;
 
+    /// <summary>The most journal kinds listed as granted to one plugin; <c>subscriptions_truncated</c> says where there were more.</summary>
+    public const int MaxSubscriptions = 20;
+
     /// <summary>
     /// The most of the plugin list inside the runtime section, in the bundle's own bytes: past it the list is cut, in the
     /// listing's order, and <c>plugins_truncated</c> says so — so the runtime's own report, in the rest of the section's
@@ -994,18 +997,33 @@ public static partial class DoctorComposer
     private static PluginLine Plugin(PluginDto plugin)
     {
         var codes = (plugin.Problems ?? []).Select(problem => problem?.Code).OfType<string>().Where(code => Code().IsMatch(code)).ToList();
+
+        // The kinds the settings grant, which are the runtime's words: a grant admits only kinds the manifest declares, and
+        // a manifest declares only kinds the runtime names. Which plugin ids an order lists, and how a grant is written,
+        // stay with the settings, whose values the bundle never carries.
+        var kinds = (plugin.Capabilities?.Subscriptions?.Granted ?? []).OfType<string>().Where(kind => Code().IsMatch(kind)).ToList();
         return new PluginLine(
             Bounded(plugin.Id),
             Bounded(plugin.Version),
             Bounded(plugin.Digest),
             plugin.Status,
             [.. codes.Take(MaxProblemCodes)],
-            codes.Count > MaxProblemCodes);
+            codes.Count > MaxProblemCodes,
+            [.. kinds.Take(MaxSubscriptions)],
+            kinds.Count > MaxSubscriptions);
     }
 
     private static string? Bounded(string? text) => text is { Length: > MaxPluginText } ? TooLong : text;
 
-    internal sealed record PluginLine(string? Id, string? Version, string? Digest, PluginStatus Status, IReadOnlyList<string> ProblemCodes, bool ProblemCodesTruncated);
+    internal sealed record PluginLine(
+        string? Id,
+        string? Version,
+        string? Digest,
+        PluginStatus Status,
+        IReadOnlyList<string> ProblemCodes,
+        bool ProblemCodesTruncated,
+        IReadOnlyList<string> Subscriptions,
+        bool SubscriptionsTruncated);
 
     /// <summary>
     /// <c>system.info</c> as a bundle carries it: each field of <see cref="SystemInfoWithheld"/> left out as that list says,

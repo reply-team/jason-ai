@@ -1,0 +1,7 @@
+{
+  "kind": "plugins_reloaded",
+  "version": 1,
+  "case": "a reload activated with a subscriber granted two kinds and a provider granted none",
+  "body": { "key": "snp_01JC0000000000000000000007", "old": null, "new": { "snapshot_id": "snp_01JC0000000000000000000007", "source": "reload", "plugins": [{ "id": "example-provider", "version": "1.2.0", "digest": "sha256:a1b2c3d4e5f60718a1b2c3d4e5f60718a1b2c3d4e5f60718a1b2c3d4e5f60718", "status": "valid", "subscriptions": 0 }, { "id": "example-relay", "version": "0.1.0", "digest": "sha256:a1b2c3d4e5f60718a1b2c3d4e5f60718a1b2c3d4e5f60718a1b2c3d4e5f60718", "status": "valid", "subscriptions": 2 }], "routes": { "snapshot_id": "rts_01JC0000000000000000000008", "global_default": "example-provider", "override_count": 0, "campaign_route_count": 0 }, "subscriptions": { "kind_count": 2, "subscriber_count": 1 } } },
+  "expect": "valid"
+}

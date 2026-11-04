@@ -28,6 +28,9 @@ internal static class ReviewedLogProperties
         "Count", "Plugins", "Candidates", "Problems", "Expired", "Lost", "Summoned", "Claimed", "Applied", "New",
         "Scan", "Exec", "Http", "Env", "Pid", "ExitCode", "DurationMs", "StatusCode", "Elapsed", "@r",
 
+        // How many journal kinds a plugin is admitted to (PluginLoader).
+        "Subscriptions",
+
         // How many pages a read of an account took, how many events it stored and how many the store already held (EventReader).
         "Pages", "Stored", "Duplicates",
 
