@@ -20,7 +20,13 @@ public sealed class JournalKindHistoryTests
     public void No_document_of_the_last_published_release_is_removed_moved_or_narrowed()
     {
         var tag = Git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*.[0-9]*.[0-9]*", "HEAD");
-        Assert.SkipWhen(tag is null, "No release tag is reachable from this checkout, so there is no published release to compare with.");
+        if (tag is null)
+        {
+            var failure = NoReleaseTagFailure(UnderCi);
+            Assert.True(failure is null, failure);
+            Assert.Skip("No release tag is reachable from this checkout, so there is no published release to compare with.");
+        }
+
         tag = tag!.Trim();
 
         var files = Git("ls-tree", "--name-only", tag, Journal + "/")?
@@ -41,6 +47,26 @@ public sealed class JournalKindHistoryTests
         }
 
         Assert.True(problems.Count == 0, $"against {tag}:\n" + string.Join('\n', problems));
+    }
+
+    /// <summary>
+    /// A clone without the tags skips outside CI, where a shallow clone is a person's choice; under CI the checkout is the
+    /// workflow's, and a test that skipped there would never run at all, so it fails and names the checkout.
+    /// </summary>
+    [Fact]
+    public void Under_ci_no_reachable_release_tag_fails_naming_the_checkout()
+    {
+        var failure = NoReleaseTagFailure(underCi: true);
+
+        Assert.NotNull(failure);
+        Assert.Contains("actions/checkout", failure, StringComparison.Ordinal);
+        Assert.Contains("fetch-depth: 0", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Outside_ci_no_reachable_release_tag_skips()
+    {
+        Assert.Null(NoReleaseTagFailure(underCi: false));
     }
 
     [Fact]
@@ -85,6 +111,15 @@ public sealed class JournalKindHistoryTests
 
         Assert.Contains(Narrowed(Published(), current), said => said.Contains(problem, StringComparison.Ordinal));
     }
+
+    private static bool UnderCi => Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
+
+    /// <summary>Why a missing release tag fails the test, or null where it only skips it.</summary>
+    private static string? NoReleaseTagFailure(bool underCi) => underCi
+        ? "No release tag is reachable from this checkout under CI, so nothing would compare the documents with the last "
+          + "published release's: the build-test-publish job's actions/checkout in .github/workflows/ci.yml must keep "
+          + "fetch-depth: 0, which brings the tags."
+        : null;
 
     /// <summary>What <paramref name="current"/>, or its absence, took from <paramref name="published"/>.</summary>
     private static IEnumerable<string> Narrowed(JsonObject published, JsonObject? current)
