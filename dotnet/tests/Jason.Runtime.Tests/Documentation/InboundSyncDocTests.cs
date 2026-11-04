@@ -110,7 +110,8 @@ public partial class InboundSyncDocTests
             .ToList();
         var document = JsonNode.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", "contracts", "journal", JournalKinds.InboundReplyObserved + ".json")))!;
         var required = document["body"]!["properties"]!["new"]!["required"]!.AsArray().Select(member => (string)member!).ToList();
-        Assert.Equal(required, written);
+        // A schema's required members are a set, so neither the step's order nor the document's is a claim.
+        Assert.Equal(required.Order(StringComparer.Ordinal), written.Order(StringComparer.Ordinal));
     }
 
     /// <summary>The sentences an operator will hold the read to: where a campaign that gains a route starts, and what a failure does.</summary>

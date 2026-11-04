@@ -15,9 +15,16 @@ public class JournalKindsEndpointTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>
+    /// While the catalog fits one default page, the whole of it comes back on that page. A catalog that outgrows the page
+    /// is no fault of the read: the walk across pages holds the rest, and this row says which of the two has changed.
+    /// </summary>
     [Fact]
     public async Task Every_kind_comes_back_in_kind_order_on_one_default_page()
     {
+        Assert.True(
+            JournalKindCatalog.Kinds.Count <= Paging.DefaultLimit,
+            $"The catalog has {JournalKindCatalog.Kinds.Count} kinds, more than one default page of {Paging.DefaultLimit}; the walk across pages holds them, so this row is the one to change.");
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
 
         var page = await api.PostOkAsync<Page<JournalKindDto>>(Operations.JournalKinds, new { }, Ct);
