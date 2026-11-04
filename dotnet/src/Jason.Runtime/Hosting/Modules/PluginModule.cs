@@ -3,6 +3,7 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins;
+using Jason.Runtime.Plugins.Door;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
 using Microsoft.AspNetCore.Routing;
@@ -39,6 +40,9 @@ public static class PluginModule
         // whole runtime. It has to outlive a scope in any case: the command that invokes a plugin is held by the
         // dispatcher for as long as an attempt runs, which is longer than the scope that resolved it.
         services.AddSingleton<PluginInvoker>();
+
+        // The live handler capabilities: memory only, one set per process, so a restart forgets every one.
+        services.AddSingleton<HandlerCapabilities>();
 
         services.AddScoped<ExecutableResolver>();
         services.AddScoped<ExternalIdStore>();
