@@ -89,29 +89,34 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
     /// because an option of the context holds for whatever logger the context is given, not for the runtime's file alone.
     /// <para>
     /// A journal line of a reserved kind is held to its document by <see cref="JournalLineInterceptor"/>, and
-    /// <paramref name="lines"/> says what happens to one that is off it. Null is <see cref="JournalLines.Strict"/>: every
-    /// context made without saying otherwise refuses such a line, the migrator's and every test's among them; the host
-    /// passes its own.
+    /// <paramref name="lines"/> says what happens to one that is off it, and every caller says it, for there is no
+    /// default: strict under test, logged in an installation. The host passes the mode its options name, the migrator
+    /// the logged one with its own logger, and every test strict; an installation's context that forgot would otherwise
+    /// refuse a line rather than log it.
     /// </para>
     /// </remarks>
-    public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder builder, string databaseFile, JournalLines? lines = null)
+    public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder builder, string databaseFile, JournalLines lines)
     {
         ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(lines);
         return builder
             .UseSqlite(ConnectionString(databaseFile))
             .AddInterceptors(
                 new AppendOnlyInterceptor(),
-                new JournalLineInterceptor(lines ?? JournalLines.Strict),
+                new JournalLineInterceptor(lines),
                 new TextFoldInterceptor(),
                 new LinkedInKeyInterceptor())
             .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.QueryIterationFailed));
     }
 
-    /// <summary>One connection string for the whole runtime: WAL is set by the migrator, busy timeout here.</summary>
+    /// <summary>
+    /// One connection string for the whole runtime: WAL is set by the migrator, busy timeout here. Strict, for the tests
+    /// and the design-time tooling that call it; no context of a running installation is made here.
+    /// </summary>
     public static DbContextOptions<JasonDbContext> CreateOptions(string databaseFile)
     {
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        Configure(builder, databaseFile);
+        Configure(builder, databaseFile, JournalLines.Strict);
         return builder.Options;
     }
 

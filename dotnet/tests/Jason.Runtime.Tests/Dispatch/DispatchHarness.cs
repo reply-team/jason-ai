@@ -87,7 +87,7 @@ internal sealed class DispatchHarness : IDisposable
         services.AddSingleton(Status);
         services.AddDbContext<JasonDbContext>(o =>
         {
-            JasonDbContext.Configure(o, _database.File);
+            JasonDbContext.Configure(o, _database.File, JournalLines.Strict);
             o.AddInterceptors(new SaveHook(Take), Commands);
         });
 
