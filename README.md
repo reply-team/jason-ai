@@ -579,9 +579,9 @@ jason report list --campaign <campaign-id> --human
 | Repository | Role |
 |---|---|
 | `reply-team/jason-ai` (this repo) | Product entry point: the runtime and business skills, the official plugins, the operation contracts, the install path, and every release of the runtime — the executable for each platform |
-| [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) | Reply.io provider CLI: auth, profiles, teams, full API v3 access, and the Reply-specific skills |
+| [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) | Reply.io provider CLI: auth, profiles, teams, full API v3 access, and the Reply-specific skills, which ship inside its npm package and which `reply skills install` writes |
 | [`reply-team/reply-mcp`](https://github.com/reply-team/reply-mcp) | Remote MCP server exposing curated Reply tools to MCP-capable agents |
-| [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) | **Formerly** the home of the skills packs. Both halves now live here: the runtime skills in [`skills/runtime`](skills/runtime), re-authored around the Runtime API, and the business skills in [`skills/business`](skills/business), moved across unchanged and then held to this repository's own guards. The Reply-specific half belongs with `reply-cli` |
+| [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) | **Formerly** the home of the skills packs; it is archived and read-only now. Its business pack (`ai-sdr-core`) lives here in [`skills/business`](skills/business), held to this repository's own guards; the runtime skills are [`skills/runtime`](skills/runtime), re-authored around the Runtime API, and replaced its `agentic-runtime` pack, which is retired; `jason skills install` installs both. Its Reply-specific pack (`reply-adapter`) belongs with `reply-cli` |
 
 ## Getting help
 

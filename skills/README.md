@@ -146,3 +146,11 @@ This repository also offers both packs through the **skills marketplace** at
 is installable with no network. That is a different thing from the **plugin marketplace** under
 [`plugins/`](../plugins/README.md), which holds the JavaScript packages that execute provider
 operations in the plugin host.
+
+## Taking the business pack without the runtime
+
+The business pack stands in this repository at [`skills/business`](business/README.md), and it is true whether or not
+Jason is installed. A host's own skill tools can take it without the runtime: point a plugin marketplace at this
+repository and install the plugin `jason-business-skills`, or copy the directory into the place your host reads
+skills from, as described above. There is no separate skills repository; the pack is read here, and `jason skills`
+is what installs it for a person who runs Jason.

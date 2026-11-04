@@ -64,6 +64,34 @@ public class SkillsHomeTests
     }
 
     /// <summary>
+    /// The business pack can be taken without the runtime, and the one document that says so names where the pack
+    /// stands and the plugin a host's own marketplace tools find it under. The plugin name is read from the manifest
+    /// rather than copied into this test, so a rename that leaves the passage behind goes red.
+    /// </summary>
+    [Fact]
+    public void The_skills_readme_says_where_the_business_pack_stands_and_how_a_host_takes_it()
+    {
+        var root = SkillPack.RepositoryRoot();
+        var text = File.ReadAllText(Path.Combine(root, "skills", "README.md"));
+
+        using var manifest = System.Text.Json.JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(root, ".claude-plugin", "marketplace.json")));
+        var plugin = manifest.RootElement.GetProperty("plugins").EnumerateArray()
+            .Single(entry => entry.GetProperty("source").GetString() == "./skills/business")
+            .GetProperty("name").GetString()!;
+
+        const string Heading = "## Taking the business pack without the runtime";
+        var start = text.IndexOf(Heading, StringComparison.Ordinal);
+        Assert.True(start >= 0, "skills/README.md has no section saying how the business pack is taken without the runtime.");
+
+        var next = text.IndexOf("\n## ", start + Heading.Length, StringComparison.Ordinal);
+        var section = next < 0 ? text[start..] : text[start..next];
+        Assert.Contains("skills/business", section, StringComparison.Ordinal);
+        Assert.Contains(plugin, section, StringComparison.Ordinal);
+        Assert.Contains("no separate skills repository", section, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// <c>jason skills install</c> does not exist in this build. A document that prints it has to say so — and
     /// has to stop saying so the moment it does exist, or the sentence that was true becomes the false claim in
     /// reverse and nothing goes red.
