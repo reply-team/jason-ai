@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_resumed",
+  "version": 1,
+  "case": "the items a role waited on all ended",
+  "body": { "key": "att_01JC0000000000000000000005", "old": null, "new": { "because": "children_ended" } },
+  "expect": "valid"
+}

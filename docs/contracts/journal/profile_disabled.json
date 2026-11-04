@@ -1,0 +1,21 @@
+{
+  "kind": "profile_disabled",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "An execution profile was disabled, so no attempt is launched under it until it is enabled again.",
+  "subscribable": true,
+  "entities": {
+    "profile": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The profile's name." },
+      "old": { "type": "null" },
+      "new": { "type": "null" }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_released",
+  "version": 1,
+  "case": "a person approved the work it was waiting on them for",
+  "body": { "key": "status", "old": "awaiting_approval", "new": "created" },
+  "expect": "valid"
+}

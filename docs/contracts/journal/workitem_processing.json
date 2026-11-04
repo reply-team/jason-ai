@@ -1,0 +1,24 @@
+{
+  "kind": "workitem_processing",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "An attempt the dispatcher opened for a work item started running.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "attempt" },
+      "old": { "type": "null" },
+      "new": { "type": "integer", "minimum": 1, "description": "The attempt's number among the item's attempts, from 1." }
+    }
+  }
+}

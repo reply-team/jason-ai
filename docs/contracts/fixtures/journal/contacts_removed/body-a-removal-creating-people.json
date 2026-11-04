@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_removed",
+  "version": 1,
+  "case": "a removal never creates anybody",
+  "body": { "key": null, "old": null, "new": { "removed": 1, "not_member": 0, "already_excluded": 0, "rejected": 0, "contact_ids": ["cnt_01JC0000000000000000000001"], "created_contact_ids": [] } },
+  "expect": { "invalid": [{ "pointer": "/new/created_contact_ids", "reason": "additional_properties" }] }
+}

@@ -101,6 +101,11 @@ internal static class ReviewedLogProperties
         // Summoner: the chronicle kind that summoned a manager, or "scheduled".
         "Intent",
 
+        // JournalLines: the kind of a line written off its document, which is only ever checked, and so logged, when it is
+        // one the runtime reserves and publishes a document for: one of the build's own constants, never a kind a person
+        // or an agent appended under a name of its own.
+        "Kind",
+
         // Claimer: the level of a memory file the host could not write as a read rule, "client", "project" or
         // "campaign" — never the file's path, which is built from names a person gave.
         "Level",

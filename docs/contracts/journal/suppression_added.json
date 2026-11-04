@@ -1,0 +1,27 @@
+{
+  "kind": "suppression_added",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "An address or number was put on the do-not-contact register, so nothing reaches it on its channel.",
+  "subscribable": true,
+  "entities": {},
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The channel, such as email or phone." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "value"],
+        "properties": {
+          "channel": { "type": "string", "minLength": 1, "description": "The channel, the same as the key." },
+          "value": { "type": "string", "minLength": 1, "description": "The address or number, in the form its channel keeps it." }
+        }
+      }
+    }
+  }
+}

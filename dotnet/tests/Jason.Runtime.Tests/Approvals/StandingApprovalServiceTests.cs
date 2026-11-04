@@ -5,6 +5,7 @@ using Jason.Runtime.Approvals;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Journal;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Approvals;
@@ -195,7 +196,18 @@ public class StandingApprovalServiceTests
         var service = new StandingApprovalService(db, new JournalWriter(clock), clock);
         var spent = await service.SetAsync(Set(campaign) with { MaxReleases = 1 }, Ct);
         await service.SetAsync(Set(campaign) with { Category = "not_now", ExpiresAt = new DateTimeOffset(Noon.AddHours(1)) }, Ct);
-        new JournalWriter(clock).Append(db, Actors.Dispatcher, JournalKinds.ApprovalStandingApplied, campaign, key: spent.LineId, updated: new JsonObject());
+        var released = WorkItemFactory.NewProviderOp(campaign, "conversation.reply", Noon);
+        released.Status = WorkItemStatus.Succeeded;
+        db.WorkItems.Add(released);
+        await db.SaveChangesAsync(Ct);
+        new JournalWriter(clock).AppendDocumented(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.ApprovalStandingApplied,
+            campaign,
+            key: spent.LineId,
+            with: new JsonObject { ["standing"] = spent.LineId, ["category"] = "interested" },
+            workItem: released);
         await db.SaveChangesAsync(Ct);
         clock.Advance(TimeSpan.FromHours(2));
 

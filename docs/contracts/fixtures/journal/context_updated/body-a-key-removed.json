@@ -1,0 +1,7 @@
+{
+  "kind": "context_updated",
+  "version": 1,
+  "case": "a context key is removed",
+  "body": { "key": "tone", "old": "warm and brief", "new": null },
+  "expect": "valid"
+}

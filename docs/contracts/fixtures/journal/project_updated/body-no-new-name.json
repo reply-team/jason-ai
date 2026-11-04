@@ -1,0 +1,7 @@
+{
+  "kind": "project_updated",
+  "version": 1,
+  "case": "a rename says the new name",
+  "body": { "key": "prj_01JC0000000000000000000009", "old": { "name": "Spring launch" }, "new": {} },
+  "expect": { "invalid": [{ "pointer": "/new/name", "reason": "required" }] }
+}

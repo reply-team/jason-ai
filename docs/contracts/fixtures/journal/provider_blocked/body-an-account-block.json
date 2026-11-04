@@ -1,0 +1,11 @@
+{
+  "kind": "provider_blocked",
+  "version": 1,
+  "case": "credits ran out on the whole account",
+  "body": {
+    "key": "blk_01JC0000000000000000000008",
+    "old": null,
+    "new": { "provider_block_id": "blk_01JC0000000000000000000008", "plugin_id": "example-mail", "scope": "account", "sender_external_id": null, "reason": "billing", "clears_at": null, "work_item_id": "wi_01JC0000000000000000000002" }
+  },
+  "expect": "valid"
+}

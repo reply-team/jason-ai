@@ -1,0 +1,37 @@
+{
+  "kind": "contacts_removed",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "One request removed people from a campaign, which cancels their open work there: the line counts what happened to its items and names the people it removed.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/new/contact_ids", "presence": "sometimes", "each": true }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "null" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["removed", "not_member", "already_excluded", "rejected", "contact_ids"],
+        "properties": {
+          "removed": { "type": "integer", "minimum": 0, "description": "Items that took a member out of the campaign." },
+          "not_member": { "type": "integer", "minimum": 0, "description": "Items naming a person the campaign never held." },
+          "already_excluded": { "type": "integer", "minimum": 0, "description": "Items naming a person already removed from the campaign." },
+          "rejected": { "type": "integer", "minimum": 0, "description": "Items refused, each answered with its error in the response." },
+          "contact_ids": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^cnt_" },
+            "description": "The people removed, in the order of the request; empty when nobody was."
+          }
+        }
+      }
+    }
+  }
+}

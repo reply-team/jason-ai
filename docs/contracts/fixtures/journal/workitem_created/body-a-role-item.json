@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_created",
+  "version": 1,
+  "case": "a role's work is created for the campaign",
+  "body": { "key": "kind", "old": null, "new": { "kind": "ai_role", "role": "manager", "operation": null, "contact_id": null, "priority": 0, "not_before": null, "due_at": null } },
+  "expect": "valid"
+}

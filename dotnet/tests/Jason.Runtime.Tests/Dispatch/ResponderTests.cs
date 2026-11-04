@@ -6,6 +6,7 @@ using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Journal;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.WorkItems;
 using Microsoft.Data.Sqlite;
@@ -585,13 +586,13 @@ public class ResponderTests
         var other = await CampaignAsync(harness);
         var own = await CampaignLineAsync(harness, campaign);
         await CampaignLineAsync(harness, other);
-        await harness.WriteLineAsync(JournalKinds.CampaignCreated, Ct);
+        await harness.WriteLineAsync(JournalKinds.SuppressionAdded, Ct);
 
         Assert.Equal(0, await harness.RespondAsync(Ct));
         Assert.Equal(own, await WatermarkAsync(harness, campaign));
 
         // Every campaign level with its own chronicle: an installation's line writes nothing for any of them.
-        await harness.WriteLineAsync(JournalKinds.CampaignCreated, Ct);
+        await harness.WriteLineAsync(JournalKinds.SuppressionAdded, Ct);
         harness.Commands.Clear();
         Assert.Equal(0, await harness.RespondAsync(Ct));
         Assert.Equal(own, await WatermarkAsync(harness, campaign));
@@ -833,7 +834,7 @@ public class ResponderTests
     {
         await using var db = harness.Open();
         var campaign = await db.Campaigns.SingleAsync(c => c.Id == campaignId, Ct);
-        var entry = new JournalWriter(harness.Clock).Append(db, Actors.Runtime, JournalKinds.CampaignCreated, campaign);
+        var entry = new JournalWriter(harness.Clock).AppendDocumented(db, Actors.Runtime, JournalKinds.CampaignCreated, campaign);
         await db.SaveChangesAsync(Ct);
         return entry.Id;
     }

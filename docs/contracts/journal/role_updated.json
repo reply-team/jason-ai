@@ -1,0 +1,28 @@
+{
+  "kind": "role_updated",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "The execution profile a role's work runs under was set, changed or cleared.",
+  "subscribable": true,
+  "entities": {
+    "role": { "at": "/key", "presence": "always" },
+    "profile": { "at": "/new", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The role's name." },
+      "old": {
+        "type": ["string", "null"],
+        "description": "The name of the profile the role named before, or null where it named none."
+      },
+      "new": {
+        "type": ["string", "null"],
+        "description": "The name of the profile the role names now, or null where it was cleared. A line is written only when it differs from the one before."
+      }
+    }
+  }
+}

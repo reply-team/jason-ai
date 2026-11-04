@@ -1,0 +1,28 @@
+{
+  "kind": "external_id_origin",
+  "version": 1,
+  "since": "0.19.0",
+  "summary": "A plugin said how the provider came to hold the entity whose identifier was just pinned or diverged: found already there, or created by the attempt.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": {
+        "type": "string",
+        "pattern": "^(campaign|contact)/",
+        "description": "The key of the pin or divergence line it follows, under the same work item and attempt."
+      },
+      "old": { "type": "null" },
+      "new": { "enum": ["found", "created"] }
+    }
+  }
+}

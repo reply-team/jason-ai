@@ -1,0 +1,16 @@
+{
+  "kind": "workitem_waiting",
+  "version": 1,
+  "case": "a wait on items waits for all of them or any one, and nothing else",
+  "body": {
+    "key": "att_01JC0000000000000000000005",
+    "old": null,
+    "new": {
+      "on": ["wi_01JC0000000000000000000003", "wi_01JC0000000000000000000004"],
+      "mode": "most",
+      "until": null,
+      "deadline": "2026-10-02T10:00:00.000Z"
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/mode", "reason": "enum" }, { "pointer": "", "reason": "any_of" }] }
+}

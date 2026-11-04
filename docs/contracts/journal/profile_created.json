@@ -1,0 +1,35 @@
+{
+  "kind": "profile_created",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "An execution profile was created at its first revision, naming the agent host the work it runs is launched on.",
+  "subscribable": true,
+  "entities": {
+    "profile": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The profile's name." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["revision", "host", "program", "host_version_verified"],
+        "description": "What the first revision says about the launch: the host, the program and the host version it was verified against. The arguments, the denials and the tools are kept on the revision, not on the line.",
+        "properties": {
+          "revision": { "const": 1 },
+          "host": { "enum": ["claude_code", "codex", "copilot_cli", "cursor_cli", "gemini_cli", "antigravity_cli"] },
+          "program": { "type": "string", "minLength": 1, "description": "The program the host is started as." },
+          "host_version_verified": {
+            "type": ["string", "null"],
+            "description": "The host version the person verified the profile against, or null where none was stated."
+          }
+        }
+      }
+    }
+  }
+}

@@ -345,8 +345,10 @@ internal sealed class CampaignWorld
             ["thread"] = "t-" + contact.FirstName,
             ["channel"] = "email",
             ["last_activity_at"] = moment,
+            ["unread"] = true,
+            ["has_meeting_intent"] = null,
             ["contact_id"] = contact.PublicId,
-        });
+        }, Jason.Runtime.Dispatch.InboundSync.ObservationKey("reply", "t-" + contact.FirstName, moment));
 
     private void Event(Contact contact, string kind, DateTime written, string moment, string? bounce = null)
     {
@@ -356,24 +358,33 @@ internal sealed class CampaignWorld
             ["plugin"] = "reply",
             ["event_id"] = _id("evt"),
             ["occurred_at"] = moment,
-            ["channel"] = "email",
+            ["channel"] = kind == "reply_detected" ? "email" : null,
             ["contact_id"] = contact.PublicId,
+            ["attributed_by"] = "campaign_pin",
         };
+        if (kind == "reply_detected")
+        {
+            line["thread"] = "t-" + contact.FirstName;
+        }
+
         if (bounce is not null)
         {
+            line["message"] = "m-" + contact.FirstName;
             line["bounce"] = bounce;
         }
 
-        Line(JournalKinds.ProviderEventObserved, Spring, contact, written, line);
+        // The event's own key, in its shape: a hash, here over what tells this world's events apart.
+        var key = "sha256:" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(kind + "|" + contact.PublicId + "|" + moment)));
+        Line(JournalKinds.ProviderEventObserved, Spring, contact, written, line, key);
     }
 
     private void Suppress(Contact contact, DateTime at, DateTime? lifted)
     {
         var value = contact.Channels[0].Value;
-        Line(JournalKinds.SuppressionAdded, null, null, at, new JsonObject { ["channel"] = "email", ["value"] = value });
+        Line(JournalKinds.SuppressionAdded, null, null, at, new JsonObject { ["channel"] = "email", ["value"] = value }, "email");
         if (lifted is { } liftedAt)
         {
-            Line(JournalKinds.SuppressionRemoved, null, null, liftedAt, new JsonObject { ["channel"] = "email", ["value"] = value });
+            Line(JournalKinds.SuppressionRemoved, null, null, liftedAt, new JsonObject { ["channel"] = "email", ["value"] = value }, "email");
             return;
         }
 
@@ -389,9 +400,10 @@ internal sealed class CampaignWorld
         ["contact_ids"] = new JsonArray(person.PublicId),
     });
 
-    private void Line(string kind, Campaign? campaign, Contact? contact, DateTime ts, JsonObject updated) =>
+    private void Line(string kind, Campaign? campaign, Contact? contact, DateTime ts, JsonObject updated, string? key = null) =>
         _db.Journal.Add(new JournalEntry
         {
+            Key = key,
             PublicId = _id("jrn"),
             Ts = ts,
             ActorType = ActorType.System,

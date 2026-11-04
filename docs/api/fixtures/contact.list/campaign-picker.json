@@ -66,7 +66,8 @@
           "old": null,
           "new": {
             "id": "apr_1",
-            "operation": "campaign.enroll"
+            "operation": "campaign.enroll",
+            "subject_hash": "sha256:recorded-1"
           },
           "reason": null,
           "contact_id": "cnt_1",
@@ -150,8 +151,8 @@
           "kind": "workitem_failed",
           "campaign_id": "cmp_1",
           "work_item_id": "wi_2",
-          "attempt_id": null,
-          "key": "error",
+          "attempt_id": "att_1",
+          "key": "att_1",
           "old": null,
           "new": {
             "code": "provider_error",
@@ -375,7 +376,7 @@
           "kind": "workitem_succeeded",
           "campaign_id": "cmp_1",
           "work_item_id": "wi_3",
-          "attempt_id": null,
+          "attempt_id": "att_2",
           "key": "result_present",
           "old": null,
           "new": true,
@@ -437,13 +438,15 @@
           "campaign_id": "cmp_1",
           "work_item_id": null,
           "attempt_id": null,
-          "key": null,
+          "key": "sha256:recorded-4",
           "old": null,
           "new": {
             "plugin": "reply",
             "thread": "t-Jon",
             "channel": "email",
             "last_activity_at": "2026-10-14T08:00:00.000Z",
+            "unread": true,
+            "has_meeting_intent": null,
             "contact_id": "cnt_13"
           },
           "reason": null,

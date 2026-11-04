@@ -51,7 +51,7 @@ public sealed class NotificationsAfterARestartTests
                 null,
                 [ChannelOutcome.NotAttempted("toast", ChannelKinds.Toast, NotAttemptedReasons.NoDesktop, "session 0")],
                 null);
-            new JournalWriter(TimeProvider.System).Append(db, Actors.Runtime, JournalKinds.NotificationSent, campaign: null, updated: line.ToJson());
+            new JournalWriter(TimeProvider.System).Append(db, Actors.Runtime, JournalKinds.NotificationSent, campaign: null, key: "notification", updated: line.ToJson());
             await db.SaveChangesAsync(Ct);
         }
         finally

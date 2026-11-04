@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_added",
+  "version": 1,
+  "case": "the people added are always named",
+  "body": { "key": null, "old": null, "new": { "added": 1, "already_member": 0, "rejected": 0, "created_contact_ids": [] } },
+  "expect": { "invalid": [{ "pointer": "/new/contact_ids", "reason": "required" }] }
+}

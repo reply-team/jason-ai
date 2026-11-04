@@ -1,0 +1,7 @@
+{
+  "kind": "suppression_removed",
+  "version": 1,
+  "case": "a phone number comes off the register",
+  "body": { "key": "phone", "old": null, "new": { "channel": "phone", "value": "+15555550123" } },
+  "expect": "valid"
+}

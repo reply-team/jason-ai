@@ -1,0 +1,29 @@
+{
+  "kind": "project_created",
+  "version": 1,
+  "since": "0.14.0",
+  "summary": "A project was made, with its name and the slug it keeps.",
+  "subscribable": true,
+  "entities": {
+    "project": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^prj_", "description": "The project." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "slug"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "slug": { "type": "string", "minLength": 1, "description": "The project's slug, unique and never changed." }
+        }
+      }
+    }
+  }
+}

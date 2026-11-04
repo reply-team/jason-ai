@@ -1,0 +1,7 @@
+{
+  "kind": "suppression_removed",
+  "version": 1,
+  "case": "the pair is said once, in new",
+  "body": { "key": "phone", "old": { "channel": "phone", "value": "+15555550123" }, "new": { "channel": "phone", "value": "+15555550123" } },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "type" }] }
+}

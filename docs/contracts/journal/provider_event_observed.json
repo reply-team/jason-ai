@@ -1,0 +1,98 @@
+{
+  "kind": "provider_event_observed",
+  "version": 1,
+  "since": "0.12.0",
+  "summary": "A provider event read from an account reached a campaign: a reply the provider detected, an invitation accepted, or a bounce.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": { "/new/attributed_by": "0.16.0" },
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^sha256:", "description": "The provider event's own key: a hash over the plugin, its kind, the identifiers it names and its moment." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "plugin", "event_id", "occurred_at", "channel", "contact_id"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["reply_detected", "invitation_accepted", "bounce"], "description": "The provider event's kind." },
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin the account was read through." },
+          "event_id": { "type": "string", "pattern": "^evt_", "description": "The stored provider event." },
+          "occurred_at": { "type": "string", "format": "date-time", "description": "When it happened, as the provider stamps it." },
+          "channel": { "type": ["null", "string"], "enum": ["email", "linkedin", "other", null], "description": "The channel of a detected reply; null for the other kinds." },
+          "contact_id": { "type": ["null", "string"], "pattern": "^cnt_", "description": "The campaign's contact the provider's person is pinned to, or null where none is." },
+          "attributed_by": { "type": "string", "enum": ["campaign_pin", "contact_pin"], "description": "Which rule found that the provider event concerns the campaign: the campaign's own pinned identifier, or the contact's." },
+          "thread": { "type": ["null", "string"], "minLength": 1, "description": "The provider's thread of a detected reply, or null where it names none." },
+          "account": { "type": ["null", "string"], "minLength": 1, "description": "The provider's account that sent the accepted invitation, or null where it names none." },
+          "message": { "type": ["null", "string"], "minLength": 1, "description": "The provider's identifier for the message that bounced, or null where it names none." },
+          "bounce": { "type": ["null", "string"], "enum": ["hard", "soft", null], "description": "The provider's own word for the bounce, or null where it gives none." }
+        }
+      }
+    },
+    "anyOf": [
+      {
+        "description": "A reply the provider detected.",
+        "properties": {
+          "new": {
+            "properties": {
+              "kind": { "const": "reply_detected" },
+              "channel": { "type": "string" }
+            },
+            "required": ["thread"],
+            "not": {
+              "anyOf": [
+                { "required": ["account"] },
+                { "required": ["message"] },
+                { "required": ["bounce"] }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "description": "A connection invitation the account sent was accepted.",
+        "properties": {
+          "new": {
+            "properties": {
+              "kind": { "const": "invitation_accepted" },
+              "channel": { "type": "null" }
+            },
+            "required": ["account"],
+            "not": {
+              "anyOf": [
+                { "required": ["thread"] },
+                { "required": ["message"] },
+                { "required": ["bounce"] }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "description": "A message the account sent bounced.",
+        "properties": {
+          "new": {
+            "properties": {
+              "kind": { "const": "bounce" },
+              "channel": { "type": "null" }
+            },
+            "required": ["message", "bounce"],
+            "not": {
+              "anyOf": [
+                { "required": ["thread"] },
+                { "required": ["account"] }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

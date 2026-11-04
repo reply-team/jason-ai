@@ -1,0 +1,36 @@
+{
+  "kind": "approval_standing_applied",
+  "version": 1,
+  "since": "0.25.0",
+  "summary": "A standing approval released a drafted reply without asking a person, and the line names the approval that records the release, the standing approval and the verdict the reply answers.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "approval": { "at": "/new/id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^jrn_", "description": "The line that set the standing approval, by its id: what the standing approval's ceiling counts." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "operation", "subject_hash", "standing", "verdict", "category"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^apr_", "description": "The approval written already approved, decided by the person who set the standing approval." },
+          "operation": { "enum": ["conversation.reply", "message.send"] },
+          "subject_hash": { "type": "string", "pattern": "^sha256:", "description": "The digest of what was released; the subject itself stays on the approval." },
+          "standing": { "type": "string", "pattern": "^jrn_", "description": "The line that set the standing approval, the same as the key." },
+          "verdict": { "type": "string", "pattern": "^jrn_", "description": "The line that classified the reply this work answers." },
+          "category": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers." }
+        }
+      }
+    }
+  }
+}

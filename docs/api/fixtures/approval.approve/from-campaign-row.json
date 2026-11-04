@@ -17,7 +17,7 @@
     "operation_version": 1,
     "status": "approved",
     "reason": "approval_required",
-    "subject_hash": "sha256:recorded-4",
+    "subject_hash": "sha256:recorded-1",
     "subject": {
       "operation": "campaign.enroll",
       "work_item": "wi_1"

@@ -1,0 +1,24 @@
+{
+  "kind": "workitem_succeeded",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "An attempt succeeded and its work item finished as succeeded; the line says whether the item now carries a result.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "result_present" },
+      "old": { "type": "null" },
+      "new": { "type": "boolean", "description": "Whether the item carries a result once it succeeded: the one this attempt gave, or one it already held when the attempt gave none." }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "kind": "preference_unset",
+  "version": 1,
+  "case": "nothing is set in its place",
+  "body": {
+    "key": "sender.identity",
+    "old": { "bytes": 96, "hash": "sha256:7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e" },
+    "new": { "bytes": 0, "hash": "sha256:7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e" }
+  },
+  "expect": { "invalid": [{ "pointer": "/new", "reason": "type" }] }
+}

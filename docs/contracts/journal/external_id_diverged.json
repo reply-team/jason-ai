@@ -1,0 +1,28 @@
+{
+  "kind": "external_id_diverged",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A provider returned an identifier different from the one already pinned: the pin stands, and the value it returned is recorded beside it.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": {
+        "type": "string",
+        "pattern": "^(campaign|contact)/",
+        "description": "What the identifier belongs to, `campaign` or `contact`, then the plugin's id and the identifier's kind, joined by slashes."
+      },
+      "old": { "type": "string", "minLength": 1, "description": "The pinned identifier, which stands." },
+      "new": { "type": "string", "minLength": 1, "description": "The different identifier the attempt returned." }
+    }
+  }
+}

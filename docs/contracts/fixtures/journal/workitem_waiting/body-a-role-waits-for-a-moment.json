@@ -1,0 +1,11 @@
+{
+  "kind": "workitem_waiting",
+  "version": 1,
+  "case": "a role's run ended by waiting until a moment",
+  "body": {
+    "key": "att_01JC0000000000000000000005",
+    "old": null,
+    "new": { "on": [], "mode": null, "until": "2026-10-01T18:00:00.000Z", "deadline": "2026-10-01T18:00:00.000Z" }
+  },
+  "expect": "valid"
+}

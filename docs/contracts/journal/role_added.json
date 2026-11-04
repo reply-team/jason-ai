@@ -1,0 +1,31 @@
+{
+  "kind": "role_added",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A role was registered, so work can name it and an attempt can run as it.",
+  "subscribable": true,
+  "entities": {
+    "role": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The role's name." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entry_command_present"],
+        "properties": {
+          "entry_command_present": {
+            "type": "boolean",
+            "description": "Whether the role was registered with a command of its own that launches its work. The command itself is kept on the role, not on the line."
+          }
+        }
+      }
+    }
+  }
+}

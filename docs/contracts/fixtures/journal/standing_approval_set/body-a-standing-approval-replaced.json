@@ -1,0 +1,11 @@
+{
+  "kind": "standing_approval_set",
+  "version": 1,
+  "case": "a person widens a standing approval to messages and takes its bounds away",
+  "body": {
+    "key": "interested",
+    "old": { "category": "interested", "operations": ["conversation.reply"], "expires_at": "2026-10-08T10:00:00.000Z", "max_releases": 50 },
+    "new": { "category": "interested", "operations": ["conversation.reply", "message.send"], "expires_at": null, "max_releases": null }
+  },
+  "expect": "valid"
+}

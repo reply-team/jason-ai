@@ -1,0 +1,17 @@
+{
+  "kind": "workitem_waiting",
+  "version": 1,
+  "case": "the claim parked an item on a provider block before any attempt",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": {
+      "on": [],
+      "mode": null,
+      "until": null,
+      "deadline": null,
+      "blocked_by": { "provider_block_id": "blk_01JC0000000000000000000009", "scope": "account", "reason": "billing" }
+    }
+  },
+  "expect": "valid"
+}

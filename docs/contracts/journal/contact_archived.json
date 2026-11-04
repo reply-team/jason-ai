@@ -1,0 +1,21 @@
+{
+  "kind": "contact_archived",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A person was archived in the contact directory, so nothing reaches out to them any more and their open work is cancelled.",
+  "subscribable": true,
+  "entities": {
+    "contact": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^cnt_", "description": "The person's id." },
+      "old": { "type": "null" },
+      "new": { "type": "null" }
+    }
+  }
+}

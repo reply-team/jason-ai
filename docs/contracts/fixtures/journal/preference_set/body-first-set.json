@@ -1,0 +1,11 @@
+{
+  "kind": "preference_set",
+  "version": 1,
+  "case": "a preference set for the first time",
+  "body": {
+    "key": "tone_of_voice",
+    "old": null,
+    "new": { "bytes": 212, "hash": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1" }
+  },
+  "expect": "valid"
+}

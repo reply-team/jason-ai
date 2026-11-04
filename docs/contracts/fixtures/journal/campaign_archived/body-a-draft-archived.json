@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_archived",
+  "version": 1,
+  "case": "a draft is archived without ever running",
+  "body": { "key": "status", "old": "draft", "new": "archived" },
+  "expect": "valid"
+}

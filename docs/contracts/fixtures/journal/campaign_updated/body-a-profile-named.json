@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_updated",
+  "version": 1,
+  "case": "a campaign leaves the default profile for a named one",
+  "body": { "key": "execution_profile", "old": null, "new": "careful" },
+  "expect": "valid"
+}

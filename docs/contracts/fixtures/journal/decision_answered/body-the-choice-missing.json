@@ -1,0 +1,7 @@
+{
+  "kind": "decision_answered",
+  "version": 1,
+  "case": "the line always says which option was chosen, or null",
+  "body": { "key": "decision", "old": null, "new": { "decision_id": "dec_01JC0000000000000000000006" } },
+  "expect": { "invalid": [{ "pointer": "/new/chosen_option", "reason": "required" }] }
+}

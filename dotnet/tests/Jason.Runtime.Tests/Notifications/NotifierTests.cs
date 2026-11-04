@@ -3,6 +3,7 @@ using Jason.Runtime.Journal;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Tests.Approvals;
 using Jason.Runtime.Tests.Dispatch;
+using Jason.Runtime.Tests.Journal;
 
 namespace Jason.Runtime.Tests.Notifications;
 
@@ -276,10 +277,11 @@ public sealed class NotifierTests
         await harness.WriteLineAsync(JournalKinds.NotificationSent, Ct, Line(covered.PublicId, lastDeliveredAt: null));
         await using (var db = harness.Open())
         {
+            var (campaign, item, _) = await DocumentedLines.StandInsAsync(db, JournalKinds.WorkItemUpdated, harness.Clock.GetUtcNow().UtcDateTime, Ct);
             var writer = new JournalWriter(harness.Clock);
             for (var line = 0; line < Notifier.ReadBatch + 500; line++)
             {
-                writer.Append(db, Jason.Runtime.Domain.Actors.Runtime, JournalKinds.WorkItemUpdated, campaign: null);
+                writer.AppendDocumented(db, Jason.Runtime.Domain.Actors.Runtime, JournalKinds.WorkItemUpdated, campaign, workItem: item);
             }
 
             await db.SaveChangesAsync(Ct);
@@ -336,9 +338,10 @@ public sealed class NotifierTests
         await using (var db = harness.Open())
         {
             var writer = new JournalWriter(harness.Clock);
+            var (campaign, item, _) = await DocumentedLines.StandInsAsync(db, JournalKinds.ApprovalRequested, harness.Clock.GetUtcNow().UtcDateTime, Ct);
             for (var line = 0; line < 5_000; line++)
             {
-                writer.Append(db, Jason.Runtime.Domain.Actors.Runtime, line % 2 == 0 ? JournalKinds.ApprovalRequested : JournalKinds.WorkItemCreated, campaign: null);
+                writer.AppendDocumented(db, Jason.Runtime.Domain.Actors.Runtime, line % 2 == 0 ? JournalKinds.ApprovalRequested : JournalKinds.WorkItemCreated, campaign, workItem: item);
             }
 
             await db.SaveChangesAsync(Ct);
@@ -370,10 +373,11 @@ public sealed class NotifierTests
         await harness.WriteLineAsync(JournalKinds.ApprovalRequested, Ct);
         await using (var db = harness.Open())
         {
+            var (campaign, item, _) = await DocumentedLines.StandInsAsync(db, JournalKinds.WorkItemUpdated, harness.Clock.GetUtcNow().UtcDateTime, Ct);
             var writer = new JournalWriter(harness.Clock);
             for (var line = 0; line < Notifier.ReadBatch + 500; line++)
             {
-                writer.Append(db, Jason.Runtime.Domain.Actors.Runtime, JournalKinds.WorkItemUpdated, campaign: null);
+                writer.AppendDocumented(db, Jason.Runtime.Domain.Actors.Runtime, JournalKinds.WorkItemUpdated, campaign, workItem: item);
             }
 
             await db.SaveChangesAsync(Ct);
@@ -401,6 +405,9 @@ public sealed class NotifierTests
 
     private static JsonObject Line(string coveredThrough, DateTime? lastDeliveredAt) => new()
     {
+        ["notification_id"] = "ntf_earlier",
+        ["counts"] = new JsonObject { ["approvals"] = 1, ["decisions"] = 0 },
+        ["channels"] = new JsonArray(),
         ["covered_through"] = coveredThrough,
         ["last_delivered_at"] = lastDeliveredAt?.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture),
     };

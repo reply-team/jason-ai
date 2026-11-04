@@ -1,0 +1,11 @@
+{
+  "kind": "project_updated",
+  "version": 1,
+  "case": "a project renamed",
+  "body": {
+    "key": "prj_01JC0000000000000000000009",
+    "old": { "name": "Spring launch" },
+    "new": { "name": "Spring launch, EMEA" }
+  },
+  "expect": "valid"
+}

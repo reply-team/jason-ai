@@ -1,0 +1,7 @@
+{
+  "kind": "context_updated",
+  "version": 1,
+  "case": "the reason travels beside the body, never in it",
+  "body": { "key": "tone", "old": null, "new": "warm", "reason": "asked for" },
+  "expect": { "invalid": [{ "pointer": "/reason", "reason": "additional_properties" }] }
+}
