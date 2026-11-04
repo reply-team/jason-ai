@@ -238,6 +238,7 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
         var what = problem.Code switch
         {
             "reserved" => "is a flag the runtime composes for every attempt",
+            "denied" => "is granted and denied by the profile itself",
             _ => "is refused by the host's rules",
         };
         return $"The execution profile '{launch.Profile.Name}' (revision {launch.Revision.Number}) is refused by this build's rules for {AgentHosts.Word(host.Kind)}: "
