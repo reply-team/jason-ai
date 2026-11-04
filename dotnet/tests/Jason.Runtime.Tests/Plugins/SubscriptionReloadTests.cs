@@ -4,11 +4,15 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Routing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Plugins;
 
@@ -94,7 +98,8 @@ public class SubscriptionReloadTests
 
     /// <summary>
     /// A campaign's route is activated without a plugin load, so it leaves the plugin snapshot, and with it the
-    /// chains, exactly as they were — even when the order section has been edited since.
+    /// chains, exactly as they were — even when the order section has been edited since, and the runtime has seen the
+    /// edit: the row waits for the settings watch before it sets the route, so the order it ignores is one it holds.
     /// </summary>
     [Fact]
     [Critical(Family.W11, "routes are read only at a reload")]
@@ -111,6 +116,14 @@ public class SubscriptionReloadTests
         var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed" }, Ct)).Id;
 
         Settings(api.Paths, settings => Order(settings, Failed, "nobody"));
+        var order = api.Resolve<IOptionsMonitor<SubscriptionOrderOptions>>();
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!Holds(order, Failed, "nobody") && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(25, Ct);
+        }
+
+        Assert.True(Holds(order, Failed, "nobody"));
         await TestRoutes.SetCampaignAsync(api, campaign, operation: null, TestPlugins.FakeProviderId, RouteActivationTests.Workspace(), Ct);
 
         Assert.Same(before, registry.Snapshot);
@@ -205,6 +218,38 @@ public class SubscriptionReloadTests
     }
 
     /// <summary>
+    /// A route that is fine beside an order that is not: the order alone is wrong, so the reload is rejected naming it,
+    /// and the route the candidate could not finish measuring is neither named nor turned into an answer to send again.
+    /// </summary>
+    [Fact]
+    public async Task A_reload_with_an_unmeasured_route_and_a_bad_order_is_rejected_naming_the_order_alone()
+    {
+        PatternTiming timing = TimingOut.Always(value => value == Patterned.Unmeasured);
+        await using var api = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                Patterned.Install(paths);
+                WriteSubscriber(paths, "watcher");
+                Settings(paths, settings => Grant(settings, "watcher", "*"));
+            },
+            configureServices: services => services.AddSingleton(timing));
+        var before = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
+
+        Settings(api.Paths, settings => Order(settings, Failed, "gone"));
+        await TestRoutes.WriteGlobalAsync(api, TestRoutes.GlobalDefault(Patterned.Id, RouteActivationTests.Workspace(Patterned.Unmeasured)), Ct);
+        var details = await RefusedAsync(api);
+
+        var detail = Assert.Single(details);
+        Assert.Equal(("Subscriptions:Order:workitem_failed[0]", SubscriptionProblemCodes.OrderUngranted), (detail.Field, detail.Code));
+        Assert.Empty(api.Resolve<PluginRegistry>().LastReload!.Routes!);
+        var after = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
+        Assert.Equal(before.Snapshot.Id, after.Snapshot.Id);
+        Assert.Equal(before.RoutingSnapshotId, after.RoutingSnapshotId);
+    }
+
+    /// <summary>
     /// The start follows the reload's rule, with the start's outcome for a set it cannot activate: nothing is active,
     /// the report says why, and the runtime runs on, as it does for a bad route.
     /// </summary>
@@ -227,6 +272,45 @@ public class SubscriptionReloadTests
         var problem = Assert.Single(report.Subscriptions);
         Assert.Equal("Subscriptions:Order:workitem_failed[0]", problem.Field);
         Assert.Equal(SubscriptionProblemCodes.OrderUngranted, problem.Code);
+    }
+
+    /// <summary>
+    /// A start with a route that holds and an order that does not: the route is never activated on its own, so a plugin
+    /// set and its routes are active together or not at all, and neither registry holds anything after the refusal.
+    /// </summary>
+    [Fact]
+    public async Task A_start_with_a_route_and_an_order_naming_a_plugin_not_granted_the_kind_activates_nothing_on_either_registry()
+    {
+        await using var api = await StartAsync(paths =>
+        {
+            TestPlugins.InstallFakeProvider(paths);
+            TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, RouteActivationTests.Workspace()));
+            WriteSubscriber(paths, "watcher");
+            Settings(paths, settings => Order(settings, Failed, "watcher"));
+        });
+
+        var registry = api.Resolve<PluginRegistry>();
+        Assert.Empty(registry.Snapshot.Plugins);
+        var routes = api.Resolve<RouteRegistry>().Snapshot;
+        Assert.Null(routes.Global.Default);
+        Assert.Empty(routes.Global.Operations);
+        Assert.Empty(routes.Campaigns);
+        var report = registry.LastReload!;
+        Assert.False(report.Activated);
+        Assert.Empty(report.Routes!);
+        Assert.Equal(SubscriptionProblemCodes.OrderUngranted, Assert.Single(report.Subscriptions).Code);
+    }
+
+    private static bool Holds(IOptionsMonitor<SubscriptionOrderOptions> monitor, string kind, params string[] ids)
+    {
+        try
+        {
+            return monitor.CurrentValue.Order.TryGetValue(kind, out var order) && order.SequenceEqual(ids);
+        }
+        catch (OptionsValidationException)
+        {
+            return false;
+        }
     }
 
     private static Task<Page<JournalEntryDto>> LinesAsync(RuntimeApiFixture api) =>
@@ -277,6 +361,34 @@ public class SubscriptionReloadTests
         Child(Child(settings, "Subscriptions"), "Order")[kind] = Array(ids);
 
     private static JsonArray Array(string[] values) => [.. values.Select(value => (JsonNode)JsonValue.Create(value))];
+
+    /// <summary>A provider whose binding is held to a pattern, and the one value of it these rows let time out.</summary>
+    private static class Patterned
+    {
+        public const string Id = "patterned-provider";
+
+        public const string Unmeasured = "west";
+
+        public static void Install(JasonPaths paths) =>
+            TestPlugins.Write(
+                paths,
+                Id,
+                TestPlugins.Manifest(
+                    Id,
+                    "[campaign.get]",
+                    """
+                    binding:
+                      type: object
+                      additionalProperties: false
+                      required: [workspace]
+                      properties:
+                        workspace:
+                          type: string
+                          pattern: "^[a-z]+$"
+
+                    """),
+                "export function invoke() { return { result: {} }; }");
+    }
 
     private static JsonObject Child(JsonObject parent, string name)
     {
