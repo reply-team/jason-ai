@@ -173,7 +173,7 @@ public sealed class DoctorComposerTests
         Assert.Equal(2, plugins.Count);
         foreach (var plugin in plugins)
         {
-            Assert.Equal(["id", "version", "digest", "status", "problem_codes", "problem_codes_truncated"], Keys(plugin!));
+            Assert.Equal(["id", "version", "digest", "status", "problem_codes", "problem_codes_truncated", "subscriptions", "subscriptions_truncated"], Keys(plugin!));
         }
 
         var unavailable = plugins.Single(plugin => Text(plugin!["id"]) == "<plugin-2>")!;
@@ -1490,6 +1490,73 @@ public sealed class DoctorComposerTests
         Assert.Equal(Enumerable.Range(0, DoctorComposer.MaxProblemCodes).Select(n => $"problem_{n:D2}"), Strings(plugin["problem_codes"]));
         Assert.True(plugin["problem_codes_truncated"]!.GetValue<bool>());
         Assert.Equal(InstanceId, Text(section["system_info"]!["instance_id"]));
+    }
+
+    /// <summary>
+    /// A plugin line names the journal kinds the plugin is granted, as the runtime's words and bounded like its problem
+    /// codes; a kind that is not a word is left out.
+    /// </summary>
+    [Fact]
+    public async Task A_plugin_line_names_the_kinds_it_is_granted_bounded_and_only_as_words()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        string[] kinds = ["SENTINEL kind", .. Enumerable.Range(0, 30).Select(n => $"kind_{n:D2}")];
+        var subscriber = StubRuntime.Plugin("fake-provider", "sha256:3f2a", PluginStatus.Valid, []) with
+        {
+            Capabilities = new PluginCapabilitiesDto(null, null, null) { Subscriptions = new ListCapabilityDto(kinds, kinds) },
+        };
+        var quiet = StubRuntime.Plugin("notifier", "sha256:9a8b", PluginStatus.Valid, []);
+        runtime.Registry = new PluginRegistryDto(new SnapshotDto("snp_01JDOCTOR", Now, SnapshotSource.Startup, 2), "rts_01JDOCTOR", [subscriber, quiet], null, Activated: true);
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var plugins = Section(bundle, "runtime")["plugins"]!.AsArray();
+        var line = plugins.Single(plugin => Strings(plugin!["subscriptions"]).Count > 0)!;
+        Assert.Equal(Enumerable.Range(0, DoctorComposer.MaxSubscriptions).Select(n => $"kind_{n:D2}"), Strings(line["subscriptions"]));
+        Assert.True(line["subscriptions_truncated"]!.GetValue<bool>());
+        var other = plugins.Single(plugin => plugin != line)!;
+        Assert.Empty(Strings(other["subscriptions"]));
+        Assert.False(other["subscriptions_truncated"]!.GetValue<bool>());
+        AssertAbsent(bundle, "SENTINEL kind");
+    }
+
+    /// <summary>
+    /// Which plugins an order lists and what a grant names are a person's choices: the bundle carries the settings' shape,
+    /// never those values, and a plugin this repository does not ship is its alias in the status fact that names the
+    /// plugins handling journal kinds, as it is everywhere else.
+    /// </summary>
+    [Fact]
+    public async Task The_order_and_the_grant_travel_by_shape_and_a_subscriber_s_id_by_its_alias()
+    {
+        using var dir = new TempPaths();
+        const string Own = "sentinel-relay";
+        Directory.CreateDirectory(Path.Combine(dir.Paths.PluginsDirectory, Own));
+        File.WriteAllText(Path.Combine(dir.Paths.PluginsDirectory, Own, "plugin.yaml"), $"id: {Own}");
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(
+            dir.Paths.UserSettingsFile,
+            new JsonObject
+            {
+                ["Plugins"] = new JsonObject { ["Grants"] = new JsonObject { [Own] = new JsonObject { ["Subscriptions"] = new JsonArray("SENTINEL_GRANTED_KIND") } } },
+                ["Subscriptions"] = new JsonObject { ["Order"] = new JsonObject { ["workitem_failed"] = new JsonArray(Own, "sentinel-ordered") } },
+            }.ToJsonString());
+
+        var runtime = Running(dir);
+        var subscriber = StubRuntime.Plugin(Own, "sha256:own", PluginStatus.Valid, []) with
+        {
+            Capabilities = new PluginCapabilitiesDto(null, null, null) { Subscriptions = new ListCapabilityDto(["workitem_failed"], ["workitem_failed"]) },
+        };
+        runtime.Registry = new PluginRegistryDto(new SnapshotDto("snp_01JDOCTOR", Now, SnapshotSource.Startup, 1), "rts_01JDOCTOR", [subscriber], null, Activated: true);
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "plugin_subscriptions")!;
+        Assert.Equal("ok", Text(check["state"]));
+        Assert.StartsWith("<plugin-1> handles workitem_failed.", Text(check["fact"]), StringComparison.Ordinal);
+        Assert.Equal(["workitem_failed"], Strings(Section(bundle, "runtime")["plugins"]![0]!["subscriptions"]));
+        Assert.NotNull(Section(bundle, "config")["settings_file"]!["shape"]!["members"]!["Subscriptions"]);
+        AssertAbsent(bundle, Own, "sentinel-ordered", "SENTINEL_GRANTED_KIND");
     }
 
     /// <summary>
