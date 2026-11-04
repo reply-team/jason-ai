@@ -231,7 +231,8 @@ A sixth family is published here, and it is no work either: the **kinds the runt
 lines**. A line the runtime writes under one of its kinds — `campaign_paused`, `workitem_succeeded`, `reply_classified`
 and the rest — is a fact it recorded, and every kind it reserves gets one document under [`journal/`](journal), named
 for the kind, with its fixtures under [`fixtures/journal/`](fixtures/journal). A kind a person or an agent appends
-under a name of its own through `journal.append` has no document here and is never checked against one.
+under a name of its own through `journal.append` has no document here and is never checked against one. The runtime
+answers these documents through `journal.kinds` (`docs/runtime-api.md`), each entity's `at` always a list there.
 
 A document is `{kind, version, since, summary, subscribable, entities, field_since, body}` and nothing else:
 

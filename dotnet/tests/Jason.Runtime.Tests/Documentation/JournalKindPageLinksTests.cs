@@ -24,6 +24,16 @@ public partial class JournalKindPageLinksTests
         Assert.DoesNotContain(list, text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The contract's own section and the decision that made the kinds a contract both say where a program reads the
+    /// documents from a runtime, and in what shape a place comes back.
+    /// </summary>
+    [Theory]
+    [InlineData("contracts/README.md", "The runtime answers these documents through `journal.kinds` (`docs/runtime-api.md`), each entity's `at` always a list there.")]
+    [InlineData("architecture.md", "The runtime answers these documents through `journal.kinds`.")]
+    public void The_contract_and_its_decision_say_the_runtime_answers_the_documents(string page, string sentence) =>
+        Assert.Contains(sentence, Whitespace().Replace(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", page)), " "), StringComparison.Ordinal);
+
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
 }
