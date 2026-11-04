@@ -147,10 +147,12 @@ such a unit exists only while the person is signed in.
   and checked by tests here; it has not been watched on a Mac.
 - **A click** on the banner, or on its entry in the notification center, opens your UI on Windows: on the one approval
   or question when exactly one waits, on the list of what waits otherwise, paired as `jason ui open` pairs (§7). On
-  macOS and Linux a click opens nothing of Jason's; `jason ui open` reaches the same page.
-- **Copy prompt.** A toast for one item also has a **Copy prompt** button. It shows nothing: it puts on the clipboard
-  the text `jason approval get <approval-id> --prompt` or `jason decision get <decision-id> --prompt` prints, for you to
-  paste into your agent host. The list's toast has no button, and neither has a toast whose link is not Jason's (§7).
+  macOS and Linux a click opens nothing of Jason's; `jason ui open` reaches the same page. The real click on a real
+  toast is not yet measured on a machine; the link's handling is composed and checked by tests here.
+- **Copy prompt.** A toast for one item also has a **Copy prompt** button. It shows no page of Jason's: it puts on the
+  clipboard the text `jason approval get <approval-id> --prompt` or `jason decision get <decision-id> --prompt`
+  prints, for you to paste into your agent host. The list's toast has no button, and neither has a toast whose link is
+  not Jason's (§7).
 - **A page you visit can open a `jason:` link too**, after your browser's own confirmation, and it can do nothing a
   click cannot: your own UI opens on the list, or on an item whose id the page could have typed, or Jason's own prompt
   for such an item replaces what was on your clipboard, for an id the runtime answers, or a new terminal opens running
@@ -269,9 +271,9 @@ jason journal list --kind notification_sent
   key is Jason's. A machine-wide `jason` another program installs after Jason's per-user key is shadowed by it, which is
   Windows' own rule for a class both hold. The link follows the executable that last showed a toast: a
   development runtime that shows one re-points it to its own executable until the installed one shows the next, as the
-  AppUserModelID's display name already follows whichever showed the last. The executable is a console program: on
-  Windows 11 24H2 and later a click opens no window, and on earlier Windows a console window shows while the link is
-  handled.
+  AppUserModelID's display name already follows whichever showed the last. The executable is a console program. A real
+  click on a real toast, with its window or none, is not yet measured on a machine; on Windows 11 24H2 and later a
+  click should open no window, and on earlier Windows a console window should show while the link is handled.
 - **Shown by a child of the same executable**, `jason toast-host`, which ends once it has shown the toast and read the
   Setting, and is the only place the WinRT interop runs: a fault in it ends that child, recorded as a failed toast,
   never the runtime. What a walk saw of it is in §10.

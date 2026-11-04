@@ -1356,9 +1356,10 @@ are the operations' own examples; §7 says how to drive one through the host by 
   first: the search path is walked to its end, any `.exe` or `.com` in any directory wins outright, and
   only then is the first `.cmd` that was found read. Every one of these has to hold, and a file that
   breaks one is refused with that rule named:
-  - the file is at most 8 KiB and matches one of npm's two current `:find_dp0` templates exactly —
-    the one that hands an entry script to node, or the one whose call is the target alone — so an older
-    template, or a line either never holds, is refused;
+  - the file is at most 8 KiB and matches one of npm's two current `:find_dp0` templates —
+    the one that hands an entry script to node, held to its four marker lines and its call line, or the one
+    whose call is the target alone, held line for line — so an older template, whose markers are missing, or a call
+    line neither form holds, is refused;
   - the package is one directory under `node_modules`, or two for a **scoped package**
     (`node_modules\@scope\name\…`), and each of them reads as a name before any path is built from it —
     the scope as `@` and a package name, the package as a package name — so a segment that is not a
@@ -1374,13 +1375,15 @@ are the operations' own examples; §7 says how to drive one through the host by 
   - for a shim that hands an entry script to node, `node.exe` is found beside the shim or on the same
     search path, and recorded as an absolute path.
 
+  A real npm install of Claude Code, the form with no interpreter, is not yet measured on a machine.
+
   What the name resolved to is visible in `plugin list` and in the envelope as `launch`, and every
   `host.exec` line records it.
 
   Resolving a shim means the runtime now reads a file to decide what to start, which it did not do
   before. It does not widen who can substitute the program — anyone who can write npm's directory can
   already replace an `.exe` on the search path — but it is a new kind of trust, so it is narrow on
-  purpose: npm's exact template, the package's own `bin` entry as a cross-check, the entry script held
+  purpose: npm's template, the package's own `bin` entry as a cross-check, the entry script held
   inside the package directory, an absolute interpreter or a program image by its name, and the whole
   thing re-read at every reload, never remembered from the last one. A file that deviates in any of
   those is refused with the rule it broke, exactly as a `.cmd` is refused today.
