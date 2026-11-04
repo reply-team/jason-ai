@@ -4,6 +4,7 @@ using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Journal;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Dispatch;
@@ -148,10 +149,20 @@ public class ManagerHostileInputTests
     {
         await using var db = harness.Open();
         var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignPublicId, Ct);
+        var (_, item, attempt) = await DocumentedLines.StandInsAsync(
+            db, JournalKinds.WorkItemFailed, harness.Clock.GetUtcNow().UtcDateTime, Ct, campaign, attempt: true);
         var writer = new JournalWriter(harness.Clock);
         for (var i = 0; i < lines; i++)
         {
-            writer.Append(db, Actors.Dispatcher, JournalKinds.WorkItemFailed, campaign, key: "status");
+            writer.Append(
+                db,
+                Actors.Dispatcher,
+                JournalKinds.WorkItemFailed,
+                campaign,
+                key: attempt!.PublicId,
+                updated: DocumentedLines.Failure(),
+                workItem: item,
+                attempt: attempt);
         }
 
         await db.SaveChangesAsync(Ct);

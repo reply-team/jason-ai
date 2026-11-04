@@ -1,0 +1,48 @@
+{
+  "kind": "profile_revised",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "An execution profile was changed: the line names the fields the change named and the revision current after it, never their values.",
+  "subscribable": true,
+  "entities": {
+    "profile": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The profile's name." },
+      "old": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["revision"],
+        "properties": {
+          "revision": { "type": "integer", "minimum": 1, "description": "The revision that was current before the change." }
+        }
+      },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["revision", "fields"],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The revision current after the change. A change of the description alone appends no revision, so there it is the number before."
+          },
+          "fields": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "The fields the change named, in the order the profile states them.",
+            "items": {
+              "enum": ["description", "host", "program", "args", "deny", "tools", "cli_command", "host_version_verified"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

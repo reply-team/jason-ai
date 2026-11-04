@@ -1,0 +1,41 @@
+{
+  "kind": "contacts_added",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "One request added people to a campaign: the line counts what happened to its items and names the people it added.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/new/contact_ids", "presence": "sometimes", "each": true }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "null" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["added", "already_member", "rejected", "contact_ids", "created_contact_ids"],
+        "properties": {
+          "added": { "type": "integer", "minimum": 0, "description": "Items that made a person a member of the campaign." },
+          "already_member": { "type": "integer", "minimum": 0, "description": "Items naming a person the campaign already held." },
+          "rejected": { "type": "integer", "minimum": 0, "description": "Items refused, each answered with its error in the response." },
+          "contact_ids": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^cnt_" },
+            "description": "The people added, in the order of the request; empty when nobody was."
+          },
+          "created_contact_ids": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^cnt_" },
+            "description": "Those of the people added that the request also created in the contact directory."
+          }
+        }
+      }
+    }
+  }
+}

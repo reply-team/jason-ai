@@ -1,0 +1,7 @@
+{
+  "kind": "role_updated",
+  "version": 1,
+  "case": "a profile is named by its name, never a number",
+  "body": { "key": "researcher", "old": null, "new": 3 },
+  "expect": { "invalid": [{ "pointer": "/new", "reason": "type" }] }
+}

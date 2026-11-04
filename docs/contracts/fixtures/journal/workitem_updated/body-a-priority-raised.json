@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_updated",
+  "version": 1,
+  "case": "a work item's priority is raised",
+  "body": { "key": "priority", "old": 0, "new": 10 },
+  "expect": "valid"
+}

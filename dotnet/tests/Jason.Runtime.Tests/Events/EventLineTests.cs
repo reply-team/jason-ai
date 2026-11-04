@@ -140,6 +140,16 @@ public class EventLineTests
                 Kind = JournalKinds.InboundReplyObserved,
                 CampaignId = campaign.Id,
                 Key = InboundSync.ObservationKey(Reader, "t_501", Stamp(at)),
+                New = new JsonObject
+                {
+                    ["plugin"] = Reader,
+                    ["thread"] = "t_501",
+                    ["channel"] = "email",
+                    ["last_activity_at"] = Stamp(at),
+                    ["unread"] = true,
+                    ["has_meeting_intent"] = null,
+                    ["contact_id"] = null,
+                },
             });
             await db.SaveChangesAsync(Ct);
         }

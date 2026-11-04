@@ -1,0 +1,7 @@
+{
+  "kind": "external_id_origin",
+  "version": 1,
+  "case": "an origin is found or created",
+  "body": { "key": "contact/example-provider/person", "old": null, "new": "updated" },
+  "expect": { "invalid": [{ "pointer": "/new", "reason": "enum" }] }
+}

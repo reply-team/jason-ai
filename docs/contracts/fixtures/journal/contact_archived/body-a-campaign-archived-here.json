@@ -1,0 +1,7 @@
+{
+  "kind": "contact_archived",
+  "version": 1,
+  "case": "the key is the person's id, never a campaign's",
+  "body": { "key": "cmp_01JC0000000000000000000001", "old": null, "new": null },
+  "expect": { "invalid": [{ "pointer": "/key", "reason": "pattern" }] }
+}

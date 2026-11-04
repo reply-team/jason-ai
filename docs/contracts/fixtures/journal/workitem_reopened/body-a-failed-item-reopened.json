@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_reopened",
+  "version": 1,
+  "case": "only an expired item is reopened",
+  "body": { "key": "status", "old": "failed", "new": "created" },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "const" }] }
+}

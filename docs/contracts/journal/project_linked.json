@@ -1,0 +1,37 @@
+{
+  "kind": "project_linked",
+  "version": 1,
+  "since": "0.15.0",
+  "summary": "A project's folder, or the folders of its campaigns, were recorded again where they now stand.",
+  "subscribable": true,
+  "entities": {
+    "project": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^prj_", "description": "The project." },
+      "old": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["folder_path", "campaigns"],
+        "properties": {
+          "folder_path": { "type": ["null", "string"], "minLength": 1, "description": "The project's folder as it was recorded before, or null where none was." },
+          "campaigns": { "type": "object", "description": "From the id of each campaign whose folder was recorded again to its folder as recorded before, or null where none was." }
+        }
+      },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["folder_path", "campaigns"],
+        "properties": {
+          "folder_path": { "type": "string", "minLength": 1, "description": "The project's folder as now recorded." },
+          "campaigns": { "type": "object", "description": "From the id of each campaign whose folder was recorded again to its folder as now recorded." }
+        }
+      }
+    }
+  }
+}

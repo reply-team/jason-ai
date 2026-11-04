@@ -1,0 +1,37 @@
+{
+  "kind": "preference_set",
+  "version": 1,
+  "since": "0.14.0",
+  "summary": "A person set a named preference, recorded by the value's size and hash and never the value.",
+  "subscribable": true,
+  "entities": {},
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The preference's key." },
+      "old": {
+        "type": ["null", "object"],
+        "description": "The value it replaced, by size and hash, or null where the key was not set.",
+        "additionalProperties": false,
+        "required": ["bytes", "hash"],
+        "properties": {
+          "bytes": { "type": "integer", "minimum": 0, "description": "The size of the value's canonical form, in bytes." },
+          "hash": { "type": "string", "pattern": "^sha256:", "description": "The sha256: of the value's canonical form." }
+        }
+      },
+      "new": {
+        "type": "object",
+        "description": "The value now set, by size and hash.",
+        "additionalProperties": false,
+        "required": ["bytes", "hash"],
+        "properties": {
+          "bytes": { "type": "integer", "minimum": 0, "description": "The size of the value's canonical form, in bytes." },
+          "hash": { "type": "string", "pattern": "^sha256:", "description": "The sha256: of the value's canonical form." }
+        }
+      }
+    }
+  }
+}

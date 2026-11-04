@@ -54,6 +54,10 @@ public static class TestRuntimeOptions
         // is a folder the test removes, never ~/Jason. A property rather than a line in the hook, for the reason the
         // feed's handler is one: a test that replaces the hook replaces it whole.
         Home = paths => TempDataDir.HomeOf(paths.Root),
+        // Every test runtime refuses a journal line of a reserved kind that is off its document, as every context a test
+        // builds itself does, so a writer that drifts from its document fails the test that drives it. An installation
+        // writes the line and logs its kind.
+        JournalLinesStrict = true,
     };
 
     /// <summary>

@@ -87,7 +87,7 @@ internal sealed class DispatchHarness : IDisposable
         services.AddSingleton(Status);
         services.AddDbContext<JasonDbContext>(o =>
         {
-            JasonDbContext.Configure(o, _database.File);
+            JasonDbContext.Configure(o, _database.File, JournalLines.Strict);
             o.AddInterceptors(new SaveHook(Take), Commands);
         });
 
@@ -198,11 +198,24 @@ internal sealed class DispatchHarness : IDisposable
         return await notifier.NotifyAsync(services.GetRequiredService<JasonDbContext>(), ct);
     }
 
-    /// <summary>One journal line, written by the runtime at the harness clock's time, as a step of the runtime would.</summary>
+    /// <summary>
+    /// One journal line, written by the runtime at the harness clock's time, as a step of the runtime would: in the shape
+    /// its kind's document states, with the members of <paramref name="updated"/> over the documented ones, and naming
+    /// stand-ins where the document names a campaign, a work item or an attempt on every line.
+    /// </summary>
     public async Task<JournalEntry> WriteLineAsync(string kind, CancellationToken ct, System.Text.Json.Nodes.JsonObject? updated = null)
     {
         await using var db = Open();
-        var entry = new JournalWriter(Clock).Append(db, Actors.Runtime, kind, campaign: null, updated: updated);
+        var (campaign, item, attempt) = await Tests.Journal.DocumentedLines.StandInsAsync(db, kind, Clock.GetUtcNow().UtcDateTime, ct);
+        var entry = Tests.Journal.DocumentedLines.AppendDocumented(
+            new JournalWriter(Clock),
+            db,
+            Actors.Runtime,
+            kind,
+            campaign,
+            with: updated,
+            workItem: item,
+            attempt: attempt);
         await db.SaveChangesAsync(ct);
         return entry;
     }

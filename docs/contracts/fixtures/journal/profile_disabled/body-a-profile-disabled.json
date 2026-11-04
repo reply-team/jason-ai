@@ -1,0 +1,7 @@
+{
+  "kind": "profile_disabled",
+  "version": 1,
+  "case": "a profile disabled",
+  "body": { "key": "local-agent", "old": null, "new": null },
+  "expect": "valid"
+}

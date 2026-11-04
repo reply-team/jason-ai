@@ -1,0 +1,7 @@
+{
+  "kind": "role_note_set",
+  "version": 1,
+  "case": "the client's note for a role names neither a campaign nor a project",
+  "body": { "key": "researcher", "old": null, "new": { "role": "researcher", "bytes": 12, "hash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } },
+  "expect": "valid"
+}

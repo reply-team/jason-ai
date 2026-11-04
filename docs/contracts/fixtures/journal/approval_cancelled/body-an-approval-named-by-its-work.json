@@ -1,0 +1,15 @@
+{
+  "kind": "approval_cancelled",
+  "version": 1,
+  "case": "the approval is named by its own id, never by its work item's",
+  "body": {
+    "key": "approval",
+    "old": null,
+    "new": {
+      "id": "wi_01JC0000000000000000000002",
+      "operation": "message.send",
+      "subject_hash": "sha256:9f2c4e1a7b3d5f60817263544536271809a1b2c3d4e5f60718293a4b5c6d7e8f"
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/id", "reason": "pattern" }] }
+}

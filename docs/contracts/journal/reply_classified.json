@@ -1,0 +1,77 @@
+{
+  "kind": "reply_classified",
+  "version": 1,
+  "since": "0.25.0",
+  "summary": "A reply in a campaign was given a verdict: what kind of reply it is, how sure the verdict is, and what is to be done about it.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "sometimes" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "decision": { "at": "/new/decision_id", "presence": "sometimes" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^sha256:", "description": "A hash over the plugin, the thread and the message: every verdict on one reply is a line of its own under the same key." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["plugin", "thread", "message_id", "message_at", "contact_id", "category", "confidence", "reaction", "goal_id", "goal_kind", "decision_id", "answered_by"],
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1, "maxLength": 256, "description": "The plugin the reply was read through." },
+          "thread": { "type": "string", "minLength": 1, "maxLength": 256, "description": "The provider's identifier for the thread." },
+          "message_id": { "type": "string", "minLength": 1, "maxLength": 256, "description": "The provider's identifier for the reply." },
+          "message_at": { "type": "string", "format": "date-time", "description": "When the reply arrived." },
+          "contact_id": { "type": ["null", "string"], "pattern": "^cnt_", "description": "The contact who replied, or null where the verdict names none." },
+          "category": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The word that names what kind of reply it is." },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1, "description": "How sure the verdict is, from 0 to 1." },
+          "reaction": { "type": "string", "enum": ["act", "draft", "escalate", "none"], "description": "What is to be done about the reply." },
+          "goal_id": { "type": ["null", "string"], "minLength": 1, "description": "The campaign's goal the reply bears on, or null." },
+          "goal_kind": { "type": ["null", "string"], "description": "That goal's kind, as the campaign's goals give it, or null where no goal is named." },
+          "decision_id": { "type": ["null", "string"], "pattern": "^dec_", "description": "The campaign's question whose answer the verdict carries, or null." },
+          "answered_by": {
+            "type": ["null", "object"],
+            "description": "Who answered that question, or null where the verdict carries no answer.",
+            "additionalProperties": false,
+            "required": ["type", "id"],
+            "properties": {
+              "type": { "type": "string", "enum": ["human", "role", "system", "attempt"] },
+              "id": { "type": ["null", "string"] }
+            }
+          }
+        }
+      }
+    },
+    "anyOf": [
+      {
+        "description": "A verdict that carries no answer.",
+        "properties": {
+          "new": {
+            "properties": {
+              "decision_id": { "type": "null" },
+              "answered_by": { "type": "null" }
+            }
+          }
+        }
+      },
+      {
+        "description": "A verdict that carries the answer to one of the campaign's questions.",
+        "properties": {
+          "new": {
+            "properties": {
+              "decision_id": { "type": "string" },
+              "answered_by": { "type": "object" }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

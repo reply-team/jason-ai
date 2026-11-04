@@ -1,0 +1,24 @@
+{
+  "kind": "workitem_cancelled",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A work item was cancelled before it finished, together with its live attempt, if it had one.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "status" },
+      "old": { "enum": ["created", "awaiting_approval", "scheduled", "processing", "expired", "waiting"], "description": "The status the item left: any status but the three it never leaves, succeeded, failed and cancelled." },
+      "new": { "const": "cancelled" }
+    }
+  }
+}

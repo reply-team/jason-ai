@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_awaiting_approval",
+  "version": 1,
+  "case": "running work is never parked: the claim parks it before it runs",
+  "body": { "key": "status", "old": "processing", "new": "awaiting_approval" },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "const" }] }
+}

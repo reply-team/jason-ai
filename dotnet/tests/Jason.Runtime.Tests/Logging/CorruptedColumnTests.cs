@@ -318,7 +318,7 @@ public sealed class CorruptedColumnTests
         };
         db.Campaigns.Add(campaign);
         db.CampaignRoutes.Add(route);
-        var line = new JournalWriter(TimeProvider.System).Append(db, Actors.Runtime, JournalKinds.NotificationSent, campaign: null, updated: new JsonObject());
+        var line = new JournalWriter(TimeProvider.System).Append(db, Actors.Runtime, JournalKinds.NotificationSent, campaign: null, key: "notification", updated: new NotificationLine("ntf_earlier", 1, 0, null, [], null).ToJson());
         db.SaveChanges();
 
         // The journal takes no update, so the line the notifier reads is a copy of the one just written, with its value

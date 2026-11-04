@@ -1,0 +1,7 @@
+{
+  "kind": "role_updated",
+  "version": 1,
+  "case": "a role's profile is cleared",
+  "body": { "key": "researcher", "old": "local-agent", "new": null },
+  "expect": "valid"
+}

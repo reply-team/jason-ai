@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_updated",
+  "version": 1,
+  "case": "a work item gives its own timeout back to the installation's",
+  "body": { "key": "timeout_seconds", "old": 600, "new": null },
+  "expect": "valid"
+}

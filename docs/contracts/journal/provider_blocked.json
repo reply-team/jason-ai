@@ -1,0 +1,62 @@
+{
+  "kind": "provider_blocked",
+  "version": 1,
+  "since": "0.18.0",
+  "summary": "An open provider block held work of a campaign, said once in each campaign it holds work of.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/new/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "plugin": { "at": "/new/plugin_id", "presence": "always" },
+    "provider_block": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^blk_", "description": "The block." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider_block_id", "plugin_id", "scope", "sender_external_id", "reason", "clears_at", "work_item_id"],
+        "properties": {
+          "provider_block_id": { "type": "string", "pattern": "^blk_", "description": "The block, as the key says." },
+          "plugin_id": { "type": "string", "minLength": 1, "description": "The plugin whose provider refused." },
+          "scope": { "type": "string", "enum": ["account", "sender"], "description": "Every call through the binding, or one sending account under it." },
+          "sender_external_id": { "type": ["null", "string"], "minLength": 1, "description": "The provider's identifier of the blocked sending account; null for a block of the whole account." },
+          "reason": { "type": "string", "enum": ["billing", "limit", "credential", "channel", "other"], "description": "Why, in the words of the provider block contract." },
+          "clears_at": { "type": ["null", "string"], "format": "date-time", "description": "When the provider says the block clears by itself, or null where it did not say." },
+          "work_item_id": { "type": "string", "pattern": "^wi_", "description": "The work item that met the block first in this campaign." }
+        }
+      }
+    },
+    "anyOf": [
+      {
+        "description": "A block of the whole account.",
+        "properties": {
+          "new": {
+            "properties": {
+              "scope": { "const": "account" },
+              "sender_external_id": { "type": "null" }
+            }
+          }
+        }
+      },
+      {
+        "description": "A block of one sending account.",
+        "properties": {
+          "new": {
+            "properties": {
+              "scope": { "const": "sender" },
+              "sender_external_id": { "type": "string" }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

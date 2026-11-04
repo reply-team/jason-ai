@@ -1,0 +1,17 @@
+{
+  "kind": "notification_sent",
+  "version": 1,
+  "case": "every line says what each channel did",
+  "body": {
+    "key": "notification",
+    "old": null,
+    "new": {
+      "notification_id": "ntf_01JC000000000000000000000A",
+      "counts": { "approvals": 2, "decisions": 1, "protective_failures": 0, "event_gaps": 0, "blocks": 1 },
+      "covered_through": "jrn_01JC000000000000000000000B",
+      "last_delivered_at": "2026-10-28T09:15:02.418Z",
+      "delivered_through": "jrn_01JC000000000000000000000B"
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/channels", "reason": "required" }] }
+}

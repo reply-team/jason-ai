@@ -67,4 +67,12 @@ public sealed record RuntimeHostOptions(
     /// runtime to ask, so this is how a test sees that it gave the configuration, and the settings file's watch, back.
     /// </summary>
     internal Action<Microsoft.Extensions.Configuration.IConfigurationRoot>? ConfigurationBuilt { get; init; }
+
+    /// <summary>
+    /// Whether a journal line of a reserved kind written off its document is refused rather than written and logged
+    /// (<see cref="Persistence.JournalLines"/>). False, the default, is what a running installation does: the line the
+    /// runtime meant to keep is kept, and the log names its kind. The test suite sets it, so a writer that drifts from
+    /// its document fails the test that drives it; a property of its own for the reason <see cref="Home"/> is one.
+    /// </summary>
+    internal bool JournalLinesStrict { get; init; }
 }

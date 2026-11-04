@@ -1,0 +1,55 @@
+{
+  "kind": "role_note_set",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A role's note at one level, a campaign, a project or the client, was written; the line records its size and hash, never what it says.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "sometimes" },
+    "project": { "at": "/new/project_id", "presence": "sometimes" },
+    "role": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {
+    "/new/project_id": "0.15.0"
+  },
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "description": "The role whose note this is." },
+      "old": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["bytes", "hash"],
+        "description": "The note this one replaced, by its size and hash, or null where the level held no note for the role.",
+        "properties": {
+          "bytes": { "type": "integer", "minimum": 0, "description": "The size of the note's canonical form in UTF-8." },
+          "hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        }
+      },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "bytes", "hash"],
+        "description": "The note as written, by its size and hash, and the level it was written at: a campaign's id, a project's id, or neither for the client.",
+        "not": { "required": ["campaign_id", "project_id"] },
+        "properties": {
+          "campaign_id": {
+            "type": "string",
+            "pattern": "^cmp_",
+            "description": "The campaign whose note this is; absent at a project's or the client's level."
+          },
+          "project_id": {
+            "type": "string",
+            "pattern": "^prj_",
+            "description": "The project whose note this is; absent at a campaign's or the client's level."
+          },
+          "role": { "type": "string", "minLength": 1, "description": "The role whose note this is, the same as the key." },
+          "bytes": { "type": "integer", "minimum": 0, "description": "The size of the note's canonical form in UTF-8." },
+          "hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}

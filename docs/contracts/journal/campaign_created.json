@@ -1,0 +1,21 @@
+{
+  "kind": "campaign_created",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A campaign was created as a draft, under the name the line carries.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "name" },
+      "old": { "type": "null" },
+      "new": { "type": "string", "minLength": 1, "description": "The name the campaign was created with." }
+    }
+  }
+}

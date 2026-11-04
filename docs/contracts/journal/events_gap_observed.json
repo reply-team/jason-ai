@@ -1,0 +1,32 @@
+{
+  "kind": "events_gap_observed",
+  "version": 1,
+  "since": "0.12.0",
+  "summary": "A span of an account's provider events was older than the store reads back, so it went unread and is said as a gap.",
+  "subscribable": true,
+  "entities": {
+    "event_source": { "at": "/new/source", "presence": "always" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^gap/evs_", "description": "The account and the start of the gap: a gap is said once." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "plugin", "from", "to"],
+        "properties": {
+          "source": { "type": "string", "pattern": "^evs_", "description": "The account." },
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin the account is read through." },
+          "from": { "type": "string", "format": "date-time", "description": "Where the unread span starts." },
+          "to": { "type": "string", "format": "date-time", "description": "Where it ends." }
+        }
+      }
+    }
+  }
+}

@@ -38,7 +38,7 @@ internal sealed class EventStoreFixture : IDisposable
     public JasonDbContext Open(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, _database.File);
+        JasonDbContext.Configure(builder, _database.File, JournalLines.Strict);
         builder.AddInterceptors(interceptors);
         return new JasonDbContext(builder.Options);
     }

@@ -1,0 +1,7 @@
+{
+  "kind": "role_added",
+  "version": 1,
+  "case": "a role registered with an entry command",
+  "body": { "key": "researcher", "old": null, "new": { "entry_command_present": true } },
+  "expect": "valid"
+}

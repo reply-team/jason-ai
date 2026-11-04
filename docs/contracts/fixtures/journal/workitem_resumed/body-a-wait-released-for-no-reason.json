@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_resumed",
+  "version": 1,
+  "case": "a released wait always says why",
+  "body": { "key": "att_01JC0000000000000000000005", "old": null, "new": {} },
+  "expect": { "invalid": [{ "pointer": "/new/because", "reason": "required" }] }
+}

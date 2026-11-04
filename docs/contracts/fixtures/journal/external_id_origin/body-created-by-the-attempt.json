@@ -1,0 +1,7 @@
+{
+  "kind": "external_id_origin",
+  "version": 1,
+  "case": "the attempt created the campaign at the provider",
+  "body": { "key": "campaign/example-provider/sequence", "old": null, "new": "created" },
+  "expect": "valid"
+}

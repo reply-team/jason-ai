@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_released",
+  "version": 1,
+  "case": "a restart found an attempt that was claimed and never started",
+  "body": { "key": "att_01JC0000000000000000000005", "old": null, "new": { "code": "interrupted" } },
+  "expect": "valid"
+}

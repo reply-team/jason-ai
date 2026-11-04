@@ -1,0 +1,77 @@
+{
+  "kind": "events_read",
+  "version": 1,
+  "since": "0.12.0",
+  "summary": "One read of an account's provider events ended, with what it read and stored and the failure it ended with, if any.",
+  "subscribable": true,
+  "entities": {
+    "event_source": { "at": "/new/source", "presence": "always" },
+    "plugin": { "at": "/new/plugin", "presence": "always" },
+    "backfill": { "at": "/new/backfill", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "null" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["read_id", "source", "plugin", "binding_identity", "mode", "pages", "stored", "duplicates", "said", "outcome", "code", "class", "plugin_version", "plugin_digest", "plugin_snapshot_id", "routing_snapshot_id", "signaled"],
+        "properties": {
+          "read_id": { "type": "string", "pattern": "^evr_", "description": "The read, as every provider event it stored keeps it." },
+          "source": { "type": "string", "pattern": "^evs_", "description": "The account read." },
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin the account was read through." },
+          "binding_identity": { "type": "string", "minLength": 1, "description": "The account's binding, as the sha256: of its canonical form, or none for a route that names no binding." },
+          "mode": { "type": "string", "enum": ["cursor", "first_start", "gap", "forgotten_cursor", "backfill"], "description": "Where the read started: the account's cursor, the store's depth back from now on a first read, after a gap or after a cursor the plugin forgot, or a span asked for again." },
+          "pages": { "type": "integer", "minimum": 0, "description": "Pages read." },
+          "stored": { "type": "integer", "minimum": 0, "description": "Provider events stored for the first time." },
+          "duplicates": { "type": "integer", "minimum": 0, "description": "Provider events the store already held." },
+          "said": { "type": "integer", "minimum": 0, "description": "Lines said in campaigns from what was stored." },
+          "outcome": { "type": "string", "enum": ["succeeded", "failed", "moved"], "description": "How the read ended; moved where another writer moved the cursor first and nothing of the page was kept." },
+          "code": { "type": ["null", "string"], "minLength": 1, "description": "The failure code of a failed read, or null." },
+          "class": { "type": ["null", "string"], "enum": ["transient", "permanent", "validation", "ambiguous", "blocked", null], "description": "The failure class of a failed read, or null." },
+          "plugin_version": { "type": "string", "minLength": 1, "description": "The version of the plugin the read ran at." },
+          "plugin_digest": { "type": "string", "pattern": "^sha256:", "description": "The content digest of the plugin package the read ran at." },
+          "plugin_snapshot_id": { "type": "string", "minLength": 1, "description": "The plugin snapshot the read was pinned to." },
+          "routing_snapshot_id": { "type": "string", "minLength": 1, "description": "The routing snapshot the read was pinned to." },
+          "signaled": { "type": "boolean", "description": "Whether a signal brought the read forward." },
+          "backfill": { "type": "string", "pattern": "^evb_", "description": "The span asked for again that the read was of; absent for a read of the account's own cursor." },
+          "backfill_status": { "type": "string", "enum": ["pending", "done", "failed"], "description": "Where that span stands after the read." }
+        }
+      }
+    },
+    "anyOf": [
+      {
+        "description": "A read of the account from its own cursor or by date.",
+        "properties": {
+          "new": {
+            "properties": {
+              "mode": { "type": "string", "enum": ["cursor", "first_start", "gap", "forgotten_cursor"] }
+            },
+            "not": {
+              "anyOf": [
+                { "required": ["backfill"] },
+                { "required": ["backfill_status"] }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "description": "A read of a span asked for again.",
+        "properties": {
+          "new": {
+            "properties": {
+              "mode": { "const": "backfill" }
+            },
+            "required": ["backfill", "backfill_status"]
+          }
+        }
+      }
+    ]
+  }
+}

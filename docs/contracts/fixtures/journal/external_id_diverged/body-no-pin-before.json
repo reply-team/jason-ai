@@ -1,0 +1,7 @@
+{
+  "kind": "external_id_diverged",
+  "version": 1,
+  "case": "a divergence is from a pin that stands",
+  "body": { "key": "contact/example-provider/person", "old": null, "new": "50017" },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "type" }] }
+}

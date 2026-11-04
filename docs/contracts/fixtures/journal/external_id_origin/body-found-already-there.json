@@ -1,0 +1,7 @@
+{
+  "kind": "external_id_origin",
+  "version": 1,
+  "case": "the provider already held the contact",
+  "body": { "key": "contact/example-provider/person", "old": null, "new": "found" },
+  "expect": "valid"
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_expired",
+  "version": 1,
+  "case": "a queued item passed its due date",
+  "body": { "key": "due_at", "old": "2026-10-01T10:00:00.000Z", "new": null },
+  "expect": "valid"
+}

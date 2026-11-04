@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_updated",
+  "version": 1,
+  "case": "a status change is a line of its own kind",
+  "body": { "key": "status", "old": "draft", "new": "active" },
+  "expect": { "invalid": [{ "pointer": "/key", "reason": "enum" }, { "pointer": "", "reason": "any_of" }] }
+}

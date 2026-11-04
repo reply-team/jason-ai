@@ -1,0 +1,17 @@
+{
+  "kind": "project_linked",
+  "version": 1,
+  "case": "a project folder a person moved, recorded where it now stands",
+  "body": {
+    "key": "prj_01JC0000000000000000000009",
+    "old": {
+      "folder_path": "/home/someone/Jason/projects/launch",
+      "campaigns": { "cmp_01JC0000000000000000000001": "/home/someone/Jason/projects/launch/campaigns/outreach" }
+    },
+    "new": {
+      "folder_path": "/home/someone/Jason/projects/spring-launch",
+      "campaigns": { "cmp_01JC0000000000000000000001": "/home/someone/Jason/projects/spring-launch/campaigns/outreach" }
+    }
+  },
+  "expect": "valid"
+}

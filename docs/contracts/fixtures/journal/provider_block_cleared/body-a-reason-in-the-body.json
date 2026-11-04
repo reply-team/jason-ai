@@ -1,0 +1,11 @@
+{
+  "kind": "provider_block_cleared",
+  "version": 1,
+  "case": "a person's reason is the line's own, never the body's",
+  "body": {
+    "key": "blk_01JC0000000000000000000008",
+    "old": null,
+    "new": { "provider_block_id": "blk_01JC0000000000000000000008", "reason": "paid the invoice" }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/reason", "reason": "additional_properties" }] }
+}

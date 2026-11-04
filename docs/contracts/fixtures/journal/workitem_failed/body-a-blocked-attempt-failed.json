@@ -1,0 +1,17 @@
+{
+  "kind": "workitem_failed",
+  "version": 1,
+  "case": "an attempt met a provider block and the item had nothing left to try",
+  "body": {
+    "key": "att_01JC0000000000000000000005",
+    "old": null,
+    "new": {
+      "code": "provider_blocked",
+      "message": "The account is out of credits.",
+      "retriable": false,
+      "class": "blocked",
+      "block": { "scope": "account", "reason": "billing" }
+    }
+  },
+  "expect": "valid"
+}
