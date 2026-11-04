@@ -111,7 +111,7 @@ public sealed class UninstallSchemeRegistrationTests
 
         Assert.Equal(ExitCodes.Success, exit);
         var report = Report(output);
-        Assert.Contains(report.Kept, line => line.StartsWith($@"Kept the jason: link registration at HKCU\{LinkRegistration.Key}", StringComparison.Ordinal) && line.Contains(Elsewhere, StringComparison.Ordinal));
+        Assert.Contains($@"Kept the jason: link registration at HKCU\{LinkRegistration.Key}: it holds a command other than this installation's: {Elsewhere}", report.Kept);
         Assert.DoesNotContain(report.Done, line => line.Contains("jason: link", StringComparison.Ordinal));
         Assert.Empty(remover.LinkRemovedFor);
         Assert.NotNull(remover.Link);

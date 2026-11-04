@@ -695,7 +695,7 @@ public static class UninstallRunner
 
                 break;
             case LinkRegistrationFate.Kept:
-                kept.Add($@"Kept the jason: link registration at HKCU\{Key}: its command names another installation ({link.Command}), whose own uninstall removes it.");
+                kept.Add($@"Kept the jason: link registration at HKCU\{Key}: it holds a command other than this installation's: {link.Command}");
                 break;
             case LinkRegistrationFate.Untouched:
                 kept.Add($@"Left the jason: link registration at HKCU\{Key}: it is another program's.");
