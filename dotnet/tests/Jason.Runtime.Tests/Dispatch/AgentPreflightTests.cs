@@ -336,6 +336,29 @@ public class AgentPreflightTests
     }
 
     /// <summary>
+    /// A stored revision whose grant its own deny takes away is refused for that, not for the host's rules: the sentence
+    /// says the profile grants and denies the tool itself, so the repair it points at is the profile's two lists.
+    /// </summary>
+    [Fact]
+    public async Task A_stored_revision_that_grants_and_denies_a_tool_is_refused_in_the_profile_s_own_words()
+    {
+        using var harness = new Harness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "both", "claude", tools: [AgentTool.WebFetch], deny: ["WebFetch"]);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "both");
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Empty(claimed);
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(AttemptErrors.ProfileRevisionRefused, stored.LastError!.Code);
+        Assert.Contains("tools[0] (denied) is granted and denied by the profile itself.", stored.LastError.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("the host's rules", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A profile is a name plus a program, and a program is a fact about the machine. Deciding it here is what
     /// keeps "the host is not installed" a configuration problem somebody can read, rather than a child that
     /// failed to start for reasons buried in an exit code.
@@ -806,7 +829,7 @@ public class AgentPreflightTests
         await db.SaveChangesAsync(Ct);
     }
 
-    private static async Task SeedProfileAsync(JasonDbContext db, string name, string program, bool disabled = false, AgentHostKind host = AgentHostKind.ClaudeCode, string[]? args = null)
+    private static async Task SeedProfileAsync(JasonDbContext db, string name, string program, bool disabled = false, AgentHostKind host = AgentHostKind.ClaudeCode, string[]? args = null, AgentTool[]? tools = null, string[]? deny = null)
     {
         var profile = new ExecutionProfile
         {
@@ -824,7 +847,8 @@ public class AgentPreflightTests
             Host = host,
             Program = program,
             Args = [.. args ?? []],
-            Deny = ["Write"],
+            Deny = [.. deny ?? ["Write"]],
+            Tools = [.. tools ?? []],
             CreatedByType = ActorType.Human,
             CreatedAt = Noon,
         });

@@ -8,10 +8,10 @@ public sealed record HookDecision(string Decision, string Reason);
 
 /// <summary>
 /// The <c>host-hook antigravity-cli</c> mode: the answer to one tool call, which the host asks for through the workspace
-/// hook this runtime writes into an attempt's work directory. It is a pure function of the rules on its command line and
-/// the one JSON document on standard input. It starts no runtime and no child, opens no socket, reads no file and no
-/// environment variable, and writes nothing but the one line of its answer, whose reason is a fixed sentence and never a
-/// word of what it was asked: the input of a tool call can carry a person's text.
+/// hook this runtime writes into an attempt's work directory. It is a function of the rules on its command line and the
+/// one JSON document on standard input. It starts no runtime and no child, opens no socket, reads no file but one look at
+/// what stands at the result path and no environment variable, and writes nothing but the one line of its answer, whose
+/// reason is a fixed sentence and never a word of what it was asked: the input of a tool call can carry a person's text.
 /// </summary>
 /// <remarks>
 /// <c>auto_approve</c> lifts the host's own ask where no rule of the person's settles it, honouring their deny and ask
@@ -147,8 +147,10 @@ public static class AntigravityHook
                 return Text(args, "AbsolutePath") is not { } viewed ? Unreadable : rules.Read.Any(file => SamePath(viewed, file, windows)) ? Approved : Delegated;
 
             case "write_to_file":
-                // A relative path is read against the work directory, the one the host runs in; and a write that
-                // overwrites is never approved.
+                // A relative path is read against the work directory, the one the host runs in. The result file is
+                // approved with or without Overwrite, so a role whose first result was refused can write it again: the
+                // path pins the target and the hook refuses a link or a directory there, so a planted link gains nothing
+                // but a race against the role's own write. Every other write is denied.
                 if (Text(args, "TargetFile") is not { } target)
                 {
                     return Unreadable;
@@ -156,7 +158,7 @@ public static class AntigravityHook
 
                 var workDirectory = Path.GetDirectoryName(rules.Write) ?? "";
                 var full = Path.IsPathFullyQualified(target) || workDirectory.Length == 0 ? target : Path.Combine(workDirectory, target);
-                return SamePath(full, rules.Write, windows) && IsFalseOrAbsent(args, "Overwrite") ? Approved : Floor;
+                return SamePath(full, rules.Write, windows) && NothingOrAPlainFileAt(rules.Write) ? Approved : Floor;
 
             case "read_url_content":
             case "search_web":
@@ -276,6 +278,32 @@ public static class AntigravityHook
 
     private static bool IsBare(char c) =>
         c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_' or '-' or '=' or '.' or '/' or ':' or ',' or '@' or '+';
+
+    /// <summary>
+    /// The hook's one look at the file system: whether nothing, or a plain file, stands at the result path. A link of any
+    /// kind and a directory are not the result file. The link is asked first, since a link whose target is not there is a
+    /// link whatever the attributes say, and then the entry's own attributes; never its content. A look that throws
+    /// reaches the caller, which refuses the call.
+    /// </summary>
+    private static bool NothingOrAPlainFileAt(string path)
+    {
+        if (new FileInfo(path).LinkTarget is not null)
+        {
+            return false;
+        }
+
+        FileAttributes attributes;
+        try
+        {
+            attributes = File.GetAttributes(path);
+        }
+        catch (Exception missing) when (missing is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return true;
+        }
+
+        return (attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) == 0;
+    }
 
     /// <summary>Two full paths are one file when they are the same after normalising; case counts except on Windows. A path that is not full is no file.</summary>
     private static bool SamePath(string given, string known, bool windows)

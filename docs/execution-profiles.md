@@ -914,10 +914,10 @@ the runtime never writes that folder. What a work directory can carry is a works
 `<work directory>/.agents/hooks.json`, and the pre-tool-use handler it names is asked about each tool call and answers
 that the call is approved, refused, or left to the person's own rules. The launch writes one such file, with one handler
 (`jason-attempt`) whose command is the installation's command word, found on the host's search path, with the
-`host-hook antigravity-cli <rules>` mode of the same executable: a pure function of the
-call and the attempt's rules, with no runtime, no child, no file and no environment, which answers one JSON line and
-exits 0 whatever it was given. The rules travel in the command line as one base64url word, so no shell metacharacter
-reaches a shell, and the capability token and the envelope are in none of it. The hook answers:
+`host-hook antigravity-cli <rules>` mode of the same executable: a pure function of the call and the attempt's rules
+and one look at what stands at the result path, with no runtime, no child, no other file and no environment, which
+answers one JSON line and exits 0 whatever it was given. The rules travel in the command line as one base64url word, so
+no shell metacharacter reaches a shell, and the capability token and the envelope are in none of it. The hook answers:
 
 - **a command** is approved only when it is exactly one call of the runtime's command word (`jason`, unless the
   installation names another) in bare words or single-quoted spans, on a foreground command that runs in the work
@@ -930,12 +930,14 @@ reaches a shell, and the capability token and the envelope are in none of it. Th
   quote in it is left to the person.
 - **a view of a file** is approved for exactly the memory files the launch names and left to the person's rules for any
   other.
-- **a write** is approved for `result.json` in the work directory, a relative path being read against the work directory,
-  and only as a write that does not overwrite; nothing else is written. An edit of a file, a question to the person, a
-  sub-agent, a message, a schedule, a task, a permission request and an image are refused. One reach is left: under the
-  host's proceed-in-sandbox or auto mode a command the person's rules allow may plant a link in the work directory that the
-  host's later write follows, and the hook cannot see it, because it reads no file. "Never writable" holds for the host's
-  write tools.
+- **a write** is approved for `result.json` in the work directory, a relative path being read against the work directory:
+  the one result file, written as often as the role needs, and only where nothing or a plain file stands at its path. A
+  link or a directory there is refused, and nothing else is written. An edit of a file, a question to the person, a
+  sub-agent, a message, a schedule, a task, a permission request and an image are refused. Two reaches are left: a
+  command that plants a link between the hook's look and the host's write, and a hard link to a file the account owns,
+  which the look sees as a plain file. Under the host's proceed-in-sandbox mode both are a matter for the person's
+  sandbox, which decides whether a command may link a file outside the work directory; under auto mode either is made by
+  a command that could write anywhere already. "Never writable" holds for the host's write tools.
 - **a fetch of a page or a search** is approved where the profile grants `web_fetch` or `web_search` and refused where it
   does not; the browser tools are refused unless the fetch is granted. A profile stored under 0.26.0 grants no tool on
   this host, since 0.26.0 refused every grant here, so the hook refuses web fetch, web search and the browser tools for

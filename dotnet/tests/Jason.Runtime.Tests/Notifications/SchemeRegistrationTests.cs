@@ -53,6 +53,25 @@ public sealed class SchemeRegistrationTests
         Assert.Empty(registry.Writes);
     }
 
+    /// <summary>
+    /// The real registry's merged view shows this account's own key too, so a key of ours is seen in both places; the
+    /// merged view decides only where our marker is absent, and a key of ours that says the same is still left alone.
+    /// </summary>
+    [Fact]
+    public void A_key_of_ours_the_merged_view_also_shows_is_present_and_nothing_is_written()
+    {
+        var registry = new FakeUserRegistry();
+        Ours(registry);
+        foreach (var ((key, name), value) in registry.Values.ToList())
+        {
+            registry.Classes[(key[@"Software\Classes\".Length..], name)] = value;
+        }
+
+        Assert.Equal(SelfCommand, registry.Classes[(LinkRegistration.ClassesCommandKey, string.Empty)]);
+        Assert.Equal(("present", (string?)null), SchemeRegistration.Ensure(registry, Self));
+        Assert.Empty(registry.Writes);
+    }
+
     /// <summary>A second installation, or a development build, re-points the link to itself at its first toast.</summary>
     [Fact]
     public void A_key_of_ours_naming_another_executable_is_written_again()
