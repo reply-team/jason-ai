@@ -1,6 +1,8 @@
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins.Manifest;
+using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Plugins.Subscriptions;
 
 namespace Jason.Runtime.Tests.Plugins;
@@ -115,6 +117,38 @@ public sealed class ManifestSubscriptionsTests : IDisposable
     }
 
     /// <summary>Nothing ties a subscription to a kind of plugin: a provider and a notification plugin may each declare one.</summary>
+    /// <summary>
+    /// A subscriber reaches the outside world the way any plugin does: it may request programs, hosts and variables, and
+    /// a grant admits them by the rules every kind of plugin follows. A forwarder of journal lines needs a host to forward to.
+    /// </summary>
+    [Fact]
+    public void A_subscriber_plugin_may_request_programs_hosts_and_variables_and_a_grant_admits_them()
+    {
+        var result = Read(Subscriber + """
+            subscriptions: [workitem_failed]
+            capabilities:
+              exec:
+                executables:
+                  - name: forward-cli
+              http:
+                hosts: [hooks.example.test]
+              env:
+                variables: [FORWARD_TOKEN]
+
+            """);
+
+        Assert.True(result.IsValid, Problems(result));
+        var grants = GrantResolver.Resolve(
+            result.Manifest!,
+            new PluginGrant { Exec = ["*"], Http = ["*"], Env = ["*"], Subscriptions = ["*"] });
+
+        Assert.Equal(["forward-cli"], grants.Exec);
+        Assert.Equal(["hooks.example.test"], grants.Http);
+        Assert.Equal(["FORWARD_TOKEN"], grants.Env);
+        Assert.Equal(["workitem_failed"], grants.Subscriptions);
+        Assert.Empty(grants.Warnings);
+    }
+
     [Fact]
     public void A_provider_and_a_notification_plugin_may_subscribe()
     {
