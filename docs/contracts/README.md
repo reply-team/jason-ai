@@ -47,6 +47,8 @@ docs/contracts/
   context/<key>.json               a reserved key of a campaign's context, a fifth family, embedded the same way
   context/<key>.md                 the same key explained, with a generated block
   fixtures/context/<key>/value-*.json   values, accepted and refused, with the pointer and reason of each refusal
+  journal/<kind>.json              a kind of the runtime's own journal lines, a sixth family, embedded the same way
+  fixtures/journal/<kind>/body-*.json   bodies, accepted and refused, with the pointer and reason of each refusal
   block/provider_block.json        the provider block a blocked failure carries, written once for every operation
   block/provider_block.md          the same block explained
   fixtures/block/value-*.json      blocks, accepted and refused, with the pointer and reason of each refusal
@@ -205,23 +207,144 @@ standing approval reads at the claim, and nothing else reads it
 
 **A reserved journal line beside the goals.** A role records its verdict on a reply — the category it read, its
 confidence, the reaction it chose and the goal it steers to — through the Runtime API's `reply.record`
-([`docs/runtime-api.md`](../runtime-api.md)), which writes one reserved journal line, `reply_classified`. The line is
-the runtime's: `journal.append` refuses it to every other writer. It carries the campaign, the contact, the plugin and
-thread, the message's provider identifier and moment, the category as a string, the confidence from 0 to 1, the
-reaction (`act`, `draft`, `escalate` or `none`), the goal's id and kind, and the actor, and never a word a person
-wrote: no subject, no body, no preview, no name. The runtime checks that the category is one non-empty line of text
+([`docs/runtime-api.md`](../runtime-api.md)), which writes one reserved journal line,
+[`reply_classified`](journal/reply_classified.json), whose document states what the line carries. The line is the
+runtime's: `journal.append` refuses it to every other writer, and it never carries a word a person wrote: no subject,
+no body, no preview, no name. The runtime checks that the category is one non-empty line of text
 and nothing more; what a category means is the skills' business, never the runtime's. Where the category is a
 person's answer to a question about the reply, `reply.record`'s optional `decision_id` argument names that decision;
 the runtime checks at the call that it is the campaign's (`decision_not_found`), answered (`decision_not_answered`) by a
 named person (`decision_not_human`), with the category as the chosen option (`decision_option_differs`), and raised by
 the attempt that recorded a verdict on this reply (`decision_not_about_reply`), and the line then carries the
-decision's id as `decision_id` and the person's actor as `answered_by`.
+decision's id and the person's actor.
 
 **Three reserved lines beside it.** A person's word in advance about one category of verdict in one campaign is a
-standing approval: `approval.set_standing` writes `standing_approval_set` and `approval.unset_standing` writes
-`standing_approval_unset`, each keyed by the category, and the dispatcher writes `approval_standing_applied`, keyed by
-the line that set it, each time it lets a draft go under one. All three are the runtime's, refused by
+standing approval: `approval.set_standing` writes [`standing_approval_set`](journal/standing_approval_set.json) and
+`approval.unset_standing` writes [`standing_approval_unset`](journal/standing_approval_unset.json), each keyed by the
+category, and the dispatcher writes [`approval_standing_applied`](journal/approval_standing_applied.json), keyed by the
+line that set it, each time it lets a draft go under one. All three are the runtime's, refused by
 `journal.append` to every other writer, and none carries a word a person wrote.
+
+## The journal's kinds
+
+A sixth family is published here, and it is no work either: the **kinds the runtime reserves for its own journal
+lines**. A line the runtime writes under one of its kinds — `campaign_paused`, `workitem_succeeded`, `reply_classified`
+and the rest — is a fact it recorded, and every kind it reserves gets one document under [`journal/`](journal), named
+for the kind, with its fixtures under [`fixtures/journal/`](fixtures/journal). A kind a person or an agent appends
+under a name of its own through `journal.append` has no document here and is never checked against one.
+
+A document is `{kind, version, since, summary, subscribable, entities, field_since, body}` and nothing else:
+
+- `kind` — lower-case letters, digits and underscores, starting with a letter, at most 64 characters; the file is
+  named for it.
+- `version` — the document's own, a whole number from 1.
+- `since` — the release that first wrote the kind, a full version `X.Y.Z`.
+- `summary` — one line, ending with a full stop, saying what a line of the kind records.
+- `subscribable` — whether a program may subscribe to lines of the kind.
+- `entities` — which things a line names, and where. Each is keyed by one of fifteen names (`campaign`, `project`,
+  `contact`, `work_item`, `attempt`, `approval`, `role`, `plugin`, `account`, `decision`, `report`, `profile`,
+  `provider_block`, `event_source`, `backfill`) and is `{at, presence, each?}`: `at` is a JSON pointer into the line as
+  `journal.list` returns it, either one of its columns (`/campaign_id`, `/work_item_id`, `/attempt_id`, `/contact_id`)
+  or a place in its body (`/key`, `/new/...`); `presence` is `always` or `sometimes`; and `each: true` says the pointer
+  names an array of ids, one per item.
+- `field_since` — a map from a pointer into the body to the release that added the field there, for every field a
+  release after `since` added; a line written before that release does not have it. In such a pointer `*` stands for
+  any index of an array (`/new/plugins/*/subscriptions`), and names the field in every item the array's `items`
+  describes; a `*` where the body describes no array is refused.
+- `body` — the schema of the line's body in the dialect below: the object `{key, old, new}`, each member always
+  present and JSON `null` where the line has nothing. The schema requires all three and allows nothing else, and a
+  member a kind always leaves empty is `{"type": "null"}`. What every line carries whatever its kind — its id, its
+  moment, its actor and the reason the actor gave — is outside the body and the same for every kind.
+
+**What holds a line to its document.** Whenever the runtime writes a line of a reserved kind, its body is checked
+against the document's schema, and every column the document says is `always` named must be set. In the test suite a
+line off its document is refused, so a writer that drifts from its document fails the test that drives it. In an
+installation the line is written and the runtime's log names its kind and nothing else: a line the runtime meant to
+keep is never lost to its own check.
+
+**How a kind changes.** A kind the runtime starts writing arrives with its document in the same pull request. A body
+grows by optional fields only, each named in `field_since` with the release that added it; a field never changes
+meaning, and no field is removed. A kind is never renamed or retired while a release that writes it is supported. A
+closed list of words in a body may gain a word when a later release writes one, so a line written before then holds
+only the words that release knew. A test reads the documents of the last published release and refuses a document
+removed, a `since` changed, or a body field removed or newly required.
+
+Every kind this build reserves, rendered from the documents by a test and compared whole:
+
+<!-- BEGIN GENERATED journal-kinds -->
+<!-- Rendered from each kind's document. Edit those; this table follows them. -->
+
+| Kind | Since | Subscribable | Names | What a line records |
+|---|---|---|---|---|
+| [`approval_approved`](journal/approval_approved.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A person approved parked work, so it goes back to the queue to run. |
+| [`approval_cancelled`](journal/approval_cancelled.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision was ended because the work it was about was cancelled or passed its due date. |
+| [`approval_rejected`](journal/approval_rejected.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A person rejected parked work, so it ends as failed. |
+| [`approval_requested`](journal/approval_requested.json) | `0.1.0` | yes | campaign, contact, work_item, approval | Work was parked to wait for a person's decision, and the line names the approval that asks for it. |
+| [`approval_standing_applied`](journal/approval_standing_applied.json) | `0.25.0` | yes | campaign, contact, work_item, approval | A standing approval released a drafted reply without asking a person, and the line names the approval that records the release, the standing approval and the verdict the reply answers. |
+| [`approval_superseded`](journal/approval_superseded.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision stopped applying because the subject of the work it was about changed before the work ran, and a new decision is asked in its place. |
+| [`campaign_archived`](journal/campaign_archived.json) | `0.1.0` | yes | campaign | A campaign was archived for good: its open work and its pending questions are cancelled and it never runs again. |
+| [`campaign_created`](journal/campaign_created.json) | `0.1.0` | yes | campaign | A campaign was created as a draft, under the name the line carries. |
+| [`campaign_paused`](journal/campaign_paused.json) | `0.1.0` | yes | campaign | A campaign stopped being active, so none of its work is dispatched until it is started again. |
+| [`campaign_started`](journal/campaign_started.json) | `0.1.0` | yes | campaign | A campaign became active, from a draft or from a pause, so its work can be dispatched. |
+| [`campaign_updated`](journal/campaign_updated.json) | `0.1.0` | yes | campaign, project | One setting of a campaign changed: its name, its execution profile, its review cadence or the project it is in; a change of several settings writes one line for each. |
+| [`contact_archived`](journal/contact_archived.json) | `0.1.0` | yes | contact | A person was archived in the contact directory, so nothing reaches out to them any more and their open work is cancelled. |
+| [`contact_created`](journal/contact_created.json) | `0.1.0` | yes | contact | A person was added to the contact directory. |
+| [`contact_updated`](journal/contact_updated.json) | `0.1.0` | yes | contact | A person's details in the contact directory changed; the line names the fields that changed and never their values. |
+| [`contacts_added`](journal/contacts_added.json) | `0.1.0` | yes | campaign, contact | One request added people to a campaign: the line counts what happened to its items and names the people it added. |
+| [`contacts_removed`](journal/contacts_removed.json) | `0.1.0` | yes | campaign, contact | One request removed people from a campaign, which cancels their open work there: the line counts what happened to its items and names the people it removed. |
+| [`context_updated`](journal/context_updated.json) | `0.1.0` | yes | campaign | One key of a campaign's context was set, changed or removed; a change of several keys writes one line for each. |
+| [`decision_answered`](journal/decision_answered.json) | `0.1.0` | yes | campaign, contact, work_item, attempt, decision | A person answered a question an attempt raised, and the review that continues the work is summoned from this line; the answer is kept on the decision. |
+| [`decision_cancelled`](journal/decision_cancelled.json) | `0.1.0` | yes | campaign, contact, work_item, attempt, decision | A question still waiting for a person was cancelled because its campaign was archived. |
+| [`decision_raised`](journal/decision_raised.json) | `0.1.0` | yes | campaign, contact, work_item, attempt, decision | An attempt raised a question it cannot answer itself, and the question waits for a person; what was asked is kept on the decision. |
+| [`events_backfill_requested`](journal/events_backfill_requested.json) | `0.12.0` | yes | plugin, event_source, backfill | A span of an account's provider events was asked to be read again. |
+| [`events_gap_observed`](journal/events_gap_observed.json) | `0.12.0` | yes | plugin, event_source | A span of an account's provider events was older than the store reads back, so it went unread and is said as a gap. |
+| [`events_read`](journal/events_read.json) | `0.12.0` | yes | plugin, event_source, backfill | One read of an account's provider events ended, with what it read and stored and the failure it ended with, if any. |
+| [`external_effect_reported`](journal/external_effect_reported.json) | `0.1.0` | yes | campaign, contact, work_item, report | Somebody reported an effect that happened outside Jason, and the report was admitted. |
+| [`external_id_diverged`](journal/external_id_diverged.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | A provider returned an identifier different from the one already pinned: the pin stands, and the value it returned is recorded beside it. |
+| [`external_id_origin`](journal/external_id_origin.json) | `0.19.0` | yes | campaign, contact, work_item, attempt | A plugin said how the provider came to hold the entity whose identifier was just pinned or diverged: found already there, or created by the attempt. |
+| [`external_id_pinned`](journal/external_id_pinned.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | A provider's identifier for a campaign or a contact was pinned for the first time, by the attempt that returned it, and is never overwritten. |
+| [`inbound_reply_observed`](journal/inbound_reply_observed.json) | `0.4.0` | yes | campaign, contact, work_item, attempt, plugin | A conversation thread of a campaign moved because the other side wrote, as the inbound read of the campaign or a read of the account's provider events found it. |
+| [`message_sent_observed`](journal/message_sent_observed.json) | `0.22.0` | yes | campaign, contact, work_item, plugin | A read of a send found that the message went out, with the moment it went and the provider's identifier for it. |
+| [`notification_sent`](journal/notification_sent.json) | `0.2.0` | yes | none | A notification pointing at what waits for a person went out, with the counts it carried and what each channel did with it. |
+| [`plugins_reloaded`](journal/plugins_reloaded.json) | `0.1.0` | yes | plugin | A load of the plugins was activated, at startup or by a reload: the line names every package then active at its digest, and the routes frozen with it. |
+| [`preference_set`](journal/preference_set.json) | `0.14.0` | yes | none | A person set a named preference, recorded by the value's size and hash and never the value. |
+| [`preference_unset`](journal/preference_unset.json) | `0.14.0` | yes | none | A person took a named preference's value back, recorded by the size and hash of the value it had. |
+| [`profile_created`](journal/profile_created.json) | `0.1.0` | yes | profile | An execution profile was created at its first revision, naming the agent host the work it runs is launched on. |
+| [`profile_disabled`](journal/profile_disabled.json) | `0.1.0` | yes | profile | An execution profile was disabled, so no attempt is launched under it until it is enabled again. |
+| [`profile_enabled`](journal/profile_enabled.json) | `0.1.0` | yes | profile | A disabled execution profile was enabled again, so attempts may be launched under it. |
+| [`profile_revised`](journal/profile_revised.json) | `0.1.0` | yes | profile | An execution profile was changed: the line names the fields the change named and the revision current after it, never their values. |
+| [`project_created`](journal/project_created.json) | `0.14.0` | yes | project | A project was made, with its name and the slug it keeps. |
+| [`project_linked`](journal/project_linked.json) | `0.15.0` | yes | project | A project's folder, or the folders of its campaigns, were recorded again where they now stand. |
+| [`project_updated`](journal/project_updated.json) | `0.14.0` | yes | project | A project's name changed. |
+| [`provider_block_cleared`](journal/provider_block_cleared.json) | `0.18.0` | yes | campaign, attempt, provider_block | An open provider block that had held work of a campaign cleared, through a trial that got past it or by a person. |
+| [`provider_blocked`](journal/provider_blocked.json) | `0.18.0` | yes | campaign, work_item, attempt, plugin, provider_block | An open provider block held work of a campaign, said once in each campaign it holds work of. |
+| [`provider_event_observed`](journal/provider_event_observed.json) | `0.12.0` | yes | campaign, contact, plugin | A provider event read from an account reached a campaign: a reply the provider detected, an invitation accepted, or a bounce. |
+| [`reply_classified`](journal/reply_classified.json) | `0.25.0` | yes | campaign, contact, work_item, attempt, plugin, decision | A reply in a campaign was given a verdict: what kind of reply it is, how sure the verdict is, and what is to be done about it. |
+| [`role_added`](journal/role_added.json) | `0.1.0` | yes | role | A role was registered, so work can name it and an attempt can run as it. |
+| [`role_note_set`](journal/role_note_set.json) | `0.1.0` | yes | campaign, project, role | A role's note at one level, a campaign, a project or the client, was written; the line records its size and hash, never what it says. |
+| [`role_updated`](journal/role_updated.json) | `0.1.0` | yes | role, profile | The execution profile a role's work runs under was set, changed or cleared. |
+| [`routes_updated`](journal/routes_updated.json) | `0.1.0` | yes | campaign, plugin | A campaign's route was set or taken away, so an operation, or the campaign's default, goes to the plugin it names or back to the routes above it. |
+| [`standing_approval_set`](journal/standing_approval_set.json) | `0.25.0` | yes | campaign | A person gave a campaign a standing approval for one category of reply, or replaced the one in force, so drafted replies it covers go without a decision each time. |
+| [`standing_approval_unset`](journal/standing_approval_unset.json) | `0.25.0` | yes | campaign | A person took back a campaign's standing approval for one category of reply, so drafted replies of it wait for a decision again. |
+| [`suppression_added`](journal/suppression_added.json) | `0.1.0` | yes | none | An address or number was put on the do-not-contact register, so nothing reaches it on its channel. |
+| [`suppression_removed`](journal/suppression_removed.json) | `0.1.0` | yes | none | An address or number was taken off the do-not-contact register, which puts it back in reach. |
+| [`workitem_awaiting_approval`](journal/workitem_awaiting_approval.json) | `0.1.0` | yes | campaign, contact, work_item | A queued work item was parked to wait for a person's approval before it may run. |
+| [`workitem_cancelled`](journal/workitem_cancelled.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | A work item was cancelled before it finished, together with its live attempt, if it had one. |
+| [`workitem_context_updated`](journal/workitem_context_updated.json) | `0.1.0` | yes | campaign, contact, work_item | One key of a work item's context was set, changed or removed; a change of several keys writes one line for each. |
+| [`workitem_created`](journal/workitem_created.json) | `0.1.0` | yes | campaign, contact, work_item | A work item was created; the line says what it was asked to be, so where the work came from is answered without reading the item. |
+| [`workitem_expired`](journal/workitem_expired.json) | `0.1.0` | yes | campaign, contact, work_item | A work item nobody had picked up passed its due date and expired; a new due date can reopen it. |
+| [`workitem_failed`](journal/workitem_failed.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | A work item ended as failed: an attempt failed with nothing left worth trying, or a person rejected the work while it waited for their approval. |
+| [`workitem_processing`](journal/workitem_processing.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | An attempt the dispatcher opened for a work item started running. |
+| [`workitem_released`](journal/workitem_released.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | A work item went back to the queue to be claimed again: its attempt failed in a way worth another attempt, a restart found its attempt never started, or a person approved the work it was waiting on. |
+| [`workitem_reopened`](journal/workitem_reopened.json) | `0.1.0` | yes | campaign, contact, work_item | An expired work item was given a new due date and went back to the queue. |
+| [`workitem_resumed`](journal/workitem_resumed.json) | `0.18.0` | yes | campaign, contact, work_item, attempt | A waiting work item went back to the queue: what it waited for happened, its bound came, its provider block cleared or let a trial through, or a person resumed it. |
+| [`workitem_scheduled`](journal/workitem_scheduled.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | The dispatcher claimed a work item and opened an attempt for it, numbered by the line. |
+| [`workitem_succeeded`](journal/workitem_succeeded.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | An attempt succeeded and its work item finished as succeeded; the line says whether the item now carries a result. |
+| [`workitem_updated`](journal/workitem_updated.json) | `0.1.0` | yes | campaign, contact, work_item | One setting of a work item changed: when it may start, when it is due, its priority, its limits, its execution profile or its result format; a change of several settings writes one line for each. |
+| [`workitem_waiting`](journal/workitem_waiting.json) | `0.18.0` | yes | campaign, contact, work_item, attempt, provider_block | A work item stopped to wait for other work items to end, for a moment, or for a provider block to clear, and is not claimed until what it waits for happens or its bound comes. |
+
+<!-- END GENERATED journal-kinds -->
+
 
 ## What a document states
 
