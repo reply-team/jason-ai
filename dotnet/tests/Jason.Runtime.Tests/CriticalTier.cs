@@ -63,7 +63,7 @@ internal static partial class CriticalTier
         [Family.S5] =  [  0,   0,   0,   0,  17],
         [Family.S6] =  [  0,   0,   0,   0, 133],
         [Family.R1] =  [  0,   0,  12,   9,  21],
-        [Family.R2] =  [  0,  25,   8,   0,  16],
+        [Family.R2] =  [  0,  25,  10,   0,  16],
         [Family.R3] =  [  0,   1,  30,   0,  14],
         [Family.R4] =  [  0,   0,   0,   8,   0],
         [Family.R5] =  [  0,   0,   0,   5,   5],
@@ -102,7 +102,7 @@ internal static partial class CriticalTier
     [
         (24, 360, 516),       // Jason.App.Tests
         (148, 2186, 3750),    // Jason.Cli.Tests
-        (102, 737, 3372),     // Jason.Contracts.Tests
+        (104, 737, 3372),     // Jason.Contracts.Tests
         (41, 199, 302),       // Jason.PluginHost.Tests
         (584, 4841, 9487),    // Jason.Runtime.Tests
     ];
