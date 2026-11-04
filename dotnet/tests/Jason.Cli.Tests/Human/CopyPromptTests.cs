@@ -191,6 +191,32 @@ public sealed partial class CopyPromptTests
         Assert.DoesNotContain("campaign.enroll", approvalRun.Output, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Nor anything of the campaign or the project the folder is read from: the folder's path is all the brief takes from
+    /// those answers, and a name or a context is a person's text as much as the item's own.
+    /// </summary>
+    [Fact]
+    public async Task Nothing_of_the_campaign_or_the_project_is_in_the_prompt()
+    {
+        const string Marker = "ZEBRA-DISTINCTIVE-TEXT";
+        var campaign = JsonNode.Parse(Fixture("campaign.get", "one"))!.AsObject();
+        campaign["name"] = Marker + " campaign";
+        campaign["context"] = new JsonObject { ["brief"] = Marker + " context" };
+        var project = JsonNode.Parse(Fixture("project.get", "by-slug"))!.AsObject();
+        project["name"] = Marker + " project";
+
+        var approvalRun = await Run(["approval", "get", "apr_1", "--prompt"], Fixture("approval.get", "pending-with-preview"), campaign: campaign.ToJsonString(), project: project.ToJsonString(), info: Marked(Fixture("system.info", "with-ui")));
+        var questionRun = await Run(["decision", "get", "dec_1", "--prompt"], Fixture("decision.get", "pending-with-options"), campaign: campaign.ToJsonString(), project: project.ToJsonString(), info: Marked(Fixture("system.info", "with-ui")));
+
+        foreach (var run in new[] { approvalRun, questionRun })
+        {
+            Assert.Equal(ExitCodes.Success, run.Exit);
+            Assert.Equal(["campaign.get", "project.get", "system.info"], run.Asked[1..]);
+            Assert.Contains("Harness root (no folder is recorded for the campaign or its project): ~/Jason", run.Output, StringComparison.Ordinal);
+            Assert.DoesNotContain(Marker, run.Output, StringComparison.Ordinal);
+        }
+    }
+
     [Theory]
     [InlineData("approved")]
     [InlineData("rejected")]
