@@ -430,7 +430,7 @@ among its `failure_codes` (§7).
 
 **Promises.** `async function invoke` works: the host drains the job queue and unwraps the promise
 within the budget. The six `host.*` functions are synchronous — they block until the program or the
-request finishes — so there is nothing to `await` on them.
+request finishes — so there is nothing to `await` on them, nor on `host.call`.
 
 **Modules.** Only relative specifiers ending in `.js` or `.mjs`, only inside the package: `./x.js`,
 `../shared/y.mjs`. A bare specifier (`lodash`), an absolute path, a URL, a `.json` import or a path
@@ -459,15 +459,16 @@ and `null` alike. No secret is ever in `context`.
 
 ## 6. The Host SDK
 
-`host` is a plain JavaScript object with exactly six read-only functions, closed to extension. It is
-not a wrapped CLR instance, so there is no member surface beyond those six and no type to walk back
-into the host program. Every function takes **one options object** and refuses an unknown key with a
+`host` is a plain JavaScript object with exactly six read-only functions, closed to extension, and a seventh,
+`host.call`, only where the invocation carries a door to the Runtime API. It is not a wrapped CLR instance, so there
+is no member surface beyond those functions and no type to walk back into the host program. Every function takes **one options object** and refuses an unknown key with a
 `TypeError` you can catch: `timeoutMs` next to `timeout_ms` would otherwise make a capped call look
 uncapped. A key whose value is `undefined` counts as absent.
 
 Calling a capability the user did not grant is **not** a catchable error: the whole invocation fails
 `permanent` with `capability_not_granted` and `details: { capability, requested }`, because a plugin
 must not be able to probe its grants and quietly fall back to something else.
+`host.call` refuses the same way, with `details: { capability: "api", operation }`.
 
 ### `host.exec`
 
@@ -632,6 +633,49 @@ the plugin can see, never a block mistaken for something else.
 throw host.fail({ class: "blocked", code: "provider_blocked", message: "the account is out of credits",
                   block: { scope: "account", reason: "billing", link: "https://provider.example/billing" } });
 ```
+
+### `host.call`
+
+```js
+const page = host.call("campaign.list", { limit: 20 });           // the API's answer, as an object
+host.call("journal.append", { campaign_id: id, kind: "forwarder_sent", new: { to: "crm" } });
+```
+
+One Runtime API operation, made by the host through the **door** an invocation may carry. A door is opened by the
+runtime for one invocation about one journal line, and only for a plugin granted at least one Runtime API family
+(§9); an invocation without one has no `host.call` at all. The first argument is the operation's name as the API
+publishes it, the second an object of its arguments, or nothing. What comes back is the API's answer exactly as
+`POST /v1/<operation>` returns it.
+
+The host speaks for the handler, and says who and why: every call carries the actor `{ type: "plugin", id: <this
+plugin's id> }` and the reason `journal <line id>`, so the journal names the plugin that acted and the line it acted
+on. `actor` or `reason` among the arguments is a `TypeError`; they are the host's to set. The API accepts the actor
+`plugin` from that plugin's own door and from no other caller.
+
+| Rule | Code when broken |
+|---|---|
+| the operation is one the door opens: in the families the person granted, and never one no grant opens (§9) | `capability_not_granted`, not catchable |
+| the second argument is an object; `actor` and `reason` are not in it | a `TypeError` |
+| the request is at most 1 MiB | `api_limit` |
+| at most 100 calls per invocation | `api_limit` |
+
+An operation outside the door ends the invocation `permanent` before anything leaves the process, like an exec, http
+or env refusal; the API refuses it again with `403 operation_not_granted`. Every call is bounded by the smaller of 30
+seconds and what remains of the invocation, and reads at most 1 MiB of answer. The bounds are the protocol's own,
+not settings. A call that fails otherwise throws an error you can catch, with `class`, `code`, `message`, `details`
+(`operation`, the HTTP `status` where one came) and `retryable`:
+
+| Code | Class | Means |
+|---|---|---|
+| an API error code, such as `not_found` | `transient` where the API said `retryable`, else `permanent` | the API refused the call; its own `details` are under `details.details` |
+| `runtime_unreachable` | `transient`, `retryable` | nothing answered, or the connection broke before an answer came |
+| `runtime_timeout` | `ambiguous` | no answer within the call's bound; the call may have acted |
+| `response_too_large` | `permanent` | the answer is over 1 MiB; the call may have acted |
+| `runtime_answer_invalid` | `permanent` | what came back is not the Runtime API's answer or its error |
+
+A call that runs out with the invocation itself ends the invocation `plugin_timeout`, as any other host call does.
+Every call is said on stderr as one `api` line, with the operation, the status and the duration, or as one
+`api_failed` line where no answer came; the capability is never written there or anywhere else the host writes.
 
 ### The environment a child sees
 
@@ -1129,13 +1173,14 @@ what it gets, in `~/.jason/config/settings.json`:
 {
   "Plugins": {
     "Grants": {
-      "fake-provider": { "Exec": ["*"], "Http": ["api.example.com"], "Env": ["FAKE_TOKEN"] }
+      "fake-provider": { "Exec": ["*"], "Http": ["api.example.com"], "Env": ["FAKE_TOKEN"] },
+      "forwarder": { "Api": ["read", "journal.append"] }
     }
   }
 }
 ```
 
-Three lists per plugin id, each naming things **out of what that plugin's manifest requested**. `*`
+Four lists per plugin id, each naming things **out of what that plugin's manifest requested**. `*`
 grants everything requested for that capability. An absent list, an absent plugin, or a freshly
 copied package grants nothing — the default is nothing, and a plugin with no grants still loads as
 `valid`. An entry the manifest never requested grants nothing and is reported as a
@@ -1158,6 +1203,39 @@ invocation rather than empty, which is a different thing from one that is presen
 And the version check of a declared executable runs only for an executable the user **granted** — a
 reload must never start a program nobody consented to; an ungranted one is resolved for presence only
 and lists `"version": null`.
+
+### The `api` grant: what a handler may call
+
+`Api` names Runtime API families, out of the ones the manifest's `capabilities.api` requested, and decides which
+operations a handler's `host.call` may make (§6). Every operation of the Runtime API is a read, in exactly one write
+family, or in none:
+
+| Family | Opens |
+|---|---|
+| `read` | every operation that only reads: its verb is `get`, `list`, `count`, `summary`, `activity`, `activity_by_period`, `list_contacts`, `list_standing`, `resolve`, `sources` or `kinds`, and its noun is not `system` or `ui` |
+| `campaign` | `campaign.create`, `campaign.update`, `campaign.start`, `campaign.pause`, `campaign.archive`, `campaign.update_context`, `campaign.add_contacts`, `campaign.remove_contacts` |
+| `contact` | `contact.create`, `contact.update`, `contact.archive` |
+| `workitem` | `workitem.create`, `workitem.update`, `workitem.cancel` |
+| `suppression` | `suppression.add`, `suppression.remove` |
+| `report` | `report.submit` |
+| `journal.append` | `journal.append` |
+
+No grant opens the rest: the installation's and the UI's own doors (every `system.` and `ui.` operation,
+`plugin.reload`, `route.set`, `route.unset`, `project.create`, `project.update`, `project.link`, `preference.set`,
+`preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `events.backfill`,
+`events.signal`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
+`approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`), an
+executor's fenced verbs (`workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait`), and the
+conversation reads `contact.threads` and `contact.thread`, which are no read here because answering one spends a
+provider call. An operation the API adds later is in none until it is classified, which a test holds. A family the
+manifest names that is not one of the seven is `api_family_unknown`.
+
+A subscriber granted `workitem` writes can feed itself through a role: an item it creates may run a role, and what
+that role does afterwards is ordinary work.
+
+The families granted are resolved to their operations at each load and frozen with the snapshot, like every grant.
+The runtime mints a handler's capability with exactly that set, the host refuses anything outside it before a call
+leaves the process, and the API refuses it again.
 
 ## 10. The protocol
 
@@ -1205,7 +1283,12 @@ escape reads the same in any page.
 
 The grants here are the **resolved policy** — what the user granted out of what the manifest
 requested — so the child enforces what the runtime decided and has no configuration of its own. No
-secret value is in the envelope. A capability the manifest never requested is `null` here. An
+secret value is in the envelope but one: a handler's `door`, where the invocation has one, carries the capability the
+runtime minted for that invocation, beside the address, the journal line, the operations it opens and the limits. It
+travels on stdin only, never on argv, in the environment or in a file; the host masks it wherever it writes and the
+runtime redacts it from the stderr it copies; and it is dead when the invocation ends however it ends, at the latest at
+the invocation's deadline plus the kill grace, and with any restart of the runtime, which keeps capabilities in memory
+only. A capability the manifest never requested is `null` here. An
 executable's `launch` is `null` for an ordinary program and carries the arguments that go before the
 plugin's own where the name resolved to an interpreter and a script (§13).
 

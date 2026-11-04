@@ -580,7 +580,8 @@ environment before it starts anything, and the launch removes it again, so no ag
 
 **The capability token is never on the command line, never in the environment, and never stored**:
 every occurrence of it is replaced with `[redacted]` before anything the child wrote is put in a file
-or in an attempt's error trace.
+or in an attempt's error trace. A plugin handler's narrower capability follows its own rule
+([plugins.md](plugins.md), §10).
 
 ### The launch envelope
 
