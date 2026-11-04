@@ -5,10 +5,16 @@ namespace Jason.Cli.Human;
 /// <summary>
 /// <c>--prompt</c> for <c>approval get</c> and <c>decision get</c>: the answer is read only for the identifiers
 /// it carries, the folder is resolved, and <see cref="CopyPrompt"/> composes the words. Each returns null when the
-/// body is not what it expects, and the runner prints the response as it came.
+/// body is not what it expects, and the runner refuses it in <see cref="NoItem"/>'s words rather than print the body.
 /// </summary>
 public static class PromptRenderers
 {
+    /// <summary>
+    /// Why no prompt was made from an answer: said by <c>--prompt</c> and by the toast's Copy prompt button alike, each
+    /// followed by what it did not do.
+    /// </summary>
+    public const string NoItem = "the runtime's answer names no item to compose a prompt for";
+
     public static Func<string, CancellationToken, Task<string?>> Approval(CliEnvironment env) => async (json, cancellationToken) =>
     {
         var approval = RenderText.Read<ApprovalDto>(json);

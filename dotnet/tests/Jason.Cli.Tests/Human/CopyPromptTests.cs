@@ -241,13 +241,18 @@ public sealed partial class CopyPromptTests
         Assert.Equal(string.Empty, run.Output);
     }
 
+    /// <summary>
+    /// An answer the prompt cannot be composed from is refused, as the toast's button refuses it: printed as it came, the
+    /// item's raw body would stand on stdout where a brief made of ids was asked for.
+    /// </summary>
     [Fact]
-    public async Task An_answer_that_is_not_an_item_prints_as_it_came()
+    public async Task An_answer_that_is_not_an_item_is_refused_and_prints_nothing()
     {
         var run = await Run(["approval", "get", "apr_1", "--prompt"], "{\"something\":\"else\"}");
 
-        Assert.Equal(ExitCodes.Success, run.Exit);
-        Assert.Equal("{\"something\":\"else\"}", run.Output.Trim());
+        Assert.Equal(ExitCodes.ApiError, run.Exit);
+        Assert.Equal(string.Empty, run.Output);
+        Assert.Equal("--prompt: the runtime's answer names no item to compose a prompt for; nothing was printed.", run.Error.TrimEnd());
     }
 
     [Fact]
