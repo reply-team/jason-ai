@@ -12,8 +12,8 @@ export default defineConfig({
         buildManifest({ version: process.env.JASON_VERSION ?? '0.0.0-local', apiVersion: API_VERSION }),
     ],
     // The screen tests import the two published prompt texts under docs/prompts as raw text (`?raw`). That folder is
-    // outside this project, and without this entry the import is denied: the list names the project and that one
-    // folder, and nothing wider.
+    // outside this project, and without this entry vitest refuses it ("Denied ID ... docs/prompts/approval.txt?raw"): the
+    // list names the project and that one folder, and nothing wider.
     server: { fs: { allow: ['.', '../docs/prompts'] } },
     build: { outDir: 'dist', emptyOutDir: true, assetsInlineLimit: 0, sourcemap: false },
     test: {

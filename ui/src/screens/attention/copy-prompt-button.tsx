@@ -20,6 +20,8 @@ export function CopyPromptButton({ kind, itemId, campaignId, workItemId }: Props
         try {
             // The clipboard is asked inside this click, before any read is awaited: a browser takes a write only
             // within the gesture's call stack, so the text is handed over as a promise it resolves when it is ready.
+            // Where there is no `ClipboardItem`, the `writeText` fallback awaits the text first, by design: it is the
+            // exception.
             const text = resolveFolder(api, campaignId).then((folder) =>
                 composePrompt(kind, itemId, campaignId, workItemId, folder),
             );

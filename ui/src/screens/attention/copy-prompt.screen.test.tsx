@@ -131,12 +131,26 @@ describe('Copy prompt', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Copy prompt' }));
 
-        // The runtime has not answered the folder read, and the write is already asked for.
-        await waitFor(() => expect(written.length).toBe(1));
+        // The runtime has not answered the folder read, and the write is already asked for, inside the click.
+        expect(written.length).toBe(1);
         expect(screen.getByRole('button', { name: 'Copy prompt' }).hasAttribute('disabled')).toBe(true);
         release();
         await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy());
         expect(await written[0]).toBe(published(approvalText));
+    });
+
+    it('falls back to writeText, with the published text, where there is no ClipboardItem', async () => {
+        const written = fakeClipboard();
+        vi.stubGlobal('ClipboardItem', undefined);
+        renderApp(fake());
+        await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
+        fireEvent.click(screen.getByText('Enroll Ada Lovelace'));
+        await waitFor(() => screen.getByRole('button', { name: 'Approve' }));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Copy prompt' }));
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy());
+        expect(written).toEqual([published(approvalText)]);
     });
 
     it("clears the first click's timer on a second, so Copied lasts its own time", async () => {
