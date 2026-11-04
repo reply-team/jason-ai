@@ -54,7 +54,7 @@ public class ReloadOrderingTests
             loader,
             routes,
             new RouteActivator(db, new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()), routes, TimeProvider.System),
-            new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionOrderOptions>(new SubscriptionOrderOptions())),
+            new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionsOptions>(new SubscriptionsOptions())),
             new ReloadGate(),
             new SettingsFile(new ConfigurationBuilder().Build()),
             NullLogger<PluginService>.Instance);
@@ -100,7 +100,7 @@ public class ReloadOrderingTests
             new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()),
             routes,
             TimeProvider.System));
-        services.AddSingleton(new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionOrderOptions>(new SubscriptionOrderOptions())));
+        services.AddSingleton(new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionsOptions>(new SubscriptionsOptions())));
         await using var provider = services.BuildServiceProvider();
 
         var startup = new PluginStartupLoader(

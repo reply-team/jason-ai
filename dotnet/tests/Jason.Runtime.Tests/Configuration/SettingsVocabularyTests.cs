@@ -62,7 +62,7 @@ public class SettingsVocabularyTests
                 typeof(NotificationsOptions),
                 typeof(InboundOptions),
                 typeof(HarnessOptions),
-                typeof(SubscriptionOrderOptions),
+                typeof(SubscriptionsOptions),
             },
             new HashSet<Type>(Sections()));
     }

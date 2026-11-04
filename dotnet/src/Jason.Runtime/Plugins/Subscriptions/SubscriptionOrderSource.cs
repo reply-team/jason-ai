@@ -9,14 +9,14 @@ namespace Jason.Runtime.Plugins.Subscriptions;
 /// The one reader of <c>Subscriptions:Order</c>: the load at a start and the plugin reload, and nothing else, so an
 /// edit to the order means nothing until the next reload, as an edit to a route does.
 /// </summary>
-public sealed class SubscriptionOrderSource(IOptionsMonitor<SubscriptionOrderOptions> options)
+public sealed class SubscriptionOrderSource(IOptionsMonitor<SubscriptionsOptions> options)
 {
     /// <summary>The chains <paramref name="snapshot"/> would freeze under the order as the settings now hold it.</summary>
     public SubscriptionCandidate Build(PluginSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        SubscriptionOrderOptions order;
+        SubscriptionsOptions order;
         try
         {
             order = options.CurrentValue;
@@ -28,7 +28,7 @@ public sealed class SubscriptionOrderSource(IOptionsMonitor<SubscriptionOrderOpt
             return new SubscriptionCandidate(
                 null,
                 [.. refused.Failures.Select(failure => new ErrorDetail(
-                    SettingsFailure.Name(SubscriptionOrderOptions.Section, failure),
+                    SettingsFailure.Name(SubscriptionsOptions.Section, failure),
                     SubscriptionProblemCodes.SettingsInvalid,
                     failure))]);
         }

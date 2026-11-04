@@ -66,9 +66,10 @@ public static class SettingsVocabulary
         // Harness.
         "Root",
 
-        // Subscriptions: the order of each kind's subscribers, under a key that is the kind. Subscriptions also names a
-        // grant's list of kinds, a section above.
-        "Order",
+        // Subscriptions: the order of each kind's subscribers, under a key that is the kind, and the numbers the runner of
+        // their chains works to; its MaxParallel is above. Subscriptions also names a grant's list of kinds, a section
+        // above.
+        "Order", "RunRecordsPerKind", "EnvelopeBytes", "TransientRetries", "RetryBackoffSeconds",
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>

@@ -43,7 +43,7 @@ public sealed class SubscriptionChains
     /// that plugin is not granted. Such an id is refused rather than passed over: the person meant something this set
     /// does not hold, and a chain run without it would carry out an order nobody wrote.
     /// </summary>
-    public static SubscriptionCandidate Build(PluginSnapshot snapshot, SubscriptionOrderOptions order)
+    public static SubscriptionCandidate Build(PluginSnapshot snapshot, SubscriptionsOptions order)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(order);
@@ -72,7 +72,7 @@ public sealed class SubscriptionChains
                 if (!ids.Contains(listed[index], StringComparer.Ordinal))
                 {
                     problems.Add(new ErrorDetail(
-                        string.Create(CultureInfo.InvariantCulture, $"{SubscriptionOrderOptions.Setting(kind)}[{index}]"),
+                        string.Create(CultureInfo.InvariantCulture, $"{SubscriptionsOptions.Setting(kind)}[{index}]"),
                         SubscriptionProblemCodes.OrderUngranted,
                         Ungranted(snapshot, kind, listed[index])));
                 }

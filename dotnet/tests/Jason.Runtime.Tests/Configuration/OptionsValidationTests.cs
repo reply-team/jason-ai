@@ -486,7 +486,7 @@ public class OptionsValidationTests
                 typeof(UpdateOptions),
                 typeof(NotificationsOptions),
                 typeof(InboundOptions),
-                typeof(SubscriptionOrderOptions),
+                typeof(SubscriptionsOptions),
             },
             ValidatedSections(services).ToHashSet());
     }
