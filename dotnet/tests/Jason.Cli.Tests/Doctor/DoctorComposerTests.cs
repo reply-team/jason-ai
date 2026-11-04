@@ -1555,7 +1555,7 @@ public sealed class DoctorComposerTests
         Assert.Equal("ok", Text(check["state"]));
         Assert.StartsWith("<plugin-1> handles workitem_failed.", Text(check["fact"]), StringComparison.Ordinal);
         Assert.Equal(["workitem_failed"], Strings(Section(bundle, "runtime")["plugins"]![0]!["subscriptions"]));
-        Assert.NotNull(Section(bundle, "config")["settings_file"]!["shape"]!["members"]!["Subscriptions"]);
+        Assert.NotNull(Section(bundle, "config")["settings_file"]!["shape"]!["members"]!["Subscriptions"]!["members"]!["Order"]!["members"]!["workitem_failed"]);
         AssertAbsent(bundle, Own, "sentinel-ordered", "SENTINEL_GRANTED_KIND");
     }
 

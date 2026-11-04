@@ -1,4 +1,4 @@
-using Jason.Runtime.Journal;
+using Jason.Contracts.Journal;
 
 namespace Jason.Runtime.Plugins.Subscriptions;
 
@@ -17,8 +17,9 @@ public enum KindStanding
 
 /// <summary>
 /// What a manifest's subscriptions and the order of a kind's subscribers are read against: the kinds the runtime writes
-/// to its journal, each with whether a plugin may subscribe to it. <see cref="Catalog"/> is the one the runtime reads; a
-/// test hands a lookup of its own where it needs a kind the catalog does not have.
+/// to its journal, each with whether a plugin may subscribe to it. <see cref="Catalog"/> is the one the runtime reads: the
+/// published contract of every kind (<see cref="JournalKindCatalog"/>), so the document a plugin author reads is the one a
+/// manifest and an order are held to. A test hands a lookup of its own where it needs a kind the catalog does not have.
 /// </summary>
 public sealed class SubscribableKinds
 {
@@ -30,9 +31,13 @@ public sealed class SubscribableKinds
         _standing = standing;
     }
 
-    /// <summary>The kinds the runtime writes.</summary>
-    public static SubscribableKinds Catalog { get; } = new(kind =>
-        JournalKinds.Reserved.Contains(kind) ? KindStanding.Subscribable : KindStanding.Unknown);
+    /// <summary>The kinds the runtime writes, as their published contracts state them.</summary>
+    public static SubscribableKinds Catalog { get; } = new(kind => JournalKindCatalog.Find(kind) switch
+    {
+        null => KindStanding.Unknown,
+        { Subscribable: true } => KindStanding.Subscribable,
+        _ => KindStanding.NotSubscribable,
+    });
 
     /// <summary>Where <paramref name="kind"/> stands.</summary>
     public KindStanding Of(string kind) => _standing(kind);

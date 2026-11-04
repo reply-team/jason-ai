@@ -89,9 +89,9 @@ public sealed class SubscriptionOrderOptionsTests
 
         Assert.Equal(
             [
-                "Subscriptions:Order:<key>[1] must be a plugin id; the value written is 11 characters long and is not one.",
-                "Subscriptions:Order:<key>[2] must be a plugin id; nothing is written there.",
-                "Subscriptions:Order:<key>[3] repeats the id at [0]; a plugin is listed once.",
+                "Subscriptions:Order:workitem_failed[1] must be a plugin id; the value written is 11 characters long and is not one.",
+                "Subscriptions:Order:workitem_failed[2] must be a plugin id; nothing is written there.",
+                "Subscriptions:Order:workitem_failed[3] repeats the id at [0]; a plugin is listed once.",
             ],
             failures);
     }
@@ -107,7 +107,7 @@ public sealed class SubscriptionOrderOptionsTests
         using var refused = Provider("""{"Subscriptions":{"Order":{"workitem_failed":"SENTINEL"}}}""");
         var error = Assert.Throws<OptionsValidationException>(() => refused.GetRequiredService<IOptionsMonitor<SubscriptionOrderOptions>>().CurrentValue);
 
-        Assert.Contains("Subscriptions:Order:<key> could not be read as a list of plugin ids.", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Subscriptions:Order:workitem_failed could not be read as a list of plugin ids.", error.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("SENTINEL", error.Message, StringComparison.Ordinal);
     }
 
