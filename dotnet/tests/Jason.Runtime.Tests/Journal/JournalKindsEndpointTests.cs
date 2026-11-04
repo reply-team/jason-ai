@@ -26,6 +26,18 @@ public class JournalKindsEndpointTests
         Assert.Null(page.NextCursor);
     }
 
+    /// <summary>The exchange a reader of the API sees, recorded: a first page of two kinds and the cursor to the next.</summary>
+    [Fact]
+    public async Task A_first_page_of_two_kinds_is_recorded()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var page = await api.RecordAsync<Page<JournalKindDto>>(Operations.JournalKinds, "first-page", new { Limit = 2 }, Ct);
+
+        Assert.Equal(JournalKindCatalog.Kinds.Take(2), page.Items.Select(kind => kind.Kind));
+        Assert.Equal(Paging.EncodeCursor(JournalKindCatalog.Kinds[1]), page.NextCursor);
+    }
+
     [Fact]
     public async Task Pages_walk_the_catalog_with_no_kind_missed_or_repeated()
     {
