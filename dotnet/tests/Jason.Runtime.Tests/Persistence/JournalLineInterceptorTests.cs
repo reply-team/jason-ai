@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Tests.Dispatch;
@@ -73,6 +74,55 @@ public sealed class JournalLineInterceptorTests
         db.SaveChanges();
 
         Assert.Equal(1, db.Journal.Count());
+    }
+
+    /// <summary>
+    /// A pattern that did not finish in time says nothing about the value, so it is no reason to refuse a line or to warn
+    /// about one: under either mode the line is written, and nothing is said.
+    /// </summary>
+    [Fact]
+    public void A_pattern_that_did_not_finish_is_no_verdict_and_strict_writes_the_line()
+    {
+        using var database = new TestDatabase();
+        var timing = TimingOut.Always();
+        using var db = Open(database, JournalLines.Strict, timing);
+
+        db.Journal.Add(Line("contact_archived", "cnt_01JC0000000000000000000001", null, null));
+        db.SaveChanges();
+
+        Assert.Equal(1, db.Journal.Count());
+        Assert.True(timing.TimedOut > 0, "the key's pattern was never matched");
+    }
+
+    [Fact]
+    public void A_pattern_that_did_not_finish_is_no_verdict_and_logged_says_nothing()
+    {
+        using var database = new TestDatabase();
+        var timing = TimingOut.Always();
+        var logs = new RecordingLogs();
+        using var factory = LoggerFactory.Create(logging => logging.AddProvider(logs));
+        using var db = Open(database, JournalLines.Logged(factory.CreateLogger<JournalLineInterceptor>()), timing);
+
+        db.Journal.Add(Line("contact_archived", "cnt_01JC0000000000000000000001", null, null));
+        db.SaveChanges();
+
+        Assert.Equal(1, db.Journal.Count());
+        Assert.True(timing.TimedOut > 0, "the key's pattern was never matched");
+        Assert.Empty(logs.Lines);
+    }
+
+    /// <summary>A line wrong somewhere else is still refused when a pattern of it did not finish: the verdicts decide.</summary>
+    [Fact]
+    public void A_line_off_its_document_is_refused_even_where_a_pattern_did_not_finish()
+    {
+        using var database = new TestDatabase();
+        using var db = Open(database, JournalLines.Strict, TimingOut.Always());
+
+        db.Journal.Add(Line("contact_archived", "cnt_01JC0000000000000000000001", null, JsonValue.Create(Sentinel)));
+        var refused = Assert.Throws<InvalidOperationException>(() => db.SaveChanges());
+
+        Assert.Contains("`contact_archived`", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("/new", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -159,6 +209,13 @@ public sealed class JournalLineInterceptorTests
         File.WriteAllText(dir.Paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
         return await RuntimeHost.StartAsync(dir.Paths, options, Ct);
     }
+
+    /// <summary>A context with the one interceptor under test, its patterns matched under <paramref name="timing"/>.</summary>
+    private static JasonDbContext Open(TestDatabase database, JournalLines lines, PatternTiming timing) => new(
+        new DbContextOptionsBuilder<JasonDbContext>()
+            .UseSqlite(JasonDbContext.ConnectionString(database.File))
+            .AddInterceptors(new JournalLineInterceptor(lines, timing))
+            .Options);
 
     private static JournalEntry Line(string kind, string? key, JsonNode? old, JsonNode? updated, Campaign? campaign = null) => new()
     {

@@ -260,7 +260,8 @@ A document is `{kind, version, since, summary, subscribable, entities, field_sin
 against the document's schema, and every column the document says is `always` named must be set. In the test suite a
 line off its document is refused, so a writer that drifts from its document fails the test that drives it. In an
 installation the line is written and the runtime's log names its kind and nothing else: a line the runtime meant to
-keep is never lost to its own check.
+keep is never lost to its own check. A pattern that does not finish in time is no verdict on a line: in either mode the
+line is written and nothing is said of it.
 
 **How a kind changes.** A kind the runtime starts writing arrives with its document in the same pull request. A body
 grows by optional fields only, each named in `field_since` with the release that added it; a field never changes

@@ -1,4 +1,5 @@
 using Jason.Contracts.Journal;
+using Jason.Contracts.Operations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -11,8 +12,14 @@ namespace Jason.Runtime.Persistence;
 /// with no document — one a person or an agent appends under a name of its own — is not checked. What happens to a line
 /// off its document is <see cref="JournalLines"/>'s to say.
 /// </summary>
-public sealed class JournalLineInterceptor(JournalLines lines) : SaveChangesInterceptor
+public sealed class JournalLineInterceptor(JournalLines lines, PatternTiming timing) : SaveChangesInterceptor
 {
+    /// <summary>The interceptor every context is given: the body's patterns matched as every runtime site matches them.</summary>
+    public JournalLineInterceptor(JournalLines lines)
+        : this(lines, PatternTiming.Default)
+    {
+    }
+
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
         ArgumentNullException.ThrowIfNull(eventData);
@@ -42,7 +49,8 @@ public sealed class JournalLineInterceptor(JournalLines lines) : SaveChangesInte
             }
 
             var line = entry.Entity;
-            var pointers = contract.CheckBody(line.Key, line.Old, line.New)
+            // A pattern that did not finish in time is no verdict on the value: it neither refuses a line nor warns of one.
+            var pointers = SchemaValidator.Verdicts(contract.CheckBody(line.Key, line.Old, line.New, timing))
                 .Select(problem => problem.Pointer)
                 .Concat(MissingColumns(contract, line))
                 .Distinct(StringComparer.Ordinal)
