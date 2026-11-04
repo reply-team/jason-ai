@@ -167,4 +167,20 @@ public class UninstallVerbTests
     [Fact]
     public void The_environment_this_program_really_runs_with_names_a_remover() =>
         Assert.NotNull(CliEnvironment.Default().Removes);
+
+    /// <summary>
+    /// And a terminal starter, and on Windows a clipboard: without them a session link and the toast's Copy prompt button
+    /// would refuse on every machine while every test passed. Naming them starts nothing and writes nothing.
+    /// </summary>
+    [Fact]
+    public void The_environment_this_program_really_runs_with_names_a_terminal_starter_and_on_windows_a_clipboard()
+    {
+        var real = CliEnvironment.Default();
+
+        Assert.NotNull(real.Terminals);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.NotNull(real.Clipboard);
+        }
+    }
 }
