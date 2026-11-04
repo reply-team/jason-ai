@@ -84,6 +84,17 @@ public class ActorOptionTests
     }
 
     [Theory]
+    [InlineData("plugin")]
+    [InlineData("plugin:acme-forwarder")]
+    public void A_plugin_is_not_an_actor_a_command_line_can_claim(string text)
+    {
+        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse(text));
+
+        Assert.Contains("--actor", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("host.call", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("robot")]
     [InlineData("Human")]
     [InlineData("human:")]
