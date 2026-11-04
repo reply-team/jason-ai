@@ -1,5 +1,6 @@
 using Jason.Contracts.Discovery;
 using Jason.Runtime.Notifications;
+using Jason.Runtime.Plugins.Subscriptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -484,6 +485,7 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<InboundOptions>, BindingFailureValidator<InboundOptions>>();
         services.AddSingleton<IValidateOptions<ResponderOptions>, BindingFailureValidator<ResponderOptions>>();
         services.AddSingleton<IValidateOptions<HarnessOptions>, BindingFailureValidator<HarnessOptions>>();
+        services.AddSingleton<IValidateOptions<SubscriptionOrderOptions>, BindingFailureValidator<SubscriptionOrderOptions>>();
 
         services.AddSingleton<IValidateOptions<RuntimeOptions>, RuntimeOptionsValidator>();
         services.AddSingleton<IValidateOptions<LoggingOptions>, LoggingOptionsValidator>();
@@ -501,6 +503,7 @@ public static class JasonConfiguration
         // already is, and any other key is written as a placeholder (SettingKey holds the whole rule).
         services.AddSingleton<IValidateOptions<PluginsOptions>>(new PluginsOptionsValidator(Installed));
         services.AddSingleton<IValidateOptions<RoutesOptions>>(new RoutesOptionsValidator(Installed));
+        services.AddSingleton<IValidateOptions<SubscriptionOrderOptions>>(new SubscriptionOrderOptionsValidator(Installed, SubscribableKinds.Catalog));
         services.AddSingleton<IValidateOptions<UpdateOptions>, UpdateOptionsValidator>();
         services.AddSingleton<IValidateOptions<InboundOptions>, InboundOptionsValidator>();
         services.AddSingleton<IValidateOptions<ResponderOptions>, ResponderOptionsValidator>();
@@ -538,6 +541,13 @@ public static class JasonConfiguration
         services.AddSingleton<IOptionsChangeTokenSource<RoutesOptions>>(new ConfigurationChangeTokenSource<RoutesOptions>(routes));
         services.AddSingleton<IConfigureOptions<RoutesOptions>>(new ConfigureOptions<RoutesOptions>(options => RoutesOptions.Fill(routes, options)));
         services.AddOptions<RoutesOptions>().ValidateOnStart();
+
+        // The order of each kind's subscribers is read by hand for the reason SubscriptionOrderOptions.Fill gives, and
+        // like the routes it is frozen: the plugin load reads it, and nothing reads it while a chain runs.
+        var subscriptions = configuration.GetSection(SubscriptionOrderOptions.Section);
+        services.AddSingleton<IOptionsChangeTokenSource<SubscriptionOrderOptions>>(new ConfigurationChangeTokenSource<SubscriptionOrderOptions>(subscriptions));
+        services.AddSingleton<IConfigureOptions<SubscriptionOrderOptions>>(new ConfigureOptions<SubscriptionOrderOptions>(options => SubscriptionOrderOptions.Fill(subscriptions, options)));
+        services.AddOptions<SubscriptionOrderOptions>().ValidateOnStart();
 
         services.AddSingleton(new SettingsFile(configuration));
         return services;

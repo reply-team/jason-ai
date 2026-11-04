@@ -1526,3 +1526,73 @@ reads by date. Any other failure, the host's own codes of §8 included, is answe
 installation's cadence, `Dispatcher:EventsCadenceSeconds` — ten minutes unless set otherwise — and at once when the
 runtime starts: up to twenty pages a read, one child each, the first read of an account reaching thirty days back. The
 fixtures under [`contracts/fixtures/events.read/`](contracts/fixtures/events.read/) are what to check a plugin against.
+
+## 16. Subscriptions: declaration, grant, order
+
+A plugin may ask to be handed journal lines of the kinds it names. Like a capability, that takes two parties: the
+manifest declares the kinds, and the person grants them. Which kinds a plugin may name is the runtime's list of journal
+kinds; a kind the runtime does not write, or one it keeps to itself, is refused when the package is read.
+
+**The declaration.** `subscriptions` is a list of journal kinds, each named once:
+
+```yaml
+manifest_version: 1
+id: my-forwarder
+version: 1.0.0
+kind: subscriber
+contracts:
+  protocol: [1]
+subscriptions: [workitem_failed, campaign_created]
+```
+
+A plugin of `kind: subscriber` does nothing else: it implements no canonical operation, delivers no notification and
+reads no provider's events, so it carries no `operations`, `contracts.operations`, `contracts.events`, `arguments`,
+`templates` or `settles_by_key`, and it must declare `subscriptions`. A provider or a notification plugin may declare
+`subscriptions` as well, and that changes nothing else about it: a route reaches a provider that subscribes exactly as
+one that does not, and its status decides both its routed work and its subscriptions. A kind the runtime does not write
+is `subscription_kind_unknown`; one the runtime writes but no plugin may subscribe to is
+`subscription_kind_not_subscribable`. Both are package problems, so either rejects the whole reload.
+
+**The grant.** `Plugins:Grants:<id>:Subscriptions` lists the kinds the person admits the plugin to, out of those it
+declares (§9):
+
+```json
+{
+  "Plugins": {
+    "Grants": {
+      "my-forwarder": { "Subscriptions": ["*"] }
+    }
+  }
+}
+```
+
+`*` admits every declared kind and nothing more. A kind the manifest does not declare admits nothing and is a
+`grant_unrequested` warning at `grants.subscriptions[i]`; it does not make the plugin unavailable. A declared kind
+nobody granted is simply not admitted, and is no problem. The grant is resolved at the load and frozen with the plugin,
+so a change takes effect at the next `jason plugin reload`.
+
+**The order.** Every kind that at least one plugin is admitted to has one chain: the plugins handed its lines, one
+after another. `Subscriptions:Order:<kind>` says who goes first:
+
+```json
+{
+  "Subscriptions": {
+    "Order": {
+      "workitem_failed": ["my-forwarder", "my-auditor"]
+    }
+  }
+}
+```
+
+The ids listed come first, in the order written; every other plugin admitted to that kind follows in plugin-id order.
+A kind with no list, or with an empty one, runs in plugin-id order alone. A plugin that loaded `unavailable` keeps its
+place in a chain: its availability is decided again only at the next load. The order is read when the runtime starts
+and at each plugin reload, and never in between, so plugins, grants and chains always change together.
+
+An order that names a plugin holding no admitted subscription to that kind — one that is not installed, whose manifest
+does not declare the kind, or that the settings do not grant it — is `subscription_order_ungranted`, and the message
+says which. Like a route to a plugin the reload does not have, it rejects the whole reload with both the plugin and the
+route snapshots kept; edit the order before reloading. An order the settings cannot hold at all — a key that is not a
+journal kind a plugin may subscribe to, an entry that is not a plugin id or is listed twice, text where a list belongs —
+stops a start, naming the setting, and rejects a reload with `subscriptions_settings_invalid` at the setting's path. A
+reload refused for both a route and an order names both. Neither problem names what was written, only where.

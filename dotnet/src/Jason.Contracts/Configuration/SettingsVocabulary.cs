@@ -19,6 +19,7 @@ public static class SettingsVocabulary
     {
         // The sections.
         "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound", "Responder", "Harness",
+        "Subscriptions",
 
         // Runtime and Logging.
         "Port",
@@ -41,7 +42,7 @@ public static class SettingsVocabulary
         "DefaultExecutionProfile", "DefaultEntryCommand", "MaxStdoutBytes", "MaxSkillBytes",
 
         // Plugins: who is granted what, then the limits every invocation runs under.
-        "Grants", "Limits", "Exec", "Http", "Invoker", "Env", "Subscriptions",
+        "Grants", "Limits", "Exec", "Http", "Invoker", "Env",
         "TimeoutMs", "MaxTimeoutMs", "MemoryMb", "MaxMemoryMb", "MaxStatements", "MaxRecursion",
         "OutputBytes", "MaxCalls",
         "ResponseBytes", "RequestBytes",
@@ -64,6 +65,10 @@ public static class SettingsVocabulary
 
         // Harness.
         "Root",
+
+        // Subscriptions: the order of each kind's subscribers, under a key that is the kind. Subscriptions also names a
+        // grant's list of kinds, a section above.
+        "Order",
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -84,5 +89,8 @@ public static class SettingsVocabulary
         "Plugins:Grants:*:Http",
         "Plugins:Grants:*:Env",
         "Plugins:Grants:*:Subscriptions",
+
+        // The order of a kind's subscribers.
+        "Subscriptions:Order:*",
     ];
 }

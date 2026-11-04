@@ -62,6 +62,7 @@ public class SettingsVocabularyTests
                 typeof(NotificationsOptions),
                 typeof(InboundOptions),
                 typeof(HarnessOptions),
+                typeof(SubscriptionOrderOptions),
             },
             new HashSet<Type>(Sections()));
     }
@@ -108,6 +109,12 @@ public class SettingsVocabularyTests
             }
             else if (property.PropertyType.IsGenericType && property.PropertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {
+                // A map whose entries are lists: each entry is a list, under the one key of the map.
+                if (property.PropertyType.GetGenericArguments()[1] is { IsGenericType: true } entry && entry.GetGenericTypeDefinition() == typeof(List<>))
+                {
+                    paths.Add($"{child}:*");
+                }
+
                 foreach (var nested in OptionTypes(property.PropertyType.GetGenericArguments()[1]))
                 {
                     ListPaths(nested, $"{child}:*", [.. chain, type], paths);
