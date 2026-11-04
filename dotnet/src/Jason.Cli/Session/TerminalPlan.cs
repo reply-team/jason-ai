@@ -84,10 +84,12 @@ public static class TerminalPlan
     }
 
     /// <summary>
-    /// What a Linux terminal is given before the program it runs, by the program's file name: kitty and foot take the
-    /// program as positional arguments and have no <c>-e</c>; gnome-terminal takes it after <c>--</c>; wezterm after
-    /// <c>start --</c>; every other name after <c>-e</c>, as xterm, konsole, alacritty, xfce4-terminal, urxvt and
-    /// <c>x-terminal-emulator</c> (Debian Policy 11.8.3) take it.
+    /// What a Linux terminal is given before the program it runs, by the program's file name, in the form each vendor
+    /// documents: kitty and foot take the host's words after the program; gnome-terminal after <c>--</c>; xfce4-terminal
+    /// and mate-terminal after <c>-x</c>, which executes the remainder of the command line; wezterm after
+    /// <c>start --</c>; every other name, <c>x-terminal-emulator</c> included, after <c>-e</c> as separate arguments
+    /// (Debian Policy 11.8.3). An emulator whose <c>-e</c> takes one string and that documents no remainder form, tilix
+    /// among them, is outside the table: it is given <c>-e</c> too, and is used through <c>x-terminal-emulator</c>.
     /// </summary>
     public static IReadOnlyList<string> LinuxForm(string program)
     {
@@ -97,6 +99,7 @@ public static class TerminalPlan
         {
             "kitty" or "foot" => [],
             "gnome-terminal" => ["--"],
+            "xfce4-terminal" or "mate-terminal" => ["-x"],
             "wezterm" => ["start", "--"],
             _ => ["-e"],
         };

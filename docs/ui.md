@@ -156,11 +156,12 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
   folder, readable by your account alone, which removes itself and its folder when it runs. This is composed and checked
   by tests here; it has not been watched on a Mac.
-- **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, with the host after `-e` as
-  several arguments. That form is the one Debian Policy 11.8.3 requires of `x-terminal-emulator`, and it is assumed for
-  `TERMINAL` too. Some emulators' own `-e` takes the command as one string instead: `gnome-terminal`, `xfce4-terminal`,
-  `mate-terminal` and `tilix` among them. If yours is one of those, leave `TERMINAL` unset so `x-terminal-emulator` is
-  used. A `TERMINAL` that holds whitespace, is a relative path, or names a program that is not found falls back to
+- **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, and gives it the host in the
+  form that program documents, decided by its file name: `kitty` and `foot` take the host's words after the program,
+  `gnome-terminal` after `--`, `xfce4-terminal` and `mate-terminal` after `-x`, `wezterm` after `start --`. A name
+  outside that table is given the host after `-e` as separate arguments, the form Debian Policy 11.8.3 requires of
+  `x-terminal-emulator`. An emulator whose `-e` takes the command as one string and that offers no other form, `tilix`
+  among them, does not take that: leave `TERMINAL` unset so `x-terminal-emulator` is used. A `TERMINAL` that holds whitespace, is a relative path, or names a program that is not found falls back to
   `x-terminal-emulator`, and the answer names the terminal that was used.
 
 The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing

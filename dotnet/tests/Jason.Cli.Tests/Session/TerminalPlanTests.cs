@@ -136,21 +136,18 @@ public sealed class TerminalPlanTests : IDisposable
     }
 
     /// <summary>
-    /// Each terminal is given the host in the form it takes, by the program's file name: kitty and foot take the program
-    /// as positional arguments, gnome-terminal after <c>--</c>, wezterm after <c>start --</c>, and every other name after
-    /// <c>-e</c>, as xterm, konsole, alacritty, xfce4-terminal, urxvt and Debian's <c>x-terminal-emulator</c> (Debian
-    /// Policy 11.8.3) take it.
+    /// Each terminal is given the host in the form its vendor documents, by the program's file name: kitty and foot take
+    /// the host's words after the program, gnome-terminal after <c>--</c>, xfce4-terminal and mate-terminal after
+    /// <c>-x</c>, wezterm after <c>start --</c>, and every other name, Debian's <c>x-terminal-emulator</c> included, after
+    /// <c>-e</c> as separate arguments (Debian Policy 11.8.3).
     /// </summary>
     [Theory]
     [InlineData("kitty", new string[0])]
     [InlineData("foot", new string[0])]
     [InlineData("gnome-terminal", new[] { "--" })]
+    [InlineData("xfce4-terminal", new[] { "-x" })]
+    [InlineData("mate-terminal", new[] { "-x" })]
     [InlineData("wezterm", new[] { "start", "--" })]
-    [InlineData("xterm", new[] { "-e" })]
-    [InlineData("konsole", new[] { "-e" })]
-    [InlineData("alacritty", new[] { "-e" })]
-    [InlineData("xfce4-terminal", new[] { "-e" })]
-    [InlineData("urxvt", new[] { "-e" })]
     [InlineData("x-terminal-emulator", new[] { "-e" })]
     public void Linux_gives_each_terminal_the_host_in_the_form_it_takes(string name, string[] before)
     {
