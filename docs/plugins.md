@@ -1116,8 +1116,8 @@ The other codes the host itself writes into a failed outcome — as opposed to y
 are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missing`,
 `plugin_syntax_error`, `plugin_memory_exceeded`, `plugin_statement_limit`, `plugin_recursion_limit`,
 `capability_not_granted`, `executable_not_allowed`, `exec_limit`, `http_host_not_allowed`,
-`http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit` and
-`module_not_allowed`. All of them are `permanent`, and every operation's check passes them but the events
+`http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit`,
+`module_not_allowed` and `api_limit`. All of them are `permanent`, and every operation's check passes them but the events
 family's (§15).
 
 ## 9. Capabilities and grants
@@ -1250,7 +1250,7 @@ identifier of a kind the operation never declared or carrying a control characte
 
 `source` is `host` or `plugin`; `data` and `truncated` appear only when they apply. The host's own
 messages are `invocation_rejected`, `digest_unverified`, `env_probe`, `exec`, `exec_launch_failed`,
-`exec_kill_unconfirmed`, `exec_kill_unfinished`, `http`, `http_failed` and `log_truncated`. The runtime copies the stream, redacted, to
+`exec_kill_unconfirmed`, `exec_kill_unfinished`, `http`, `http_failed`, `api`, `api_failed` and `log_truncated`. The runtime copies the stream, redacted, to
 `stderr.log` in the invocation directory and keeps the last 4096 characters as the trace that travels
 with a protocol failure. It is read in fixed chunks and copied line by line, up to
 `Plugins:Invoker:StderrBytes` (4 MiB); past that the file ends with a single `[stderr truncated]`

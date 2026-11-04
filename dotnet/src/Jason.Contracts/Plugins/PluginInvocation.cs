@@ -67,10 +67,30 @@ public sealed record InvocationLimits(
     HttpLimits Http,
     LogLimits Log);
 
+/// <summary>The bounds of one door: how many calls, how large an answer, and how long one call may take.</summary>
+public sealed record DoorLimits(int MaxCalls, int ResponseBytes, int TimeoutMs)
+{
+    /// <summary>The protocol's fixed bounds, the ones every door is given.</summary>
+    public static DoorLimits Standard { get; } = new(PluginProtocol.MaxDoorCalls, PluginProtocol.MaxDoorResponseBytes, PluginProtocol.DoorCallTimeoutMs);
+}
+
+/// <summary>
+/// A handler's door to the Runtime API: where the runtime listens on loopback, the capability the runtime minted for
+/// this one invocation, the journal line the invocation is about, and the operations the capability opens. The host
+/// holds it and makes every call itself; nothing of it is reachable from the plugin's JavaScript. The capability is
+/// the one secret an envelope carries, so a door never prints it.
+/// </summary>
+public sealed record InvocationDoor(string BaseUrl, string Capability, string LineId, IReadOnlyList<string> Operations, DoorLimits Limits)
+{
+    public override string ToString() =>
+        $"InvocationDoor {{ BaseUrl = {BaseUrl}, Capability = [redacted], LineId = {LineId}, Operations = {string.Join(' ', Operations)}, Limits = {Limits} }}";
+}
+
 /// <summary>
 /// One invocation, written to the child's stdin as a single JSON object and then end of file. Nothing about an
-/// invocation travels on argv beyond what a process listing may show, and no secret value travels here at all:
-/// granted environment variables reach the child by name, through its own environment.
+/// invocation travels on argv beyond what a process listing may show. The one secret value that travels here is a
+/// handler's door capability, which the host masks wherever it writes and the runtime revokes when the invocation
+/// ends; granted environment variables reach the child by name, through its own environment.
 /// </summary>
 public sealed record PluginInvocation(
     int ProtocolVersion,
@@ -82,4 +102,5 @@ public sealed record PluginInvocation(
     JsonObject Input,
     InvocationContext Context,
     InvocationGrants Grants,
-    InvocationLimits Limits);
+    InvocationLimits Limits,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] InvocationDoor? Door = null);
