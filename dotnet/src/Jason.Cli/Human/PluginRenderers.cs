@@ -106,7 +106,7 @@ public static class PluginRenderers
     /// <summary>Granted against requested for each capability: declaration is not permission, and it shows.</summary>
     private static string? Grants(PluginCapabilitiesDto? capabilities)
     {
-        if (capabilities is null || (capabilities.Exec is null && capabilities.Http is null && capabilities.Env is null))
+        if (capabilities is null || (capabilities.Exec is null && capabilities.Http is null && capabilities.Env is null && capabilities.Api is null))
         {
             return null;
         }
@@ -115,7 +115,9 @@ public static class PluginRenderers
         var http = capabilities.Http is null ? Absent : Counts(capabilities.Http.Granted?.Count ?? 0, capabilities.Http.Requested?.Count ?? 0);
         var env = capabilities.Env is null ? Absent : Counts(capabilities.Env.Granted?.Count ?? 0, capabilities.Env.Requested?.Count ?? 0);
 
-        return $"exec {exec} | http {http} | env {env}";
+        // The door is a handler's alone, so a plugin that asks for none keeps the line it always had.
+        var line = $"exec {exec} | http {http} | env {env}";
+        return capabilities.Api is null ? line : line + $" | api {Counts(capabilities.Api.Granted?.Count ?? 0, capabilities.Api.Requested?.Count ?? 0)}";
     }
 
     private static string Counts(int granted, int requested) =>

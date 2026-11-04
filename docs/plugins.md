@@ -100,6 +100,7 @@ capabilities:                    # every section optional; absent means "not req
     hosts: ["api.example.com", "localhost:5555"]   # 1..32; exact match, no wildcards
   env:
     variables: [FAKE_TOKEN]      # 1..32; the variables host.env may read
+  api: [read, journal.append]    # optional; the Runtime API families host.call may reach (§9)
 limits:                          # optional; asks, never raises
   timeout_ms: 20000
   memory_mb: 64
@@ -135,6 +136,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `capabilities.env.variables` | required inside `env`; 1..32 names `^[A-Z][A-Z0-9_]{0,63}$`, unique | `field_required`, `field_invalid`, `variable_name_invalid` |
 | a variable named `JASON_…` | never; the prefix is reserved for the runtime | `variable_reserved` |
 | a variable that decides what a program loads | never; the same names `host.exec` refuses — `LD_*`, `DYLD_*`, `COMPlus_*`, `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `NODE_OPTIONS`, `PYTHONPATH`, `JAVA_TOOL_OPTIONS`, `PATH` and the rest listed under `host.exec` below. A granted variable is copied into every child the plugin starts, so being handed one and setting one end in the same place | `field_invalid` |
+| `capabilities.api` | optional; a list of 1..7 Runtime API families, each named once: `read`, `campaign`, `contact`, `workitem`, `suppression`, `report`, `journal.append`. They are what a handler's `host.call` may reach once granted (§9) | `field_invalid`, `api_family_unknown` |
 | `limits.timeout_ms` | 1000 .. `Plugins:Limits:MaxTimeoutMs` (3 600 000 by default) | `field_invalid` |
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
 | `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` — including a pattern that cannot finish matching the short probe or the 64 KiB one within the dialect's 100 ms on a warm engine, twice | `field_invalid` |

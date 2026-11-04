@@ -211,13 +211,14 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
         {
             if (grant is null)
             {
-                failures.Add($"{SettingKey.ShownPath($"Plugins:Grants:{pluginId}", installed.Value)} must be an object with Exec, Http and Env lists.");
+                failures.Add($"{SettingKey.ShownPath($"Plugins:Grants:{pluginId}", installed.Value)} must be an object with Exec, Http, Env and Api lists.");
                 continue;
             }
 
             ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Exec", grant.Exec, installed);
             ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Http", grant.Http, installed);
             ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Env", grant.Env, installed);
+            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Api", grant.Api, installed);
         }
 
         return OptionRules.Result(failures);
@@ -235,7 +236,7 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
 
             failures.Add(string.Create(
                 CultureInfo.InvariantCulture,
-                $"{SettingKey.ShownPath(setting, installed.Value)}[{index}] must be \"*\" or the name of an executable, a host or a variable the manifest requests; {OptionRules.Written("value", entry, "is not one")}"));
+                $"{SettingKey.ShownPath(setting, installed.Value)}[{index}] must be \"*\" or the name of an executable, a host, a variable or an api family the manifest requests; {OptionRules.Written("value", entry, "is not one")}"));
         }
     }
 

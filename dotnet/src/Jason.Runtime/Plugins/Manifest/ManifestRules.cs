@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Api;
 using Jason.Contracts.Events;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
@@ -796,12 +797,51 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
 
         if (root["capabilities"] is not JsonObject capabilities)
         {
-            Add(ProblemCodes.FieldInvalid, "capabilities", "capabilities is a mapping of exec, http and env.");
+            Add(ProblemCodes.FieldInvalid, "capabilities", "capabilities is a mapping of exec, http, env and api.");
             return new CapabilityRequests(null, null, null);
         }
 
-        UnknownKeys(capabilities, "capabilities", ["exec", "http", "env"]);
-        return new CapabilityRequests(ReadExec(capabilities), ReadHttp(capabilities), ReadEnv(capabilities));
+        UnknownKeys(capabilities, "capabilities", ["exec", "http", "env", "api"]);
+        return new CapabilityRequests(ReadExec(capabilities), ReadHttp(capabilities), ReadEnv(capabilities), ReadApi(capabilities));
+    }
+
+    /// <summary>
+    /// The Runtime API families a handler of this plugin asks to reach through its door: a list of families, each named
+    /// once. A name that is no family is a package problem of its own, since no grant could ever open it.
+    /// </summary>
+    private ApiRequestSpec? ReadApi(JsonObject capabilities)
+    {
+        if (!Has(capabilities, "api"))
+        {
+            return null;
+        }
+
+        const string path = "capabilities.api";
+        if (capabilities["api"] is not JsonArray array || array.Count == 0 || array.Count > OperationFamilies.All.Count)
+        {
+            Add(ProblemCodes.FieldInvalid, path, string.Create(CultureInfo.InvariantCulture, $"{path} names 1 to {OperationFamilies.All.Count} families: {string.Join(", ", OperationFamilies.All)}."));
+            return null;
+        }
+
+        var families = new List<string>();
+        for (var index = 0; index < array.Count; index++)
+        {
+            var itemPath = string.Create(CultureInfo.InvariantCulture, $"{path}[{index}]");
+            if (!TryText(array[index], out var family) || !OperationFamilies.IsFamily(family))
+            {
+                Add(ProblemCodes.ApiFamilyUnknown, itemPath, $"a family is one of {string.Join(", ", OperationFamilies.All)}.");
+            }
+            else if (families.Contains(family, StringComparer.Ordinal))
+            {
+                Add(ProblemCodes.FieldInvalid, itemPath, $"family '{family}' is named twice.");
+            }
+            else
+            {
+                families.Add(family);
+            }
+        }
+
+        return new ApiRequestSpec(families);
     }
 
     private ExecRequestSpec? ReadExec(JsonObject capabilities)
