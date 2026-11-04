@@ -356,11 +356,14 @@ Plugins:    none active | last reload rejected
 ```
 
 An **activated** load writes one global journal entry of the reserved kind `plugins_reloaded`
-carrying the snapshot id, its source, `{id, version, digest, status}` per plugin, and the routes it
-froze as `{snapshot_id, global_default, override_count, campaign_route_count}` — actor `system`
-for the load at startup, the request's actor and reason for a reload. A **rejected** load writes
-none; it is visible in the log and in `last_reload`. `journal.append` refuses the kind, so nothing
-but a real activation can write one.
+carrying the snapshot id, its source, `{id, version, digest, status, subscriptions}` per plugin —
+`subscriptions` being how many journal kinds the plugin is granted — the routes it froze as
+`{snapshot_id, global_default, override_count, campaign_route_count}`, and the chains it froze as
+`subscriptions: {kind_count, subscriber_count}`: how many kinds some plugin handles, and how many
+plugins handle at least one. The line counts and names no kind and no order; `plugin.list` says
+which. Actor `system` for the load at startup, the request's actor and reason for a reload. A
+**rejected** load writes none; it is visible in the log and in `last_reload`. `journal.append`
+refuses the kind, so nothing but a real activation can write one.
 
 ## 5. Writing `invoke`
 

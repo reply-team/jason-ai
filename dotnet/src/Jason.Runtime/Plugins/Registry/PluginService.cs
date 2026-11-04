@@ -126,7 +126,9 @@ public sealed class PluginService(
 
     /// <summary>
     /// One global entry per activated snapshot, shared with the load at startup. It is the audit trail that
-    /// invocation pinning leans on: which package, at which digest, was active when.
+    /// invocation pinning leans on: which package, at which digest, was active when. The journal kinds the load froze
+    /// travel as counts only — how many each plugin is granted, how many have a chain, how many plugins are in one —
+    /// never a kind or an order: <c>plugin.list</c> says which.
     /// </summary>
     public static void JournalActivation(
         JournalWriter journal,
@@ -149,8 +151,11 @@ public sealed class PluginService(
                 ["version"] = plugin.Manifest.Version,
                 ["digest"] = plugin.Digest,
                 ["status"] = SnakeCase.Convert(plugin.Status.ToString()),
+                ["subscriptions"] = plugin.Grants.Subscriptions.Count,
             });
         }
+
+        var chains = snapshot.Subscriptions;
 
         journal.Append(
             db,
@@ -172,6 +177,11 @@ public sealed class PluginService(
                     ["global_default"] = routes.Global.Default?.PluginId,
                     ["override_count"] = routes.Global.Operations.Count,
                     ["campaign_route_count"] = routes.Campaigns.Values.Sum(set => set.Operations.Count + (set.Default is null ? 0 : 1)),
+                },
+                ["subscriptions"] = new JsonObject
+                {
+                    ["kind_count"] = chains.Kinds.Count,
+                    ["subscriber_count"] = chains.Kinds.SelectMany(chains.For).Distinct(StringComparer.Ordinal).Count(),
                 },
             },
             reason: reason);

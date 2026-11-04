@@ -51,6 +51,48 @@ public class SubscriptionReloadTests
     }
 
     /// <summary>
+    /// The line an activated load writes counts what it froze — kinds granted to each plugin, kinds with a chain, plugins
+    /// in one — and names no kind and no order: <c>plugin.list</c> says what, the line says how much changed.
+    /// </summary>
+    [Fact]
+    public async Task The_activation_line_counts_the_subscriptions_it_froze_and_names_no_kind()
+    {
+        await using var api = await StartAsync(paths =>
+        {
+            TestPlugins.InstallFakeProvider(paths);
+            WriteSubscriber(paths, "watcher");
+            Settings(paths, settings => Grant(settings, "watcher", "*"));
+        });
+        var startup = Assert.Single((await LinesAsync(api)).Items);
+        Assert.Equal(1, (int)startup.New!["subscriptions"]!["kind_count"]!);
+        Assert.Equal(1, (int)startup.New["subscriptions"]!["subscriber_count"]!);
+
+        WriteSubscriber(api.Paths, "alpha", "campaign_created");
+        WriteSubscriber(api.Paths, "beta");
+        Settings(api.Paths, settings =>
+        {
+            Grant(settings, "alpha", "campaign_created");
+            Grant(settings, "beta", Failed);
+            Order(settings, Failed, "beta");
+        });
+        await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+
+        var line = (await LinesAsync(api)).Items[0];
+        var counts = line.New!["subscriptions"]!.AsObject();
+        Assert.Equal(["kind_count", "subscriber_count"], counts.Select(member => member.Key));
+        Assert.Equal(2, (int)counts["kind_count"]!);
+        Assert.Equal(3, (int)counts["subscriber_count"]!);
+        var granted = line.New["plugins"]!.AsArray().ToDictionary(plugin => (string)plugin!["id"]!, plugin => (int)plugin!["subscriptions"]!);
+        Assert.Equal(1, granted["alpha"]);
+        Assert.Equal(1, granted["beta"]);
+        Assert.Equal(1, granted["watcher"]);
+        Assert.Equal(0, granted[TestPlugins.FakeProviderId]);
+        var written = line.New.ToJsonString();
+        Assert.DoesNotContain(Failed, written, StringComparison.Ordinal);
+        Assert.DoesNotContain("campaign_created", written, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A campaign's route is activated without a plugin load, so it leaves the plugin snapshot, and with it the
     /// chains, exactly as they were — even when the order section has been edited since.
     /// </summary>
@@ -183,6 +225,9 @@ public class SubscriptionReloadTests
         Assert.Equal("Subscriptions:Order:workitem_failed[0]", problem.Field);
         Assert.Equal(SubscriptionProblemCodes.OrderUngranted, problem.Code);
     }
+
+    private static Task<Page<JournalEntryDto>> LinesAsync(RuntimeApiFixture api) =>
+        api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Kind = "plugins_reloaded" }, Ct);
 
     private static Task<RuntimeApiFixture> StartAsync(Action<JasonPaths> prepare) =>
         RouteActivationTests.StartAsync(prepare: prepare);
