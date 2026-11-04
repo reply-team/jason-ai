@@ -71,7 +71,9 @@ public static class UninstallCommand
                                    any provider CLI, any model credential, a PATH entry the installer did
                                    not write, another account's logon registration, the notifications
                                    already in the notification center, which are the person's to dismiss,
-                                   a jason: link registration another program or another installation owns.
+                                   a jason: link registration another program owns, and one whose command is
+                                   other than this installation's: it may be another installation's or a
+                                   spelling of this one.
                                    And the harness root (Harness:Root, ~/Jason by default) with every
                                    folder and file in it, --purge-data included: the purge empties the
                                    data directory, never the root. A link in the data directory is
@@ -380,7 +382,7 @@ public static class UninstallCommand
 
         if (plan.Link is { Fate: LinkRegistrationFate.Kept } kept)
         {
-            env.Out.WriteLine($@"  NOT touched: the jason: link registration at HKCU\{Jason.Contracts.Notifications.LinkRegistration.Key}, whose command names another installation: {kept.Command}");
+            env.Out.WriteLine($@"  NOT touched: the jason: link registration at HKCU\{Jason.Contracts.Notifications.LinkRegistration.Key}, which holds a command other than this installation's: {kept.Command}");
         }
         else if (plan.Link is { Fate: LinkRegistrationFate.Untouched })
         {

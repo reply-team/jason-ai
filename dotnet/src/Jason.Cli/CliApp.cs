@@ -66,8 +66,8 @@ namespace Jason.Cli;
 /// agent host — the one the named preference <c>agent.interactive_host</c> names — in a new terminal window at the
 /// campaign's folder, with the brief <c>approval get --prompt</c> or <c>decision get --prompt</c> prints as its first
 /// input. A terminal on this machine is not the runtime's to start or to know about, so the runtime is asked nothing new:
-/// only what those two renderings ask, and <c>preference.list</c>. It never approves, rejects or answers; the agent it
-/// starts proposes.
+/// only what those two renderings ask, and <c>preference.list</c>. Jason's brief asks the agent to propose only and not
+/// to approve, reject or answer; what it may run is the host's own permission settings' to decide.
 /// </para>
 /// <para>
 /// Guards hold the list to these: the verb-map tests to the four verbs, the three nouns, the <c>ui</c> group's three

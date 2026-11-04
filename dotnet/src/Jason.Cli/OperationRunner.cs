@@ -19,7 +19,8 @@ public sealed record RunOptions(bool Human, Func<string, string?>? RenderHuman =
 
     /// <summary>
     /// With <c>--prompt</c>, the text that briefs an agent session on the item the answer describes, in place of the
-    /// answer. It is a rendering like <c>--human</c>: the answer is unchanged, and a body it cannot read prints as it came.
+    /// answer. It is a rendering like <c>--human</c>: the answer is unchanged. A body it cannot read is refused, exit 1, and
+    /// never printed: what was asked for is a brief made of ids, and the body is the item itself.
     /// </summary>
     public Func<string, CancellationToken, Task<string?>>? RenderPromptAsync { get; init; }
 
@@ -34,8 +35,8 @@ public static class OperationRunner
 {
     /// <summary>
     /// 3 when the runtime cannot be reached or rejects the token (the envelope is on stdout), 1 when the API
-    /// answers with an error (its body verbatim, or an envelope when the body is not JSON), 0 on success (the body
-    /// verbatim, or the rendered text).
+    /// answers with an error (its body verbatim, or an envelope when the body is not JSON) or <c>--prompt</c> cannot read
+    /// the answer (one line on stderr), 0 on success (the body verbatim, or the rendered text).
     /// </summary>
     public static async Task<int> RunAsync(CliEnvironment env, string operation, JsonObject body, RunOptions options, CancellationToken cancellationToken)
     {
@@ -58,6 +59,11 @@ public static class OperationRunner
         if (options.Prompt && options.RenderPromptAsync is not null)
         {
             rendered = await options.RenderPromptAsync(response.Body, cancellationToken).ConfigureAwait(false);
+            if (rendered is null)
+            {
+                env.Error.WriteLine($"--prompt: {Human.PromptRenderers.NoItem}; nothing was printed.");
+                return ExitCodes.ApiError;
+            }
         }
         else if (options.Human && options.RenderHumanAsync is not null)
         {

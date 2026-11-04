@@ -90,7 +90,10 @@ public sealed class UninstallSchemeRegistrationTests
         Assert.Null(remover.Link);
     }
 
-    /// <summary>Another installation on this account wrote the key last: that one's own uninstall removes it.</summary>
+    /// <summary>
+    /// Another installation on this account wrote the key last. A command other than this installation's is kept, since
+    /// it may be another installation's or a spelling of this one.
+    /// </summary>
     [Fact]
     public async Task Another_installation_s_link_is_named_and_kept()
     {
@@ -101,7 +104,7 @@ public sealed class UninstallSchemeRegistrationTests
             DryRun,
             Ct);
         Assert.Contains(
-            $@"  NOT touched: the jason: link registration at HKCU\{LinkRegistration.Key}, whose command names another installation: {Elsewhere}",
+            $@"  NOT touched: the jason: link registration at HKCU\{LinkRegistration.Key}, which holds a command other than this installation's: {Elsewhere}",
             planned.ToString(),
             StringComparison.Ordinal);
 
@@ -111,7 +114,7 @@ public sealed class UninstallSchemeRegistrationTests
 
         Assert.Equal(ExitCodes.Success, exit);
         var report = Report(output);
-        Assert.Contains(report.Kept, line => line.StartsWith($@"Kept the jason: link registration at HKCU\{LinkRegistration.Key}", StringComparison.Ordinal) && line.Contains(Elsewhere, StringComparison.Ordinal));
+        Assert.Contains($@"Kept the jason: link registration at HKCU\{LinkRegistration.Key}: it holds a command other than this installation's: {Elsewhere}", report.Kept);
         Assert.DoesNotContain(report.Done, line => line.Contains("jason: link", StringComparison.Ordinal));
         Assert.Empty(remover.LinkRemovedFor);
         Assert.NotNull(remover.Link);
@@ -228,6 +231,31 @@ public sealed class UninstallSchemeRegistrationTests
     public void No_key_is_no_plan() => Assert.Null(LinkRegistrationPlan.Of(null, Ours_));
 
     /// <summary>
+    /// The remover's own check just before the delete: the same decision, read again, and anything but Removed refused, so
+    /// a key another installation or another program wrote between the plan and the step is never deleted.
+    /// </summary>
+    [Theory]
+    [InlineData(true, LinkRegistration.Marker, Ours_, true)]
+    [InlineData(true, LinkRegistration.Marker, Elsewhere, false)]
+    [InlineData(true, "another.program", Ours_, false)]
+    [InlineData(false, null, null, false)]
+    public void The_remover_deletes_only_what_the_decision_removes(bool key, string? marker, string? command, bool removes)
+    {
+        var read = key ? new LinkRegistrationRead(marker, command) : null;
+
+        var refused = Record.Exception(() => LinkRegistrationPlan.Require(read, Ours_));
+
+        if (removes)
+        {
+            Assert.Null(refused);
+        }
+        else
+        {
+            Assert.Equal(CliErrors.UninstallRefused, Assert.IsType<RemovalRefused>(refused).Code);
+        }
+    }
+
+    /// <summary>
     /// An installation whose path holds a <c>%</c> writes no link, so a key of ours naming any command is another
     /// installation's, and one naming none is a half-written key of ours.
     /// </summary>
@@ -243,7 +271,7 @@ public sealed class UninstallSchemeRegistrationTests
 
     [Theory]
     [InlineData("on Windows, the notification registration: the AppUserModelID key the toast was shown under, the two entries Windows made for it, and the jason: link registration where its command names this executable")]
-    [InlineData("a jason: link registration another program or another installation owns")]
+    [InlineData("a jason: link registration another program owns, and one whose command is other than this installation's: it may be another installation's or a spelling of this one.")]
     [InlineData("This account's, not this installation's: the logon registration, the notification registration and the agent harnesses. Uninstalling a second installation on one account takes the first one's registrations and harness skills too. The jason: link goes only where its command names this executable.")]
     public async Task The_help_says_what_it_takes_away_and_what_it_leaves(string published)
     {

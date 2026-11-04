@@ -156,7 +156,7 @@ public static class ModeRouter
         AntigravityHook.RunAsync(args[1..], HostHookInput(), Console.Out, Console.Error, cancellationToken);
 
     /// <summary>Where the hook reads its call: the process's standard input as bytes, never a console reader. A test swaps it.</summary>
-    public static Func<Stream> HostHookInput { get; set; } = Console.OpenStandardInput;
+    internal static Func<Stream> HostHookInput { get; set; } = Console.OpenStandardInput;
 
     /// <summary>
     /// A click on a <c>jason:</c> link: the shell starts this executable with the link as its one argument, and the CLI

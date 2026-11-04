@@ -157,7 +157,7 @@ public interface IInstallationRemover
     /// <summary>
     /// Removes the <c>jason:</c> link registration, and everything under it, from this account's classes, the one key
     /// this may delete there: read again first, and refused unless it still carries Jason's marker and
-    /// <paramref name="command"/> or no command at all (<see cref="LinkRegistrationPlan.Of"/>).
+    /// <paramref name="command"/> or no command at all (<see cref="LinkRegistrationPlan.Require"/>).
     /// </summary>
     void RemoveLinkRegistration(string? command);
 }
@@ -561,10 +561,7 @@ public static class InstallationRemovers
 
         public void RemoveLinkRegistration(string? command)
         {
-            if (LinkRegistrationPlan.Of(ReadLinkRegistration(), command) is not { Fate: LinkRegistrationFate.Removed })
-            {
-                throw new RemovalRefused(CliErrors.UninstallRefused, "The jason: link registration no longer carries Jason's marker and this installation's command, so it is not this verb's to remove.");
-            }
+            LinkRegistrationPlan.Require(ReadLinkRegistration(), command);
 
             if (OperatingSystem.IsWindows())
             {

@@ -658,7 +658,8 @@ public static class UninstallRunner
 
     /// <summary>
     /// Removes the <c>jason:</c> link registration where it carries Jason's marker and this installation's command; keeps
-    /// another installation's, naming it, and leaves another program's.
+    /// one whose command is other than this installation's, naming it, since it may be another installation's or a
+    /// spelling of this one; and leaves another program's.
     /// </summary>
     /// <remarks>
     /// In the notification step and for its reason: a runtime still running when the plan was read could show one more
@@ -695,7 +696,7 @@ public static class UninstallRunner
 
                 break;
             case LinkRegistrationFate.Kept:
-                kept.Add($@"Kept the jason: link registration at HKCU\{Key}: its command names another installation ({link.Command}), whose own uninstall removes it.");
+                kept.Add($@"Kept the jason: link registration at HKCU\{Key}: it holds a command other than this installation's: {link.Command}");
                 break;
             case LinkRegistrationFate.Untouched:
                 kept.Add($@"Left the jason: link registration at HKCU\{Key}: it is another program's.");

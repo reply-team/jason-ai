@@ -86,7 +86,7 @@ public static class LinkHandler
         var render = approval ? PromptRenderers.Approval(env) : PromptRenderers.Question(env);
         if (await render(response.Body, cancellationToken).ConfigureAwait(false) is not { } prompt)
         {
-            env.Error.WriteLine("Copy prompt: the runtime's answer names no item to compose a prompt for; nothing was copied.");
+            env.Error.WriteLine($"Copy prompt: {PromptRenderers.NoItem}; nothing was copied.");
             return ExitCodes.ApiError;
         }
 

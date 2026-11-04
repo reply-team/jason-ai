@@ -13,7 +13,10 @@ public enum LinkRegistrationFate
     /// <summary>Jason's marker, and this installation's command or none: it goes.</summary>
     Removed,
 
-    /// <summary>Jason's marker and another installation's command: that one's own uninstall removes it.</summary>
+    /// <summary>
+    /// Jason's marker and a command other than this installation's: kept, since it may be another installation's or a
+    /// spelling of this one.
+    /// </summary>
     Kept,
 
     /// <summary>No Jason marker: another program's, never touched.</summary>
@@ -49,5 +52,18 @@ public sealed record LinkRegistrationPlan(LinkRegistrationFate Fate, string? Com
         return read.Command is null || (command is not null && LinkRegistration.SameCommand(read.Command, command))
             ? new LinkRegistrationPlan(LinkRegistrationFate.Removed, read.Command)
             : new LinkRegistrationPlan(LinkRegistrationFate.Kept, read.Command);
+    }
+
+    /// <summary>
+    /// The remover's check just before the delete: <see cref="Of"/> made again over the registration as it stands now,
+    /// refusing anything but <see cref="LinkRegistrationFate.Removed"/>, no key included.
+    /// </summary>
+    /// <exception cref="RemovalRefused">The registration is no longer this installation's to remove.</exception>
+    public static void Require(LinkRegistrationRead? read, string? command)
+    {
+        if (Of(read, command) is not { Fate: LinkRegistrationFate.Removed })
+        {
+            throw new RemovalRefused(CliErrors.UninstallRefused, "The jason: link registration no longer carries Jason's marker and this installation's command, so it is not this verb's to remove.");
+        }
     }
 }

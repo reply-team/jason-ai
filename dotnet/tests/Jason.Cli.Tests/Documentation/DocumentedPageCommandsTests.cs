@@ -36,6 +36,9 @@ public class DocumentedPageCommandsTests
         // for real all the same: the data directory it writes under is this test's own, and an `--output` a page
         // printed is moved there too (see Named).
         "jason logs", "jason doctor",
+        // The verb that starts a person's own agent host. Typed for real as the others are: with no runtime in this test's
+        // data directory its first read finds no descriptor and it exits 3 before a host is looked for or a terminal named.
+        "jason session ",
     ];
 
     /// <summary>
@@ -67,6 +70,7 @@ public class DocumentedPageCommandsTests
         Path.Combine("docs", "INSTALL.md"),
         Path.Combine("docs", "notifications.md"),
         Path.Combine("docs", "projects.md"),
+        Path.Combine("docs", "contracts", "preferences", "agent.interactive_host.md"),
         Path.Combine("docs", "contracts", "preferences", "sender.identity.md"),
         Path.Combine("docs", "contracts", "preferences", "tone_of_voice.md"),
         Path.Combine("docs", "contracts", "context", "goals.md"),

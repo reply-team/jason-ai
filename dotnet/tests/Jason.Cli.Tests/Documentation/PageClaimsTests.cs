@@ -210,6 +210,7 @@ public partial class PageClaimsTests
     [InlineData("dotnet/src/Jason.Cli/Session/SessionOpener.cs", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide.")]
     [InlineData("dotnet/src/Jason.Cli/Link/LinkHandler.cs", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide.")]
     [InlineData("ui/src/screens/attention/session-link.tsx", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is your host's own permission settings' to decide.")]
+    [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide.")]
     public void No_page_says_the_agent_a_session_starts_cannot_decide(string page, string said)
     {
         var text = Flat(Regex.Replace(Page(page.Split('/')), @"(?m)^\s*(///|\*)\s?", ""));
@@ -218,7 +219,7 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("reads and proposes and decides nothing", text, StringComparison.Ordinal);
         Assert.DoesNotContain("the person still decides", text, StringComparison.Ordinal);
         Assert.DoesNotContain("approving, rejecting and answering stay with you", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("and the agent it starts proposes.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("the agent it starts proposes.", text, StringComparison.Ordinal);
         Assert.Contains(said, text, StringComparison.Ordinal);
     }
 

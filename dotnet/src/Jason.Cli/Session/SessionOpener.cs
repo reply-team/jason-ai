@@ -18,8 +18,9 @@ namespace Jason.Cli.Session;
 /// </summary>
 /// <remarks>
 /// Exit codes are the CLI's: 0 the terminal started (or, for a dry run, would be), 1 refused — by the runtime, or because
-/// nothing waits on the item, the host is unknown or not installed, the recorded folder is not there, or no terminal is
-/// found or starts — and 3 no runtime to ask. Every refusal that leaves the item waiting says how to do the same by hand.
+/// nothing waits on the item, the host is unknown or not installed, the recorded folder is not there, no folder is
+/// recorded and no home folder is named, or no terminal is found or starts — and 3 no runtime to ask. Every refusal that
+/// leaves the item waiting says how to do the same by hand.
 /// Stdout is one compact object of the CLI's own, never the prompt.
 /// </remarks>
 public static class SessionOpener
@@ -101,6 +102,13 @@ public static class SessionOpener
 
         var prompt = CopyPrompt.Compose(kind, item.Id, item.CampaignId, item.WorkItemId, folder);
         var where = folder?.Path ?? Home(env);
+        if (string.IsNullOrWhiteSpace(where))
+        {
+            env.Error.WriteLine($"No folder is recorded for the {noun}'s campaign and this account names no home folder, so there is nowhere to start {hostWord} and nothing was started.");
+            env.Error.WriteLine(byHand);
+            return ExitCodes.ApiError;
+        }
+
         var shown = folder?.Path ?? "your home folder";
         var terminals = env.Terminals;
         var terminal = terminals is null
@@ -136,9 +144,13 @@ public static class SessionOpener
         return ExitCodes.Success;
     }
 
+    /// <summary>
+    /// How to name another host, in the form every shell passes whole: the value in a file, since Windows PowerShell 5.1
+    /// and cmd.exe break an inline JSON value's quotes.
+    /// </summary>
     private const string ChooseAnother =
-        "Choose another host with jason preference set agent.interactive_host --value '{\"host\":\"<host>\"}' --actor human:<your-name>, "
-        + "or go back to claude_code with jason preference unset agent.interactive_host --actor human:<your-name>.";
+        "To choose another host, put {\"host\":\"<host>\"} in a file, host.json say, and run `jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`; "
+        + "or go back to claude_code with `jason preference unset agent.interactive_host --actor human:<your-name>`.";
 
     private sealed record Item(string Id, string CampaignId, string WorkItemId, string? DecidedState);
 
@@ -148,18 +160,15 @@ public static class SessionOpener
         {
             var read = RenderText.Read<ApprovalDto>(json);
             return read is { Id: { Length: > 0 } id, CampaignId: { Length: > 0 } campaign, WorkItemId: { Length: > 0 } workItem }
-                ? new Item(id, campaign, workItem, read.Status == ApprovalStatus.Pending ? null : Word(read.Status))
+                ? new Item(id, campaign, workItem, PromptRenderers.Decided(read.Status, ApprovalStatus.Pending))
                 : null;
         }
 
         var decision = RenderText.Read<DecisionDto>(json);
         return decision is { Id: { Length: > 0 } decisionId, CampaignId: { Length: > 0 } decisionCampaign, WorkItemId: { Length: > 0 } decisionWorkItem }
-            ? new Item(decisionId, decisionCampaign, decisionWorkItem, decision.Status == DecisionStatus.Pending ? null : Word(decision.Status))
+            ? new Item(decisionId, decisionCampaign, decisionWorkItem, PromptRenderers.Decided(decision.Status, DecisionStatus.Pending))
             : null;
     }
-
-    private static string Word<T>(T status)
-        where T : struct, Enum => JsonSerializer.Serialize(status, JasonJson.Options).Trim('"');
 
     /// <summary>The word the preference holds, or null when it is unset; a read the runtime refused is its exit code.</summary>
     private static async Task<(int Exit, string? Word)> PreferredHostAsync(CliEnvironment env, CancellationToken cancellationToken)

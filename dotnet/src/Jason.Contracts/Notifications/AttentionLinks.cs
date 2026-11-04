@@ -40,7 +40,10 @@ public sealed record AttentionTarget(AttentionAct Act, AttentionKind? Kind, stri
 /// <summary>
 /// The <c>jason:</c> links, one row per path: what a Windows toast's click carries, and the one parser the executable
 /// reads them back with. The toast builds its links from these rows and the handler parses with them, so neither can
-/// write or take a link the other does not know.
+/// write or take a link the other does not know. The session link is written elsewhere, by the UI
+/// (<c>ui/src/screens/attention/session-link.tsx</c>), which cannot call this table: its screen test holds what it writes,
+/// and <c>SessionOpenerTests.The_uis_session_link_and_command_are_ones_this_build_takes</c> holds the same form to the row
+/// here and to the parser.
 /// </summary>
 /// <remarks>
 /// <para>

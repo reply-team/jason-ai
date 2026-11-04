@@ -40,9 +40,20 @@ public sealed class SessionOpenerTests : IDisposable
         var prompt = CopyPrompt.Compose(PromptKind.Approval, "apr_1", "cmp_1", "wi_1", new PromptFolder(PromptFolderLevel.Campaign, folder));
         Assert.Equal([_run.ConsoleHost, "--", claude, prompt], launch.Argv);
         Assert.Equal(folder, launch.WorkingDirectory);
+        var answer = JsonNode.Parse(_run.Output.ToString())!.AsObject();
         Assert.Equal(
-            "{\"kind\":\"approval\",\"id\":\"apr_1\",\"campaign_id\":\"cmp_1\",\"folder\":{\"level\":\"campaign\",\"path\":\"" + folder + "\"},\"host\":\"claude_code\",\"program\":" + Quoted(claude) + ",\"terminal\":\"conhost\",\"started\":true}",
-            _run.Output.ToString().TrimEnd());
+            ["kind", "id", "campaign_id", "folder", "host", "program", "terminal", "started"],
+            answer.Select(field => field.Key).ToArray());
+        Assert.Equal("approval", (string?)answer["kind"]);
+        Assert.Equal("apr_1", (string?)answer["id"]);
+        Assert.Equal("cmp_1", (string?)answer["campaign_id"]);
+        Assert.Equal("campaign", (string?)answer["folder"]!["level"]);
+        Assert.Equal(folder, (string?)answer["folder"]!["path"]);
+        Assert.Equal("claude_code", (string?)answer["host"]);
+        Assert.Equal(claude, (string?)answer["program"]);
+        Assert.Equal("conhost", (string?)answer["terminal"]);
+        Assert.True((bool)answer["started"]!);
+        Assert.Single(_run.Output.ToString().TrimEnd().Split('\n'));
         Assert.Empty(_run.Error.ToString());
     }
 
@@ -73,6 +84,15 @@ public sealed class SessionOpenerTests : IDisposable
         { "gemini_cli", "gemini", "-i" },
         { "antigravity_cli", "agy", "-i" },
     };
+
+    /// <summary>The table above is every host this build knows, by the word the preference holds, and no other.</summary>
+    [Fact]
+    public void The_host_table_is_every_host_this_build_knows()
+    {
+        var words = Enum.GetValues<AgentHostKind>().Select(host => System.Text.Json.JsonSerializer.Serialize(host, Jason.Contracts.Json.JasonJson.Options).Trim('"'));
+
+        Assert.Equal(words.Order(StringComparer.Ordinal), Hosts().Select(row => row.Data.Item1).Order(StringComparer.Ordinal));
+    }
 
     /// <summary>Each host word starts that host's program, found by its command word, with the prompt in that host's own form.</summary>
     [Theory]
@@ -218,6 +238,29 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Contains("cd -- '" + _run.CampaignFolder + "' || exit 1", script, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// On Linux the terminal is the one the <c>TERMINAL</c> variable names, found on the search path, given the host in
+    /// that program's own form: kitty takes it as its positional arguments.
+    /// </summary>
+    [Fact]
+    public async Task On_linux_the_terminal_the_terminal_variable_names_starts_the_host_at_the_campaigns_folder()
+    {
+        _run.Terminals.Platform = TerminalPlatform.Linux;
+        var claude = _run.Programs.AddProgram("claude");
+        var kitty = _run.Programs.Add("kitty", executable: true);
+        _run.Variables["TERMINAL"] = "kitty";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var launch = Assert.Single(_run.Terminals.Launches);
+        var prompt = CopyPrompt.Compose(PromptKind.Approval, "apr_1", "cmp_1", "wi_1", new PromptFolder(PromptFolderLevel.Campaign, _run.CampaignFolder));
+        Assert.Equal("kitty", launch.Terminal);
+        Assert.Equal([kitty, claude, prompt], launch.Argv);
+        Assert.Equal(_run.CampaignFolder, launch.WorkingDirectory);
+        Assert.Null(launch.Script);
+    }
+
     [Fact]
     public async Task Human_says_what_was_started_and_where()
     {
@@ -250,21 +293,39 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal("Started claude_code in conhost at your home folder.", _run.Output.ToString().TrimEnd());
     }
 
+    /// <summary>No folder recorded and no home folder named: there is nowhere to start, said in its own line and the way by hand.</summary>
+    [Fact]
+    public async Task With_no_folder_and_no_home_folder_nothing_is_started()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.Campaign = CopyPromptTests.Fixture("campaign.get", "one");
+        _run.GivenHome = "";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Empty(_run.Output.ToString());
+        var said = _run.Error.ToString().TrimEnd().Split('\n');
+        Assert.Equal(2, said.Length);
+        Assert.Equal(
+            "No folder is recorded for the approval's campaign and this account names no home folder, so there is nowhere to start claude_code and nothing was started.",
+            said[0].TrimEnd('\r'));
+        Assert.Contains("jason approval get apr_1 --prompt", said[1], StringComparison.Ordinal);
+    }
+
     /// <summary>
-    /// The UI's Open an AI session link and the command shown beside it are this build's: the command parses through the
-    /// program's own parser to <c>session open</c>, and the link is the one the table the click is read with writes, so a
-    /// renamed option or a moved row turns this red rather than a dead link on the page.
+    /// The forms the UI's Open an AI session link and the command shown beside it take (written by
+    /// <c>ui/src/screens/attention/session-link.tsx</c>) are this build's: the command parses through the program's own
+    /// parser to <c>session open</c>, and the link is the one the table the click is read with writes and reads, so a
+    /// renamed option or a moved row turns this red rather than a dead link on the page. That the UI writes these forms is
+    /// its own screen test's to hold (<c>session-link.screen.test.tsx</c>).
     /// </summary>
     [Theory]
     [InlineData("approval", "approvals", "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6")]
     [InlineData("question", "questions", "dec_01JBZ3X7Q9K2M4N6P8R0S2T4V6")]
     public void The_uis_session_link_and_command_are_ones_this_build_takes(string kind, string collection, string id)
     {
-        var source = File.ReadAllText(Path.Combine(CopyPromptTests.RepositoryRoot(), "ui", "src", "screens", "attention", "session-link.tsx"));
-        Assert.Contains("`jason session open --${kind} ${itemId}`", source, StringComparison.Ordinal);
-        Assert.Contains("`jason://attention/${collection}/${itemId}/session`", source, StringComparison.Ordinal);
-        Assert.Contains($"kind === 'approval' ? 'approvals' : 'questions'", source, StringComparison.Ordinal);
-
         var command = $"jason session open --{kind} {id}";
         using var paths = new TempPaths();
         var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
@@ -287,6 +348,20 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Empty(_run.Asked);
         Assert.Empty(_run.Terminals.Launches);
+    }
+
+    /// <summary>An empty id is a usage error like a missing one, said in the CLI's own words, and nothing is asked.</summary>
+    [Theory]
+    [InlineData("--approval")]
+    [InlineData("--question")]
+    public async Task An_empty_id_is_a_usage_error_that_asks_nothing(string option)
+    {
+        var exit = await _run.Cli("session", "open", option, "");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Empty(_run.Asked);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Contains(option + " was given an empty id", _run.Error.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>A decided item has nothing for a session to propose: refused in one line, and its brief is still printed by --prompt.</summary>
@@ -367,9 +442,14 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Contains("codex's program 'codex' is not on this machine's search path", said, StringComparison.Ordinal);
         Assert.Contains("jason approval get apr_1 --prompt", said, StringComparison.Ordinal);
 
-        // A preference is a person's own word, so the line names the person, as the verb requires.
-        Assert.Contains("jason preference set agent.interactive_host --value '{\"host\":\"<host>\"}' --actor human:<your-name>", said, StringComparison.Ordinal);
-        Assert.Contains("jason preference unset agent.interactive_host --actor human:<your-name>", said, StringComparison.Ordinal);
+        // A preference is a person's own word, so the line names the person, as the verb requires. The value goes in a
+        // file, the one form every shell passes whole: Windows PowerShell 5.1 and cmd.exe break the inline JSON's quotes.
+        Assert.Contains(
+            "put {\"host\":\"<host>\"} in a file, host.json say, and run `jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`; "
+            + "or go back to claude_code with `jason preference unset agent.interactive_host --actor human:<your-name>`.",
+            said,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("--value '", said, StringComparison.Ordinal);
     }
 
     /// <summary>A host whose shim names an executable the disk does not hold is named by its shim, not as a name nothing answers for.</summary>
@@ -515,6 +595,20 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Empty(_run.Terminals.Launches);
     }
 
+    /// <summary>A preference list that is not JSON is no answer either: nothing is started.</summary>
+    [Fact]
+    public async Task A_preference_list_that_is_not_json_starts_nothing()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.PreferencesBody = "<html>not the runtime</html>";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(["approval.get", "campaign.get", "preference.list"], _run.Asked);
+        Assert.Empty(_run.Terminals.Launches);
+    }
+
     private static string Quoted(string text) => System.Text.Json.JsonSerializer.Serialize(text);
 
     /// <summary>A runtime that answers the recorded exchanges a session takes, and a machine of temporary folders.</summary>
@@ -556,6 +650,9 @@ public sealed class SessionOpenerTests : IDisposable
 
         public string Home { get; }
 
+        /// <summary>The home folder the account's identity names, when a row gives one other than <see cref="Home"/>.</summary>
+        public string? GivenHome { get; set; }
+
         public string? Item { get; set; } = CopyPromptTests.Fixture("approval.get", "pending-with-preview");
 
         public string? Campaign { get; set; }
@@ -564,6 +661,12 @@ public sealed class SessionOpenerTests : IDisposable
         public string? Preference { get; set; }
 
         public bool PreferencesAnswer { get; set; } = true;
+
+        /// <summary>The preference list's body as it is sent, in place of the one composed from <see cref="Preference"/>.</summary>
+        public string? PreferencesBody { get; set; }
+
+        /// <summary>The environment variables the verb reads, none unless a row names one.</summary>
+        public Dictionary<string, string> Variables { get; } = [];
 
         public bool Descriptor { get; set; } = true;
 
@@ -599,7 +702,7 @@ public sealed class SessionOpenerTests : IDisposable
                     "approval.get" => Item,
                     "decision.get" => Item is null ? null : CopyPromptTests.Fixture("decision.get", "pending-with-options"),
                     "campaign.get" => Campaign,
-                    "preference.list" => PreferencesAnswer ? Preferences() : null,
+                    "preference.list" => PreferencesAnswer ? PreferencesBody ?? Preferences() : null,
                     _ => null,
                 };
                 return answer is null
@@ -612,8 +715,8 @@ public sealed class SessionOpenerTests : IDisposable
                 _dir.Paths,
                 handler,
                 SearchPath: Programs.Root,
-                Identity: new IdentityFacts(Home, "marta", "DESK-1", null, null),
-                Variables: new Dictionary<string, string>(),
+                Identity: new IdentityFacts(GivenHome ?? Home, "marta", "DESK-1", null, null),
+                Variables: Variables,
                 Terminals: terminals ? Terminals : null);
         }
 

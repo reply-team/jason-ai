@@ -159,12 +159,12 @@ public class ModeRouterTests
     }
 
     /// <summary>
-    /// The hook mode answers one tool call and nothing else: it does not enter the CLI, it reads no environment variable,
-    /// and no byte of what it was asked or of the environment reaches its output. A variable that names a data directory
-    /// is poisoned with a marker, and the answer must not hold it.
+    /// The hook mode answers one tool call with one line, and nothing of what it was asked or of the environment is in
+    /// it: the command it was asked about and a variable that names a data directory are both poisoned with a marker, and
+    /// the line must not hold it.
     /// </summary>
     [Fact]
-    public async Task The_hook_mode_answers_one_line_enters_no_cli_and_reads_no_environment()
+    public async Task The_hook_mode_answers_one_line_that_holds_nothing_of_the_call_or_the_environment()
     {
         const string Marker = "marker-5d21c8-made-up";
         var originalInput = ModeRouter.HostHookInput;
