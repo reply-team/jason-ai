@@ -1747,6 +1747,7 @@ original chat session.
 | DEC-ADP-005 | `host.exec` is an explicitly injected JavaScript-visible bridge to trusted C# structured process execution. |
 | DEC-ADP-006 | Runtime and Plugin Host communicate through structured stdin/stdout, diagnostics on stderr, and process status. |
 | DEC-ADP-007 | Plugin packages and candidate routes are activated by explicit, validated, atomic Runtime-controlled reload. |
+| DEC-PLUGINS-001 | A plugin is one of three kinds: `provider`, which performs canonical operations; `notification`, a delivery channel; and `subscriber`, which implements no operation, is no channel, reads no provider events and handles only the journal kinds its manifest declares under `subscriptions`. A provider or a notification plugin may subscribe too, and routes, claims and runs its work as one that does not. Declaration is not permission: `Plugins:Grants:<id>:Subscriptions` grants the kinds. Which plugins handle a kind, and in what order — those `Subscriptions:Order:<kind>` lists first, the rest by plugin id — is frozen with the plugin snapshot by the same load, and an order naming a plugin not granted the kind rejects that load. |
 | DEC-PLAT-001 | Runtime is implemented in .NET and distributed as platform-specific self-contained builds. |
 | DEC-DATA-001 | EF Core is selected; Dapper is excluded; Native AOT is deferred until compatible and low-risk. |
 | DEC-INSTALL-001 | Standalone and Reply-assisted installation are both legitimate paths to the same user Runtime. |

@@ -262,12 +262,13 @@ jason plugin list --human
 ```
 
 ```text
-ID             VERSION  KIND      STATUS  OPERATIONS              GRANTS                         DIGEST
--------------  -------  --------  ------  ----------------------  -----------------------------  ------------
-fake-provider  1.0.0    provider  valid   echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2  3f2a9c1b4d5e
+ID             VERSION  KIND      STATUS  OPERATIONS              GRANTS                                           DIGEST
+-------------  -------  --------  ------  ----------------------  -----------------------------------------------  ------------
+fake-provider  1.0.0    provider  valid   echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2 | subscriptions -  3f2a9c1b4d5e
 ```
 
-`GRANTS` is granted-over-requested per capability, `-` where the manifest requested nothing; `DIGEST`
+`GRANTS` is granted-over-requested per capability, the journal kinds a plugin subscribes to among them (§16), `-` where
+the manifest requested nothing; `DIGEST`
 is the first 12 hex characters. Without `--human` the verb prints the API body, which carries all of
 it in full:
 
@@ -283,11 +284,12 @@ it in full:
       "capabilities": {
         "exec": { "requested": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "version": "2.4.1", "min_version": null, "launch": null } ], "granted": ["provider-cli"] },
         "http": { "requested": ["localhost:5555", "api.example.com"], "granted": [] },
-        "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] } },
+        "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] },
+        "subscriptions": null },
       "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "binding_schema": null, "status": "valid", "problems": [] } ],
   "last_reload": { "at": "2026-09-14T12:00:00.000Z", "source": "reload", "activated": true,
                    "candidates": [ { "directory": "fake-provider", "id": "fake-provider", "status": "valid", "problems": [] } ],
-                   "routes": [] },
+                   "routes": [], "subscriptions": [] },
   "activated": true
 }
 ```
@@ -296,6 +298,9 @@ it in full:
 `Routes:Operations:<operation>`, `campaign:<cmp_…>/routes/<operation>` or `…/routes/default` — with its code and
 message, so it is empty when the load activated. The routes a load froze are not listed there: `routing_snapshot_id`
 names the snapshot they are in, and the activation journals them in `plugins_reloaded` (below).
+`last_reload.subscriptions` is the same for the order of each journal kind's subscribers (§16): each refusal is named by
+its setting, `Subscriptions:Order:<kind>[<index>]`, with its code and message. `capabilities.subscriptions` is the kinds
+a plugin declares against the kinds it is granted, `null` when it declares none.
 
 ### Two kinds of problem
 
