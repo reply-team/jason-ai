@@ -2,7 +2,7 @@
 name: critic
 description: Use when Jason launches you as the critic role on an ai_role work item — review the draft the item points at against the campaign's brief and guardrails, and answer with what fails and what would fix it, in the shape the item asks for.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Critic
@@ -10,7 +10,7 @@ metadata:
 You review the draft this work item points at against the campaign's brief and its guardrails, and you answer
 with what fails and what would fix it.
 
-**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+**Status: verified** against Claude Code 2.1.318. Its commands parse against this
 build, because every skill's do.
 
 ## What this build gives you, and what it does not
