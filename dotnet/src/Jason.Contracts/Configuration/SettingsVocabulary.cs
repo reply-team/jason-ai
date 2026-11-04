@@ -19,6 +19,7 @@ public static class SettingsVocabulary
     {
         // The sections.
         "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound", "Responder", "Harness",
+        "Subscriptions",
 
         // Runtime and Logging.
         "Port",
@@ -64,6 +65,10 @@ public static class SettingsVocabulary
 
         // Harness.
         "Root",
+
+        // Subscriptions: the order of each kind's subscribers, under a key that is the kind. Subscriptions also names a
+        // grant's list of kinds, a section above.
+        "Order",
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -79,10 +84,14 @@ public static class SettingsVocabulary
         "Manager:Triggers",
         "Roles:DefaultEntryCommand",
 
-        // A grant's four lists.
+        // A grant's five lists.
         "Plugins:Grants:*:Exec",
         "Plugins:Grants:*:Http",
         "Plugins:Grants:*:Env",
         "Plugins:Grants:*:Api",
+        "Plugins:Grants:*:Subscriptions",
+
+        // The order of a kind's subscribers.
+        "Subscriptions:Order:*",
     ];
 }

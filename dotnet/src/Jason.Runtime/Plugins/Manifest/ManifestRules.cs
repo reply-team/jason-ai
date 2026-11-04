@@ -5,6 +5,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Events;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Plugins.Subscriptions;
 
 namespace Jason.Runtime.Plugins.Manifest;
 
@@ -13,7 +14,7 @@ namespace Jason.Runtime.Plugins.Manifest;
 /// appends its own problem and carries on, so an author who got three things wrong is told all three at once
 /// rather than made to fix them one reload at a time.
 /// </summary>
-internal sealed partial class ManifestRules(JsonObject root, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing)
+internal sealed partial class ManifestRules(JsonObject root, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing, SubscribableKinds kinds)
 {
     private const int MaxNameLength = 100;
     private const int MaxDescriptionLength = 1000;
@@ -27,7 +28,7 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     [
         "manifest_version", "id", "version", "kind", "name", "description", "homepage",
         "contracts", "operations", "entry", "capabilities", "limits", "binding", "arguments",
-        "settles_by_key", "templates",
+        "settles_by_key", "templates", "subscriptions",
     ];
 
     /// <summary>Where a schema problem is, spelled as the document and a pointer into it.</summary>
@@ -71,8 +72,78 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             Arguments = ReadArguments(kind, operations),
             Templates = ReadTemplates(kind, operations),
             KeyedOperations = ReadSettlesByKey(kind, operations),
+            Subscriptions = ReadSubscriptions(kind),
         };
     }
+
+    /// <summary>
+    /// The journal kinds the plugin handles: optional on a provider and a notification plugin, and what a subscriber is
+    /// for, so required on one. Each is read against the catalog of the kinds the runtime writes, since a kind the runtime
+    /// never writes, or one no plugin may subscribe to, would be a subscription nothing ever runs. Declaring a kind asks
+    /// for it; the grant decides whether it is given.
+    /// </summary>
+    private List<string> ReadSubscriptions(PluginKind? kind)
+    {
+        const string Field = "subscriptions";
+        var declared = new List<string>();
+        if (!Has(root, Field))
+        {
+            if (kind == PluginKind.Subscriber)
+            {
+                Add(ProblemCodes.FieldRequired, Field, "subscriptions is required: a subscriber plugin names the journal kinds it handles.");
+            }
+
+            return declared;
+        }
+
+        if (root[Field] is not JsonArray listed || listed.Count == 0)
+        {
+            Add(ProblemCodes.FieldInvalid, Field, $"{Field} is a non-empty list of the journal kinds the plugin handles.");
+            return declared;
+        }
+
+        for (var index = 0; index < listed.Count; index++)
+        {
+            var at = string.Create(CultureInfo.InvariantCulture, $"{Field}[{index}]");
+            if (!TryText(listed[index], out var journalKind))
+            {
+                Add(ProblemCodes.FieldInvalid, at, "a subscription is a journal kind, such as 'workitem_failed'.");
+            }
+            else if (declared.Contains(journalKind, StringComparer.Ordinal)
+                || listed.Take(index).Any(earlier => TryText(earlier, out var text) && string.Equals(text, journalKind, StringComparison.Ordinal)))
+            {
+                Add(ProblemCodes.FieldInvalid, at, $"'{journalKind}' is listed twice.");
+            }
+            else
+            {
+                switch (kinds.Of(journalKind))
+                {
+                    case KindStanding.Subscribable:
+                        declared.Add(journalKind);
+                        break;
+                    case KindStanding.NotSubscribable:
+                        Add(ProblemCodes.SubscriptionKindNotSubscribable, at, $"'{journalKind}' is a kind the runtime writes that no plugin may subscribe to.");
+                        break;
+                    default:
+                        Add(ProblemCodes.SubscriptionKindUnknown, at, $"'{journalKind}' is not a kind the runtime writes to its journal.");
+                        break;
+                }
+            }
+        }
+
+        return declared;
+    }
+
+    /// <summary>Whether a plugin of <paramref name="kind"/> implements no canonical operation: every kind but a provider.</summary>
+    private static bool ImplementsNoOperations(PluginKind? kind) => kind is PluginKind.Notification or PluginKind.Subscriber;
+
+    /// <summary>The kind as a manifest spells it, for a message.</summary>
+    private static string Word(PluginKind? kind) => kind switch
+    {
+        PluginKind.Notification => "notification",
+        PluginKind.Subscriber => "subscriber",
+        _ => "provider",
+    };
 
     /// <summary>
     /// The operations whose lost answer the plugin settles by the work item's key: it makes every attempt under the key,
@@ -89,9 +160,9 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             return keyed;
         }
 
-        if (kind == PluginKind.Notification)
+        if (ImplementsNoOperations(kind))
         {
-            Add(ProblemCodes.SettlesByKeyInvalid, Field, "a notification plugin implements no canonical operations, so it settles none by a key.");
+            Add(ProblemCodes.SettlesByKeyInvalid, Field, $"a {Word(kind)} plugin implements no canonical operations, so it settles none by a key.");
             return keyed;
         }
 
@@ -145,9 +216,9 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             return ManifestArguments.None;
         }
 
-        if (kind == PluginKind.Notification)
+        if (ImplementsNoOperations(kind))
         {
-            Add(ProblemCodes.ArgumentInvalid, "arguments", "a notification plugin implements no canonical operations, so it takes no argument of one.");
+            Add(ProblemCodes.ArgumentInvalid, "arguments", $"a {Word(kind)} plugin implements no canonical operations, so it takes no argument of one.");
             return ManifestArguments.None;
         }
 
@@ -210,9 +281,9 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             return ManifestTemplates.None;
         }
 
-        if (kind == PluginKind.Notification)
+        if (ImplementsNoOperations(kind))
         {
-            Add(ProblemCodes.TemplateInvalid, Field, "a notification plugin implements no canonical operations, so it writes no template of one.");
+            Add(ProblemCodes.TemplateInvalid, Field, $"a {Word(kind)} plugin implements no canonical operations, so it writes no template of one.");
             return ManifestTemplates.None;
         }
 
@@ -523,12 +594,14 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
                     return PluginKind.Provider;
                 case "notification":
                     return PluginKind.Notification;
+                case "subscriber":
+                    return PluginKind.Subscriber;
                 default:
                     break;
             }
         }
 
-        Add(ProblemCodes.KindInvalid, "kind", "kind is 'provider' or 'notification'.");
+        Add(ProblemCodes.KindInvalid, "kind", "kind is 'provider', 'notification' or 'subscriber'.");
         return null;
     }
 
@@ -583,9 +656,18 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
         UnknownKeys(contracts, "contracts", ["protocol", "operations", "events"]);
         var protocol = ReadVersions(contracts, "contracts", "protocol", required: true, PluginProtocol.CurrentVersion);
 
-        // A notification plugin implements no canonical operation, so it declares no contract for them either.
-        var operationsRequired = kind != PluginKind.Notification;
-        var operations = ReadVersions(contracts, "contracts", "operations", operationsRequired, PluginProtocol.OperationContractVersion);
+        // A notification plugin implements no canonical operation, so it declares no contract for them either; what it
+        // may declare there is the delivery contract's version. A subscriber implements none and delivers nothing.
+        IReadOnlyList<int> operations = [];
+        if (kind != PluginKind.Subscriber)
+        {
+            operations = ReadVersions(contracts, "contracts", "operations", !ImplementsNoOperations(kind), PluginProtocol.OperationContractVersion);
+        }
+        else if (Has(contracts, "operations"))
+        {
+            Add(ProblemCodes.FieldInvalid, "contracts.operations", "a subscriber plugin implements no canonical operations and delivers nothing, so it speaks no operation or delivery contract.");
+        }
+
         return new ManifestContracts(protocol, operations) { Events = ReadEvents(contracts, kind) };
     }
 
@@ -596,11 +678,11 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     /// </summary>
     private IReadOnlyList<int> ReadEvents(JsonObject contracts, PluginKind? kind)
     {
-        if (kind == PluginKind.Notification)
+        if (ImplementsNoOperations(kind))
         {
             if (Has(contracts, "events"))
             {
-                Add(ProblemCodes.EventsNotAllowed, "contracts.events", "a notification plugin reads no account's events.");
+                Add(ProblemCodes.EventsNotAllowed, "contracts.events", $"a {Word(kind)} plugin reads no account's events.");
             }
 
             return [];
@@ -656,11 +738,11 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
 
     private IReadOnlyList<string> ReadOperations(PluginKind? kind)
     {
-        if (kind == PluginKind.Notification)
+        if (ImplementsNoOperations(kind))
         {
             if (root["operations"] is JsonArray { Count: > 0 })
             {
-                Add(ProblemCodes.OperationsNotAllowed, "operations", "a notification plugin implements no canonical operations.");
+                Add(ProblemCodes.OperationsNotAllowed, "operations", $"a {Word(kind)} plugin implements no canonical operations.");
             }
 
             return [];

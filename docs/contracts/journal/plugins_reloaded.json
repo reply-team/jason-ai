@@ -7,7 +7,7 @@
   "entities": {
     "plugin": { "at": "/new/plugins/*/id", "presence": "sometimes", "each": true }
   },
-  "field_since": {},
+  "field_since": { "/new/plugins/*/subscriptions": "0.29.0", "/new/subscriptions": "0.29.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -33,7 +33,8 @@
                 "id": { "type": "string", "minLength": 1, "description": "The plugin's id, which is its directory's name." },
                 "version": { "type": "string", "minLength": 1, "description": "The version its manifest states." },
                 "digest": { "type": "string", "pattern": "^sha256:", "description": "The package's content digest." },
-                "status": { "enum": ["valid", "unavailable"] }
+                "status": { "enum": ["valid", "unavailable"] },
+                "subscriptions": { "type": "integer", "minimum": 0, "description": "How many journal kinds the plugin is granted; 0 where none." }
               }
             }
           },
@@ -54,6 +55,16 @@
                 "minimum": 0,
                 "description": "How many campaign routes there are, each campaign's default and operation overrides together."
               }
+            }
+          },
+          "subscriptions": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind_count", "subscriber_count"],
+            "description": "The chains the same act froze, by their counts; which kinds and in what order is plugin.list's to say.",
+            "properties": {
+              "kind_count": { "type": "integer", "minimum": 0, "description": "How many journal kinds some plugin handles." },
+              "subscriber_count": { "type": "integer", "minimum": 0, "description": "How many plugins handle at least one journal kind." }
             }
           }
         }

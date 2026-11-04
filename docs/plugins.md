@@ -76,7 +76,7 @@ is answered with three problems rather than one per reload.
 manifest_version: 1              # required; this runtime reads 1
 id: fake-provider                # required; must equal the directory name
 version: 1.0.0                   # required; SemVer core, optional prerelease, no build metadata
-kind: provider                   # required; provider | notification
+kind: provider                   # required; provider | notification | subscriber
 name: Fake provider              # optional
 description: The test double every plugin-host test drives; copy its shape.
 homepage: https://example.com    # optional; absolute https URL
@@ -84,7 +84,7 @@ contracts:
   protocol: [1]                  # required; plugin-host protocol versions this plugin speaks
   operations: [1]                # required for a provider; canonical-operation contract versions
   events: [1]                    # optional, a provider only: the events contract versions it reads accounts by
-operations: [echo.run, exec.run] # required non-empty for a provider; absent/empty for notification
+operations: [echo.run, exec.run] # required non-empty for a provider; absent/empty for notification and subscriber
 entry:                           # optional; defaults to main.js / invoke
   module: main.js
   function: invoke
@@ -110,6 +110,7 @@ binding:                         # optional; a schema, in the published dialect,
   required: [workspace]
   properties:
     workspace: { type: string }
+subscriptions: [workitem_failed] # optional; required for a subscriber: the journal kinds the plugin handles
 ```
 
 | Field | Rule | Problem code |
@@ -117,15 +118,15 @@ binding:                         # optional; a schema, in the published dialect,
 | `manifest_version` | required; must be `1` | `field_required`, `manifest_version_unsupported` |
 | `id` | required; `^[a-z][a-z0-9-]{1,63}$` (2–64 characters); must equal the directory name | `field_required`, `field_invalid`, `id_mismatch` |
 | `version` | required; `major.minor.patch` with an optional `-prerelease`, no build metadata | `field_required`, `version_invalid` |
-| `kind` | required; `provider` or `notification` | `field_required`, `kind_invalid` |
+| `kind` | required; `provider`, `notification` or `subscriber` | `field_required`, `kind_invalid` |
 | `name` | optional text, at most 100 characters | `field_invalid` |
 | `description` | optional text, at most 1000 characters | `field_invalid` |
 | `homepage` | optional; absolute `https` URL | `field_invalid` |
 | `contracts.protocol` | required non-empty list of whole numbers; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
-| `contracts.operations` | required for a provider, optional for a notification; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
+| `contracts.operations` | required for a provider, optional for a notification, absent on a subscriber; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
 | `contracts.events` | optional, and only on a provider; when present, must include `1` | `field_invalid`, `contract_unsupported`, `events_not_allowed` |
 | `operations` | required non-empty for a provider; each `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$` — at least one dot — and unique | `field_required`, `field_invalid`, `operation_invalid`, `operation_duplicate` |
-| `operations` on a `notification` | must be absent or empty | `operations_not_allowed` |
+| `operations` on a `notification` or a `subscriber` | must be absent or empty | `operations_not_allowed` |
 | `entry.module` | `.js` or `.mjs`, relative, no `..` segments, inside the package, must exist | `field_invalid`, `entry_module_outside_package`, `entry_module_missing` |
 | `entry.function` | `^[A-Za-z_$][A-Za-z0-9_$]*$` | `entry_function_invalid` |
 | `capabilities.exec.executables` | required inside `exec`; 1..16 entries | `field_required`, `field_invalid` |
@@ -144,6 +145,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `arguments` | optional, and only on a provider; a mapping of operations to the arguments the plugin takes on some of that operation's channels, each a non-empty list of channels without duplicates. An operation the plugin does not implement or this build publishes no document for, an argument the operation's document does not name under `channel_arguments`, and a channel the operation's arguments do not take are refused | `field_invalid`, `argument_invalid` |
 | `settles_by_key` | optional, and only on a provider; a non-empty list of the operations whose lost answer the plugin settles by the work item's key, without duplicates. An operation the plugin does not implement, one this build publishes no document for, and one whose document's recovery read does not rest on the key (`recovery_read.by_key`) are refused | `field_invalid`, `settles_by_key_invalid` |
 | `templates` | optional, and only on a provider; a mapping of operations to the channels the plugin writes that operation's message on as a template, each a non-empty list without duplicates. An operation the plugin does not implement or this build publishes no document for, one whose document names no channel under `channel_templates`, and a channel the document does not name there are refused | `field_invalid`, `template_invalid` |
+| `subscriptions` | optional on a provider and a notification plugin, required on a subscriber; a non-empty list of the journal kinds the plugin handles, each named once. A kind the runtime does not write to its journal, and one it writes that no plugin may subscribe to, are refused. Declaring a kind is not being given it: the grant decides (§9) | `field_required`, `field_invalid`, `subscription_kind_unknown`, `subscription_kind_not_subscribable` |
 
 `binding` says what an installation has to tell this plugin before it can act — which account, which
 workspace, which mailbox. It never carries the credential: the plugin reaches that through the
@@ -262,12 +264,13 @@ jason plugin list --human
 ```
 
 ```text
-ID             VERSION  KIND      STATUS  OPERATIONS              GRANTS                         DIGEST
--------------  -------  --------  ------  ----------------------  -----------------------------  ------------
-fake-provider  1.0.0    provider  valid   echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2  3f2a9c1b4d5e
+ID             VERSION  KIND      STATUS  OPERATIONS              GRANTS                                           DIGEST
+-------------  -------  --------  ------  ----------------------  -----------------------------------------------  ------------
+fake-provider  1.0.0    provider  valid   echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2 | subscriptions -  3f2a9c1b4d5e
 ```
 
-`GRANTS` is granted-over-requested per capability, `-` where the manifest requested nothing; `DIGEST`
+`GRANTS` is granted-over-requested per capability, the journal kinds a plugin subscribes to among them (§16), `-` where
+the manifest requested nothing; `DIGEST`
 is the first 12 hex characters. Without `--human` the verb prints the API body, which carries all of
 it in full:
 
@@ -283,11 +286,13 @@ it in full:
       "capabilities": {
         "exec": { "requested": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "version": "2.4.1", "min_version": null, "launch": null } ], "granted": ["provider-cli"] },
         "http": { "requested": ["localhost:5555", "api.example.com"], "granted": [] },
-        "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] } },
+        "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] },
+        "api": null,
+        "subscriptions": null },
       "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "binding_schema": null, "status": "valid", "problems": [] } ],
   "last_reload": { "at": "2026-09-14T12:00:00.000Z", "source": "reload", "activated": true,
                    "candidates": [ { "directory": "fake-provider", "id": "fake-provider", "status": "valid", "problems": [] } ],
-                   "routes": [] },
+                   "routes": [], "subscriptions": [] },
   "activated": true
 }
 ```
@@ -296,6 +301,9 @@ it in full:
 `Routes:Operations:<operation>`, `campaign:<cmp_…>/routes/<operation>` or `…/routes/default` — with its code and
 message, so it is empty when the load activated. The routes a load froze are not listed there: `routing_snapshot_id`
 names the snapshot they are in, and the activation journals them in `plugins_reloaded` (below).
+`last_reload.subscriptions` is the same for the order of each journal kind's subscribers (§16): each refusal is named by
+its setting, `Subscriptions:Order:<kind>[<index>]`, with its code and message. `capabilities.subscriptions` is the kinds
+a plugin declares against the kinds it is granted, `null` when it declares none.
 
 ### Two kinds of problem
 
@@ -351,11 +359,14 @@ Plugins:    none active | last reload rejected
 ```
 
 An **activated** load writes one global journal entry of the reserved kind `plugins_reloaded`
-carrying the snapshot id, its source, `{id, version, digest, status}` per plugin, and the routes it
-froze as `{snapshot_id, global_default, override_count, campaign_route_count}` — actor `system`
-for the load at startup, the request's actor and reason for a reload. A **rejected** load writes
-none; it is visible in the log and in `last_reload`. `journal.append` refuses the kind, so nothing
-but a real activation can write one.
+carrying the snapshot id, its source, `{id, version, digest, status, subscriptions}` per plugin —
+`subscriptions` being how many journal kinds the plugin is granted — the routes it froze as
+`{snapshot_id, global_default, override_count, campaign_route_count}`, and the chains it froze as
+`subscriptions: {kind_count, subscriber_count}`: how many kinds some plugin handles, and how many
+plugins handle at least one. The line counts and names no kind and no order; `plugin.list` says
+which. Actor `system` for the load at startup, the request's actor and reason for a reload. A
+**rejected** load writes none; it is visible in the log and in `last_reload`. `journal.append`
+refuses the kind, so nothing but a real activation can write one.
 
 ## 5. Writing `invoke`
 
@@ -1186,7 +1197,10 @@ grants everything requested for that capability. An absent list, an absent plugi
 copied package grants nothing — the default is nothing, and a plugin with no grants still loads as
 `valid`. An entry the manifest never requested grants nothing and is reported as a
 `grant_unrequested` warning at `grants.<capability>[i]`; it does not make the plugin unavailable.
-Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
+A fifth list, `Subscriptions`, grants journal kinds out of those the manifest's `subscriptions`
+declares, by the same rules: `*` admits every declared kind, a kind the manifest does not declare
+admits nothing and is a `grant_unrequested` warning at `grants.subscriptions[i]`, and a declared kind
+nobody granted is simply not admitted. Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
 the next `jason plugin reload`, and `plugin list` always shows requested next to granted. The reload
 reads `settings.json` itself before it resolves anything, and waits for an edit the settings watch is
 still applying. So a reload sent straight after an edit holds it, and after two quick saves it holds
@@ -1608,3 +1622,73 @@ reads by date. Any other failure, the host's own codes of §8 included, is answe
 installation's cadence, `Dispatcher:EventsCadenceSeconds` — ten minutes unless set otherwise — and at once when the
 runtime starts: up to twenty pages a read, one child each, the first read of an account reaching thirty days back. The
 fixtures under [`contracts/fixtures/events.read/`](contracts/fixtures/events.read/) are what to check a plugin against.
+
+## 16. Subscriptions: declaration, grant, order
+
+A plugin may ask to be handed journal lines of the kinds it names. Like a capability, that takes two parties: the
+manifest declares the kinds, and the person grants them. Which kinds a plugin may name is the runtime's list of journal
+kinds; a kind the runtime does not write, or one it keeps to itself, is refused when the package is read.
+
+**The declaration.** `subscriptions` is a list of journal kinds, each named once:
+
+```yaml
+manifest_version: 1
+id: my-forwarder
+version: 1.0.0
+kind: subscriber
+contracts:
+  protocol: [1]
+subscriptions: [workitem_failed, campaign_created]
+```
+
+A plugin of `kind: subscriber` does nothing else: it implements no canonical operation, delivers no notification and
+reads no provider's events, so it carries no `operations`, `contracts.operations`, `contracts.events`, `arguments`,
+`templates` or `settles_by_key`, and it must declare `subscriptions`. A provider or a notification plugin may declare
+`subscriptions` as well, and that changes nothing else about it: a route reaches a provider that subscribes exactly as
+one that does not, and its status decides both its routed work and its subscriptions. A kind the runtime does not write
+is `subscription_kind_unknown`; one the runtime writes but no plugin may subscribe to is
+`subscription_kind_not_subscribable`. Both are package problems, so either rejects the whole reload.
+
+**The grant.** `Plugins:Grants:<id>:Subscriptions` lists the kinds the person admits the plugin to, out of those it
+declares (§9):
+
+```json
+{
+  "Plugins": {
+    "Grants": {
+      "my-forwarder": { "Subscriptions": ["*"] }
+    }
+  }
+}
+```
+
+`*` admits every declared kind and nothing more. A kind the manifest does not declare admits nothing and is a
+`grant_unrequested` warning at `grants.subscriptions[i]`; it does not make the plugin unavailable. A declared kind
+nobody granted is simply not admitted, and is no problem. The grant is resolved at the load and frozen with the plugin,
+so a change takes effect at the next `jason plugin reload`.
+
+**The order.** Every kind that at least one plugin is admitted to has one chain: the plugins handed its lines, one
+after another. `Subscriptions:Order:<kind>` says who goes first:
+
+```json
+{
+  "Subscriptions": {
+    "Order": {
+      "workitem_failed": ["my-forwarder", "my-auditor"]
+    }
+  }
+}
+```
+
+The ids listed come first, in the order written; every other plugin admitted to that kind follows in plugin-id order.
+A kind with no list, or with an empty one, runs in plugin-id order alone. A plugin that loaded `unavailable` keeps its
+place in a chain: its availability is decided again only at the next load. The order is read when the runtime starts
+and at each plugin reload, and never in between, so plugins, grants and chains always change together.
+
+An order that names a plugin holding no admitted subscription to that kind — one that is not installed, whose manifest
+does not declare the kind, or that the settings do not grant it — is `subscription_order_ungranted`, and the message
+says which. Like a route to a plugin the reload does not have, it rejects the whole reload with both the plugin and the
+route snapshots kept; edit the order before reloading. An order the settings cannot hold at all — a key that is not a
+journal kind a plugin may subscribe to, an entry that is not a plugin id or is listed twice, text where a list belongs —
+stops a start, naming the setting, and rejects a reload with `subscriptions_settings_invalid` at the setting's path. A
+reload refused for both a route and an order names both. Neither problem names what was written, only where.

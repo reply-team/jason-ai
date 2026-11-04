@@ -259,7 +259,11 @@ internal static class StatusChecks
 
             checks.Add(ProviderPlugin(info));
             checks.Add(PluginPackage(info));
-            checks.Add(await PluginAvailabilityAsync(client, info, cancellationToken).ConfigureAwait(false));
+            // One plugin.list answer, read once and passed on: the two checks it serves describe the same snapshot.
+            var asked = client is not null && info is not null;
+            var registry = asked ? await ReadAsync<PluginRegistryDto>(client!, Operations.PluginList, cancellationToken).ConfigureAwait(false) : null;
+            checks.Add(PluginAvailability(asked, registry));
+            checks.Add(PluginSubscriptions(asked, registry));
             var routes = client is null ? null : await ReadAsync<RoutesDto>(client, Operations.RouteList, cancellationToken).ConfigureAwait(false);
             checks.Add(Route(routes));
             checks.Add(Binding(routes));
@@ -900,15 +904,14 @@ internal static class StatusChecks
     /// its author's text, so neither is, and the fact names the listing that has them. A bundle carries this fact as it
     /// is, beside its own plugin list, which keeps words of the same two kinds and never a message.
     /// </remarks>
-    private static async Task<StatusCheck> PluginAvailabilityAsync(RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken)
+    private static StatusCheck PluginAvailability(bool asked, PluginRegistryDto? registry)
     {
         const string Name = "plugin_availability";
-        if (client is null || info is null)
+        if (!asked)
         {
             return new StatusCheck(Name, false, CheckState.Unknown, "The runtime did not answer, so whether its plugins are available was not asked.", null);
         }
 
-        var registry = await ReadAsync<PluginRegistryDto>(client, Operations.PluginList, cancellationToken).ConfigureAwait(false);
         if (registry?.Plugins is not { } listed)
         {
             return new StatusCheck(Name, false, CheckState.Unknown, "plugin.list did not answer, so whether each plugin is available is not known.", null);
@@ -942,6 +945,67 @@ internal static class StatusChecks
                 + "and a notification plugin delivers nothing; nothing else stops, so this check never decides readiness. "
                 + $"`{Repair.ListPlugins}` says what each problem is, and `{Repair.ReloadPlugins}` reads the plugins again once it is repaired.",
             null);
+    }
+
+    /// <summary>
+    /// Which plugins the active snapshot hands journal kinds to, read from the same <c>plugin.list</c> answer as
+    /// <c>plugin_availability</c>: each plugin granted a kind, named with the kinds it is granted. Optional, and never
+    /// deciding readiness: a kind nobody handles is the ordinary state of an installation, and a subscriber is a plugin
+    /// like any other, whose availability the check above already says.
+    /// </summary>
+    /// <remarks>
+    /// Only the runtime's own words are quoted, as in the check above: an id a package can have, and kinds that are words.
+    /// </remarks>
+    private static StatusCheck PluginSubscriptions(bool asked, PluginRegistryDto? registry)
+    {
+        const string Name = "plugin_subscriptions";
+        if (!asked)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime did not answer, so which plugins handle journal kinds was not asked.", null);
+        }
+
+        if (registry?.Plugins is not { } listed)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "plugin.list did not answer, so which plugins handle journal kinds is not known.", null);
+        }
+
+        var subscribers = listed
+            .Where(plugin => plugin?.Capabilities?.Subscriptions?.Granted is { Count: > 0 })
+            .ToList();
+        if (subscribers.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, "No plugin is granted a journal kind, so none handles one.", null);
+        }
+
+        var named = string.Join(" ", subscribers.Take(MostNamed).Select(SubscriberLine));
+        var more = subscribers.Count - MostNamed;
+        if (more > 0)
+        {
+            named += string.Create(CultureInfo.InvariantCulture, $" {more} more {(more == 1 ? "plugin handles" : "plugins handle")} journal kinds.");
+        }
+
+        return new StatusCheck(
+            Name,
+            false,
+            CheckState.Ok,
+            named + $" `{Repair.ListPlugins}` says which kinds each plugin declares and which it is granted.",
+            null);
+    }
+
+    private static string SubscriberLine(PluginDto plugin)
+    {
+        var who = PluginIds.IsWellFormed(plugin.Id) ? plugin.Id : "A plugin whose id no package can have";
+        var granted = plugin.Capabilities!.Subscriptions!.Granted!;
+        var kinds = granted.OfType<string>().Where(IsWord).Distinct(StringComparer.Ordinal).ToList();
+        var unnamed = granted.Distinct(StringComparer.Ordinal).Count() - kinds.Count;
+        var more = Math.Max(kinds.Count - MostNamed, 0) + unnamed;
+        if (kinds.Count == 0)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"{who} handles {more} {(more == 1 ? "kind" : "kinds")}.");
+        }
+
+        var tail = more > 0 ? string.Create(CultureInfo.InvariantCulture, $", and {more} more") : string.Empty;
+        return $"{who} handles {string.Join(", ", kinds.Take(MostNamed))}{tail}.";
     }
 
     private static string UnavailableLine(PluginDto plugin)
