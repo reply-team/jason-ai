@@ -4,6 +4,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Journal;
 using Microsoft.EntityFrameworkCore;
 using static Jason.Runtime.Tests.Dispatch.InboundSyncHarvestTests;
 
@@ -250,8 +251,18 @@ public class InboundSyncFailureTests
     {
         await EndAsync(harness, read, WorkItemStatus.Failed);
         await using var db = harness.Open();
-        var item = await db.WorkItems.SingleAsync(row => row.Id == read.Id, Ct);
-        new JournalWriter(harness.Clock).Append(db, Jason.Runtime.Domain.Actors.Dispatcher, JournalKinds.WorkItemFailed, campaign: null, workItem: item);
+        var item = await db.WorkItems.Include(row => row.Attempts).SingleAsync(row => row.Id == read.Id, Ct);
+        var attempt = WorkItemFactory.NewAttempt(item, item.Attempts.Count + 1, AttemptStatus.Failed, harness.Clock.GetUtcNow().UtcDateTime);
+        await db.SaveChangesAsync(Ct);
+        new JournalWriter(harness.Clock).Append(
+            db,
+            Jason.Runtime.Domain.Actors.Dispatcher,
+            JournalKinds.WorkItemFailed,
+            campaign: null,
+            key: attempt.PublicId,
+            updated: DocumentedLines.Failure(),
+            workItem: item,
+            attempt: attempt);
         await db.SaveChangesAsync(Ct);
         await harness.SyncAsync(Ct);
     }

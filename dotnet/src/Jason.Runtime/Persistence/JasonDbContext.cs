@@ -87,13 +87,23 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
     /// One event rather than EF Core's query category raised past
     /// Error in the logger, because that category also carries EF Core's warnings about how a query is written, and
     /// because an option of the context holds for whatever logger the context is given, not for the runtime's file alone.
+    /// <para>
+    /// A journal line of a reserved kind is held to its document by <see cref="JournalLineInterceptor"/>, and
+    /// <paramref name="lines"/> says what happens to one that is off it. Null is <see cref="JournalLines.Strict"/>: every
+    /// context made without saying otherwise refuses such a line, the migrator's and every test's among them; the host
+    /// passes its own.
+    /// </para>
     /// </remarks>
-    public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder builder, string databaseFile)
+    public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder builder, string databaseFile, JournalLines? lines = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder
             .UseSqlite(ConnectionString(databaseFile))
-            .AddInterceptors(new AppendOnlyInterceptor(), new TextFoldInterceptor(), new LinkedInKeyInterceptor())
+            .AddInterceptors(
+                new AppendOnlyInterceptor(),
+                new JournalLineInterceptor(lines ?? JournalLines.Strict),
+                new TextFoldInterceptor(),
+                new LinkedInKeyInterceptor())
             .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.QueryIterationFailed));
     }
 

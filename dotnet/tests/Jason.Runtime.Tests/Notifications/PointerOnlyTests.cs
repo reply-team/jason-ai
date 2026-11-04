@@ -267,7 +267,7 @@ public sealed class PointerOnlyTests
         db.WorkItems.Add(failed);
         db.Attempts.Add(failedAttempt);
         await db.SaveChangesAsync(Ct);
-        new JournalWriter(TimeProvider.System).Append(db, Jason.Runtime.Domain.Actors.Dispatcher, JournalKinds.WorkItemFailed, campaign: null, key: failedAttempt.PublicId, workItem: failed, attempt: failedAttempt);
+        new JournalWriter(TimeProvider.System).Append(db, Jason.Runtime.Domain.Actors.Dispatcher, JournalKinds.WorkItemFailed, campaign: null, key: failedAttempt.PublicId, updated: new JsonObject { ["code"] = failed.LastError.Code, ["message"] = failed.LastError.Message, ["retriable"] = failed.LastError.Retriable }, workItem: failed, attempt: failedAttempt);
         await db.SaveChangesAsync(Ct);
 
         return (campaign.PublicId, failed.PublicId, failedAttempt.PublicId);

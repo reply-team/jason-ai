@@ -489,7 +489,10 @@ public static class RuntimeHost
         builder.Services.AddSingleton(info);
         builder.Services.AddSingleton(migration);
         builder.Services.AddSingleton(paths);
-        builder.Services.AddDbContext<JasonDbContext>(o => JasonDbContext.Configure(o, paths.DatabaseFile));
+        builder.Services.AddDbContext<JasonDbContext>((services, o) => JasonDbContext.Configure(
+            o,
+            paths.DatabaseFile,
+            options.JournalLinesStrict ? JournalLines.Strict : JournalLines.Logged(services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<JournalLineInterceptor>>())));
         builder.Services.AddSingleton(options.Clock ?? TimeProvider.System);
         builder.Services.AddSingleton(new RuntimeSecrets(token));
         builder.Services.AddSingleton<TokenRedactor>();
