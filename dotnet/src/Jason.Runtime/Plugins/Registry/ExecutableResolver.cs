@@ -60,6 +60,12 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
                 ProblemCodes.ExecutableNotRunnable,
                 path,
                 $"'{request.Name}' resolves only to {ProgramLookup.ShellScript}; a plugin may start programs, never shells."),
+
+            // npm's shim answered for the name and the executable it starts is not there: missing, said by the file found.
+            ProgramLookupOutcome.NotFound when found.File is { } shim => new ManifestProblem(
+                ProblemCodes.ExecutableMissing,
+                path,
+                $"'{request.Name}' resolves to '{Path.GetFileName(shim)}', npm's shim, whose executable is not there."),
             _ => new ManifestProblem(
                 ProblemCodes.ExecutableMissing,
                 path,

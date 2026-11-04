@@ -517,7 +517,11 @@ to it ([ui.md](ui.md#open-an-ai-session)).
 A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there, and only
 a path of that kind detects it — and `jason skills install --host <host>` deploys into that host's root alone. Each harness folder carries, beside its
 `AGENTS.md`, a one-line import file for every host that reads a file of another name. Jason holds no key for any host:
-each runs under the person's own plan, signed in by them. A host whose program is not on this machine ends the attempt
+each runs under the person's own plan, signed in by them. On Windows npm's shim is read for a scoped package, such as
+`@openai/codex`, as for an unscoped one, whether it starts a script through node or an executable the package ships, and
+what runs is the interpreter and entry script, or that executable, it names; an executable that a package's postinstall
+never put in place of its placeholder starts and fails as any program that cannot run does
+([plugins](plugins.md#13-known-limitations-of-this-version)). A host whose program is not on this machine ends the attempt
 with `host_not_available`; so does a host that stops because it is not signed in, where that host's row names the
 signal Jason reads for it; a host whose row names none ends such an attempt as any exit of it ends. A
 `host_not_available` carries one sentence of Jason's own, never the host's words.
