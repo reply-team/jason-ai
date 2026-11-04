@@ -250,6 +250,27 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal("Started claude_code in conhost at your home folder.", _run.Output.ToString().TrimEnd());
     }
 
+    /// <summary>No folder recorded and no home folder named: there is nowhere to start, said in its own line and the way by hand.</summary>
+    [Fact]
+    public async Task With_no_folder_and_no_home_folder_nothing_is_started()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.Campaign = CopyPromptTests.Fixture("campaign.get", "one");
+        _run.GivenHome = "";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Empty(_run.Output.ToString());
+        var said = _run.Error.ToString().TrimEnd().Split('\n');
+        Assert.Equal(2, said.Length);
+        Assert.Equal(
+            "No folder is recorded for the approval's campaign and this account names no home folder, so there is nowhere to start claude_code and nothing was started.",
+            said[0].TrimEnd('\r'));
+        Assert.Contains("jason approval get apr_1 --prompt", said[1], StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// The UI's Open an AI session link and the command shown beside it are this build's: the command parses through the
     /// program's own parser to <c>session open</c>, and the link is the one the table the click is read with writes, so a
@@ -575,6 +596,9 @@ public sealed class SessionOpenerTests : IDisposable
 
         public string Home { get; }
 
+        /// <summary>The home folder the account's identity names, when a row gives one other than <see cref="Home"/>.</summary>
+        public string? GivenHome { get; set; }
+
         public string? Item { get; set; } = CopyPromptTests.Fixture("approval.get", "pending-with-preview");
 
         public string? Campaign { get; set; }
@@ -631,7 +655,7 @@ public sealed class SessionOpenerTests : IDisposable
                 _dir.Paths,
                 handler,
                 SearchPath: Programs.Root,
-                Identity: new IdentityFacts(Home, "marta", "DESK-1", null, null),
+                Identity: new IdentityFacts(GivenHome ?? Home, "marta", "DESK-1", null, null),
                 Variables: new Dictionary<string, string>(),
                 Terminals: terminals ? Terminals : null);
         }

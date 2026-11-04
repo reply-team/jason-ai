@@ -18,8 +18,8 @@ namespace Jason.Cli.Session;
 /// </summary>
 /// <remarks>
 /// Exit codes are the CLI's: 0 the terminal started (or, for a dry run, would be), 1 refused — by the runtime, or because
-/// nothing waits on the item, the host is unknown or not installed, the recorded folder is not there, or no terminal is
-/// found or starts — and 3 no runtime to ask. Every refusal that leaves the item waiting says how to do the same by hand.
+/// nothing waits on the item, the host is unknown or not installed, the recorded folder is not there, no folder is
+/// recorded and no home folder is named, or no terminal is found or starts — and 3 no runtime to ask. Every refusal that leaves the item waiting says how to do the same by hand.
 /// Stdout is one compact object of the CLI's own, never the prompt.
 /// </remarks>
 public static class SessionOpener
@@ -101,6 +101,13 @@ public static class SessionOpener
 
         var prompt = CopyPrompt.Compose(kind, item.Id, item.CampaignId, item.WorkItemId, folder);
         var where = folder?.Path ?? Home(env);
+        if (string.IsNullOrWhiteSpace(where))
+        {
+            env.Error.WriteLine($"No folder is recorded for the {noun}'s campaign and this account names no home folder, so there is nowhere to start {hostWord} and nothing was started.");
+            env.Error.WriteLine(byHand);
+            return ExitCodes.ApiError;
+        }
+
         var shown = folder?.Path ?? "your home folder";
         var terminals = env.Terminals;
         var terminal = terminals is null
