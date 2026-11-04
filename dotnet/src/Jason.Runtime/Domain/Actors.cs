@@ -24,7 +24,10 @@ public static class Actors
         return new ActorRef(ActorType.Attempt, attempt.PublicId);
     }
 
-    /// <summary>Default is human. "system" is reserved for the runtime; a role and an attempt must name themselves.</summary>
+    /// <summary>
+    /// Default is human. "system" is reserved for the runtime; a role and an attempt must name themselves; a plugin must
+    /// name itself and is accepted only within the scope its own door opened (<see cref="ActorScope"/>).
+    /// </summary>
     public static ActorRef Resolve(ActorRef? claimed)
     {
         if (claimed is null)
@@ -46,6 +49,17 @@ public static class Actors
         if (claimed.Type == ActorType.Attempt && string.IsNullOrWhiteSpace(claimed.Id))
         {
             errors.Add("actor.id", "required", "an attempt actor must carry its attempt id.");
+        }
+
+        // A plugin is an actor only through its own door: the capability the runtime minted for one invocation of that
+        // plugin opened the scope this reads, and nothing a caller writes into a body can open it.
+        if (claimed.Type == ActorType.Plugin && string.IsNullOrWhiteSpace(claimed.Id))
+        {
+            errors.Add("actor.id", "required", "a plugin actor must carry its plugin id.");
+        }
+        else if (claimed.Type == ActorType.Plugin && !string.Equals(ActorScope.Plugin, claimed.Id?.Trim(), StringComparison.Ordinal))
+        {
+            errors.Add("actor.type", "not_allowed", "actor type 'plugin' is accepted only from that plugin's own host.call; callers claim 'human', 'role' or 'attempt'.");
         }
 
         if (claimed.Id is { Length: > MaxIdLength })

@@ -5,6 +5,7 @@ using Jason.Contracts.Json;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Door;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.EntityFrameworkCore;
@@ -37,9 +38,16 @@ public static class OperationEndpoints
         Delegate operationHandler = async (HttpContext context) =>
         {
             TRequest request;
+            var caller = context.Features.Get<HandlerCaller>();
             try
             {
-                request = await ReadRequestAsync<TRequest>(context).ConfigureAwait(false);
+                request = await ReadRequestAsync<TRequest>(context, caller).ConfigureAwait(false);
+            }
+            catch (DomainException ex)
+            {
+                // A body read whole that does not speak as its door says it must: refused as any field is.
+                await ErrorResults.WriteAsync(context, ex.StatusCode, ex.Code, ex.Message, ex.Retryable, ex.Details).ConfigureAwait(false);
+                return;
             }
             catch (Exception ex)
             {
@@ -62,6 +70,8 @@ public static class OperationEndpoints
 
             try
             {
+                // A request through a handler's door speaks as that plugin for its whole flow, and only that one.
+                using var scope = caller is null ? null : ActorScope.ForPlugin(caller.Grant.PluginId);
                 var service = context.RequestServices.GetRequiredService<TService>();
                 var response = await handler(service, request, context.RequestAborted).ConfigureAwait(false);
                 await context.Response.WriteAsJsonAsync(response, JasonJson.Options, context.RequestAborted).ConfigureAwait(false);
@@ -128,7 +138,7 @@ public static class OperationEndpoints
     /// </summary>
     internal static JsonSerializerOptions RequestDialect { get; } = new(JasonJson.Options) { PropertyNameCaseInsensitive = false };
 
-    internal static async Task<TRequest> ReadRequestAsync<TRequest>(HttpContext context)
+    internal static async Task<TRequest> ReadRequestAsync<TRequest>(HttpContext context, HandlerCaller? caller = null)
         where TRequest : class
     {
         using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
@@ -139,6 +149,7 @@ public static class OperationEndpoints
         }
 
         using var document = JsonDocument.Parse(text, Bodies);
+        caller?.Check(document.RootElement);
         return document.Deserialize<TRequest>(RequestDialect) ?? throw new JsonException("The request body must be a JSON object.");
     }
 

@@ -1,3 +1,4 @@
+using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins.Manifest;
@@ -117,6 +118,42 @@ public class GrantResolverTests
         var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Exec = ["provider-cli", "provider-cli"] });
 
         Assert.Equal(["provider-cli"], grants.Exec);
+    }
+
+    [Fact]
+    [Critical(Family.R2, "a handler's door opens only granted families")]
+    public void The_api_families_granted_resolve_once_to_the_operations_a_door_opens()
+    {
+        var requested = new CapabilityRequests(null, null, null, new ApiRequestSpec([OperationFamilies.Read, OperationFamilies.WorkItem]));
+
+        var none = GrantResolver.Resolve(Manifest(requested), null);
+        Assert.Empty(none.Api);
+        Assert.Empty(none.ApiOperations);
+
+        var all = GrantResolver.Resolve(Manifest(requested), new PluginGrant { Api = ["*"] });
+        Assert.Equal([OperationFamilies.Read, OperationFamilies.WorkItem], all.Api);
+        Assert.Contains(Operations.CampaignList, all.ApiOperations);
+        Assert.Contains(Operations.WorkItemCreate, all.ApiOperations);
+        Assert.DoesNotContain(Operations.CampaignCreate, all.ApiOperations);
+        Assert.DoesNotContain(Operations.WorkItemResume, all.ApiOperations);
+        Assert.DoesNotContain(Operations.SystemInfo, all.ApiOperations);
+        Assert.Empty(all.Warnings);
+
+        var some = GrantResolver.Resolve(Manifest(requested), new PluginGrant { Api = [OperationFamilies.Read, OperationFamilies.Campaign] });
+        Assert.Equal([OperationFamilies.Read], some.Api);
+        Assert.DoesNotContain(Operations.CampaignCreate, some.ApiOperations);
+        Assert.DoesNotContain(Operations.WorkItemCreate, some.ApiOperations);
+        Assert.Equal("grants.api[1]", Assert.Single(some.Warnings).Path);
+    }
+
+    [Fact]
+    public void An_api_grant_over_a_manifest_that_requests_none_grants_nothing()
+    {
+        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Api = ["*", OperationFamilies.Read] });
+
+        Assert.Empty(grants.Api);
+        Assert.Empty(grants.ApiOperations);
+        Assert.Equal("grants.api[1]", Assert.Single(grants.Warnings).Path);
     }
 
     private static PluginManifest Manifest(CapabilityRequests capabilities) => new(

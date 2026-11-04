@@ -38,12 +38,13 @@ function capital(text: string): string {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** Who acted: you, a person by name, a role by its name, or Jason. */
+/** Who acted: you, a person by name, a role by its name, a plugin by its id, or Jason. */
 function actorName(entry: JournalEntry, me: string): string {
     const { type, id } = entry.actor;
     if (type === 'human') return id === me ? 'You' : (id ?? 'A person');
     if (type === 'attempt') return entry.actor_role ? capital(entry.actor_role) : 'A role';
     if (type === 'role') return id ? capital(id) : 'A role';
+    if (type === 'plugin') return id ?? 'A plugin';
     return 'Jason';
 }
 
@@ -75,7 +76,7 @@ function list(words: string[]): string {
  */
 export function entryLabel(entry: JournalEntry, me: string): EntryLabel {
     const who = actorName(entry, me);
-    const whom = who === 'You' || who === 'A person' ? who.toLowerCase() : who;
+    const whom = who === 'You' || who === 'A person' || who === 'A plugin' ? who.toLowerCase() : who;
     const role = entry.work_item_role ? capital(entry.work_item_role) : null;
     // The work a line is about, as a title leads with it and as a list row's few words end with it: those are all lower
     // case, the role's name included, as the runtime spells it.

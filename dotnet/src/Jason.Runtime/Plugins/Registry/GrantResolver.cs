@@ -1,4 +1,6 @@
+using System.Collections.Frozen;
 using System.Globalization;
+using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins.Manifest;
 
@@ -17,6 +19,15 @@ public sealed record ResolvedGrants(
 {
     /// <summary>The default for a plugin nobody has decided about: declaration is not permission.</summary>
     public static ResolvedGrants None { get; } = new([], [], [], []);
+
+    /// <summary>The Runtime API families granted, as the manifest spells them.</summary>
+    public IReadOnlyList<string> Api { get; init; } = [];
+
+    /// <summary>
+    /// The operations those families open, resolved once at the load that froze these grants: the set a handler's
+    /// capability is minted with, and the only one its door opens.
+    /// </summary>
+    public IReadOnlySet<string> ApiOperations { get; init; } = FrozenSet<string>.Empty;
 }
 
 public static class GrantResolver
@@ -37,11 +48,15 @@ public static class GrantResolver
             ? []
             : manifest.Capabilities.Exec.Executables.Select(executable => executable.Name).ToList();
 
-        return new ResolvedGrants(
-            Match("exec", grant.Exec, executables, StringComparer.Ordinal, warnings),
-            Match("http", grant.Http, manifest.Capabilities.Http?.Hosts ?? [], StringComparer.OrdinalIgnoreCase, warnings),
-            Match("env", grant.Env, manifest.Capabilities.Env?.Variables ?? [], StringComparer.Ordinal, warnings),
-            warnings);
+        var exec = Match("exec", grant.Exec, executables, StringComparer.Ordinal, warnings);
+        var http = Match("http", grant.Http, manifest.Capabilities.Http?.Hosts ?? [], StringComparer.OrdinalIgnoreCase, warnings);
+        var env = Match("env", grant.Env, manifest.Capabilities.Env?.Variables ?? [], StringComparer.Ordinal, warnings);
+        var api = Match("api", grant.Api, manifest.Capabilities.Api?.Families ?? [], StringComparer.Ordinal, warnings);
+        return new ResolvedGrants(exec, http, env, warnings)
+        {
+            Api = api,
+            ApiOperations = OperationFamilies.OperationsOf(api),
+        };
     }
 
     /// <summary>

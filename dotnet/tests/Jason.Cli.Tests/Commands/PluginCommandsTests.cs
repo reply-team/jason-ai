@@ -86,6 +86,21 @@ public class PluginCommandsTests
     }
 
     [Fact]
+    public async Task Human_mode_counts_the_api_families_granted_against_those_requested()
+    {
+        var registry = TwoPlugins();
+        var handler = registry.Plugins[1] with
+        {
+            Capabilities = new PluginCapabilitiesDto(null, null, null, new ListCapabilityDto(["read", "journal.append"], ["read"])),
+        };
+        using var cli = new CliRun(JsonSerializer.Serialize(registry with { Plugins = [handler] }, JasonJson.Options));
+
+        await cli.RunAsync("plugin", "list", "--human");
+
+        Assert.Contains("exec - | http - | env - | api 1/2", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Human_mode_names_the_problems_of_a_rejected_reload()
     {
         using var cli = new CliRun(JsonSerializer.Serialize(KeptAfterARejectedReload(), JasonJson.Options));

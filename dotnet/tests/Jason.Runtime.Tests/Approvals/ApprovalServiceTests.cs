@@ -62,6 +62,31 @@ public class ApprovalServiceTests
     }
 
     /// <summary>
+    /// A plugin speaks only through its own door, and even there it does not decide: its actor is admitted in the scope its
+    /// capability opened, and approving or rejecting is refused it as it is refused a role.
+    /// </summary>
+    [Fact]
+    public async Task A_plugin_in_its_own_door_s_scope_is_refused_an_approval_and_a_rejection()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (_, approval) = await ParkedWork.WriteAsync(db, Ct);
+        var plugin = new ActorRef(ActorType.Plugin, "acme-forwarder");
+
+        using (ActorScope.ForPlugin("acme-forwarder"))
+        {
+            var approve = await Assert.ThrowsAsync<InvalidRequestException>(
+                () => Service(db).ApproveAsync(new ApprovalDecisionRequest(approval.PublicId, plugin, null), Ct));
+            var reject = await Assert.ThrowsAsync<InvalidRequestException>(
+                () => Service(db).RejectAsync(new ApprovalDecisionRequest(approval.PublicId, plugin, "not mine"), Ct));
+
+            Assert.Equal(("approval_not_human", "approval_not_human"), (approve.Code, reject.Code));
+        }
+
+        Assert.Equal(ApprovalStatus.Pending, (await db.Approvals.AsNoTracking().SingleAsync(Ct)).Status);
+    }
+
+    /// <summary>
     /// And the runtime's own actor never reaches that rule at all: every caller is refused the system actor before any
     /// verb reads it, as a request that is wrong rather than as work only a person may do.
     /// </summary>

@@ -33,6 +33,9 @@ public sealed class InvocationBuilder
     public InvocationGrants Grants { get; set; } = new(null, null, null);
 
     public InvocationLimits Limits { get; set; } = InvocationFactory.DefaultLimits;
+
+    /// <summary>A handler's door to the Runtime API; null for every invocation that is not a handler's.</summary>
+    public InvocationDoor? Door { get; set; }
 }
 
 /// <summary>A valid invocation envelope for a package on disk, and the smallest package to point it at.</summary>
@@ -63,7 +66,8 @@ public static class InvocationFactory
             input ?? [],
             builder.Context,
             builder.Grants,
-            builder.Limits);
+            builder.Limits,
+            builder.Door);
     }
 
     /// <summary>Writes a package that is enough to run: a manifest placeholder, an entry module and its modules.</summary>

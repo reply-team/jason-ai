@@ -113,6 +113,39 @@ public sealed class IsolationTests : IDisposable
         Assert.Equal("exec,http,env,log,fail,channelKey", result["host"]!.GetValue<string>());
     }
 
+    /// <summary>
+    /// The door is the host's to use, never the plugin's to hold: neither the capability nor the address it is spent at is
+    /// anywhere a plugin can read, so <c>host.call</c> is the only way through it.
+    /// </summary>
+    [Fact]
+    public async Task A_door_s_capability_and_address_are_not_there_to_be_read()
+    {
+        const string Capability = "door-capability-0123456789abcdef";
+        var outcome = await WrittenAsync(
+            """
+            export function invoke(operation, input, context) {
+              const own = (value) => value === null || value === undefined ? [] : Object.getOwnPropertyNames(value);
+              return {
+                result: {
+                  text: JSON.stringify({ operation, input, context }),
+                  globals: own(globalThis).join(","),
+                  host: own(host).join(","),
+                  call: own(host.call).join(","),
+                  source: String(host.call),
+                },
+              };
+            }
+            """,
+            builder => builder.Door = new InvocationDoor("http://127.0.0.1:49731", Capability, "jrn_01JDOORLINE", ["campaign.list"], DoorLimits.Standard));
+
+        var text = outcome.Result!.ToJsonString();
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.DoesNotContain(Capability, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("49731", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("door", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("exec,http,env,log,fail,channelKey,call", outcome.Result!["host"]!.GetValue<string>());
+    }
+
     [Fact]
     [Critical(Family.R4, "no shell from a plugin")]
     public async Task A_shell_is_not_something_a_plugin_can_start()
