@@ -13,12 +13,13 @@ namespace Jason.App.Tests;
 /// Six rules. No test names the real registry, the real clipboard or the real terminal starter: each would act on the
 /// machine running the suite, whatever the data directory says, the last by opening a window with an agent host in it.
 /// No file reaches the link handler and the real CLI environment together, which carries the real opener, the real
-/// clipboard and the real terminal starter; nor names the <c>session</c> verb or its opener beside that environment. No file runs the router beside a <c>jason:</c> link, since the
-/// router hands a link the real environment: choosing the mode is held by <c>ModeRouter.Select</c> alone. And no file
-/// that starts a process — by a start info of its own, by <c>Process.Start</c>, through <c>ChildProcess</c>, or through
-/// the executable runner the end-to-end tests share — holds a <c>jason:</c> literal, names <c>AttentionLinks</c> or holds
-/// a <c>"session"</c> literal, since the executable it starts runs a link as a click does and the session verb as a
-/// person does.
+/// clipboard and the real terminal starter; nor names the <c>session</c> verb or its opener beside that environment. No
+/// file runs the router beside a <c>jason:</c> link, since the router hands a link the real environment: choosing the
+/// mode is held by <c>ModeRouter.Select</c> alone. And no file that starts a process — by a start info of its own, by
+/// <c>Process.Start</c>, by a <c>Process</c> of its own, through <c>ChildProcess</c>, or through the executable runner
+/// the end-to-end tests share — holds a <c>jason:</c> literal, names <c>AttentionLinks</c> or holds a literal that is
+/// or begins with the <c>session</c> verb, since the executable it starts runs a link as a click does and the session
+/// verb as a person does.
 /// </para>
 /// <para>
 /// Its reach is the source text with whole-line comments removed and adjacent string literals joined, as
@@ -62,6 +63,9 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("executable runner with the session verb", "await GoldenPath.JasonAsync(it, \"session\", \"open\", \"--approval\", id);")]
     [InlineData("process start with the table's link", "var start = new ProcessStartInfo(exe) { ArgumentList = { AttentionLinks.Item(id) } };")]
     [InlineData("process start of its own with a link", "using var started = Process.Start(exe, \"jason://attention\");")]
+    [InlineData("process start of its own with the session verb in one string", "using var started = Process.Start(exe, \"session open --approval apr_1\");")]
+    [InlineData("start info with the session verb in one string", "var start = new ProcessStartInfo(exe, \"session open --approval apr_1\");")]
+    [InlineData("process of its own with a link", "using var started = new Process { StartInfo = { FileName = exe, ArgumentList = { \"jason://attention\" } } };")]
     public void The_rule_finds_each_form(string form, string text) =>
         Assert.True(Offence("Mutant.cs", text) is not null, $"{form} passes the rule: {text}");
 
@@ -120,7 +124,7 @@ public sealed partial class NoTestClicksALinkTests
                 return $"{file} starts a process through {how} beside a jason: link";
             }
 
-            if (text.Contains("\"session\"", StringComparison.Ordinal))
+            if (SessionLiteral().IsMatch(text))
             {
                 return $"{file} starts a process through {how} beside the session verb, which starts a terminal window on this machine";
             }
@@ -129,8 +133,12 @@ public sealed partial class NoTestClicksALinkTests
         return null;
     }
 
-    /// <summary>What a test file starts a process through: a start info, the shared helper, the end-to-end runner, a start of its own.</summary>
-    private static readonly string[] ProcessStarts = ["ProcessStartInfo", "ChildProcess", "JasonAsync(", "LauncherAsync(", "Process.Start("];
+    /// <summary>
+    /// What a test file starts a process through: a start info, the shared helper, the end-to-end runner, a start of its
+    /// own, a process of its own.
+    /// </summary>
+    private static readonly string[] ProcessStarts =
+        ["ProcessStartInfo", "ChildProcess", "JasonAsync(", "LauncherAsync(", "Process.Start(", "new Process"];
 
     private static string Joined(string text) => Concatenation().Replace(Uncommented(text), string.Empty);
 
@@ -142,6 +150,10 @@ public sealed partial class NoTestClicksALinkTests
 
     [GeneratedRegex("\"jason:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex LinkLiteral();
+
+    /// <summary>A literal that is the session verb or begins with it, as one command line written in one string does.</summary>
+    [GeneratedRegex(@"""session\b", RegexOptions.CultureInvariant)]
+    private static partial Regex SessionLiteral();
 
     /// <summary>Every test project's sources, found from the repository root the way every guard here finds it.</summary>
     private static IEnumerable<string> Sources()
