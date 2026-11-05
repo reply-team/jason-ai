@@ -1505,9 +1505,10 @@ are the operations' own examples; §7 says how to drive one through the host by 
   the same operation; which one a campaign uses is a routing question: a route names the plugin, per
   campaign or for the whole installation.
 - **No cascades reach one step only.** A subscription passes over a line a plugin wrote and a line about a work item
-  a plugin created (§17), but not what follows from that work: a work item a plugin created may run a role, and what
-  the role's attempt writes afterwards is the role's own work, so its lines are handed to subscribers as any work's are,
-  although a handler caused them at one remove. A subscriber granted the `workitem` family can therefore feed itself
+  a plugin created (§17), but not what follows from that work: a work item a plugin created may run a role, and a line
+  that names that item is passed over whoever wrote it, but what the role creates afterwards — new work items, new
+  contacts, its lines on other entities — is the role's own work and is handed to subscribers as any work's is, although
+  a handler caused it at one remove. A subscriber granted the `workitem` family can therefore feed itself
   through a role; nothing in this version follows a cause further back, or bounds how often a kind's chains run.
 - **Notification plugins are not routed**: a route to one is refused at activation with
   `route_plugin_kind_not_invocable`; they are reached through the `Notifications` settings instead (§14).
@@ -1719,7 +1720,7 @@ or attempt. A handler granted a Runtime API family (§9) carries a door for the 
 
 **What it answers.** `{ result: { envelope } }`: an object, handed as it stands to the next handler and kept with the
 chain's run when this handler is the last. It pins no identifier, and an envelope longer than
-`Subscriptions:EnvelopeBytes` — 64 KiB unless set otherwise, as compact JSON in UTF-8 — is refused against the handler
+`Subscriptions:EnvelopeBytes` — 64 KiB unless set otherwise, in bytes of the compact JSON the runtime writes to the handler — is refused against the handler
 that returned it, as `subscription_envelope_too_large`; an answer of any other shape is `subscription_answer_invalid`.
 
 **One line of a kind at a time, in the journal's order.** A kind's chain takes its next line only when the one before
@@ -1755,8 +1756,9 @@ later. A kind no chain holds any more loses its position, and starts afresh if a
 **No cascades.** A line written by a plugin — its actor is `plugin`, as everything a handler writes through `host.call`
 is — and a line about a work item a plugin created are passed over: the position moves past them, and no handler is
 invoked and no run recorded for them. What a handler does is therefore never handed to another handler as a new line.
-The rule reads one step only (§13): a work item a plugin created may run a role, and what that role's attempt writes
-afterwards is the role's own work, handed out as any work is.
+The rule reads one step only (§13): a work item a plugin created may run a role; a line that names that item is passed
+over whoever wrote it, but what the role creates afterwards — new work items, new contacts, its lines on other entities —
+is the role's own work, handed out as any work is.
 
 **The record.** The runtime keeps a record of each chain it started — its line, each handler's attempts and outcomes,
 and the envelope the last one returned — and keeps `Subscriptions:RunRecordsPerKind` of them for each kind, 1000 unless

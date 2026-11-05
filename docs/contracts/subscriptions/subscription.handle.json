@@ -7,7 +7,7 @@
     "properties": {
       "line": {
         "type": "object",
-        "description": "The journal line exactly as journal.list returns it; the runtime reads it afresh for each invocation.",
+        "description": "The journal line exactly as journal.list returns it; read when the chain for the line starts, and again when the line is handed out afresh.",
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "ts": { "type": "string", "minLength": 1 },
@@ -42,7 +42,7 @@
   },
   "failure_codes": [
     { "code": "subscription_answer_invalid", "class": "validation", "when": "the runtime's record of an answer outside this contract: no envelope, an envelope that is not an object, a field beside it, or an identifier pinned" },
-    { "code": "subscription_envelope_too_large", "class": "validation", "when": "the runtime's record of an envelope longer, as compact JSON in UTF-8, than the bound Subscriptions:EnvelopeBytes sets" }
+    { "code": "subscription_envelope_too_large", "class": "validation", "when": "the runtime's record of an envelope longer, in bytes of the compact JSON the runtime writes to the handler, than the bound Subscriptions:EnvelopeBytes sets" }
   ],
   "timeout_ms": 3600000,
   "conformance": [

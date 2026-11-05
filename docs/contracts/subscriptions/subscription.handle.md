@@ -50,7 +50,8 @@ inside the envelope.
 ```
 
 `line` is the journal line exactly as `journal.list` returns it, the names beside the identifiers included. It is
-read when the handler is invoked, so a line handed out again carries the names as they stand then. The operation word the handler is invoked under is the line's `kind`, so one `main.js` tells the kinds it
+read when the chain for the line starts, and again when the line is handed out afresh, so a line handed out again
+carries the names as they stand then. The operation word the handler is invoked under is the line's `kind`, so one `main.js` tells the kinds it
 subscribes to apart as a provider tells its operations apart. `attempt` counts how many times this plugin has been
 handed this line, this time included.
 
@@ -58,7 +59,7 @@ handed this line, this time included.
 
 Success with `{ "envelope": { … } }` — an object, the empty object included, handed as it stands to the next handler,
 and kept with the chain's run when this handler is the last. Nothing else stands beside it, and a handler pins no
-identifier, so an answer carrying `external_ids` is refused. An envelope longer, as compact JSON in UTF-8, than the
+identifier, so an answer carrying `external_ids` is refused. An envelope longer, in bytes of the compact JSON the runtime writes to the handler, than the
 bound `Subscriptions:EnvelopeBytes` sets is refused too, against the handler that returned it.
 
 A failure carries a code of the handler's own under one of the five classes. The runtime tries a **transient** failure
@@ -93,7 +94,7 @@ handler takes each line **at least once**, and an effect it causes is one it can
 | Failure code | Class | When |
 |---|---|---|
 | `subscription_answer_invalid` | `validation` | the runtime's record of an answer outside this contract: no envelope, an envelope that is not an object, a field beside it, or an identifier pinned |
-| `subscription_envelope_too_large` | `validation` | the runtime's record of an envelope longer, as compact JSON in UTF-8, than the bound Subscriptions:EnvelopeBytes sets |
+| `subscription_envelope_too_large` | `validation` | the runtime's record of an envelope longer, in bytes of the compact JSON the runtime writes to the handler, than the bound Subscriptions:EnvelopeBytes sets |
 
 <!-- END GENERATED properties -->
 
