@@ -266,8 +266,8 @@ change is not in force until the person has reloaded. Writing them is the person
 `docs/plugins.md` §16 and §17 say the rest, and `plugins/journal-forwarder` in the plugin marketplace is the smallest
 complete subscriber.
 
-`jason subscription list` answers where each subscribed kind stands: its chain, its cursor and the journal's head, the
-lag between them, the chain in flight if any, and `waiting_on`, which names the members of the chain the current load
+`jason subscription list` answers where each subscribed kind stands: its chain, its cursor, its newest line and how many
+of its lines are due, the chain in flight if any, and `waiting_on`, which names the members of the chain the current load
 cannot run because they are `unavailable`. A kind waiting on a plugin is not failing: it stays at its line until a
 reload makes that plugin available or takes it out of the chain, and it writes nothing meanwhile. With nothing
 installed that subscribes, the list is empty and nothing is wrong. What went wrong inside a chain, and the rewind that

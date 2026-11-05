@@ -100,11 +100,11 @@ internal static partial class CriticalTier
     /// </summary>
     public static readonly (int TierMethods, int Methods, int Cases)[] Sizes =
     [
-        (24, 360, 516),       // Jason.App.Tests
-        (148, 2186, 3750),    // Jason.Cli.Tests
-        (104, 737, 3372),     // Jason.Contracts.Tests
-        (43, 199, 302),       // Jason.PluginHost.Tests
-        (597, 4941, 9644),    // Jason.Runtime.Tests
+        (24, 362, 518),       // Jason.App.Tests
+        (148, 2219, 3803),    // Jason.Cli.Tests
+        (104, 794, 3734),     // Jason.Contracts.Tests
+        (43, 223, 343),       // Jason.PluginHost.Tests
+        (597, 5022, 9785),    // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>
