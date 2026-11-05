@@ -115,6 +115,36 @@ public class SubscriptionRunnerTests
         Assert.Contains(harness.Logs.All, message => message == $"Subscription chain for {Failed} at line {id} failed at beta ({word}, watcher_refused)");
     }
 
+    /// <summary>
+    /// Each line's failure is said by a line of its own: two lines of one kind that each end in a final class leave two
+    /// <c>subscription_failed</c> lines, keyed by the kind and each naming its own line, the second never refused or
+    /// folded into the first.
+    /// </summary>
+    [Fact]
+    public async Task Two_lines_of_one_kind_that_each_fail_are_said_by_two_lines_each_naming_its_own()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("alpha", Failed));
+        var lines = Lines(harness, Failed, Failed);
+        var first = await PublicIdOfAsync(harness, lines[0]);
+        var second = await PublicIdOfAsync(harness, lines[1]);
+        await CursorAsync(harness, Failed);
+        harness.Handlers.Answer("alpha", Failure("watcher_refused", FailureClass.Permanent), Failure("watcher_mismatch", FailureClass.Validation));
+
+        Assert.Equal(new SubscriptionTurn(Failed, 2, 0, SubscriptionTurn.Head), await harness.SubscriptionRunner.RunNextAsync(Failed, Ct));
+
+        Assert.Equal([SubscriptionRunStatus.Failed, SubscriptionRunStatus.Failed], (await RunsAsync(harness)).Select(run => run.Status));
+        var said = await JournalAsync(harness, JournalKinds.SubscriptionFailed);
+        Assert.Equal([Failed, Failed], said.Select(entry => entry.Key));
+        Assert.Equal(
+            [
+                $$"""{"kind":"{{Failed}}","line":"{{first}}","plugin_id":"alpha","class":"permanent","code":"watcher_refused","attempts":1}""",
+                $$"""{"kind":"{{Failed}}","line":"{{second}}","plugin_id":"alpha","class":"validation","code":"watcher_mismatch","attempts":1}""",
+            ],
+            said.Select(entry => entry.New!.ToJsonString()));
+        Assert.Equal([$"{Failed}|{lines[1]}|2"], await PositionsAsync(harness));
+    }
+
     /// <summary>A protocol failure is classed as every invocation's is: a timeout may have acted, so it is ambiguous and final.</summary>
     [Fact]
     public async Task A_protocol_failure_ends_the_chain_in_the_class_the_protocol_gives_it()
