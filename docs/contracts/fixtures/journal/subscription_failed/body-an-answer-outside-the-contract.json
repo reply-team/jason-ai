@@ -1,0 +1,18 @@
+{
+  "kind": "subscription_failed",
+  "version": 1,
+  "case": "the runtime's own code for an answer outside the contract",
+  "body": {
+    "key": "workitem_failed",
+    "old": null,
+    "new": {
+      "kind": "workitem_failed",
+      "line": "jrn_01JC0000000000000000000042",
+      "plugin_id": "example-tickets",
+      "class": "validation",
+      "code": "subscription_answer_invalid",
+      "attempts": 1
+    }
+  },
+  "expect": "valid"
+}

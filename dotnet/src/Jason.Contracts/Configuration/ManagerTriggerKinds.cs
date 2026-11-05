@@ -36,5 +36,6 @@ public static class ManagerTriggerKinds
         "provider_blocked", "provider_block_cleared",
         "project_created", "project_updated", "project_linked",
         "preference_set", "preference_unset",
+        "subscription_failed",
     }.ToFrozenSet(StringComparer.Ordinal);
 }

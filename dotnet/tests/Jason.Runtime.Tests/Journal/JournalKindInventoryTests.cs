@@ -103,6 +103,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.ProviderBlockCleared,
         JournalKinds.PreferenceSet,
         JournalKinds.PreferenceUnset,
+        JournalKinds.SubscriptionFailed,
     };
 
     /// <summary>

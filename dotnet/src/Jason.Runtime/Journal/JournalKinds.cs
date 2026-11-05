@@ -248,6 +248,14 @@ public static partial class JournalKinds
     /// <summary>A person unset a named preference and its value was deleted: keyed by the key, with the size and hash it had.</summary>
     public const string PreferenceUnset = "preference_unset";
 
+    /// <summary>
+    /// A subscriber's handler ended in a final class for one line, so the chain of that kind ended there for that line and
+    /// the kind moved on: keyed by the kind, with the line, the plugin, the class, the code and the attempts. Never the
+    /// failure's message or the envelope. Written by the subscription runner only, as the system; it names no campaign,
+    /// and no program may subscribe to it.
+    /// </summary>
+    public const string SubscriptionFailed = "subscription_failed";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -316,6 +324,7 @@ public static partial class JournalKinds
         ProjectLinked,
         PreferenceSet,
         PreferenceUnset,
+        SubscriptionFailed,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);
