@@ -1734,12 +1734,15 @@ run at once across every kind. Each handler is given the contract's own timeout 
 **At least once.** The runtime records each handler's start before the child exists and its outcome after it ends, so a
 runtime stopped in the middle of a chain writes nothing more, and the next start runs the chain for the same line again
 from its first handler, each handler that was handed the line before seeing `attempt` above 1. An effect a handler
-causes is one it can tell it already caused. A turn that cannot finish for a reason of the runtime's own is logged, and the next scan offers the kind again
-from the same line.
+causes is one it can tell it already caused. A turn that cannot finish for a reason of the runtime's own is logged, once
+for as long as the same failure repeats, and the kind holds no child and is not offered again, from the same line, until
+a wait has passed: `Subscriptions:RetryBackoffSeconds` after the first such turn, doubled after each one in a row and
+held to an hour, and back to the first wait once a turn of the kind ends without one.
 
 **Failures.** A `transient` failure is tried again by the same handler, with the envelope as it stood before it, up to
 `Subscriptions:TransientRetries` times — 3 unless set otherwise. The first wait is `Subscriptions:RetryBackoffSeconds`
-— 30 unless set otherwise — and each one after doubles it, held to an hour; a chain waiting out its backoff holds no
+— 30 unless set otherwise, the same number that paces a turn that could not finish — and each one after doubles it,
+held to an hour; a chain waiting out its backoff holds no
 child, so other kinds run meanwhile, and the kind waits at that line. Every other class, and a transient one whose
 retries are spent, ends the chain at that handler, for that line: the handlers after it are not invoked, the runtime
 writes one `subscription_failed` line naming the kind, the line, the plugin, the class, the code and the attempts —
