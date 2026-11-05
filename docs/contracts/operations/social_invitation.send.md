@@ -20,7 +20,8 @@ deciding reads the note exactly as it would go.
 providers mapped first publish no read of it. The work item's idempotency key is what makes the repeat a read: every attempt makes its send under it, and no other
 call of the attempt carries it, so a provider that keeps such keys answers a repeat of a send it already took with its
 first answer — the same reference — and sends nothing twice, and a send the provider answered with a failure is never
-repeated, since the provider keeps no key for it and a repeat would be a new send. Before the repeat the plugin reads whether the provider keeps keys for the send at all; where it does not,
+repeated, since the provider keeps no key for it and a repeat would be a new send. The plugin repeats only where it knows the provider keeps keys for the send, by what it knows of the provider or by a
+read before the repeat; where it does not,
 the repeat fails `send_not_settled` with nothing sent, and the item ends for a person, because guessing wrong is a second
 invitation. A repeat that meets the first attempt's send still being finished under the key fails `provider_unavailable`,
 transient, and is made again later. The provider keeps the key for a bounded time only. `recovery_read.by_key` says the
@@ -175,7 +176,7 @@ show each case.
 | precondition | The person's contact at the provider carries no other LinkedIn profile than the one consumed, and the provider does not hold them as opted out; a contact that carries no profile is given the consumed one before anything is sent. |
 | preview a person reads | `Invite {/contacts/0/channels/0/value} to connect on LinkedIn, from the provider's account {/args/sender/external_id} ({/args/sender/address}), with the note: {/args/note}; send after: {/args/send_after}`; highlighted: `/contacts/0/channels/0/value`, `/args/sender`, `/args/note`, `/args/send_after` |
 | pinned identifiers | `contact` names a contact; `send` names a work_item |
-| recovery read | The provider's record of the send under this work item's idempotency key, read by making the same send again under the same key: the provider answers a send it already took with what it answered then — the same reference — and sends nothing twice, and a send the provider answered with a failure is never repeated, since the provider keeps no key for it and a repeat would be a new send. Before the repeat the plugin reads whether the provider keeps such keys at all; where it does not, the repeat fails `send_not_settled` and nothing is sent. |
+| recovery read | The provider's record of the send under this work item's idempotency key, read by making the same send again under the same key: the provider answers a send it already took with what it answered then — the same reference — and sends nothing twice, and a send the provider answered with a failure is never repeated, since the provider keeps no key for it and a repeat would be a new send. The plugin repeats only where it knows the provider keeps such keys, by what it knows of the provider or by a read before the repeat; where it does not, the repeat fails `send_not_settled` and nothing is sent. |
 | after an ambiguous end | `after_recovery_read`, by the work item's key — a later attempt performs the recovery read above and answers from it when the effect already happened, and only under a plugin whose manifest lists the operation under `settles_by_key` |
 | timeout | 120000 ms |
 | invariants | none names this operation |

@@ -1765,7 +1765,7 @@ public partial class ReplyMessageSendTests
 
         var reference = (format == "email" ? "email" : "linkedin") + "-1001";
         Assert.Equal(("sent", reference), ((string?)item["status"], (string?)item["reference"]));
-        Assert.Equal(["account list", "direct-send get email-1", "contact get 1001", FormatCommand(format)], account.CallsSince(mark).Select(call => call.Line));
+        Assert.Equal(["account list", "contact get 1001", FormatCommand(format)], account.CallsSince(mark).Select(call => call.Line));
         Assert.Single(account.Sent);
     }
 
