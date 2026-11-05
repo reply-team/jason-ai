@@ -78,8 +78,11 @@ published beside the archives instead, from 0.11.0 on, as a package of its own: 
 files of `plugins/reply` at the tag at its root, built once per release, listed in `checksums.txt`, and named in the
 manifest's `plugins` (§3) rather than its artifacts, which are platforms. Installing it is `jason plugin install reply`, which
 unpacks it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 runs it — and
-what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002). Any other plugin is installed as
-`docs/plugins.md` §4 says.
+what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002). The journal forwarder is
+published the same way from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, the files of `plugins/journal-forwarder`
+at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`; a copy a
+person edits there to name another receiver is theirs, which an update leaves in place, as
+[its README](../plugins/journal-forwarder/README.md) says. Any other plugin is installed as `docs/plugins.md` §4 says.
 
 **The browser UI is published the same way, as `jason-ui.zip`:** `ui/` built once per release at the tag, with the
 release's version in its `manifest.json`, and listed in `checksums.txt` but not in the manifest. It is built at the
@@ -112,6 +115,12 @@ nothing to break when an API version retires.
       "asset": "jason-plugin-reply.zip",
       "digest": "sha256:5e0e…0a7d",
       "recorded": { "0.8.0": "sha256:b5c2…50f6", "0.9.0": "sha256:5e0e…0a7d" }
+    },
+    "journal-forwarder": {
+      "version": "1.0.1",
+      "asset": "jason-plugin-journal-forwarder.zip",
+      "digest": "sha256:1604…daf0",
+      "recorded": { "1.0.0": "sha256:9239…545b", "1.0.1": "sha256:1604…daf0" }
     }
   }
 }
@@ -128,11 +137,11 @@ nothing to break when an API version retires.
 | `asset` (in `artifacts.<rid>`) | a file name, and only a file name: letters, digits, dot, dash, underscore. Never a path and never a URL. |
 | `sha256` (in `artifacts.<rid>`) | 64 lowercase hexadecimal characters, with no `sha256:` prefix. |
 | `size` (in `artifacts.<rid>`) | the archive's size in bytes, a positive number. |
-| `plugins` | the plugin packages the release publishes beside its archives, by plugin id, or `null`: every release from 0.20.0 names the Reply plugin's, and a release with no list names none. The last field, after `artifacts`. A reader before 0.20.0 skips it, as it skips every root field it does not read. Read by `jason update check` (§5) and by the applier's `plugins` step (§7), not by the advertisement. A malformed `plugins` is refused with the whole feed by every reader from 0.20.0 on, the applier included, so its shape changes only with the schema. |
+| `plugins` | the plugin packages the release publishes beside its archives, by plugin id, or `null`: every release from 0.20.0 names the Reply plugin's, every release from 0.30.0 the journal forwarder's beside it, and a release with no list names none. The last field, after `artifacts`. A reader before 0.20.0 skips it, as it skips every root field it does not read. Read by `jason update check` (§5) and by the applier's `plugins` step (§7), not by the advertisement. A malformed `plugins` is refused with the whole feed by every reader from 0.20.0 on, the applier included, so its shape changes only with the schema. |
 | `version` (in `plugins.<id>`) | the version of the package the release publishes, SemVer. |
 | `asset` (in `plugins.<id>`) | the package's file name beside the archives, under the rule an archive's `asset` follows; its line in `checksums.txt` is the one the package is checked against. |
 | `digest` (in `plugins.<id>`) | the package's content digest, `sha256:` and 64 hexadecimal characters: what the runtime computes over the unpacked files, and what `jason plugin list` shows for an installed copy. |
-| `recorded` (in `plugins.<id>`) | every version the package's digest list at the tag records — `plugins/<id>.digests` — each with its digest, and the package's own among them. No version is recorded twice and no digest under two versions, so an installed copy's digest says which version it is. A digest the record does not hold is a package the list does not know: built or edited on that machine, or a version before the list's first line, 0.3.2. The check never names it; whether it is behind is `jason status`'s to say, by its version. |
+| `recorded` (in `plugins.<id>`) | every version the package's digest list at the tag records — `plugins/<id>.digests` — each with its digest, and the package's own among them. No version is recorded twice and no digest under two versions, so an installed copy's digest says which version it is. A digest the record does not hold is a package the list does not know: built or edited on that machine, or a version before the list's first line (0.3.2 for Reply's package, 1.0.0 for the journal forwarder's). The check never names it; whether it is behind is `jason status`'s to say, by its version. |
 
 The manifest is generated by the release workflow from the files it just built, so it is one source rather than
 a second copy of what the checksums say. A download is fetched from **the feed's own directory** and the asset
@@ -306,7 +315,7 @@ here that the release publishes a later version of, as `{"id": "reply", "install
 id order and under a manager too, since no manager places plugins; `--human` prints a line for each after the lines
 about Jason. The installed version is the one the release's `recorded` holds for the content digest of the files under
 `~/.jason/plugins/<id>/`, so the runtime is still not asked. A package whose digest the record does not hold is a
-package the list does not know: built or edited on that machine, or a version before the list's first line, 0.3.2.
+package the list does not know: built or edited on that machine, or a version before the list's first line (0.3.2 for Reply's package, 1.0.0 for the journal forwarder's).
 The check never names it, since whether it is behind is `jason status`'s to say, by its version; and a package that
 cannot be read is passed over in silence, since what is wrong there is `jason status`'s to say as well. Beside
 `install_first`'s null, `plugin_updates` is null where no package is named or the release is not newer, and `[]`
@@ -515,7 +524,7 @@ manifest names, before anything moves; the package it replaces is moved to `~/.j
 comes before `started` because no runtime is running there, so no package moves under a runtime and the new runtime's
 first load reads the new package. The packages it replaces are written to the ledger before the first of them moves, so
 a kill anywhere in the step is finished by the next `jason update apply`. A package the record does not know — built or
-edited on that machine, or a version before the list's first line, 0.3.2 — is left byte for byte, and so is one that is
+edited on that machine, or a version before the list's first line (0.3.2 for Reply's package, 1.0.0 for the journal forwarder's) — is left byte for byte, and so is one that is
 current, later than the release's, or cannot be read; a plugin that is not installed is not placed. The apply prints one
 `plugins:` line for each package the release publishes: `plugins: reply 0.8.0 -> 0.9.0`,
 `plugins: reply 0.9.0 is current`, or why it was left as it is. A step resumed after a kill prints lines only for the

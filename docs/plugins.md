@@ -59,7 +59,8 @@ version changes with it, because the runtime compares an installed package's dig
 carries, and reads the versions only when the two differ; two packages under one version would make an earlier release's
 package look like one edited here, so `jason status` would not say it was left behind. The marketplace records the digest
 of each version the Reply package has had from 0.9.0 on, and of the earlier versions a release published, in
-[`plugins/reply.digests`](../plugins/reply.digests).
+[`plugins/reply.digests`](../plugins/reply.digests), and of each version the journal forwarder's has had, from the 1.0.0
+that 0.29.0 shipped in its tree, in [`plugins/journal-forwarder.digests`](../plugins/journal-forwarder.digests).
 
 ## 3. The manifest
 
@@ -234,9 +235,10 @@ manifest could name the arguments, a version check would be a way to run anythin
 ## 4. Installing, reloading and listing
 
 Installing a plugin is placing its directory in `~/.jason/plugins/` (override the data directory
-with `JASON_DATA_DIR`). The package this repository ships, the Reply plugin, is also published with every
-release from 0.11.0 on as `jason-plugin-reply.zip`, its files at the archive's root, and the release's
-`manifest.json` names it with the content digest of the tree it unpacks to. `jason plugin install <id>`
+with `JASON_DATA_DIR`). Two packages of this repository are also published with every release: the Reply
+plugin from 0.11.0 on as `jason-plugin-reply.zip`, and the journal forwarder from 0.30.0 on as
+`jason-plugin-journal-forwarder.zip`, each with its files at the archive's root, and the release's `manifest.json`
+names each with the content digest of the tree it unpacks to. `jason plugin install <id>`
 installs a package the release you run publishes: it downloads the file the manifest names, from that
 release's own directory, checks it against the release's `checksums.txt` and, unpacked, against that
 digest, and moves it in whole as `~/.jason/plugins/<id>`, or places nothing and exits 1 saying why. A

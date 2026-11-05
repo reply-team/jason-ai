@@ -591,6 +591,9 @@ public partial class PageClaimsTests
     [InlineData(".github/release-notes-template.md", "The Reply plugin's package is installed by `jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in `checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it.")]
     [InlineData("docs/plugins.md", "`jason plugin install <id>` installs a package the release you run publishes: it downloads the file the manifest names, from that release's own directory, checks it against the release's `checksums.txt` and, unpacked, against that digest, and moves it in whole as `~/.jason/plugins/<id>`, or places nothing and exits 1 saying why.")]
     [InlineData("docs/release-and-update.md", "The Reply plugin is published beside the archives instead, from 0.11.0 on, as a package of its own:")]
+    [InlineData("docs/release-and-update.md", "The journal forwarder is published the same way from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, the files of `plugins/journal-forwarder` at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`;")]
+    [InlineData(".github/release-notes-template.md", "The journal forwarder's package is installed the same way, by `jason plugin install journal-forwarder`, into `~/.jason/plugins/journal-forwarder`;")]
+    [InlineData("docs/plugins.md", "the journal forwarder from 0.30.0 on as `jason-plugin-journal-forwarder.zip`, each with its files at the archive's root,")]
     [InlineData("README.md", "signs in with it, places the package from the release with `jason plugin install reply`, grants it that one program")]
     public void The_pages_say_how_the_plugin_s_package_is_published_and_installed(string page, string said)
     {

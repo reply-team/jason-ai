@@ -220,8 +220,9 @@ public sealed class PluginAssetTests
     }
 
     /// <summary>
-    /// The architecture's register of accepted decisions records that the Reply plugin ships as a release asset, as it
-    /// stands, beside the row that says both installation paths are legitimate.
+    /// The architecture's register of accepted decisions records that the plugins' packages a release publishes, Reply's
+    /// and the journal forwarder's, ship as release assets, as it stands, beside the row that says both installation paths
+    /// are legitimate.
     /// </summary>
     [Fact]
     public void The_decision_register_records_that_the_plugin_ships_as_a_release_asset()
@@ -237,13 +238,13 @@ public sealed class PluginAssetTests
         Assert.Equal(PluginAssetDecision, rows[paths + 1]);
     }
 
-    /// <summary>The register's row for the plugin as a release asset, as it stands.</summary>
+    /// <summary>The register's row for the plugins' packages as release assets, as it stands.</summary>
     private const string PluginAssetDecision =
-        "| DEC-INSTALL-002 | The Reply plugin ships as a release asset: every release publishes `jason-plugin-reply.zip`, the files of `plugins/reply` at the tag at the archive's root, "
-        + "built once and listed in `checksums.txt`, and named in the manifest's `plugins` with its version, file name, content digest and the digest of every version its list records, "
+        "| DEC-INSTALL-002 | The Reply plugin and, from 0.30.0 on, the journal forwarder ship as release assets: every release publishes `jason-plugin-reply.zip` and `jason-plugin-journal-forwarder.zip`, the files of `plugins/<id>` at the tag at the archive's root, "
+        + "each built once and listed in `checksums.txt`, and named in the manifest's `plugins` with its version, file name, content digest and the digest of every version its list records, "
         + "never among the manifest's artifacts, which are platforms. "
-        + "Installing it is `jason plugin install reply`: download, verify against `checksums.txt` and the manifest's content digest, unpack into the plugins directory; "
-        + "the package's content digest is its identity, and both installation paths of §15.5 rest on that asset. |";
+        + "Installing one is `jason plugin install <id>`: download, verify against `checksums.txt` and the manifest's content digest, unpack into the plugins directory; "
+        + "a package's content digest is its identity, and both installation paths of §15.5 rest on those assets. |";
 
     /// <summary>The version the lines are run at, as <c>jason --version</c> prints it up to any <c>+</c>.</summary>
     private const string Version = "0.11.0";
