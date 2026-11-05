@@ -105,7 +105,7 @@ internal static partial class CriticalTier
         (148, 2219, 3803),    // Jason.Cli.Tests
         (104, 794, 3734),     // Jason.Contracts.Tests
         (43, 223, 343),       // Jason.PluginHost.Tests
-        (599, 5022, 9785),    // Jason.Runtime.Tests
+        (600, 5055, 9831),    // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>
