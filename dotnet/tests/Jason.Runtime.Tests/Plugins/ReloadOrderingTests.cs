@@ -57,6 +57,7 @@ public class ReloadOrderingTests
             new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionsOptions>(new SubscriptionsOptions())),
             new ReloadGate(),
             new SettingsFile(new ConfigurationBuilder().Build()),
+            TimeProvider.System,
             NullLogger<PluginService>.Instance);
 
         await Assert.ThrowsAsync<RefusedSaveException>(() => service.ReloadAsync(new PluginReloadRequest(null, null), Ct));

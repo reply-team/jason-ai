@@ -88,6 +88,11 @@ public sealed class PluginStartupLoader(
                 snapshot,
                 candidate.Snapshot,
                 reason: null);
+            await SubscriptionCursors.ReconcileAsync(
+                db,
+                chains.Chains,
+                scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime,
+                cancellationToken).ConfigureAwait(false);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             registry.Replace(snapshot, load.Report);
             scope.ServiceProvider.GetRequiredService<RouteActivator>().Activate(candidate.Snapshot);
