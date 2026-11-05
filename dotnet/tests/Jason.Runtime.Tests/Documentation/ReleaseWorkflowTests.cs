@@ -1095,6 +1095,7 @@ public partial class ReleaseWorkflowTests
     /// workflows, the actions, the scripts and the pages. A release is published with the run's own token now.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "no page names the publication token")]
     public void No_workflow_script_or_page_names_the_publication_token()
     {
         var root = RepositoryRoot();
