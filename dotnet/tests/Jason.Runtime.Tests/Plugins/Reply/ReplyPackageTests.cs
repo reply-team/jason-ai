@@ -513,7 +513,7 @@ public class ReplyPackageTests
                 "Reply holds the email for the schedule's next opening, at or after `send_after` where a moment still ahead is named beside it.",
                 "Reply answers such an email in one of two ways: one whose schedule is open now, or opens within ten minutes, is `queued`, with the moment under `send_after`; one whose schedule opens later is `waitingForSchedule`, with only an estimate of the moment, `estimated_send_at`, null where the schedule does not open within 30 days. Either way the answer is `accepted` with `cancelable` true, and `accepted_for` is absent: the email goes when the schedule lets it, and an estimate is no moment Reply holds it for, on the send or on `message.status`'s read of it.",
                 "The package does not read `reply schedule list` before the send",
-                "A LinkedIn message, InMail or voice message names a schedule the same way, and it goes on the format's own command as `--schedule-id`. Once Reply times deferred LinkedIn sends itself, it holds the message for the schedule's next opening",
+                "A LinkedIn message, InMail or voice message names a schedule the same way, and it goes on the format's own command as `--schedule-id`. Reply holds the message for the schedule's next opening",
             },
             word => Assert.Contains(word, send, StringComparison.Ordinal));
     }
@@ -667,51 +667,68 @@ public class ReplyPackageTests
 
     /// <summary>
     /// Reply refuses a cancel of a send it is sending now at 409 under <c>directSend.alreadySending</c>, which reply-cli
-    /// names <c>direct_send.already_sending</c>, only once it times deferred LinkedIn sends itself; until then it answers
-    /// such a cancel <c>alreadySent</c>. Every text of the package that names the CLI's code says, in the same row or
-    /// entry, that it is that coming answer: the README's rows, the error table's and the changelog's. The release notes
-    /// that said it for the package's own release, 0.23.0's, are that release's and stay at its tag; a later release's
-    /// notes are not held to them.
+    /// names <c>direct_send.already_sending</c>, since Reply times deferred LinkedIn sends itself on every account. Every
+    /// text of the package that names the CLI's code tells it as an answer Reply gives now: the README's rows and the error
+    /// table's. The changelog's entry for 0.14.3, which named it as a coming answer, is that version's history and keeps
+    /// its words, and the entry for 0.14.5 names the code among the texts told in the present tense.
     /// </summary>
     [Fact]
-    public void Reply_s_refusal_of_a_cancel_of_a_send_it_is_sending_is_named_as_its_coming_answer_wherever_it_is_named()
+    public void Reply_s_refusal_of_a_cancel_of_a_send_it_is_sending_is_told_as_an_answer_reply_gives_now_wherever_it_is_named()
     {
         const string Code = "`direct_send.already_sending`";
         const string Coming = "once Reply times deferred LinkedIn sends itself";
         var readme = File.ReadAllLines(Path.Combine(ReplyPlugins.PackageSource, "README.md")).Where(line => line.Contains(Code, StringComparison.Ordinal)).ToList();
         var table = ReplyErrorTable.AllRows().Select(entry => (string?)entry.Row["when"] ?? "").Where(when => when.Contains(Code, StringComparison.Ordinal)).ToList();
-        var changelog = Items(ChangelogSection(2)).Where(item => item.Contains(Code, StringComparison.Ordinal)).ToList();
+        var history = Items(ChangelogSection(2)).Where(item => item.Contains(Code, StringComparison.Ordinal)).ToList();
 
-        Assert.Equal((2, 1, 1), (readme.Count, table.Count, changelog.Count));
-        Assert.All(readme.Concat(table).Concat(changelog), text => Assert.Contains(Coming, Flat(text), StringComparison.Ordinal));
+        Assert.Equal((2, 1, 1), (readme.Count, table.Count, history.Count));
+        Assert.All(readme.Concat(table), text => Assert.DoesNotContain("once Reply times", Flat(text), StringComparison.Ordinal));
+        Assert.All(history, text => Assert.Contains(Coming, Flat(text), StringComparison.Ordinal));
+        Assert.Contains(Items(ChangelogSection(0)), item => item.Contains(Code, StringComparison.Ordinal) && item.Contains("present", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// Reply answers a cancel it could not confirm at 503 with its direct sends themselves, before it times deferred
-    /// LinkedIn sends; only a send waiting for its schedule comes with that. Every text that names the CLI's code, the
-    /// README's rows, the error table's and the changelog's, says the send is still queued and names the schedule's wait
-    /// alone as coming, never the answer.
+    /// Reply answers a cancel it could not confirm at 503 for a send still queued or waiting for its schedule, since it
+    /// times deferred LinkedIn sends itself on every account. Every text that names the CLI's code, the README's rows and
+    /// the error table's, says so in the present tense; the changelog's entry for 0.14.3, which named the schedule's wait
+    /// as coming, is that version's history and keeps its words.
     /// </summary>
     [Fact]
     public void A_cancel_reply_could_not_confirm_is_named_as_an_answer_reply_gives_now()
     {
         const string Code = "`direct_send.cancel_not_confirmed`";
-        const string Queued = "still queued (or, once Reply times deferred LinkedIn sends itself, waiting for its schedule)";
+        const string Queued = "still queued or waiting for its schedule";
         var readme = File.ReadAllLines(Path.Combine(ReplyPlugins.PackageSource, "README.md")).Where(line => line.Contains(Code, StringComparison.Ordinal)).ToList();
         var table = ReplyErrorTable.AllRows().Where(entry => entry.Key == "cancel_not_confirmed").SelectMany(entry => new[] { (string?)entry.Row["when"] ?? "", (string?)entry.Row["note"] ?? "" }).ToList();
-        var changelog = Items(ChangelogSection(2)).Where(item => item.Contains(Code, StringComparison.Ordinal)).ToList();
+        var history = Items(ChangelogSection(2)).Where(item => item.Contains(Code, StringComparison.Ordinal)).ToList();
 
-        Assert.Equal((2, 2, 1), (readme.Count, table.Count, changelog.Count));
+        Assert.Equal((2, 2, 1), (readme.Count, table.Count, history.Count));
         Assert.All(
-            readme.Concat(table).Concat(changelog).Select(Flat),
+            readme.Concat(table).Select(Flat),
             text =>
             {
                 Assert.Contains(Queued, text, StringComparison.Ordinal);
-                Assert.DoesNotContain("queued or waiting for its schedule", text, StringComparison.Ordinal);
-                Assert.DoesNotContain("at 503, once Reply times", text, StringComparison.Ordinal);
-                Assert.DoesNotContain("cancelNotConfirmed` once it times", text, StringComparison.Ordinal);
-                Assert.DoesNotContain("which Reply gives once it times", text, StringComparison.Ordinal);
+                Assert.DoesNotContain("once Reply times", text, StringComparison.Ordinal);
+                Assert.DoesNotContain("once it times", text, StringComparison.Ordinal);
             });
+        Assert.All(history.Select(Flat), text => Assert.Contains("once Reply times deferred LinkedIn sends itself, waiting for its schedule", text, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Reply times deferred LinkedIn sends itself on every account, so neither the README nor the error table tells it as
+    /// something Reply will do: no "once Reply times" and no "Before then" about a deferred send remain in them.
+    /// </summary>
+    [Fact]
+    public void The_readme_and_the_table_tell_reply_s_deferred_linkedin_sends_in_the_present_tense()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n"));
+        var table = ReplyErrorTable.AllRows().SelectMany(entry => new[] { (string?)entry.Row["when"] ?? "", (string?)entry.Row["note"] ?? "" }).Select(Flat).ToList();
+
+        foreach (var phrase in new[] { "once Reply times", "once it times", "Before then a deferred send", "the second once" })
+        {
+            Assert.DoesNotContain(phrase, readme, StringComparison.Ordinal);
+            Assert.All(table, text => Assert.DoesNotContain(phrase, text, StringComparison.Ordinal));
+        }
     }
 
     /// <summary>
@@ -1336,7 +1353,8 @@ public class ReplyPackageTests
     /// ahead, a schedule or a repeat, since Reply's direct-send routes are on every account; a 404 with no code of Reply's
     /// own is <c>provider_call_failed</c>, on a repeat of a send <c>send_not_settled</c> and on the change feed
     /// <c>events_unsupported</c>; the two rows that said a moment or a schedule was not offered gone; one call less before
-    /// such a send and the same endings for every answer that carries Reply's code. It needs what 0.14.4 needs.
+    /// such a send and the same endings for every answer that carries Reply's code; and Reply's deferred LinkedIn sends
+    /// told in the present tense. It needs what 0.14.4 needs.
     /// </summary>
     [Fact]
     public void The_changelog_opens_with_0_14_5_no_read_before_a_send_and_what_a_404_without_reply_s_code_ends_in()
@@ -1349,7 +1367,7 @@ public class ReplyPackageTests
             {
                 "`reply direct-send get email-1`", "`provider_call_failed`", "`reply.refused`", "404", "`send_not_settled`",
                 "`events_unsupported`", "`send_after_not_offered`", "`schedule_not_offered`", "one call less",
-                "the same endings", "`jason update apply`", "reply-cli 0.18.0",
+                "the same endings", "`jason update apply`", "deferred LinkedIn sends", "reply-cli 0.18.0",
             },
             word => Assert.Contains(word, section, StringComparison.Ordinal));
     }

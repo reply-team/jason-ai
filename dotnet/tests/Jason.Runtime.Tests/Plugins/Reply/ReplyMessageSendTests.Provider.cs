@@ -84,7 +84,7 @@ public partial class ReplyMessageSendTests
     }
 
     /// <summary>
-    /// Once Reply times deferred LinkedIn sends itself it answers a LinkedIn message timed by a schedule as it answers an
+    /// Reply answers a LinkedIn message timed by a schedule as it answers an
     /// email: <c>queued</c> with the opening under <c>send_after</c> where the schedule is open now or opens within ten
     /// minutes, and <c>waitingForSchedule</c> with no moment where it opens later, both under the scheduled reference.
     /// Both are accepted, both can still be cancelled, and neither names a moment.

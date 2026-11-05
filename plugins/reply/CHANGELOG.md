@@ -17,6 +17,10 @@ absorbed by a release of this package alone.
   whose account's replies are read thread by thread as before. Before, it was `capability_not_offered`.
 - The rows `send_after_not_offered` and `schedule_not_offered`, a moment or a schedule the account's Reply did not keep,
   are gone with the read that reached them; a LinkedIn route that refuses a schedule is still `capability_not_offered`.
+- Reply times deferred LinkedIn sends itself on every account, so the README and the error table say so in the present
+  tense: a LinkedIn send held for a moment ahead or a schedule, its `linkedin-scheduled-<n>` reference, Reply's
+  refusals of a schedule on LinkedIn, a cancel of a send Reply is sending (`direct_send.already_sending`) and one it
+  could not confirm, of a send still queued or waiting for its schedule. The endings are the same.
 - It needs reply-cli 0.18.0, as 0.14.4 does.
 
 ## 0.14.4

@@ -606,7 +606,7 @@ public partial class ReplyErrorTableTests
     }
 
     /// <summary>
-    /// A code reply-cli gives for a refusal Reply makes once it times deferred LinkedIn sends itself is told with the status
+    /// A code reply-cli gives for a refusal Reply makes as it times deferred LinkedIn sends itself is told with the status
     /// and the code Reply gives it: in the README's table for the operation, in one row under the code and the class the
     /// table's row gives it, and in the "when" of that row. A reader who meets either code in a trace finds it in both.
     /// </summary>

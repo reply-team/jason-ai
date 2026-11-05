@@ -1552,19 +1552,19 @@ export const ROWS = {
         "note": "The account's Reply does not time a send on this channel by a schedule yet, so the message that names one in `provider.schedule_id` was not sent: it goes by the schedule or not at all. Asking again meets the same answer until Reply times such sends; what to do instead is the agent's to choose."
       },
       "schedule_not_held": {
-        "when": "The send answered `schedule.not_found`, Reply's code `contact.scheduleNotFound` on an email or `directLinkedIn.scheduleNotFound` on a LinkedIn message, at 404, the second once Reply times deferred LinkedIn sends itself: the schedule `provider.schedule_id` names is not one the account can read, unknown and another account's alike. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
+        "when": "The send answered `schedule.not_found`, Reply's code `contact.scheduleNotFound` on an email or `directLinkedIn.scheduleNotFound` on a LinkedIn message, at 404: the schedule `provider.schedule_id` names is not one the account can read, unknown and another account's alike. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "The schedule `provider.schedule_id` names is not one Reply holds for this account, so the message was not sent. Name a schedule `schedule.list` returns and propose the message again."
       },
       "schedule_needs_the_contact_s_zone": {
-        "when": "The send answered `contact.time_zone_missing`, Reply's code `contact.contactTimeZoneMissing` on an email or `directLinkedIn.contactTimeZoneMissing` on a LinkedIn message, at 409, the second once Reply times deferred LinkedIn sends itself: the schedule `provider.schedule_id` names keeps the contact's own time zone, and Reply holds none for this person. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
+        "when": "The send answered `contact.time_zone_missing`, Reply's code `contact.contactTimeZoneMissing` on an email or `directLinkedIn.contactTimeZoneMissing` on a LinkedIn message, at 409: the schedule `provider.schedule_id` names keeps the contact's own time zone, and Reply holds none for this person. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "The schedule `provider.schedule_id` names keeps the contact's own time zone, and Reply holds none for this person, so the message was not sent. Give the contact a time zone at Reply, or name a schedule that keeps its own, and propose the message again."
       },
       "schedule_has_no_hours": {
-        "when": "The send answered `schedule.no_slot`, Reply's code `contact.scheduleHasNoSlot` on an email or `directLinkedIn.scheduleHasNoSlot` on a LinkedIn message, at 409, the second once Reply times deferred LinkedIn sends itself: the schedule `provider.schedule_id` names has no day with hours to send in. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
+        "when": "The send answered `schedule.no_slot`, Reply's code `contact.scheduleHasNoSlot` on an email or `directLinkedIn.scheduleHasNoSlot` on a LinkedIn message, at 409: the schedule `provider.schedule_id` names has no day with hours to send in. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "The schedule `provider.schedule_id` names has no day with hours to send in, so the message was not sent. Give the schedule hours at Reply, or name another, and propose the message again."
@@ -1628,10 +1628,10 @@ export const ROWS = {
     },
     "message.cancel": {
       "cancel_not_confirmed": {
-        "when": "The CLI answered `direct_send.cancel_not_confirmed`, Reply's code `directSend.cancelNotConfirmed` at 503: it could not confirm the cancel, the send is still queued (or, once Reply times deferred LinkedIn sends itself, waiting for its schedule), and Reply asks for the cancel again, after the wait it names as `retry_after` where it names one. Any other answer at 500 or above to a cancel stays the lost answer.",
+        "when": "The CLI answered `direct_send.cancel_not_confirmed`, Reply's code `directSend.cancelNotConfirmed` at 503: it could not confirm the cancel, the send is still queued or waiting for its schedule, and Reply asks for the cancel again, after the wait it names as `retry_after` where it names one. Any other answer at 500 or above to a cancel stays the lost answer.",
         "code": "provider_unavailable",
         "class": "transient",
-        "note": "Reply could not confirm the cancel: the send is still queued (or, once Reply times deferred LinkedIn sends itself, waiting for its schedule), and Reply asks for the cancel again. The runtime cancels again later; a send already cancelled by then answers cancelled."
+        "note": "Reply could not confirm the cancel: the send is still queued or waiting for its schedule, and Reply asks for the cancel again. The runtime cancels again later; a send already cancelled by then answers cancelled."
       },
       "send_not_found": {
         "when": "The CLI answered `direct_send.not_found`, or `direct_send.not_owned` for a send Reply holds for an account this one is not, or refused the reference without a call (`usage.reference`).",
@@ -1640,7 +1640,7 @@ export const ROWS = {
         "note": "Reply holds no send under the reference the runtime keeps for this send, or none this account may see, so nothing was cancelled. No later attempt will find it."
       },
       "send_already_sent": {
-        "when": "The CLI answered `direct_send.already_sent`, for a send that went or that Reply is sending now; or, once Reply times deferred LinkedIn sends itself, `direct_send.already_sending`, Reply's code `directSend.alreadySending` at 409, for a send Reply is sending now, even one a read still told as queued; or the cancel answered with a send in the state `sent` or `sending`. Nothing was changed.",
+        "when": "The CLI answered `direct_send.already_sent`, for a send that went or that Reply is sending now; or `direct_send.already_sending`, Reply's code `directSend.alreadySending` at 409, for a send Reply is sending now, even one a read still told as queued; or the cancel answered with a send in the state `sent` or `sending`. Nothing was changed.",
         "code": "send_not_pending",
         "class": "permanent",
         "state": "sent",

@@ -85,7 +85,7 @@ public class ReplyMessageStatusTests
     /// (<c>directLinkedIn.missedWindow</c>), and one whose account's allowance stayed spent until its window passed — a
     /// block code as the send's fate, not a refusal when Reply took it — is <c>failed</c>, nothing having gone, with Reply's
     /// code carried as given and never <c>unknown</c>. So is every other <c>directLinkedIn.</c> code Reply gives a send's
-    /// fate once it times deferred LinkedIn sends itself, <c>directLinkedIn.unknown</c> among them, and one this version
+    /// fate, <c>directLinkedIn.unknown</c> among them, and one this version
     /// has never seen, <c>directLinkedIn.contactNotFound</c>; and a failure after Reply handed the send on, which carries
     /// no code at all and is never a malformed answer. The stand-in prints each record as reply-cli 0.18.0 does (reply-cli's
     /// <c>src/operations/direct-sends.ts</c>:54): the state as Reply gives it, and <c>failure_code</c> beside it.
@@ -120,7 +120,7 @@ public class ReplyMessageStatusTests
     }
 
     /// <summary>
-    /// A LinkedIn send Reply holds until its schedule's next opening, once Reply times deferred LinkedIn sends itself, is
+    /// A LinkedIn send Reply holds until its schedule's next opening is
     /// <c>waitingForSchedule</c> with no moment of its own, under its <c>linkedin-scheduled-</c> reference: <c>queued</c>,
     /// still cancelable, and naming no moment.
     /// </summary>

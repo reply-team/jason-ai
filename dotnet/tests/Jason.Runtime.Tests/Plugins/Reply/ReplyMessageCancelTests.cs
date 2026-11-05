@@ -72,8 +72,8 @@ public class ReplyMessageCancelTests
 
     /// <summary>
     /// A cancel of a send Reply is sending now is the refusal of a send that went: <c>send_not_pending</c>, permanent, the
-    /// state <c>sent</c>, and never a refusal this version has no word for. Once Reply times deferred LinkedIn sends itself
-    /// it refuses it at 409 with its own code <c>directSend.alreadySending</c>, which reply-cli names
+    /// state <c>sent</c>, and never a refusal this version has no word for. Reply, which times deferred LinkedIn sends
+    /// itself, refuses it at 409 with its own code <c>directSend.alreadySending</c>, which reply-cli names
     /// <c>direct_send.already_sending</c> (reply-cli's <c>src/operations/direct-send.ts</c>:235, read for a cancel at
     /// <c>src/operations/direct-sends.ts</c>:77), and it may do so while a read still tells the send <c>queued</c>: the
     /// send left the queue between the two. A Reply before that answers the same send <c>direct_send.already_sent</c>.
@@ -166,8 +166,7 @@ public class ReplyMessageCancelTests
 
     /// <summary>
     /// Reply answers a cancel it could not confirm at 503 with its own code <c>directSend.cancelNotConfirmed</c>, with its
-    /// direct sends and before it times deferred LinkedIn sends itself: the send is still queued (or, once it does, waiting
-    /// for its schedule), and Reply asks for the cancel again. reply-cli names it
+    /// direct sends: the send is still queued or waiting for its schedule, and Reply asks for the cancel again. reply-cli names it
     /// <c>direct_send.cancel_not_confirmed</c>, exit 1, with the wait Reply asked for as <c>retry_after</c> where it gave
     /// one (reply-cli's <c>src/operations/direct-send.ts</c>:243 and its <c>known_refusal</c>, read for a cancel only at
     /// <c>src/operations/direct-sends.ts</c>:77). The package reads it as <c>provider_unavailable</c>, transient, and the
@@ -189,7 +188,7 @@ public class ReplyMessageCancelTests
 
         Assert.Equal(("provider_unavailable", FailureClass.Transient), (error.Code, error.Class));
         Assert.True(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
-        Assert.Contains("still queued (or, once Reply times deferred LinkedIn sends itself, waiting for its schedule)", error.Message, StringComparison.Ordinal);
+        Assert.Contains("still queued or waiting for its schedule", error.Message, StringComparison.Ordinal);
         Assert.Equal(wait, (int?)error.Details!["retry_after"]);
         Assert.Equal("cancelled", (string?)repeat["items"]![0]!["state"]);
     }
