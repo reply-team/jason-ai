@@ -34,11 +34,16 @@ runtime handed it, `envelope` is what the handlers before this one returned (the
 POST that timed out may have arrived. The receiver drops a line id it has already seen, and `Jason-Line-Id` is the key to
 do it by. Any 2xx answer is delivery; its body is not read.
 
+**What leaves the machine.** A line carries what the journal says: campaign and contact names, fields and contexts as they
+changed, addresses put on the do-not-contact register, the reasons people typed. A receiver is therefore a place you
+trust with that. The grant is the only filter, and `["*"]` sends every kind the package declares, which is every kind a
+plugin may subscribe to.
+
 ## What you need
 
 - **A receiver**: anything that takes a `POST` of JSON at a URL. A file is reached by a receiver of your own that writes
   one; the package has no way to write a file itself.
-- **A Jason release that has subscriptions.**
+- **Jason 0.29.0 or newer**, which has subscriptions.
 
 ## Installing it
 
@@ -77,6 +82,9 @@ set it as a user environment variable there:
 | `JOURNAL_FORWARDER_URL` | the one URL every line is POSTed to: `http://localhost:8787/jason`, or an `https://` URL of your receiver |
 | `JOURNAL_FORWARDER_TOKEN` | optional: a bearer token for a receiver that requires one. It is read with `host.env`, sent only as the `Authorization` header, and never logged or returned |
 
+Keep a secret in the URL's query string or in the token, never in its path: the plugin host's diagnostics name the host
+and the path of every request, and never the query or the headers.
+
 **4. Reload:**
 
 ```sh
@@ -112,7 +120,7 @@ moves on to its next line; a transient one is tried again after a wait that doub
 | Outcome | When |
 |---|---|
 | delivered | the receiver answered 2xx; the chain goes on with the envelope unchanged |
-| `forwarder_unreachable` (transient) | the receiver did not answer, or answered 408, 429 or 5xx. The runtime tries again after a wait that doubles |
+| `forwarder_unreachable` (transient) | the receiver did not answer within the twenty seconds the plugin allows, or answered 408, 429 or 5xx. The runtime tries again after a wait that doubles |
 | `forwarder_unauthorized` (permanent) | the receiver answered 401 or 403: the token is wrong, or one is needed and none was set |
 | `forwarder_refused` (permanent) | any other answer the receiver will not change its mind about, such as 400 or 404, or a redirect, which is never followed |
 | `forwarder_url_missing` (permanent) | `JOURNAL_FORWARDER_URL` is not set in the runtime's environment, or the grant does not list it under `Env` |
