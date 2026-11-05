@@ -11,7 +11,11 @@ namespace Jason.Contracts.Tests.Journal;
 /// A kind's document only grows. A reader written against a release's documents keeps reading every line a later release
 /// writes, so a later document keeps every kind, every <c>since</c>, every body field, every entity and every
 /// <c>field_since</c> entry the published one had, accepts every body the release published as valid, and requires
-/// nothing the published one did not. The published documents are the last release's, read from its tag.
+/// nothing the published one did not of a body the release described: a member only a branch added to an <c>anyOf</c> the
+/// release already had requires, or one inside an object the release never described, no published body could have
+/// needed. The release's branches are known by their place in the list alone, so a branch put before them, or a change to
+/// any of them, makes every branch of that list the release's and a member it newly requires is refused. The published
+/// documents are the last release's, read from its tag.
 /// </summary>
 public sealed class JournalKindHistoryTests
 {
@@ -86,20 +90,39 @@ public sealed class JournalKindHistoryTests
     [InlineData("grew")]
     [InlineData("became subscribable")]
     [InlineData("named on every line")]
+    [InlineData("a new branch requires an object the release never described")]
+    [InlineData("an optional object the release never described requires its members")]
     public void A_document_that_only_grew_is_kept(string change)
     {
-        var published = Published();
+        var branched = change == "a new branch requires an object the release never described";
+        var published = branched ? Branched() : Published();
         if (change == "became subscribable")
         {
             published["subscribable"] = false;
         }
 
         using var repository = new Repository(published);
-        var current = Published();
+        var current = branched ? Branched() : Published();
+        var body = (JsonObject)current["body"]!["properties"]!["new"]!;
         switch (change)
         {
             case "grew":
-                ((JsonObject)current["body"]!["properties"]!["new"]!["properties"]!)["note"] = new JsonObject { ["type"] = "string" };
+                ((JsonObject)body["properties"]!)["note"] = new JsonObject { ["type"] = "string" };
+                ((JsonObject)current["field_since"]!)["/new/note"] = "0.31.0";
+                break;
+            case "a new branch requires an object the release never described":
+                // The shape of a hold's `held_by`: a member only a new branch requires, whose own members are required.
+                ((JsonObject)body["properties"]!)["held"] = JsonNode.Parse("""
+                    { "type": "object", "additionalProperties": false, "required": ["code", "limit"],
+                      "properties": { "code": { "type": "string" }, "limit": { "type": "integer" } } }
+                    """);
+                ((JsonArray)body["anyOf"]!).Add(JsonNode.Parse("""{ "required": ["held"] }"""));
+                ((JsonObject)current["field_since"]!)["/new/held"] = "0.31.0";
+                break;
+            case "an optional object the release never described requires its members":
+                ((JsonObject)body["properties"]!)["note"] = JsonNode.Parse("""
+                    { "type": "object", "required": ["text"], "properties": { "text": { "type": "string" } } }
+                    """);
                 ((JsonObject)current["field_since"]!)["/new/note"] = "0.31.0";
                 break;
             case "named on every line":
@@ -118,6 +141,15 @@ public sealed class JournalKindHistoryTests
     [InlineData("field removed", "`/new/added` is no longer in the body")]
     [InlineData("item field removed", "`/new/contacts/*/id` is no longer in the body")]
     [InlineData("newly required", "`/new/reason` is required now and was not")]
+    [InlineData("newly required at the root", "`/note` is required now and was not")]
+    [InlineData("newly required in a branch the release had", "`/new/note` is required now and was not")]
+    [InlineData("newly required in a branch of the release's put after a new one", "`/new/note` is required now and was not")]
+    [InlineData("newly required by a new branch where the release described it", "`/new/reason` is required now and was not")]
+    [InlineData("newly required by a new branch of an allOf", "`/new/held` is required now and was not")]
+    [InlineData("newly required by a branch added to an allOf the release had", "`/new/held` is required now and was not")]
+    [InlineData("newly required by the one branch of a first anyOf", "`/held` is required now and was not")]
+    [InlineData("newly required in a branch of the release's moved and widened", "`/new/note` is required now and was not")]
+    [InlineData("newly required in a branch of the release's moved and described", "`/new/note` is required now and was not")]
     [InlineData("published body refused", "the body `a pause with its reason` was published as valid and is refused now at /new/reason")]
     [InlineData("field_since dropped", "`field_since` no longer says when `/new/added` was added")]
     [InlineData("entity dropped", "a line no longer names its `campaign`")]
@@ -126,9 +158,18 @@ public sealed class JournalKindHistoryTests
     [InlineData("no longer subscribable", "was subscribable and is not now")]
     public void A_document_that_lost_or_narrowed_anything_is_refused(string change, string problem)
     {
-        using var repository = new Repository(Published());
-        var current = Published();
+        var branched = change.Contains("branch", StringComparison.Ordinal);
+        var published = branched ? Branched() : Published();
+        var current = branched ? Branched() : Published();
         var body = (JsonObject)current["body"]!["properties"]!["new"]!;
+        if (change == "newly required by a branch added to an allOf the release had")
+        {
+            var all = """[{ "properties": { "reason": { "type": "string" } } }]""";
+            published["body"]!["properties"]!["new"]!["allOf"] = JsonNode.Parse(all);
+            body["allOf"] = JsonNode.Parse(all);
+        }
+
+        using var repository = new Repository(published);
         switch (change)
         {
             case "removed":
@@ -145,6 +186,61 @@ public sealed class JournalKindHistoryTests
                 break;
             case "newly required":
                 ((JsonArray)body["required"]!).Add("reason");
+                break;
+            case "newly required at the root":
+                ((JsonObject)current["body"]!["properties"]!)["note"] = new JsonObject { ["type"] = "string" };
+                ((JsonArray)current["body"]!["required"]!).Add("note");
+                break;
+            case "newly required in a branch the release had":
+                // Grown alone, so the list still says what the release's said: the branch is the release's by its place in it.
+                body["anyOf"]![0] = JsonNode.Parse("""
+                    { "properties": { "reason": { "enum": ["a holiday"] }, "note": { "type": "string" } }, "required": ["added", "note"] }
+                    """);
+                break;
+            case "newly required in a branch of the release's put after a new one":
+                // The release's second branch, grown, now third: a new branch in the release's first place makes the list the release's.
+                body["anyOf"] = JsonNode.Parse("""
+                    [
+                      { "properties": { "reason": { "type": "string" } } },
+                      { "properties": { "reason": { "enum": ["a holiday"] } }, "required": ["added"] },
+                      { "properties": { "added": { "type": "string" }, "note": { "type": "string" } }, "required": ["note"] }
+                    ]
+                    """);
+                break;
+            case "newly required by a new branch where the release described it":
+                // New by `held`, which the release never described; `reason` it did, as optional.
+                ((JsonArray)body["anyOf"]!).Add(JsonNode.Parse("""{ "properties": { "held": { "type": "string" } }, "required": ["held", "reason"] }"""));
+                break;
+            case "newly required by a new branch of an allOf":
+                // Every body must match every branch of an `allOf`, so its one branch is a requirement of every body.
+                body["allOf"] = JsonNode.Parse("""[{ "properties": { "held": { "type": "string" } }, "required": ["held"] }]""");
+                break;
+            case "newly required by a branch added to an allOf the release had":
+                ((JsonArray)body["allOf"]!).Add(JsonNode.Parse("""{ "properties": { "held": { "type": "string" } }, "required": ["held"] }"""));
+                break;
+            case "newly required by the one branch of a first anyOf":
+                // The root had no `anyOf`, so a body matches its one branch or nothing.
+                current["body"]!["anyOf"] = JsonNode.Parse("""[{ "properties": { "held": { "type": "string" } }, "required": ["held"] }]""");
+                break;
+            case "newly required in a branch of the release's moved and widened":
+                // The release's second branch, widened and grown, now third, with another branch in its place.
+                body["anyOf"] = JsonNode.Parse("""
+                    [
+                      { "properties": { "reason": { "enum": ["a holiday"] } }, "required": ["added"] },
+                      { "properties": { "reason": { "enum": ["a strike"] } }, "required": ["added"] },
+                      { "properties": { "added": { "type": ["string", "null"] }, "note": { "type": "string" } }, "required": ["note"] }
+                    ]
+                    """);
+                break;
+            case "newly required in a branch of the release's moved and described":
+                // The same move, the release's second branch changed by a description alone besides its growth.
+                body["anyOf"] = JsonNode.Parse("""
+                    [
+                      { "properties": { "reason": { "enum": ["a holiday"] } }, "required": ["added"] },
+                      { "properties": { "reason": { "enum": ["a strike"] } }, "required": ["added"] },
+                      { "description": "Any other pause.", "properties": { "added": { "type": "string" }, "note": { "type": "string" } }, "required": ["note"] }
+                    ]
+                    """);
                 break;
             case "published body refused":
                 body["properties"]!["reason"] = new JsonObject { ["type"] = "integer" };
@@ -258,16 +354,21 @@ public sealed class JournalKindHistoryTests
             yield return $"{kind}: `since` was {published["since"]} and is now {current["since"]}.";
         }
 
-        var (wasDescribed, wasRequired) = Places((JsonObject)published["body"]!);
-        var (described, required) = Places((JsonObject)current["body"]!);
-        foreach (var place in wasDescribed.Where(place => !described.Contains(place)).Order(StringComparer.Ordinal))
+        var was = Places((JsonObject)published["body"]!);
+        var now = Places((JsonObject)current["body"]!, was);
+        foreach (var place in was.Described.Where(place => !now.Described.Contains(place)).Order(StringComparer.Ordinal))
         {
             yield return $"{kind}: `{place}` is no longer in the body.";
         }
 
-        foreach (var place in required.Where(place => !wasRequired.Contains(place)).Order(StringComparer.Ordinal))
+        // Newly required narrows the kind only where a body the release described could have been held to it: the place
+        // itself was described (and optional), or an object the release described, or a branch of the release's, requires it.
+        foreach (var (place, by) in now.Required.Where(entry => !was.Required.ContainsKey(entry.Key)).OrderBy(entry => entry.Key, StringComparer.Ordinal))
         {
-            yield return $"{kind}: `{place}` is required now and was not.";
+            if (was.Described.Contains(place) || by == Requirement.Release)
+            {
+                yield return $"{kind}: `{place}` is required now and was not.";
+            }
         }
 
         if (IsTrue(published["subscribable"]) && !IsTrue(current["subscribable"]))
@@ -307,66 +408,184 @@ public sealed class JournalKindHistoryTests
 
     private static bool IsTrue(JsonNode? node) => node is JsonValue value && value.GetValueKind() == JsonValueKind.True;
 
+    /// <summary>Where a place's requirement comes from, as the last published release reads it.</summary>
+    private enum Requirement
+    {
+        /// <summary>The root, an object the release described, an <c>allOf</c> branch, or any branch of a list the release had: a body it described could be held to it.</summary>
+        Release,
+
+        /// <summary>Only a branch added to an <c>anyOf</c> the release had, or an object the release never described: no body it published could have needed it.</summary>
+        New,
+    }
+
+    /// <summary>
+    /// What a body describes and requires. <see cref="Required"/> keeps, for each place, where its requirement comes from,
+    /// <see cref="Requirement.Release"/> wherever one of its requirements is; <see cref="Branches"/> holds every branch by
+    /// its location in the document, such as <c>#/properties/new/anyOf/0</c>, for a later document to know the release's by.
+    /// </summary>
+    private sealed record Shape(HashSet<string> Described, Dictionary<string, Requirement> Required, Dictionary<string, JsonObject> Branches)
+    {
+        public static Shape Empty() => new(new(StringComparer.Ordinal), new(StringComparer.Ordinal), new(StringComparer.Ordinal));
+    }
+
     /// <summary>
     /// Every place a body describes a member, as a pointer with <c>*</c> for an array's index, and those it requires:
     /// through <c>properties</c>, <c>items</c>, every branch of <c>anyOf</c> and <c>allOf</c>, and <c>$ref</c> into the
-    /// body's <c>$defs</c>.
+    /// body's <c>$defs</c>. Read against <paramref name="release"/>, the shape of the last published release's
+    /// document, a requirement is <see cref="Requirement.New"/> where an object whose own place the release never
+    /// described makes it, or where it lies inside a new branch: a branch of an <c>anyOf</c> the release had with at
+    /// least one branch, at an index the release's list did not reach, while every branch at an index the release had
+    /// still says what the release's said there once every place the release never described is set aside. Any other
+    /// branch is the release's: every branch of an <c>allOf</c>, of a first <c>anyOf</c>, and of a list one of whose
+    /// release branches was moved or changed.
     /// </summary>
-    private static (HashSet<string> Described, HashSet<string> Required) Places(JsonObject body)
+    private static Shape Places(JsonObject body, Shape? release = null)
     {
-        var described = new HashSet<string>(StringComparer.Ordinal);
-        var required = new HashSet<string>(StringComparer.Ordinal);
-        var pending = new Stack<(JsonObject Schema, string At, int Depth)>();
-        pending.Push((body, string.Empty, 0));
-        while (pending.Count > 0)
+        var shape = Shape.Empty();
+        Walk(shape, body, string.Empty, "#", Requirement.Release, 0);
+        return shape;
+
+        void Walk(Shape into, JsonObject schema, string at, string location, Requirement by, int depth)
         {
-            var (schema, at, depth) = pending.Pop();
             if (depth > 64)
             {
-                continue;
+                return;
             }
 
             if (schema["properties"] is JsonObject properties)
             {
                 foreach (var (name, child) in properties)
                 {
-                    described.Add($"{at}/{name}");
+                    into.Described.Add($"{at}/{name}");
                     if (child is JsonObject member)
                     {
-                        pending.Push((member, $"{at}/{name}", depth + 1));
+                        Walk(into, member, $"{at}/{name}", $"{location}/properties/{name}", by, depth + 1);
                     }
                 }
             }
 
             if (schema["required"] is JsonArray names)
             {
+                var owner = release is null || ObjectDescribed(release.Described, at) ? by : Requirement.New;
                 foreach (var name in names.OfType<JsonValue>().Select(name => (string)name!))
                 {
-                    required.Add($"{at}/{name}");
+                    var place = $"{at}/{name}";
+                    into.Required[place] = into.Required.GetValueOrDefault(place, owner) == Requirement.Release ? Requirement.Release : owner;
                 }
             }
 
             if (schema["items"] is JsonObject items)
             {
-                pending.Push((items, $"{at}/*", depth + 1));
+                Walk(into, items, $"{at}/*", $"{location}/items", by, depth + 1);
             }
 
             foreach (var combinator in new[] { "anyOf", "allOf" })
             {
-                foreach (var branch in (schema[combinator] as JsonArray)?.OfType<JsonObject>() ?? [])
+                var branches = (schema[combinator] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
+                var had = combinator == "anyOf" && by == Requirement.Release && release is not null
+                    ? Kept(branches, at, $"{location}/{combinator}")
+                    : 0;
+                for (var index = 0; index < branches.Count; index++)
                 {
-                    pending.Push((branch, at, depth + 1));
+                    var here = $"{location}/{combinator}/{index}";
+                    into.Branches[here] = branches[index];
+                    var within = had > 0 && index >= had ? Requirement.New : by;
+                    Walk(into, branches[index], at, here, within, depth + 1);
                 }
             }
 
             if (schema["$ref"] is JsonValue reference && ((string?)reference)?.StartsWith("#/$defs/", StringComparison.Ordinal) == true
                 && (body["$defs"] as JsonObject)?[((string)reference!)["#/$defs/".Length..]] is JsonObject defined)
             {
-                pending.Push((defined, at, depth + 1));
+                Walk(into, defined, at, (string)reference!, by, depth + 1);
             }
         }
 
-        return (described, required);
+        // How many branches the release had in the `anyOf` at `list`, where each of them still stands at its index and says
+        // what it said there once every place the release never described is set aside; otherwise none, which reads every
+        // branch of the list as the release's.
+        int Kept(List<JsonObject> branches, string at, string list)
+        {
+            var had = 0;
+            for (; release!.Branches.TryGetValue($"{list}/{had}", out var was); had++)
+            {
+                if (had >= branches.Count
+                    || !JsonNode.DeepEquals(Known(branches[had], at, release.Described), Known(was, at, release.Described)))
+                {
+                    return 0;
+                }
+            }
+
+            return had;
+        }
+    }
+
+    /// <summary>Whether the object at <paramref name="at"/> is one the release described: the root, or a described place, through its items.</summary>
+    private static bool ObjectDescribed(HashSet<string> described, string at)
+    {
+        while (at.EndsWith("/*", StringComparison.Ordinal))
+        {
+            at = at[..^2];
+        }
+
+        return at.Length == 0 || described.Contains(at);
+    }
+
+    /// <summary>
+    /// A copy of <paramref name="schema"/>, standing at <paramref name="at"/>, with every place outside
+    /// <paramref name="described"/> set aside, its member and its requirement both, and a set of members or a list of
+    /// requirements that leaves empty dropped: a branch as much of it as the release could have known.
+    /// </summary>
+    private static JsonObject Known(JsonObject schema, string at, HashSet<string> described)
+    {
+        var copy = (JsonObject)schema.DeepClone();
+        if (copy["properties"] is JsonObject properties)
+        {
+            foreach (var name in properties.Select(entry => entry.Key).ToList())
+            {
+                if (!described.Contains($"{at}/{name}"))
+                {
+                    properties.Remove(name);
+                }
+                else if (properties[name] is JsonObject member)
+                {
+                    properties[name] = Known(member, $"{at}/{name}", described);
+                }
+            }
+
+            if (properties.Count == 0)
+            {
+                copy.Remove("properties");
+            }
+        }
+
+        if (copy["required"] is JsonArray names)
+        {
+            var kept = names.OfType<JsonValue>().Select(name => (string)name!).Where(name => described.Contains($"{at}/{name}")).ToList();
+            if (kept.Count == 0)
+            {
+                copy.Remove("required");
+            }
+            else
+            {
+                copy["required"] = new JsonArray([.. kept.Select(name => (JsonNode)JsonValue.Create(name))]);
+            }
+        }
+
+        if (copy["items"] is JsonObject items)
+        {
+            copy["items"] = Known(items, $"{at}/*", described);
+        }
+
+        foreach (var combinator in new[] { "anyOf", "allOf" })
+        {
+            if (copy[combinator] is JsonArray branches)
+            {
+                copy[combinator] = new JsonArray([.. branches.Select(branch => branch is JsonObject inner ? Known(inner, at, described) : branch?.DeepClone())]);
+            }
+        }
+
+        return copy;
     }
 
     /// <summary>A made-up document as a release published it.</summary>
@@ -403,6 +622,19 @@ public sealed class JournalKindHistoryTests
           }
         }
         """)!;
+
+    /// <summary>The made-up document with two branches under <c>/new</c>, the first one the published body holds.</summary>
+    private static JsonObject Branched()
+    {
+        var document = Published();
+        document["body"]!["properties"]!["new"]!["anyOf"] = JsonNode.Parse("""
+            [
+              { "properties": { "reason": { "enum": ["a holiday"] } }, "required": ["added"] },
+              { "properties": { "added": { "type": "string" } } }
+            ]
+            """);
+        return document;
+    }
 
     /// <summary>A body the made-up document's release published as valid.</summary>
     private static JsonObject Fixture() => (JsonObject)JsonNode.Parse("""

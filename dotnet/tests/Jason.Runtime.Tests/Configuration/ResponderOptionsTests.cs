@@ -10,8 +10,8 @@ using Microsoft.Extensions.Options;
 namespace Jason.Runtime.Tests.Configuration;
 
 /// <summary>
-/// The respond step's five settings: whether a reply wakes the responder at all, where the responder sits in the queue,
-/// what one run may cost, and how old a reply may be and still wake one.
+/// The respond step's six settings: whether a reply wakes the responder at all, where the responder sits in the queue,
+/// what one run may cost, how old a reply may be and still wake one, and how many runs a campaign may start in a day.
 /// </summary>
 public class ResponderOptionsTests
 {
@@ -27,6 +27,7 @@ public class ResponderOptionsTests
         Assert.Equal(900, options.TimeoutSeconds);
         Assert.Equal(1, options.MaxAttempts);
         Assert.Equal(259_200, options.MaxAgeSeconds);
+        Assert.Equal(25, options.MaxLaunchesPerDay);
         Assert.True(new ResponderOptionsValidator().Validate(null, options).Succeeded);
     }
 
@@ -39,6 +40,8 @@ public class ResponderOptionsTests
     [InlineData("Responder:MaxAttempts", 11, "Responder:MaxAttempts must be between 1 and 10; got 11.")]
     [InlineData("Responder:MaxAgeSeconds", 3_599, "Responder:MaxAgeSeconds must be between 3600 and 2592000; got 3599.")]
     [InlineData("Responder:MaxAgeSeconds", 2_592_001, "Responder:MaxAgeSeconds must be between 3600 and 2592000; got 2592001.")]
+    [InlineData("Responder:MaxLaunchesPerDay", 0, "Responder:MaxLaunchesPerDay must be between 1 and 1000; got 0.")]
+    [InlineData("Responder:MaxLaunchesPerDay", 1_001, "Responder:MaxLaunchesPerDay must be between 1 and 1000; got 1001.")]
     public void A_number_out_of_range_is_refused_with_its_rule(string setting, int value, string failure)
     {
         var result = new ResponderOptionsValidator().Validate(null, With(setting, value));
@@ -56,6 +59,8 @@ public class ResponderOptionsTests
     [InlineData("Responder:MaxAttempts", 10)]
     [InlineData("Responder:MaxAgeSeconds", 3_600)]
     [InlineData("Responder:MaxAgeSeconds", 2_592_000)]
+    [InlineData("Responder:MaxLaunchesPerDay", 1)]
+    [InlineData("Responder:MaxLaunchesPerDay", 1_000)]
     public void The_bound_itself_is_allowed(string setting, int value) =>
         Assert.True(new ResponderOptionsValidator().Validate(null, With(setting, value)).Succeeded);
 
@@ -133,7 +138,7 @@ public class ResponderOptionsTests
     public void The_vocabulary_names_the_section_and_its_settings()
     {
         Assert.Contains("Responder", SettingsVocabulary.Names);
-        foreach (var name in new[] { "OnReply", "Priority", "TimeoutSeconds", "MaxAttempts", "MaxAgeSeconds" })
+        foreach (var name in new[] { "OnReply", "Priority", "TimeoutSeconds", "MaxAttempts", "MaxAgeSeconds", "MaxLaunchesPerDay" })
         {
             Assert.Contains(name, SettingsVocabulary.Names);
         }
@@ -144,6 +149,7 @@ public class ResponderOptionsTests
         "Responder:Priority" => new ResponderOptions { Priority = value },
         "Responder:TimeoutSeconds" => new ResponderOptions { TimeoutSeconds = value },
         "Responder:MaxAttempts" => new ResponderOptions { MaxAttempts = value },
+        "Responder:MaxLaunchesPerDay" => new ResponderOptions { MaxLaunchesPerDay = value },
         _ => new ResponderOptions { MaxAgeSeconds = value },
     };
 
