@@ -20,77 +20,63 @@ replaces the title and the body together.
 -->
 
 
-# Jason 0.27.0
+# Jason 0.28.0
 
-## What is new since 0.26.0
+## What is new since 0.27.0
 
-A notification now lands on what waits, and one click each takes you from it to a brief and to your own agent. The agent
-proposes; approving, rejecting and answering stay yours.
+Each skill pack now has one home that owns it: Reply's skills ship with reply-cli, the SDR expertise and the runtime
+skills ship with Jason, and the separate skills repository is archived.
 
-- **A click on a Windows notification opens what waits.** With one approval or question waiting, a click on the banner
-  or on its entry in the notification centre opens that item in your UI; with several, it opens the list. Jason registers
-  a `jason:` link scheme under your account for this, and a link that is not one of its few forms is refused before
-  anything is asked of the runtime. Only the item's opaque id travels, never anything of what it says. A toast for one
-  item also has a **Copy prompt** button, which puts that item's brief on the clipboard. This is Windows only; on macOS
-  and Linux a notification opens nothing of Jason's, and `jason ui open` reaches the same page. [The notifications
-  page](https://github.com/reply-team/jason-ai/blob/v0.27.0/docs/notifications.md) says what a click opens on each platform.
-- **Copy prompt.** `jason approval get <id> --prompt` and `jason decision get <id> --prompt` print, in place of the JSON
-  answer, a short brief for an agent session on that one item: what waits, its campaign and the folder to work from, the
-  `approvals-and-questions` skill and the line that installs it, what to read and bring back, and that the session
-  decides nothing. The brief holds nothing of the item itself; the session reads it through the command line. It cannot be
-  combined with `--human`. The UI has the same text behind a **Copy prompt** button on an open approval or question.
-- **Open an AI session.** `jason session open --approval <id>` or `--question <id>` starts your own agent host in a new
-  terminal window at the campaign's folder (the home folder where none is recorded), with that brief as its first
-  message; `--dry-run` prints the command and starts nothing. The host is the one your named preference
-  `agent.interactive_host` says, and Claude Code when it is not set. The preference is optional, and you set it as
-  yourself, for example `jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`
-  with a file `host.json` holding `{"host":"codex"}`; `jason preference unset agent.interactive_host --actor human:<your-name>` takes it back.
-  [The preference's page](https://github.com/reply-team/jason-ai/blob/v0.27.0/docs/contracts/preferences/agent.interactive_host.md) lists the host words. The attention
-  screen of the UI shows this command beside Copy prompt, and on Windows an **Open an AI session** link that runs it.
-  [The UI page](https://github.com/reply-team/jason-ai/blob/v0.27.0/docs/ui.md#open-an-ai-session) says how each system opens the terminal.
-- **Antigravity CLI roles no longer need your two settings rules.** Each attempt's work directory now carries a workspace
-  hook, and the host asks it about the tools a role uses: the role may call `jason` back, read its memory files and write
-  its `result.json`, may not edit any other file, and gets web fetch and search only where its profile grants them. The
-  hook route is built from the host's own hooks page and has not yet been run on an account. The two rules of 0.26.0
-  stay as the fallback, and [the Antigravity
-  section](https://github.com/reply-team/jason-ai/blob/v0.27.0/docs/execution-profiles.md#antigravity-cli) says what is not measured.
+- **Reply's skills come with reply-cli 0.19.0.** The five Reply skills (`reply-api`, `reply-auth`, `reply-cli`,
+  `reply-mcp`, `reply-operations-mapping`) are part of the `reply-cli` npm package. `reply skills install` copies them from
+  the installed package into each assistant it detects, and `reply skills update` brings them to the version of the CLI;
+  neither needs a network or git. For Claude Code they land in `~/.claude/skills` (`.claude/skills` with `--project`) and
+  for Codex in `~/.agents/skills` (`.agents/skills` with `--project`). On Claude Code they are now standalone skills,
+  so the `reply-adapter:` prefix on their names is gone. Asking the command for `core`, `ai-sdr-core`, `runtime` or
+  `agentic-runtime` is refused with one sentence saying that those ship with Jason. [reply-cli's
+  README](https://github.com/reply-team/reply-cli/blob/v0.19.0/README.md#skills) has the commands and the full table of
+  assistants.
+- **The skills repository `reply-team/reply-skills` is archived.** A plugin installed from its marketplace keeps working
+  and is read-only: it never updates. `reply skills install` removes the old `reply-adapter@reply-skills` plugin once the
+  copied skills are in place, and leaves `ai-sdr-core@reply-skills` and `agentic-runtime@reply-skills` installed,
+  naming them in its report. Jason's own skills, installed by `jason skills install`, replace those two.
+- **Taking the business pack without the runtime.** A host's own skill tools can install it from this repository;
+  [the skills page](https://github.com/reply-team/jason-ai/blob/v0.28.0/skills/README.md#taking-the-business-pack-without-the-runtime)
+  says how.
+- **Thirteen skills are verified.** Claude Code 2.1.318 read the approvals, installation, campaign-work, troubleshooting
+  and in-session planner skills and eight of the nine role skills against the published 0.27.0, and their status is now
+  `verified`. The responder role skill stays `draft`: no host has yet read it handling a real reply.
 
-## Fixed since 0.26.0
-
-- **An agent host installed with npm is found on Windows.** Claude Code, Codex CLI, Gemini CLI and GitHub Copilot CLI,
-  installed with `npm install -g`, were answered `host_not_available` by a role's launch and not found by
-  `jason status`. Jason now reads npm's shim of a scoped package, and the shim that starts an executable the package ships,
-  without starting either through a shell.
-- **A profile stored under an older build is checked again when work launches.** A profile revision written before an update
-  can hold a word this build's rules for its host refuse, such as a reserved argument. Work under it now ends before
-  any child starts with the code `profile_revision_refused`, naming the field and never the value; `jason profile get`
-  and `jason profile list` show it as `problems`, and `jason status` names the profile. `jason profile update` is the repair.
-- **A runtime start writes the import files a recorded folder lacks.** The `GEMINI.md` that imports `AGENTS.md` is now
-  written, at every start, into the harness root and every recorded project and campaign folder that lacks it, where 0.26.0
-  wrote it only at a create. A file that is there is never opened.
-
-## Upgrading from 0.26.0
+## Upgrading from 0.27.0
 
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
   lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
   install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
   and `jason plugin install reply --replace` follow.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`. The approvals, installation, campaign-work, troubleshooting, in-session
-  planner skills and the nine role skills changed in their wording.
+  `brew upgrade jason`, run `jason skills update`. Thirteen skills changed their status line from `draft` to `verified`.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle stay
   as they were.
-- **The preference `agent.interactive_host`** is new and optional; without it `jason session open` starts Claude Code.
-- **Antigravity CLI:** if you added the two rules to your own settings in 0.26.0, you may keep them; they remain the
-  fallback. The hook refuses web fetch, web search and the browser tools a profile does not grant, and a profile
-  stored under 0.26.0 grants none on this host, so an upgraded Antigravity profile loses web fetch and web search
-  until `jason profile update <name> --tool web_fetch --tool web_search`.
+- **If you use reply-cli,** update it as its README says (`reply install`, or `npm install -g reply-cli`), then run
+  `reply skills install` (or `reply skills update`) to take the skills that now ship with it.
+- **If you installed `ai-sdr-core@reply-skills` or `agentic-runtime@reply-skills` as plugins,** the skills of
+  `ai-sdr-core` are an older copy of Jason's business pack and keep loading beside it under the plugin's prefix, and
+  those of `agentic-runtime` are retired, Jason's runtime skills replacing them. Remove both with your host's own plugin
+  command; on Claude Code that is `claude plugin uninstall ai-sdr-core@reply-skills` and
+  `claude plugin uninstall agentic-runtime@reply-skills`, with `--scope project` for one installed in a project. For
+  Codex, use the host's plugin command.
 - **The Reply plugin** is unchanged.
-- **From 0.25.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
+- **From 0.26.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
 
 ## Known issues
+
+`reply skills install --project` does not see an old `reply-adapter@reply-skills` plugin installed at user scope on
+Claude Code, so that plugin keeps loading beside the project copy of the skills.
+
+`reply skills install --dry-run` and `reply skills update --dry-run` describe what they would do in the past tense, as
+if it had been done; nothing is changed.
 
 The click on a notification and its Copy prompt button are Windows only. Where another program already holds `jason:` links,
 Jason leaves that registration alone and the toast shows without a click or a button.
@@ -111,8 +97,8 @@ that names another installation alone, so nothing is lost.
 On Linux, kitty, foot, gnome-terminal, xfce4-terminal, mate-terminal and wezterm are started in the form each takes;
 any other terminal program is given the host after `-e` as separate arguments.
 
-Under Windows PowerShell 5.1 and cmd.exe the inner quotes of `--value '{"host":"codex"}'` are lost, which is why the
-example above reads the value from a file.
+Under Windows PowerShell 5.1 and cmd.exe the inner quotes of `--value '{"host":"codex"}'` are lost, so give the value in a file:
+`jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`.
 
 If Claude Code's npm postinstall never replaced its placeholder executable, `jason session open` reports that it started the host
 and the window closes at once.
