@@ -11,9 +11,11 @@ namespace Jason.Contracts.Tests.Journal;
 /// A kind's document only grows. A reader written against a release's documents keeps reading every line a later release
 /// writes, so a later document keeps every kind, every <c>since</c>, every body field, every entity and every
 /// <c>field_since</c> entry the published one had, accepts every body the release published as valid, and requires
-/// nothing the published one did not of a body the release described: a member only a new branch requires, or one inside
-/// an object the release never described, no published body could have needed. The published documents are the last
-/// release's, read from its tag.
+/// nothing the published one did not of a body the release described: a member only a branch added to an <c>anyOf</c> the
+/// release already had requires, or one inside an object the release never described, no published body could have
+/// needed. The release's branches are known by their place in the list alone, so a branch put before them, or a change to
+/// any of them, makes every branch of that list the release's and a member it newly requires is refused. The published
+/// documents are the last release's, read from its tag.
 /// </summary>
 public sealed class JournalKindHistoryTests
 {
@@ -143,6 +145,11 @@ public sealed class JournalKindHistoryTests
     [InlineData("newly required in a branch the release had", "`/new/note` is required now and was not")]
     [InlineData("newly required in a branch of the release's put after a new one", "`/new/note` is required now and was not")]
     [InlineData("newly required by a new branch where the release described it", "`/new/reason` is required now and was not")]
+    [InlineData("newly required by a new branch of an allOf", "`/new/held` is required now and was not")]
+    [InlineData("newly required by a branch added to an allOf the release had", "`/new/held` is required now and was not")]
+    [InlineData("newly required by the one branch of a first anyOf", "`/held` is required now and was not")]
+    [InlineData("newly required in a branch of the release's moved and widened", "`/new/note` is required now and was not")]
+    [InlineData("newly required in a branch of the release's moved and described", "`/new/note` is required now and was not")]
     [InlineData("published body refused", "the body `a pause with its reason` was published as valid and is refused now at /new/reason")]
     [InlineData("field_since dropped", "`field_since` no longer says when `/new/added` was added")]
     [InlineData("entity dropped", "a line no longer names its `campaign`")]
@@ -152,9 +159,17 @@ public sealed class JournalKindHistoryTests
     public void A_document_that_lost_or_narrowed_anything_is_refused(string change, string problem)
     {
         var branched = change.Contains("branch", StringComparison.Ordinal);
-        using var repository = new Repository(branched ? Branched() : Published());
+        var published = branched ? Branched() : Published();
         var current = branched ? Branched() : Published();
         var body = (JsonObject)current["body"]!["properties"]!["new"]!;
+        if (change == "newly required by a branch added to an allOf the release had")
+        {
+            var all = """[{ "properties": { "reason": { "type": "string" } } }]""";
+            published["body"]!["properties"]!["new"]!["allOf"] = JsonNode.Parse(all);
+            body["allOf"] = JsonNode.Parse(all);
+        }
+
+        using var repository = new Repository(published);
         switch (change)
         {
             case "removed":
@@ -177,13 +192,13 @@ public sealed class JournalKindHistoryTests
                 ((JsonArray)current["body"]!["required"]!).Add("note");
                 break;
             case "newly required in a branch the release had":
-                // Widened as well as grown, so the branch is the release's by its place in the list alone.
+                // Grown alone, so the list still says what the release's said: the branch is the release's by its place in it.
                 body["anyOf"]![0] = JsonNode.Parse("""
-                    { "properties": { "reason": { "enum": ["a holiday", "a strike"] }, "note": { "type": "string" } }, "required": ["added", "note"] }
+                    { "properties": { "reason": { "enum": ["a holiday"] }, "note": { "type": "string" } }, "required": ["added", "note"] }
                     """);
                 break;
             case "newly required in a branch of the release's put after a new one":
-                // The release's second branch, grown, now third: the release's by what it says once the growth is set aside.
+                // The release's second branch, grown, now third: a new branch in the release's first place makes the list the release's.
                 body["anyOf"] = JsonNode.Parse("""
                     [
                       { "properties": { "reason": { "type": "string" } } },
@@ -195,6 +210,37 @@ public sealed class JournalKindHistoryTests
             case "newly required by a new branch where the release described it":
                 // New by `held`, which the release never described; `reason` it did, as optional.
                 ((JsonArray)body["anyOf"]!).Add(JsonNode.Parse("""{ "properties": { "held": { "type": "string" } }, "required": ["held", "reason"] }"""));
+                break;
+            case "newly required by a new branch of an allOf":
+                // Every body must match every branch of an `allOf`, so its one branch is a requirement of every body.
+                body["allOf"] = JsonNode.Parse("""[{ "properties": { "held": { "type": "string" } }, "required": ["held"] }]""");
+                break;
+            case "newly required by a branch added to an allOf the release had":
+                ((JsonArray)body["allOf"]!).Add(JsonNode.Parse("""{ "properties": { "held": { "type": "string" } }, "required": ["held"] }"""));
+                break;
+            case "newly required by the one branch of a first anyOf":
+                // The root had no `anyOf`, so a body matches its one branch or nothing.
+                current["body"]!["anyOf"] = JsonNode.Parse("""[{ "properties": { "held": { "type": "string" } }, "required": ["held"] }]""");
+                break;
+            case "newly required in a branch of the release's moved and widened":
+                // The release's second branch, widened and grown, now third, with another branch in its place.
+                body["anyOf"] = JsonNode.Parse("""
+                    [
+                      { "properties": { "reason": { "enum": ["a holiday"] } }, "required": ["added"] },
+                      { "properties": { "reason": { "enum": ["a strike"] } }, "required": ["added"] },
+                      { "properties": { "added": { "type": ["string", "null"] }, "note": { "type": "string" } }, "required": ["note"] }
+                    ]
+                    """);
+                break;
+            case "newly required in a branch of the release's moved and described":
+                // The same move, the release's second branch changed by a description alone besides its growth.
+                body["anyOf"] = JsonNode.Parse("""
+                    [
+                      { "properties": { "reason": { "enum": ["a holiday"] } }, "required": ["added"] },
+                      { "properties": { "reason": { "enum": ["a strike"] } }, "required": ["added"] },
+                      { "description": "Any other pause.", "properties": { "added": { "type": "string" }, "note": { "type": "string" } }, "required": ["note"] }
+                    ]
+                    """);
                 break;
             case "published body refused":
                 body["properties"]!["reason"] = new JsonObject { ["type"] = "integer" };
@@ -316,7 +362,7 @@ public sealed class JournalKindHistoryTests
         }
 
         // Newly required narrows the kind only where a body the release described could have been held to it: the place
-        // itself was described (and optional), or an object the release described, or a branch it had, requires it.
+        // itself was described (and optional), or an object the release described, or a branch of the release's, requires it.
         foreach (var (place, by) in now.Required.Where(entry => !was.Required.ContainsKey(entry.Key)).OrderBy(entry => entry.Key, StringComparer.Ordinal))
         {
             if (was.Described.Contains(place) || by == Requirement.Release)
@@ -365,10 +411,10 @@ public sealed class JournalKindHistoryTests
     /// <summary>Where a place's requirement comes from, as the last published release reads it.</summary>
     private enum Requirement
     {
-        /// <summary>The root, an object the release described, or a branch the release had: a body it described could be held to it.</summary>
+        /// <summary>The root, an object the release described, an <c>allOf</c> branch, or any branch of a list the release had: a body it described could be held to it.</summary>
         Release,
 
-        /// <summary>Only a branch that is new, or an object the release never described: no body it published could have needed it.</summary>
+        /// <summary>Only a branch added to an <c>anyOf</c> the release had, or an object the release never described: no body it published could have needed it.</summary>
         New,
     }
 
@@ -387,9 +433,10 @@ public sealed class JournalKindHistoryTests
     /// through <c>properties</c>, <c>items</c>, every branch of <c>anyOf</c> and <c>allOf</c>, and <c>$ref</c> into the
     /// body's <c>$defs</c>. Read against <paramref name="release"/>, the shape of the last published release's document,
     /// a requirement is <see cref="Requirement.New"/> where an object whose own place the release never described makes
-    /// it, or where it lies inside a new branch: one that requires a place the release never described and is not the
-    /// release's, which a branch is where the release had a branch at its location, or where, once every place the
-    /// release never described is set aside, it says what a branch the release had beside it said.
+    /// it, or where it lies inside a new branch: a branch of an <c>anyOf</c> the release had with at least one branch, at
+    /// an index the release's list did not reach, while every branch at an index the release had still says what the release's said there once every place the release never described
+    /// is set aside. Any other branch is the release's: every branch of an <c>allOf</c>, of a first <c>anyOf</c>, and of
+    /// a list one of whose release branches was moved or changed.
     /// </summary>
     private static Shape Places(JsonObject body, Shape? release = null)
     {
@@ -433,13 +480,16 @@ public sealed class JournalKindHistoryTests
 
             foreach (var combinator in new[] { "anyOf", "allOf" })
             {
-                var index = 0;
-                foreach (var branch in (schema[combinator] as JsonArray)?.OfType<JsonObject>() ?? [])
+                var branches = (schema[combinator] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
+                var had = combinator == "anyOf" && by == Requirement.Release && release is not null
+                    ? Kept(branches, at, $"{location}/{combinator}")
+                    : 0;
+                for (var index = 0; index < branches.Count; index++)
                 {
-                    var here = $"{location}/{combinator}/{index++}";
-                    into.Branches[here] = branch;
-                    var within = by == Requirement.Release && release is not null && IsNew(branch, at, here, depth) ? Requirement.New : by;
-                    Walk(into, branch, at, here, within, depth + 1);
+                    var here = $"{location}/{combinator}/{index}";
+                    into.Branches[here] = branches[index];
+                    var within = had > 0 && index >= had ? Requirement.New : by;
+                    Walk(into, branches[index], at, here, within, depth + 1);
                 }
             }
 
@@ -450,25 +500,22 @@ public sealed class JournalKindHistoryTests
             }
         }
 
-        bool IsNew(JsonObject branch, string at, string here, int depth)
+        // How many branches the release had in the `anyOf` at `list`, where each of them still stands at its index and says
+        // what it said there once every place the release never described is set aside; otherwise none, which reads every
+        // branch of the list as the release's.
+        int Kept(List<JsonObject> branches, string at, string list)
         {
-            if (release!.Branches.ContainsKey(here))
+            var had = 0;
+            for (; release!.Branches.TryGetValue($"{list}/{had}", out var was); had++)
             {
-                return false;
+                if (had >= branches.Count
+                    || !JsonNode.DeepEquals(Known(branches[had], at, release.Described), Known(was, at, release.Described)))
+                {
+                    return 0;
+                }
             }
 
-            var own = Shape.Empty();
-            Walk(own, branch, at, here, Requirement.Release, depth + 1);
-            if (own.Required.Keys.All(release.Described.Contains))
-            {
-                return false;
-            }
-
-            var list = here[..(here.LastIndexOf('/') + 1)];
-            var known = Known(branch, at, release.Described);
-            return !release.Branches
-                .Where(entry => entry.Key.StartsWith(list, StringComparison.Ordinal) && !entry.Key[list.Length..].Contains('/', StringComparison.Ordinal))
-                .Any(entry => JsonNode.DeepEquals(known, Known(entry.Value, at, release.Described)));
+            return had;
         }
     }
 
