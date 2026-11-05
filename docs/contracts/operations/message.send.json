@@ -335,7 +335,7 @@
   },
 
   "recovery_read": {
-    "reads": "The provider's record of the send under this work item's idempotency key, read by making the same send again under the same key: the provider answers a send it already took with what it answered then — the same reference — and sends nothing twice, and a send the provider answered with a failure is never repeated, since the provider keeps no key for it and a repeat would be a new send. Before the repeat the plugin reads whether the provider keeps such keys at all; where it does not, the repeat fails `send_not_settled` and nothing is sent.",
+    "reads": "The provider's record of the send under this work item's idempotency key, read by making the same send again under the same key: the provider answers a send it already took with what it answered then — the same reference — and sends nothing twice, and a send the provider answered with a failure is never repeated, since the provider keeps no key for it and a repeat would be a new send. The plugin repeats only where it knows the provider keeps such keys, by what it knows of the provider or by a read before the repeat; where it does not, the repeat fails `send_not_settled` and nothing is sent.",
     "justification": "A send is irreversible, and on a metered channel a blind repeat is a second charge as well as a second message in somebody's inbox. The key the provider keeps is what turns the repeat into a read: it is the one trace of this work item's own send, where a read of the thread cannot tell it from another send to the same person. The provider keeps it for a bounded time only.",
     "by_key": true
   },
