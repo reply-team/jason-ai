@@ -61,7 +61,7 @@ public static class SettingsVocabulary
         "SyncSeconds", "LookbackSeconds",
 
         // Responder; Priority, TimeoutSeconds and MaxAttempts are above.
-        "OnReply", "MaxAgeSeconds",
+        "OnReply", "MaxAgeSeconds", "MaxLaunchesPerDay",
 
         // Harness.
         "Root",

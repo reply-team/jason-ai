@@ -918,6 +918,7 @@ public class AgentPreflightTests
                 new ExternalIdStore(journal, clock),
                 new NothingIsSuppressed(),
                 settings,
+                TestOptions.ResponderSettings(),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>());
         }

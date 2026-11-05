@@ -1,0 +1,17 @@
+{
+  "kind": "workitem_waiting",
+  "version": 1,
+  "case": "the claim held a responder at its campaign's daily limit until the next 00:00Z, before any attempt",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": {
+      "on": [],
+      "mode": null,
+      "until": "2026-10-07T00:00:00.000Z",
+      "deadline": "2026-10-07T00:00:00.000Z",
+      "held_by": { "code": "responder_launches_spent", "limit": 25 }
+    }
+  },
+  "expect": "valid"
+}

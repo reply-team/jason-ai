@@ -241,8 +241,11 @@ does. And a reply, or a read that failed, can wake the campaign's manager: what 
 A reply about the campaign's own thread also costs a pair: one `conversation.get` (one plugin child, seconds) and one
 responder launch of up to `Responder:TimeoutSeconds`, with the lifecycle lines of both items in the chronicle; a further
 move into a thread whose responder is still open costs one patch and no launch. The claim paces them — one item per
-campaign at a time — so a burst of fifty threads in one campaign is answered one after another over a few hours, and
-other campaigns are not held up. Meanwhile the campaign's own sends, at priority 0, wait behind its responders. The
+campaign at a time, and no more responder runs started in a campaign in a UTC day than `Responder:MaxLaunchesPerDay`
+(25) — so a burst of fifty threads in one campaign is answered one after another, twenty-five over a few hours and the
+rest from the next 00:00Z, and other campaigns are not held up; a responder over the day's limit waits, with no attempt
+and its thread's further moves still recorded on it, as [work execution](work-execution.md) says under the claim rule.
+Meanwhile the campaign's own sends, at priority 0, wait behind its responders. The
 sends wait, detection does not: this read's `conversation.list` items sit ten above `Responder:Priority`, so the
 campaign's next read is claimed ahead of the responders still queued — those queued before an edit that lowered
 `Responder:Priority` by more than ten keep the priority they were created with, and sit above the new reads until they

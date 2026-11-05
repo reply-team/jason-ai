@@ -63,6 +63,10 @@ public partial class InboundSyncDocTests
             $"`Responder:MaxAgeSeconds` | `{defaults.MaxAgeSeconds}` | {ResponderOptions.MinimumMaxAgeSeconds}..{ResponderOptions.MaximumMaxAgeSeconds} |",
             page,
             StringComparison.Ordinal);
+        Assert.Contains(
+            $"`Responder:MaxLaunchesPerDay` | `{defaults.MaxLaunchesPerDay}` | {ResponderOptions.MinimumMaxLaunchesPerDay}..{ResponderOptions.MaximumMaxLaunchesPerDay} |",
+            page,
+            StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -11,13 +11,13 @@
     "contact": { "at": "/contact_id", "presence": "sometimes" },
     "provider_block": { "at": "/new/blocked_by/provider_block_id", "presence": "sometimes" }
   },
-  "field_since": {},
+  "field_since": { "/new/held_by": "0.30.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
     "required": ["key", "old", "new"],
     "properties": {
-      "key": { "type": ["null", "string"], "pattern": "^att_", "description": "The attempt that ended by waiting, by its id; null where no attempt ended: an item written already waiting, or one the claim parked on a provider block." },
+      "key": { "type": ["null", "string"], "pattern": "^att_", "description": "The attempt that ended by waiting, by its id; null where no attempt ended: an item written already waiting, or one the claim parked on a provider block or held at a limit." },
       "old": { "type": "null" },
       "new": {
         "type": "object",
@@ -42,6 +42,16 @@
               "provider_block_id": { "type": "string", "pattern": "^blk_" },
               "scope": { "enum": ["account", "sender"] },
               "reason": { "enum": ["billing", "limit", "credential", "channel", "other"] }
+            }
+          },
+          "held_by": {
+            "type": "object",
+            "description": "The limit the claim held it at before any attempt, until the moment the limit lets it go: the code its last error carries, and the number in force when it was held.",
+            "additionalProperties": false,
+            "required": ["code", "limit"],
+            "properties": {
+              "code": { "enum": ["responder_launches_spent"] },
+              "limit": { "type": "integer", "minimum": 1 }
             }
           }
         }
@@ -99,6 +109,20 @@
               "deadline": { "type": "null" }
             },
             "required": ["on", "mode", "until", "deadline", "blocked_by"]
+          }
+        }
+      },
+      {
+        "properties": {
+          "key": { "type": "null" },
+          "new": {
+            "properties": {
+              "on": { "maxItems": 0 },
+              "mode": { "type": "null" },
+              "until": { "type": "string" },
+              "deadline": { "type": "string" }
+            },
+            "required": ["on", "mode", "until", "deadline", "held_by"]
           }
         }
       }
