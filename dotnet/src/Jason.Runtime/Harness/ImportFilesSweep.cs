@@ -16,9 +16,9 @@ namespace Jason.Runtime.Harness;
 /// It writes only what <see cref="HarnessFolders.CompleteImportFiles"/> writes: a file that is there is left alone, never
 /// opened, and no word of any <c>AGENTS.md</c> is read or written; nothing is deleted and <c>git</c> is never run. A folder
 /// that is not there, no longer carries its marker, or refused the write, is skipped and said by its level and identifier alone, since a path
-/// carries a name a person gave. Nothing here fails the start or holds it: the sweep runs off it, once the host has handed it
-/// off, so the runtime answers while a folder on a slow or absent share is still being read, and a failure is
-/// said once and leaves the runtime running. A stop ends the sweep between two folders.
+/// carries a name a person gave. Nothing here fails the start or holds it: the host starts the sweep on the thread pool and
+/// does not wait for it, so the runtime answers while a folder on a slow or absent share is still being read, and a failure
+/// is said once and leaves the runtime running. A stop ends the sweep between two folders.
 /// </remarks>
 public sealed class ImportFilesSweep(
     IServiceScopeFactory scopes,
@@ -56,7 +56,7 @@ public sealed class ImportFilesSweep(
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // A stop, between two folders: a sweep that was stopped says nothing more.
+            // A stop, wherever it lands: a sweep that was stopped says nothing more.
         }
         catch (Exception)
         {
