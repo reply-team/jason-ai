@@ -197,6 +197,17 @@ public sealed class SubscriptionsOptionsTests
         Assert.EndsWith("names a journal kind no plugin may subscribe to.", failure, StringComparison.Ordinal);
     }
 
+    /// <summary>Against the runtime's own catalog: no order may name the kind that says a chain failed.</summary>
+    [Fact]
+    public void An_order_for_the_line_that_says_a_chain_failed_is_refused()
+    {
+        var options = Read("""{"Subscriptions":{"Order":{"subscription_failed":["first"]}}}""");
+
+        var failure = Assert.Single(new SubscriptionsOptionsValidator(SafeBinding.NoInstalledPlugins, SubscribableKinds.Catalog).Validate(null, options).Failures!);
+
+        Assert.EndsWith("names a journal kind no plugin may subscribe to.", failure, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Each_entry_is_a_plugin_id_written_once()
     {
