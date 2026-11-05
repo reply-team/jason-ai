@@ -91,6 +91,23 @@ public class InsideARunTests
     }
 
     /// <summary>
+    /// The refusal stands before the body is read, so a body the runtime could not read at all is refused by the header
+    /// and not answered as malformed: a body that reads checks no actor, so only one that cannot read tells where the
+    /// check stands.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(PersonsVerbs))]
+    public async Task A_body_that_cannot_be_read_is_refused_by_the_header_first(string operation)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+
+        var (status, text) = await api.PostRawAsync(operation, "{not json", Inside, Ct);
+
+        Assert.True(status == HttpStatusCode.Forbidden, $"{operation} answered {(int)status}: {text}");
+        Assert.Equal("decided_inside_a_run", JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error.Code);
+    }
+
+    /// <summary>
     /// The five and no more. The other verbs that take no default actor — a preference set or unset, a block's clear, a
     /// resume, a report and a subscription's rewind — are not among them: a resume and a report are a run's to make, and
     /// the rest are a person's already by their actor. A sixth is a decision of its own, made here on purpose.
