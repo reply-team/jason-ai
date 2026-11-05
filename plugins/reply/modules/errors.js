@@ -449,7 +449,7 @@ export const ROWS = {
       "when": "The CLI answered `reply.refused`, `reply.invalid_request` about a field this operation has no row for, or a code this version does not know. That holds for `reply.refused` at status 404 and no code of Reply's own, which means Reply's API changed under this package version: the CLI passes such a 404 through as it is on every command but `contact get`, `contact delete`, `inbox get`, `inbox reply`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`.",
       "code": "provider_call_failed",
       "class": "permanent",
-      "note": "Reply refused the call in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
+      "note": "Reply refused the call in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table. Update the package (`jason update apply`) and, if the ending stays, report it."
     },
     "account_or_sender_blocked": {
       "when": "Not reported yet for the account. The CLI publishes no code that says Reply refused a call for the account's money or plan or a revoked key, and did nothing for it; this row is where such a code lands once it does (see the README, \"Endings every operation can meet\"). A sending account Reply refused for its own state is the sender's block, on the two sends' own rows.",
@@ -1545,11 +1545,11 @@ export const ROWS = {
         "note": "The message was cancelled at Reply before it went, so nothing was sent. Whether to propose it again is a person's to decide."
       },
       "schedule_not_taken_on_the_route": {
-        "when": "The provider's own object names a sending schedule in `provider.schedule_id`, and the send answered `reply.invalid_request` naming the field `scheduleId`: a Reply whose direct sends are deployed and whose LinkedIn routes do not take a schedule yet answers one so (scheduleId is not supported for LinkedIn sends in this version.). The package gives Reply only a schedule id it can read, so the field refused is the route not taking one, never a request built wrong. Nothing is sent.",
+        "when": "The provider's own object names a sending schedule in `provider.schedule_id`, and the send answered `reply.invalid_request` naming the field `scheduleId`: a Reply whose LinkedIn route does not take a schedule answers so (scheduleId is not supported for LinkedIn sends in this version.). The package gives Reply only a schedule id it can read, so the field refused is the route not taking one, never a request built wrong. Nothing is sent.",
         "code": "capability_not_offered",
         "class": "permanent",
         "quotes": "operation",
-        "note": "The account's Reply does not time a send on this channel by a schedule yet, so the message that names one in `provider.schedule_id` was not sent: it goes by the schedule or not at all. Asking again meets the same answer until Reply times such sends; what to do instead is the agent's to choose."
+        "note": "A Reply whose LinkedIn route does not take a schedule answers so: the message that names one in `provider.schedule_id` was not sent, since it goes by the schedule or not at all. Asking again meets the same answer."
       },
       "schedule_not_held": {
         "when": "The send answered `schedule.not_found`, Reply's code `contact.scheduleNotFound` on an email or `directLinkedIn.scheduleNotFound` on a LinkedIn message, at 404: the schedule `provider.schedule_id` names is not one the account can read, unknown and another account's alike. reply-cli gives both the one code, so an email and a LinkedIn message end on this row alike. Nothing is sent.",
@@ -1704,7 +1704,7 @@ export const ROWS = {
         "note": "Reply refused the read in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing changes at Reply by reading, so the runtime reads again later, at a cadence that doubles while the refusal lasts."
       },
       "feed_answered_without_a_code": {
-        "when": "The CLI answered `reply.refused` at status 404 with no code of Reply's own: Reply's change feed answered a 404 without Reply's code.",
+        "when": "The CLI answered `reply.refused` at status 404 with no code of Reply's own on the change feed: Reply's API changed under this package version.",
         "code": "events_unsupported",
         "class": "permanent",
         "note": "Reply's change feed answered a 404 without Reply's code, so nothing was read; the inbound sync keeps reading the account's threads page by page. The runtime asks again after a day."
@@ -1819,6 +1819,7 @@ export function rowOf(operation, error, variant, repeat) {
     return own[unknown];
   }
 
+  // The shared table holds no 404 key today; this lookup stays to keep the order: own repeat, own, shared, the CLI's code.
   if (unknown !== null && has(CODES.shared, unknown)) {
     return CODES.shared[unknown];
   }

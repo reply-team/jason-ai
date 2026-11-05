@@ -76,7 +76,8 @@ public class ReplyMessageCancelTests
     /// itself, refuses it at 409 with its own code <c>directSend.alreadySending</c>, which reply-cli names
     /// <c>direct_send.already_sending</c> (reply-cli's <c>src/operations/direct-send.ts</c>:235, read for a cancel at
     /// <c>src/operations/direct-sends.ts</c>:77), and it may do so while a read still tells the send <c>queued</c>: the
-    /// send left the queue between the two. A Reply before that answers the same send <c>direct_send.already_sent</c>.
+    /// send left the queue between the two. An older Reply build answered the same send <c>direct_send.already_sent</c>,
+    /// read the same way.
     /// </summary>
     [Theory]
     [InlineData("sending", null)]

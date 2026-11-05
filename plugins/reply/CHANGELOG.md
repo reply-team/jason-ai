@@ -12,9 +12,9 @@ absorbed by a release of this package alone.
   endings as before.
 - A 404 that carries no code of Reply's own, `reply.refused` at status 404, says Reply's API changed under this package
   version. It ends the work `provider_call_failed`, permanent, with `reply.refused` and the 404 in its details, and
-  nothing was done: update the package (`jason update apply`) and, if the ending stays, report it. On a repeat of a send
-  whose earlier attempt may have gone it ends `send_not_settled` instead, and on the change feed `events_unsupported`,
-  whose account's replies are read thread by thread as before. Before, it was `capability_not_offered`.
+  nothing was done: update the package (`jason update apply`) and, if the ending stays, report it. Before, it was
+  `capability_not_offered`. On a repeat whose send itself answers the 404 it ends `send_not_settled` instead, and on
+  the change feed `events_unsupported`, whose account's replies are read thread by thread as before.
 - The rows `send_after_not_offered` and `schedule_not_offered`, a moment or a schedule the account's Reply did not keep,
   are gone with the read that reached them; a LinkedIn route that refuses a schedule is still `capability_not_offered`.
 - Reply times deferred LinkedIn sends itself on every account, so the README and the error table say so in the present

@@ -436,7 +436,7 @@ route's binding names them.
 | A **write**'s outcome is unknown: the CLI answered `outcome.unknown`, or the write timed out, exited without an error the CLI explained, printed something that is not a result, or had its answer cut off at `Plugins:Exec:OutputBytes`. | `provider_answer_lost` | ambiguous | Where the operation's contract says a repeat is safe, the runtime repeats it; otherwise the item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned, the CLI's own identifiers included, travels with the failure, so there are identifiers to look by. |
 | The profile is not signed in, Reply refused the credential (`access.denied`), or Reply says the account lacks a feature where the operation has no code of its own for that (`access.feature_unavailable`). | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
 | Reply asked to wait longer than the CLI waits on its own (`rate_limited`). | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt; the wait Reply asked for is in the trace. |
-| A 404 without Reply's code: `reply.refused` at status 404 and no code of Reply's own, which reply-cli passes through as it is on every command but `contact get`, `contact delete`, `inbox get`, `inbox reply`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`. Reply's API changed under this package version, and nothing was done. | `provider_call_failed` | permanent | `reply.refused` and the 404 are in the trace, with no code of Reply's. Update the package (`jason update apply`) and, if the ending stays, report it. A repeat of a send ends `send_not_settled` instead, and the change feed `events_unsupported`, as their tables say. |
+| A 404 without Reply's code: `reply.refused` at status 404 and no code of Reply's own, which reply-cli passes through as it is on every command but `contact get`, `contact delete`, `inbox get`, `inbox reply`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`. Reply's API changed under this package version, and nothing was done. | `provider_call_failed` | permanent | `reply.refused` and the 404 are in the trace, with no code of Reply's. Update the package (`jason update apply`) and, if the ending stays, report it. A repeat whose send itself answers the 404 ends `send_not_settled` instead, and the change feed `events_unsupported`, as their tables say. |
 | Reply refused the call otherwise (`reply.refused`), refused a field no row below names (`reply.invalid_request`), or the CLI answered a code this version does not know. | `provider_call_failed` | permanent | The CLI's code, Reply's own code and its sentence are in the trace. A refusal that recurs belongs in the table. |
 | Not reported yet for the account: Reply refused the call for the account's money or plan or a revoked key, and did nothing for it. | `provider_blocked` | blocked | Clear it at Reply where the block says. Pending: the CLI publishes no code for this today, so nothing reaches the row `account_or_sender_blocked` in the table; when the CLI publishes one, its mapping in `rowOf` is where the switch lands, and the failure then carries the block. Until then such a refusal arrives as one of the rows above or below, under the class that row gives it. A sending account Reply refused for its own state is the sender's block, in the two sends' tables. |
 
@@ -891,7 +891,7 @@ it: still held, answered `in_use`; completed, answered again; or never claimed.
 | Reply did not say whether the profile was written onto a contact that held none. Nothing is sent. | `provider_unavailable` | transient | Nothing. The runtime repeats the attempt, which reads the contact again first. |
 | Reply answered that it holds no contact under an identifier it had just named — one the lookup found, one the command's own import made, or one it named as already held (`contact.not_found`). Nothing is sent, and nothing is pinned. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the message again. |
 | The command answered that Reply already held the person (`contact.already_held`) without saying which contact. Nothing is sent. | `provider_call_failed` | permanent | Look the person up at Reply, then propose the message again. |
-| The provider's own object names a schedule in `provider.schedule_id`, and the send answered `reply.invalid_request` naming the field `scheduleId`: a Reply whose direct sends are deployed and whose LinkedIn routes do not take a schedule yet answers so (scheduleId is not supported for LinkedIn sends in this version.). The package gives Reply only a schedule id it can read, so this is the route not taking one, never a request built wrong. Nothing is sent. | `capability_not_offered` | permanent | The message names the operation and `provider.schedule_id`. The message goes by the schedule or not at all: propose it without one, or wait until Reply times such sends. |
+| The provider's own object names a schedule in `provider.schedule_id`, and the send answered `reply.invalid_request` naming the field `scheduleId`: a Reply whose LinkedIn route does not take a schedule answers so (scheduleId is not supported for LinkedIn sends in this version.). The package gives Reply only a schedule id it can read, so this is the route not taking one, never a request built wrong. Nothing is sent. | `capability_not_offered` | permanent | The message names the operation and `provider.schedule_id`. The message goes by the schedule or not at all: propose it without one, so it goes at once, or on another channel. |
 | The work item carries the provider's own object (`args.provider`) and it is not `{"schedule_id": "<id>"}`: it names another member beside it or instead, or none; or the schedule is not a string of a Reply id's digits, 1 to 2147483647, written without a sign, a space or a leading zero. Nothing is called. | `provider_input_invalid` | validation | The message is the shape the package reads, the same sentence whatever was given, and quotes none of it; the trace names where it went wrong. Write the object in that shape and propose the message again. |
 | The schedule `provider.schedule_id` names is not one Reply holds for the account, unknown and another account's alike: the send answered `schedule.not_found`, Reply's code `contact.scheduleNotFound` on an email or `directLinkedIn.scheduleNotFound` on a LinkedIn message, at 404. The package does not read `reply schedule list` before the send, so Reply's own refusal of the send answers it, and reply-cli gives an email and a LinkedIn message the one code; Reply's code makes it no bare 404 of a route Reply lacks. Nothing is sent. | `provider_call_failed` | permanent | The code is in the trace. Name a schedule `schedule.list` returns and propose the message again. |
 | The schedule `provider.schedule_id` names keeps the contact's own time zone and Reply holds none for the person: the send answered `contact.time_zone_missing`, Reply's code `contact.contactTimeZoneMissing` on an email or `directLinkedIn.contactTimeZoneMissing` on a LinkedIn message, at 409. reply-cli gives both the one code. Nothing is sent. | `provider_call_failed` | permanent | Give the contact a time zone at Reply, or name another schedule, and propose the message again. |
@@ -910,20 +910,19 @@ it: still held, answered `in_use`; completed, answered again; or never claimed.
 
 The same path as the invitation's, in this order and each refusing with nothing sent: the subject and the text are held
 to what Reply would send as written; the sender is read from `reply account list --channel email` or `--channel
-linkedin` and held to the address the person approving read; the person is found by the pin or by
-`reply contact find`; and the contact Reply holds is read with `reply contact get` — opted out is a stop, another address or profile a
+linkedin` and held to the address the person approving read; the person is found by the pin or by `reply contact find`;
+and the contact Reply holds is read with `reply contact get` — opted out is a stop, another address or profile a
 refusal, no LinkedIn profile filled with the work item's. Then the one command made for the format, the text on stdin —
 for a person Reply holds nobody for, given `--contact -`, which imports them, the person and the text one object
 `{"contact": …, "message": …}`: `reply contact send-email` with `{subject, body}`, the body the text written as HTML, or
-the template in Reply's syntax; `reply contact
-linkedin-message` with `{body}` and `reply contact linkedin-inmail` with `{subject, body}`, the text as written or the template
-in Reply's syntax; `reply contact linkedin-voice` with the text as `{script}`. Given `--contact -`, the command sends only to a contact it made, and one Reply already
-held it names as `contact.already_held`, sending nothing; the package then reads that contact as above and sends to it
-by its identifier. The command that sends carries the work item's key and the moment as the invitation's does. The
-answer is read as the invitation's is: its status by Reply's state, and `accepted_for`, its `reference` and whether it
-is `cancelable`, each only where reply-cli gave it; a message held for its moment names no message yet, and on
-LinkedIn Reply calls it by its `linkedin-scheduled-<n>` reference for its
-whole life, as it does an invitation held for one. On a failure, Reply's own
+the template in Reply's syntax; `reply contact linkedin-message` with `{body}` and `reply contact linkedin-inmail` with
+`{subject, body}`, the text as written or the template in Reply's syntax; `reply contact linkedin-voice` with the text
+as `{script}`. Given `--contact -`, the command sends only to a contact it made, and one Reply already held it names as
+`contact.already_held`, sending nothing; the package then reads that contact as above and sends to it by its identifier.
+The command that sends carries the work item's key and the moment as the invitation's does. The answer is read as the
+invitation's is: its status by Reply's state, and `accepted_for`, its `reference` and whether it is `cancelable`, each
+only where reply-cli gave it; a message held for its moment names no message yet, and on LinkedIn Reply calls it by its
+`linkedin-scheduled-<n>` reference for its whole life, as it does an invitation held for one. On a failure, Reply's own
 word for an email's state stays in the evidence. A message whose answer was lost is repeated under the same key, and
 Reply answers it as it answers the invitation's.
 
@@ -935,25 +934,25 @@ of the ids `reply schedule list` names, written as a string of its digits:
 { "schedule_id": "4021" }
 ```
 
-The schedule goes on the send as `--schedule-id`, and Reply holds the email for the schedule's next opening, at or after `send_after` where a moment still ahead is named
-beside it. Reply answers such an email in one of two ways: one whose schedule is open now, or opens within ten minutes,
-is `queued`, with the moment under `send_after`; one whose schedule opens later is `waitingForSchedule`, with only an
-estimate of the moment, `estimated_send_at`, null where the schedule does not open within 30 days. Either way the
-answer is `accepted` with `cancelable` true, and `accepted_for` is absent: the email goes when the schedule lets it, and
-an estimate is no moment Reply holds it for, on the send or on `message.status`'s read of it. An object
-that names another member or none, and a schedule in another form, are refused before anything is called with
-`provider_input_invalid`, class `validation`, the trace naming where it went wrong, and the message the same sentence
-whatever was given:
+The schedule goes on the send as `--schedule-id`, and Reply holds the email for the schedule's next opening, at or after
+`send_after` where a moment still ahead is named beside it. Reply answers such an email in one of two ways: one whose
+schedule is open now, or opens within ten minutes, is `queued`, with the moment under `send_after`; one whose schedule
+opens later is `waitingForSchedule`, with only an estimate of the moment, `estimated_send_at`, null where the schedule
+does not open within 30 days. Either way the answer is `accepted` with `cancelable` true, and `accepted_for` is absent:
+the email goes when the schedule lets it, and an estimate is no moment Reply holds it for, on the send or on
+`message.status`'s read of it. An object that names another member or none, and a schedule in another form, are refused
+before anything is called with `provider_input_invalid`, class `validation`, the trace naming where it went wrong, and
+the message the same sentence whatever was given:
 
 > `args.provider` is read on message.send as `{"schedule_id": "<id>"}` and nothing else, the id of a Reply sending schedule written as a string of its digits; the object given is not that shape.
 
 A LinkedIn message, InMail or voice message names a schedule the same way, and it goes on the format's own command as
-`--schedule-id`. Reply holds the
-message for the schedule's next opening and answers it as it answers such an email, `queued` or `waitingForSchedule`,
-`accepted` with `cancelable` true and no `accepted_for`, under its `linkedin-scheduled-<n>` reference. A Reply whose LinkedIn
-route does not take a schedule answers it `capability_not_offered`, as the table above says, and nothing is sent. The package does not
-read `reply schedule list` before the send, so a schedule Reply cannot time the send by is Reply's to refuse, and an
-email and a LinkedIn message end on the same row of the table for each of reply-cli's three codes.
+`--schedule-id`. Reply holds the message for the schedule's next opening and answers it as it answers such an email,
+`queued` or `waitingForSchedule`, `accepted` with `cancelable` true and no `accepted_for`, under its
+`linkedin-scheduled-<n>` reference. A Reply whose LinkedIn route does not take a schedule answers it
+`capability_not_offered`, as the table above says, and nothing is sent. The package does not read `reply schedule list`
+before the send, so a schedule Reply cannot time the send by is Reply's to refuse, and an email and a LinkedIn message
+end on the same row of the table for each of reply-cli's three codes.
 
 ### `message.status`
 

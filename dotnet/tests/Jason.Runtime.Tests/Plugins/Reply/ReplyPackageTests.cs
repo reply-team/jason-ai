@@ -724,7 +724,7 @@ public class ReplyPackageTests
         var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n"));
         var table = ReplyErrorTable.AllRows().SelectMany(entry => new[] { (string?)entry.Row["when"] ?? "", (string?)entry.Row["note"] ?? "" }).Select(Flat).ToList();
 
-        foreach (var phrase in new[] { "once Reply times", "once it times", "Before then a deferred send", "the second once" })
+        foreach (var phrase in new[] { "once Reply times", "once it times", "Before then a deferred send", "the second once", "a schedule yet", "until Reply times" })
         {
             Assert.DoesNotContain(phrase, readme, StringComparison.Ordinal);
             Assert.All(table, text => Assert.DoesNotContain(phrase, text, StringComparison.Ordinal));

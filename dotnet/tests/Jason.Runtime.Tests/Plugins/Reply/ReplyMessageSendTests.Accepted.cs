@@ -157,7 +157,7 @@ public partial class ReplyMessageSendTests
         Assert.Single(account.Sent);
         var module = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "modules", "send.js"));
         Assert.DoesNotContain("email-1\"", module, StringComparison.Ordinal);
-        Assert.DoesNotContain("offered", module, StringComparison.Ordinal);
+        Assert.All(new[] { "offered(", "send_after_not_offered", "schedule_not_offered" }, name => Assert.DoesNotContain(name, module, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -178,21 +178,38 @@ public partial class ReplyMessageSendTests
     /// <summary>
     /// A repeat after an attempt that may have sent goes under the key with nothing read first; where Reply answers its
     /// send with a 404 that carries no code of Reply's own, the repeat cannot tell whether the earlier attempt went, so it
-    /// fails <c>send_not_settled</c>, final, and nothing is sent.
+    /// fails <c>send_not_settled</c>, final, and nothing is sent. That holds whichever way the person is named: by the
+    /// identifier the pin gives, by their fields for the command to import, and by the identifier the command named
+    /// when it answered that Reply already held them.
     /// </summary>
-    [Fact]
-    public async Task A_repeat_whose_send_meets_a_404_without_reply_s_code_is_not_settled_and_nothing_is_sent()
+    [Theory]
+    [InlineData("by id")]
+    [InlineData("by fields")]
+    [InlineData("held")]
+    public async Task A_repeat_whose_send_meets_a_404_without_reply_s_code_is_not_settled_and_nothing_is_sent(string named)
     {
-        using var account = ByEmail().NotOffering("send_direct_email");
+        using var account = (named switch
+        {
+            "by fields" => new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox),
+            "held" => ByEmail().Unlisted(1001),
+            _ => ByEmail(),
+        }).NotOffering("send_direct_email");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
+        var input = named == "by id" ? Input("email", pinned: "1001") : Input("email");
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email", pinned: "1001"), attempt: 2, unsettledSince: Unsettled));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input, attempt: 2, unsettledSince: Unsettled));
 
         Assert.Equal(("send_not_settled", FailureClass.Permanent), (error.Code, error.Class));
         Assert.Equal(("reply.refused", 404), ((string?)error.Details!["cli_code"], (int?)error.Details["status"]));
         Assert.Null(error.Details["provider_code"]);
-        Assert.Equal(["account list", "contact get 1001", "contact send-email"], Lines(account));
+        string[] calls = named switch
+        {
+            "by fields" => ["account list", "contact find", "contact send-email"],
+            "held" => ["account list", "contact find", "contact send-email", "contact get 1001", "contact send-email"],
+            _ => ["account list", "contact get 1001", "contact send-email"],
+        };
+        Assert.Equal(calls, Lines(account));
         Assert.Empty(account.Sent);
     }
 

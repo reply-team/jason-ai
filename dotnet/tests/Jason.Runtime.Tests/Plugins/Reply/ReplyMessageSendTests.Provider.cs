@@ -322,10 +322,11 @@ public partial class ReplyMessageSendTests
     }
 
     /// <summary>
-    /// A LinkedIn route that does not take a schedule answers one with a 400 whose <c>errors[]</c> names the field (scheduleId is not supported for LinkedIn sends in this version.). reply-cli
-    /// keeps only the field's name, as <c>reply.invalid_request</c> with <c>details.fields</c> (<c>invalid_fields</c> and
-    /// <c>refusal</c> in <c>src/operations/call.ts</c>). The package gives Reply only a schedule it can read, so the field
-    /// refused is the route not taking one: <c>capability_not_offered</c> naming the member, never a request built wrong.
+    /// A LinkedIn route that does not take a schedule answers one with a 400 whose <c>errors[]</c> names the field
+    /// (scheduleId is not supported for LinkedIn sends in this version.). reply-cli keeps only the field's name, as
+    /// <c>reply.invalid_request</c> with <c>details.fields</c> (<c>invalid_fields</c> and <c>refusal</c> in
+    /// <c>src/operations/call.ts</c>). The package gives Reply only a schedule it can read, so the field refused is the
+    /// route not taking one: <c>capability_not_offered</c> naming the member, never a request built wrong.
     /// </summary>
     [Theory]
     [InlineData("linkedin_message")]
