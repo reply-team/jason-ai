@@ -33,7 +33,7 @@
               "null"
             ],
             "pattern": "^jrn_",
-            "description": "The last line the kind's chain had handled before the rewind; null when it had handled none."
+            "description": "The line the kind's cursor stood after before the rewind, of any kind; null when it stood at the journal's start."
           }
         }
       },

@@ -12,7 +12,7 @@ public static class SubscriptionRenderers
 {
     private const int Label = 12;
 
-    /// <summary>The subscribed kinds in one table, then the chain in flight of each kind that has one.</summary>
+    /// <summary>The subscribed kinds in one table, the id of a kind's chain in flight under IN FLIGHT.</summary>
     public static string? Kinds(string json)
     {
         var page = RenderText.Read<Page<SubscriptionKindDto>>(json);

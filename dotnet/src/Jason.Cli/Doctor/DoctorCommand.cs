@@ -738,7 +738,7 @@ public static class DoctorCommand
                                each by its ids, status and moments, every handler by its plugin, start, outcome, code and
                                duration, and a failure by its plugin, class and code — never the envelope a chain carried.
                                A kind the catalogue does not know is written as {SettingKey.Hidden} and its chains are not asked for.
-              config          the settings file and every JASON_* variable by shape — keys, types, lengths — with a
+              config           the settings file and every JASON_* variable by shape — keys, types, lengths — with a
                                value only where the list below carries it.
               logs             the log files by name, size and time; the newest error and fatal events, at most {DoctorComposer.RecentErrors},
                                looked for in the last {Size(DoctorComposer.ErrorSearchBytes)} of the log; and the newest events of any

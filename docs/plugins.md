@@ -1750,10 +1750,13 @@ journal line.
 the line it reached, logged once for each load, until a reload makes the plugin available or takes it out of the chain.
 That is not a failure of the line, so nothing is written for it.
 
-**The position.** Each kind has a position in the journal: the last line its chain finished with. A kind first admitted
-by a load starts after the journal's last line then, never at its beginning. The position is read afresh before each
-line and moved only by the end that read it, so a rewind of the position during a turn is seen at the next line, never
-later. A kind no chain holds any more loses its position, and starts afresh if a later load admits it again.
+**The position.** Each kind has a position in the journal: the line it stands after, of any kind. A kind first admitted
+by a load stands after the journal's last line then, never at its beginning; then after each line of the kind its chain
+finished with; and after a rewind, after the line before the first one it hands again. The position is read afresh
+before each line and moved only by the end that read it, so a rewind of the position during a turn is seen at the next
+line, never later. A kind no chain holds any more loses its position, and starts afresh if a later load admits it again.
+How a person reads where a kind stands, reads its chains' record and rewinds it is in the `subscription` section of
+[docs/runtime-api.md](runtime-api.md).
 
 **No cascades.** A line written by a plugin — its actor is `plugin`, as everything a handler writes through `host.call`
 is — and a line about a work item a plugin created are passed over: the position moves past them, and no handler is
