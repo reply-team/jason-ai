@@ -20,54 +20,82 @@ replaces the title and the body together.
 -->
 
 
-# Jason 0.28.0
+# Jason 0.29.0
 
-## What is new since 0.27.0
+## What is new since 0.28.0
 
-Each skill pack now has one home that owns it: Reply's skills ship with reply-cli, the SDR expertise and the runtime
-skills ship with Jason, and the separate skills repository is archived.
+The runtime's journal is now a bus for plugins: a plugin that a person grants journal kinds is handed each line of those
+kinds after the runtime wrote it, and may act back only through the public Runtime API and only as far as the person
+granted.
 
-- **Reply's skills come with reply-cli 0.19.0.** The five Reply skills (`reply-api`, `reply-auth`, `reply-cli`,
-  `reply-mcp`, `reply-operations-mapping`) are part of the `reply-cli` npm package. `reply skills install` copies them from
-  the installed package into each assistant it detects, and `reply skills update` brings them to the version of the CLI;
-  neither needs a network or git. For Claude Code they land in `~/.claude/skills` (`.claude/skills` with `--project`) and
-  for Codex in `~/.agents/skills` (`.agents/skills` with `--project`). On Claude Code they are now standalone skills,
-  so the `reply-adapter:` prefix on their names is gone. Asking the command for `core`, `ai-sdr-core`, `runtime` or
-  `agentic-runtime` is refused with one sentence saying that those ship with Jason. [reply-cli's
-  README](https://github.com/reply-team/reply-cli/blob/v0.19.0/README.md#skills) has the commands and the full table of
-  assistants.
-- **The skills repository `reply-team/reply-skills`, formerly the home of all three packs, is archived.** A plugin
-  installed from its marketplace keeps working and is read-only: it never updates. `reply skills install` removes the
-  old `reply-adapter@reply-skills` plugin once the copied skills are in place, and leaves `ai-sdr-core@reply-skills` and
-  `agentic-runtime@reply-skills` installed, naming them in its report. Jason's own skills, installed by
-  `jason skills install`, replace those two.
-- **Taking the business pack without the runtime.** A host's own skill tools can install it from this repository;
-  [the skills page](https://github.com/reply-team/jason-ai/blob/v0.28.0/skills/README.md#taking-the-business-pack-without-the-runtime)
-  says how.
-- **Thirteen skills are verified.** Claude Code 2.1.318 read the approvals, installation, campaign-work, troubleshooting
-  and in-session planner skills and eight of the nine role skills against the published 0.27.0, and their status is now
-  `verified`. The responder role skill stays `draft`: no host has yet read it handling a real reply.
+- **The journal's kinds are published.** Every kind the runtime reserves for its own lines has one document under
+  [`docs/contracts/journal/`](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/contracts/journal), saying what a
+  line of the kind records, which things it names and whether a plugin may subscribe to it, and every line the runtime
+  writes is held to its document as it is written. `jason journal kinds` reads them, a page at a time, in kind order.
+  [The contracts page](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/contracts/README.md#the-journals-kinds)
+  states the rules a document follows.
+- **A plugin subscribes by declaration and grant.** A manifest lists the kinds it wants under `subscriptions`; you admit
+  it to some or all of them in `Plugins:Grants:<id>:Subscriptions` of `settings.json`, and `*` admits every kind it
+  declares. Where several plugins are admitted to one kind, they run one after another, in plugin-id order unless
+  `Subscriptions:Order:<kind>` lists some of them first. Grants and orders are frozen at each load, so a change takes
+  effect at the next `jason plugin reload`. A plugin that does only this is the new plugin kind `subscriber`, which
+  implements no operation and delivers no notification; a provider or a notification plugin may subscribe as well.
+  [The plugin guide](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/plugins.md#16-subscriptions-declaration-grant-order)
+  has the manifest, the grant and the order.
+- **What a handler is handed, and how it runs.** The runtime hands a handler one line of a kind at a time, in the order
+  the journal holds them, with the envelope the handler before it in the chain returned; the handler answers an
+  envelope, which goes on to the next handler. The runtime never reads what an envelope means. A transient failure is
+  tried again, up to `Subscriptions:TransientRetries` times, after a wait of `Subscriptions:RetryBackoffSeconds` that
+  doubles; any other failure ends the chain at that handler for that line, writes one `subscription_failed` line naming
+  the kind, the line, the plugin, the class and the code, and the kind moves on. What a handler does is never handed to
+  another handler as a new line. Delivery is at least once: a line may be handed twice, after a restart in the middle of
+  a chain too, and a handler tells a repeat by `attempt` in its input, which counts how many times that plugin has been
+  handed the line, this time included. The numbers under `Subscriptions` apply live. See
+  [the plugin guide](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/plugins.md#17-writing-a-subscriber).
+- **A handler reads and writes Jason through `host.call`.** A handler of a plugin you granted a Runtime API family calls
+  Runtime API operations through a door the runtime opens for that one invocation, about that one line. The families
+  are the ones the manifest's `capabilities.api` requested and you listed in the plugin's `Api` list under
+  `Plugins:Grants`: `read`, `campaign`, `contact`, `workitem`, `suppression`, `report` and `journal.append`. It acts as
+  the plugin, never as a person, with the line as the reason, so the chronicle names the plugin and the line. The
+  installation's own doors, a person's decisions and an executor's verbs are in no family, so no grant opens them.
+  [The guide's capabilities section](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/plugins.md#9-capabilities-and-grants)
+  lists them.
+- **`jason subscription list`, `runs` and `rewind`.** `list` shows, for each subscribed kind, the plugins of its chain,
+  where its position stands, the journal's last line of the kind, the lag between the two, and the members the current
+  load cannot run. `runs --kind <kind>` pages the records of that kind's chains, newest first, each handler's outcome
+  included. `rewind --kind <kind>` with `--line <id>` or `--since <moment>` moves the position back so the kind's lines
+  are handed again; only a person may, so it takes `--actor human:<your-name>`, it refuses a target ahead of the
+  position, and each rewind writes one `subscription_cursor_rewound` line. `jason doctor` gains a `subscriptions`
+  section with where each kind stands and how its newest chains ended, and it never carries an envelope.
+- **The `journal-forwarder` plugin pushes each granted line to one URL.** It is a reference subscriber: for each line of
+  a kind you granted, it POSTs the line, the envelope and the attempt as JSON to the URL named in
+  `JOURNAL_FORWARDER_URL`, and answers the envelope as it was handed. It is in the repository's plugin marketplace under
+  [`plugins/journal-forwarder`](https://github.com/reply-team/jason-ai/blob/v0.29.0/plugins/journal-forwarder/README.md),
+  not a release asset: you copy the package into `~/.jason/plugins`, as its README says. What leaves the machine is what
+  the journal says, which includes names, fields as they changed and the reasons people typed, so the receiver is a
+  place you trust with that. Its manifest names `localhost:8787`; a receiver elsewhere is your edit of the package, as
+  the README says, and the copy is yours to keep current.
+- **Two skills teach the new verbs.** `operating-the-installation` and `troubleshooting-jason` now teach
+  `jason journal kinds` and `jason subscription`, and both are `draft` again until a host reads their new text. The
+  skills marked `draft` in this release are those two, `researcher-in-session`, `roles/responder` and the nine skills of
+  the business pack.
 
-## Upgrading from 0.27.0
+## Upgrading from 0.28.0
 
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
   lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
   install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
   and `jason plugin install reply --replace` follow.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`. Thirteen skills changed their status line from `draft` to `verified`.
-- **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle stay
-  as they were.
-- **If you use reply-cli,** update it as its README says (`reply install`, or `npm install -g reply-cli`), then run
-  `reply skills install` (or `reply skills update`) to take the skills that now ship with it.
-- **If you installed `ai-sdr-core@reply-skills` or `agentic-runtime@reply-skills` as plugins,** the skills of
-  `ai-sdr-core` are an older copy of Jason's business pack and keep loading beside it under the plugin's prefix, and
-  those of `agentic-runtime` are retired, Jason's runtime skills replacing them. Remove both with your host's own plugin
-  command; on Claude Code that is `claude plugin uninstall ai-sdr-core@reply-skills` and
-  `claude plugin uninstall agentic-runtime@reply-skills`, with `--scope project` for one installed in a project. For
-  Codex, use the host's plugin command.
+  `brew upgrade jason`, run `jason skills update`. Two skills changed their text and their status line is `draft`
+  again.
+- **The data directory:** this release adds one database migration, `SubscriptionRunner`, which adds the tables that
+  hold each subscribed kind's position and the records of its chains. The first start on 0.29.0 runs it after taking a
+  backup, as every migration does. Your projects, campaigns, work items and chronicle stay as they were.
+- **Nothing subscribes until you say so.** No plugin is handed a journal line until you install a subscriber and grant it
+  kinds, so an upgrade with no subscriber changes no behaviour.
 - **The Reply plugin** is unchanged.
-- **From 0.26.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
+- **From 0.27.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
 
@@ -188,3 +216,6 @@ in a reply without its angle brackets.
 
 The responder's skill ships marked `draft`: no agent host has read its text in the state it ships in. Its commands parse
 against this build, as every skill's do, but how an agent follows its loop on a real reply is not yet seen.
+
+A fault of the runtime's own that stops a subscribed kind's turn is logged, and the kind is offered again at the next
+scan with no pause, from the same line, so a fault that lasts repeats at every scan until it is gone.
