@@ -108,6 +108,7 @@ public static class Operations
 
     public const string JournalAppend = "journal.append";
     public const string JournalList = "journal.list";
+    public const string JournalKinds = "journal.kinds";
 
     public const string PluginList = "plugin.list";
     public const string PluginReload = "plugin.reload";

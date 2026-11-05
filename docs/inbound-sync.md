@@ -145,7 +145,7 @@ For each thread on the page that moved at or after the read's `since`, one line:
 | `campaign_id` | the campaign |
 | `work_item_id`, `attempt_id` | the read, and the attempt of it that succeeded |
 | `key` | `sha256:` over the plugin, the thread and the moment it moved |
-| `new` | `plugin`, `thread`, `channel`, `last_activity_at`, `unread`, `has_meeting_intent`, `contact_id` |
+| `new` | the fields [the kind's document](contracts/journal/inbound_reply_observed.json) requires |
 
 `unread` and `has_meeting_intent` are the provider's own flags, said as it said them. `contact_id` names the person the
 thread belongs to: the one contact pinned at that plugin with the identifier the provider gave, and `null` when no

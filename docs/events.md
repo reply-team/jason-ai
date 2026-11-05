@@ -116,16 +116,16 @@ Both lines are written by `system:dispatcher`, name the campaign and no work ite
 manager is woken by under the default `Manager:Triggers`; an `inbound_reply_observed` line whose `attributed_by` is
 `campaign_pin` also wakes the campaign's responder ([inbound sync](inbound-sync.md) §1).
 
-- **`inbound_reply_observed`** is the line the inbound read writes, with its fields — `plugin`, `thread`, `channel`,
-  `last_activity_at`, `unread`, `has_meeting_intent`, `contact_id` — and two more, `event_id`, the stored event, and
-  `attributed_by`, the rule that found the campaign (section 3). The inbound read's own line carries neither, since the
-  thread it names is the campaign's own by the read that listed it. It is keyed as the inbound read keys it, by the
+- **`inbound_reply_observed`** is the line the inbound read writes, with the fields
+  [its document](contracts/journal/inbound_reply_observed.json) requires, and two more, `event_id`, the stored event,
+  and `attributed_by`, the rule that found the campaign (section 3). The inbound read's own line carries neither, since
+  the thread it names is the campaign's own by the read that listed it. It is keyed as the inbound read keys it, by the
   plugin, the thread and the moment, so a move both reads found is said once.
   A move the provider cannot say who made reads as a reply, so a follow-up sent into a thread that already has a reply
   is said again, as the inbound read says it.
-- **`provider_event_observed`** carries `kind`, `plugin`, `event_id`, `occurred_at`, `channel`, `contact_id`,
-  `attributed_by`, and the kind's own identifiers and flags: `thread` for a detected reply, `account` for an accepted
-  invitation, `message` and `bounce` for a bounce. It is keyed by the event's own key.
+- **`provider_event_observed`** carries the event, the person it is about, `attributed_by`, and the kind's own
+  identifiers and flags, field by field in [its document](contracts/journal/provider_event_observed.json). It is keyed
+  by the event's own key.
 
 **Said once.** A campaign says each line once under its key, and the database refuses a second; one key may be said in
 two campaigns, and the rule that found a campaign is no part of the key. **History is not said.** An event that
@@ -216,10 +216,10 @@ it came with. Such a page stores nothing, and the cursor stays where it was.
 
 **What is recorded.** The source keeps when its last read started and ended, when the last read that succeeded started,
 and how many reads in a row failed, with the last one's code and class. Each read that stored something, failed, or read
-by date writes one `events_read` line naming no campaign: the source, the plugin, the binding identity, how it read, the
-pages, how many events it stored and found already held, how many lines it said, how it ended, the package and the
-snapshots it ran under, and `signaled`, whether a signal had come since the last read started — never a cursor, a
-binding or an event. A read from a cursor that found nothing writes none, so a signal answered by such a read leaves
+by date writes one `events_read` line naming no campaign, with the fields
+[its document](contracts/journal/events_read.json) lists — what it read, stored and said, how it ended, and `signaled`,
+whether a signal had come since the last read started — never a cursor, a binding or an event. A read from a cursor
+that found nothing writes none, so a signal answered by such a read leaves
 only its moment on the source. The log carries the source's id, codes, classes and counts.
 
 **Beside the inbound read.** While a plugin's account is read here, the inbound read leaves the campaigns routed to it —

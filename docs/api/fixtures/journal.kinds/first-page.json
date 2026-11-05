@@ -1,0 +1,177 @@
+{
+  "operation": "journal.kinds",
+  "case": "first-page",
+  "request": {
+    "limit": 2
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "kind": "approval_approved",
+        "version": 1,
+        "since": "0.1.0",
+        "summary": "A person approved parked work, so it goes back to the queue to run.",
+        "subscribable": true,
+        "entities": {
+          "campaign": {
+            "at": [
+              "/campaign_id"
+            ],
+            "presence": "always",
+            "each": false
+          },
+          "work_item": {
+            "at": [
+              "/work_item_id"
+            ],
+            "presence": "always",
+            "each": false
+          },
+          "contact": {
+            "at": [
+              "/contact_id"
+            ],
+            "presence": "sometimes",
+            "each": false
+          },
+          "approval": {
+            "at": [
+              "/new/id"
+            ],
+            "presence": "always",
+            "each": false
+          }
+        },
+        "field_since": {},
+        "body": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "old",
+            "new"
+          ],
+          "properties": {
+            "key": {
+              "const": "approval"
+            },
+            "old": {
+              "type": "null"
+            },
+            "new": {
+              "type": "object",
+              "description": "The approval by its identifiers, never its subject or its preview.",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "operation",
+                "subject_hash"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^apr_",
+                  "description": "The approval."
+                },
+                "operation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The operation the work performs, by its id."
+                },
+                "subject_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:",
+                  "description": "The digest of what was asked to be approved; the subject itself stays on the approval."
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "approval_cancelled",
+        "version": 1,
+        "since": "0.1.0",
+        "summary": "A decision was ended because the work it was about was cancelled or passed its due date.",
+        "subscribable": true,
+        "entities": {
+          "campaign": {
+            "at": [
+              "/campaign_id"
+            ],
+            "presence": "always",
+            "each": false
+          },
+          "work_item": {
+            "at": [
+              "/work_item_id"
+            ],
+            "presence": "always",
+            "each": false
+          },
+          "contact": {
+            "at": [
+              "/contact_id"
+            ],
+            "presence": "sometimes",
+            "each": false
+          },
+          "approval": {
+            "at": [
+              "/new/id"
+            ],
+            "presence": "always",
+            "each": false
+          }
+        },
+        "field_since": {},
+        "body": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "old",
+            "new"
+          ],
+          "properties": {
+            "key": {
+              "const": "approval"
+            },
+            "old": {
+              "type": "null"
+            },
+            "new": {
+              "type": "object",
+              "description": "The approval by its identifiers, never its subject or its preview.",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "operation",
+                "subject_hash"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^apr_",
+                  "description": "The approval."
+                },
+                "operation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The operation the work performs, by its id."
+                },
+                "subject_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:",
+                  "description": "The digest of what was asked to be approved; the subject itself stays on the approval."
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "next_cursor": "YXBwcm92YWxfY2FuY2VsbGVk"
+  }
+}

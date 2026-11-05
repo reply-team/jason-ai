@@ -162,6 +162,7 @@ public static class ApiFixtures
         "decision.list/empty",
         "decision.list/pending",
         "decision.list/summer-pending",
+        "journal.kinds/first-page",
         "journal.list/by-awaiting-item",
         "journal.list/by-campaign",
         "journal.list/by-campaign-changes",
