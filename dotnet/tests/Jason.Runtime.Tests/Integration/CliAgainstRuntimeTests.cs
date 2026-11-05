@@ -392,7 +392,9 @@ public class CliAgainstRuntimeTests
     {
         var output = new StringWriter();
         var error = new StringWriter();
-        var exit = await CliApp.RunAsync(args, new CliEnvironment(output, error, fixture.Paths), Ct);
+        // The CLI runs in this process, so it is handed an environment of its own, empty: what the process that runs
+        // the tests holds, an attempt included, is not the CLI's to read.
+        var exit = await CliApp.RunAsync(args, new CliEnvironment(output, error, fixture.Paths, Variables: new Dictionary<string, string>()), Ct);
         return (exit, output.ToString().Trim(), error.ToString().Trim());
     }
 }

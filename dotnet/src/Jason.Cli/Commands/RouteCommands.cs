@@ -49,7 +49,7 @@ public static class RouteCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(campaign))
                 .Set("operation", parseResult.GetValue(operation));
@@ -70,7 +70,7 @@ public static class RouteCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty().Set("campaign_id", parseResult.GetValue(campaign));
 
             return OperationRunner.RunAsync(env, Operations.RouteList, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Routes), cancellationToken);
@@ -111,7 +111,7 @@ public static class RouteCommands
                 .Set("plugin", parseResult.GetValue(plugin))
                 .Set("binding", VerbOptions.Object(parseResult.GetValue(binding), "--binding"))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return OperationRunner.RunAsync(env, Operations.RouteSet, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Routes), cancellationToken);
         });
@@ -136,7 +136,7 @@ public static class RouteCommands
             var body = RequireCampaign(parseResult.GetValue(campaign))
                 .Set("operation", parseResult.GetValue(operation))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return OperationRunner.RunAsync(env, Operations.RouteUnset, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Routes), cancellationToken);
         });

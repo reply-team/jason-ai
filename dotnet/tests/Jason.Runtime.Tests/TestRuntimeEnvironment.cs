@@ -1,4 +1,5 @@
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Notifications;
 
@@ -42,9 +43,16 @@ public static class TestRuntimeEnvironment
     public static readonly string HarnessRootVariable =
         JasonConfiguration.EnvironmentPrefix + HarnessOptions.Section + "__" + nameof(HarnessOptions.Root);
 
+    /// <summary>
+    /// Sets the five, and takes away the attempt and the work item a suite run inside a Jason attempt would hand on: a
+    /// child started with them is that attempt, and its CLI is refused a person's verb. A test that means its child to be
+    /// an attempt sets the variable after this.
+    /// </summary>
     public static void Offline(IDictionary<string, string?> environment, string dataDirectory)
     {
         ArgumentNullException.ThrowIfNull(environment);
+        environment.Remove(ExecutionEnvironment.AttemptIdVariable);
+        environment.Remove(ExecutionEnvironment.WorkItemIdVariable);
         environment[JasonPaths.DataDirectoryVariable] = dataDirectory;
         environment[CheckEnabledVariable] = "false";
         environment[NotificationsVariable] = "false";

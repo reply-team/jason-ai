@@ -36,18 +36,21 @@ public static class RuntimeAutostartCommands
         var autostart = new Command("autostart", "Register the runtime to start when you log on, or take that registration away.");
 
         autostart.Subcommands.Add(Verb(
+            env,
             "enable",
             "Register this runtime to start at logon, carrying the data directory it is registered under. Nothing is started now.",
             actor,
             human => Enable(env, human)));
 
         autostart.Subcommands.Add(Verb(
+            env,
             "disable",
             "Take that registration away, so nothing starts at logon. A runtime that is running keeps running; removing a registration that is not there is not an error.",
             actor,
             human => Disable(env, human)));
 
         autostart.Subcommands.Add(Verb(
+            env,
             "status",
             "Say what is registered to start at logon: the data directory it names, the executable it runs, and whether that executable is still there.",
             actor,
@@ -229,7 +232,7 @@ public static class RuntimeAutostartCommands
             $"The runtime starts at logon from {answer.Executable}, on the data directory {answer.DataDirectory}.{missing}");
     }
 
-    private static Command Verb(string name, string description, Option<string?> actor, Func<bool, int> run)
+    private static Command Verb(CliEnvironment env, string name, string description, Option<string?> actor, Func<bool, int> run)
     {
         var command = new Command(name, description);
         var human = VerbOptions.Human();
@@ -238,7 +241,7 @@ public static class RuntimeAutostartCommands
         {
             // About this machine rather than about business state, so no claim travels with it — but a
             // malformed claim is still refused here, so --actor behaves the same on every verb.
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             return run(parseResult.GetValue(human));
         });
 

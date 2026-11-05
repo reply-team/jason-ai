@@ -57,7 +57,7 @@ public static class ProfileCommands
             fields.LayOver(body, parseResult)
                 .Set("name", parseResult.GetValue(name))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ProfileCreate, body, new RunOptions(parseResult.GetValue(human), ProfileRenderers.Profile), cancellationToken)
@@ -88,7 +88,7 @@ public static class ProfileCommands
             fields.LayOver(body, parseResult)
                 .Set("name", parseResult.GetValue(name))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ProfileUpdate, body, new RunOptions(parseResult.GetValue(human), ProfileRenderers.Profile), cancellationToken)
@@ -110,7 +110,7 @@ public static class ProfileCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("name", parseResult.GetValue(name))
                 .Set("revision", parseResult.GetValue(revision));
@@ -137,7 +137,7 @@ public static class ProfileCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("include_disabled", parseResult.GetValue(includeDisabled) ? JsonValue.Create(true) : null)
                 .Set("limit", parseResult.GetValue(limit))
@@ -166,7 +166,7 @@ public static class ProfileCommands
             var body = RequestBody.Empty()
                 .Set("name", parseResult.GetValue(name))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return OperationRunner.RunAsync(
                 env, operation, body, new RunOptions(parseResult.GetValue(human), ProfileRenderers.Profile), cancellationToken);

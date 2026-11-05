@@ -278,6 +278,7 @@ is, and a listing carries the question whole — "what am I being asked?" is the
 | `decision_not_found` | no question has that identifier; nothing deletes one, so this is a wrong id |
 | `decision_not_pending` | it has been answered already, or its campaign was archived; the message says which |
 | `decision_not_human` | a role or an attempt tried to answer, and an answer is a person's |
+| `decided_inside_a_run` | the answer came from inside a run, whatever person it named: the CLI names its attempt on every request it sends from there, and a person answers outside the run that asked |
 | `decision_option_unknown` | the chosen label is not one the question offered, or it offered none |
 | `decision_reference_unresolved` | a reference names nothing in this campaign, so nobody could read it later |
 

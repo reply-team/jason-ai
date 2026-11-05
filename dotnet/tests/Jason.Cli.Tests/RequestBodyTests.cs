@@ -102,7 +102,7 @@ public class RequestBodyTests
     {
         Assert.Equal(
             "{\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}",
-            RequestBody.Serialize(RequestBody.Empty().SetActor(ActorOption.Parse("role:planner"))));
+            RequestBody.Serialize(RequestBody.Empty().SetActor(ActorOption.Parse("role:planner", null))));
         Assert.Equal("{}", RequestBody.Serialize(RequestBody.Empty().SetActor(null)));
     }
 }

@@ -27,6 +27,9 @@ public sealed class ConflictException(string code, string message) : DomainExcep
 
 public sealed class InvalidRequestException(string code, string message) : DomainException(StatusCodes.Status400BadRequest, code, message);
 
+/// <summary>A request this caller may not make from where it stands, however its body is written.</summary>
+public sealed class ForbiddenException(string code, string message) : DomainException(StatusCodes.Status403Forbidden, code, message);
+
 /// <summary>Field-level problems. The message repeats the field names and rule codes, never the submitted values.</summary>
 public sealed class ValidationException(IReadOnlyList<ErrorDetail> details)
     : DomainException(StatusCodes.Status400BadRequest, "validation_failed", Summarise(details), false, details)

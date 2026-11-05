@@ -287,7 +287,9 @@ provenance, the coded failure, and one against the budget.
 with a name; a role or an attempt is refused with `approval_not_human`, and an absent actor with
 `actor_required`. What the runtime cannot do is tell a person from a process holding that person's own
 command line — that is the operator's trust to give. What it guarantees is that nothing inside it can
-approve anything, and that every decision names who made it.
+approve anything, and that every decision names who made it. An approval or an answer sent from inside a run is
+refused with `decided_inside_a_run` whoever it names, since the CLI names its attempt on every request it sends from
+there: a higher bar against a role deciding its own work, not a boundary.
 
 An approval is about one operation on one work item, and it is not the only thing a person is asked. A
 role that cannot decide *what to do next* raises a question instead — a decision, which outlives the
@@ -581,7 +583,9 @@ Its environment is the runtime's own plus the runtime's four and the constants a
 
 - `JASON_DATA_DIR`, pointing at the data directory;
 - `JASON_ATTEMPT_ID` and `JASON_WORK_ITEM_ID`, both non-secret values the envelope already carries, so
-  that an agent reporting through the CLI is its attempt without having to say so;
+  that an agent reporting through the CLI is its attempt without having to say so; and the CLI names
+  the attempt to the runtime on every request in the `Jason-Attempt` header, whatever actor it claims,
+  so the five verbs that are a person's own word refuse it (`decided_inside_a_run`);
 - the directory this build of Jason runs from, at the front of `PATH`, so the bare command word in
   `runtime.cli_command` reaches this runtime rather than whatever else answers for that name.
 

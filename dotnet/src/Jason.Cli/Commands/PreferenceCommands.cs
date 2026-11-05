@@ -52,7 +52,7 @@ public static class PreferenceCommands
                 .Set("key", parseResult.GetValue(key))
                 .Set("value", document)
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "preference set", "a preference is set on a person's word");
 
             return await OperationRunner
@@ -80,7 +80,7 @@ public static class PreferenceCommands
             var body = RequestBody.Empty()
                 .Set("key", parseResult.GetValue(key))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "preference unset", "a preference is taken back on a person's word");
 
             return OperationRunner.RunAsync(env, Operations.PreferenceUnset, body, new RunOptions(parseResult.GetValue(human), PreferenceRenderers.Preference), cancellationToken);
@@ -101,7 +101,7 @@ public static class PreferenceCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));

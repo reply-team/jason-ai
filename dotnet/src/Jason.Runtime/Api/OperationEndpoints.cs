@@ -33,10 +33,20 @@ public static class OperationEndpoints
         ArgumentNullException.ThrowIfNull(app);
         ArgumentNullException.ThrowIfNull(handler);
 
+        var personsWord = InsideARun.Refusing.Contains(operation);
+
         // Typed as Delegate on purpose: the RequestDelegate overload of MapPost would hand back a builder that
         // carries no route-handler conventions, and every operation should stay configurable like any other route.
         Delegate operationHandler = async (HttpContext context) =>
         {
+            // A person's own word from inside a run is refused before the body is read, so before its actor is.
+            if (personsWord && InsideARun.AttemptOf(context.Request) is { } attempt)
+            {
+                var refusal = DomainErrors.DecidedInsideARun(attempt);
+                await ErrorResults.WriteAsync(context, refusal.StatusCode, refusal.Code, refusal.Message, refusal.Retryable).ConfigureAwait(false);
+                return;
+            }
+
             TRequest request;
             var caller = context.Features.Get<HandlerCaller>();
             try

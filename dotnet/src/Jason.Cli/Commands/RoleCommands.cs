@@ -35,7 +35,7 @@ public static class RoleCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
@@ -77,7 +77,7 @@ public static class RoleCommands
                 .Set("description", parseResult.GetValue(description))
                 .Set("execution_profile", parseResult.GetValue(executionProfile))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.RoleAdd, body, new RunOptions(parseResult.GetValue(human), RoleRenderers.Role), cancellationToken)
@@ -129,7 +129,7 @@ public static class RoleCommands
                 .Set("name", parseResult.GetValue(name))
                 .Set("execution_profile", profile, onlyIfNotNull: false)
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return OperationRunner.RunAsync(env, Operations.RoleSetProfile, body, new RunOptions(parseResult.GetValue(human), RoleRenderers.Role), cancellationToken);
         });
