@@ -45,4 +45,17 @@ public sealed class ResponderOptions
     /// days. An older one — a span read again, a campaign paused for long — is the manager's alone.
     /// </summary>
     public int MaxAgeSeconds { get; set; } = 259_200;
+
+    /// <summary>The fewest and most responder launches a campaign may be allowed in one UTC day.</summary>
+    public const int MinimumMaxLaunchesPerDay = 1;
+
+    public const int MaximumMaxLaunchesPerDay = 1_000;
+
+    /// <summary>
+    /// How many responder runs one campaign may start in a UTC day, counted from 00:00Z by the attempts that started. A
+    /// responder the claim finds at the limit is not failed — a failure would wake the manager — but held: it waits,
+    /// with no attempt, until the next 00:00Z, or until a person resumes it. Read once a scan, at the claim's start, so a
+    /// raised limit applies from the next scan to work not yet held, and an item already held keeps its moment.
+    /// </summary>
+    public int MaxLaunchesPerDay { get; set; } = 25;
 }

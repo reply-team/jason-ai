@@ -187,30 +187,6 @@ export function runOrHeld(context, request) {
 }
 
 /**
- * Whether the account's Reply offers what a read names, by reading it once: true when the command exits 0 or refuses in
- * one of `codes` — the CLI's own words for an answer Reply gave about what was asked, which only a route it has can
- * give — and false when Reply's API has no route for the call (a 404 with no code of Reply's own). Every other ending
- * is `run`'s.
- */
-export function offered(context, request, codes) {
-  const answer = call(context, request);
-  if (answer.timed_out !== true && answer.exit_code === DONE) {
-    return true;
-  }
-
-  const said = answer.timed_out === true || answer.exit_code !== FAILED ? null : verdict(answer.stderr);
-  if (said !== null && codes.indexOf(said.code) >= 0) {
-    return true;
-  }
-
-  if (said !== null && rowOf(request.operation, said) === UNROUTED) {
-    return false;
-  }
-
-  return ended(answer, request);
-}
-
-/**
  * One read whose every ending other than an answer is taken as no answer at all: its result object when it exits 0
  * with an answer read whole, and null for every other ending — a refusal, a timeout, a program that never started, an
  * answer cut off or one that does not parse — but one. A refusal for want of a working credential (`auth.*`, exit 2)
@@ -239,9 +215,6 @@ function call(context, request) {
   const stdin = request.stdin === undefined || request.stdin === null ? undefined : JSON.stringify(request.stdin);
   return exec(context, commandArgs(context, request.command, request.operands || [], request.flags || []), stdin);
 }
-
-// The row of a refusal that says Reply's API has no route for the call (errors.js).
-const UNROUTED = "route_not_offered";
 
 // What Reply holds under a key it holds for another request, or null for every other ending, and for a request made
 // under no key: an exit 1 whose verdict is that refusal. Its details are read by the operation, which holds them to the
@@ -346,9 +319,9 @@ function ended(answer, request) {
     observed.row = lost;
   } else if (answer.exit_code === REFUSED_THE_CALL) {
     // Nothing was sent. The CLI's own word says whether it was about who is calling or about what was asked.
-    observed.row = said === null ? unexplainedRefusalRow(operation) : rowOf(operation, said, request.variant);
+    observed.row = said === null ? unexplainedRefusalRow(operation) : rowOf(operation, said, request.variant, request.repeat === true);
   } else if (answer.exit_code === FAILED && said !== null) {
-    observed.row = rowOf(operation, said, request.variant);
+    observed.row = rowOf(operation, said, request.variant, request.repeat === true);
   } else {
     // An exit the CLI did not explain: a crash, a stack trace. On a write it may have happened.
     observed.row = lost;

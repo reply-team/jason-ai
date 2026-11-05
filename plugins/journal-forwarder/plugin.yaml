@@ -1,6 +1,6 @@
 manifest_version: 1
 id: journal-forwarder
-version: 1.0.0
+version: 1.0.1
 kind: subscriber
 name: Journal forwarder
 description: Pushes each journal line of a kind it was granted, as JSON, to one URL the person names - the smallest complete subscriber.

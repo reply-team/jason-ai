@@ -3,6 +3,15 @@
 This package versions independently of the Jason runtime, under SemVer. It declares every journal kind a plugin may
 subscribe to, so a version that adds a kind to its manifest is a new version of the package.
 
+## 1.0.1
+
+The package is published with every release of Jason from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, and the
+README installs it with `jason plugin install journal-forwarder` rather than a copy out of a checkout. A receiver on
+another host is an edit of the installed copy's `plugin.yaml`, after which the copy is the person's own: the README says
+that `jason update` leaves it and says it differs, that `jason status` reports it as behind once a later version is
+published and names the `--replace` that discards the edit, that a later version is theirs to apply, and that
+`--replace` discards the edit. The plugin's code and manifest are otherwise unchanged.
+
 ## 1.0.0
 
 First release. Performs the subscription contract `subscription.handle` version 1: each journal line of a kind the

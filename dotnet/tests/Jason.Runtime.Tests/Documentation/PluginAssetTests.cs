@@ -11,10 +11,11 @@ using static Jason.Runtime.Tests.Documentation.Workflows;
 namespace Jason.Runtime.Tests.Documentation;
 
 /// <summary>
-/// The Reply plugin's package as a release publishes it, <see cref="ReleaseAssets.ReplyPlugin"/>: written once per release
-/// by <c>.github/scripts/Write-PluginArchive.ps1</c> from <c>plugins/reply</c> at the tag. What holds the archive to the
-/// package is the package's content digest, <see cref="PackageDigest"/>: unpacked, the archive has the digest of the
-/// directory it was made from, so what a person installs from a release is the tag's package, byte for byte.
+/// The plugins' packages as a release publishes them, each <c>jason-plugin-&lt;id&gt;.zip</c> of
+/// <see cref="ReleaseAssets.Published"/>: written once per release by <c>.github/scripts/Write-PluginArchive.ps1</c> from
+/// <c>plugins/&lt;id&gt;</c> at the tag. What holds an archive to its package is the package's content digest,
+/// <see cref="PackageDigest"/>: unpacked, the archive has the digest of the directory it was made from, so what a person
+/// installs from a release is the tag's package, byte for byte.
 /// </summary>
 /// <remarks>
 /// The script is executed, not read, and its output is measured by the runtime's own digest rather than by a second
@@ -27,17 +28,35 @@ public sealed class PluginAssetTests
 
     private static readonly Dictionary<string, string> NoEnvironment = [];
 
+    private const string PackagePrefix = "jason-plugin-";
+
+    private const string PackageSuffix = ".zip";
+
     /// <summary>
-    /// The archive of the real package holds its files and nothing else, at the root — no folder around them, no entry
-    /// for a directory — in ordinal order, whatever order the file system lists them in, and unpacked into an empty
-    /// directory it has the package's digest.
+    /// Every plugin package a release publishes, by its file name: the <c>jason-plugin-&lt;id&gt;.zip</c> names of
+    /// <see cref="ReleaseAssets.Published"/>, so a package the release starts to publish is a row here without a word of
+    /// this class changing.
     /// </summary>
-    [Fact]
-    public void The_archive_holds_exactly_the_package_s_files_at_its_root_and_unpacks_to_its_digest()
+    public static TheoryData<string> PublishedPackages() =>
+        [.. ReleaseAssets.Published.Where(name => name.StartsWith(PackagePrefix, StringComparison.Ordinal)
+            && name.EndsWith(PackageSuffix, StringComparison.Ordinal))];
+
+    /// <summary>The plugin id a published package's file name carries, which is its directory under <c>plugins/</c>.</summary>
+    private static string IdOf(string asset) => asset[PackagePrefix.Length..^PackageSuffix.Length];
+
+    /// <summary>
+    /// The archive of each real package a release publishes holds its files and nothing else, at the root — no folder
+    /// around them, no entry for a directory — in ordinal order, whatever order the file system lists them in, and
+    /// unpacked into an empty directory it has the package's digest.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(PublishedPackages))]
+    public void The_archive_holds_exactly_the_package_s_files_at_its_root_and_unpacks_to_its_digest(string asset)
     {
         using var tree = new TempTree();
-        var source = Path.Combine(RepositoryRoot(), "plugins", "reply");
-        var archive = WriteArchive(tree, source);
+        var id = IdOf(asset);
+        var source = Path.Combine(RepositoryRoot(), "plugins", id);
+        var archive = WriteArchive(tree, source, asset);
 
         var entries = EntryNames(archive);
         var files = PackageDigest.Files(source);
@@ -45,13 +64,13 @@ public sealed class PluginAssetTests
             entries.SequenceEqual(files),
             $"The archive holds, in its order, {Listed(entries)}; the package is, in ordinal order, {Listed(files)}.");
 
-        var unpacked = tree.NewDirectory("reply");
+        var unpacked = tree.NewDirectory(id);
         ZipFile.ExtractToDirectory(archive, unpacked);
         var expected = PackageDigest.Compute(source);
         var actual = PackageDigest.Compute(unpacked);
         Assert.True(
             actual.Digest == expected.Digest,
-            $"Unpacked, the archive is {actual.Digest} over {actual.FileCount} files; the package is {expected.Digest} over {expected.FileCount}.");
+            $"Unpacked, {asset} is {actual.Digest} over {actual.FileCount} files; plugins/{id} is {expected.Digest} over {expected.FileCount}.");
     }
 
     /// <summary>
@@ -114,9 +133,10 @@ public sealed class PluginAssetTests
     }
 
     /// <summary>
-    /// The wiring check's step 3, executed: the page's own line installs the package the release at
-    /// <c>v&lt;version&gt;</c> names in its manifest, fetched beside its <c>checksums.txt</c> and checked against it. What it
-    /// installs has the content digest of <c>plugins/reply</c>.
+    /// The wiring check's step 3, executed for each package a release publishes: the page's own line, naming that
+    /// package's id where it names <c>reply</c>, installs the package the release at <c>v&lt;version&gt;</c> names in its
+    /// manifest, fetched beside its <c>checksums.txt</c> and checked against it. What it installs has the content digest
+    /// of <c>plugins/&lt;id&gt;</c>.
     /// </summary>
     /// <remarks>
     /// The release is <see cref="LoopbackReleases"/>: the product's address on the loopback interface, answering as the
@@ -125,23 +145,25 @@ public sealed class PluginAssetTests
     /// the only changes are the runner's: the release feed's address made the loopback one, the version, and Jason's data
     /// directory made the test's own.
     /// </remarks>
-    [Fact]
-    public async Task Step_3_installs_the_release_s_package_with_the_tree_s_digest()
+    [Theory]
+    [MemberData(nameof(PublishedPackages))]
+    public async Task Step_3_installs_the_release_s_package_with_the_tree_s_digest(string asset)
     {
         using var tree = new TempTree();
-        var source = Path.Combine(RepositoryRoot(), "plugins", "reply");
-        using var releases = new LoopbackReleases(Release(tree, source, Mismatch.None));
+        var id = IdOf(asset);
+        var source = Path.Combine(RepositoryRoot(), "plugins", id);
+        using var releases = new LoopbackReleases(Release(tree, id, asset, source, Mismatch.None));
         var data = DataDirectory(tree);
 
-        var (exit, output) = await RunStepThreeAsync(releases.Releases, data);
+        var (exit, output) = await RunStepThreeAsync(releases.Releases, data, id);
 
-        Assert.True(exit == 0, $"Step 3's line exited {exit}:\n{output}");
-        var installed = new JasonPaths(data).PluginPackageDirectory("reply");
+        Assert.True(exit == 0, $"Step 3's line for {id} exited {exit}:\n{output}");
+        var installed = new JasonPaths(data).PluginPackageDirectory(id);
         var expected = PackageDigest.Compute(source);
         var actual = PackageDigest.Compute(installed);
         Assert.True(
             actual.Digest == expected.Digest,
-            $"Step 3 installed {actual.Digest} over {actual.FileCount} files; plugins/reply is {expected.Digest} over {expected.FileCount}.");
+            $"Step 3 installed {actual.Digest} over {actual.FileCount} files; plugins/{id} is {expected.Digest} over {expected.FileCount}.");
         Assert.Equal(PackageDigest.Files(source), PackageDigest.Files(installed));
 
         // Each file from the address first and then from where it redirects, at the version asked for.
@@ -151,8 +173,8 @@ public sealed class PluginAssetTests
                 $"GET /store/releases/download/v{Version}/{ReleaseAssets.Manifest}",
                 $"GET /releases/download/v{Version}/{ReleaseAssets.Checksums}",
                 $"GET /store/releases/download/v{Version}/{ReleaseAssets.Checksums}",
-                $"GET /releases/download/v{Version}/{ReleaseAssets.ReplyPlugin}",
-                $"GET /store/releases/download/v{Version}/{ReleaseAssets.ReplyPlugin}",
+                $"GET /releases/download/v{Version}/{asset}",
+                $"GET /store/releases/download/v{Version}/{asset}",
             ],
             releases.Asked);
     }
@@ -167,10 +189,11 @@ public sealed class PluginAssetTests
     public async Task Step_3_unpacks_nothing_that_does_not_match_its_checksum(Mismatch mismatch)
     {
         using var tree = new TempTree();
-        using var releases = new LoopbackReleases(Release(tree, Path.Combine(RepositoryRoot(), "plugins", "reply"), mismatch));
+        using var releases = new LoopbackReleases(
+            Release(tree, "reply", ReleaseAssets.ReplyPlugin, Path.Combine(RepositoryRoot(), "plugins", "reply"), mismatch));
         var data = DataDirectory(tree);
 
-        var (exit, output) = await RunStepThreeAsync(releases.Releases, data);
+        var (exit, output) = await RunStepThreeAsync(releases.Releases, data, "reply");
 
         Assert.True(exit == 1, $"Step 3's line exited {exit} over a release whose checksums.txt has {mismatch}:\n{output}");
         var plugins = new JasonPaths(data).PluginsDirectory;
@@ -220,8 +243,9 @@ public sealed class PluginAssetTests
     }
 
     /// <summary>
-    /// The architecture's register of accepted decisions records that the Reply plugin ships as a release asset, as it
-    /// stands, beside the row that says both installation paths are legitimate.
+    /// The architecture's register of accepted decisions records that the plugins' packages a release publishes, Reply's
+    /// and the journal forwarder's, ship as release assets, as it stands, beside the row that says both installation paths
+    /// are legitimate.
     /// </summary>
     [Fact]
     public void The_decision_register_records_that_the_plugin_ships_as_a_release_asset()
@@ -237,30 +261,30 @@ public sealed class PluginAssetTests
         Assert.Equal(PluginAssetDecision, rows[paths + 1]);
     }
 
-    /// <summary>The register's row for the plugin as a release asset, as it stands.</summary>
+    /// <summary>The register's row for the plugins' packages as release assets, as it stands.</summary>
     private const string PluginAssetDecision =
-        "| DEC-INSTALL-002 | The Reply plugin ships as a release asset: every release publishes `jason-plugin-reply.zip`, the files of `plugins/reply` at the tag at the archive's root, "
-        + "built once and listed in `checksums.txt`, and named in the manifest's `plugins` with its version, file name, content digest and the digest of every version its list records, "
+        "| DEC-INSTALL-002 | The Reply plugin and, from 0.30.0 on, the journal forwarder ship as release assets: every release publishes `jason-plugin-reply.zip` and `jason-plugin-journal-forwarder.zip`, the files of `plugins/<id>` at the tag at the archive's root, "
+        + "each built once and listed in `checksums.txt`, and named in the manifest's `plugins` with its version, file name, content digest and the digest of every version its list records, "
         + "never among the manifest's artifacts, which are platforms. "
-        + "Installing it is `jason plugin install reply`: download, verify against `checksums.txt` and the manifest's content digest, unpack into the plugins directory; "
-        + "the package's content digest is its identity, and both installation paths of §15.5 rest on that asset. |";
+        + "Installing one is `jason plugin install <id>`: download, verify against `checksums.txt` and the manifest's content digest, unpack into the plugins directory; "
+        + "a package's content digest is its identity, and both installation paths of §15.5 rest on those assets. |";
 
     /// <summary>The version the lines are run at, as <c>jason --version</c> prints it up to any <c>+</c>.</summary>
     private const string Version = "0.11.0";
 
     /// <summary>
-    /// A release's store: the package as the release job writes it, a <c>checksums.txt</c> with a line per archive and
-    /// what <paramref name="mismatch"/> says of the package's line, and a manifest naming the package by the content digest
-    /// of <paramref name="source"/>.
+    /// A release's store: the package as the release job writes it, under <paramref name="asset"/>, a
+    /// <c>checksums.txt</c> with a line per archive and what <paramref name="mismatch"/> says of the package's line, and a
+    /// manifest naming the package under <paramref name="id"/> by the content digest of <paramref name="source"/>.
     /// </summary>
-    private static string Release(TempTree tree, string source, Mismatch mismatch)
+    private static string Release(TempTree tree, string id, string asset, string source, Mismatch mismatch)
     {
-        var archive = WriteArchive(tree, source);
+        var archive = WriteArchive(tree, source, asset);
         var lines = ReleaseAssets.Rids.Select(rid => $"{new string('0', 64)}  {ReleaseAssets.For(rid)}");
         if (mismatch != Mismatch.NoLine)
         {
             var digest = Convert.ToHexStringLower(SHA256.HashData(mismatch == Mismatch.AnotherDigest ? Encoding.UTF8.GetBytes("another package") : File.ReadAllBytes(archive)));
-            lines = lines.Append($"{digest}  {ReleaseAssets.ReplyPlugin}");
+            lines = lines.Append($"{digest}  {asset}");
         }
 
         var store = Path.GetDirectoryName(archive)!;
@@ -277,7 +301,7 @@ public sealed class PluginAssetTests
                 "linux-x64": { "asset": "{{ReleaseAssets.For("linux-x64")}}", "sha256": "{{new string('0', 64)}}", "size": 1 }
               },
               "plugins": {
-                "reply": { "version": "0.0.0", "asset": "{{ReleaseAssets.ReplyPlugin}}", "digest": "{{content}}", "recorded": { "0.0.0": "{{content}}" } }
+                "{{id}}": { "version": "0.0.0", "asset": "{{asset}}", "digest": "{{content}}", "recorded": { "0.0.0": "{{content}}" } }
               }
             }
             """);
@@ -297,15 +321,17 @@ public sealed class PluginAssetTests
     }
 
     /// <summary>
-    /// Step 3's line, read from the page, run through the program with the runner's substitutions made: the default feed
-    /// is the loopback release's, and the data directory and the version are the test's own. No runtime answers, so the
-    /// package is placed and loads at the next start.
+    /// Step 3's line, read from the page, run through the program with the runner's substitutions made: the package it
+    /// names is <paramref name="id"/>, the default feed is the loopback release's, and the data directory and the version
+    /// are the test's own. No runtime answers, so the package is placed and loads at the next start.
     /// </summary>
-    private static async Task<(int Exit, string Output)> RunStepThreeAsync(string releases, string data)
+    private static async Task<(int Exit, string Output)> RunStepThreeAsync(string releases, string data, string id)
     {
         var line = StepThreeLine();
         var arguments = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal("jason", arguments[0]);
+        Assert.Equal("reply", arguments[^1]);
+        arguments[^1] = id;
 
         var feed = UpdateFeed.Default.AbsoluteUri.Replace(ProductAddress.Releases, releases, StringComparison.Ordinal);
         Assert.NotEqual(UpdateFeed.Default.AbsoluteUri, feed);
@@ -329,10 +355,13 @@ public sealed class PluginAssetTests
         return Assert.Single(step.Split('\n'), line => line.StartsWith("jason plugin install ", StringComparison.Ordinal));
     }
 
-    /// <summary>The script run as the release job runs it, over <paramref name="package"/>, and the archive it wrote.</summary>
-    internal static string WriteArchive(TempTree tree, string package)
+    /// <summary>
+    /// The script run as the release job runs it, over <paramref name="package"/>, and the archive it wrote, named
+    /// <paramref name="asset"/>.
+    /// </summary>
+    internal static string WriteArchive(TempTree tree, string package, string asset = ReleaseAssets.ReplyPlugin)
     {
-        var archive = Path.Combine(tree.NewDirectory("release"), ReleaseAssets.ReplyPlugin);
+        var archive = Path.Combine(tree.NewDirectory("release"), asset);
         var (exit, stdout, stderr) = Script(
             NoEnvironment,
             Path.Combine([RepositoryRoot(), .. ArchiveScript]),
