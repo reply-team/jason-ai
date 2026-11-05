@@ -3067,7 +3067,7 @@ public partial class ReleaseWorkflowTests
 
         // A release's own notes are the other half of its body, so they are held to the same words whenever the file is
         // there; the next release rewrites it, and a sentence carried from the last one is caught before it ships again.
-        string[][] pages = [Notes, ["README.md"], ["docs", "INSTALL.md"], ["docs", "release-and-update.md"], ["docs", "architecture.md"]];
+        string[][] pages = [Notes, ["README.md"], ["docs", "handbook.md"], ["docs", "INSTALL.md"], ["docs", "release-and-update.md"], ["docs", "architecture.md"]];
         if (File.Exists(Path.Combine(RepositoryRoot(), "RELEASE-NOTES.md")))
         {
             pages = [.. pages, ["RELEASE-NOTES.md"]];

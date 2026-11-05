@@ -61,6 +61,7 @@ public class DocumentedPageCommandsTests
     private static readonly string[] Pages =
     [
         "README.md",
+        Path.Combine("docs", "handbook.md"),
         Path.Combine("skills", "README.md"),
         Path.Combine("skills", "runtime", "README.md"),
         Path.Combine("skills", "business", "README.md"),
@@ -91,7 +92,7 @@ public class DocumentedPageCommandsTests
 
     // Critical: a printed command parses.
     public static TheoryData<string, string> CriticalDocumentedCommands() =>
-        CriticalRows.Mark(DocumentedCommands(), Family.D1, data => data is ["README.md", "jason update check"]);
+        CriticalRows.Mark(DocumentedCommands(), Family.D1, data => data is [string page, "jason update check"] && page == Path.Combine("docs", "handbook.md"));
 
     private static IEnumerable<(string Page, string Command)> Printed() =>
         Pages.SelectMany(page => Commands(page).Select(line => (page, line)));
@@ -302,12 +303,39 @@ public class DocumentedPageCommandsTests
         var joined = text.Replace("\\\r\n", " ", StringComparison.Ordinal).Replace("\\\n", " ", StringComparison.Ordinal);
         foreach (var line in joined.Split('\n'))
         {
-            var trimmed = line.Trim();
+            var trimmed = WithoutComment(line.Trim());
             if (Nouns.Any(noun => trimmed.StartsWith(noun, StringComparison.Ordinal)) || Lines.Contains(trimmed, StringComparer.Ordinal))
             {
                 yield return trimmed;
             }
         }
+    }
+
+    /// <summary>
+    /// The line as a shell runs it: an unquoted word that begins with <c>#</c> starts a comment, which the shell drops
+    /// with the rest of the line, so a page may say beside a printed command what it does.
+    /// </summary>
+    private static string WithoutComment(string line)
+    {
+        var quote = '\0';
+        for (var at = 0; at < line.Length; at++)
+        {
+            var c = line[at];
+            if (quote != '\0')
+            {
+                quote = c == quote ? '\0' : quote;
+            }
+            else if (c is '\'' or '"')
+            {
+                quote = c;
+            }
+            else if (c == '#' && (at == 0 || char.IsWhiteSpace(line[at - 1])))
+            {
+                return line[..at].TrimEnd();
+            }
+        }
+
+        return line;
     }
 
     /// <summary>The tokens a shell would hand the program, by the one splitter every such guard here uses.</summary>

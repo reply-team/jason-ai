@@ -71,7 +71,7 @@ public sealed class IssueFormTests
     /// made with the journal's entries never goes to an issue.
     /// </summary>
     [Theory]
-    [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("CONTRIBUTING.md")]
     [InlineData("docs/INSTALL.md")]
     public void The_pages_send_a_problem_to_the_form_and_a_journal_file_never_to_an_issue(string page)
