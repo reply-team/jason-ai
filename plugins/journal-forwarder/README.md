@@ -116,9 +116,11 @@ The manifest names `localhost:8787` and nothing else, so another host is your ed
    `jason plugin list` shows, and no release published it.
 
 From then on the copy is yours. `jason update` leaves it in place and says it differs from every package a release
-published, so an update never undoes your edit. A later version of the forwarder is yours to apply: read its
-changelog, and make your edit again on the new package. `jason plugin install journal-forwarder --replace` discards your
-edit, placing the package the release you run published in place of your copy.
+published, so an update never undoes your edit. Once a release publishes a later version of the forwarder,
+`jason status` reports your edited copy as behind, and the repair it names, `--replace`, is the discard below. A later
+version of the forwarder is yours to apply instead: read its changelog, and make your edit again on the new package.
+`jason plugin install journal-forwarder --replace` discards your edit, placing the package the release you run
+published in place of your copy.
 
 The plugin does not check the URL's host itself: the plugin host does, against the grant. A URL whose host the manifest
 and the grant do not both name ends the invocation as `http_host_not_allowed`, and nothing is sent.

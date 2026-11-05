@@ -407,8 +407,9 @@ public sealed class JournalForwarderPackageTests
     /// The package's README installs it from the release a person runs, by <c>jason plugin install journal-forwarder</c>,
     /// never by a copy out of a checkout, which a person who installed Jason does not have. A receiver on another host is
     /// an edit of the installed copy's <c>plugin.yaml</c>, after which the copy is the person's own, and the README says
-    /// the three things that follow from it: <c>jason update</c> leaves it and says it differs, a later version is theirs
-    /// to apply, and <c>--replace</c> discards the edit.
+    /// the four things that follow from it: <c>jason update</c> leaves it and says it differs, <c>jason status</c> reports
+    /// it as behind once a later version is published and names the <c>--replace</c> that discards the edit, a later
+    /// version is theirs to apply, and <c>--replace</c> discards the edit.
     /// </summary>
     [Fact]
     public void The_readme_installs_the_package_from_the_release_and_an_edited_copy_is_the_person_s_own()
@@ -425,6 +426,11 @@ public sealed class JournalForwarderPackageTests
         Assert.Contains("`~/.jason/plugins/journal-forwarder/plugin.yaml`", elsewhere, StringComparison.Ordinal);
         Assert.Contains("From then on the copy is yours.", elsewhere, StringComparison.Ordinal);
         Assert.Contains("`jason update` leaves it in place and says it differs from every package a release published", elsewhere, StringComparison.Ordinal);
+        Assert.Contains(
+            "Once a release publishes a later version of the forwarder, `jason status` reports your edited copy as behind, "
+            + "and the repair it names, `--replace`, is the discard below.",
+            elsewhere,
+            StringComparison.Ordinal);
         Assert.Contains("A later version of the forwarder is yours to apply", elsewhere, StringComparison.Ordinal);
         Assert.Contains("`jason plugin install journal-forwarder --replace` discards your edit", elsewhere, StringComparison.Ordinal);
     }
