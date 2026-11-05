@@ -1388,19 +1388,23 @@ public partial class PageClaimsTests
     /// the first-use walkthrough: it is a check of the wiring, and the real work is a campaign. Nor a sandbox: it makes a
     /// real draft campaign at the person's provider and enrols their own address, and the published pages keep that word
     /// for an isolation boundary. A file path is not prose, and the executable's own "first runs" is another matter, so
-    /// neither is read as one.
+    /// neither is read as one. The README is held to the three old names alone: it names Codex's sandbox, which is that
+    /// isolation boundary, so "sandbox" there is the meaning the word is kept for.
     /// </summary>
     [Theory]
-    [InlineData("docs/handbook.md")]
-    [InlineData("docs/INSTALL.md")]
-    [InlineData("docs/golden-path.md")]
-    [InlineData("skills/runtime/operating-the-installation/SKILL.md")]
-    [InlineData("skills/runtime/managed-campaign-work/SKILL.md")]
-    public void No_page_calls_the_wiring_check_by_a_name_it_had_before(string page)
+    [InlineData("README.md", false)]
+    [InlineData("docs/handbook.md", true)]
+    [InlineData("docs/INSTALL.md", true)]
+    [InlineData("docs/golden-path.md", true)]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", true)]
+    [InlineData("skills/runtime/managed-campaign-work/SKILL.md", true)]
+    public void No_page_calls_the_wiring_check_by_a_name_it_had_before(string page, bool sandbox)
     {
         var said = Regex.Match(
             Flat(Page(page.Split('/'))),
-            @"\b(?:first run|golden path|first[- ]use walkthrough|sandbox)\b",
+            sandbox
+                ? @"\b(?:first run|golden path|first[- ]use walkthrough|sandbox)\b"
+                : @"\b(?:first run|golden path|first[- ]use walkthrough)\b",
             RegexOptions.IgnoreCase);
         Assert.False(said.Success, $"{page} still says '{said.Value}' at offset {said.Index} of its flattened text.");
     }
