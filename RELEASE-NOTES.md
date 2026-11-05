@@ -19,89 +19,106 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
+# Jason 0.30.0
 
-# Jason 0.29.0
+## What is new since 0.29.0
 
-## What is new since 0.28.0
+The Reply plugin now sends on every account without first asking Reply whether it keeps direct sends, a person's own
+decisions can no longer be made from inside a run, and a campaign's responder is held to a daily limit of runs.
 
-The runtime's journal is now a bus for plugins: a plugin that a person grants journal kinds is handed each line of those
-kinds after the runtime wrote it, and may act back only through the public Runtime API and only as far as the person
-granted.
+- **The journal forwarder is a release asset.** Each release now publishes it as `jason-plugin-journal-forwarder.zip`
+  beside the Reply plugin's package, and `jason plugin install journal-forwarder` places the one your Jason's own
+  release published, after checking it against the release's `checksums.txt` and its content digest. You no longer copy
+  it out of a checkout. The package is version 1.0.1; its code is as it was, and its
+  [README](https://github.com/reply-team/jason-ai/blob/v0.30.0/plugins/journal-forwarder/README.md) now installs it with
+  that command and says what an edited copy means for later updates. `jason status` and `jason update check` name the
+  forwarder as they name the Reply package, and a forwarder you never installed is never a failure.
+- **The Reply package is 0.14.5.** It makes one call fewer before a send: it no longer reads whether the account's Reply
+  keeps direct sends before a `message.send` or `social_invitation.send` that names a moment ahead or a sending
+  schedule, or before a repeat after an attempt that may have sent, since Reply's direct-send routes are on every
+  account. A 404 that carries no code of Reply's own now means that Reply's API changed under this package version, no
+  longer that the route is missing: the work ends `provider_call_failed`, permanent, with `reply.refused` and the 404 in
+  its details and nothing done, so run `jason update apply` and report the ending if it stays. A repeat whose send
+  itself answers that 404 ends `send_not_settled` instead, and the inbox change feed ends `events_unsupported`, whose
+  account's replies are read thread by thread as before. The endings `send_after_not_offered` and
+  `schedule_not_offered` are gone with the read that reached them. A LinkedIn route that refuses a sending schedule is
+  still `capability_not_offered`. The package still needs reply-cli 0.18.0. Its
+  [README](https://github.com/reply-team/jason-ai/blob/v0.30.0/plugins/reply/README.md) holds the error table.
+- **A campaign's responder is held to a daily limit of runs.** `Responder:MaxLaunchesPerDay` in `settings.json` is 25 by
+  default and accepts 1 to 1000; it applies at the next scan. Once a campaign's responder has started that many runs
+  since 00:00Z, further responder work for that campaign waits, with no attempt of its own and no notification: the work
+  item is `waiting` with the error `responder_launches_spent`, and the campaign's other work goes on. It goes on at the
+  next 00:00Z, or sooner if a person resumes that item with `jason workitem resume`, which lets that one item past the
+  limit under their name, or raises the limit, which applies to work not yet held. Every run counts, a resumption and a
+  responder queued by hand included; another role's run and a provider operation do not.
+  [The work-execution page](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/work-execution.md#the-claim-rule)
+  has the rule, and [the inbound-sync page](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/inbound-sync.md)
+  says what it means for a burst of replies.
+- **A person's word is refused from inside a run.** Approving or rejecting an approval, setting or taking back a
+  standing approval, and answering a question are now answered `403` with the code `decided_inside_a_run` when the
+  request comes from a `jason` launched inside an attempt, whatever person it names; nothing is recorded. Inside a run
+  the CLI names its attempt in a `Jason-Attempt` header on every request, and the refusal says what to do instead: leave
+  the decision to the person (`jason approval list`, `jason decision list`) or raise it as a decision. A program of your
+  own that does not run inside an attempt is not affected. This is a higher bar against a role deciding its own work,
+  not a security boundary: the runtime still cannot tell a person from a program that holds the token. The
+  [Runtime API page](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/runtime-api.md) states it.
+- **Two more skills are `verified`.** `operating-the-installation` and `troubleshooting-jason` were read by a real
+  agent host against the published 0.29.0 executable, did the job each teaches, and had every `jason` line they quote
+  held to that executable's `--help`; no instruction changed. The skills still marked `draft` are `researcher-in-session`,
+  `roles/responder` and the nine skills of the business pack.
+- **The README is new, and the former README is the handbook.** The first page of the repository is now written for a
+  reader who has not yet decided to install Jason. The former README, whole, is
+  [`docs/handbook.md`](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/handbook.md), and the new
+  [README](https://github.com/reply-team/jason-ai/blob/v0.30.0/README.md) links to it.
 
-- **The journal's kinds are published.** Every kind the runtime reserves for its own lines has one document under
-  [`docs/contracts/journal/`](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/contracts/journal), saying what a
-  line of the kind records, which things it names and whether a plugin may subscribe to it, and every line the runtime
-  writes is checked against its document as it is written: the test suite refuses a line off its document, and an
-  installation writes it and its log names the kind. `jason journal kinds` reads them, a page at a time, in kind order.
-  [The contracts page](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/contracts/README.md#the-journals-kinds)
-  states the rules a document follows.
-- **A plugin subscribes by declaration and grant.** A manifest lists the kinds it wants under `subscriptions`; you admit
-  it to some or all of them in `Plugins:Grants:<id>:Subscriptions` of `settings.json`, and `*` admits every kind it
-  declares. Where several plugins are admitted to one kind, they run one after another, in plugin-id order unless
-  `Subscriptions:Order:<kind>` lists some of them first. Grants and orders are frozen at each load, so a change takes
-  effect at the next `jason plugin reload`. A plugin that does only this is the new plugin kind `subscriber`, which
-  implements no operation and delivers no notification; a provider or a notification plugin may subscribe as well.
-  [The plugin guide](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/plugins.md#16-subscriptions-declaration-grant-order)
-  has the manifest, the grant and the order.
-- **What a handler is handed, and how it runs.** The runtime hands a handler one line of a kind at a time, in the order
-  the journal holds them, with the envelope the handler before it in the chain returned; the handler answers an
-  envelope, which goes on to the next handler. The runtime never reads what an envelope means. A transient failure is
-  tried again, up to `Subscriptions:TransientRetries` times, after a wait of `Subscriptions:RetryBackoffSeconds` that
-  doubles; any other failure ends the chain at that handler for that line, writes one `subscription_failed` line naming
-  the kind, the line, the plugin, the class and the code, and the kind moves on. What a handler does is never handed to
-  another handler as a new line. Delivery is at least once: a line may be handed twice, after a restart in the middle of
-  a chain too, and a handler tells a repeat by `attempt` in its input, which counts how many times that plugin has been
-  handed the line in this chain's record, this time included, so it is above 1 after a transient retry or a restart; a
-  rewind opens a new chain, so it starts at 1 again, and that repeat is the person's own. The numbers under `Subscriptions` apply live. See
-  [the plugin guide](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/plugins.md#17-writing-a-subscriber).
-- **A handler reads and writes Jason through `host.call`.** A handler of a plugin you granted a Runtime API family calls
-  Runtime API operations through a door the runtime opens for that one invocation, about that one line. The families
-  are the ones the manifest's `capabilities.api` requested and you listed in the plugin's `Api` list under
-  `Plugins:Grants`: `read`, `campaign`, `contact`, `workitem`, `suppression`, `report` and `journal.append`. It acts as
-  the plugin, never as a person, with the line as the reason, so the chronicle names the plugin and the line. The
-  installation's own doors, a person's decisions and an executor's verbs are in no family, so no grant opens them.
-  [The guide's capabilities section](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/plugins.md#9-capabilities-and-grants)
-  lists them.
-- **`jason subscription list`, `runs` and `rewind`.** `list` shows, for each subscribed kind, the plugins of its chain,
-  where its position stands, the journal's last line of the kind, how many of its lines are due, and the members the current
-  load cannot run. `runs --kind <kind>` pages the records of that kind's chains, newest first, each handler's outcome
-  included. `rewind --kind <kind>` with `--line <id>` or `--since <moment>` moves the position back so the kind's lines
-  are handed again; only a person may, so it takes `--actor human:<your-name>`, it refuses a target ahead of the
-  position, and each rewind writes one `subscription_cursor_rewound` line. `jason doctor` gains a `subscriptions`
-  section with where each kind stands and how its newest chains ended, and it never carries an envelope.
-- **The `journal-forwarder` plugin pushes each granted line to one URL.** It is a reference subscriber: for each line of
-  a kind you granted, it POSTs the line, the envelope and the attempt as JSON to the URL named in
-  `JOURNAL_FORWARDER_URL`, and answers the envelope as it was handed. It is in the repository's plugin marketplace under
-  [`plugins/journal-forwarder`](https://github.com/reply-team/jason-ai/blob/v0.29.0/plugins/journal-forwarder/README.md),
-  not a release asset: you copy the package into `~/.jason/plugins`, as its README says. What leaves the machine is what
-  the journal says, which includes names, fields as they changed and the reasons people typed, so the receiver is a
-  place you trust with that. Its manifest names `localhost:8787`; a receiver elsewhere is your edit of the package, as
-  the README says, and the copy is yours to keep current.
-- **Two skills teach the new verbs.** `operating-the-installation` and `troubleshooting-jason` now teach
-  `jason journal kinds` and `jason subscription`, and both are `draft` again until a host reads their new text. The
-  skills marked `draft` in this release are those two, `researcher-in-session`, `roles/responder` and the nine skills of
-  the business pack.
+## Fixed since 0.29.0
 
-## Upgrading from 0.28.0
+- **A start no longer waits for a slow network share.** At every start the runtime writes each host's missing import
+  file (`CLAUDE.md`, `GEMINI.md`) into the harness root and into every folder recorded for a project or a campaign.
+  That sweep ran inside the start, so a recorded folder on a slow or absent network share held the runtime's first
+  answer, and the CLI's wait for the start, for as long as one directory check on it took. The sweep now runs in the
+  background and the runtime answers at once. A folder read, or a role launched, in the first moments after a start may
+  therefore not have its import file yet, as
+  [the projects page](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/projects.md) says; a folder moved during
+  the sweep is skipped and gains its file at the next start.
+- **A subscribed kind whose turn gives out now rests.** In 0.29.0 a fault of the runtime's own that stopped a
+  subscribed kind's turn was logged and the kind was offered again at the next scan with no pause, so a fault that
+  lasted repeated at every scan. The turn now ends as given out and the kind is offered again only after a wait:
+  `Subscriptions:RetryBackoffSeconds` after the first give-out, doubled after each one in a row, and never longer than
+  an hour. The setting is read at each give-out. The warning is logged once per streak and again only when the failure
+  differs, and it names the kind, the failure and the wait. The streak is kept in memory: a reload keeps it, a restart
+  begins afresh, and a turn that ends without a give-out ends it.
+
+## Upgrading from 0.29.0
 
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
   lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
   install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
-  and `jason plugin install reply --replace` follow.
+  and `jason plugin install reply --replace` follow,
+  and `jason plugin install journal-forwarder --replace` too if you installed the forwarder.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`. Two skills changed their text and their status line is `draft`
-  again.
-- **The data directory:** this release adds one database migration, `SubscriptionRunner`, which adds the tables that
-  hold each subscribed kind's position and the records of its chains. The first start on 0.29.0 runs it after taking a
-  backup, as every migration does. Your projects, campaigns, work items and chronicle stay as they were.
-- **Nothing subscribes until you say so.** No plugin is handed a journal line until you install a subscriber and grant it
-  kinds, so an upgrade with no subscriber changes no behaviour.
-- **The Reply plugin** is unchanged.
-- **From 0.27.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
+  `brew upgrade jason`, run `jason skills update`. Two skills changed their status line from `draft` to `verified`.
+- **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle
+  stay as they were.
+- **The Reply plugin** changed to 0.14.5. `jason update apply` replaces an installed Reply package that is an earlier
+  version this release records, byte for byte as published, and leaves one built or edited on your machine alone; after
+  the install line or `brew upgrade jason`, which run no apply, `jason plugin install reply --replace` places it.
+- **The journal forwarder** is installable from the release with `jason plugin install journal-forwarder`. A copy you
+  took from the repository for 0.29.0 and did not edit is replaced by `jason update apply` with 1.0.1; a copy you
+  edited, as a receiver other than `localhost:8787` needs, is yours and is left as it is, so there is nothing to do, and
+  `--replace` would discard your edit.
+- **A responder past 25 runs a day** is held from this release: for a campaign whose responder ran more than 25 times in
+  a UTC day, the 26th run waits until 00:00Z. Raise `Responder:MaxLaunchesPerDay` in `settings.json` to keep the old
+  pace.
+- **A run's agent that approved or answered in a person's name** is now refused; the person decides.
+- **From 0.28.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
 
 ## Known issues
+
+On Windows, a campaign's move to another project can be refused for the instant the background import-file sweep writes
+inside that folder, soon after a start; ask again and it succeeds.
 
 `reply skills install --project` does not see an old `reply-adapter@reply-skills` plugin installed at user scope on
 Claude Code, so that plugin keeps loading beside the project copy of the skills.
@@ -171,12 +188,6 @@ That update is still performed by the older build, and it happens when the two b
 Type `jason update apply` again: it runs 0.19.0, which finishes the update, and one more `jason update apply` then
 takes the newest release. From 0.18.x this does not happen: 0.19.0 is built on the same .NET patch as 0.18.0.
 
-Reply's routes behind 0.22.0's send features - a send's moment and its sending schedule, reading and cancelling a send
-by its reference, and the inbox change feed - reach Reply's accounts on Reply's own schedule. Until an account's Reply
-has a route, the Reply package answers `capability_not_offered` for that operation or argument, and the account's
-replies are read thread by thread in place of the feed, as its README says; nothing in Jason needs updating when the
-route arrives.
-
 For a sequence email, Reply keeps at most one reply to each email it sent and drops a finished contact's later replies
 on that thread before it stores them, so they reach none of `conversation.list`, `conversation.get` and the change
 feed, and Jason's inbound sync says nothing of them. After this side has answered on the thread through
@@ -187,10 +198,6 @@ and has not yet been observed on an account.
 A send or an invitation through Reply carries no sending time in its own result: `sent_at` is null, because Reply's
 answer to a LinkedIn send gives a local time marked as UTC and its answer to an email gives none. `message.status`
 reports when a send went, and a message's own moment is read from its thread, where it is true UTC.
-
-Through Reply, a sending schedule times a LinkedIn message only once the account's Reply times deferred LinkedIn sends
-itself. Until then the Reply package answers a LinkedIn message that names one `capability_not_offered`, and nothing is
-sent, whether the account's Reply has no direct sends yet or has them without a schedule on LinkedIn.
 
 The approval preview shows a send's `send_after` and not the provider object beside the arguments, so a send that also
 names a sending schedule goes at the schedule's first opening at or after that moment, which may be later than the
@@ -218,6 +225,3 @@ in a reply without its angle brackets.
 
 The responder's skill ships marked `draft`: no agent host has read its text in the state it ships in. Its commands parse
 against this build, as every skill's do, but how an agent follows its loop on a real reply is not yet seen.
-
-A fault of the runtime's own that stops a subscribed kind's turn is logged, and the kind is offered again at the next
-scan with no pause, from the same line, so a fault that lasts repeats at every scan until it is gone.
