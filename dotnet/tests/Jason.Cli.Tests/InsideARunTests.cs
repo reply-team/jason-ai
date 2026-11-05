@@ -18,6 +18,9 @@ public class InsideARunTests
 {
     private const string Attempt = "att_01K7QN0000000000000000000R";
 
+    /// <summary>A Latin small e with an acute accent, written by its code so the source stays ASCII.</summary>
+    private const char NonAscii = (char)0xE9;
+
     private static readonly RuntimeDescriptor Live = new("v1", "0.1.0-dev", "rt_LIVE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch);
 
     private static readonly string[][] Rows =
@@ -44,10 +47,13 @@ public class InsideARunTests
         Assert.Equal(new[] { Attempt }, request.Attempt);
     }
 
-    /// <summary>The value goes as the environment names it, trimmed, and is not checked: the runtime only reads that it is there.</summary>
+    /// <summary>
+    /// The value goes as the environment names it, trimmed, and is not checked against any shape: the runtime only reads
+    /// that it is there.
+    /// </summary>
     [Theory]
     [InlineData("  att_01K7QN0000000000000000000R\t", Attempt)]
-    [InlineData("anything at all", "anything at all")]
+    [InlineData("att_nothing-like-an-id", "att_nothing-like-an-id")]
     public async Task The_attempt_is_sent_as_the_environment_names_it_trimmed(string named, string sent)
     {
         using var run = new Run(new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = named });
@@ -55,6 +61,62 @@ public class InsideARunTests
         await run.RunAsync("campaign", "list");
 
         Assert.Equal(new[] { sent }, Assert.Single(run.Requests).Attempt);
+        Assert.Equal(string.Empty, run.Error.ToString());
+    }
+
+    /// <summary>A non-ASCII letter, a line break that would start a second header, and a space.</summary>
+    public static TheoryData<string> Uncarried =>
+    [
+        "att_01K7QN" + NonAscii + "0000000000000000R",
+        "att_01K7QN0000000000000000000R" + (char)13 + (char)10 + "X-Other: 1",
+        "att_A att_B",
+    ];
+
+    /// <summary>
+    /// What a header cannot carry is not sent: a value with a character outside visible ASCII, a line break or a space
+    /// inside it among them. The request goes without the header, as it would with the variable unset, and one line on
+    /// stderr names the variable and never its value.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Uncarried))]
+    public async Task A_value_a_header_cannot_carry_is_not_sent_and_stderr_says_so(string named)
+    {
+        using var run = new Run(new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = named });
+
+        var exit = await run.RunAsync("campaign", "list");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Null(Assert.Single(run.Requests).Attempt);
+        var line = Assert.Single(run.Error.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains("JASON_ATTEMPT_ID", line, StringComparison.Ordinal);
+        Assert.Contains("cannot travel as a header", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("att_", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A verb that makes more than one client — a human view that finds a campaign's folder, the diagnostic bundle — says
+    /// it once on the stderr it was given, however many clients were made with it.
+    /// </summary>
+    [Fact]
+    public async Task Two_clients_on_one_stderr_say_it_once()
+    {
+        var error = new StringWriter();
+        var seen = new List<string[]?>();
+        var handler = new FakeHandler(request =>
+        {
+            seen.Add(AttemptOf(request));
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
+        });
+
+        using (var first = new RuntimeClient(Live, "att_" + NonAscii, error, handler))
+        using (var second = new RuntimeClient(Live, "att_" + NonAscii, error, handler))
+        {
+            await first.PostAsync("campaign.list", TestContext.Current.CancellationToken);
+            await second.PostAsync("campaign.list", TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(new string[]?[] { null, null }, seen);
+        Assert.Single(error.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
     }
 
     /// <summary>Outside a run, or where the variable is empty, no request carries the header.</summary>
@@ -102,7 +164,7 @@ public class InsideARunTests
     public async Task The_client_names_the_attempt_it_was_given(string? given, string? sent)
     {
         var seen = new List<string[]?>();
-        using var client = new RuntimeClient(Live, given, new FakeHandler(request =>
+        using var client = new RuntimeClient(Live, given, TextWriter.Null, new FakeHandler(request =>
         {
             seen.Add(AttemptOf(request));
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
@@ -181,7 +243,7 @@ public class InsideARunTests
             _paths.WriteDescriptor(Live);
             _environment = new CliEnvironment(
                 Output,
-                TextWriter.Null,
+                Error,
                 _paths.Paths,
                 new FakeHandler(request =>
                 {
@@ -192,6 +254,8 @@ public class InsideARunTests
         }
 
         public StringWriter Output { get; } = new();
+
+        public StringWriter Error { get; } = new();
 
         public List<Sent> Requests { get; } = [];
 
