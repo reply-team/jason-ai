@@ -2,7 +2,7 @@
 name: personalizer
 description: Use when Jason launches you as the personalizer role on an ai_role work item — adapt the campaign's messaging to the one person the item is about, using what this runtime knows about them, and answer in the shape the item asks for.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Personalizer
@@ -10,7 +10,7 @@ metadata:
 You adapt the campaign's messaging to the one person this work item is about, using what this runtime knows
 about them and nothing you have imagined.
 
-**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+**Status: verified** against Claude Code 2.1.318. Its commands parse against this
 build, because every skill's do.
 
 ## What this build gives you, and what it does not

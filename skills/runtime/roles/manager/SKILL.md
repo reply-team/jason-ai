@@ -2,7 +2,7 @@
 name: manager
 description: Use when Jason launches you as the manager role on a check-in — review one campaign's state, act within the manager's own boundary or raise one question for a person, and leave a line in the chronicle saying what you did.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Manager
@@ -10,7 +10,7 @@ metadata:
 You review one campaign — what has happened since the last review, what is stuck, what waits on a person —
 and then stop.
 
-**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+**Status: verified** against Claude Code 2.1.318. Its commands parse against this
 build, because every skill's do.
 
 ## Know why you were woken
