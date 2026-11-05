@@ -97,8 +97,8 @@ The header says where a request comes from; it is not a credential, it opens not
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), which answer it `403` with
 the code `decided_inside_a_run` before the body is read, and record nothing. A program that is not running inside an
-attempt sends no `Jason-Attempt`, and is not affected. A value a header cannot carry, anything but visible ASCII, is not
-sent: `jason` says so in one line on stderr, naming the variable and never its value.
+attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
+so in one line on stderr, naming the variable and never its value.
 
 ## The request form
 

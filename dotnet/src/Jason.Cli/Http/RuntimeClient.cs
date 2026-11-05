@@ -24,8 +24,8 @@ public sealed class RuntimeClient : IDisposable
     /// <param name="attempt">
     /// The attempt the environment names, or null outside a run. It is sent trimmed, and unchecked in its shape, as
     /// <see cref="ExecutionEnvironment.AttemptHeader"/> on every request, reads included, whatever actor a body claims;
-    /// empty is the same as none. A value a header cannot carry, anything but visible ASCII, is not sent, and
-    /// <paramref name="error"/> is told once. Required, so that no request is made without deciding it.
+    /// empty is the same as none. A value that is not all visible ASCII is not sent, and <paramref name="error"/> is
+    /// told once. Required, so that no request is made without deciding it.
     /// </param>
     /// <param name="error">The CLI's stderr, where it says that an attempt could not be named.</param>
     /// <param name="handler">The handler to send through, or null for the machine's own.</param>
@@ -49,18 +49,18 @@ public sealed class RuntimeClient : IDisposable
         }
         else if (Said.TryAdd(error, Said))
         {
-            // Not a check of the value's shape but of the wire: a character outside visible ASCII fails the request
-            // before it leaves, and a line break would start a header of its own. The request goes as it would with the
-            // variable unset, and the line names the variable, never what it holds.
+            // Not a check of the value's shape: a value that is not all visible ASCII is not sent, since a non-ASCII
+            // character would fail the request before it leaves and a line break would start a header of its own. The
+            // request goes as it would with the variable unset, and the line names the variable, never what it holds.
             error.WriteLine(
-                $"{ExecutionEnvironment.AttemptIdVariable} holds a value that cannot travel as a header (only visible ASCII can), so the runtime is not told which attempt this runs inside.");
+                $"{ExecutionEnvironment.AttemptIdVariable} holds a value that is not all visible ASCII, so it is not sent and the runtime is not told which attempt this runs inside.");
         }
     }
 
     /// <summary>The stderr writers already told, so a verb that makes more than one client says it once.</summary>
     private static readonly ConditionalWeakTable<TextWriter, object> Said = [];
 
-    /// <summary>Visible ASCII only, 0x21 to 0x7E: what a header value carries whole, with no space and no line break.</summary>
+    /// <summary>Visible ASCII only, 0x21 to 0x7E: no space, no line break and no character outside ASCII.</summary>
     private static bool Travels(string value) => value.All(character => character is >= '!' and <= '~');
 
     public Task<RuntimeResponse> PostAsync(string operation, CancellationToken cancellationToken) =>

@@ -66,7 +66,7 @@ public class InsideARunTests
     }
 
     /// <summary>A non-ASCII letter, a line break that would start a second header, and a space.</summary>
-    public static TheoryData<string> Uncarried =>
+    public static TheoryData<string> NotVisibleAscii =>
     [
         "att_01K7QN" + NonAscii + "0000000000000000R",
         "att_01K7QN0000000000000000000R" + (char)13 + (char)10 + "X-Other: 1",
@@ -74,13 +74,13 @@ public class InsideARunTests
     ];
 
     /// <summary>
-    /// What a header cannot carry is not sent: a value with a character outside visible ASCII, a line break or a space
-    /// inside it among them. The request goes without the header, as it would with the variable unset, and one line on
-    /// stderr names the variable and never its value.
+    /// A value that is not all visible ASCII is not sent: a non-ASCII letter, a line break or a space inside it among
+    /// them. The request goes without the header, as it would with the variable unset, and one line on stderr names the
+    /// variable and never its value.
     /// </summary>
     [Theory]
-    [MemberData(nameof(Uncarried))]
-    public async Task A_value_a_header_cannot_carry_is_not_sent_and_stderr_says_so(string named)
+    [MemberData(nameof(NotVisibleAscii))]
+    public async Task A_value_that_is_not_all_visible_ASCII_is_not_sent_and_stderr_says_so(string named)
     {
         using var run = new Run(new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = named });
 
@@ -90,7 +90,7 @@ public class InsideARunTests
         Assert.Null(Assert.Single(run.Requests).Attempt);
         var line = Assert.Single(run.Error.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
         Assert.Contains("JASON_ATTEMPT_ID", line, StringComparison.Ordinal);
-        Assert.Contains("cannot travel as a header", line, StringComparison.Ordinal);
+        Assert.Contains("is not all visible ASCII, so it is not sent", line, StringComparison.Ordinal);
         Assert.DoesNotContain("att_", line, StringComparison.Ordinal);
     }
 
