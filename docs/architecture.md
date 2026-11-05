@@ -1343,9 +1343,11 @@ simplicity) but does not outweigh the development leverage and richer domain-app
 here. TypeScript/Node remains suitable for surrounding components but not the selected
 deterministic core.
 
-The runtime is being ported to Rust in this repository, which supersedes the rejection of Rust as
-the core platform (REJ-PLAT-001). Until the port is complete, the C# runtime under `dotnet/` is
-the one released, and the baseline above is the one it is built on.
+The runtime is being rewritten in TypeScript in this repository, decided on 5 November 2026, which
+supersedes both the rejection of TypeScript/Node as the core platform (REJ-PLAT-001) and the port
+to Rust decided on 30 October 2026. Plugins stay JavaScript, under the contract the runtime
+enforces, whichever language the runtime is written in. Until the rewrite is complete, the C#
+runtime under `dotnet/` is the one released, and the baseline above is the one it is built on.
 
 ### 15.3 EF Core, Dapper, and Native AOT
 
@@ -1428,7 +1430,7 @@ future server or managed variants under different requirements.
 
 The repository is organised by deliverable, not by one language's convention, because it
 carries the runtime, the plugin marketplace and the skills together. The C# runtime sits under
-`dotnet/`, which keeps the root free for the Cargo workspace of the Rust port (15.2):
+`dotnet/`, which keeps the root free for the workspace of the TypeScript rewrite (15.2):
 
 ```text
 jason-ai/
@@ -1827,7 +1829,7 @@ architecture is explicitly revised with new evidence.
 | SUP-ORCH-001 | A daemon that scans workspaces and infers readiness/status from files. | A deterministic domain Runtime owns readiness and state transactionally. |
 | SUP-OSS-001 | Runtime, contracts, skills, and the public plugin mechanism remain open source; hosted provider capabilities remain external services. | DEC-OSS-003: the runtime, its source and everything else are open source under MIT. |
 | DEC-OSS-002 | Contracts, skills, the public plugin mechanism, documentation and the install path open (MIT) and published in `reply-team/jason-ai`, with the runtime released there as binaries without its source. | DEC-OSS-003: the runtime's source is open too, and developed in the same repository. |
-| REJ-PLAT-001 | Rejected: Go, TypeScript/Node, Rust, Java, or Python as the selected core Runtime platform, since none outweighed .NET's product fit and existing team leverage. | The runtime is being ported to Rust in this repository; until the port is complete, the C# runtime under `dotnet/` is the one released (DEC-PLAT-001, 15.2). |
+| REJ-PLAT-001 | Rejected: Go, TypeScript/Node, Rust, Java, or Python as the selected core Runtime platform, since none outweighed .NET's product fit and existing team leverage. | The runtime is being rewritten in TypeScript in this repository, which supersedes this rejection of TypeScript/Node and the Rust port before it; until the rewrite is complete, the C# runtime under `dotnet/` is the one released (DEC-PLAT-001, 15.2). |
 
 ### 20.2 Rejected under the accepted architecture
 
