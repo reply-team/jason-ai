@@ -119,8 +119,8 @@ nothing to break when an API version retires.
     "journal-forwarder": {
       "version": "1.0.1",
       "asset": "jason-plugin-journal-forwarder.zip",
-      "digest": "sha256:1604…daf0",
-      "recorded": { "1.0.0": "sha256:9239…545b", "1.0.1": "sha256:1604…daf0" }
+      "digest": "sha256:430e…8afa",
+      "recorded": { "1.0.0": "sha256:9239…545b", "1.0.1": "sha256:430e…8afa" }
     }
   }
 }
@@ -525,8 +525,8 @@ manifest names, before anything moves; the package it replaces is moved to `~/.j
 comes before `started` because no runtime is running there, so no package moves under a runtime and the new runtime's
 first load reads the new package. The packages it replaces are written to the ledger before the first of them moves, so
 a kill anywhere in the step is finished by the next `jason update apply`. A package the record does not know — built or
-edited on that machine, or, for Reply's package, a version before its list's first line, 0.3.2 — is left byte for byte,
-and so is one that is current, later than the release's, or cannot be read; a plugin that is not installed is not
+edited on that machine, or, for Reply's package, a version before its list's first line, 0.3.2 — is left byte for
+byte, and so is one that is current, later than the release's, or cannot be read; a plugin that is not installed is not
 placed. The apply prints one `plugins:` line for each package the release publishes: `plugins: reply 0.8.0 -> 0.9.0`,
 `plugins: reply 0.9.0 is current`, or why it was left as it is. A step resumed after a kill prints lines only for the
 packages its ledger names. A release the step cannot read again — the network gone after the swap — gives one line,

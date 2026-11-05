@@ -25,8 +25,8 @@
        item per package, carried for their content digest and their manifest's version and for nothing else
        (ReleasedPlugins): system.info says how each installed package stands against the release this runtime is. A
        directory glob and never a file list, so a file added to a package is in the binary; a path with a segment
-       starting with a dot is left out, as the digest and the release's zip leave it out. A test holds the carried set to
-       the tree and to the release's assets. -->
+       starting with a dot is left out, as the digest and the release's zip leave it out. A test holds the carried set
+       to the tree and to the release's assets. -->
   <ItemGroup>
     <EmbeddedResource Include="../../../plugins/reply/**/*" Exclude="../../../plugins/reply/**/.*;../../../plugins/reply/**/.*/**" LogicalName="ReleasedPlugins/reply/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
     <EmbeddedResource Include="../../../plugins/journal-forwarder/**/*" Exclude="../../../plugins/journal-forwarder/**/.*;../../../plugins/journal-forwarder/**/.*/**" LogicalName="ReleasedPlugins/journal-forwarder/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
