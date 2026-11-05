@@ -199,6 +199,30 @@ public class SubscriptionServiceTests
         Assert.True(early < before && before < from);
     }
 
+    /// <summary>
+    /// A line's moment is stamped when it is appended and its id when it is saved, so a writer that stamped earlier and
+    /// saved later holds a higher id and an earlier moment. The cursor goes to just before the first line at or after the
+    /// moment, never to the greatest line before it, so the line at the moment is handed again and so is the late one.
+    /// </summary>
+    [Fact]
+    public async Task A_line_stamped_before_the_moment_and_saved_after_a_line_at_it_never_carries_the_cursor_past_that_line()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("beta", Failed));
+        var early = LineAt(harness, Failed, Noon.AddHours(-3));
+        var atMoment = LineAt(harness, Failed, Noon.AddHours(-1));
+        var late = LineAt(harness, Failed, Noon.AddHours(-2));
+        var last = LineAt(harness, Failed, Noon);
+        await CursorAsync(harness, Failed, after: last);
+
+        await using var db = harness.Open();
+        var kind = await Service(harness, db).RewindAsync(Rewind(since: "2026-11-04T11:00:00Z"), Ct);
+
+        Assert.True(early < atMoment && atMoment < late && late < last);
+        Assert.Equal((await PublicIdOfAsync(harness, early), 3), (kind.Cursor, kind.Lag));
+        Assert.Equal([$"{Failed}|{early}|1"], await PositionsAsync(harness));
+    }
+
     [Fact]
     public async Task A_moment_before_the_journal_s_first_line_puts_the_cursor_at_the_start()
     {

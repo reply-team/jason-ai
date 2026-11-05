@@ -117,22 +117,29 @@ public sealed partial class SubscriptionService(JasonDbContext db, JournalWriter
         var cursor = await db.SubscriptionCursors.FirstOrDefaultAsync(row => row.Kind == kind, ct).ConfigureAwait(false)
             ?? throw DomainErrors.SubscriptionKindUnsubscribed(kind);
 
-        int target;
+        // The first line handed again: the one named, or the first written at or after the moment. A line's moment is
+        // stamped when it is appended and its id when it is saved, so ids and moments need not run together: the cursor
+        // goes to just before that first line, which may hand again a line stamped before the moment but never skips one
+        // stamped at or after it. With no line at or after the moment, the cursor goes to the head.
+        int? first;
         if (byLine)
         {
-            var line = await db.Journal
+            first = await db.Journal
                 .AsNoTracking()
                 .Where(entry => entry.PublicId == request.Line && entry.Kind == kind)
                 .Select(entry => (int?)entry.Id)
                 .FirstOrDefaultAsync(ct)
                 .ConfigureAwait(false)
                 ?? throw DomainErrors.SubscriptionLineNotFound(kind, request.Line!);
-            target = await db.Journal.Where(entry => entry.Id < line).MaxAsync(entry => (int?)entry.Id, ct).ConfigureAwait(false) ?? 0;
         }
         else
         {
-            target = await db.Journal.Where(entry => entry.Ts < since).MaxAsync(entry => (int?)entry.Id, ct).ConfigureAwait(false) ?? 0;
+            first = await db.Journal.Where(entry => entry.Ts >= since).MinAsync(entry => (int?)entry.Id, ct).ConfigureAwait(false);
         }
+
+        var target = first is { } from
+            ? await db.Journal.Where(entry => entry.Id < from).MaxAsync(entry => (int?)entry.Id, ct).ConfigureAwait(false) ?? 0
+            : await db.Journal.MaxAsync(entry => (int?)entry.Id, ct).ConfigureAwait(false) ?? 0;
 
         if (target > cursor.AfterLine)
         {

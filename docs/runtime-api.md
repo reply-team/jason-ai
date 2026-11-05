@@ -353,8 +353,10 @@ that is not that attempt does not call them.
   that keep its chain from starting, and the chain in flight.
 - `subscription.runs`: the records of one kind's chains, newest first: each handler's outcome, how the chain ended, and
   the envelope the last handler returned.
-- `subscription.rewind`: a person moves a kind's cursor back, to just before a line of the kind or to a moment, so the
-  chain hands those lines to its plugins again; never forward, and each rewind is a `subscription_cursor_rewound` line.
+- `subscription.rewind`: a person moves a kind's cursor back, to just before a line of the kind or to just before the
+  first line written at or after a moment, so the chain hands those lines to its plugins again; never forward, and each
+  rewind is a `subscription_cursor_rewound` line. A line is stamped before it is saved, so a line stamped before the
+  moment but saved after one at it is handed again too: a rewind may repeat a line and never skips one.
 
 ## What a program can read
 
