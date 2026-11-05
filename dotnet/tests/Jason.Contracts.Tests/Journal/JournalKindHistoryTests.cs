@@ -431,12 +431,13 @@ public sealed class JournalKindHistoryTests
     /// <summary>
     /// Every place a body describes a member, as a pointer with <c>*</c> for an array's index, and those it requires:
     /// through <c>properties</c>, <c>items</c>, every branch of <c>anyOf</c> and <c>allOf</c>, and <c>$ref</c> into the
-    /// body's <c>$defs</c>. Read against <paramref name="release"/>, the shape of the last published release's document,
-    /// a requirement is <see cref="Requirement.New"/> where an object whose own place the release never described makes
-    /// it, or where it lies inside a new branch: a branch of an <c>anyOf</c> the release had with at least one branch, at
-    /// an index the release's list did not reach, while every branch at an index the release had still says what the release's said there once every place the release never described
-    /// is set aside. Any other branch is the release's: every branch of an <c>allOf</c>, of a first <c>anyOf</c>, and of
-    /// a list one of whose release branches was moved or changed.
+    /// body's <c>$defs</c>. Read against <paramref name="release"/>, the shape of the last published release's
+    /// document, a requirement is <see cref="Requirement.New"/> where an object whose own place the release never
+    /// described makes it, or where it lies inside a new branch: a branch of an <c>anyOf</c> the release had with at
+    /// least one branch, at an index the release's list did not reach, while every branch at an index the release had
+    /// still says what the release's said there once every place the release never described is set aside. Any other
+    /// branch is the release's: every branch of an <c>allOf</c>, of a first <c>anyOf</c>, and of a list one of whose
+    /// release branches was moved or changed.
     /// </summary>
     private static Shape Places(JsonObject body, Shape? release = null)
     {

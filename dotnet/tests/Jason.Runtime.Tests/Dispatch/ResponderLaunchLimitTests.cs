@@ -416,6 +416,32 @@ public class ResponderLaunchLimitTests
         Assert.Equal(2, await db.Journal.AsNoTracking().CountAsync(e => e.WorkItemId == item.PublicId && e.Kind == JournalKinds.WorkItemWaiting && e.Key == null, Ct));
     }
 
+    /// <summary>
+    /// A hold numbers no resumption: a fresh responder held at the limit and let go at midnight runs with nothing to be
+    /// told, and when that run yields and its wait is released, the next run is told it is the first resumption, the
+    /// hold's released wait, which has no attempt, counting for nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_hold_released_before_a_yield_is_not_counted_among_the_item_s_resumptions()
+    {
+        using var harness = Harness(limit: 2);
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, Today.AddHours(1), Today.AddHours(2));
+        var held = await QueuedAsync(harness, campaign);
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        harness.Clock.Now = new DateTimeOffset(Tomorrow.AddHours(1));
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+        Assert.Null(Assert.Single(await harness.ClaimAsync(Ct)).Resumption);
+
+        var run = await RunsAndYieldsAsync(harness, held, until: Tomorrow.AddHours(2));
+        harness.Clock.Now = new DateTimeOffset(Tomorrow.AddHours(2));
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+        var resumption = Assert.IsType<Resumption>(Assert.Single(await harness.ClaimAsync(Ct)).Resumption);
+
+        Assert.Equal((run, 1, WaitReleaseReason.MomentReached), (resumption.PreviousAttemptId, resumption.ResumptionNumber, resumption.WokeBecause));
+    }
+
     /// <summary>The claimed run follows the yield's wait: told its attempt and its reason, numbered as its first resumption, and named on that wait.</summary>
     private static async Task AssertResumedFromTheYieldAsync(DispatchHarness harness, int itemId, string yieldedAttempt, ClaimedWork work)
     {
