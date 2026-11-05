@@ -1,0 +1,7 @@
+{
+  "kind": "profile_revised",
+  "version": 1,
+  "case": "a revision that moved the host and the program",
+  "body": { "key": "local-agent", "old": { "revision": 2 }, "new": { "revision": 3, "fields": ["host", "program"] } },
+  "expect": "valid"
+}

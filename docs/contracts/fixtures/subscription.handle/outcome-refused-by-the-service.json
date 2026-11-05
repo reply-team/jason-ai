@@ -1,0 +1,30 @@
+{
+  "operation": "subscription.handle",
+  "version": 1,
+  "case": "the service refused the handler's credential: the chain ends at this handler for this line",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "code": "ticket_service_unauthorized",
+      "class": "permanent",
+      "message": "The ticket service refused the token.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": {
+      "duration_ms": 120,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 1
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "class": "permanent",
+    "retriable": false
+  }
+}

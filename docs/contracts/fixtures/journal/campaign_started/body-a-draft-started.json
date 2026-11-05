@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_started",
+  "version": 1,
+  "case": "a draft is started for the first time",
+  "body": { "key": "status", "old": "draft", "new": "active" },
+  "expect": "valid"
+}

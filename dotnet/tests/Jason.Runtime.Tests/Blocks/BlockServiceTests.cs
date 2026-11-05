@@ -183,8 +183,11 @@ public partial class BlockServiceTests
     [Theory]
     [InlineData(ActorType.Role, "planner")]
     [InlineData(ActorType.Attempt, "att_01K52JR0000000000000000001")]
+    [InlineData(ActorType.Plugin, "acme-forwarder")]
     public async Task Only_a_person_clears_a_block(ActorType type, string id)
     {
+        // A plugin is admitted as an actor only in the scope its own door opened, and refused there all the same.
+        using var door = type == ActorType.Plugin ? ActorScope.ForPlugin(id) : null;
         using var harness = new DispatchHarness(Noon);
         var campaign = await CampaignAsync(harness);
         var block = await BlockAsync(harness, campaign, openedAt: Noon, parked: 1);
@@ -586,7 +589,7 @@ public partial class BlockServiceTests
         var id = await BlockAsync(harness, campaign, openedAt: Noon, parked: 3);
         var recorder = new Recorder();
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, harness.DatabaseFile).AddInterceptors(recorder);
+        JasonDbContext.Configure(builder, harness.DatabaseFile, JournalLines.Strict).AddInterceptors(recorder);
         await using (var db = new JasonDbContext(builder.Options))
         {
             await NewWorkItems(db, Noon).ListAsync(new WorkItemListRequest(null, null, null, null, null, null, null, null, ProviderBlockId: id), Ct);
@@ -704,7 +707,7 @@ public partial class BlockServiceTests
     {
         var recorder = new Recorder();
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, harness.DatabaseFile).AddInterceptors(recorder);
+        JasonDbContext.Configure(builder, harness.DatabaseFile, JournalLines.Strict).AddInterceptors(recorder);
         await using (var db = new JasonDbContext(builder.Options))
         {
             await NewService(db, Noon).ListAsync(request, Ct);
@@ -860,7 +863,7 @@ public partial class BlockServiceTests
     private static JasonDbContext Impatient(DispatchHarness harness)
     {
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, harness.DatabaseFile).UseSqlite($"Data Source={harness.DatabaseFile};Default Timeout=1");
+        JasonDbContext.Configure(builder, harness.DatabaseFile, JournalLines.Strict).UseSqlite($"Data Source={harness.DatabaseFile};Default Timeout=1");
         return new JasonDbContext(builder.Options);
     }
 

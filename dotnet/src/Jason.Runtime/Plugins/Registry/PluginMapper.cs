@@ -52,7 +52,11 @@ public static class PluginMapper
                             executable.Launch.Count == 0 ? null : executable.Launch))],
                         plugin.Grants.Exec),
                 manifest.Capabilities.Http is null ? null : new ListCapabilityDto(manifest.Capabilities.Http.Hosts, plugin.Grants.Http),
-                manifest.Capabilities.Env is null ? null : new ListCapabilityDto(manifest.Capabilities.Env.Variables, plugin.Grants.Env)),
+                manifest.Capabilities.Env is null ? null : new ListCapabilityDto(manifest.Capabilities.Env.Variables, plugin.Grants.Env),
+                manifest.Capabilities.Api is null ? null : new ListCapabilityDto(manifest.Capabilities.Api.Families, plugin.Grants.Api))
+            {
+                Subscriptions = manifest.Subscriptions.Count == 0 ? null : new ListCapabilityDto(manifest.Subscriptions, plugin.Grants.Subscriptions),
+            },
             new PluginLimitsDto(plugin.Limits.TimeoutMs, plugin.Limits.MemoryMb),
 
             // A copy, because the DTO is serialized on another thread than the snapshot it came from and a
@@ -74,7 +78,10 @@ public static class PluginMapper
                 candidate.Id,
                 candidate.Status,
                 [.. candidate.Problems.Select(ToDto)]))],
-            [.. report.Routes.Select(route => new RouteProblemDto(route.Field, route.Code, route.Message))]);
+            [.. report.Routes.Select(route => new RouteProblemDto(route.Field, route.Code, route.Message))])
+        {
+            Subscriptions = [.. report.Subscriptions.Select(problem => new SubscriptionProblemDto(problem.Field, problem.Code, problem.Message))],
+        };
     }
 
     /// <summary>
@@ -92,6 +99,7 @@ public static class PluginMapper
                 .SelectMany(candidate => candidate.Problems.Select(problem =>
                     new ErrorDetail(Field(candidate.Directory, problem.Path), problem.Code, problem.Message))),
             .. report.Routes,
+            .. report.Subscriptions,
             .. report.Settings ?? [],
         ];
     }

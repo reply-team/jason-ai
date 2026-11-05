@@ -24,8 +24,14 @@ public sealed record ExecCapabilityDto(IReadOnlyList<ExecutableDto> Requested, I
 
 public sealed record ListCapabilityDto(IReadOnlyList<string> Requested, IReadOnlyList<string> Granted);
 
-/// <summary>Requested against granted, for every capability: declaration is not permission, and it shows.</summary>
-public sealed record PluginCapabilitiesDto(ExecCapabilityDto? Exec, ListCapabilityDto? Http, ListCapabilityDto? Env);
+/// <summary>
+/// Requested against granted, for every capability: declaration is not permission, and it shows. <c>Subscriptions</c> is
+/// the journal kinds the manifest declares against the kinds the settings grant, null when it declares none.
+/// </summary>
+public sealed record PluginCapabilitiesDto(ExecCapabilityDto? Exec, ListCapabilityDto? Http, ListCapabilityDto? Env, ListCapabilityDto? Api = null)
+{
+    public ListCapabilityDto? Subscriptions { get; init; }
+}
 
 /// <summary>
 /// The contract versions a plugin declares: the plugin-host protocol, the canonical operations (for a notification
@@ -69,16 +75,26 @@ public sealed record CandidateDto(string Directory, string? Id, CandidateStatus 
 public sealed record RouteProblemDto(string Route, string Code, string Message);
 
 /// <summary>
+/// One thing the last load refused in the order of a journal kind's subscribers, named by the setting as an operator
+/// edits it: <c>Subscriptions:Order:&lt;kind&gt;[i]</c>, or the part of the section its validator refused.
+/// </summary>
+public sealed record SubscriptionProblemDto(string Setting, string Code, string Message);
+
+/// <summary>
 /// What the last load made of every candidate, whether or not it ended in a swap. <c>Routes</c> is its own list
 /// rather than a candidate named "routes": a candidate is a package, and a reader of this report should not have
-/// to know that one entry in a list of packages is a different kind of thing.
+/// to know that one entry in a list of packages is a different kind of thing. <c>Subscriptions</c> is the same again
+/// for the order of each journal kind's subscribers.
 /// </summary>
 public sealed record ReloadReportDto(
     DateTimeOffset At,
     SnapshotSource Source,
     bool Activated,
     IReadOnlyList<CandidateDto> Candidates,
-    IReadOnlyList<RouteProblemDto> Routes);
+    IReadOnlyList<RouteProblemDto> Routes)
+{
+    public IReadOnlyList<SubscriptionProblemDto> Subscriptions { get; init; } = [];
+}
 
 /// <summary>
 /// The whole registry: a small thing, answered in one piece and never paged. <c>RoutingSnapshotId</c> is the

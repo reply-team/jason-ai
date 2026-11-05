@@ -3,6 +3,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -53,8 +54,10 @@ public class ReloadOrderingTests
             loader,
             routes,
             new RouteActivator(db, new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()), routes, TimeProvider.System),
+            new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionsOptions>(new SubscriptionsOptions())),
             new ReloadGate(),
             new SettingsFile(new ConfigurationBuilder().Build()),
+            TimeProvider.System,
             NullLogger<PluginService>.Instance);
 
         await Assert.ThrowsAsync<RefusedSaveException>(() => service.ReloadAsync(new PluginReloadRequest(null, null), Ct));
@@ -98,6 +101,7 @@ public class ReloadOrderingTests
             new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()),
             routes,
             TimeProvider.System));
+        services.AddSingleton(new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionsOptions>(new SubscriptionsOptions())));
         await using var provider = services.BuildServiceProvider();
 
         var startup = new PluginStartupLoader(

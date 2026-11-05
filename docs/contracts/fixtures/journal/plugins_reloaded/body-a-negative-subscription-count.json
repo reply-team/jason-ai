@@ -1,0 +1,7 @@
+{
+  "kind": "plugins_reloaded",
+  "version": 1,
+  "case": "a count of chains is never below zero",
+  "body": { "key": "snp_01JC0000000000000000000007", "old": null, "new": { "snapshot_id": "snp_01JC0000000000000000000007", "source": "startup", "plugins": [], "routes": { "snapshot_id": "rts_01JC0000000000000000000008", "global_default": null, "override_count": 0, "campaign_route_count": 0 }, "subscriptions": { "kind_count": -1, "subscriber_count": 0 } } },
+  "expect": { "invalid": [{ "pointer": "/new/subscriptions/kind_count", "reason": "minimum" }] }
+}

@@ -183,7 +183,8 @@ internal sealed partial class NamesMet
     private static partial Regex ReleaseTag();
 
     /// <summary>
-    /// Every <c>plugin_id</c>, every <c>role</c> and, in a log event, every plugin the runtime's line names. A route's
+    /// Every <c>plugin_id</c>, every <c>role</c>, the id of every actor that is a plugin and, in a log event, every plugin
+    /// the runtime's line names. A route's
     /// binding, wherever a section carries one, is not read: its keys are whatever the plugin's binding names, and a key
     /// called <c>role</c> there names no role.
     /// </summary>
@@ -196,6 +197,12 @@ internal sealed partial class NamesMet
                     && Text(members[property]) is { } named && LoggedNames.NamesAPlugin(template, named))
                 {
                     Add(AliasKind.Plugin, named);
+                }
+
+                // An actor a handler wrote as: its id is its plugin's.
+                if (Text(members[ActorType]) == PluginActor)
+                {
+                    Add(AliasKind.Plugin, Text(members[ActorId]));
                 }
 
                 foreach (var (key, value) in members)
@@ -228,6 +235,13 @@ internal sealed partial class NamesMet
 
     /// <summary>Where a line of the log carries its message template.</summary>
     private const string LogTemplateKey = "@mt";
+
+    /// <summary>An actor's members, and the type that says the actor is a plugin.</summary>
+    private const string ActorType = "type";
+
+    private const string ActorId = "id";
+
+    private const string PluginActor = "plugin";
 
     /// <summary>A route's binding, whose keys are the plugin's.</summary>
     private const string Binding = "binding";

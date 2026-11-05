@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_updated",
+  "version": 1,
+  "case": "a work item names an execution profile",
+  "body": { "key": "execution_profile", "old": null, "new": "careful" },
+  "expect": "valid"
+}

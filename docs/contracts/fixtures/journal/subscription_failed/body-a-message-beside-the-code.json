@@ -1,0 +1,26 @@
+{
+  "kind": "subscription_failed",
+  "version": 1,
+  "case": "the failure's message is never kept",
+  "body": {
+    "key": "workitem_failed",
+    "old": null,
+    "new": {
+      "kind": "workitem_failed",
+      "line": "jrn_01JC0000000000000000000042",
+      "plugin_id": "example-tickets",
+      "class": "permanent",
+      "code": "ticket_service_unauthorized",
+      "attempts": 1,
+      "message": "The ticket service refused the token."
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/new/message",
+        "reason": "additional_properties"
+      }
+    ]
+  }
+}

@@ -61,5 +61,26 @@ public static class JournalRenderers
         return RenderText.WithCursor(table.Render(), page.NextCursor);
     }
 
+    /// <summary>
+    /// A page of the kinds the runtime writes itself, one row each: the kind, the release that first wrote it, whether a
+    /// plugin may subscribe to it, and what a line of it records. The entities and the body's schema stay in the JSON.
+    /// </summary>
+    public static string? KindList(string json)
+    {
+        var page = RenderText.Read<Page<JournalKindDto>>(json);
+        if (page?.Items is null)
+        {
+            return null;
+        }
+
+        var table = new HumanTable("KIND", "SINCE", "SUBSCRIBABLE", "SUMMARY");
+        foreach (var kind in page.Items)
+        {
+            table.Row(kind.Kind, kind.Since, kind.Subscribable ? "yes" : "no", kind.Summary);
+        }
+
+        return RenderText.WithCursor(table.Render(), page.NextCursor);
+    }
+
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : RenderText.Shown(value));
 }

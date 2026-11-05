@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_updated",
+  "version": 1,
+  "case": "a campaign sets its own review cadence",
+  "body": { "key": "review_seconds", "old": null, "new": 3600 },
+  "expect": "valid"
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_updated",
+  "version": 1,
+  "case": "a role's work is given a result format",
+  "body": { "key": "result_format", "old": null, "new": { "type": "object", "required": ["verdict"], "properties": { "verdict": { "type": "string" } } } },
+  "expect": "valid"
+}

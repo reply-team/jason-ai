@@ -5,6 +5,7 @@ using Jason.Runtime.Approvals;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Journal;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Approvals;
@@ -100,12 +101,13 @@ public class StandingApprovalServiceTests
     }
 
     /// <summary>
-    /// Only a person sets or takes back a standing approval, and a request has to name them: a role or a run is refused
+    /// Only a person sets or takes back a standing approval, and a request has to name them: a role, a run or a plugin in its own door's scope is refused
     /// the way it is refused a decision, and a request with no actor, or one naming nobody, is refused for want of a name.
     /// </summary>
     [Theory]
     [InlineData(ActorType.Role, "manager", "approval_not_human")]
     [InlineData(ActorType.Attempt, "att_01K52JR0000000000000000001", "approval_not_human")]
+    [InlineData(ActorType.Plugin, "acme-forwarder", "approval_not_human")]
     [InlineData(ActorType.Human, "  ", "actor_required")]
     [InlineData(null, null, "actor_required")]
     [Critical(Family.S2, "only a named person sets a standing approval")]
@@ -116,6 +118,8 @@ public class StandingApprovalServiceTests
         var campaign = await SeedAsync(db);
         var actor = type is { } kind ? new ActorRef(kind, id) : null;
 
+        // A plugin is admitted as an actor only in the scope its own door opened, and refused there all the same.
+        using var door = type == ActorType.Plugin ? ActorScope.ForPlugin(id!) : null;
         var set = await Assert.ThrowsAsync<InvalidRequestException>(() => Service(db).SetAsync(Set(campaign) with { Actor = actor }, Ct));
         var unset = await Assert.ThrowsAsync<InvalidRequestException>(
             () => Service(db).UnsetAsync(new ApprovalUnsetStandingRequest(campaign.PublicId, "interested", actor), Ct));
@@ -195,7 +199,18 @@ public class StandingApprovalServiceTests
         var service = new StandingApprovalService(db, new JournalWriter(clock), clock);
         var spent = await service.SetAsync(Set(campaign) with { MaxReleases = 1 }, Ct);
         await service.SetAsync(Set(campaign) with { Category = "not_now", ExpiresAt = new DateTimeOffset(Noon.AddHours(1)) }, Ct);
-        new JournalWriter(clock).Append(db, Actors.Dispatcher, JournalKinds.ApprovalStandingApplied, campaign, key: spent.LineId, updated: new JsonObject());
+        var released = WorkItemFactory.NewProviderOp(campaign, "conversation.reply", Noon);
+        released.Status = WorkItemStatus.Succeeded;
+        db.WorkItems.Add(released);
+        await db.SaveChangesAsync(Ct);
+        new JournalWriter(clock).AppendDocumented(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.ApprovalStandingApplied,
+            campaign,
+            key: spent.LineId,
+            with: new JsonObject { ["standing"] = spent.LineId, ["category"] = "interested" },
+            workItem: released);
         await db.SaveChangesAsync(Ct);
         clock.Advance(TimeSpan.FromHours(2));
 

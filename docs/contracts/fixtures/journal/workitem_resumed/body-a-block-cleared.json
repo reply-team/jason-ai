@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_resumed",
+  "version": 1,
+  "case": "the provider block an item was parked on cleared",
+  "body": { "key": null, "old": null, "new": { "because": "block_cleared" } },
+  "expect": "valid"
+}

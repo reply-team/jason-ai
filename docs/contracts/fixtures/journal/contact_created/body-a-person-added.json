@@ -1,0 +1,7 @@
+{
+  "kind": "contact_created",
+  "version": 1,
+  "case": "a person is added to the directory",
+  "body": { "key": "cnt_01JC0000000000000000000001", "old": null, "new": null },
+  "expect": "valid"
+}

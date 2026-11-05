@@ -17,7 +17,8 @@
       "source": "startup",
       "activated": true,
       "candidates": [],
-      "routes": []
+      "routes": [],
+      "subscriptions": []
     },
     "activated": true
   }

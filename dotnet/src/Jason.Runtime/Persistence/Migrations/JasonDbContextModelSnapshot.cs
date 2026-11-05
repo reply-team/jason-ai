@@ -1956,6 +1956,139 @@ namespace Jason.Runtime.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.SubscriptionCursor", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AfterLine")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("after_line");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("revision");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_subscription_cursors");
+
+                    b.HasIndex("Kind")
+                        .IsUnique()
+                        .HasDatabaseName("ix_subscription_cursors_kind");
+
+                    b.ToTable("subscription_cursors", (string)null);
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.SubscriptionRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("Envelope")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("envelope_json");
+
+                    b.Property<string>("FailedPluginId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("failed_plugin_id");
+
+                    b.Property<string>("FailureClass")
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("failure_class");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("failure_code");
+
+                    b.Property<string>("Handlers")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("handlers_json");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
+
+                    b.Property<int>("LineId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("line_id");
+
+                    b.Property<string>("LinePublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("line_public_id");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<DateTime?>("RetryAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("retry_at");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_subscription_runs");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_subscription_runs_public_id");
+
+                    b.HasIndex("Kind", "Id")
+                        .HasDatabaseName("ix_subscription_runs_kind_id");
+
+                    b.HasIndex(new[] { "Kind" }, "ix_subscription_runs_one_running_per_kind")
+                        .IsUnique()
+                        .HasDatabaseName("ix_subscription_runs_one_running_per_kind")
+                        .HasFilter("status = 'running'");
+
+                    b.ToTable("subscription_runs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_subscription_runs_envelope_json", "envelope_json IS NULL OR json_valid(envelope_json)");
+
+                            t.HasCheckConstraint("ck_subscription_runs_handlers_json", "json_valid(handlers_json)");
+                        });
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Suppression", b =>
                 {
                     b.Property<int>("Id")

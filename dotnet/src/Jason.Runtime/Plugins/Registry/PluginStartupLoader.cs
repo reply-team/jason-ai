@@ -3,6 +3,7 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -63,16 +64,19 @@ public sealed class PluginStartupLoader(
                 return;
             }
 
-            // The same all-or-nothing rule a reload follows, and for the same reason: a bad route leaves both
-            // registries empty rather than a plugin set active with routes nobody checked. The report names what is
-            // wrong, and an unmeasured binding beside a real problem is not.
-            if (candidate!.Snapshot is null)
+            // The same all-or-nothing rule a reload follows, and for the same reason: a bad route or a bad order
+            // leaves both registries empty rather than a plugin set active with routes or chains nobody checked. The
+            // report names what is wrong, and an unmeasured binding beside a real problem is not.
+            var chains = scope.ServiceProvider.GetRequiredService<SubscriptionOrderSource>().Build(load.Snapshot);
+            if (candidate!.Snapshot is null || chains.Chains is null)
             {
                 var named = candidate.Unmeasured ? candidate.Problems : candidate.Refusals;
-                registry.Record(load.Report with { Activated = false, Routes = named });
-                StartupRejected(logger, named.Count, null);
+                registry.Record(load.Report with { Activated = false, Routes = named, Subscriptions = chains.Problems });
+                StartupRejected(logger, named.Count + chains.Problems.Count, null);
                 return;
             }
+
+            var snapshot = load.Snapshot with { Subscriptions = chains.Chains };
 
             // The runtime is the actor: nobody asked for this load, the process starting is what caused it. The
             // record is written before the swap, like a reload's: a snapshot nobody could write down is not active.
@@ -81,11 +85,16 @@ public sealed class PluginStartupLoader(
                 scope.ServiceProvider.GetRequiredService<JournalWriter>(),
                 db,
                 Actors.Runtime,
-                load.Snapshot,
+                snapshot,
                 candidate.Snapshot,
                 reason: null);
+            await SubscriptionCursors.ReconcileAsync(
+                db,
+                chains.Chains,
+                scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime,
+                cancellationToken).ConfigureAwait(false);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            registry.Replace(load.Snapshot, load.Report);
+            registry.Replace(snapshot, load.Report);
             scope.ServiceProvider.GetRequiredService<RouteActivator>().Activate(candidate.Snapshot);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

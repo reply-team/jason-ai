@@ -8,6 +8,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.WorkItems;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -39,6 +40,7 @@ public static class DispatcherModule
             .AddScoped<Resumer>()
             .AddScoped<Claimer>()
             .AddScoped<Notifier>()
+            .AddScoped<SubscriptionScan>()
             .AddScoped<StartupRecovery>();
 
         // One implementation per host and no fallback, so a profile naming a host this build cannot start is a
@@ -86,6 +88,7 @@ public static class DispatcherModule
         services.AddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
         services.AddSingleton(Seam<InboundOptions>(InboundOptions.Section));
         services.AddSingleton(Seam<ResponderOptions>(ResponderOptions.Section));
+        services.AddSingleton(Seam<SubscriptionsOptions>(SubscriptionsOptions.Section));
 
         // Named here because the summon creates work through the work-item service, and that service reads the
         // plugin section for a provider item's timeout floor. The plugin module registers the same seam; either
@@ -106,6 +109,13 @@ public static class DispatcherModule
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<EventReader>>()));
         services.AddHostedService(provider => provider.GetRequiredService<EventReader>());
+
+        // The subscribed kinds' chains run off the scan: one runner, which is both what the scan offers a kind to and the
+        // service that runs its chains. It hands lines to handlers through the invoker the plugin module registers; a test
+        // registers its own first.
+        services.TryAddScoped<ISubscriptionInvoker, PluginSubscriptionInvoker>();
+        services.AddSingleton<SubscriptionRunner>();
+        services.AddHostedService(provider => provider.GetRequiredService<SubscriptionRunner>());
 
         // Which skipped campaigns have been said, once per campaign and reason in the life of the process.
         services.AddSingleton<InboundSkips>();

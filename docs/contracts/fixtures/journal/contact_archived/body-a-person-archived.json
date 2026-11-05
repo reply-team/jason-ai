@@ -1,0 +1,7 @@
+{
+  "kind": "contact_archived",
+  "version": 1,
+  "case": "a person is archived",
+  "body": { "key": "cnt_01JC0000000000000000000002", "old": null, "new": null },
+  "expect": "valid"
+}

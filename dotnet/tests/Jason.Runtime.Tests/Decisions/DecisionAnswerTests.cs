@@ -28,8 +28,11 @@ public class DecisionAnswerTests
     [Critical(Family.S2, "a question is a person's to answer")]
     [InlineData(ActorType.Role, "researcher")]
     [InlineData(ActorType.Attempt, "att_live")]
+    [InlineData(ActorType.Plugin, "acme-forwarder")]
     public async Task Only_a_person_can_answer(ActorType type, string id)
     {
+        // A plugin is admitted as an actor only in the scope its own door opened, and refused there all the same.
+        using var door = type == ActorType.Plugin ? ActorScope.ForPlugin(id) : null;
         using var database = new TestDatabase();
         await using var db = database.Open();
         var decision = await RaiseAsync(db);

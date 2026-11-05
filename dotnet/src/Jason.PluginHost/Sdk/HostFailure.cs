@@ -41,6 +41,23 @@ public static partial class HostFailure
         var externalIds = ReadExternalIds(engine, specification);
         var block = ReadBlock(engine, specification, failureClass);
 
+        return Build(engine, failureClass, code, message, details, externalIds, block);
+    }
+
+    /// <summary>
+    /// A failure as <c>host.fail</c> builds it, for the host's own functions to throw where the plugin stands — so a
+    /// plugin catches it as it would one of its own, and an uncaught one is read back by <see cref="TryRead"/>.
+    /// </summary>
+    internal static ObjectInstance Build(
+        Engine engine,
+        string failureClass,
+        string code,
+        string message,
+        JsonNode? details,
+        JsonNode? externalIds = null,
+        JsonNode? block = null)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
         var error = engine.Intrinsics.Error.Construct(message);
         error.FastSetDataProperty("name", Name);
         error.FastSetDataProperty("class", failureClass);
@@ -50,6 +67,9 @@ public static partial class HostFailure
         error.FastSetDataProperty("block", JsJson.FromJson(engine, block));
         return error;
     }
+
+    /// <summary>Whether <paramref name="code"/> is spelled as a failure's code must be: lower snake_case, at most 64 characters.</summary>
+    internal static bool IsCode(string code) => CodePattern().IsMatch(code);
 
     /// <summary>
     /// Whether what the plugin threw is one of ours. Everything is checked again here rather than trusted:

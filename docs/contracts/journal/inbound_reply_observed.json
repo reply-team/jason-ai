@@ -1,0 +1,61 @@
+{
+  "kind": "inbound_reply_observed",
+  "version": 1,
+  "since": "0.4.0",
+  "summary": "A conversation thread of a campaign moved because the other side wrote, as the inbound read of the campaign or a read of the account's provider events found it.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "sometimes" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": { "/new/event_id": "0.12.0", "/new/attributed_by": "0.16.0" },
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^sha256:", "description": "A hash over the plugin, the thread and the moment it moved: one move is said once in a campaign, whichever read found it." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["plugin", "thread", "channel", "last_activity_at", "unread", "has_meeting_intent", "contact_id"],
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin the thread was read through." },
+          "thread": { "type": "string", "minLength": 1, "description": "The provider's identifier for the thread." },
+          "channel": { "type": ["null", "string"], "enum": ["email", "linkedin", "other", null], "description": "The thread's channel, or null where the provider does not say." },
+          "last_activity_at": { "type": "string", "format": "date-time", "description": "When the thread last moved, as the provider stamps it." },
+          "unread": { "type": ["null", "boolean"], "description": "Whether the provider holds the thread as unread, or null where it does not say." },
+          "has_meeting_intent": { "type": ["null", "boolean"], "description": "The provider's own judgement that the thread asks for a meeting, or null where it makes none." },
+          "contact_id": { "type": ["null", "string"], "pattern": "^cnt_", "description": "The campaign's contact the provider's person is pinned to, or null where none is." },
+          "event_id": { "type": "string", "pattern": "^evt_", "description": "The stored provider event the move was read from; absent where the inbound read found it." },
+          "attributed_by": { "type": "string", "enum": ["campaign_pin", "contact_pin"], "description": "Which rule found that the provider event concerns the campaign: the campaign's own pinned identifier, or the contact's." }
+        }
+      }
+    },
+    "anyOf": [
+      {
+        "description": "Found by the inbound read of the campaign.",
+        "properties": {
+          "new": {
+            "not": {
+              "anyOf": [
+                { "required": ["event_id"] },
+                { "required": ["attributed_by"] }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "description": "Found by a read of the account's provider events.",
+        "properties": {
+          "new": { "required": ["event_id"] }
+        }
+      }
+    ]
+  }
+}

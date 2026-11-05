@@ -1,0 +1,7 @@
+{
+  "kind": "context_updated",
+  "version": 1,
+  "case": "a context key changes to a structured value",
+  "body": { "key": "offer", "old": "a demo", "new": { "kind": "trial", "days": 14 } },
+  "expect": "valid"
+}

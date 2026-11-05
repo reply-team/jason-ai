@@ -1,0 +1,7 @@
+{
+  "kind": "contact_updated",
+  "version": 1,
+  "case": "a person's title and time zone change",
+  "body": { "key": "cnt_01JC0000000000000000000001", "old": null, "new": ["title", "time_zone"] },
+  "expect": "valid"
+}

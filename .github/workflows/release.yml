@@ -142,7 +142,11 @@ jobs:
     # macOS and Windows are not legs here: their jobs, below, hold the Apple identity and the Azure sign-in, and a runner
     # is handed every secret its job names, so the job that runs the tests names none.
     steps:
+      # The whole history and its tags, as the suite's checkout in ci.yml has them: the journal's kind documents are
+      # compared with the last published release's, read from its tag, and at a release's tag that is the one before it.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-dotnet
         with:

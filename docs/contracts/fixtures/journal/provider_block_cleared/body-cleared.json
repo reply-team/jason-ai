@@ -1,0 +1,11 @@
+{
+  "kind": "provider_block_cleared",
+  "version": 1,
+  "case": "a block cleared",
+  "body": {
+    "key": "blk_01JC0000000000000000000008",
+    "old": null,
+    "new": { "provider_block_id": "blk_01JC0000000000000000000008" }
+  },
+  "expect": "valid"
+}

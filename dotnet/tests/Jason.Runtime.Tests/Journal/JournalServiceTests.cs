@@ -221,7 +221,7 @@ public class JournalServiceTests
         var service = NewJournalService(db, clock);
         var kept = await service.AppendAsync(new JournalAppendRequest(mine, "observation", null, null, null, null), Ct);
         await service.AppendAsync(new JournalAppendRequest(theirs, "observation", null, null, null, null), Ct);
-        new JournalWriter(clock).Append(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null, key: "email");
+        new JournalWriter(clock).AppendDocumented(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null);
         await db.SaveChangesAsync(Ct);
 
         var scoped = await service.ListAsync(new JournalListRequest(mine, null, "observation", null, null, null), Ct);
@@ -292,8 +292,8 @@ public class JournalServiceTests
         db.Attempts.Add(attempt);
         await db.SaveChangesAsync(Ct);
 
-        writer.Append(db, Actors.Runtime, JournalKinds.WorkItemScheduled, campaign: null, key: "attempt", workItem: mine, attempt: attempt);
-        writer.Append(db, Actors.Runtime, JournalKinds.WorkItemExpired, campaign: null, key: "due_at", workItem: other);
+        writer.AppendDocumented(db, Actors.Runtime, JournalKinds.WorkItemScheduled, campaign: null, workItem: mine, attempt: attempt);
+        writer.AppendDocumented(db, Actors.Runtime, JournalKinds.WorkItemExpired, campaign: null, workItem: other);
         await db.SaveChangesAsync(Ct);
 
         var page = await service.ListAsync(new JournalListRequest(null, "wi_MINE", null, null, null, null), Ct);
@@ -337,13 +337,24 @@ public class JournalServiceTests
             LockUntil = Noon.UtcDateTime.AddHours(1),
         };
         db.Attempts.Add(attempt);
+        var enrolled = new Attempt
+        {
+            PublicId = "att_E",
+            WorkItem = enrol,
+            Number = 1,
+            Command = WorkItemKind.AiRole,
+            Status = AttemptStatus.Succeeded,
+            ClaimedAt = Noon.UtcDateTime,
+            LockUntil = Noon.UtcDateTime.AddHours(1),
+        };
+        db.Attempts.Add(enrolled);
         await db.SaveChangesAsync(Ct);
 
-        writer.Append(db, Actors.ForAttempt(attempt), JournalKinds.ContactUpdated, campaign: null, key: "cnt_ADA", contact: ada);
-        writer.Append(db, Actors.Runtime, JournalKinds.WorkItemSucceeded, campaign: null, workItem: enrol);
-        writer.Append(db, new ActorRef(ActorType.Human, "vitaliy"), JournalKinds.ApprovalApproved, campaign: null, workItem: enrol);
-        writer.Append(db, Actors.Dispatcher, JournalKinds.InboundReplyObserved, campaign, key: "k", contactId: ada.Id);
-        writer.Append(db, Actors.Runtime, JournalKinds.ContactCreated, campaign: null, key: "cnt_GRACE", contact: grace);
+        writer.AppendDocumented(db, Actors.ForAttempt(attempt), JournalKinds.ContactUpdated, campaign: null, key: "cnt_ADA", contact: ada);
+        writer.AppendDocumented(db, Actors.Runtime, JournalKinds.WorkItemSucceeded, campaign: null, workItem: enrol, attempt: enrolled);
+        writer.AppendDocumented(db, new ActorRef(ActorType.Human, "operator"), JournalKinds.ApprovalApproved, campaign: null, workItem: enrol);
+        writer.AppendDocumented(db, Actors.Dispatcher, JournalKinds.InboundReplyObserved, campaign, contactId: ada.Id);
+        writer.AppendDocumented(db, Actors.Runtime, JournalKinds.ContactCreated, campaign: null, key: "cnt_GRACE", contact: grace);
         await db.SaveChangesAsync(Ct);
 
         var walked = new List<JournalEntryDto>();

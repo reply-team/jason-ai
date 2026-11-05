@@ -1,0 +1,17 @@
+{
+  "kind": "approval_standing_applied",
+  "version": 1,
+  "case": "a release always names the verdict it answers",
+  "body": {
+    "key": "jrn_01JC0000000000000000000007",
+    "old": null,
+    "new": {
+      "id": "apr_01JC0000000000000000000006",
+      "operation": "conversation.reply",
+      "subject_hash": "sha256:9f2c4e1a7b3d5f60817263544536271809a1b2c3d4e5f60718293a4b5c6d7e8f",
+      "standing": "jrn_01JC0000000000000000000007",
+      "category": "interested"
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/verdict", "reason": "required" }] }
+}

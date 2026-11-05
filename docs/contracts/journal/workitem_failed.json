@@ -1,0 +1,66 @@
+{
+  "kind": "workitem_failed",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A work item ended as failed: an attempt failed with nothing left worth trying, or a person rejected the work while it waited for their approval.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" }
+  },
+  "field_since": { "/new/block": "0.18.0" },
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "description": "The attempt that failed, by its id; `status` where a person's rejection ended the work." },
+      "old": { "type": ["null", "string"] },
+      "new": { "type": ["object", "string"] }
+    },
+    "anyOf": [
+      {
+        "properties": {
+          "key": { "type": "string", "pattern": "^att_" },
+          "old": { "type": "null" },
+          "new": {
+            "type": "object",
+            "description": "The item's last error: the attempt's error without its trace, which stays on the attempt.",
+            "additionalProperties": false,
+            "required": ["code", "message", "retriable"],
+            "properties": {
+              "code": { "type": "string", "description": "What went wrong, as a snake_case code." },
+              "message": { "type": "string", "description": "What went wrong, in words for a person." },
+              "retriable": { "type": "boolean", "description": "The runtime's judgement of whether the failure was worth another attempt; a failure worth one still ends the item when no attempts are left." },
+              "details": {
+                "type": "array",
+                "description": "The fields a refused request named, where the failure was about specific fields.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["field", "code", "message"],
+                  "properties": {
+                    "field": { "type": "string" },
+                    "code": { "type": "string" },
+                    "message": { "type": "string" }
+                  }
+                }
+              },
+              "class": { "enum": ["transient", "permanent", "validation", "ambiguous", "blocked"], "description": "The class a plugin gave the failure where it answered for a provider; absent where the runtime classified the failure itself." },
+              "block": { "type": "object", "description": "What the provider block said, on a failure of class `blocked` whose block holds to the provider-block contract. Its shape is the one that contract publishes, docs/contracts/block/provider_block.json, and is not repeated here." }
+            }
+          }
+        }
+      },
+      {
+        "properties": {
+          "key": { "const": "status" },
+          "old": { "const": "awaiting_approval" },
+          "new": { "const": "failed" }
+        }
+      }
+    ]
+  }
+}

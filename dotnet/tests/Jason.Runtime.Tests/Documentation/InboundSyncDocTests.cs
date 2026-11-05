@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
@@ -98,16 +99,19 @@ public partial class InboundSyncDocTests
 
         Assert.Contains($"| `kind` | `{JournalKinds.InboundReplyObserved}` |", page, StringComparison.Ordinal);
         Assert.Contains(
-            "| `new` | `plugin`, `thread`, `channel`, `last_activity_at`, `unread`, `has_meeting_intent`, `contact_id` |",
+            $"| `new` | the fields [the kind's document](contracts/journal/{JournalKinds.InboundReplyObserved}.json) requires |",
             page,
             StringComparison.Ordinal);
 
-        // Read off the step's own source, so a member added to the line is a member the page has to name.
+        // Read off the step's own source, so a member added to the line is a member the document has to require.
         var source = File.ReadAllText(Path.Combine(SourceDirectory(), "Dispatch", "InboundSync.cs"));
         var written = Member().Matches(source[source.IndexOf("updated: new JsonObject", StringComparison.Ordinal)..source.IndexOf("workItem: item,", StringComparison.Ordinal)])
             .Select(match => match.Groups[1].Value)
             .ToList();
-        Assert.Equal(["plugin", "thread", "channel", "last_activity_at", "unread", "has_meeting_intent", "contact_id"], written);
+        var document = JsonNode.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", "contracts", "journal", JournalKinds.InboundReplyObserved + ".json")))!;
+        var required = document["body"]!["properties"]!["new"]!["required"]!.AsArray().Select(member => (string)member!).ToList();
+        // A schema's required members are a set, so neither the step's order nor the document's is a claim.
+        Assert.Equal(required.Order(StringComparer.Ordinal), written.Order(StringComparer.Ordinal));
     }
 
     /// <summary>The sentences an operator will hold the read to: where a campaign that gains a route starts, and what a failure does.</summary>

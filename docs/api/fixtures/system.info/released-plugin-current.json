@@ -41,7 +41,8 @@
         "20261025231527_ProviderBlockListingIndex",
         "20261026142432_ProfileTools",
         "20261029150321_SentFacts",
-        "20261102051342_ResponderWatermark"
+        "20261102051342_ResponderWatermark",
+        "20261105002401_SubscriptionRunner"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -73,7 +74,8 @@
         "20261025231527_ProviderBlockListingIndex",
         "20261026142432_ProfileTools",
         "20261029150321_SentFacts",
-        "20261102051342_ResponderWatermark"
+        "20261102051342_ResponderWatermark",
+        "20261105002401_SubscriptionRunner"
       ],
       "backup_file": null
     },
@@ -147,7 +149,7 @@
         },
         "installed": {
           "version": "0.7.0",
-          "digest": "sha256:recorded-2"
+          "digest": "sha256:recorded-1"
         }
       }
     ]

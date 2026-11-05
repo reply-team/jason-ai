@@ -1,0 +1,7 @@
+{
+  "kind": "routes_updated",
+  "version": 1,
+  "case": "a route names its plugin by id",
+  "body": { "key": "contact.find", "old": null, "new": { "plugin": 7, "binding": null } },
+  "expect": { "invalid": [{ "pointer": "/new/plugin", "reason": "type" }] }
+}

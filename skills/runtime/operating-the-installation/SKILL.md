@@ -1,8 +1,8 @@
 ---
 name: operating-the-installation
-description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
+description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which journal kinds a subscribing plugin is handed and where each stands, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,7 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.318. It covers what this build does and
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this build, because every skill's do. It covers what this build does and
 nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
@@ -245,6 +245,33 @@ before promising work: for *this* campaign and *this* operation, which plugin wo
 would. No provider ships configured, so nothing routed is the normal state of a fresh installation rather than a
 fault — **writing a route is an operator's explicit act**. If the answer is that nothing is routed, say so
 plainly instead of submitting work that will fail.
+
+## The journal's kinds and the plugins that subscribe to them
+
+The journal is the chronicle of everything the runtime wrote, and every line has a kind. `jason journal kinds` lists
+them: each kind the runtime reserves for its own lines, as its document says it, with what it means, what it carries and whether a plugin may subscribe to it. Read it before
+promising that a plugin can be handed some kind of line, and when a `jason journal list` line names a kind you do not
+know.
+
+```
+jason journal kinds --human
+jason subscription list --human
+```
+
+A plugin of `kind: subscriber` is handed, after the runtime wrote it, each line of the kinds its manifest declares
+**and the person granted**. Declaring a kind is not being given it: the grant is `Plugins:Grants:<id>:Subscriptions` in
+`~/.jason/config/settings.json` (`*` admits every declared kind and nothing more), and the order of the plugins in
+one kind's chain is `Subscriptions:Order:<kind>`. Both are read at a start and at each `jason plugin reload`, so a
+change is not in force until the person has reloaded. Writing them is the person's act, as writing a route is;
+`docs/plugins.md` §16 and §17 say the rest, and `plugins/journal-forwarder` in the plugin marketplace is the smallest
+complete subscriber.
+
+`jason subscription list` answers where each subscribed kind stands: its chain, its cursor, its newest line and how many
+of its lines are due, the chain in flight if any, and `waiting_on`, which names the members of the chain the current load
+cannot run because they are `unavailable`. A kind waiting on a plugin is not failing: it stays at its line until a
+reload makes that plugin available or takes it out of the chain, and it writes nothing meanwhile. With nothing
+installed that subscribes, the list is empty and nothing is wrong. What went wrong inside a chain, and the rewind that
+hands lines again, is `troubleshooting-jason`'s.
 
 ## The accounts whose events it reads
 

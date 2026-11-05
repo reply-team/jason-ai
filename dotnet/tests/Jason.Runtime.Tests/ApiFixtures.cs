@@ -162,6 +162,7 @@ public static class ApiFixtures
         "decision.list/empty",
         "decision.list/pending",
         "decision.list/summer-pending",
+        "journal.kinds/first-page",
         "journal.list/by-awaiting-item",
         "journal.list/by-campaign",
         "journal.list/by-campaign-changes",
@@ -218,6 +219,11 @@ public static class ApiFixtures
         "rolenote.set/project",
         "rolenote.set/two-levels",
         "route.list/empty",
+        "subscription.list/one-kind",
+        "subscription.rewind/not-human",
+        "subscription.rewind/since-without-offset",
+        "subscription.rewind/to-a-line",
+        "subscription.runs/succeeded",
         "system.info/released-plugin-behind",
         "system.info/released-plugin-current",
         "system.info/released-plugin-differs",
@@ -363,8 +369,8 @@ public static class ApiFixtures
 }
 
 /// <summary>
-/// Replaces what varies between runs with stable words: ids by prefix in order of first appearance, digests by
-/// count, the data directory by a mark, the home the runtime was given by <c>~</c> — so a folder under the harness root
+/// Replaces what varies between runs with stable words: ids by prefix in order of first appearance, digests in order of
+/// first appearance, the data directory by a mark, the home the runtime was given by <c>~</c> — so a folder under the harness root
 /// reads as it would on a person's machine, <c>~/Jason/projects/…</c> — and the values the clock does not control by
 /// fixed ones.
 /// </summary>
@@ -376,7 +382,7 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null)
 
     private readonly Dictionary<string, string> _ids = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _countByPrefix = new(StringComparer.Ordinal);
-    private int _digests;
+    private readonly Dictionary<string, string> _digests = new(StringComparer.Ordinal);
 
     public JsonNode? Scrub(JsonNode? node, string? key = null)
     {
@@ -426,10 +432,16 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null)
 
         if (Digest().IsMatch(text))
         {
-            _digests++;
-            // Not hex on purpose: the catalog test holds every file free of real digests. Numbered per occurrence, so
-            // two equal digests read as two words: a recording shows where a digest stands, never which are equal.
-            return "sha256:recorded-" + _digests.ToString(CultureInfo.InvariantCulture);
+            // Not hex on purpose: the catalog test holds every file free of real digests. Numbered by first appearance, as
+            // ids are, so two equal digests read as one word: a journal key is a digest wherever the runtime makes it one,
+            // and the screens tell two lines that say one thing by their equal keys.
+            if (!_digests.TryGetValue(text, out var word))
+            {
+                word = "sha256:recorded-" + (_digests.Count + 1).ToString(CultureInfo.InvariantCulture);
+                _digests[text] = word;
+            }
+
+            return word;
         }
 
         // The home first: it is named after the data directory, so the data directory's mark would take its beginning.

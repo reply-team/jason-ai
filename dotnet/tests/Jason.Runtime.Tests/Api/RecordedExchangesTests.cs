@@ -489,7 +489,7 @@ public class RecordedExchangesTests
                     Kind = JournalKinds.InboundReplyObserved,
                     CampaignId = campaign.Id,
                     ContactId = person.Id,
-                    Key = "reply-t_501-0855",
+                    Key = Jason.Runtime.Dispatch.InboundSync.ObservationKey("reply", "t_501", "2026-10-16T08:55:00.000Z"),
                     New = new JsonObject { ["plugin"] = "reply", ["thread"] = "t_501", ["channel"] = "email", ["last_activity_at"] = "2026-10-16T08:55:00.000Z", ["unread"] = true, ["has_meeting_intent"] = null, ["contact_id"] = seed.Mateo, ["event_id"] = "evt_01K7QN00000000000000000001", ["attributed_by"] = "contact_pin" },
                 });
             }
@@ -864,6 +864,7 @@ public class RecordedExchangesTests
             var mateoResearch = Item(101, latAm, mateo, WorkItemStatus.Succeeded, "researcher");
             var mateoResearched = Ran(mateoResearch, 101, AttemptStatus.Succeeded, null);
             var mateoWrite = Item(102, latAm, mateo, WorkItemStatus.Succeeded, "personalizer");
+            var mateoWritten = Ran(mateoWrite, 102, AttemptStatus.Succeeded, null);
             var mateoEnrol = Item(103, latAm, mateo, WorkItemStatus.Succeeded, null, "campaign.enroll");
             var mateoEnrolled = Ran(mateoEnrol, 103, AttemptStatus.Succeeded, routed);
             Item(104, latAm, mateo, WorkItemStatus.Created, "responder").NotBefore = day.AddHours(11.5);
@@ -875,6 +876,7 @@ public class RecordedExchangesTests
             var paulaEnrol = Item(107, reEngage, paula, WorkItemStatus.Succeeded, null, "campaign.enroll");
             var paulaResearch = Item(108, reEngage, paula, WorkItemStatus.Processing, "researcher");
             var paulaEnrolled = Ran(paulaEnrol, 107, AttemptStatus.Succeeded, unrouted);
+            var paulaResearching = Ran(paulaResearch, 108, AttemptStatus.Running, null);
             db.ExternalIds.AddRange(
                 new ExternalId { Contact = mateo, PluginId = "reply", Kind = "contact", Value = "16786993", RecordedAt = day.AddDays(-13), RecordedByAttemptId = mateoEnrolled.PublicId },
                 new ExternalId { Contact = paula, PluginId = "reply", Kind = "contact", Value = "20441", RecordedAt = day.AddDays(-10), RecordedByAttemptId = paulaEnrolled.PublicId });
@@ -883,7 +885,7 @@ public class RecordedExchangesTests
             // The journal in the order it happened, at fixed ids: the order a person's latest line is found by is the ids',
             // and a cursor carries one, so an id made from the machine's clock would change the recording on every run.
             var line = 100;
-            async Task Line(DateTime at, ActorRef actor, string kind, string? key = null, JsonNode? updated = null, string? reason = null, WorkItem? item = null, Contact? about = null, Campaign? campaign = null)
+            async Task Line(DateTime at, ActorRef actor, string kind, string? key = null, JsonNode? updated = null, string? reason = null, WorkItem? item = null, Contact? about = null, Campaign? campaign = null, Attempt? attempt = null)
             {
                 db.Journal.Add(new JournalEntry
                 {
@@ -894,6 +896,7 @@ public class RecordedExchangesTests
                     Kind = kind,
                     CampaignId = campaign?.Id ?? item?.CampaignId,
                     WorkItemId = item?.PublicId,
+                    AttemptId = attempt?.PublicId,
                     ContactId = about?.Id ?? item?.ContactId,
                     Key = key,
                     New = updated,
@@ -904,14 +907,14 @@ public class RecordedExchangesTests
 
             await Line(day.AddDays(-15).AddHours(9.4), Actors.ForAttempt(mateoResearched), JournalKinds.ContactCreated, mateo.PublicId, reason: "imported from the Q2 list", about: mateo);
             await Line(day.AddDays(-10), Actors.ForAttempt(paulaEnrolled), JournalKinds.ContactCreated, paula.PublicId, about: paula);
-            await Line(day.AddDays(-10).AddHours(1), Actors.Dispatcher, JournalKinds.WorkItemProcessing, "attempt", JsonValue.Create(1), item: paulaResearch);
+            await Line(day.AddDays(-10).AddHours(1), Actors.Dispatcher, JournalKinds.WorkItemProcessing, "attempt", JsonValue.Create(1), item: paulaResearch, attempt: paulaResearching);
             await Line(day.AddDays(-1).AddHours(16), Actors.ForAttempt(aguilarResearched), JournalKinds.ContactCreated, aguilar.PublicId, about: aguilar);
             await Line(day.AddDays(-1).AddHours(16).AddMinutes(40), Actors.ForAttempt(mateoResearched), JournalKinds.ContactUpdated, mateo.PublicId, new JsonArray("title", "company"), about: mateo);
-            await Line(day.AddDays(-1).AddHours(17).AddMinutes(20), Actors.Runtime, JournalKinds.WorkItemSucceeded, "result_present", JsonValue.Create(true), item: mateoWrite);
-            await Line(day.AddHours(7).AddMinutes(58), Actors.Runtime, JournalKinds.WorkItemFailed, aguilarFailed.PublicId, JsonNode.Parse("""{"code":"provider_call_failed","message":"The route forbids deriving a first name.","retriable":false,"class":"permanent"}"""), item: aguilarEnrol);
-            await Line(day.AddHours(8).AddMinutes(12), new ActorRef(ActorType.Human, "ada"), JournalKinds.ApprovalApproved, "approval", new JsonObject { ["id"] = Id("apr", 101), ["operation"] = "campaign.enroll" }, item: mateoEnrol);
-            await Line(day.AddHours(8).AddMinutes(15), Actors.Runtime, JournalKinds.WorkItemSucceeded, "result_present", JsonValue.Create(true), item: mateoEnrol);
-            await Line(day.AddHours(8).AddMinutes(41), Actors.Dispatcher, JournalKinds.InboundReplyObserved, "reply-t_501",
+            await Line(day.AddDays(-1).AddHours(17).AddMinutes(20), Actors.Runtime, JournalKinds.WorkItemSucceeded, "result_present", JsonValue.Create(true), item: mateoWrite, attempt: mateoWritten);
+            await Line(day.AddHours(7).AddMinutes(58), Actors.Runtime, JournalKinds.WorkItemFailed, aguilarFailed.PublicId, JsonNode.Parse("""{"code":"provider_call_failed","message":"The route forbids deriving a first name.","retriable":false,"class":"permanent"}"""), item: aguilarEnrol, attempt: aguilarFailed);
+            await Line(day.AddHours(8).AddMinutes(12), new ActorRef(ActorType.Human, "ada"), JournalKinds.ApprovalApproved, "approval", new JsonObject { ["id"] = Id("apr", 101), ["operation"] = "campaign.enroll", ["subject_hash"] = "sha256:4b1e0c7d2a9f3e6b5c8d1a0f7e2b9c4d6a3f0e1b8c5d2a7f4e9b6c3d0a1f8e5b" }, item: mateoEnrol);
+            await Line(day.AddHours(8).AddMinutes(15), Actors.Runtime, JournalKinds.WorkItemSucceeded, "result_present", JsonValue.Create(true), item: mateoEnrol, attempt: mateoEnrolled);
+            await Line(day.AddHours(8).AddMinutes(41), Actors.Dispatcher, JournalKinds.InboundReplyObserved, Jason.Runtime.Dispatch.InboundSync.ObservationKey("reply", "t_501", "2026-10-16T08:41:00.000Z"),
                 new JsonObject { ["plugin"] = "reply", ["thread"] = "t_501", ["channel"] = "email", ["last_activity_at"] = "2026-10-16T08:41:00.000Z", ["unread"] = true, ["has_meeting_intent"] = true, ["contact_id"] = mateo.PublicId },
                 about: mateo,
                 campaign: latAm);
@@ -1265,7 +1268,7 @@ public class RecordedExchangesTests
             // The check-in raised two: the first names Ben's research, the second a journal line.
             var benQuestion = await db.Decisions.Where(decision => decision.CampaignId == world.Spring.Id && decision.References != null).OrderBy(decision => decision.Id).FirstAsync(Ct);
 
-            void Line(DateTime at, ActorRef actor, string kind, string key, JsonNode updated, WorkItem item) => db.Journal.Add(new JournalEntry
+            void Line(DateTime at, ActorRef actor, string kind, string key, JsonNode updated, WorkItem item, Attempt? attempt = null) => db.Journal.Add(new JournalEntry
             {
                 PublicId = Id("jrn"),
                 Ts = at,
@@ -1274,6 +1277,7 @@ public class RecordedExchangesTests
                 Kind = kind,
                 CampaignId = item.CampaignId,
                 WorkItemId = item.PublicId,
+                AttemptId = attempt?.PublicId,
                 ContactId = item.ContactId,
                 Key = key,
                 New = updated,
@@ -1282,11 +1286,23 @@ public class RecordedExchangesTests
             var ivyEnrol = Of("Ivy", "campaign.enroll");
             var cleoEnrol = Of("Cleo", "campaign.enroll");
             var adaEnrol = Of("Ada", "campaign.enroll");
-            Line(ivyEnrol.FinishedAt!.Value, Actors.Runtime, JournalKinds.WorkItemSucceeded, "result_present", JsonValue.Create(true), ivyEnrol);
-            Line(cleoEnrol.FinishedAt!.Value, Actors.Runtime, JournalKinds.WorkItemFailed, "error", JsonNode.Parse("""{"code":"provider_error","message":"It did not work.","retriable":false}""")!, cleoEnrol);
-            Line(new DateTime(2026, 10, 15, 16, 0, 0, DateTimeKind.Utc), Actors.Dispatcher, JournalKinds.ApprovalRequested, "approval", new JsonObject { ["id"] = adaApproval.PublicId, ["operation"] = "campaign.enroll" }, adaEnrol);
-            var asked = await db.WorkItems.SingleAsync(item => item.Id == benQuestion.WorkItemId, Ct);
-            Line(asked.FinishedAt!.Value, Actors.Runtime, JournalKinds.DecisionRaised, "decision", new JsonObject { ["decision_id"] = benQuestion.PublicId }, asked);
+            // The attempts the two endings were written by: a line of an ending names the attempt that ended the work.
+            // Their ids stand apart from the counter, so every id after them stays the one the recording holds.
+            Attempt Ran(WorkItem item, AttemptStatus status, int number)
+            {
+                var attempt = WorkItemFactory.NewAttempt(item, 1, status, item.FinishedAt!.Value);
+                attempt.PublicId = $"att_01K7QN{900 + number:D20}";
+                db.Attempts.Add(attempt);
+                return attempt;
+            }
+
+            var ivyEnrolled = Ran(ivyEnrol, AttemptStatus.Succeeded, 1);
+            var cleoFailed = Ran(cleoEnrol, AttemptStatus.Failed, 2);
+            Line(ivyEnrol.FinishedAt!.Value, Actors.Runtime, JournalKinds.WorkItemSucceeded, "result_present", JsonValue.Create(true), ivyEnrol, ivyEnrolled);
+            Line(cleoEnrol.FinishedAt!.Value, Actors.Runtime, JournalKinds.WorkItemFailed, cleoFailed.PublicId, JsonNode.Parse("""{"code":"provider_error","message":"It did not work.","retriable":false}""")!, cleoEnrol, cleoFailed);
+            Line(new DateTime(2026, 10, 15, 16, 0, 0, DateTimeKind.Utc), Actors.Dispatcher, JournalKinds.ApprovalRequested, "approval", new JsonObject { ["id"] = adaApproval.PublicId, ["operation"] = "campaign.enroll", ["subject_hash"] = adaApproval.SubjectHash }, adaEnrol);
+            var asked = await db.WorkItems.Include(item => item.Attempts).SingleAsync(item => item.Id == benQuestion.WorkItemId, Ct);
+            Line(asked.FinishedAt!.Value, Actors.Runtime, JournalKinds.DecisionRaised, "decision", new JsonObject { ["decision_id"] = benQuestion.PublicId }, asked, asked.Attempts.First());
             var planned = WorkItemFactory.NewAiRole(world.Spring, "copywriter", new DateTime(2026, 10, 15, 9, 0, 0, DateTimeKind.Utc));
             planned.PublicId = Id("wi");
             planned.NotBefore = new DateTime(2026, 10, 17, 9, 0, 0, DateTimeKind.Utc);

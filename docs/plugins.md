@@ -76,7 +76,7 @@ is answered with three problems rather than one per reload.
 manifest_version: 1              # required; this runtime reads 1
 id: fake-provider                # required; must equal the directory name
 version: 1.0.0                   # required; SemVer core, optional prerelease, no build metadata
-kind: provider                   # required; provider | notification
+kind: provider                   # required; provider | notification | subscriber
 name: Fake provider              # optional
 description: The test double every plugin-host test drives; copy its shape.
 homepage: https://example.com    # optional; absolute https URL
@@ -84,7 +84,7 @@ contracts:
   protocol: [1]                  # required; plugin-host protocol versions this plugin speaks
   operations: [1]                # required for a provider; canonical-operation contract versions
   events: [1]                    # optional, a provider only: the events contract versions it reads accounts by
-operations: [echo.run, exec.run] # required non-empty for a provider; absent/empty for notification
+operations: [echo.run, exec.run] # required non-empty for a provider; absent/empty for notification and subscriber
 entry:                           # optional; defaults to main.js / invoke
   module: main.js
   function: invoke
@@ -100,6 +100,7 @@ capabilities:                    # every section optional; absent means "not req
     hosts: ["api.example.com", "localhost:5555"]   # 1..32; exact match, no wildcards
   env:
     variables: [FAKE_TOKEN]      # 1..32; the variables host.env may read
+  api: [read, journal.append]    # optional; the Runtime API families host.call may reach (§9)
 limits:                          # optional; asks, never raises
   timeout_ms: 20000
   memory_mb: 64
@@ -109,6 +110,7 @@ binding:                         # optional; a schema, in the published dialect,
   required: [workspace]
   properties:
     workspace: { type: string }
+subscriptions: [workitem_failed] # optional; required for a subscriber: the journal kinds the plugin handles
 ```
 
 | Field | Rule | Problem code |
@@ -116,15 +118,15 @@ binding:                         # optional; a schema, in the published dialect,
 | `manifest_version` | required; must be `1` | `field_required`, `manifest_version_unsupported` |
 | `id` | required; `^[a-z][a-z0-9-]{1,63}$` (2–64 characters); must equal the directory name | `field_required`, `field_invalid`, `id_mismatch` |
 | `version` | required; `major.minor.patch` with an optional `-prerelease`, no build metadata | `field_required`, `version_invalid` |
-| `kind` | required; `provider` or `notification` | `field_required`, `kind_invalid` |
+| `kind` | required; `provider`, `notification` or `subscriber` | `field_required`, `kind_invalid` |
 | `name` | optional text, at most 100 characters | `field_invalid` |
 | `description` | optional text, at most 1000 characters | `field_invalid` |
 | `homepage` | optional; absolute `https` URL | `field_invalid` |
 | `contracts.protocol` | required non-empty list of whole numbers; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
-| `contracts.operations` | required for a provider, optional for a notification; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
+| `contracts.operations` | required for a provider, optional for a notification, absent on a subscriber; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
 | `contracts.events` | optional, and only on a provider; when present, must include `1` | `field_invalid`, `contract_unsupported`, `events_not_allowed` |
 | `operations` | required non-empty for a provider; each `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$` — at least one dot — and unique | `field_required`, `field_invalid`, `operation_invalid`, `operation_duplicate` |
-| `operations` on a `notification` | must be absent or empty | `operations_not_allowed` |
+| `operations` on a `notification` or a `subscriber` | must be absent or empty | `operations_not_allowed` |
 | `entry.module` | `.js` or `.mjs`, relative, no `..` segments, inside the package, must exist | `field_invalid`, `entry_module_outside_package`, `entry_module_missing` |
 | `entry.function` | `^[A-Za-z_$][A-Za-z0-9_$]*$` | `entry_function_invalid` |
 | `capabilities.exec.executables` | required inside `exec`; 1..16 entries | `field_required`, `field_invalid` |
@@ -135,6 +137,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `capabilities.env.variables` | required inside `env`; 1..32 names `^[A-Z][A-Z0-9_]{0,63}$`, unique | `field_required`, `field_invalid`, `variable_name_invalid` |
 | a variable named `JASON_…` | never; the prefix is reserved for the runtime | `variable_reserved` |
 | a variable that decides what a program loads | never; the same names `host.exec` refuses — `LD_*`, `DYLD_*`, `COMPlus_*`, `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `NODE_OPTIONS`, `PYTHONPATH`, `JAVA_TOOL_OPTIONS`, `PATH` and the rest listed under `host.exec` below. A granted variable is copied into every child the plugin starts, so being handed one and setting one end in the same place | `field_invalid` |
+| `capabilities.api` | optional; a list of 1..7 Runtime API families, each named once: `read`, `campaign`, `contact`, `workitem`, `suppression`, `report`, `journal.append`. They are what a handler's `host.call` may reach once granted (§9) | `field_invalid`, `api_family_unknown` |
 | `limits.timeout_ms` | 1000 .. `Plugins:Limits:MaxTimeoutMs` (3 600 000 by default) | `field_invalid` |
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
 | `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` — including a pattern that cannot finish matching the short probe or the 64 KiB one within the dialect's 100 ms on a warm engine, twice | `field_invalid` |
@@ -142,6 +145,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `arguments` | optional, and only on a provider; a mapping of operations to the arguments the plugin takes on some of that operation's channels, each a non-empty list of channels without duplicates. An operation the plugin does not implement or this build publishes no document for, an argument the operation's document does not name under `channel_arguments`, and a channel the operation's arguments do not take are refused | `field_invalid`, `argument_invalid` |
 | `settles_by_key` | optional, and only on a provider; a non-empty list of the operations whose lost answer the plugin settles by the work item's key, without duplicates. An operation the plugin does not implement, one this build publishes no document for, and one whose document's recovery read does not rest on the key (`recovery_read.by_key`) are refused | `field_invalid`, `settles_by_key_invalid` |
 | `templates` | optional, and only on a provider; a mapping of operations to the channels the plugin writes that operation's message on as a template, each a non-empty list without duplicates. An operation the plugin does not implement or this build publishes no document for, one whose document names no channel under `channel_templates`, and a channel the document does not name there are refused | `field_invalid`, `template_invalid` |
+| `subscriptions` | optional on a provider and a notification plugin, required on a subscriber; a non-empty list of the journal kinds the plugin handles, each named once. A kind the runtime does not write to its journal, and one it writes that no plugin may subscribe to, are refused. Declaring a kind is not being given it: the grant decides (§9) | `field_required`, `field_invalid`, `subscription_kind_unknown`, `subscription_kind_not_subscribable` |
 
 `binding` says what an installation has to tell this plugin before it can act — which account, which
 workspace, which mailbox. It never carries the credential: the plugin reaches that through the
@@ -260,12 +264,13 @@ jason plugin list --human
 ```
 
 ```text
-ID             VERSION  KIND      STATUS  OPERATIONS              GRANTS                         DIGEST
--------------  -------  --------  ------  ----------------------  -----------------------------  ------------
-fake-provider  1.0.0    provider  valid   echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2  3f2a9c1b4d5e
+ID             VERSION  KIND      STATUS  OPERATIONS              GRANTS                                           DIGEST
+-------------  -------  --------  ------  ----------------------  -----------------------------------------------  ------------
+fake-provider  1.0.0    provider  valid   echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2 | subscriptions -  3f2a9c1b4d5e
 ```
 
-`GRANTS` is granted-over-requested per capability, `-` where the manifest requested nothing; `DIGEST`
+`GRANTS` is granted-over-requested per capability, the journal kinds a plugin subscribes to among them (§16), `-` where
+the manifest requested nothing; `DIGEST`
 is the first 12 hex characters. Without `--human` the verb prints the API body, which carries all of
 it in full:
 
@@ -281,11 +286,13 @@ it in full:
       "capabilities": {
         "exec": { "requested": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "version": "2.4.1", "min_version": null, "launch": null } ], "granted": ["provider-cli"] },
         "http": { "requested": ["localhost:5555", "api.example.com"], "granted": [] },
-        "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] } },
+        "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] },
+        "api": null,
+        "subscriptions": null },
       "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "binding_schema": null, "status": "valid", "problems": [] } ],
   "last_reload": { "at": "2026-09-14T12:00:00.000Z", "source": "reload", "activated": true,
                    "candidates": [ { "directory": "fake-provider", "id": "fake-provider", "status": "valid", "problems": [] } ],
-                   "routes": [] },
+                   "routes": [], "subscriptions": [] },
   "activated": true
 }
 ```
@@ -294,6 +301,9 @@ it in full:
 `Routes:Operations:<operation>`, `campaign:<cmp_…>/routes/<operation>` or `…/routes/default` — with its code and
 message, so it is empty when the load activated. The routes a load froze are not listed there: `routing_snapshot_id`
 names the snapshot they are in, and the activation journals them in `plugins_reloaded` (below).
+`last_reload.subscriptions` is the same for the order of each journal kind's subscribers (§16): each refusal is named by
+its setting, `Subscriptions:Order:<kind>[<index>]`, with its code and message. `capabilities.subscriptions` is the kinds
+a plugin declares against the kinds it is granted, `null` when it declares none.
 
 ### Two kinds of problem
 
@@ -349,11 +359,14 @@ Plugins:    none active | last reload rejected
 ```
 
 An **activated** load writes one global journal entry of the reserved kind `plugins_reloaded`
-carrying the snapshot id, its source, `{id, version, digest, status}` per plugin, and the routes it
-froze as `{snapshot_id, global_default, override_count, campaign_route_count}` — actor `system`
-for the load at startup, the request's actor and reason for a reload. A **rejected** load writes
-none; it is visible in the log and in `last_reload`. `journal.append` refuses the kind, so nothing
-but a real activation can write one.
+carrying the snapshot id, its source, `{id, version, digest, status, subscriptions}` per plugin —
+`subscriptions` being how many journal kinds the plugin is granted — the routes it froze as
+`{snapshot_id, global_default, override_count, campaign_route_count}`, and the chains it froze as
+`subscriptions: {kind_count, subscriber_count}`: how many kinds some plugin handles, and how many
+plugins handle at least one. The line counts and names no kind and no order; `plugin.list` says
+which. Actor `system` for the load at startup, the request's actor and reason for a reload. A
+**rejected** load writes none; it is visible in the log and in `last_reload`. `journal.append`
+refuses the kind, so nothing but a real activation can write one.
 
 ## 5. Writing `invoke`
 
@@ -428,7 +441,7 @@ among its `failure_codes` (§7).
 
 **Promises.** `async function invoke` works: the host drains the job queue and unwraps the promise
 within the budget. The six `host.*` functions are synchronous — they block until the program or the
-request finishes — so there is nothing to `await` on them.
+request finishes — so there is nothing to `await` on them, nor on `host.call`.
 
 **Modules.** Only relative specifiers ending in `.js` or `.mjs`, only inside the package: `./x.js`,
 `../shared/y.mjs`. A bare specifier (`lodash`), an absolute path, a URL, a `.json` import or a path
@@ -457,15 +470,16 @@ and `null` alike. No secret is ever in `context`.
 
 ## 6. The Host SDK
 
-`host` is a plain JavaScript object with exactly six read-only functions, closed to extension. It is
-not a wrapped CLR instance, so there is no member surface beyond those six and no type to walk back
-into the host program. Every function takes **one options object** and refuses an unknown key with a
+`host` is a plain JavaScript object with exactly six read-only functions, closed to extension, and a seventh,
+`host.call`, only where the invocation carries a door to the Runtime API. It is not a wrapped CLR instance, so there
+is no member surface beyond those functions and no type to walk back into the host program. Every function takes **one options object** and refuses an unknown key with a
 `TypeError` you can catch: `timeoutMs` next to `timeout_ms` would otherwise make a capped call look
 uncapped. A key whose value is `undefined` counts as absent.
 
 Calling a capability the user did not grant is **not** a catchable error: the whole invocation fails
 `permanent` with `capability_not_granted` and `details: { capability, requested }`, because a plugin
 must not be able to probe its grants and quietly fall back to something else.
+`host.call` refuses the same way, with `details: { capability: "api", operation }`.
 
 ### `host.exec`
 
@@ -630,6 +644,50 @@ the plugin can see, never a block mistaken for something else.
 throw host.fail({ class: "blocked", code: "provider_blocked", message: "the account is out of credits",
                   block: { scope: "account", reason: "billing", link: "https://provider.example/billing" } });
 ```
+
+### `host.call`
+
+```js
+const page = host.call("campaign.list", { limit: 20 });           // the API's answer, as an object
+host.call("journal.append", { campaign_id: id, kind: "forwarder_sent", new: { to: "crm" } });
+```
+
+One Runtime API operation, made by the host through the **door** an invocation may carry. A door is opened by the
+runtime for one invocation about one journal line, and only for a plugin granted at least one Runtime API family
+(§9); an invocation without one has no `host.call` at all. The first argument is the operation's name as the API
+publishes it, the second an object of its arguments, or nothing. What comes back is the API's answer exactly as
+`POST /v1/<operation>` returns it.
+
+The host speaks for the handler, and says who and why: every call carries the actor `{ type: "plugin", id: <this
+plugin's id> }` and the reason `journal <line id>`, so the journal names the plugin that acted and the line it acted
+on. `actor` or `reason` among the arguments is a `TypeError`; they are the host's to set. The API accepts the actor
+`plugin` from that plugin's own door and from no other caller.
+
+| Rule | Code when broken |
+|---|---|
+| the operation is one the door opens: in the families the person granted, and never one no grant opens (§9) | `capability_not_granted`, not catchable |
+| the second argument is an object; `actor` and `reason` are not in it | a `TypeError` |
+| the request is at most 1 MiB | `api_limit` |
+| at most 100 calls per invocation | `api_limit` |
+
+An operation outside the door ends the invocation `permanent` before anything leaves the process, like an exec, http
+or env refusal; the API refuses it again with `403 operation_not_granted`. Every call is bounded by the smaller of 30
+seconds and what remains of the invocation, and reads at most 1 MiB of answer. The bounds are the protocol's own,
+not settings. A call that fails otherwise throws an error you can catch, with `class`, `code`, `message`, `details`
+(`operation`, the HTTP `status` where one came) and `retryable`:
+
+| Code | Class | Means |
+|---|---|---|
+| an API error code, such as `not_found` | `transient` where the API said `retryable`, else `permanent` | the API refused the call; its own `details` are under `details.details` |
+| `runtime_unreachable` | `transient`, `retryable` | nothing accepted the connection, so the request never left |
+| `runtime_answer_lost` | `ambiguous` | the connection broke after the request left; the call may have acted |
+| `runtime_timeout` | `ambiguous` | no answer within the call's bound; the call may have acted |
+| `response_too_large` | `permanent` | the answer is over 1 MiB; the call may have acted |
+| `runtime_answer_invalid` | `permanent` | what came back is not the Runtime API's answer or its error |
+
+A call that runs out with the invocation itself ends the invocation `plugin_timeout`, as any other host call does.
+Every call is said on stderr as one `api` line, with the operation, the status and the duration, or as one
+`api_failed` line where no answer came; the capability is never written there or anywhere else the host writes.
 
 ### The environment a child sees
 
@@ -1114,8 +1172,8 @@ The other codes the host itself writes into a failed outcome — as opposed to y
 are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missing`,
 `plugin_syntax_error`, `plugin_memory_exceeded`, `plugin_statement_limit`, `plugin_recursion_limit`,
 `capability_not_granted`, `executable_not_allowed`, `exec_limit`, `http_host_not_allowed`,
-`http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit` and
-`module_not_allowed`. All of them are `permanent`, and every operation's check passes them but the events
+`http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit`,
+`module_not_allowed` and `api_limit`. All of them are `permanent`, and every operation's check passes them but the events
 family's (§15).
 
 ## 9. Capabilities and grants
@@ -1127,18 +1185,22 @@ what it gets, in `~/.jason/config/settings.json`:
 {
   "Plugins": {
     "Grants": {
-      "fake-provider": { "Exec": ["*"], "Http": ["api.example.com"], "Env": ["FAKE_TOKEN"] }
+      "fake-provider": { "Exec": ["*"], "Http": ["api.example.com"], "Env": ["FAKE_TOKEN"] },
+      "forwarder": { "Api": ["read", "journal.append"] }
     }
   }
 }
 ```
 
-Three lists per plugin id, each naming things **out of what that plugin's manifest requested**. `*`
+Four lists per plugin id, each naming things **out of what that plugin's manifest requested**. `*`
 grants everything requested for that capability. An absent list, an absent plugin, or a freshly
 copied package grants nothing — the default is nothing, and a plugin with no grants still loads as
 `valid`. An entry the manifest never requested grants nothing and is reported as a
 `grant_unrequested` warning at `grants.<capability>[i]`; it does not make the plugin unavailable.
-Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
+A fifth list, `Subscriptions`, grants journal kinds out of those the manifest's `subscriptions`
+declares, by the same rules: `*` admits every declared kind, a kind the manifest does not declare
+admits nothing and is a `grant_unrequested` warning at `grants.subscriptions[i]`, and a declared kind
+nobody granted is simply not admitted. Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
 the next `jason plugin reload`, and `plugin list` always shows requested next to granted. The reload
 reads `settings.json` itself before it resolves anything, and waits for an edit the settings watch is
 still applying. So a reload sent straight after an edit holds it, and after two quick saves it holds
@@ -1156,6 +1218,42 @@ invocation rather than empty, which is a different thing from one that is presen
 And the version check of a declared executable runs only for an executable the user **granted** — a
 reload must never start a program nobody consented to; an ungranted one is resolved for presence only
 and lists `"version": null`.
+
+### The `api` grant: what a handler may call
+
+`Api` names Runtime API families, out of the ones the manifest's `capabilities.api` requested, and decides which
+operations a handler's `host.call` may make (§6). Every operation of the Runtime API is a read, in exactly one write
+family, or in none:
+
+| Family | Opens |
+|---|---|
+| `read` | every operation that only reads: its verb is `get`, `list`, `count`, `summary`, `activity`, `activity_by_period`, `list_contacts`, `list_standing`, `resolve`, `sources` or `kinds`, and its noun is not `system` or `ui` |
+| `campaign` | `campaign.create`, `campaign.update`, `campaign.start`, `campaign.pause`, `campaign.archive`, `campaign.update_context`, `campaign.add_contacts`, `campaign.remove_contacts` |
+| `contact` | `contact.create`, `contact.update`, `contact.archive` |
+| `workitem` | `workitem.create`, `workitem.update`, `workitem.cancel` |
+| `suppression` | `suppression.add` |
+| `report` | `report.submit` |
+| `journal.append` | `journal.append` |
+
+No grant opens the rest: the installation's and the UI's own doors (every `system.` and `ui.` operation,
+`plugin.reload`, `route.set`, `route.unset`, `project.create`, `project.update`, `project.link`, `preference.set`,
+`preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `events.backfill`,
+`events.signal`, `subscription.rewind`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
+`approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`,
+`suppression.remove`), an
+executor's fenced verbs (`workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait`), and the
+conversation reads `contact.threads` and `contact.thread`, which are no read here because answering one spends a
+provider call, and `subscription.runs`, whose records carry the envelopes other plugins' handlers made: a handler in a
+chain already holds the envelope handed to it, and a person reads the final one through the run token, so no plugin
+reads another chain's envelopes. `subscription.list` is a read by the rule above. An operation the API adds later is in none until it is classified, which a test holds. A family the
+manifest names that is not one of the seven is `api_family_unknown`.
+
+A subscriber granted `workitem` writes can feed itself through a role: an item it creates may run a role, and what
+that role does afterwards is ordinary work.
+
+The families granted are resolved to their operations at each load and frozen with the snapshot, like every grant.
+The runtime mints a handler's capability with exactly that set, the host refuses anything outside it before a call
+leaves the process, and the API refuses it again.
 
 ## 10. The protocol
 
@@ -1201,9 +1299,19 @@ escape reads the same in any page.
 }
 ```
 
+A child is started for one of four purposes, and `operation` says which: a canonical operation by its name, the
+delivery contract as `notification.send` (§14), the events contract as `events.read` (§15), or a subscription as the
+kind of the journal line its handler is handed (§17), with `operation_contract_version` the version of the contract
+that purpose speaks.
+
 The grants here are the **resolved policy** — what the user granted out of what the manifest
 requested — so the child enforces what the runtime decided and has no configuration of its own. No
-secret value is in the envelope. A capability the manifest never requested is `null` here. An
+secret value is in the envelope but one: a handler's `door`, where the invocation has one, carries the capability the
+runtime minted for that invocation, beside the address, the journal line, the operations it opens and the limits. It
+travels on stdin only, never on argv, in the environment or in a file; the host masks it wherever it writes and the
+runtime redacts it from the stderr it copies; and it is dead when the invocation ends however it ends, at the latest at
+the invocation's deadline plus the kill grace and one call's bound of 30 seconds, which covers the start of the child
+and a call in flight at the deadline, and with any restart of the runtime, which keeps capabilities in memory only. A capability the manifest never requested is `null` here. An
 executable's `launch` is `null` for an ordinary program and carries the arguments that go before the
 plugin's own where the name resolved to an interpreter and a script (§13).
 
@@ -1248,7 +1356,7 @@ identifier of a kind the operation never declared or carrying a control characte
 
 `source` is `host` or `plugin`; `data` and `truncated` appear only when they apply. The host's own
 messages are `invocation_rejected`, `digest_unverified`, `env_probe`, `exec`, `exec_launch_failed`,
-`exec_kill_unconfirmed`, `exec_kill_unfinished`, `http`, `http_failed` and `log_truncated`. The runtime copies the stream, redacted, to
+`exec_kill_unconfirmed`, `exec_kill_unfinished`, `http`, `http_failed`, `api`, `api_failed` and `log_truncated`. The runtime copies the stream, redacted, to
 `stderr.log` in the invocation directory and keeps the last 4096 characters as the trace that travels
 with a protocol failure. It is read in fixed chunks and copied line by line, up to
 `Plugins:Invoker:StderrBytes` (4 MiB); past that the file ends with a single `[stderr truncated]`
@@ -1398,6 +1506,12 @@ are the operations' own examples; §7 says how to drive one through the host by 
 - **One installed version per id**, because the id is the directory name. Two plugins may implement
   the same operation; which one a campaign uses is a routing question: a route names the plugin, per
   campaign or for the whole installation.
+- **No cascades reach one step only.** A subscription passes over a line a plugin wrote and a line about a work item
+  a plugin created (§17), but not what follows from that work: a work item a plugin created may run a role, and a line
+  that names that item is passed over whoever wrote it, but what the role creates afterwards — new work items, new
+  contacts, its lines on other entities — is the role's own work and is handed to subscribers as any work's is, although
+  a handler caused it at one remove. A subscriber granted the `workitem` family can therefore feed itself
+  through a role; nothing in this version follows a cause further back, or bounds how often a kind's chains run.
 - **Notification plugins are not routed**: a route to one is refused at activation with
   `route_plugin_kind_not_invocable`; they are reached through the `Notifications` settings instead (§14).
 - **One install verb, for a release's own packages; no signing, no trust model.** Any other package is
@@ -1521,3 +1635,146 @@ reads by date. Any other failure, the host's own codes of §8 included, is answe
 installation's cadence, `Dispatcher:EventsCadenceSeconds` — ten minutes unless set otherwise — and at once when the
 runtime starts: up to twenty pages a read, one child each, the first read of an account reaching thirty days back. The
 fixtures under [`contracts/fixtures/events.read/`](contracts/fixtures/events.read/) are what to check a plugin against.
+
+## 16. Subscriptions: declaration, grant, order
+
+A plugin may ask to be handed journal lines of the kinds it names. Like a capability, that takes two parties: the
+manifest declares the kinds, and the person grants them. Which kinds a plugin may name is the runtime's list of journal
+kinds; a kind the runtime does not write, or one it keeps to itself, is refused when the package is read.
+
+**The declaration.** `subscriptions` is a list of journal kinds, each named once:
+
+```yaml
+manifest_version: 1
+id: my-forwarder
+version: 1.0.0
+kind: subscriber
+contracts:
+  protocol: [1]
+subscriptions: [workitem_failed, campaign_created]
+```
+
+A plugin of `kind: subscriber` does nothing else: it implements no canonical operation, delivers no notification and
+reads no provider's events, so it carries no `operations`, `contracts.operations`, `contracts.events`, `arguments`,
+`templates` or `settles_by_key`, and it must declare `subscriptions`. A provider or a notification plugin may declare
+`subscriptions` as well, and that changes nothing else about it: a route reaches a provider that subscribes exactly as
+one that does not, and its status decides both its routed work and its subscriptions. A kind the runtime does not write
+is `subscription_kind_unknown`; one the runtime writes but no plugin may subscribe to is
+`subscription_kind_not_subscribable`. Both are package problems, so either rejects the whole reload.
+
+**The grant.** `Plugins:Grants:<id>:Subscriptions` lists the kinds the person admits the plugin to, out of those it
+declares (§9):
+
+```json
+{
+  "Plugins": {
+    "Grants": {
+      "my-forwarder": { "Subscriptions": ["*"] }
+    }
+  }
+}
+```
+
+`*` admits every declared kind and nothing more. A kind the manifest does not declare admits nothing and is a
+`grant_unrequested` warning at `grants.subscriptions[i]`; it does not make the plugin unavailable. A declared kind
+nobody granted is simply not admitted, and is no problem. The grant is resolved at the load and frozen with the plugin,
+so a change takes effect at the next `jason plugin reload`.
+
+**The order.** Every kind that at least one plugin is admitted to has one chain: the plugins handed its lines, one
+after another. `Subscriptions:Order:<kind>` says who goes first:
+
+```json
+{
+  "Subscriptions": {
+    "Order": {
+      "workitem_failed": ["my-forwarder", "my-auditor"]
+    }
+  }
+}
+```
+
+The ids listed come first, in the order written; every other plugin admitted to that kind follows in plugin-id order.
+A kind with no list, or with an empty one, runs in plugin-id order alone. A plugin that loaded `unavailable` keeps its
+place in a chain: its availability is decided again only at the next load. The order is read when the runtime starts
+and at each plugin reload, and never in between, so plugins, grants and chains always change together.
+
+An order that names a plugin holding no admitted subscription to that kind — one that is not installed, whose manifest
+does not declare the kind, or that the settings do not grant it — is `subscription_order_ungranted`, and the message
+says which. Like a route to a plugin the reload does not have, it rejects the whole reload with both the plugin and the
+route snapshots kept; edit the order before reloading. An order the settings cannot hold at all — a key that is not a
+journal kind a plugin may subscribe to, an entry that is not a plugin id or is listed twice, text where a list belongs —
+stops a start, naming the setting, and rejects a reload with `subscriptions_settings_invalid` at the setting's path. A
+reload refused for both a route and an order names both. Neither problem names what was written, only where.
+
+## 17. Writing a subscriber
+
+A subscriber is handed journal lines of the kinds it was granted (§16), after the runtime wrote them. It is invoked for
+the subscription contract [`subscription.handle`](contracts/subscriptions/subscription.handle.md) by the runtime's own
+subscription runner; no work item names it and no route carries it. The contract page says what a handler is handed and
+what it may answer; this section says how the runtime runs the chains.
+
+**What it is handed.** `operation` is the line's kind, so one `main.js` tells the kinds it subscribes to apart as a
+provider tells its operations apart; `input` is `{ line, envelope, attempt }`: the line as `journal.list` returns it,
+the envelope the handler before it returned — the empty object for the first — and how many times this plugin has been
+handed this line in this chain's record, this time included; a rewind opens a new chain, which counts from 1 again. The correlation id is the line's id, and the context names no campaign, work item
+or attempt. A handler granted a Runtime API family (§9) carries a door for the line, and reads and writes Jason through
+`host.call` (§6).
+
+**What it answers.** `{ result: { envelope } }`: an object, handed as it stands to the next handler and kept with the
+chain's run when this handler is the last. It pins no identifier, and an envelope longer than
+`Subscriptions:EnvelopeBytes` — 64 KiB unless set otherwise, in bytes of the compact JSON the runtime writes to the handler — is refused against the handler
+that returned it, as `subscription_envelope_too_large`; an answer of any other shape is `subscription_answer_invalid`.
+
+**One line of a kind at a time, in the journal's order.** A kind's chain takes its next line only when the one before
+it has ended, and a kind is taken up to fifty lines at a turn before the next scan offers it again; different kinds run
+side by side. `Subscriptions:MaxParallel` — 2 unless set otherwise, at most 16 — is how many handlers, one child each,
+run at once across every kind. Each handler is given the contract's own timeout of an hour, lowered to the plugin's own
+`limits.timeout_ms`.
+
+**At least once.** The runtime records each handler's start before the child exists and its outcome after it ends, so a
+runtime stopped in the middle of a chain writes nothing more, and the next start runs the chain for the same line again
+from its first handler, each handler that was handed the line before seeing `attempt` above 1. An effect a handler
+causes is one it can tell it already caused. A turn that cannot finish for a reason of the runtime's own is logged, and the next scan offers the kind again
+from the same line.
+
+**Failures.** A `transient` failure is tried again by the same handler, with the envelope as it stood before it, up to
+`Subscriptions:TransientRetries` times — 3 unless set otherwise. The first wait is `Subscriptions:RetryBackoffSeconds`
+— 30 unless set otherwise — and each one after doubles it, held to an hour; a chain waiting out its backoff holds no
+child, so other kinds run meanwhile, and the kind waits at that line. Every other class, and a transient one whose
+retries are spent, ends the chain at that handler, for that line: the handlers after it are not invoked, the runtime
+writes one `subscription_failed` line naming the kind, the line, the plugin, the class, the code and the attempts —
+never the envelope or the failure's message — and the kind moves on to its next line. A chain that ends well writes no
+journal line.
+
+**A plugin that cannot run.** A member of a chain that loaded `unavailable` keeps its place (§16), and its kind waits at
+the line it reached, logged once for each load, until a reload makes the plugin available or takes it out of the chain.
+That is not a failure of the line, so nothing is written for it.
+
+**The position.** Each kind has a position in the journal: the line it stands after, of any kind. A kind first admitted
+by a load stands after the journal's last line then, never at its beginning; then after each line of the kind its chain
+finished with; and after a rewind, after the line before the first one it hands again. The position is read afresh
+before each line and moved only by the end that read it, so a rewind of the position during a turn is seen at the next
+line, never later. A kind no chain holds any more loses its position, and starts afresh if a later load admits it again.
+How a person reads where a kind stands, reads its chains' record and rewinds it is in the `subscription` section of
+[docs/runtime-api.md](runtime-api.md).
+
+**No cascades.** A line written by a plugin — its actor is `plugin`, as everything a handler writes through `host.call`
+is — and a line about a work item a plugin created are passed over: the position moves past them, and no handler is
+invoked and no run recorded for them. What a handler does is therefore never handed to another handler as a new line.
+The rule reads one step only (§13): a work item a plugin created may run a role; a line that names that item is passed
+over whoever wrote it, but what the role creates afterwards — new work items, new contacts, its lines on other entities —
+is the role's own work, handed out as any work is.
+
+**The record.** The runtime keeps a record of each chain it started — its line, each handler's attempts and outcomes,
+and the envelope the last one returned — and keeps `Subscriptions:RunRecordsPerKind` of them for each kind, 1000 unless
+set otherwise; the oldest beyond that are deleted when the kind's next chain starts, and a chain in flight is never
+deleted. The lasting record of a failure is its `subscription_failed` line. The numbers under `Subscriptions` apply
+live; the order is read at a start and at each reload (§16).
+
+**The smallest complete subscriber.** [`plugins/journal-forwarder`](../plugins/journal-forwarder/README.md) is a
+`kind: subscriber` package of one `main.js`: for each line it is handed it POSTs the line, the envelope and the attempt
+as JSON to one URL the person names in the environment, under `host.http` and a granted host, and answers the envelope
+it was handed unchanged. It declares every kind the catalog lets a plugin subscribe to, the person narrows them by the
+grant, and it takes no Runtime API family and so no `host.call`. Its README is the operator's page, and its failure
+codes (`forwarder_unreachable`, `forwarder_unauthorized`, `forwarder_refused`, `forwarder_url_missing`,
+`forwarder_url_invalid`) show how a handler's own codes sit under the five classes.

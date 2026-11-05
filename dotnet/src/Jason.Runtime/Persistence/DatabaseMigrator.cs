@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Serilog;
+using Serilog.Extensions.Logging;
 
 namespace Jason.Runtime.Persistence;
 
@@ -103,8 +104,11 @@ public sealed class DatabaseMigrator(JasonPaths paths)
         Directory.CreateDirectory(paths.StateDirectory);
         var databaseExisted = File.Exists(paths.DatabaseFile);
 
+        // A start is an installation's, so a journal line off its document is logged here, never refused.
+        using var loggers = new SerilogLoggerFactory(Log ?? Serilog.Core.Logger.None);
         var options = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(options, paths.DatabaseFile).AddInterceptors(Interceptors);
+        JasonDbContext.Configure(options, paths.DatabaseFile, JournalLines.Logged(loggers.CreateLogger(typeof(JournalLineInterceptor).FullName!)))
+            .AddInterceptors(Interceptors);
         using var db = new JasonDbContext(options.Options);
         var pending = db.Database.GetPendingMigrations().ToList();
 

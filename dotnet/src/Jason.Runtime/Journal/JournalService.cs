@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Jason.Contracts.Api;
+using Jason.Contracts.Journal;
 using Jason.Contracts.Json;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
@@ -74,6 +75,24 @@ public sealed class JournalService(JasonDbContext db, JournalWriter journal)
         return JournalWriter.ToDto(entry, campaign.PublicId);
     }
 
+    /// <summary>
+    /// Every kind the runtime reserves for its own journal lines, in kind order, each as its published document says
+    /// it. The catalog is fixed for a build, so the answer is too; it pages as <c>preference.list</c> pages its catalog.
+    /// </summary>
+    public static Page<JournalKindDto> Kinds(JournalKindsRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var limit = Paging.ResolveLimit(request.Limit);
+        var after = Paging.DecodeCursor(request.Cursor);
+
+        var contracts = JournalKindCatalog.All
+            .Where(contract => after is null || string.CompareOrdinal(contract.Kind, after) > 0)
+            .Take(limit + 1)
+            .ToList();
+
+        return Paging.ToPage(contracts, limit, contract => contract.Kind, ToDto);
+    }
+
     public async Task<Page<JournalEntryDto>> ListAsync(JournalListRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -139,4 +158,17 @@ public sealed class JournalService(JasonDbContext db, JournalWriter journal)
     }
 
     private static bool Blank(string? value) => string.IsNullOrWhiteSpace(value);
+
+    private static JournalKindDto ToDto(JournalKindContract contract) => new(
+        contract.Kind,
+        contract.Version,
+        contract.Since,
+        contract.Summary,
+        contract.Subscribable,
+        contract.Entities.ToDictionary(
+            entity => entity.Key,
+            entity => new JournalKindEntityDto([.. entity.Value.At], entity.Value.Presence, entity.Value.Each),
+            StringComparer.Ordinal),
+        contract.FieldSince.ToDictionary(field => field.Key, field => field.Value, StringComparer.Ordinal),
+        contract.Body.DeepClone().AsObject());
 }

@@ -82,7 +82,7 @@ public static class PluginHostMode
 
         diagnostics = new HostDiagnostics(
             stderr,
-            GrantedSecrets(invocation),
+            KnownSecrets(invocation),
             invocation.Limits.Log,
             invocation.Plugin.Id,
             invocation.InvocationId,
@@ -134,6 +134,12 @@ public static class PluginHostMode
     /// The values of the granted variables, read from this process's own environment — the only place they exist,
     /// since no secret travels in the envelope. They are known here so that nothing the host writes can leak one.
     /// </summary>
-    private static Redactor GrantedSecrets(PluginInvocation invocation) =>
-        new((invocation.Grants.Env?.Variables ?? []).Select(Environment.GetEnvironmentVariable));
+    /// <summary>
+    /// The values this invocation must never write: those of the variables it was granted, and the door's capability
+    /// where it carries one.
+    /// </summary>
+    internal static Redactor KnownSecrets(PluginInvocation invocation) =>
+        new((invocation.Grants.Env?.Variables ?? [])
+            .Select(Environment.GetEnvironmentVariable)
+            .Append(invocation.Door?.Capability));
 }

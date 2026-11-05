@@ -61,6 +61,11 @@ public sealed class PluginLoader(
         new EventId(4, nameof(GrantsResolved)),
         "Plugin {Id} granted {Exec} executables, {Http} hosts, {Env} variables");
 
+    private static readonly Action<ILogger, string, int, Exception?> SubscriptionsGranted = LoggerMessage.Define<string, int>(
+        LogLevel.Debug,
+        new EventId(7, nameof(SubscriptionsGranted)),
+        "Plugin {Id} granted {Subscriptions} subscriptions");
+
     public Task<LoadResult> LoadAsync(SnapshotSource source, CancellationToken cancellationToken) =>
         LoadAsync(source, probeTimeoutsHoldOnlyThePlugin: false, cancellationToken);
 
@@ -230,6 +235,7 @@ public sealed class PluginLoader(
 
         var grants = GrantResolver.Resolve(manifest, settings.Grants.GetValueOrDefault(manifest.Id));
         GrantsResolved(logger, manifest.Id, grants.Exec.Count, grants.Http.Count, grants.Env.Count, null);
+        SubscriptionsGranted(logger, manifest.Id, grants.Subscriptions.Count, null);
 
         var executables = await ResolveExecutablesAsync(manifest, grants, settings, environment, cancellationToken).ConfigureAwait(false);
         // A manifest read with problems is one the start's second load kept for its unfinished probes alone: those come

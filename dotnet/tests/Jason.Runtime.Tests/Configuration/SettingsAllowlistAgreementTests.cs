@@ -136,6 +136,12 @@ public sealed class SettingsAllowlistAgreementTests
             {
                 yield return new Setting($"{child}[]", typeof(string));
             }
+            else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>)
+                && propertyType.GetGenericArguments()[1] == typeof(List<string>))
+            {
+                // The one map of lists is keyed by a journal kind: the order of that kind's subscribers.
+                yield return new Setting($"{child}:workitem_failed[]", typeof(string));
+            }
             else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {
                 // The one map keyed by an operation is the routes'; the others are keyed by a plugin's id.

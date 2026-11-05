@@ -582,6 +582,63 @@ public sealed class PluginHostModeTests : IDisposable
         Assert.Contains("\"code\":\"protocol_unsupported\"", stderr, StringComparison.Ordinal);
     }
 
+    private const string DoorCapability = "door-capability-0123456789abcdef";
+
+    private static InvocationDoor Door(string baseUrl = "http://127.0.0.1:9") =>
+        new(baseUrl, DoorCapability, "jrn_01JDOORLINE", ["campaign.list"], DoorLimits.Standard);
+
+    public static TheoryData<string> MalformedDoors =>
+    [
+        """{"base_url":"https://127.0.0.1:9","capability":"door-capability-0123456789abcdef","line_id":"jrn_1","operations":[],"limits":{"max_calls":1,"response_bytes":1,"timeout_ms":1}}""",
+        """{"base_url":"http://example.com:9","capability":"door-capability-0123456789abcdef","line_id":"jrn_1","operations":[],"limits":{"max_calls":1,"response_bytes":1,"timeout_ms":1}}""",
+        """{"base_url":"not a url","capability":"door-capability-0123456789abcdef","line_id":"jrn_1","operations":[],"limits":{"max_calls":1,"response_bytes":1,"timeout_ms":1}}""",
+        """{"base_url":"http://127.0.0.1:9","capability":"","line_id":"jrn_1","operations":[],"limits":{"max_calls":1,"response_bytes":1,"timeout_ms":1}}""",
+        """{"base_url":"http://127.0.0.1:9","capability":"door-capability-0123456789abcdef","line_id":"","operations":[],"limits":{"max_calls":1,"response_bytes":1,"timeout_ms":1}}""",
+        """{"base_url":"http://127.0.0.1:9","capability":"door-capability-0123456789abcdef","line_id":"jrn_1","limits":{"max_calls":1,"response_bytes":1,"timeout_ms":1}}""",
+        """{"base_url":"http://127.0.0.1:9","capability":"door-capability-0123456789abcdef","line_id":"jrn_1","operations":[]}""",
+        """{"base_url":"http://127.0.0.1:9","capability":"door-capability-0123456789abcdef","line_id":"jrn_1","operations":[],"limits":{"max_calls":0,"response_bytes":1,"timeout_ms":1}}""",
+    ];
+
+    /// <summary>A door the host could not use as given is a broken envelope, refused before any of the plugin's code runs, and never quoted.</summary>
+    [Theory]
+    [MemberData(nameof(MalformedDoors))]
+    public async Task An_envelope_whose_door_is_malformed_is_refused(string door)
+    {
+        var runner = Succeeding();
+        PluginHostMode.Runner = runner;
+        var envelope = JsonSerializer.SerializeToNode(InvocationFactory.Create(_root, "echo.run"), JasonJson.Options)!.AsObject();
+        envelope["door"] = JsonNode.Parse(door);
+        using var stdin = new StringReader(envelope.ToJsonString());
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+
+        var exit = await PluginHostMode.RunAsync(Argv(), stdin, stdout, stderr, Ct);
+
+        Assert.Equal(HostExitCodes.Rejected, exit);
+        Assert.Contains("\"code\":\"envelope_invalid\"", stderr.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(DoorCapability, stderr.ToString(), StringComparison.Ordinal);
+        Assert.Equal(0, runner.Calls);
+    }
+
+    /// <summary>The door's capability is a secret of this invocation: wherever the plugin writes it, stderr carries the mask.</summary>
+    [Fact]
+    [Critical(Family.S3, "a door's capability is masked on stderr")]
+    public async Task A_door_s_capability_is_masked_wherever_the_plugin_writes_it()
+    {
+        InvocationFactory.WritePackage(
+            _root,
+            $$"""export function invoke() { host.log("info", "{{DoorCapability}}"); throw new Error("{{DoorCapability}}"); }""");
+        var invocation = InvocationFactory.Create(_root, "echo.run", configure: builder => builder.Door = Door());
+
+        var (exit, stdout, stderr) = await RunAsync(Argv(), invocation);
+
+        Assert.Equal(HostExitCodes.Completed, exit);
+        Assert.DoesNotContain(DoorCapability, stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain(DoorCapability, stdout, StringComparison.Ordinal);
+        Assert.Contains(Redactor.Mask, stderr, StringComparison.Ordinal);
+        Assert.Contains(Redactor.Mask, stdout, StringComparison.Ordinal);
+    }
+
     [Fact]
     [Critical(Family.R1, "the child recomputes the digest")]
     public async Task A_package_that_changed_since_the_runtime_validated_it_is_never_run()

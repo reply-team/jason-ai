@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Plugins.Subscriptions;
 
 namespace Jason.Runtime.Plugins.Manifest;
 
@@ -28,13 +29,18 @@ public static class ManifestReader
     /// read as <see cref="ProblemCodes.ProbeTimedOut"/>, environmental, and the manifest is kept. The start's second load
     /// reads this way; nothing else does.
     /// </summary>
-    public static ManifestReadResult Read(string yamlText, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing, bool probeTimeoutsHoldOnlyThePlugin)
+    public static ManifestReadResult Read(string yamlText, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing, bool probeTimeoutsHoldOnlyThePlugin) =>
+        Read(yamlText, directoryName, packageRoot, bounds, timing, probeTimeoutsHoldOnlyThePlugin, SubscribableKinds.Catalog);
+
+    /// <summary>The same read, with the declared subscriptions read against <paramref name="kinds"/> rather than the catalog.</summary>
+    public static ManifestReadResult Read(string yamlText, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing, bool probeTimeoutsHoldOnlyThePlugin, SubscribableKinds kinds)
     {
         ArgumentNullException.ThrowIfNull(yamlText);
         ArgumentException.ThrowIfNullOrWhiteSpace(directoryName);
         ArgumentException.ThrowIfNullOrWhiteSpace(packageRoot);
         ArgumentNullException.ThrowIfNull(bounds);
         ArgumentNullException.ThrowIfNull(timing);
+        ArgumentNullException.ThrowIfNull(kinds);
 
         JsonNode? document;
         try
@@ -53,7 +59,7 @@ public static class ManifestReader
             return new ManifestReadResult(null, [new ManifestProblem(ProblemCodes.YamlInvalid, "(root)", "A manifest is one YAML mapping of fields.")]);
         }
 
-        var rules = new ManifestRules(root, directoryName, packageRoot, bounds, timing);
+        var rules = new ManifestRules(root, directoryName, packageRoot, bounds, timing, kinds);
         var manifest = rules.Build();
         if (probeTimeoutsHoldOnlyThePlugin && rules.Problems.Count > 0 && rules.Problems.All(problem => problem.Unmeasured))
         {

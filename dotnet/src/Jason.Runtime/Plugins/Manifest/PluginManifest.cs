@@ -16,8 +16,11 @@ public sealed record HttpRequestSpec(IReadOnlyList<string> Hosts);
 
 public sealed record EnvRequestSpec(IReadOnlyList<string> Variables);
 
+/// <summary>The Runtime API families a handler of this plugin may be granted through its door (<c>host.call</c>).</summary>
+public sealed record ApiRequestSpec(IReadOnlyList<string> Families);
+
 /// <summary>What the manifest asks for. Asking is not being given it: the grants decide that, at every reload.</summary>
-public sealed record CapabilityRequests(ExecRequestSpec? Exec, HttpRequestSpec? Http, EnvRequestSpec? Env);
+public sealed record CapabilityRequests(ExecRequestSpec? Exec, HttpRequestSpec? Http, EnvRequestSpec? Env, ApiRequestSpec? Api = null);
 
 /// <summary>
 /// The contract versions a plugin speaks: the plugin-host protocol, the canonical operations (for a notification plugin,
@@ -99,6 +102,12 @@ public sealed record PluginManifest(
     /// end of an operation whose recovery read rests on the key needs before the runtime repeats it.
     /// </summary>
     public bool SettlesByKey(string operation) => KeyedOperations.Contains(operation, StringComparer.Ordinal);
+
+    /// <summary>
+    /// The journal kinds the plugin subscribes to, as <c>subscriptions</c> declares them, in the manifest's order; none
+    /// unless the manifest lists them. Declaring a kind is not being given it: the grants decide that, at every load.
+    /// </summary>
+    public IReadOnlyList<string> Subscriptions { get; init; } = [];
 
     /// <summary>Whether this is a provider that reads its accounts' events, in a version of the events contract this build speaks.</summary>
     public bool ReadsEvents => Kind == PluginKind.Provider && Contracts.Events.Contains(EventsContract.CurrentVersion);

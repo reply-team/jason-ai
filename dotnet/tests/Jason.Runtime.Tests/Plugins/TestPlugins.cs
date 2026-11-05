@@ -155,7 +155,7 @@ public static class TestPlugins
     /// Grants a plugin what a test says it may use, merged into the settings file rather than written over it,
     /// so the dispatcher stays off and an earlier grant survives.
     /// </summary>
-    public static void Grant(JasonPaths paths, string id, string[]? exec = null, string[]? http = null, string[]? env = null)
+    public static void Grant(JasonPaths paths, string id, string[]? exec = null, string[]? http = null, string[]? env = null, string[]? api = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         Directory.CreateDirectory(paths.ConfigDirectory);
@@ -170,6 +170,10 @@ public static class TestPlugins
         grant["Exec"] = Array(exec);
         grant["Http"] = Array(http);
         grant["Env"] = Array(env);
+        if (api is not null)
+        {
+            grant["Api"] = Array(api);
+        }
 
         File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString(JasonJson.Options), new UTF8Encoding(false));
 

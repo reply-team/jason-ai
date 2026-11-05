@@ -1,0 +1,34 @@
+{
+  "kind": "approval_requested",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "Work was parked to wait for a person's decision, and the line names the approval that asks for it.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "approval": { "at": "/new/id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "approval" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "description": "The approval by its identifiers, never its subject or its preview.",
+        "additionalProperties": false,
+        "required": ["id", "operation", "subject_hash"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^apr_", "description": "The approval." },
+          "operation": { "type": "string", "minLength": 1, "description": "The operation the work performs, by its id." },
+          "subject_hash": { "type": "string", "pattern": "^sha256:", "description": "The digest of what was asked to be approved; the subject itself stays on the approval." }
+        }
+      }
+    }
+  }
+}

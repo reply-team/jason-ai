@@ -25,10 +25,12 @@ public sealed record PinnedPlugin(LoadedPlugin Plugin, string SnapshotId);
 /// already chosen; absent, the invoker chooses it from the active snapshot itself. <see cref="UnsettledSince"/> is when
 /// the earliest earlier attempt of the work item that may have acted was claimed, or null where none did, and
 /// <see cref="UnsettledReference"/> the work item's send the latest such attempt to return one returned.
+/// <see cref="Door"/> asks for the handler's door to the Runtime API, which opens only for a plugin granted a family of it.
 /// </summary>
 /// <remarks>
 /// Nothing here carries a secret. A plugin reaches its credentials through the environment variables the user
-/// granted it, which the runtime places in the child's environment by name and never writes into an envelope.
+/// granted it, which the runtime places in the child's environment by name and never writes into an envelope. A door's
+/// capability is not here either: the invoker mints it for the one invocation, and it goes to the child on stdin alone.
 /// </remarks>
 public sealed record PluginInvocationRequest(
     string PluginId,
@@ -44,16 +46,25 @@ public sealed record PluginInvocationRequest(
     PinnedPlugin? Pinned = null,
     InvocationPurpose Purpose = InvocationPurpose.CanonicalOperation,
     DateTimeOffset? UnsettledSince = null,
-    string? UnsettledReference = null);
+    string? UnsettledReference = null,
+    DoorRequest? Door = null);
+
+/// <summary>
+/// A handler's door to the Runtime API, asked for about one journal line: what it calls speaks as its plugin, and every
+/// call's reason names that line. Which operations it opens is the plugin's frozen grant, never the caller's to say.
+/// </summary>
+public sealed record DoorRequest(string LineId);
 
 /// <summary>
 /// What a plugin is invoked for, which decides the kind of plugin that may answer: a provider performs a canonical
 /// operation, a notification plugin performs the delivery contract, and a provider that declares the events contract
-/// reads an account's events. None is ever invoked for another.
+/// reads an account's events, and a plugin of any kind takes a journal line of a kind it was granted a subscription to.
+/// None is ever invoked for another.
 /// </summary>
 public enum InvocationPurpose
 {
     CanonicalOperation,
     Delivery,
     Events,
+    Subscription,
 }

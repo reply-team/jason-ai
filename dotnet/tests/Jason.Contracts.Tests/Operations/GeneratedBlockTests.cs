@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Journal;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Tests;
@@ -24,6 +25,8 @@ public class GeneratedBlockTests
     private const string End = "<!-- END GENERATED properties -->";
     private const string TableBegin = "<!-- BEGIN GENERATED operations -->";
     private const string TableEnd = "<!-- END GENERATED operations -->";
+    private const string KindsBegin = "<!-- BEGIN GENERATED journal-kinds -->";
+    private const string KindsEnd = "<!-- END GENERATED journal-kinds -->";
     private const string Unknown = "schema_keyword_unknown";
 
     /// <summary>
@@ -160,6 +163,26 @@ public class GeneratedBlockTests
         Assert.True(found == expected, $"docs/contracts/README.md's table of operations is out of step with the documents. It should read:\n\n{expected}\n");
     }
 
+    /// <summary>
+    /// The same README lists every kind the runtime reserves for its own journal lines in one table, rendered from the
+    /// kinds' documents and compared whole: the release that first wrote the kind, whether a program may subscribe to it,
+    /// the things its lines name, and its summary.
+    /// </summary>
+    [Fact]
+    public void The_readme_s_table_of_journal_kinds_is_rendered_from_the_documents()
+    {
+        var readme = File.ReadAllText(Path.Combine(ContractFiles.Package, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf(KindsBegin, StringComparison.Ordinal);
+        var finish = readme.IndexOf(KindsEnd, StringComparison.Ordinal);
+
+        Assert.True(start >= 0 && finish > start, "docs/contracts/README.md carries no generated table of the journal's kinds.");
+
+        var found = readme[start..(finish + KindsEnd.Length)];
+        var expected = JournalKindsTable();
+
+        Assert.True(found == expected, $"docs/contracts/README.md's table of the journal's kinds is out of step with the documents. It should read:\n\n{expected}\n");
+    }
+
     /// <summary>The delivery contract's page carries a block rendered from its own document, as an operation's does.</summary>
     [Fact]
     public void The_delivery_page_s_generated_block_is_what_its_document_says()
@@ -189,6 +212,27 @@ public class GeneratedBlockTests
         var path = Path.Combine(ContractFiles.Package, "events", "events.read.md");
 
         Assert.True(File.Exists(path), $"{ContractFiles.Relative(path)} explains the events contract for a plugin author, and is missing.");
+
+        var page = File.ReadAllText(path).ReplaceLineEndings("\n");
+        var start = page.IndexOf(Begin, StringComparison.Ordinal);
+        var finish = page.IndexOf(End, StringComparison.Ordinal);
+
+        Assert.True(start >= 0 && finish > start, $"{ContractFiles.Relative(path)} carries no generated block.");
+
+        var found = page[start..(finish + End.Length)];
+        var expected = Render(contract);
+
+        Assert.True(found == expected, $"{ContractFiles.Relative(path)} is out of step with its document. The block should read:\n\n{expected}\n");
+    }
+
+    /// <summary>The subscription contract's page carries a block rendered from its own document, as the others' do.</summary>
+    [Fact]
+    public void The_subscription_page_s_generated_block_is_what_its_document_says()
+    {
+        var contract = Jason.Contracts.Subscriptions.SubscriptionCatalog.Find("subscription.handle")!;
+        var path = Path.Combine(ContractFiles.Package, "subscriptions", "subscription.handle.md");
+
+        Assert.True(File.Exists(path), $"{ContractFiles.Relative(path)} explains the subscription contract for a plugin author, and is missing.");
 
         var page = File.ReadAllText(path).ReplaceLineEndings("\n");
         var start = page.IndexOf(Begin, StringComparison.Ordinal);
@@ -365,6 +409,27 @@ public class GeneratedBlockTests
         return table.ToString();
     }
 
+    /// <summary>The table of the journal's kinds, in the catalog's own order, each kind's names in the vocabulary's.</summary>
+    private static string JournalKindsTable()
+    {
+        var table = new StringBuilder();
+        table.Append(KindsBegin).Append('\n');
+        table.Append("<!-- Rendered from each kind's document. Edit those; this table follows them. -->\n\n");
+        table.Append("| Kind | Since | Subscribable | Names | What a line records |\n|---|---|---|---|---|\n");
+        foreach (var contract in JournalKindCatalog.All)
+        {
+            var names = JournalKindContract.EntityNames.Where(contract.Entities.ContainsKey).ToList();
+            table.Append("| [`").Append(contract.Kind).Append("`](journal/").Append(contract.Kind).Append(".json) | `")
+                .Append(contract.Since).Append("` | ")
+                .Append(contract.Subscribable ? "yes" : "no").Append(" | ")
+                .Append(names.Count == 0 ? "none" : string.Join(", ", names)).Append(" | ")
+                .Append(contract.Summary).Append(" |\n");
+        }
+
+        table.Append('\n').Append(KindsEnd);
+        return table.ToString();
+    }
+
     /// <summary>The one line a page's title gives its operation: what follows the name and the dash.</summary>
     private static string Title(string id)
     {
@@ -412,6 +477,28 @@ public class GeneratedBlockTests
         Row(block, "kinds", string.Join(", ", contract.Kinds.Select(kind => "`" + kind + "`")));
         Row(block, "page", "at most " + ((int)contract.InputSchema["properties"]!["limit"]!["maximum"]!).ToString(System.Globalization.CultureInfo.InvariantCulture) + " events");
         Row(block, "timeout", contract.TimeoutMs.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms");
+        block.Append('\n');
+
+        block.Append("| Failure code | Class | When |\n|---|---|---|\n");
+        foreach (var code in contract.FailureCodes)
+        {
+            block.Append("| `").Append(code.Code).Append("` | `").Append(Name(code.Class)).Append("` | ").Append(code.When).Append(" |\n");
+        }
+
+        block.Append('\n').Append(End);
+        return block.ToString();
+    }
+
+    private static string Render(Jason.Contracts.Subscriptions.SubscriptionContract contract)
+    {
+        var block = new StringBuilder();
+        block.Append(Begin).Append('\n');
+        block.Append("<!-- Rendered from ").Append(contract.Id).Append(".json. Edit the document; this block follows it. -->\n\n");
+        block.Append("| What it is | Value |\n|---|---|\n");
+        Row(block, "version", contract.Version.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Row(block, "input", string.Join(", ", Names(contract.InputSchema)));
+        Row(block, "output", string.Join(", ", Names(contract.OutputSchema)));
+        Row(block, "timeout", contract.TimeoutMs.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms, lowered to the plugin's own limit");
         block.Append('\n');
 
         block.Append("| Failure code | Class | When |\n|---|---|---|\n");

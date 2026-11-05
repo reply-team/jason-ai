@@ -1,0 +1,11 @@
+{
+  "kind": "events_backfill_requested",
+  "version": 1,
+  "case": "a fortnight of an account asked to be read again",
+  "body": {
+    "key": "evb_01JC0000000000000000000007",
+    "old": null,
+    "new": { "backfill": "evb_01JC0000000000000000000007", "source": "evs_01JC0000000000000000000005", "plugin": "example-mail", "binding_identity": "sha256:7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e", "from": "2026-08-01T00:00:00.000Z", "to": "2026-08-15T00:00:00.000Z" }
+  },
+  "expect": "valid"
+}

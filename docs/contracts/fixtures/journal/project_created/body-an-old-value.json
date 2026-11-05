@@ -1,0 +1,11 @@
+{
+  "kind": "project_created",
+  "version": 1,
+  "case": "a made project had nothing before",
+  "body": {
+    "key": "prj_01JC0000000000000000000009",
+    "old": { "name": "Spring launch" },
+    "new": { "name": "Spring launch", "slug": "spring-launch" }
+  },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "type" }] }
+}

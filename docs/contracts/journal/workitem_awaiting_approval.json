@@ -1,0 +1,23 @@
+{
+  "kind": "workitem_awaiting_approval",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A queued work item was parked to wait for a person's approval before it may run.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "status" },
+      "old": { "const": "created", "description": "Only queued work is parked: the claim parks it instead of taking it." },
+      "new": { "const": "awaiting_approval" }
+    }
+  }
+}

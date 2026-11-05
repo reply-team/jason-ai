@@ -311,8 +311,11 @@ public class PreferenceServiceTests
     [Theory]
     [InlineData(ActorType.Role, "copywriter")]
     [InlineData(ActorType.Attempt, "att_01K7QN0000000000000000000A")]
+    [InlineData(ActorType.Plugin, "acme-forwarder")]
     public async Task Only_a_person_sets_or_unsets_a_preference(ActorType type, string id)
     {
+        // A plugin is admitted as an actor only in the scope its own door opened, and refused there all the same.
+        using var door = type == ActorType.Plugin ? ActorScope.ForPlugin(id) : null;
         using var database = new TestDatabase();
         using var db = database.Open();
         var service = NewService(db);

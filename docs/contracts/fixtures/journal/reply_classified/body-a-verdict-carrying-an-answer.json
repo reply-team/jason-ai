@@ -1,0 +1,24 @@
+{
+  "kind": "reply_classified",
+  "version": 1,
+  "case": "a verdict that carries the answer a person gave to the campaign's question",
+  "body": {
+    "key": "sha256:0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+    "old": null,
+    "new": {
+      "plugin": "example-mail",
+      "thread": "thr-20931",
+      "message_id": "msg-77310",
+      "message_at": "2026-10-28T09:12:44.000Z",
+      "contact_id": "cnt_01JC0000000000000000000003",
+      "category": "interested",
+      "confidence": 0.86,
+      "reaction": "act",
+      "goal_id": null,
+      "goal_kind": null,
+      "decision_id": "dec_01JC000000000000000000000D",
+      "answered_by": { "type": "human", "id": "someone@example.com" }
+    }
+  },
+  "expect": "valid"
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "decision_answered",
+  "version": 1,
+  "case": "a person chose one of the offered options",
+  "body": { "key": "decision", "old": null, "new": { "decision_id": "dec_01JC0000000000000000000006", "chosen_option": "Pause the campaign" } },
+  "expect": "valid"
+}

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Persistence;
 using Microsoft.Data.Sqlite;
@@ -59,8 +60,8 @@ public class JournalAppendOnlyTests
         db.Campaigns.Add(campaign);
         db.SaveChanges();
 
-        db.Journal.Add(new JournalEntry { PublicId = "jrn_C", Ts = now, ActorType = ActorType.System, ActorId = "runtime", Kind = "suppression_added" });
-        db.Journal.Add(new JournalEntry { PublicId = "jrn_D", Ts = now, ActorType = ActorType.Role, ActorId = "planner", Kind = "campaign_created", Campaign = campaign });
+        db.Journal.Add(new JournalEntry { PublicId = "jrn_C", Ts = now, ActorType = ActorType.System, ActorId = "runtime", Kind = "suppression_added", Key = "email", New = new JsonObject { ["channel"] = "email", ["value"] = "ada@example.com" } });
+        db.Journal.Add(new JournalEntry { PublicId = "jrn_D", Ts = now, ActorType = ActorType.Role, ActorId = "planner", Kind = "campaign_created", Campaign = campaign, Key = "name", New = JsonValue.Create("j") });
         db.SaveChanges();
         db.ChangeTracker.Clear();
 
@@ -70,8 +71,9 @@ public class JournalAppendOnlyTests
 
     /// <summary>
     /// The first of the three: the Runtime API's operations, all of them named in one list, hold no journal verb but the
-    /// two that leave what is there as it was. An entry is appended and read; any other verb, whatever it is called, is
-    /// taken to change what is there until this list says otherwise.
+    /// three that leave what is there as it was. An entry is appended and read, and the kinds the runtime reserves are
+    /// read from their documents without a line being touched; any other verb, whatever it is called, is taken to change
+    /// what is there until this list says otherwise.
     /// </summary>
     [Fact]
     [Critical(Family.P1, "no API path rewrites a journal entry")]
@@ -104,9 +106,9 @@ public class JournalAppendOnlyTests
     ];
 
     private static List<string> RewritingTheJournal(IEnumerable<string> operations) =>
-        [.. operations.Where(name => name.Split('.') is ["journal", var verb] && verb is not ("append" or "list"))];
+        [.. operations.Where(name => name.Split('.') is ["journal", var verb] && verb is not ("append" or "list" or "kinds"))];
 
-    /// <summary>A stand-in for the operations list, with three paths that would rewrite an entry beside the two that do not.</summary>
+    /// <summary>A stand-in for the operations list, with three paths that would rewrite an entry beside the three that do not.</summary>
     private static class RewritingCatalogue
     {
         public const string Append = "journal.append";
@@ -114,6 +116,7 @@ public class JournalAppendOnlyTests
         public const string Delete = "journal.delete";
         public const string Purge = "journal.purge";
         public const string List = "journal.list";
+        public const string Kinds = "journal.kinds";
         public const string CampaignUpdate = "campaign.update";
     }
 }

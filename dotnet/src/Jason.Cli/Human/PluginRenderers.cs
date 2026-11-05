@@ -58,6 +58,12 @@ public static class PluginRenderers
             {
                 lines.Add(RenderText.Shown($"{route.Route}: {route.Code} — {route.Message}")!);
             }
+
+            // And so does the order of a kind's subscribers: the setting is its location.
+            foreach (var problem in rejected.Subscriptions ?? [])
+            {
+                lines.Add(RenderText.Shown($"{problem.Setting}: {problem.Code} — {problem.Message}")!);
+            }
         }
 
         return RenderText.Lines(lines);
@@ -106,7 +112,9 @@ public static class PluginRenderers
     /// <summary>Granted against requested for each capability: declaration is not permission, and it shows.</summary>
     private static string? Grants(PluginCapabilitiesDto? capabilities)
     {
-        if (capabilities is null || (capabilities.Exec is null && capabilities.Http is null && capabilities.Env is null))
+        if (capabilities is null
+            || (capabilities.Exec is null && capabilities.Http is null && capabilities.Env is null && capabilities.Api is null
+                && capabilities.Subscriptions is null))
         {
             return null;
         }
@@ -114,8 +122,18 @@ public static class PluginRenderers
         var exec = capabilities.Exec is null ? Absent : Counts(capabilities.Exec.Granted?.Count ?? 0, capabilities.Exec.Requested?.Count ?? 0);
         var http = capabilities.Http is null ? Absent : Counts(capabilities.Http.Granted?.Count ?? 0, capabilities.Http.Requested?.Count ?? 0);
         var env = capabilities.Env is null ? Absent : Counts(capabilities.Env.Granted?.Count ?? 0, capabilities.Env.Requested?.Count ?? 0);
+        var subscriptions = capabilities.Subscriptions is null
+            ? Absent
+            : Counts(capabilities.Subscriptions.Granted?.Count ?? 0, capabilities.Subscriptions.Requested?.Count ?? 0);
 
-        return $"exec {exec} | http {http} | env {env}";
+        // The door is a handler's alone, so a plugin that asks for none keeps the line it always had.
+        var line = $"exec {exec} | http {http} | env {env}";
+        if (capabilities.Api is not null)
+        {
+            line += $" | api {Counts(capabilities.Api.Granted?.Count ?? 0, capabilities.Api.Requested?.Count ?? 0)}";
+        }
+
+        return line + $" | subscriptions {subscriptions}";
     }
 
     private static string Counts(int granted, int requested) =>

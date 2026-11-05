@@ -9,11 +9,13 @@ using Jason.Runtime.Hosting.Modules;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Events;
 using Jason.Runtime.Tests.Events;
+using Jason.Runtime.Tests.Plugins.Subscriptions;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -82,12 +84,15 @@ internal sealed class DispatchHarness : IDisposable
 
         // The respond step, as the runtime ships it: on, so a reply the read says wakes a responder where one can launch.
         services.AddSingleton<IOptionsMonitor<ResponderOptions>>(Responder);
+
+        // The subscription runner's numbers, as the runtime ships them unless a test changes them between turns.
+        services.AddSingleton<IOptionsMonitor<SubscriptionsOptions>>(Subscriptions);
         services.AddSingleton(_dir.Paths);
         services.AddSingleton(Registry);
         services.AddSingleton(Status);
         services.AddDbContext<JasonDbContext>(o =>
         {
-            JasonDbContext.Configure(o, _database.File);
+            JasonDbContext.Configure(o, _database.File, JournalLines.Strict);
             o.AddInterceptors(new SaveHook(Take), Commands);
         });
 
@@ -113,6 +118,9 @@ internal sealed class DispatchHarness : IDisposable
         // The accounts' events are read through pages the test hands over rather than through a child.
         services.AddSingleton<IEventsInvoker>(Events);
 
+        // The subscribed kinds' handlers answer as the test says rather than through a child.
+        services.AddSingleton<ISubscriptionInvoker>(Handlers);
+
         // Where the claim finds the person's memory files: a root under this test's own home, which no test here marks,
         // so every root a role is told of is one a test made on purpose.
         services.AddSingleton(Harness.TestHarness.Folders(_dir.Home));
@@ -132,6 +140,23 @@ internal sealed class DispatchHarness : IDisposable
 
     /// <summary>The reader the scan hands reads of accounts' events to, as the runtime's singleton holds it.</summary>
     public EventReader Reader => _provider.GetRequiredService<EventReader>();
+
+    /// <summary>What each subscriber's handler answers, line by line, and what each was handed.</summary>
+    public FakeSubscriptionInvoker Handlers { get; } = new();
+
+    /// <summary>The runner the scan offers subscribed kinds to, as the runtime's singleton holds it.</summary>
+    public SubscriptionRunner SubscriptionRunner => _provider.GetRequiredService<SubscriptionRunner>();
+
+    /// <summary>The subscription runner's settings, which a test may change between turns.</summary>
+    public TestOptionsMonitor<SubscriptionsOptions> Subscriptions { get; } = new(new SubscriptionsOptions());
+
+    /// <summary>Runs one subscription step, in a scope of its own, the way the scan runs it.</summary>
+    public async Task<int> SubscriptionScanAsync(CancellationToken ct)
+    {
+        using var scope = _provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        return await scope.ServiceProvider.GetRequiredService<SubscriptionScan>().ScanAsync(db, ct);
+    }
 
     /// <summary>Runs one events step, in a scope of its own, the way the scan runs it.</summary>
     public async Task<int> EventScanAsync(CancellationToken ct)
@@ -198,11 +223,24 @@ internal sealed class DispatchHarness : IDisposable
         return await notifier.NotifyAsync(services.GetRequiredService<JasonDbContext>(), ct);
     }
 
-    /// <summary>One journal line, written by the runtime at the harness clock's time, as a step of the runtime would.</summary>
+    /// <summary>
+    /// One journal line, written by the runtime at the harness clock's time, as a step of the runtime would: in the shape
+    /// its kind's document states, with the members of <paramref name="updated"/> over the documented ones, and naming
+    /// stand-ins where the document names a campaign, a work item or an attempt on every line.
+    /// </summary>
     public async Task<JournalEntry> WriteLineAsync(string kind, CancellationToken ct, System.Text.Json.Nodes.JsonObject? updated = null)
     {
         await using var db = Open();
-        var entry = new JournalWriter(Clock).Append(db, Actors.Runtime, kind, campaign: null, updated: updated);
+        var (campaign, item, attempt) = await Tests.Journal.DocumentedLines.StandInsAsync(db, kind, Clock.GetUtcNow().UtcDateTime, ct);
+        var entry = Tests.Journal.DocumentedLines.AppendDocumented(
+            new JournalWriter(Clock),
+            db,
+            Actors.Runtime,
+            kind,
+            campaign,
+            with: updated,
+            workItem: item,
+            attempt: attempt);
         await db.SaveChangesAsync(ct);
         return entry;
     }

@@ -1,0 +1,82 @@
+{
+  "kind": "subscription_failed",
+  "version": 1,
+  "since": "0.29.0",
+  "summary": "A subscriber's handler ended in a final class for one line, so the chain of the line's kind ended there for that line and the kind moved on.",
+  "subscribable": false,
+  "entities": {
+    "plugin": {
+      "at": "/new/plugin_id",
+      "presence": "always"
+    }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "key",
+      "old",
+      "new"
+    ],
+    "properties": {
+      "key": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "description": "The kind whose chain ended, the same as new.kind."
+      },
+      "old": {
+        "type": "null"
+      },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "line",
+          "plugin_id",
+          "class",
+          "code",
+          "attempts"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "description": "The kind whose chain ended."
+          },
+          "line": {
+            "type": "string",
+            "pattern": "^jrn_",
+            "description": "The id of the line the chain was handling."
+          },
+          "plugin_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The subscriber whose handler ended the chain."
+          },
+          "class": {
+            "enum": [
+              "transient",
+              "permanent",
+              "validation",
+              "blocked",
+              "ambiguous"
+            ],
+            "description": "The failure's class; transient where the retries were spent."
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "description": "The failure's code, the handler's own or the runtime's for an answer outside the contract."
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "How many times the plugin was handed the line, the last included."
+          }
+        }
+      }
+    }
+  }
+}

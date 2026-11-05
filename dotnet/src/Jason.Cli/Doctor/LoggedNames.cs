@@ -26,6 +26,7 @@ public static class LoggedNames
         ["Plugin candidate {Directory} is not loadable: {Codes}"] = "Directory",
         ["Plugin {Directory} is unavailable on this machine: {Codes}"] = "Directory",
         ["Plugin {Id} granted {Exec} executables, {Http} hosts, {Env} variables"] = "Id",
+        ["Plugin {Id} granted {Subscriptions} subscriptions"] = "Id",
         ["Notification channel {Channel} failed ({Code}, {Class})"] = "Channel",
     }.ToFrozenDictionary(StringComparer.Ordinal);
 

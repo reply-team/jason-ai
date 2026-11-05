@@ -1,0 +1,30 @@
+{
+  "kind": "provider_block_cleared",
+  "version": 1,
+  "since": "0.18.0",
+  "summary": "An open provider block that had held work of a campaign cleared, through a trial that got past it or by a person.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "provider_block": { "at": "/key", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^blk_", "description": "The block." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider_block_id"],
+        "properties": {
+          "provider_block_id": { "type": "string", "pattern": "^blk_", "description": "The block, as the key says." }
+        }
+      }
+    }
+  }
+}

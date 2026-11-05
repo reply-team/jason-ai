@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_cancelled",
+  "version": 1,
+  "case": "a running item cancelled",
+  "body": { "key": "status", "old": "processing", "new": "cancelled" },
+  "expect": "valid"
+}

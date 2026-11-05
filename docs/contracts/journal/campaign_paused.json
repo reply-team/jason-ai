@@ -1,0 +1,21 @@
+{
+  "kind": "campaign_paused",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A campaign stopped being active, so none of its work is dispatched until it is started again.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "status" },
+      "old": { "const": "active", "description": "The status the campaign left: only an active campaign is paused." },
+      "new": { "const": "paused" }
+    }
+  }
+}

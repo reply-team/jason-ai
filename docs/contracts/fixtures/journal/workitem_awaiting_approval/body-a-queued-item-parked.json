@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_awaiting_approval",
+  "version": 1,
+  "case": "a queued item parked for a person's approval",
+  "body": { "key": "status", "old": "created", "new": "awaiting_approval" },
+  "expect": "valid"
+}

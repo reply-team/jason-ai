@@ -1,0 +1,7 @@
+{
+  "kind": "profile_revised",
+  "version": 1,
+  "case": "the line names the fields the change named",
+  "body": { "key": "local-agent", "old": { "revision": 2 }, "new": { "revision": 3 } },
+  "expect": { "invalid": [{ "pointer": "/new/fields", "reason": "required" }] }
+}

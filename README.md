@@ -248,8 +248,9 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 | the running runtime is the build this CLI is | a provider plugin is installed |
 | migrations are applied | each plugin package this release publishes is the one installed |
 | the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
-| role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a route is configured |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a binding names an account |
+| role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a plugin is granted a journal kind |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a route is configured |
+| | a binding names an account |
 | | a provider CLI **you name** answers |
 | | the skill packs are deployed to an agent harness, and the files their record names are there |
 | | every enabled profile names an agent host detected on this machine |
@@ -295,10 +296,12 @@ it leaves out. The file holds the versions, the report `jason status` gives, the
 `JASON_*` variables by shape with a value only for the settings `jason doctor --help` lists, a bounded slice
 of the log, what the runtime says about itself and each plugin by its id, version, digest, status and
 problem codes, which plugin performs which operation, here and per campaign, by plugin id and operation
-name — never which account a route binds — and the journal and the work items counted, with the newest entries by kind and ids and the
+name — never which account a route binds — which plugins each subscribed journal kind is handed to, where its
+cursor stands and how its newest chains ended, by status and code — never the envelope a chain carried — and the
+journal and the work items counted, with the newest entries by kind and ids and the
 newest failures by their error's code — never by what they say. It never holds the capability token,
 request or response bodies, prompts, work-item results, the database, plugin packages, a route's
-account and its identity, the names of execution profiles, or anything read from the folder Jason keeps what it learns about your business in —
+account and its identity, the envelopes subscription chains carried, the names of execution profiles, or anything read from the folder Jason keeps what it learns about your business in —
 `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only
 `--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a
 project link recorded, campaign

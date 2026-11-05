@@ -47,6 +47,8 @@ public sealed class SettingsAllowlistTests
         "Plugins:Invoker:VersionCheckTimeoutMs", "Plugins:Invoker:LogLineBytes",
         "Inbound:SyncSeconds", "Inbound:LookbackSeconds",
         "Responder:Priority", "Responder:TimeoutSeconds", "Responder:MaxAttempts", "Responder:MaxAgeSeconds",
+        "Subscriptions:RunRecordsPerKind", "Subscriptions:EnvelopeBytes", "Subscriptions:TransientRetries",
+        "Subscriptions:RetryBackoffSeconds", "Subscriptions:MaxParallel",
     ];
 
     /// <summary>Settings that are named so nobody adds one by accident: a feed, a profile, a command, a grant, a route, a binding.</summary>

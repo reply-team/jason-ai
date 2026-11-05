@@ -56,11 +56,17 @@ Authorization: Bearer <token>
 The token is 256 random bits, made fresh at every start. The runtime keeps it in memory and writes it to the
 descriptor, a file only the account that owns the installation can read, and to nowhere else a program could look.
 
-The token is the whole authority. Whatever the API does, the token allows: there are no scopes, no second token for a
-program, no key per program and no read-only token in this version. A program that holds it can do everything the
-account that owns the installation can do with `jason`, including deciding work that reaches real people. The one
-other holder is a browser paired with `jason ui open`, which is given a token of its own with the same rights
-([docs/ui.md](ui.md)).
+The token is the whole authority. Whatever the API does, the token allows: there are no scopes, no key per program and
+no read-only token in this version. A program that holds it can do everything the account that owns the installation
+can do with `jason`, including deciding work that reaches real people. The one other holder is a browser paired with
+`jason ui open`, which is given a token of its own with the same rights ([docs/ui.md](ui.md)).
+
+One credential is narrower than the token, and never a person's: a **handler capability**. The runtime mints one for a
+plugin's handler for a single invocation and hands it only to the plugin-host running that invocation, which makes
+every call itself ([docs/plugins.md](plugins.md), §6 and §10). It opens one operation set, the Runtime API families the
+person granted that plugin, and nothing else: any other operation is answered `403` with the code
+`operation_not_granted`. It lives for that one invocation and dies when the invocation ends, and a call through it
+speaks as the plugin, never as a person, so no operation that needs a named person is ever in its set.
 
 So a program keeps three rules:
 
@@ -95,8 +101,8 @@ A request that carries an `Origin` header naming anything but the runtime's own 
 - **Ids are prefixed ULIDs**, and the prefix says what an id names. Among them: `cmp_` a campaign, `cnt_` a contact,
   `wi_` a work item, `att_` an attempt, `apr_` an approval, `dec_` a question, `blk_` a block, `jrn_` a journal entry,
   `rpt_` a report, `prj_` a project, `rol_` a role, `prf_` an execution profile, `sup_` a do-not-contact entry, `uit_` a
-  UI token, `evs_` an event source, `evb_` a backfill, `rt_` a run of the runtime, and `rts_` and `snp_` the routing and
-  plugin snapshots a route and an approval name.
+  UI token, `evs_` an event source, `evb_` a backfill, `sbr_` a subscription chain's record, `rt_` a run of the runtime,
+  and `rts_` and `snp_` the routing and plugin snapshots a route and an approval name.
 - **Success is `200`** with the answer as it is, in no envelope.
 - **An error is any other status**, with one shape:
 
@@ -115,10 +121,11 @@ A request that carries an `Origin` header naming anything but the runtime's own 
   does, by `limit` and `offset`, with `has_more`.
 - **A request that changes something may carry `actor` and `reason`.** `actor` is
   `{"type":"human","id":"…"}`, with the type `human`, `role` or `attempt`; absent, it is a person who gave no name, and
-  `system` is refused because it is the runtime's own. Some operations ask for more: `approval.approve`,
+  `system` is refused because it is the runtime's own. The type `plugin` is refused the same way to every caller but a
+  handler capability, which must name its own plugin as the id. Some operations ask for more: `approval.approve`,
   `approval.reject`, `approval.set_standing`, `approval.unset_standing`, `decision.answer`, `block.clear`,
   `preference.set` and `preference.unset` need an actor of type `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
-  records the actor as the caller claims it and cannot verify it: it holds one token and knows no caller. The CLI
+  records the actor as the caller claims it and cannot verify it, `plugin` aside: a token knows no caller. The CLI
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume` and `report.submit` take no
@@ -306,6 +313,7 @@ that is not that attempt does not call them.
 
 - `journal.append`
 - `journal.list`
+- `journal.kinds`: every kind the runtime reserves for its own lines, in kind order, each as its document says it.
 
 ### `plugin`
 
@@ -338,6 +346,18 @@ that is not that attempt does not call them.
 - `events.backfill`: asks for a span of an account to be read again.
 - `events.signal`: asks for an account to be read sooner.
 
+### `subscription`
+
+- `subscription.list`: every journal kind a plugin of the active load subscribes to, a page at a time in kind order:
+  its chain in order, the line its cursor stands after, its newest line, how many of its lines are due, the members
+  that keep its chain from starting, and the chain in flight.
+- `subscription.runs`: the records of one kind's chains, newest first: each handler's outcome, how the chain ended, and
+  the envelope the last handler returned.
+- `subscription.rewind`: a person moves a kind's cursor back, to just before a line of the kind or to just before the
+  first line written at or after a moment, so the chain hands those lines to its plugins again; never forward, and each
+  rewind is a `subscription_cursor_rewound` line. A line is stamped before it is saved, so a line stamped before the
+  moment but saved after one at it is handed again too: a rewind may repeat a line and never skips one.
+
 ## What a program can read
 
 - **Campaigns**: `campaign.list` and `campaign.get`; `campaign.summary` for counts, `campaign.activity` and
@@ -349,6 +369,9 @@ that is not that attempt does not call them.
   person's approval, `decision.list` and `decision.get` for the questions roles have asked.
 - **Blocks**: `block.list` and `block.get`, for what a provider said it refuses until a person clears the cause.
 - **Events**: `events.sources`, for every account whose events the runtime reads and how far that reading has got.
+- **Subscriptions**: `subscription.list`, for every subscribed journal kind, where its cursor stands and what keeps its
+  chain from starting, and `subscription.runs`, for the record of a kind's chains, newest first, each with the envelope
+  it ended with: a read the run token opens and no grant does.
 - **The journal**: `journal.list`, the record of what happened in each campaign, to its people and to its work, one
   line at a time, each with a `kind`, the actor, the time, and what changed. It is append-only: no operation changes
   or removes a line, so a line read once stays read. `journal.list` answers the newest line first, and its cursor pages
@@ -356,6 +379,11 @@ that is not that attempt does not call them.
   which keeps the lines at or after a moment. A line carries the moment it was written, which can come before the
   moment it can be read. So a program that runs on its own timer reads with `since` set a minute before its last
   read, pages until `next_cursor` is `null`, and skips the ids it has already handled.
+  `journal.kinds` says what each kind the runtime writes itself means: every kind it reserves, in kind order, as its
+  document under [`contracts/journal/`](contracts/journal) publishes it — the release that first wrote it, the one
+  sentence of what a line records, whether a plugin may subscribe to it, the entities a line names and where, each place
+  a list of JSON pointers into the line as `journal.list` answers it, the release each later field arrived in, and the
+  schema of the line's `key`, `old` and `new`. A kind a person or an agent appends is not among them.
 
 ## What a program can write so its result comes back as a fact
 
@@ -409,8 +437,9 @@ release to the next ([README](../README.md)); what a release changes is in its n
 
 What is not open in this version:
 
-- **No push.** The runtime pushes nothing to a program: no webhooks, streams or subscriptions, and a program asks.
-  The only programs it starts are its plugins and the roles it launches for work (`role.add`).
+- **No push.** The runtime pushes nothing to a program: no webhooks or streams, and a program asks.
+  The plugins it hands journal lines to by subscription are its own children (`docs/plugins.md` §16), not programs it
+  pushes to. The only programs it starts are its plugins and the roles it launches for work (`role.add`).
 - **No remote access.** The API answers on `127.0.0.1` alone, and nothing reaches it from another machine.
 - **No users.** One runtime serves the one account that owns the installation, and every caller acts with that
   account's authority.

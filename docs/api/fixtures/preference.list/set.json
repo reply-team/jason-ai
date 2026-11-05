@@ -27,7 +27,7 @@
             }
           ]
         },
-        "value_hash": "sha256:recorded-3",
+        "value_hash": "sha256:recorded-1",
         "value_bytes": 145,
         "created_at": "2026-10-16T09:00:00.000Z",
         "updated_at": "2026-10-16T09:00:00.000Z",
@@ -42,7 +42,7 @@
           "summary": "Plain and warm; no exclamation marks.",
           "formality": "informal"
         },
-        "value_hash": "sha256:recorded-4",
+        "value_hash": "sha256:recorded-2",
         "value_bytes": 74,
         "created_at": "2026-10-16T09:00:00.000Z",
         "updated_at": "2026-10-16T09:00:00.000Z",

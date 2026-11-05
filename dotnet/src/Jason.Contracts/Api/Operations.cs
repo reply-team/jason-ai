@@ -108,6 +108,7 @@ public static class Operations
 
     public const string JournalAppend = "journal.append";
     public const string JournalList = "journal.list";
+    public const string JournalKinds = "journal.kinds";
 
     public const string PluginList = "plugin.list";
     public const string PluginReload = "plugin.reload";
@@ -128,6 +129,10 @@ public static class Operations
     public const string EventsSources = "events.sources";
     public const string EventsBackfill = "events.backfill";
     public const string EventsSignal = "events.signal";
+
+    public const string SubscriptionList = "subscription.list";
+    public const string SubscriptionRuns = "subscription.runs";
+    public const string SubscriptionRewind = "subscription.rewind";
 
     public static string Route(string operation) => $"/{ApiVersion.Current}/{operation}";
 }

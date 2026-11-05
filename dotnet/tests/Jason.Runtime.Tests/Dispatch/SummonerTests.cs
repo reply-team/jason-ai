@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Reports;
+using Jason.Runtime.Tests.Journal;
 using Jason.Runtime.Tests.Reports;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Decisions;
@@ -216,13 +217,16 @@ public class SummonerTests
             var item = await db.WorkItems.SingleAsync(w => w.Role == ManagerCheckIn.Role, Ct);
             item.Status = WorkItemStatus.Failed;
             item.FinishedAt = harness.Clock.GetUtcNow().UtcDateTime;
+            var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Failed, item.FinishedAt.Value);
             new JournalWriter(harness.Clock).Append(
                 db,
                 Actors.Dispatcher,
                 JournalKinds.WorkItemFailed,
                 campaign: null,
-                key: "status",
-                workItem: item);
+                key: attempt.PublicId,
+                updated: DocumentedLines.Failure(),
+                workItem: item,
+                attempt: attempt);
             await db.SaveChangesAsync(Ct);
         }
 
@@ -414,13 +418,13 @@ public class SummonerTests
         await using (var db = harness.Open())
         {
             var checkIn = await db.WorkItems.Include(w => w.Attempts).SingleAsync(w => w.Role == ManagerCheckIn.Role, Ct);
-            new JournalWriter(harness.Clock).Append(
+            new JournalWriter(harness.Clock).AppendDocumented(
                 db,
                 new ActorRef(ActorType.Attempt, attempt),
                 JournalKinds.DecisionAnswered,
                 campaign: null,
-                key: "decision",
-                workItem: checkIn);
+                workItem: checkIn,
+                attempt: checkIn.Attempts.Single(a => a.PublicId == attempt));
             await db.SaveChangesAsync(Ct);
         }
 
@@ -684,7 +688,19 @@ public class SummonerTests
     {
         await using var db = harness.Open();
         var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignPublicId, Ct);
-        new JournalWriter(harness.Clock).Append(db, Actors.Dispatcher, kind, campaign, key: "status");
+
+        // A line of the kind as the runtime writes it, about a finished item of the campaign that stands in for any.
+        var failed = kind == JournalKinds.WorkItemFailed;
+        var (_, item, attempt) = await DocumentedLines.StandInsAsync(db, kind, harness.Clock.GetUtcNow().UtcDateTime, Ct, campaign, attempt: failed);
+        new JournalWriter(harness.Clock).AppendDocumented(
+            db,
+            Actors.Dispatcher,
+            kind,
+            campaign,
+            key: failed ? attempt!.PublicId : null,
+            updated: failed ? DocumentedLines.Failure() : null,
+            workItem: item,
+            attempt: attempt);
         await db.SaveChangesAsync(Ct);
     }
 

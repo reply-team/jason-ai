@@ -65,10 +65,10 @@ public class PluginCommandsTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(
             """
-            ID             VERSION  KIND          STATUS       OPERATIONS              GRANTS                         DIGEST
-            -------------  -------  ------------  -----------  ----------------------  -----------------------------  ------------
-            fake-provider  1.0.0    provider      valid        echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2  3f2a9c1b4d5e
-            notifier       0.2.0    notification  unavailable  -                       exec 1/1 | http - | env -      9a8b7c6d5e4f
+            ID             VERSION  KIND          STATUS       OPERATIONS              GRANTS                                             DIGEST
+            -------------  -------  ------------  -----------  ----------------------  -------------------------------------------------  ------------
+            fake-provider  1.0.0    provider      valid        echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2 | subscriptions 1/2  3f2a9c1b4d5e
+            notifier       0.2.0    notification  unavailable  -                       exec 1/1 | http - | env - | subscriptions -        9a8b7c6d5e4f
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
     }
@@ -83,6 +83,39 @@ public class PluginCommandsTests
         await cli.RunAsync("plugin", "list", "--human");
 
         Assert.Contains("campaign.get + events", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_counts_a_plugin_that_declares_only_subscriptions_among_the_granted()
+    {
+        var registry = TwoPlugins();
+        var subscriber = registry.Plugins[1] with
+        {
+            Capabilities = new PluginCapabilitiesDto(null, null, null)
+            {
+                Subscriptions = new ListCapabilityDto(["workitem_failed"], ["workitem_failed"]),
+            },
+        };
+        using var cli = new CliRun(JsonSerializer.Serialize(registry with { Plugins = [subscriber] }, JasonJson.Options));
+
+        await cli.RunAsync("plugin", "list", "--human");
+
+        Assert.Contains("exec - | http - | env - | subscriptions 1/1", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_counts_the_api_families_granted_against_those_requested()
+    {
+        var registry = TwoPlugins();
+        var handler = registry.Plugins[1] with
+        {
+            Capabilities = new PluginCapabilitiesDto(null, null, null, new ListCapabilityDto(["read", "journal.append"], ["read"])),
+        };
+        using var cli = new CliRun(JsonSerializer.Serialize(registry with { Plugins = [handler] }, JasonJson.Options));
+
+        await cli.RunAsync("plugin", "list", "--human");
+
+        Assert.Contains("exec - | http - | env - | api 1/2", cli.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -103,6 +136,7 @@ public class PluginCommandsTests
             broken/plugin.yaml#3:1: yaml_invalid — mapping values are not allowed here
             broken/plugin.yaml#id: id_mismatch — the manifest says 'other', the directory says 'broken'
             Routes:Default: route_plugin_unknown — no plugin 'gone' is in the candidate set
+            Subscriptions:Order:workitem_failed[0]: subscription_order_ungranted — no plugin with id 'gone' is in the candidate set
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
     }
@@ -190,7 +224,10 @@ public class PluginCommandsTests
                 new PluginCapabilitiesDto(
                     new ExecCapabilityDto([new ExecutableDto("dotnet", "/usr/bin/dotnet", "10.0.100", null)], ["dotnet"]),
                     new ListCapabilityDto(["localhost:5555", "api.example.com"], []),
-                    new ListCapabilityDto(["FAKE_TOKEN", "OTHER_TOKEN"], ["FAKE_TOKEN"])),
+                    new ListCapabilityDto(["FAKE_TOKEN", "OTHER_TOKEN"], ["FAKE_TOKEN"]))
+                {
+                    Subscriptions = new ListCapabilityDto(["workitem_failed", "campaign_paused"], ["workitem_failed"]),
+                },
                 new PluginLimitsDto(60000, 64),
                 null,
                 PluginStatus.Valid,
@@ -259,6 +296,16 @@ public class PluginCommandsTests
 
             // A route is not a package, so it is not one of the candidates above; it is still a reason the
             // reload changed nothing, and the person reading this is the person who wrote the route.
-            [new RouteProblemDto("Routes:Default", "route_plugin_unknown", "no plugin 'gone' is in the candidate set")]),
+            [new RouteProblemDto("Routes:Default", "route_plugin_unknown", "no plugin 'gone' is in the candidate set")])
+        {
+            // Nor is the order of a kind's subscribers: the setting is where the person goes to repair it.
+            Subscriptions =
+            [
+                new SubscriptionProblemDto(
+                    "Subscriptions:Order:workitem_failed[0]",
+                    "subscription_order_ungranted",
+                    "no plugin with id 'gone' is in the candidate set"),
+            ],
+        },
         Activated: false);
 }

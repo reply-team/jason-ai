@@ -52,7 +52,7 @@
             "campaign_id": "cmp_1",
             "work_item_id": null,
             "attempt_id": null,
-            "key": null,
+            "key": "sha256:recorded-2",
             "old": null,
             "new": {
               "kind": "reply_detected",
@@ -60,7 +60,9 @@
               "event_id": "evt_1",
               "occurred_at": "2026-10-14T08:00:00.000Z",
               "channel": "email",
-              "contact_id": "cnt_6"
+              "contact_id": "cnt_6",
+              "attributed_by": "campaign_pin",
+              "thread": "t-Oli"
             },
             "reason": null,
             "contact_id": "cnt_6",
@@ -139,13 +141,15 @@
             "campaign_id": "cmp_1",
             "work_item_id": null,
             "attempt_id": null,
-            "key": null,
+            "key": "sha256:recorded-3",
             "old": null,
             "new": {
               "plugin": "reply",
               "thread": "t-Rae",
               "channel": "email",
               "last_activity_at": "2026-10-12T08:00:00.000Z",
+              "unread": true,
+              "has_meeting_intent": null,
               "contact_id": "cnt_7"
             },
             "reason": null,

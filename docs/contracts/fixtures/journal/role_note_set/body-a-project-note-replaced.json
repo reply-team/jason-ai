@@ -1,0 +1,7 @@
+{
+  "kind": "role_note_set",
+  "version": 1,
+  "case": "a project's note for a role written again",
+  "body": { "key": "researcher", "old": { "bytes": 42, "hash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }, "new": { "project_id": "prj_01JC0000000000000000000003", "role": "researcher", "bytes": 57, "hash": "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" } },
+  "expect": "valid"
+}

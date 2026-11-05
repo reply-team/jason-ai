@@ -20,7 +20,9 @@ public enum MembershipState
 
 /// <summary>
 /// Who performs an operation. <c>System</c> belongs to the runtime's own writes and is refused from callers;
-/// <c>Attempt</c> is a running executor, so work it creates stays traceable to the attempt that asked for it.
+/// <c>Attempt</c> is a running executor, so work it creates stays traceable to the attempt that asked for it;
+/// <c>Plugin</c> is a plugin's handler calling through <c>host.call</c>, accepted only on a request that carries the
+/// capability the runtime minted for that plugin's invocation, and refused from every other caller as <c>System</c> is.
 /// </summary>
 public enum ActorType
 {
@@ -28,6 +30,7 @@ public enum ActorType
     Role,
     System,
     Attempt,
+    Plugin,
 }
 
 /// <summary>
@@ -376,4 +379,17 @@ public enum ReplyReaction
     Draft,
     Escalate,
     None,
+}
+
+/// <summary>
+/// Where the chain started for one journal line stands. <c>Running</c> while its handlers run or one waits to be tried
+/// again; <c>succeeded</c> when every handler answered; <c>failed</c> when one ended it; <c>superseded</c> when its kind's
+/// position moved under it — a rewind, or the kind left without a subscriber — so its end recorded nothing further.
+/// </summary>
+public enum SubscriptionRunStatus
+{
+    Running,
+    Succeeded,
+    Failed,
+    Superseded,
 }

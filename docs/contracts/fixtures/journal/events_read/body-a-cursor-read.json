@@ -1,0 +1,11 @@
+{
+  "kind": "events_read",
+  "version": 1,
+  "case": "a read from the account's cursor that stored provider events",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": { "read_id": "evr_01JC0000000000000000000006", "source": "evs_01JC0000000000000000000005", "plugin": "example-mail", "binding_identity": "sha256:7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e", "mode": "cursor", "pages": 2, "stored": 14, "duplicates": 1, "said": 3, "outcome": "succeeded", "code": null, "class": null, "plugin_version": "1.4.0", "plugin_digest": "sha256:3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f", "plugin_snapshot_id": "pls_7", "routing_snapshot_id": "rts_7", "signaled": false }
+  },
+  "expect": "valid"
+}

@@ -43,7 +43,7 @@ public class VerbMapTests
     private static readonly string[] Nouns =
     [
         "approval", "block", "campaign", "contact", "decision", "events", "journal", "plugin", "preference", "profile", "project", "reply", "report",
-        "role", "rolenote", "route", "runtime", "session", "skills", "suppression", "ui", "update", "workitem",
+        "role", "rolenote", "route", "runtime", "session", "skills", "subscription", "suppression", "ui", "update", "workitem",
     ];
 
     [Fact]
@@ -143,6 +143,28 @@ public class VerbMapTests
 
         Assert.Equal(["install", "open", "revoke", "tokens"], verbs);
         Assert.Equal(["install"], verbs.Except(operations, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The <c>subscription</c> group is its three operations and nothing beside them: where each subscribed kind stands,
+    /// the records of its chains, and a person's rewind of its cursor. Running a chain is the runtime's own.
+    /// </summary>
+    [Fact]
+    public void The_subscription_verb_group_is_its_three_operations()
+    {
+        using var paths = new TempPaths();
+        var group = Jason.Cli.Commands.SubscriptionCommands.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths), new System.CommandLine.Option<string?>("--actor"));
+        var verbs = group.Subcommands.Select(command => command.Name).Order(StringComparer.Ordinal).ToArray();
+        var operations = typeof(Contracts.Api.Operations)
+            .GetFields()
+            .Where(field => field.IsLiteral)
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .Where(name => name.StartsWith("subscription.", StringComparison.Ordinal))
+            .Select(name => name["subscription.".Length..])
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(["list", "rewind", "runs"], verbs);
+        Assert.Equal(operations, verbs);
     }
 
     /// <summary>

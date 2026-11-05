@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_updated",
+  "version": 1,
+  "case": "a work item's start is moved later",
+  "body": { "key": "not_before", "old": "2026-11-05T09:00:00Z", "new": "2026-11-06T09:00:00Z" },
+  "expect": "valid"
+}

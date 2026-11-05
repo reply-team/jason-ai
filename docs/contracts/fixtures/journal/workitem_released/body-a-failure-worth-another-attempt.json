@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_released",
+  "version": 1,
+  "case": "an attempt timed out and the item waits a minute before it is claimed again",
+  "body": { "key": "att_01JC0000000000000000000005", "old": null, "new": { "code": "timeout", "retry_after": "2026-10-01T10:01:00.000Z" } },
+  "expect": "valid"
+}

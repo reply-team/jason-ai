@@ -9,8 +9,9 @@ namespace Jason.Cli;
 /// a running executor journals under its attempt. The CLI only parses the text: claims are verified by the
 /// runtime, and the one rule enforced here is that <c>system</c> belongs to the runtime's own writes and
 /// cannot be claimed from outside. A write that claims nobody is made as the person this account is — except the
-/// ten that are somebody's own word, an approval or a rejection, a standing approval set or unset, an answer, a
-/// preference set or unset, a block's clear, a resume and a report, which name who acts or are refused.
+/// eleven that are somebody's own word, an approval or a rejection, a standing approval set or unset, an answer, a
+/// preference set or unset, a block's clear, a resume, a report and a subscription's rewind, which name who acts or are
+/// refused.
 /// </summary>
 public static class ActorOption
 {
@@ -18,8 +19,8 @@ public static class ActorOption
 
     /// <summary>
     /// The help a verb that takes no default actor carries: approving, rejecting, setting or taking back a standing
-    /// approval, answering, setting or taking back a preference and clearing a block are a person's own word, which an
-    /// account's name is not.
+    /// approval, answering, setting or taking back a preference, clearing a block and rewinding a subscription are a
+    /// person's own word, which an account's name is not.
     /// </summary>
     public const string NoDefault = "The CLI's default actor does not apply here: name the person with --actor human:<Name>.";
 
@@ -35,7 +36,7 @@ public static class ActorOption
             + "Without it, a running executor is its attempt, and anything else is written as human:<this account's name>, "
             + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
-            + "clearing a block, resuming a work item "
+            + "clearing a block, resuming a work item, rewinding a subscription "
             + "and submitting a report take no default.",
         Recursive = true,
     };
@@ -92,6 +93,11 @@ public static class ActorOption
         if (type is "system")
         {
             throw new UsageException($"{Name} 'system' is reserved for the runtime's own writes; claim 'human' or 'role:<id>'.");
+        }
+
+        if (type is "plugin")
+        {
+            throw new UsageException($"{Name} 'plugin' is set by the runtime on a plugin's own host.call and is never claimed from a command line; claim 'human' or 'role:<id>'.");
         }
 
         if (type is not "human" and not "role" and not "attempt")

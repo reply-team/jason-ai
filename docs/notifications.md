@@ -167,21 +167,9 @@ runtime runs in.
 ## 5. What happened to each one
 
 Each notification is one `notification_sent` line in the journal, with no campaign, work item or attempt, so it never
-wakes a manager:
-
-```json
-{
-  "notification_id": "ntf_01K…",
-  "counts": { "approvals": 3, "decisions": 1, "protective_failures": 0, "event_gaps": 0, "blocks": 0 },
-  "covered_through": "jrn_01K…",
-  "channels": [
-    { "channel": "toast", "kind": "toast", "outcome": "delivered", "attempts": 1 },
-    { "channel": "ntfy", "kind": "plugin", "outcome": "failed", "code": "notification_unreachable", "class": "transient", "attempts": 2 }
-  ],
-  "last_delivered_at": "2026-10-01T09:06:00.000Z",
-  "delivered_through": "jrn_01K…"
-}
-```
+wakes a manager. Its fields are [the kind's document](contracts/journal/notification_sent.json)'s: the notification's
+id, its counts, the line it covered through, what each channel did with it, and when one last reached anybody and the
+line it covered through then.
 
 `counts.protective_failures` is how many protective actions failed in the window this notification closed: after the
 line `delivered_through` names — the line the last notification that reached anybody covered through — up to

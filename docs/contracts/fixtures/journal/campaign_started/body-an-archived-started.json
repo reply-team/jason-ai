@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_started",
+  "version": 1,
+  "case": "an archived campaign never runs again",
+  "body": { "key": "status", "old": "archived", "new": "active" },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "enum" }] }
+}

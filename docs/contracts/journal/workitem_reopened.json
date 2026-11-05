@@ -1,0 +1,23 @@
+{
+  "kind": "workitem_reopened",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "An expired work item was given a new due date and went back to the queue.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "status" },
+      "old": { "const": "expired" },
+      "new": { "const": "created" }
+    }
+  }
+}

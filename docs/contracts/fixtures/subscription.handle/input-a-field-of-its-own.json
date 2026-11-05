@@ -1,0 +1,46 @@
+{
+  "operation": "subscription.handle",
+  "version": 1,
+  "case": "a field the contract does not name: the line, the envelope and the attempt are all a handler is handed",
+  "input": {
+    "line": {
+      "id": "jrn_42",
+      "ts": "2026-10-16T09:00:00.000Z",
+      "actor": {
+        "type": "system",
+        "id": "runtime"
+      },
+      "kind": "workitem_failed",
+      "campaign_id": "cmp_1",
+      "work_item_id": "wi_9",
+      "attempt_id": "att_3",
+      "key": "att_3",
+      "old": null,
+      "new": {
+        "code": "provider_unreachable",
+        "message": "The provider did not answer.",
+        "retriable": false,
+        "class": "transient"
+      },
+      "reason": null,
+      "contact_id": "cnt_5",
+      "campaign_name": "Spring",
+      "contact_name": "Okafor",
+      "work_item_kind": "provider_op",
+      "work_item_role": null,
+      "work_item_operation": "campaign.enroll",
+      "actor_role": null
+    },
+    "envelope": {},
+    "attempt": 1,
+    "token": "anything"
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/token",
+        "reason": "additional_properties"
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "kind": "workitem_expired",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A work item nobody had picked up passed its due date and expired; a new due date can reopen it.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "due_at" },
+      "old": { "type": "string", "format": "date-time", "description": "The due date the item passed." },
+      "new": { "type": "null" }
+    }
+  }
+}

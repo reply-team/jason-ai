@@ -1,0 +1,32 @@
+{
+  "kind": "decision_cancelled",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A question still waiting for a person was cancelled because its campaign was archived.",
+  "subscribable": true,
+  "entities": {
+    "decision": { "at": "/new/decision_id", "presence": "always" },
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "const": "decision" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision_id"],
+        "properties": {
+          "decision_id": { "type": "string", "pattern": "^dec_" }
+        }
+      }
+    }
+  }
+}

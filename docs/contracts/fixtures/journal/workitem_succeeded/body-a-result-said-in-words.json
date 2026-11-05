@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_succeeded",
+  "version": 1,
+  "case": "whether a result is present is a boolean, never a word",
+  "body": { "key": "result_present", "old": null, "new": "yes" },
+  "expect": { "invalid": [{ "pointer": "/new", "reason": "type" }] }
+}

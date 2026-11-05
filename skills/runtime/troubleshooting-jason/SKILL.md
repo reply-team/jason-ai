@@ -2,7 +2,7 @@
 name: troubleshooting-jason
 description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the twelve states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Troubleshooting Jason
@@ -12,7 +12,7 @@ told: waiting for a moment that has not arrived, waiting for a person who has no
 it cannot route. This skill is how to tell those apart from a genuine failure, and how to name the one repair
 that is safe rather than the first one that comes to mind.
 
-**Status: verified** against Claude Code 2.1.318. It covers what this build records and
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this build, because every skill's do. It covers what this build records and
 nothing else.
 
 ## Look here first, in this order
@@ -48,6 +48,14 @@ only reading that shows you a sequence rather than a snapshot.
 ```
 jason journal list --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-09-18T09:00:00Z
+```
+
+A line's kind says what it records. `jason journal kinds` lists every kind the runtime reserves for its own lines, each
+with what it means and what it carries; read it when a line names a kind you do not know, rather than guessing from
+the name.
+
+```
+jason journal kinds --human
 ```
 
 **When a notification brought them here.** A person may arrive because a notification said protective actions
@@ -312,6 +320,42 @@ capabilities a provider may lack for a while.
 What to do instead is a decision about the work, not a repair of the item — in a managed campaign, the
 manager's. Report what is not offered, in the message's own words, and that nothing was done. Once the provider
 offers it, the same work asked again as a new item goes through.
+
+## When a plugin that subscribes to the journal is behind or failing
+
+Not a state of a work item, so not one of the twelve: a subscriber is handed journal lines after the runtime wrote
+them (`docs/plugins.md` §17), and what it does with them is nobody's work item. Read where each subscribed kind stands,
+then the chain's record, and only then say anything.
+
+```
+jason subscription list --human
+jason subscription runs --kind workitem_failed --human
+jason journal list --kind subscription_failed --human
+```
+
+- **`waiting_on` names a plugin.** The kind is waiting, not failing: a member of its chain loaded `unavailable` and the
+  kind stays at its line until a reload makes it available or takes it out of the chain. Nothing is written for it.
+  Read why the plugin is unavailable as state 10 does, then `jason plugin reload`.
+- **A `subscription_failed` line.** It is the lasting record of one chain that ended at one handler for one line:
+  `{kind, line, plugin_id, class, code, attempts}`, never the envelope or the failure's message. `transient` is tried
+  again by the runtime up to its limit before the line is written; every other class ends the chain there, and the kind
+  moves on to its next line. The code is the handler's own, a host rule's (a refused host, `docs/plugins.md` §9) or the protocol's, so say whose it is before explaining it; the plugin's README explains the plugin's own. `jason subscription
+  runs --kind <kind>` shows each handler's outcome for the chains of that kind, newest first; those records are kept by
+  count for each kind, so an old one may be gone while its `subscription_failed` line stays.
+- **A line handed twice.** Delivery is at least once: after a restart a chain runs again from its first handler, and a
+  handler that was handed the line before sees `attempt` above 1, as it does after a transient retry (`attempt` counts
+  that plugin's own earlier entries for the line in the chain's record, plus one; a rewind opens a new chain, which counts from 1 again). That is the contract, not a fault, and it is the
+  subscriber's to tell a repeat by.
+- **A lag that does not shrink with nothing waiting.** Say so and collect `jason doctor`; the diagnostic file carries
+  the subscriptions' figures and never an envelope.
+
+**A rewind is a person's act.** `jason subscription rewind --kind <kind> (--line <jrn_id> | --since <moment>)` moves a
+kind's cursor back so its chain hands lines again, to just before the named line (a line of that kind) or the first line written at or after
+the moment; it is refused without `--actor human:<Name>`, and never goes forward. A moment needs its offset
+(`2026-11-05T09:00:00Z`): one without is answered `invalid` at `since`, naming the form. A rewind may hand a line again
+that was already handled, and a subscriber causing an effect twice is the case to warn about first. It supersedes a
+chain in flight for that kind and writes its own `subscription_cursor_rewound` line. Offer it with that consequence
+and wait for the person; never run it to see whether it helps.
 
 ## The repairs that are safe
 

@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_added",
+  "version": 1,
+  "case": "an import whose every item was refused adds nobody",
+  "body": { "key": null, "old": null, "new": { "added": 0, "already_member": 0, "rejected": 3, "contact_ids": [], "created_contact_ids": [] } },
+  "expect": "valid"
+}

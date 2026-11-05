@@ -1,5 +1,6 @@
 using Jason.Contracts.Configuration;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Journal;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Tests;
 
@@ -33,10 +34,22 @@ public class SettingKeyTests
         var operation = OperationCatalog.All[0].Id;
         var campaign = PublicId.New("cmp");
         var workItem = PublicId.New("wi");
+        var subscriptionRun = PublicId.New("sbr");
 
         Assert.Equal(operation, SettingKey.Shown(operation, Installed));
         Assert.Equal(campaign, SettingKey.Shown(campaign, Installed));
         Assert.Equal(workItem, SettingKey.Shown(workItem, Installed));
+        Assert.Equal(subscriptionRun, SettingKey.Shown(subscriptionRun, Installed));
+    }
+
+    [Fact]
+    public void A_journal_kind_the_runtime_writes_is_shown_as_it_was_typed()
+    {
+        var kind = JournalKindCatalog.Kinds[0];
+
+        Assert.Equal(kind, SettingKey.Shown(kind, Installed));
+        Assert.Equal($"Subscriptions:Order:{kind}", SettingKey.ShownPath($"Subscriptions:Order:{kind}", Installed));
+        Assert.Equal(SettingKey.Hidden, SettingKey.Shown("not_a_kind_we_write", Installed));
     }
 
     [Theory]

@@ -721,8 +721,9 @@ public static class DoctorCommand
                                with the profiles its agent_hosts check reads counted by host, never named.
               runtime          what the runtime says about itself — system.info, projected as below, the harness
                                root's path and state among it, as the runtime reports them, and nothing under the
-                               root — each plugin by its id, version, digest, status and problem codes, at most {DoctorComposer.MaxProblemCodes} codes a plugin
-                               (problem_codes_truncated where there were more) and an id, version or digest longer than
+                               root — each plugin by its id, version, digest, status, problem codes and the journal kinds
+                               it is granted, at most {DoctorComposer.MaxProblemCodes} codes and {DoctorComposer.MaxSubscriptions} kinds a plugin
+                               (problem_codes_truncated and subscriptions_truncated where there were more) and an id, version or digest longer than
                                {DoctorComposer.MaxPluginText} characters written as {DoctorComposer.TooLong}, the list at most {Size(DoctorComposer.PluginsBytes)} in the
                                bundle, its first plugins kept and plugins_truncated past that; and data_dir_agrees, whether its data
                                directory is this one. When it did not answer, the reason: {CliErrors.NoDescriptor}, {CliErrors.RuntimeUnreachable},
@@ -732,6 +733,11 @@ public static class DoctorCommand
                                snapshot ids, and each route by its operation or default, its plugin id and whether it
                                binds an account — never which account or the identity that stands for it. An operation
                                the catalogue does not know and a plugin not installed here are written as {SettingKey.Hidden}.
+              subscriptions    each subscribed journal kind: its chain of plugins, its cursor and newest line, its lag, the
+                               chain's members not valid in the load and the chain in flight; and its newest {DoctorComposer.RecentRuns} chains,
+                               each by its ids, status and moments, every handler by its plugin, start, outcome, code and
+                               duration, and a failure by its plugin, class and code — never the envelope a chain carried.
+                               A kind the catalogue does not know is written as {SettingKey.Hidden} and its chains are not asked for.
               config           the settings file and every JASON_* variable by shape — keys, types, lengths — with a
                                value only where the list below carries it.
               logs             the log files by name, size and time; the newest error and fatal events, at most {DoctorComposer.RecentErrors},
@@ -745,7 +751,7 @@ public static class DoctorCommand
                                says where they were found: {DoctorComposer.FromJournal}, or {DoctorComposer.FromListOldestFirst} when not one page of the
                                journal could be read, which is oldest first and misses the newest of a long list.
               journal_entries  only with --include-journal: the journal's entries whole, newest first.
-            The journal and the work items are read {DoctorComposer.PageSize} to a page and never past {DoctorComposer.MaxPages} pages.
+            The journal, the work items and the subscribed kinds are read {DoctorComposer.PageSize} to a page and never past {DoctorComposer.MaxPages} pages.
 
             Bounds, in the bundle's own bytes: recent_errors at most {Size(DoctorComposer.RecentErrorsBytes)} and the slice at most {Size(DoctorComposer.SliceBytes)}, each
             keeping the newest events; journal_entries at most {Size(DoctorComposer.JournalEntriesBytes)}, keeping the newest entries; the rest
@@ -759,7 +765,7 @@ public static class DoctorCommand
             is asked. A read that stopped partway leaves incomplete and its code: {CliErrors.RuntimeUnreachable}, {DoctorComposer.TimedOut},
             {CliErrors.Unauthorized}, {DoctorComposer.UnreadableAnswer}, {CliErrors.LogsUnreadable}, or the runtime's own code. A list cut short
             says so: files_truncated, recent_errors_truncated, slice_truncated, plugins_truncated,
-            problem_codes_truncated, values_carried_truncated, truncated and recent_failures_truncated — the last
+            problem_codes_truncated, subscriptions_truncated, values_carried_truncated, truncated and recent_failures_truncated — the last
             wherever failures may exist that were not read: past the items read, or where their source was cut or
             stopped partway, whatever the count listed.
 

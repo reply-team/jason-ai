@@ -44,6 +44,12 @@ public static class ProblemCodes
     /// </summary>
     public const string SettlesByKeyInvalid = "settles_by_key_invalid";
 
+    /// <summary>A declared subscription names a kind the runtime does not write to its journal.</summary>
+    public const string SubscriptionKindUnknown = "subscription_kind_unknown";
+
+    /// <summary>A declared subscription names a kind the runtime writes that no plugin may subscribe to.</summary>
+    public const string SubscriptionKindNotSubscribable = "subscription_kind_not_subscribable";
+
     /// <summary>A notification plugin declares the events contract: it delivers pointers and reads no account.</summary>
     public const string EventsNotAllowed = "events_not_allowed";
     public const string EntryModuleMissing = "entry_module_missing";
@@ -80,6 +86,12 @@ public static class ProblemCodes
     public const string HostInvalid = "host_invalid";
     public const string VariableNameInvalid = "variable_name_invalid";
     public const string VariableReserved = "variable_reserved";
+
+    /// <summary>
+    /// An entry of <c>capabilities.api</c> names no family of the Runtime API a handler's door may open: the families are
+    /// <c>read</c> and the write families by noun, and an operation outside every family is opened by none.
+    /// </summary>
+    public const string ApiFamilyUnknown = "api_family_unknown";
     public const string PackageTooLarge = "package_too_large";
     public const string PackageUnreadable = "package_unreadable";
 

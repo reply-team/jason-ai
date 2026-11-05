@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_failed",
+  "version": 1,
+  "case": "only work waiting for a person's approval is rejected into failure",
+  "body": { "key": "status", "old": "created", "new": "failed" },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

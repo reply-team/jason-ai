@@ -19,7 +19,7 @@ using static Jason.Cli.Tests.Logs.LogFixtures;
 namespace Jason.Cli.Tests.Doctor;
 
 /// <summary>
-/// What a diagnostic bundle is made of: nine sections in one order, each bounded, composed from reads whose values are
+/// What a diagnostic bundle is made of: ten sections in one order, each bounded, composed from reads whose values are
 /// dropped in this process, with the installation's names rewritten and exception text capped last. Everything here
 /// runs against a runtime that exists only in a handler, on a temporary data directory, with names and variables of
 /// the test's own — so nothing is learned about the machine running the suite, and nothing reaches a network.
@@ -45,11 +45,12 @@ public sealed class DoctorComposerTests
     private static readonly string[] NeverSentinels =
     [
         Token, "SENTINEL_WI_CONTEXT", "SENTINEL_WI_RESULT", "SENTINEL_ERROR_MESSAGE", "SENTINEL_CREATOR", "SENTINEL_PROBLEM_MESSAGE", "SENTINEL_CONTACT_NAME",
-        "SENTINEL_SETTING_FEED", "SENTINEL_SETTING_COMMAND", "SENTINEL_ENV_FEED", "SENTINEL_ENV_NAME",
+        "SENTINEL_SETTING_FEED", "SENTINEL_SETTING_COMMAND", "SENTINEL_ENV_FEED", "SENTINEL_ENV_NAME", "SENTINEL_ENVELOPE", "SENTINEL_HANDLER_NOTE",
     ];
 
     private static readonly string[] Reads =
-        [Operations.SystemInfo, Operations.RoleList, Operations.RouteList, Operations.ProfileList, Operations.PluginList, Operations.JournalList, Operations.WorkItemList, Operations.WorkItemGet];
+        [Operations.SystemInfo, Operations.RoleList, Operations.RouteList, Operations.ProfileList, Operations.PluginList, Operations.JournalList, Operations.WorkItemList, Operations.WorkItemGet,
+         Operations.SubscriptionList, Operations.SubscriptionRuns];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -63,7 +64,7 @@ public sealed class DoctorComposerTests
 
         var bundle = await ComposeAsync(dir, runtime);
 
-        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
+        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "subscriptions", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
 
         var header = Section(bundle, "bundle");
         Assert.Equal(
@@ -97,7 +98,7 @@ public sealed class DoctorComposerTests
         Assert.Equal(bundle.NeverCarried, Strings(header["never_carried"]));
 
         // The listing is the sections after the header, each with the size it has in the file.
-        Assert.Equal(["versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
+        Assert.Equal(["versions", "status", "runtime", "routes", "subscriptions", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
         Assert.Equal(bundle.Contents.Select(section => section.Name), header["contents"]!.AsArray().Select(entry => Text(entry!["name"])));
         AssertSizesAreTheFilesOwn(bundle);
     }
@@ -173,7 +174,7 @@ public sealed class DoctorComposerTests
         Assert.Equal(2, plugins.Count);
         foreach (var plugin in plugins)
         {
-            Assert.Equal(["id", "version", "digest", "status", "problem_codes", "problem_codes_truncated"], Keys(plugin!));
+            Assert.Equal(["id", "version", "digest", "status", "problem_codes", "problem_codes_truncated", "subscriptions", "subscriptions_truncated"], Keys(plugin!));
         }
 
         var unavailable = plugins.Single(plugin => Text(plugin!["id"]) == "<plugin-2>")!;
@@ -799,7 +800,7 @@ public sealed class DoctorComposerTests
 
         var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
 
-        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items", "journal_entries"], Keys(bundle.Document));
+        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "subscriptions", "config", "logs", "journal", "work_items", "journal_entries"], Keys(bundle.Document));
         var section = Section(bundle, "runtime");
         Assert.Equal(["answered", "reason"], Keys(section));
         Assert.False(section["answered"]!.GetValue<bool>());
@@ -808,6 +809,7 @@ public sealed class DoctorComposerTests
         Assert.Null(Section(bundle, "versions")["runtime"]);
         Assert.Null(Section(bundle, "versions")["api"]);
         Assert.Equal("runtime_did_not_answer", Text(Section(bundle, "routes")["not_read"]));
+        Assert.Equal("runtime_did_not_answer", Text(Section(bundle, "subscriptions")["not_read"]));
         Assert.Equal("runtime_did_not_answer", Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal("runtime_did_not_answer", Text(Section(bundle, "work_items")["not_read"]));
         Assert.Equal("runtime_did_not_answer", Text(Section(bundle, "journal_entries")["not_read"]));
@@ -876,6 +878,7 @@ public sealed class DoctorComposerTests
         Assert.Null(runtime["plugins"]);
         Assert.Equal(DoctorComposer.TimedOut, Text(runtime["incomplete"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "routes")["not_read"]));
+        Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "subscriptions")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal_entries")["not_read"]));
@@ -899,6 +902,7 @@ public sealed class DoctorComposerTests
         Assert.False(runtime["answered"]!.GetValue<bool>());
         Assert.Equal(DoctorComposer.NotAttempted, Text(runtime["reason"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "routes")["not_read"]));
+        Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "subscriptions")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
     }
@@ -935,6 +939,7 @@ public sealed class DoctorComposerTests
         Assert.Equal(DoctorComposer.TimedOut, Text(Section(bundle, "runtime")["incomplete"]));
         Assert.DoesNotContain(runtime.Requests, request => request.Operation is Operations.JournalList or Operations.WorkItemList or Operations.WorkItemGet);
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "routes")["not_read"]));
+        Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "subscriptions")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal_entries")["not_read"]));
@@ -1062,6 +1067,108 @@ public sealed class DoctorComposerTests
         {
             Assert.DoesNotContain(unvouched, file, StringComparison.Ordinal);
         }
+    }
+
+    // ---- the subscriptions: where each kind stands and its newest chains, never an envelope ----------------------
+
+    /// <summary>
+    /// Which plugins a journal kind is handed to, where its cursor stands and how its newest chains ended are what a
+    /// stalled or failing subscriber is diagnosed from, and the bundle carries them — kinds, ids, statuses, classes, codes,
+    /// counts, durations and moments. An envelope is what one plugin's handler made for the next, so it is never carried,
+    /// nor anything else a handler's record holds; and a kind the catalogue does not know is written as a key nobody
+    /// chose, and its chains are not asked for.
+    /// </summary>
+    [Fact]
+    public async Task The_subscriptions_section_says_where_each_kind_stands_and_how_its_newest_chains_ended_never_their_envelopes()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(Path.Combine(dir.Paths.PluginsDirectory, "fake-provider"));
+        File.WriteAllText(Path.Combine(dir.Paths.PluginsDirectory, "fake-provider", "plugin.yaml"), "id: fake-provider");
+        var runtime = Running(dir);
+        runtime.Subscribed =
+        [
+            .. runtime.Subscribed,
+            new("SENTINEL_KIND", ["fake-provider"], null, null, 0, ["fake-provider"], null),
+        ];
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var asked = runtime.Requests.Where(request => request.Operation == Operations.SubscriptionRuns).Select(request => request.Body.ToJsonString());
+        Assert.Equal(["""{"kind":"campaign_created","limit":20}"""], asked);
+        var section = Section(bundle, "subscriptions");
+        var plugin = Text(section["kinds"]![0]!["chain"]![0]);
+        Assert.StartsWith("<plugin-", plugin, StringComparison.Ordinal);
+        Assert.Equal(
+            new JsonObject
+            {
+                ["kinds"] = new JsonArray(
+                    new JsonObject
+                    {
+                        ["kind"] = "campaign_created",
+                        ["chain"] = new JsonArray(plugin),
+                        ["cursor"] = "jrn_00000000000000000000000001",
+                        ["head"] = "jrn_00000000000000000000000002",
+                        ["lag"] = 1,
+                        ["waiting_on"] = new JsonArray(),
+                        ["in_flight"] = null,
+                        ["runs"] = new JsonArray(
+                            new JsonObject
+                            {
+                                ["id"] = "sbr_00000000000000000000000002",
+                                ["line"] = "jrn_00000000000000000000000002",
+                                ["status"] = "succeeded",
+                                ["started_at"] = "2026-10-04T11:58:00.000Z",
+                                ["ended_at"] = "2026-10-04T11:58:00.000Z",
+                                ["handlers"] = new JsonArray(new JsonObject { ["plugin_id"] = plugin, ["started_at"] = "2026-10-04T11:58:00.000Z", ["outcome"] = "succeeded", ["code"] = null, ["duration_ms"] = 12 }),
+                                ["failure"] = null,
+                            },
+                            new JsonObject
+                            {
+                                ["id"] = "sbr_00000000000000000000000001",
+                                ["line"] = "jrn_00000000000000000000000001",
+                                ["status"] = "failed",
+                                ["started_at"] = "2026-10-04T11:51:00.000Z",
+                                ["ended_at"] = "2026-10-04T11:52:00.000Z",
+                                ["handlers"] = new JsonArray(new JsonObject { ["plugin_id"] = plugin, ["started_at"] = "2026-10-04T11:51:00.000Z", ["outcome"] = "permanent", ["code"] = "target_refused", ["duration_ms"] = 40 }),
+                                ["failure"] = new JsonObject { ["plugin_id"] = plugin, ["class"] = "permanent", ["code"] = "target_refused" },
+                            }),
+                    },
+                    new JsonObject
+                    {
+                        ["kind"] = SettingKey.Hidden,
+                        ["chain"] = new JsonArray(plugin),
+                        ["cursor"] = null,
+                        ["head"] = null,
+                        ["lag"] = 0,
+                        ["waiting_on"] = new JsonArray(plugin),
+                        ["in_flight"] = null,
+                        ["runs"] = new JsonArray(),
+                    }),
+                ["truncated"] = false,
+            }.ToJsonString(),
+            section.ToJsonString());
+        Assert.Equal(2, bundle.Contents.Single(entry => entry.Name == "subscriptions").Items);
+        AssertAbsent(bundle, "SENTINEL_ENVELOPE", "SENTINEL_HANDLER_NOTE", "SENTINEL_KIND", "fake-provider");
+    }
+
+    /// <summary>
+    /// A kind's chains the runtime refused to page are missing from the section, so the section says why, while the kinds
+    /// it did list stay whole: not cut short, only without the chains it could not read.
+    /// </summary>
+    [Fact]
+    public async Task A_kind_whose_chains_were_refused_is_listed_without_them_and_the_section_says_why()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) => operation == Operations.SubscriptionRuns ? Envelope(HttpStatusCode.InternalServerError, "internal_error") : null;
+
+        var section = Section(await ComposeAsync(dir, runtime), "subscriptions");
+
+        Assert.Equal("internal_error", Text(section["incomplete"]));
+        Assert.False(section["truncated"]!.GetValue<bool>());
+        var kind = Assert.Single(section["kinds"]!.AsArray())!;
+        Assert.Equal("campaign_created", Text(kind["kind"]));
+        Assert.Empty(kind["runs"]!.AsArray());
     }
 
     private const string RoutingSnapshot = "rts_01J4ZQ8X5W3V2T1S0R9Q8P7N6A";
@@ -1272,6 +1379,36 @@ public sealed class DoctorComposerTests
         Assert.Equal("human", Text(actor["type"]));
         Assert.Equal("<user>", Text(actor["id"]));
         AssertAbsent(bundle, MadeUp.User);
+    }
+
+    /// <summary>
+    /// A handler writes as <c>plugin:&lt;its id&gt;</c>, so an entry's actor can name a plugin of the person's own; with the
+    /// journal asked for, that id travels as the plugin's alias, as a <c>plugin_id</c> does.
+    /// </summary>
+    [Fact]
+    public async Task With_the_journal_asked_for_a_plugin_actor_s_id_is_its_alias()
+    {
+        const string Own = "sentinelforwarder";
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) =>
+        {
+            if (operation != Operations.JournalList)
+            {
+                return null;
+            }
+
+            var entry = runtime.Entry(0);
+            entry["actor"] = new JsonObject { ["type"] = "plugin", ["id"] = Own };
+            return Respond(HttpStatusCode.OK, new JsonObject { ["items"] = new JsonArray(entry), ["next_cursor"] = null }.ToJsonString());
+        };
+
+        var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
+
+        var actor = Section(bundle, "journal_entries")["entries"]![0]!["actor"]!;
+        Assert.Equal("plugin", Text(actor["type"]));
+        Assert.Matches("^<plugin-[0-9]+>$", Text(actor["id"]));
+        AssertAbsent(bundle, Own);
     }
 
     /// <summary>Entries of most of a mebibyte each: as many of the newest as sixteen mebibytes of the bundle hold.</summary>
@@ -1490,6 +1627,73 @@ public sealed class DoctorComposerTests
         Assert.Equal(Enumerable.Range(0, DoctorComposer.MaxProblemCodes).Select(n => $"problem_{n:D2}"), Strings(plugin["problem_codes"]));
         Assert.True(plugin["problem_codes_truncated"]!.GetValue<bool>());
         Assert.Equal(InstanceId, Text(section["system_info"]!["instance_id"]));
+    }
+
+    /// <summary>
+    /// A plugin line names the journal kinds the plugin is granted, as the runtime's words and bounded like its problem
+    /// codes; a kind that is not a word is left out.
+    /// </summary>
+    [Fact]
+    public async Task A_plugin_line_names_the_kinds_it_is_granted_bounded_and_only_as_words()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        string[] kinds = ["SENTINEL kind", .. Enumerable.Range(0, 30).Select(n => $"kind_{n:D2}")];
+        var subscriber = StubRuntime.Plugin("fake-provider", "sha256:3f2a", PluginStatus.Valid, []) with
+        {
+            Capabilities = new PluginCapabilitiesDto(null, null, null) { Subscriptions = new ListCapabilityDto(kinds, kinds) },
+        };
+        var quiet = StubRuntime.Plugin("notifier", "sha256:9a8b", PluginStatus.Valid, []);
+        runtime.Registry = new PluginRegistryDto(new SnapshotDto("snp_01JDOCTOR", Now, SnapshotSource.Startup, 2), "rts_01JDOCTOR", [subscriber, quiet], null, Activated: true);
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var plugins = Section(bundle, "runtime")["plugins"]!.AsArray();
+        var line = plugins.Single(plugin => Strings(plugin!["subscriptions"]).Count > 0)!;
+        Assert.Equal(Enumerable.Range(0, DoctorComposer.MaxSubscriptions).Select(n => $"kind_{n:D2}"), Strings(line["subscriptions"]));
+        Assert.True(line["subscriptions_truncated"]!.GetValue<bool>());
+        var other = plugins.Single(plugin => plugin != line)!;
+        Assert.Empty(Strings(other["subscriptions"]));
+        Assert.False(other["subscriptions_truncated"]!.GetValue<bool>());
+        AssertAbsent(bundle, "SENTINEL kind");
+    }
+
+    /// <summary>
+    /// Which plugins an order lists and what a grant names are a person's choices: the bundle carries the settings' shape,
+    /// never those values, and a plugin this repository does not ship is its alias in the status fact that names the
+    /// plugins handling journal kinds, as it is everywhere else.
+    /// </summary>
+    [Fact]
+    public async Task The_order_and_the_grant_travel_by_shape_and_a_subscriber_s_id_by_its_alias()
+    {
+        using var dir = new TempPaths();
+        const string Own = "sentinel-relay";
+        Directory.CreateDirectory(Path.Combine(dir.Paths.PluginsDirectory, Own));
+        File.WriteAllText(Path.Combine(dir.Paths.PluginsDirectory, Own, "plugin.yaml"), $"id: {Own}");
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(
+            dir.Paths.UserSettingsFile,
+            new JsonObject
+            {
+                ["Plugins"] = new JsonObject { ["Grants"] = new JsonObject { [Own] = new JsonObject { ["Subscriptions"] = new JsonArray("SENTINEL_GRANTED_KIND") } } },
+                ["Subscriptions"] = new JsonObject { ["Order"] = new JsonObject { ["workitem_failed"] = new JsonArray(Own, "sentinel-ordered") } },
+            }.ToJsonString());
+
+        var runtime = Running(dir);
+        var subscriber = StubRuntime.Plugin(Own, "sha256:own", PluginStatus.Valid, []) with
+        {
+            Capabilities = new PluginCapabilitiesDto(null, null, null) { Subscriptions = new ListCapabilityDto(["workitem_failed"], ["workitem_failed"]) },
+        };
+        runtime.Registry = new PluginRegistryDto(new SnapshotDto("snp_01JDOCTOR", Now, SnapshotSource.Startup, 1), "rts_01JDOCTOR", [subscriber], null, Activated: true);
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "plugin_subscriptions")!;
+        Assert.Equal("ok", Text(check["state"]));
+        Assert.StartsWith("<plugin-1> handles workitem_failed.", Text(check["fact"]), StringComparison.Ordinal);
+        Assert.Equal(["workitem_failed"], Strings(Section(bundle, "runtime")["plugins"]![0]!["subscriptions"]));
+        Assert.NotNull(Section(bundle, "config")["settings_file"]!["shape"]!["members"]!["Subscriptions"]!["members"]!["Order"]!["members"]!["workitem_failed"]);
+        AssertAbsent(bundle, Own, "sentinel-ordered", "SENTINEL_GRANTED_KIND");
     }
 
     /// <summary>
@@ -2020,11 +2224,11 @@ public sealed class DoctorComposerTests
 
         var bundle = await ComposeAsync(dir, Running(dir), identity: new IdentityFacts(@"C:\Users\" + user, user, machine, null, null));
 
-        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
+        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "subscriptions", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
         Assert.Equal(
             ["~", "<data>", "<runtime_data>", "<harness_root>", "<install_dir>", "<user>", "<machine>", "<domain>", "<sid>", "<plugin-N>", "<role-N>", "<skill-pack-N>", "<skill-source>"],
             Section(bundle, "bundle").Where(member => member.Key.EndsWith("_written_as", StringComparison.Ordinal)).Select(member => Text(member.Value)));
-        Assert.Equal(["versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
+        Assert.Equal(["versions", "status", "runtime", "routes", "subscriptions", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
 
         var failure = bundle.Document["logs"]!.AsObject().First(member => member.Value is JsonArray { Count: 1 } list && list[0]!["@mt"] is not null).Value![0]!.AsObject();
         var capped = failure.Select(member => member.Value).OfType<JsonValue>().Select(value => value.GetValue<string>()).Single(text => text.StartsWith("System.Exception", StringComparison.Ordinal));
@@ -2120,6 +2324,7 @@ public sealed class DoctorComposerTests
         Assert.Equal([Operations.SystemInfo], runtime.Requests.Select(request => request.Operation));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "runtime")["reason"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "routes")["not_read"]));
+        Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "subscriptions")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
     }
@@ -2681,6 +2886,7 @@ public sealed class DoctorComposerTests
 
         AssertAbsent(bundle, Own);
         Assert.Equal(DoctorComposer.RuntimeDidNotAnswer, Text(Section(bundle, "routes")["not_read"]));
+        Assert.Equal(DoctorComposer.RuntimeDidNotAnswer, Text(Section(bundle, "subscriptions")["not_read"]));
         var keys = Section(bundle, "config")["settings_file"]!["shape"]!["members"]!["Notifications"]!["members"]!["Plugins"]!["members"]!.AsObject();
         Assert.Equal(["<plugin-1>"], keys.Select(member => member.Key));
         Assert.Contains("Notifications:Plugins:<plugin-1>:Enabled", bundle.ValuesCarried);
@@ -2896,8 +3102,8 @@ public sealed class DoctorComposerTests
 
         var bundle = await ComposeAsync(dir, runtime);
 
-        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
-        Assert.Equal(["versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
+        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "subscriptions", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
+        Assert.Equal(["versions", "status", "runtime", "routes", "subscriptions", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
         Assert.Equal("<plugin-N>", Text(Section(bundle, "bundle")["plugin_id_written_as"]));
     }
 
@@ -3317,6 +3523,35 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
     /// <summary>The enabled profiles <c>profile.list</c> answers with, each by its name and host; none unless a test says.</summary>
     public IReadOnlyList<(string Name, string Host)> Profiles { get; set; } = [];
 
+    /// <summary>What <c>subscription.list</c> answers: one kind with a chain of one, unless a test says.</summary>
+    public IReadOnlyList<SubscriptionKindDto> Subscribed { get; set; } =
+        [new("campaign_created", ["fake-provider"], "jrn_00000000000000000000000001", "jrn_00000000000000000000000002", 1, [], null)];
+
+    /// <summary>What <c>subscription.runs</c> answers for a kind: a chain that ended well, with an envelope no bundle carries, and one that failed.</summary>
+    public IReadOnlyList<SubscriptionRunDto> Runs { get; set; } =
+    [
+        new(
+            "sbr_00000000000000000000000002",
+            "campaign_created",
+            "jrn_00000000000000000000000002",
+            SubscriptionRunStatus.Succeeded,
+            Now.AddMinutes(-2),
+            Now.AddMinutes(-2),
+            [new JsonObject { ["plugin_id"] = "fake-provider", ["started_at"] = "2026-10-04T11:58:00.000Z", ["outcome"] = "succeeded", ["duration_ms"] = 12, ["note"] = "SENTINEL_HANDLER_NOTE" }],
+            null,
+            new JsonObject { ["forwarded"] = "SENTINEL_ENVELOPE" }),
+        new(
+            "sbr_00000000000000000000000001",
+            "campaign_created",
+            "jrn_00000000000000000000000001",
+            SubscriptionRunStatus.Failed,
+            Now.AddMinutes(-9),
+            Now.AddMinutes(-8),
+            [new JsonObject { ["plugin_id"] = "fake-provider", ["started_at"] = "2026-10-04T11:51:00.000Z", ["outcome"] = "permanent", ["code"] = "target_refused", ["duration_ms"] = 40 }],
+            new SubscriptionFailureDto("fake-provider", "permanent", "target_refused"),
+            new JsonObject { ["partial"] = "SENTINEL_ENVELOPE" }),
+    ];
+
     /// <summary>A response, or a throw, for the nth call of an operation; null answers it as usual.</summary>
     public Func<string, int, HttpResponseMessage?>? Fails { get; set; }
 
@@ -3428,6 +3663,8 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
             Operations.JournalList => Answer(JournalPage(body)),
             Operations.WorkItemList => Answer(WorkItemPage(body)),
             Operations.WorkItemGet => Answer(WithRole(WorkItem(int.Parse(Text(body["work_item_id"])[3..], CultureInfo.InvariantCulture), WorkItemStatus.Failed))),
+            Operations.SubscriptionList => Answer(new Page<SubscriptionKindDto>(Subscribed, null)),
+            Operations.SubscriptionRuns => Answer(new Page<SubscriptionRunDto>([.. Runs.Where(run => run.Kind == Text(body["kind"]))], null)),
             _ => throw new HttpRequestException($"nothing answers {operation} here"),
         };
     }

@@ -50,8 +50,8 @@
             "kind": "workitem_failed",
             "campaign_id": "cmp_1",
             "work_item_id": "wi_2",
-            "attempt_id": null,
-            "key": "error",
+            "attempt_id": "att_1",
+            "key": "att_1",
             "old": null,
             "new": {
               "code": "provider_error",

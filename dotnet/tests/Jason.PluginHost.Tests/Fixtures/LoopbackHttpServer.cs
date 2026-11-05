@@ -19,15 +19,24 @@ public sealed class LoopbackHttpServer : IDisposable
     private readonly HttpListener _listener;
     private readonly CancellationTokenSource _stopping = new();
     private readonly Task _serving;
+    private readonly Func<HttpListenerContext, Task>? _answer;
+    private int _requests;
 
     public LoopbackHttpServer()
         : this(FreePort)
     {
     }
 
-    /// <summary>A server on the first port <paramref name="choosePort"/> names that it can listen on.</summary>
-    internal LoopbackHttpServer(Func<int> choosePort)
+    /// <summary>A server that answers every request with <paramref name="answer"/> instead of its own paths.</summary>
+    public LoopbackHttpServer(Func<HttpListenerContext, Task> answer)
+        : this(FreePort, answer)
     {
+    }
+
+    /// <summary>A server on the first port <paramref name="choosePort"/> names that it can listen on.</summary>
+    internal LoopbackHttpServer(Func<int> choosePort, Func<HttpListenerContext, Task>? answer = null)
+    {
+        _answer = answer;
         // A free port is found by binding one and letting it go, so a test running beside this one can take it before
         // the server listens. A start that fails closes its listener, so every try is a new one. Windows reserves
         // 'localhost' for every user but not always a literal address; either is loopback.
@@ -56,6 +65,9 @@ public sealed class LoopbackHttpServer : IDisposable
     public int Port { get; }
 
     public string Host { get; }
+
+    /// <summary>How many requests reached the server.</summary>
+    public int Requests => Volatile.Read(ref _requests);
 
     public string BaseUrl => string.Create(CultureInfo.InvariantCulture, $"http://{Host}:{Port}/");
 
@@ -111,9 +123,10 @@ public sealed class LoopbackHttpServer : IDisposable
                 return;
             }
 
+            Interlocked.Increment(ref _requests);
             try
             {
-                await AnswerAsync(context).ConfigureAwait(false);
+                await (_answer is null ? AnswerAsync(context) : _answer(context)).ConfigureAwait(false);
             }
             catch (HttpListenerException)
             {

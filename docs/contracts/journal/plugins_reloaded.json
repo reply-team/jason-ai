@@ -1,0 +1,74 @@
+{
+  "kind": "plugins_reloaded",
+  "version": 1,
+  "since": "0.1.0",
+  "summary": "A load of the plugins was activated, at startup or by a reload: the line names every package then active at its digest, and the routes frozen with it.",
+  "subscribable": true,
+  "entities": {
+    "plugin": { "at": "/new/plugins/*/id", "presence": "sometimes", "each": true }
+  },
+  "field_since": { "/new/plugins/*/subscriptions": "0.29.0", "/new/subscriptions": "0.29.0" },
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^snp_", "description": "The id of the activated snapshot." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["snapshot_id", "source", "plugins", "routes"],
+        "properties": {
+          "snapshot_id": { "type": "string", "pattern": "^snp_", "description": "The id of the activated snapshot, the same as the key." },
+          "source": { "enum": ["startup", "reload"], "description": "Whether the runtime's start or a reload made the snapshot." },
+          "plugins": {
+            "type": "array",
+            "description": "Every plugin of the snapshot, the unavailable ones included.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "version", "digest", "status"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1, "description": "The plugin's id, which is its directory's name." },
+                "version": { "type": "string", "minLength": 1, "description": "The version its manifest states." },
+                "digest": { "type": "string", "pattern": "^sha256:", "description": "The package's content digest." },
+                "status": { "enum": ["valid", "unavailable"] },
+                "subscriptions": { "type": "integer", "minimum": 0, "description": "How many journal kinds the plugin is granted; 0 where none." }
+              }
+            }
+          },
+          "routes": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["snapshot_id", "global_default", "override_count", "campaign_route_count"],
+            "description": "The route snapshot the same act froze, by its counts: where each operation was being sent at the time.",
+            "properties": {
+              "snapshot_id": { "type": "string", "pattern": "^rts_", "description": "The id of the route snapshot." },
+              "global_default": {
+                "type": ["string", "null"],
+                "description": "The plugin the global default route names, or null where there is none."
+              },
+              "override_count": { "type": "integer", "minimum": 0, "description": "How many global operation overrides there are." },
+              "campaign_route_count": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "How many campaign routes there are, each campaign's default and operation overrides together."
+              }
+            }
+          },
+          "subscriptions": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind_count", "subscriber_count"],
+            "description": "The chains the same act froze, by their counts; which kinds and in what order is plugin.list's to say.",
+            "properties": {
+              "kind_count": { "type": "integer", "minimum": 0, "description": "How many journal kinds some plugin handles." },
+              "subscriber_count": { "type": "integer", "minimum": 0, "description": "How many plugins handle at least one journal kind." }
+            }
+          }
+        }
+      }
+    }
+  }
+}

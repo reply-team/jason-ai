@@ -48,5 +48,7 @@ public static class CampaignModule
             Operations.JournalAppend, (service, request, cancellationToken) => service.AppendAsync(request, cancellationToken));
         app.MapOperation<JournalService, JournalListRequest, Page<JournalEntryDto>>(
             Operations.JournalList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
+        app.MapOperation<JournalService, JournalKindsRequest, Page<JournalKindDto>>(
+            Operations.JournalKinds, (_, request, _) => Task.FromResult(JournalService.Kinds(request)));
     }
 }

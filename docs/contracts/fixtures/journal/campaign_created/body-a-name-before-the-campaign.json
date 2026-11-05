@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_created",
+  "version": 1,
+  "case": "a created campaign had no name before it",
+  "body": { "key": "name", "old": "Earlier name", "new": "Spring outreach" },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "type" }] }
+}

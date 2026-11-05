@@ -1,0 +1,7 @@
+{
+  "kind": "routes_updated",
+  "version": 1,
+  "case": "a campaign's default route moved to another plugin",
+  "body": { "key": "default", "old": { "plugin": "example-provider", "binding": null }, "new": { "plugin": "example-other", "binding": { "account": "sender@example.com" } } },
+  "expect": "valid"
+}

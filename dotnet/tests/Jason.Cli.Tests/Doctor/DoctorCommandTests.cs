@@ -499,7 +499,7 @@ public sealed class DoctorCommandTests
 
         // Each list is the bundle's: the sections in order, the one setting the list carries, the fixed lists.
         Assert.Equal(
-            ["versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items", "journal_entries"],
+            ["versions", "status", "runtime", "routes", "subscriptions", "config", "logs", "journal", "work_items", "journal_entries"],
             listing["contents"]!.AsArray().Select(section => Text(section!["name"])));
         Assert.Equal(["Dispatcher:Enabled"], Strings(listing["values_carried"]));
         Assert.Equal(DoctorComposer.NeverCarried, Strings(listing["never_carried"]));
@@ -647,7 +647,7 @@ public sealed class DoctorCommandTests
         Assert.False(File.Exists(path));
         var lines = Lines(output);
         Assert.StartsWith("SECTION", lines[0], StringComparison.Ordinal);
-        foreach (var section in (string[])["versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items", "journal_entries"])
+        foreach (var section in (string[])["versions", "status", "runtime", "routes", "subscriptions", "config", "logs", "journal", "work_items", "journal_entries"])
         {
             Assert.NotNull(Row(lines, section));
         }
