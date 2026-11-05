@@ -138,7 +138,7 @@ public sealed class UpdatePluginsStepTests
         await applier.ApplyAsync(Request(installation), Ct);
 
         Assert.False(Path.Exists(installation.Paths.PluginPackageDirectory("reply")));
-        Assert.Contains("plugins: reply is not installed, so none was placed; run: jason plugin install reply", applier.Steps);
+        Assert.Contains("plugins: reply is not installed, so none was placed; `jason plugin install reply` installs it", applier.Steps);
     }
 
     /// <summary>The journal forwarder's package as the release before this one published it, and as this one publishes it.</summary>
@@ -211,7 +211,7 @@ public sealed class UpdatePluginsStepTests
         else
         {
             Assert.False(Path.Exists(installation.Paths.PluginPackageDirectory("journal-forwarder")));
-            Assert.Contains("plugins: journal-forwarder is not installed, so none was placed; run: jason plugin install journal-forwarder", applier.Steps);
+            Assert.Contains("plugins: journal-forwarder is not installed, so none was placed; `jason plugin install journal-forwarder` installs it", applier.Steps);
         }
     }
 
