@@ -443,7 +443,7 @@ public static partial class DoctorComposer
             var status = Projected(await StatusChecks.ComposeAsync(env with { HttpHandler = projected }, providerCli: null, profileNames: false, cancellationToken).ConfigureAwait(false), projected.Skills);
 
             var descriptor = new DescriptorReader(env.Paths).Read();
-            using var client = descriptor is not null && IsLoopback(descriptor.BaseUrl) ? new RuntimeClient(descriptor, latch) : null;
+            using var client = descriptor is not null && IsLoopback(descriptor.BaseUrl) ? new RuntimeClient(descriptor, env.AttemptFromEnvironment(), latch) : null;
             var reader = client is null ? null : new Reader(client, latch);
             var runtime = await RuntimeAsync(reader, descriptor, env.Paths, cancellationToken).ConfigureAwait(false);
             var answered = runtime.Info is not null ? reader : null;

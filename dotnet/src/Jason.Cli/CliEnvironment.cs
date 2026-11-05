@@ -6,6 +6,7 @@ using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Execution;
 
 namespace Jason.Cli;
 
@@ -130,6 +131,16 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             AccountName: AccountNameOf(() => Environment.UserName),
             Clipboard: OperatingSystem.IsWindows() ? new WindowsClipboard() : null,
             Terminals: new Session.PlatformTerminalStarter());
+
+    /// <summary>
+    /// The attempt this CLI was launched inside, as the launcher named it in <c>JASON_ATTEMPT_ID</c> — read from
+    /// <see cref="Variables"/> when they are handed in, from the process otherwise — or null outside a run. Every request
+    /// names it to the runtime, whatever actor the request claims.
+    /// </summary>
+    public string? AttemptFromEnvironment() =>
+        Variables is { } variables
+            ? variables.GetValueOrDefault(ExecutionEnvironment.AttemptIdVariable)
+            : Environment.GetEnvironmentVariable(ExecutionEnvironment.AttemptIdVariable);
 
     /// <summary>
     /// The folder the command was typed in, or null where the platform cannot name it — on Linux and macOS, a folder

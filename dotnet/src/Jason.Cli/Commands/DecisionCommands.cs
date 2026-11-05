@@ -154,7 +154,7 @@ public static class DecisionCommands
     /// </summary>
     private static Command Answer(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("answer", "Answer a question, as the person you are. The review that continues the work follows from it. " + ActorOption.NoDefault);
+        var command = new Command("answer", "Answer a question, as the person you are. The review that continues the work follows from it. " + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var id = DecisionId();
         var answer = new Option<string>("--answer")
         {

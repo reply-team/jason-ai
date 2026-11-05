@@ -450,7 +450,7 @@ public static class SkillsCommands
 
         try
         {
-            using var client = new RuntimeClient(descriptor, env.HttpHandler);
+            using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.HttpHandler);
             var response = await client.PostAsync(Operations.SystemInfo, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccess)
             {

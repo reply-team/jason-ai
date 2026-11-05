@@ -22,7 +22,7 @@ public static class PromptFolderResolver
             return null;
         }
 
-        using var client = new RuntimeClient(descriptor, env.HttpHandler);
+        using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.HttpHandler);
 
         // Only an answer that carries no folder falls through to the next level. A step that did not answer (a refused
         // call, a timeout, a body that is not what it should be) ends the resolution: a lower level named after it would

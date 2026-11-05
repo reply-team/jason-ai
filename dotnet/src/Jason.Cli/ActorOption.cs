@@ -11,7 +11,8 @@ namespace Jason.Cli;
 /// cannot be claimed from outside. A write that claims nobody is made as the person this account is — except the
 /// eleven that are somebody's own word, an approval or a rejection, a standing approval set or unset, an answer, a
 /// preference set or unset, a block's clear, a resume, a report and a subscription's rewind, which name who acts or are
-/// refused.
+/// refused. Whatever it claims, a CLI the environment says runs inside an attempt names that attempt on every request
+/// beside it, in the Jason-Attempt header (see <see cref="Http.RuntimeClient"/>).
 /// </summary>
 public static class ActorOption
 {
@@ -30,6 +31,12 @@ public static class ActorOption
     /// <summary>A report's help: the reporter is named, a person or a role, and never taken from the machine.</summary>
     public const string NoDefaultForReport = "The CLI's default actor does not apply here: name who reports it with --actor human:<Name> or --actor role:<id>.";
 
+    /// <summary>
+    /// The help of the five verbs that are a person's own word in the runtime's eyes: approving, rejecting, setting or
+    /// taking back a standing approval, and answering. The runtime refuses them a request that names an attempt.
+    /// </summary>
+    public const string RefusedInsideARun = "From inside a run (the environment names an attempt) this is refused: it is a person's word.";
+
     public static Option<string?> Create() => new(Name)
     {
         Description = "Who performs the operation: human, human:<id>, role:<id> or attempt:att_... for a running executor. "
@@ -37,7 +44,9 @@ public static class ActorOption
             + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
             + "clearing a block, resuming a work item, rewinding a subscription "
-            + "and submitting a report take no default.",
+            + "and submitting a report take no default. "
+            + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
+            + "and approving, rejecting, setting or unsetting a standing approval and answering are refused there.",
         Recursive = true,
     };
 

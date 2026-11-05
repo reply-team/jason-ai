@@ -102,7 +102,7 @@ public static class ApprovalCommands
         var command = new Command(
             "set-standing",
             "Let the drafts answering one category of verdict in a campaign go without being asked each time. Set again, it replaces what was set and its count starts again. "
-            + ActorOption.NoDefault);
+            + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var id = new Argument<string>("campaign-id") { Description = "The campaign, as cmp_...." };
         var category = new Option<string>("--category")
         {
@@ -153,7 +153,7 @@ public static class ApprovalCommands
         var command = new Command(
             "unset-standing",
             "Take back the standing approval for one category of verdict in a campaign; drafts from now on wait for a person. "
-            + ActorOption.NoDefault);
+            + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var id = new Argument<string>("campaign-id") { Description = "The campaign, as cmp_...." };
         var category = new Option<string>("--category") { Description = "The verdict's category the standing approval was set for.", Required = true };
         var reason = VerbOptions.Reason();
@@ -214,7 +214,7 @@ public static class ApprovalCommands
     /// </summary>
     private static Command Decide(CliEnvironment env, Option<string?> actor, string verb, string operation, string description)
     {
-        var command = new Command(verb, $"{description} {ActorOption.NoDefault}");
+        var command = new Command(verb, $"{description} {ActorOption.NoDefault} {ActorOption.RefusedInsideARun}");
         var id = new Argument<string>("approval-id") { Description = "The approval, as approval list shows it." };
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();

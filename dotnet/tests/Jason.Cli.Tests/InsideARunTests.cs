@@ -1,0 +1,202 @@
+using System.CommandLine;
+using System.Net;
+using System.Text;
+using Jason.Cli;
+using Jason.Cli.Http;
+using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
+
+namespace Jason.Cli.Tests;
+
+/// <summary>
+/// A CLI launched inside an attempt says so on every request it sends, reads included, whatever actor it names: the
+/// attempt's id goes in the <c>Jason-Attempt</c> header as the environment names it, trimmed and not checked. The five
+/// verbs that are a person's own word are refused by the runtime for it; the CLI sends them anyway, prints the refusal as
+/// it came and exits 1.
+/// </summary>
+public class InsideARunTests
+{
+    private const string Attempt = "att_01K7QN0000000000000000000R";
+
+    private static readonly RuntimeDescriptor Live = new("v1", "0.1.0-dev", "rt_LIVE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch);
+
+    private static readonly string[][] Rows =
+    [
+        ["campaign", "list"],
+        ["campaign", "create", "--name", "Spring outreach"],
+        ["--actor", "human:ada", "approval", "approve", "apr_A"],
+        ["--actor", "human:ada", "decision", "answer", "dec_A", "--answer", "Yes, go ahead."],
+    ];
+
+    public static TheoryData<string[]> Verbs() => [.. Rows];
+
+    /// <summary>A read, a write and a person's own word each name the attempt, the last whatever person it claims.</summary>
+    [Theory]
+    [MemberData(nameof(Verbs))]
+    public async Task A_verb_run_inside_a_run_names_its_attempt_on_the_request(string[] args)
+    {
+        using var run = new Run(new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = Attempt });
+
+        var exit = await run.RunAsync(args);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var request = Assert.Single(run.Requests);
+        Assert.Equal(new[] { Attempt }, request.Attempt);
+    }
+
+    /// <summary>The value goes as the environment names it, trimmed, and is not checked: the runtime only reads that it is there.</summary>
+    [Theory]
+    [InlineData("  att_01K7QN0000000000000000000R\t", Attempt)]
+    [InlineData("anything at all", "anything at all")]
+    public async Task The_attempt_is_sent_as_the_environment_names_it_trimmed(string named, string sent)
+    {
+        using var run = new Run(new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = named });
+
+        await run.RunAsync("campaign", "list");
+
+        Assert.Equal(new[] { sent }, Assert.Single(run.Requests).Attempt);
+    }
+
+    /// <summary>Outside a run, or where the variable is empty, no request carries the header.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Outside_a_run_no_request_names_an_attempt(string? named)
+    {
+        var variables = new Dictionary<string, string>();
+        if (named is not null)
+        {
+            variables["JASON_ATTEMPT_ID"] = named;
+        }
+
+        using var run = new Run(variables);
+
+        var exit = await run.RunAsync("--actor", "human:ada", "approval", "approve", "apr_A");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Null(Assert.Single(run.Requests).Attempt);
+    }
+
+    /// <summary>A verb that asks the runtime more than once names the attempt every time.</summary>
+    [Theory]
+    [InlineData("runtime", "status")]
+    [InlineData("status")]
+    public async Task Every_request_a_verb_sends_names_the_attempt(params string[] args)
+    {
+        using var run = new Run(new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = Attempt });
+
+        await run.RunAsync(args);
+
+        Assert.NotEmpty(run.Requests);
+        Assert.All(run.Requests, request => Assert.Equal(new[] { Attempt }, request.Attempt));
+    }
+
+    /// <summary>The client names the attempt it was given on every request, and none when it was given none.</summary>
+    [Theory]
+    [InlineData(Attempt, Attempt)]
+    [InlineData(" att_X ", "att_X")]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData(" ", null)]
+    public async Task The_client_names_the_attempt_it_was_given(string? given, string? sent)
+    {
+        var seen = new List<string[]?>();
+        using var client = new RuntimeClient(Live, given, new FakeHandler(request =>
+        {
+            seen.Add(AttemptOf(request));
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
+        }));
+
+        await client.PostAsync("campaign.list", TestContext.Current.CancellationToken);
+        await client.PostAsync("campaign.create", "{\"name\":\"x\"}", TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, seen.Count);
+        Assert.All(seen, attempt => Assert.Equal(sent is null ? null : new[] { sent }, attempt));
+    }
+
+    /// <summary>The CLI does not decide the refusal: it sends, and prints the runtime's answer as it came, exiting 1.</summary>
+    [Fact]
+    public async Task A_refusal_from_inside_a_run_is_printed_as_it_came_and_exits_1()
+    {
+        const string envelope = "{\"error\":{\"code\":\"decided_inside_a_run\",\"message\":\"This request comes from inside attempt `att_01K7QN0000000000000000000R`.\",\"retryable\":false}}";
+        using var run = new Run(new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = Attempt }, HttpStatusCode.Forbidden, envelope);
+
+        var exit = await run.RunAsync("--actor", "human:ada", "approval", "reject", "apr_A");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Single(run.Requests);
+        Assert.Equal(envelope + Environment.NewLine, run.Output.ToString());
+    }
+
+    /// <summary>Exactly the five verbs that are a person's own word say in their help, word for word, that a run is refused them.</summary>
+    [Fact]
+    public void Exactly_the_five_say_in_their_help_that_a_run_is_refused_them()
+    {
+        const string sentence = "From inside a run (the environment names an attempt) this is refused: it is a person's word.";
+        using var paths = new TempPaths();
+        var saying = new List<string>();
+        Walk(CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths)), string.Empty);
+
+        Assert.Equal(
+            new[] { "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "decision answer" },
+            saying.Order(StringComparer.Ordinal));
+
+        void Walk(Command command, string path)
+        {
+            if (command.Subcommands.Count == 0 && command.Description?.Contains(sentence, StringComparison.Ordinal) == true)
+            {
+                saying.Add(path);
+            }
+
+            foreach (var sub in command.Subcommands)
+            {
+                Walk(sub, $"{path} {sub.Name}".Trim());
+            }
+        }
+    }
+
+    /// <summary>The help of <c>--actor</c> says that a run is named by the header, whatever actor is claimed.</summary>
+    [Fact]
+    public void The_help_of_actor_names_the_header_beside_the_default()
+    {
+        var description = ActorOption.Create().Description;
+
+        Assert.Contains("Jason-Attempt", description, StringComparison.Ordinal);
+        Assert.Contains("whatever actor is named", description, StringComparison.Ordinal);
+    }
+
+    private static string[]? AttemptOf(HttpRequestMessage request) =>
+        request.Headers.TryGetValues("Jason-Attempt", out var values) ? [.. values] : null;
+
+    private sealed record Sent(string Operation, string[]? Attempt);
+
+    private sealed class Run : IDisposable
+    {
+        private readonly TempPaths _paths = new();
+        private readonly CliEnvironment _environment;
+
+        public Run(IReadOnlyDictionary<string, string> variables, HttpStatusCode status = HttpStatusCode.OK, string response = "{}")
+        {
+            _paths.WriteDescriptor(Live);
+            _environment = new CliEnvironment(
+                Output,
+                TextWriter.Null,
+                _paths.Paths,
+                new FakeHandler(request =>
+                {
+                    Requests.Add(new Sent(request.RequestUri!.AbsolutePath, AttemptOf(request)));
+                    return new HttpResponseMessage(status) { Content = new StringContent(response, Encoding.UTF8, "application/json") };
+                }),
+                Variables: variables);
+        }
+
+        public StringWriter Output { get; } = new();
+
+        public List<Sent> Requests { get; } = [];
+
+        public Task<int> RunAsync(params string[] args) => CliApp.RunAsync(args, _environment, TestContext.Current.CancellationToken);
+
+        public void Dispose() => _paths.Dispose();
+    }
+}
