@@ -70,6 +70,21 @@ public partial class InboundSyncDocTests
     }
 
     /// <summary>
+    /// The page's cost section names the daily limit of responder runs once, with the default the runtime has, and
+    /// spells no count of its own: a count written out beside the setting would go stale when the default moved.
+    /// </summary>
+    [Fact]
+    public void The_cost_section_names_the_daily_limit_once_with_its_default()
+    {
+        var page = Flattened(Read("inbound-sync.md"));
+        var defaults = new ResponderOptions();
+
+        Assert.Single(Regex.Matches(page, Regex.Escape("`Responder:MaxLaunchesPerDay`")));
+        Assert.Contains($"`Responder:MaxLaunchesPerDay` (`{defaults.MaxLaunchesPerDay}` by default)", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("twenty-five", page, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// The four reasons a campaign is skipped, in the order the step asks them, by the codes it logs: the order is read
     /// off the step's own source, so asking them in another order is a page that has to change.
     /// </summary>

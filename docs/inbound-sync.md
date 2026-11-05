@@ -242,8 +242,8 @@ A reply about the campaign's own thread also costs a pair: one `conversation.get
 responder launch of up to `Responder:TimeoutSeconds`, with the lifecycle lines of both items in the chronicle; a further
 move into a thread whose responder is still open costs one patch and no launch. The claim paces them — one item per
 campaign at a time, and no more responder runs started in a campaign in a UTC day than `Responder:MaxLaunchesPerDay`
-(25) — so a burst of fifty threads in one campaign is answered one after another, twenty-five over a few hours and the
-rest from the next 00:00Z, and other campaigns are not held up; a responder over the day's limit waits, with no attempt
+(`25` by default) — so a burst of threads in one campaign is answered one after another, as many as that allows over
+a few hours and the rest from the next 00:00Z, and other campaigns are not held up; a responder over the day's limit waits, with no attempt
 and its thread's further moves still recorded on it, as [work execution](work-execution.md) says under the claim rule.
 Meanwhile the campaign's own sends, at priority 0, wait behind its responders. The
 sends wait, detection does not: this read's `conversation.list` items sit ten above `Responder:Priority`, so the
