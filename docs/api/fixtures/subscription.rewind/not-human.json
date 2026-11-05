@@ -1,0 +1,20 @@
+{
+  "operation": "subscription.rewind",
+  "case": "not-human",
+  "request": {
+    "kind": "campaign_created",
+    "line": "jrn_1",
+    "actor": {
+      "type": "role",
+      "id": "manager"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "subscription_rewind_not_human",
+      "message": "An actor of type 'role' cannot rewind a subscription; handing lines to plugins again is a person's word.",
+      "retryable": false
+    }
+  }
+}

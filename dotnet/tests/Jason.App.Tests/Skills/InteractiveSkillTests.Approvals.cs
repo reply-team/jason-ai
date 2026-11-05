@@ -5,22 +5,21 @@ namespace Jason.App.Tests.Skills;
 public partial class InteractiveSkillTests
 {
     /// <summary>
-    /// The approvals skill teaches notifications and is a draft: its text gained the manager's check-in as the one that acts
-    /// on an answer, and the preview's example, after the reading that made it verified. The front matter, the body and the
-    /// catalog's bullet say draft, and the catalog records no reading of it until a host reads it again. The operating
-    /// skill, the planner in a person's session and the managed path are drafts for the same reason.
+    /// The approvals skill teaches notifications and is verified: a host read its current text, with the manager's check-in
+    /// as the one that acts on an answer and the preview's example. The front matter, the body and the catalog's bullet
+    /// say verified, and the catalog records the reading.
     /// </summary>
     [Fact]
-    public void The_approvals_skill_is_a_draft_until_a_host_reads_its_new_text()
+    public void The_approvals_skill_is_verified_by_a_reading_of_its_current_text()
     {
         const string Name = "approvals-and-questions";
-        Assert.Equal("draft", SkillFrontMatter.Read(SkillPack.Find(Name).File).Metadata.GetValueOrDefault("status"));
-        Assert.Contains("**Status: draft.** No agent host has read this text in the state it ships in.", Flattened(Name), StringComparison.Ordinal);
-        Assert.DoesNotContain("**Status: verified**", Flattened(Name), StringComparison.Ordinal);
+        Assert.Equal("verified", SkillFrontMatter.Read(SkillPack.Find(Name).File).Metadata.GetValueOrDefault("status"));
+        Assert.Contains("**Status: verified** against Claude Code", Flattened(Name), StringComparison.Ordinal);
+        Assert.DoesNotContain("**Status: draft.**", Flattened(Name), StringComparison.Ordinal);
 
         var catalog = File.ReadAllText(SkillPack.Catalog());
-        Assert.Contains($"[`{Name}`]({Name}/SKILL.md) — **draft** until a host reads its new text.", catalog, StringComparison.Ordinal);
-        Assert.DoesNotContain($"| `{Name}` | Claude Code", catalog, StringComparison.Ordinal);
+        Assert.Contains($"[`{Name}`]({Name}/SKILL.md) — **verified.**", catalog, StringComparison.Ordinal);
+        Assert.Contains($"| `{Name}` | Claude Code", catalog, StringComparison.Ordinal);
     }
 
     /// <summary>

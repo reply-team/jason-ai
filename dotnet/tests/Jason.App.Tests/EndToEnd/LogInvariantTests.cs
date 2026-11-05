@@ -16,8 +16,10 @@ namespace Jason.App.Tests.EndToEnd;
 /// answers as — the kind of name the CLI writes for the account's person too — their answer and the reason for it, the
 /// reason a running work item was cancelled, an unloadable package's manifest, a refused setting, a setting of the
 /// wrong type, a reload's reason and a timestamp the request door cannot read, and the keys a campaign and a work item
-/// were created with — made, repeated, sent again with a different request and once too long to be a key. None of them
-/// may appear anywhere in the log, whole or in part.
+/// were created with — made, repeated, sent again with a different request and once too long to be a key — and the text of
+/// a line a subscriber's chain is handed and the envelope that chain hands on, after its handler read the campaign back
+/// through its door. None of them may appear anywhere in the log, whole or in part, and neither may a bearer: the run
+/// token by its value, the door's by its shape.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -41,6 +43,19 @@ public class LogInvariantTests
 
     /// <summary>A package directory beside the real one whose manifest no load accepts.</summary>
     private const string Unloadable = "unloadable";
+
+    /// <summary>
+    /// A subscriber to <c>campaign_created</c>, granted the read family: its handler reads the campaign back through its
+    /// door and hands on an envelope, so a chain crosses the door with a bearer of its own.
+    /// </summary>
+    private const string Subscriber = "log-subscriber";
+
+    /// <summary>
+    /// The shape of a bearer this runtime makes: 32 random bytes in unpadded base64url, standing alone. The door's bearer
+    /// is made per handler and never handed to the test, so its absence is held by its shape.
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex BearerShaped =
+        new(@"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// <summary>The line the runtime writes once for an edit of a section it refuses.</summary>
     private const string RefusedTemplate = "Edited {Section} settings were refused; the runtime keeps the last ones that validated: {Failure}";
@@ -85,6 +100,8 @@ public class LogInvariantTests
             ["a timestamp the door cannot read"] = SentinelPrefix + "SINCE_" + mark,
             ["a campaign's idempotency key"] = SentinelPrefix + "CKEY_" + mark,
             ["a work item's idempotency key"] = SentinelPrefix + "WKEY_" + mark,
+            ["a subscribed line's text"] = SentinelPrefix + "LINE_" + mark,
+            ["a chain's envelope"] = SentinelPrefix + "ENVELOPE_" + mark,
 
             // A role name is lowercase with hyphens, and is what the message of an attempt the claim refuses quotes.
             ["a role nothing can launch"] = "sentinel-role-" + mark,
@@ -109,15 +126,46 @@ public class LogInvariantTests
                 .Replace("kind: provider", "kind: " + sentinels["an unloadable package's manifest"], StringComparison.Ordinal),
             Ct);
 
+        // The subscriber reads the campaign a line names through its door, and the envelope it hands on carries a
+        // sentinel of its own beside the name it read back.
+        var subscriber = it.Paths.PluginPackageDirectory(Subscriber);
+        Directory.CreateDirectory(subscriber);
+        await File.WriteAllTextAsync(
+            Path.Combine(subscriber, "plugin.yaml"),
+            $"manifest_version: 1\nid: {Subscriber}\nversion: 1.0.0\nkind: subscriber\ncontracts:\n  protocol: [1]\nsubscriptions: [campaign_created]\ncapabilities:\n  api: [read]\n",
+            Ct);
+        await File.WriteAllTextAsync(
+            Path.Combine(subscriber, "main.js"),
+            "export function invoke(operation, input) {\n"
+                + "  const campaign = host.call('campaign.get', { campaign_id: input.line.campaign_id });\n"
+                + $"  return {{ result: {{ envelope: {{ note: '{sentinels["a chain's envelope"]}', name: campaign.name }} }} }};\n"
+                + "}\n",
+            Ct);
+
         await GoldenPath.StartAsync(it);
         GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, "runtime", "status"));
+        var descriptor = new Jason.Cli.Discovery.DescriptorReader(it.Paths).Read();
+        Assert.NotNull(descriptor);
+        sentinels["the run token"] = descriptor.Token;
 
         // The candidate goes, and the reload that activates what is left is given a reason somebody typed.
         Directory.Delete(unloadable, recursive: true);
         var reloaded = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
             it, "plugin", "reload", "--reason", sentinels["a reload's reason"])));
         Assert.True((bool)reloaded["activated"]!);
-        GoldenPath.AssertTheStandInAnswered(Assert.Single(reloaded["plugins"]!.AsArray())!.AsObject());
+        Assert.Equal(
+            [PluginId, Subscriber],
+            reloaded["plugins"]!.AsArray().Select(plugin => (string)plugin!["id"]!).Order(StringComparer.Ordinal));
+        GoldenPath.AssertTheStandInAnswered(reloaded["plugins"]!.AsArray().Single(plugin => (string?)plugin!["id"] == PluginId)!.AsObject());
+
+        // A campaign whose name is a line's text: its creation runs the subscriber's chain, which reads the campaign
+        // through the door and ends with the envelope. The record says so, and the test waits for it.
+        GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, "campaign", "create", "--name", sentinels["a subscribed line's text"]));
+        var chain = await ChainAsync(it, run => (string?)run["envelope"]?["name"] == sentinels["a subscribed line's text"]);
+        Assert.Equal("succeeded", (string?)chain["status"]);
+        Assert.Equal(sentinels["a chain's envelope"], (string?)chain["envelope"]!["note"]);
+        var handler = Assert.Single(chain["handlers"]!.AsArray())!;
+        Assert.Equal((Subscriber, "succeeded"), ((string?)handler["plugin_id"], (string?)handler["outcome"]));
 
         var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
             it, "campaign", "create", "--name", "Log guard", "--context", Object("brief", sentinels["a campaign's context"]))))["id"]!;
@@ -275,6 +323,7 @@ public class LogInvariantTests
 
         AssertEveryPropertyIsReviewed(events);
         AssertNoSentinel(it.Paths, events, mark, sentinels);
+        AssertNoBearer(it.Paths);
 
         GoldenPath.AssertSuccess(stopped);
         Assert.False(GoldenPath.IsRunning(it.Pid!.Value), "The runtime process was still alive after runtime stop returned.");
@@ -299,6 +348,11 @@ public class LogInvariantTests
                 && (string?)line["CampaignId"] == campaign);
         AssertSeen(events, "a line of the attempt's scope", line => (string?)line["CampaignId"] == campaign && line["@mt"]?.GetValue<string>().StartsWith("Plugin", StringComparison.Ordinal) == true);
         AssertSeen(events, "a request line", line => line["RequestPath"] is not null && line["StatusCode"] is not null);
+        AssertSeen(
+            events,
+            "the subscription handler's end",
+            line => (string?)line["@mt"] == "Subscription handler {PluginId} for {Kind} ended {Outcome} ({Code}) in {DurationMs} ms"
+                && (string?)line["PluginId"] == Subscriber);
         AssertSeen(events, "a framework line", line => line["address"] is not null);
     }
 
@@ -319,7 +373,11 @@ public class LogInvariantTests
             },
             ["Plugins"] = new JsonObject
             {
-                ["Grants"] = new JsonObject { [PluginId] = new JsonObject { ["Exec"] = new JsonArray("*") } },
+                ["Grants"] = new JsonObject
+                {
+                    [PluginId] = new JsonObject { ["Exec"] = new JsonArray("*") },
+                    [Subscriber] = new JsonObject { ["Api"] = new JsonArray("read"), ["Subscriptions"] = new JsonArray("campaign_created") },
+                },
             },
             ["Routes"] = new JsonObject
             {
@@ -341,6 +399,49 @@ public class LogInvariantTests
 
     private static Func<JsonObject, bool> Refusal(string section) =>
         line => (string?)line["@mt"] == RefusedTemplate && (string?)line["Section"] == section;
+
+    /// <summary>
+    /// Reads the record of <c>campaign_created</c>'s chains until the one wanted has ended, and answers it; the wait
+    /// running out is a failure that shows the record as it stood.
+    /// </summary>
+    private static async Task<JsonObject> ChainAsync(Installation it, Func<JsonObject, bool> wanted)
+    {
+        var deadline = DateTime.UtcNow.Add(GoldenPath.Patience);
+        JsonObject? page = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            page = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "subscription", "runs", "--kind", "campaign_created")));
+            if (page["items"]!.AsArray().OfType<JsonObject>().FirstOrDefault(run => (string?)run["status"] != "running" && wanted(run)) is { } run)
+            {
+                return run;
+            }
+
+            await Task.Delay(200, Ct);
+        }
+
+        Assert.Fail($"The chain never ended; the record said: {page?.ToJsonString()}");
+        return null!;
+    }
+
+    /// <summary>
+    /// No bearer this runtime makes in any file under <c>logs/</c>: the run token is a sentinel by its value, and the
+    /// door's, made per handler and never seen by the test, is looked for by its shape and by the scheme that carries it.
+    /// </summary>
+    private static void AssertNoBearer(JasonPaths paths)
+    {
+        var leaks = Directory.GetFiles(paths.LogsDirectory, "*", SearchOption.AllDirectories)
+            .SelectMany(file =>
+            {
+                var text = RuntimeLogs.ReadAllText(file);
+                var shaped = BearerShaped.Matches(text).Select(match => $"{Path.GetFileName(file)}: …{Around(text, match.Index)}…");
+                var scheme = text.Contains("Bearer", StringComparison.OrdinalIgnoreCase)
+                    ? [$"{Path.GetFileName(file)}: …{Around(text, text.IndexOf("Bearer", StringComparison.OrdinalIgnoreCase))}…"]
+                    : Array.Empty<string>();
+                return shaped.Concat(scheme);
+            })
+            .ToList();
+        Assert.True(leaks.Count == 0, $"The runtime's log carries a bearer:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
+    }
 
     /// <summary>Waits for a line the runtime is about to write. Whether it came is asserted at the end, after the leaks.</summary>
     private static async Task LoggedAsync(Installation it, Func<JsonObject, bool> wanted)

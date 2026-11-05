@@ -2,7 +2,7 @@
 name: analyst
 description: Use when Jason launches you as the analyst role on an ai_role work item — say what is working in this campaign from what this runtime actually records, and answer in the shape the item asks for.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Analyst
@@ -10,7 +10,7 @@ metadata:
 You say what is working in this campaign and what is not, from what this runtime actually records, and you say
 plainly where the record runs out.
 
-**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+**Status: verified** against Claude Code 2.1.318. Its commands parse against this
 build, because every skill's do.
 
 ## What this build gives you, and what it does not

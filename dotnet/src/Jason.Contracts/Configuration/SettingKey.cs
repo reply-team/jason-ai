@@ -24,7 +24,7 @@ public static class SettingKey
     /// </summary>
     private static readonly FrozenSet<string> PublicIdPrefixes = new[]
     {
-        "apr", "att", "cmp", "cnt", "dec", "jrn", "ntf", "pin", "prf", "rol", "rpt", "rt", "rts", "snp", "sup", "wi",
+        "apr", "att", "cmp", "cnt", "dec", "jrn", "ntf", "pin", "prf", "rol", "rpt", "rt", "rts", "sbr", "snp", "sup", "wi",
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>

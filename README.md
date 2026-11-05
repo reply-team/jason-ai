@@ -296,10 +296,12 @@ it leaves out. The file holds the versions, the report `jason status` gives, the
 `JASON_*` variables by shape with a value only for the settings `jason doctor --help` lists, a bounded slice
 of the log, what the runtime says about itself and each plugin by its id, version, digest, status and
 problem codes, which plugin performs which operation, here and per campaign, by plugin id and operation
-name — never which account a route binds — and the journal and the work items counted, with the newest entries by kind and ids and the
+name — never which account a route binds — which plugins each subscribed journal kind is handed to, where its
+cursor stands and how its newest chains ended, by status and code — never the envelope a chain carried — and the
+journal and the work items counted, with the newest entries by kind and ids and the
 newest failures by their error's code — never by what they say. It never holds the capability token,
 request or response bodies, prompts, work-item results, the database, plugin packages, a route's
-account and its identity, the names of execution profiles, or anything read from the folder Jason keeps what it learns about your business in —
+account and its identity, the envelopes subscription chains carried, the names of execution profiles, or anything read from the folder Jason keeps what it learns about your business in —
 `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only
 `--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a
 project link recorded, campaign
@@ -580,9 +582,9 @@ jason report list --campaign <campaign-id> --human
 | Repository | Role |
 |---|---|
 | `reply-team/jason-ai` (this repo) | Product entry point: the runtime and business skills, the official plugins, the operation contracts, the install path, and every release of the runtime — the executable for each platform |
-| [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) | Reply.io provider CLI: auth, profiles, teams, full API v3 access, and the Reply-specific skills |
+| [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) | Reply.io provider CLI: auth, profiles, teams, full API v3 access, and the Reply-specific skills, which ship inside its npm package and which `reply skills install` writes |
 | [`reply-team/reply-mcp`](https://github.com/reply-team/reply-mcp) | Remote MCP server exposing curated Reply tools to MCP-capable agents |
-| [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) | **Formerly** the home of the skills packs. Both halves now live here: the runtime skills in [`skills/runtime`](skills/runtime), re-authored around the Runtime API, and the business skills in [`skills/business`](skills/business), moved across unchanged and then held to this repository's own guards. The Reply-specific half belongs with `reply-cli` |
+| [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) | **Formerly** the home of the skills packs; it is archived and read-only now. Its business pack (published there as `ai-sdr-core`) lives here in [`skills/business`](skills/business), held to this repository's own guards. The runtime skills in [`skills/runtime`](skills/runtime), re-authored around the Runtime API, replace its `agentic-runtime` pack, which is retired. `jason skills install` installs both. Its Reply-specific pack (`reply-adapter`) ships with `reply-cli` |
 
 ## Getting help
 

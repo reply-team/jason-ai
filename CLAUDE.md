@@ -184,8 +184,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   permission settings' to decide (the verb-map tests hold the `session` noun to `open` alone); and
   `jason doctor` collects one installation into one file, half of which is not the
   runtime's to know — of the runtime it asks only what the runtime says about itself, its roles,
-  profiles and routes, and the journal and work-item pages it counts, keeping their metadata and dropping their
-  values. `status`, `logs` and
+  profiles, routes and subscriptions, and the journal and work-item pages it counts, keeping their metadata and
+  dropping their values. `status`, `logs` and
   `doctor` exit 0 or 1 and **never 3** — `logs` never asks the runtime, and for the other two "I could
   not ask the runtime" is an answer rather than a reason there is none — and the body of `status`
   carries `ready` so an agent branches on the body, never on the code. `uninstall` removes skills only
