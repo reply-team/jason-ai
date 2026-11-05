@@ -1,0 +1,27 @@
+{
+  "operation": "subscription.rewind",
+  "case": "since-without-offset",
+  "request": {
+    "kind": "campaign_created",
+    "since": "2026-10-16T09:00:00",
+    "actor": {
+      "type": "human",
+      "id": "Marta"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: since: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "since",
+          "code": "invalid",
+          "message": "since must be an ISO-8601 moment with its offset, such as 2026-01-15T09:00:00Z."
+        }
+      ]
+    }
+  }
+}
