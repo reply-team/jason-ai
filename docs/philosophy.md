@@ -1,7 +1,7 @@
 # What Jason is, and who it is for
 
 This page is for a person, or the AI agent working for them, who has found Jason and wants to know whether it is for
-them. The [README](../README.md) says in a paragraph what Jason is and why it was built; this page gives the reasoning
+them. The [handbook](handbook.md) says in a paragraph what Jason is and why it was built; this page gives the reasoning
 behind that paragraph and says plainly who is well served by it and who is not. Everything it says Jason does, Jason
 does in this release, on the page it links to. What a release changes is in its notes, not here.
 
@@ -111,7 +111,7 @@ Jason is built to do as much as it can on its own and nothing that should be you
 - **Your data and your machine.** The runtime keeps its data in a directory you own, and its history is append-only:
   what happened is not rewritten. What leaves your machine is what the plugins you install send to their providers, what
   the agents you use send to theirs, the runtime's check for a newer release, and the requests you start yourself, such
-  as an install or an update; nothing else, and no telemetry. The exact list is in the [README](../README.md), right
+  as an install or an update; nothing else, and no telemetry. The exact list is in the [handbook](handbook.md), right
   under its opening.
 
 ## Who it is for

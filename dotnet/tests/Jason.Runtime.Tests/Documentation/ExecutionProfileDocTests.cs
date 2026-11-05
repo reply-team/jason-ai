@@ -519,7 +519,7 @@ public partial class ExecutionProfileDocTests
     /// pipes to a shell is Jason's own one-liner. Cursor CLI, the host whose commands were once copied, is held to the link.
     /// </summary>
     [Theory]
-    [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     [InlineData("docs/execution-profiles.md")]
     public void A_host_s_install_is_a_link_to_its_own_page_and_no_command_copied_from_it(string file)

@@ -163,10 +163,10 @@ public partial class RuntimeApiDocTests
     [Fact]
     public void The_readme_says_the_runtime_api_is_open_and_links_the_page()
     {
-        var readme = Flat(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "README.md")));
+        var readme = Flat(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", "handbook.md")));
 
         Assert.Contains(
-            "The Runtime API is documented and open as well, so a plugin of your own — a program that reads and writes the runtime — can be built over it: [docs/runtime-api.md](docs/runtime-api.md).",
+            "The Runtime API is documented and open as well, so a plugin of your own — a program that reads and writes the runtime — can be built over it: [docs/runtime-api.md](runtime-api.md).",
             readme,
             StringComparison.Ordinal);
     }

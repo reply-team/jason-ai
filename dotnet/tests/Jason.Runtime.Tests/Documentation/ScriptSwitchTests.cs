@@ -14,9 +14,10 @@ namespace Jason.Runtime.Tests.Documentation;
 public sealed partial class ScriptSwitchTests
 {
     /// <summary>Every file that hands a person or an agent an install line.</summary>
-    private static readonly string[] Seven =
+    private static readonly string[] Eight =
     [
         "README.md",
+        "docs/handbook.md",
         "docs/INSTALL.md",
         "docs/release-and-update.md",
         ".github/release-notes-template.md",
@@ -29,7 +30,7 @@ public sealed partial class ScriptSwitchTests
     public void Every_release_download_named_anywhere_is_a_name_a_release_publishes()
     {
         var seen = 0;
-        foreach (var file in Seven)
+        foreach (var file in Eight)
         {
             foreach (Match url in Download().Matches(Source(file)))
             {
@@ -42,7 +43,7 @@ public sealed partial class ScriptSwitchTests
 
         // A detector that matched nothing would pass the loop above on any page: the pages name a release download
         // twenty times today, so fewer than half that means the detector, not the pages, changed.
-        Assert.True(seen >= 10, $"the detector found {seen} release download(s) in {Seven.Length} files");
+        Assert.True(seen >= 10, $"the detector found {seen} release download(s) in {Eight.Length} files");
     }
 
     /// <summary>
@@ -76,7 +77,7 @@ public sealed partial class ScriptSwitchTests
     public void A_pinned_install_fetches_the_script_of_the_release_it_installs_and_says_which()
     {
         var pinned = 0;
-        foreach (var file in Seven)
+        foreach (var file in Eight)
         {
             foreach (var line in Source(file).Split('\n').Where(l => Pinned().IsMatch(l)))
             {
