@@ -1,7 +1,7 @@
 {
   "kind": "workitem_waiting",
   "version": 1,
-  "case": "the claim held a responder at its campaign's daily limit until the next 00:00Z, before any attempt",
+  "case": "the claim held a responder at its campaign's daily limit, with no attempt of its own, until the next 00:00Z",
   "body": {
     "key": null,
     "old": null,

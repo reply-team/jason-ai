@@ -364,11 +364,12 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     }
 
     /// <summary>
-    /// Holds <paramref name="item"/>, not yet tried, at a limit the claim met: it waits, with no attempt, until
-    /// <paramref name="until"/>, the moment the limit lets it go. The counterpart of <see cref="Park"/> for a limit rather
-    /// than a block, with one entry, the claim, before any attempt exists. The item's last error is
-    /// <paramref name="error"/>, which names the limit, the moment and the ways out, and the line says which limit held it
-    /// and at what number. Nothing is counted against the item's attempts: the work has not been tried.
+    /// Holds <paramref name="item"/> at a limit the claim met: it is held at the claim, with no attempt of its own, and
+    /// waits until <paramref name="until"/>, the moment the limit lets it go. The counterpart of <see cref="Park"/> for a
+    /// limit rather than a block, with one entry, the claim. The item's last error is <paramref name="error"/>, which
+    /// names the limit, the moment and the ways out, and the line says which limit held it and at what number. Nothing is
+    /// counted against the item's attempts, since the hold starts none; a wait an earlier attempt ended in stays the one
+    /// the item's next run resumes from (<see cref="Jason.Runtime.Dispatch.Resumptions"/>).
     /// </summary>
     public WorkItemWait Hold(JasonDbContext db, WorkItem item, DateTime until, AttemptErrorDto error, int limit, ActorRef actor)
     {

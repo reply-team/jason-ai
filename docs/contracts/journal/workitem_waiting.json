@@ -46,7 +46,7 @@
           },
           "held_by": {
             "type": "object",
-            "description": "The limit the claim held it at before any attempt, until the moment the limit lets it go: the code its last error carries, and the number in force when it was held.",
+            "description": "The limit the claim held it at, with no attempt of its own, until the moment the limit lets it go: the code its last error carries, and the number in force when it was held.",
             "additionalProperties": false,
             "required": ["code", "limit"],
             "properties": {

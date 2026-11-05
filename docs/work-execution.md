@@ -132,7 +132,7 @@ processing ──► waiting ──► created                     (what it wait
 
 created | processing ──► waiting ──► created           (a provider block held it: the block cleared, or let it through as its trial)
 
-created ──► waiting ──► created                        (a limit held it before any attempt: its moment came, or somebody resumed it)
+created ──► waiting ──► created                        (a limit held it at the claim, with no attempt of its own: its moment came, or somebody resumed it)
 
 created | awaiting_approval | scheduled | processing | waiting | expired ──► cancelled
 created | awaiting_approval | waiting ──► expired      (the due date passed before anyone claimed or answered it, or while it waited)
@@ -163,7 +163,7 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   wait: the claim parks it before any attempt exists, or the attempt that met the block ends `blocked`. Its wait
   names the block rather than items or a moment, is bounded by the item's `due_at` alone, and is released with
   `block_cleared` or `block_trial` (§Provider blocks). A responder its campaign's daily limit holds waits here as well,
-  with no run behind it, until the next 00:00Z (§The claim rule).
+  held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule).
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
 - **`expired`** — the due date passed before anyone claimed it, before anyone answered the
@@ -241,7 +241,9 @@ attempt, its wait is the next 00:00Z, its `last_error` is `responder_launches_sp
 says `held_by` with the code and the limit. A held item does not make its campaign busy, so the campaign's other work
 is claimed at the next scan. There are three ways out. At 00:00Z the resume step releases it and the claim counts the
 new day as usual, so a day already spent by then holds it again. `workitem.resume` lets that one item go past the limit
-under the person's name: the claim takes it at its next turn and its run counts like any other. Raising the setting
+under the person's name: the claim takes it at its next turn and its run counts like any other. Every run counts,
+a resumption included, so a responder whose run yielded can be held too; let go, its next run is told about the wait
+its own run ended in, since the hold's wait has no attempt (§The launch envelope). Raising the setting
 applies at the next scan to work not yet held, while an item already held keeps its moment.
 
 ## Approvals
@@ -692,9 +694,10 @@ than what the provenance recorded.
 waiting — a responder the respond step wrote waiting on the read of its thread ([inbound sync](inbound-sync.md) §1) —
 since no attempt waited: that run reads what it waited on by the identifiers its context carries, with
 `jason workitem get`. A run that does follow a wait — the item's last run
-ended with `workitem.wait`, and the item's latest wait was released rather than closed some other way — is told about that wait here, composed **at the
+ended with `workitem.wait`, and the item's latest wait that an attempt ended in was released rather than closed some
+other way, a wait the claim held it in at a limit being passed over — is told about that wait here, composed **at the
 claim** from the rows the wait left: `previous_attempt_id` is the attempt that waited, `resumption_number`
-counts the item's released waits up to this one, `waited_since` is when the wait opened, and
+counts the item's released waits that an attempt ended in, up to this one, `waited_since` is when the wait opened, and
 `woke_because` is the reason the wait's release recorded, verbatim — `children_ended`, `moment_reached`,
 `wait_ceiling` or `resumed_by_actor`. A role's wait is released for one of those four: neither `block_cleared`
 nor `block_trial` occurs for a role's wait, since a provider block holds provider operations, and their relaunch

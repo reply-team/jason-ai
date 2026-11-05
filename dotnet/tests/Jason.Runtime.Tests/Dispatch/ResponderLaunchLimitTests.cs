@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
@@ -14,6 +15,7 @@ using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -339,6 +341,118 @@ public class ResponderLaunchLimitTests
         await using var check = harness.Open();
         var hold = await check.WorkItemWaits.AsNoTracking().Where(w => w.WorkItemId == responder).OrderByDescending(w => w.Id).FirstAsync(Ct);
         Assert.Equal((WaitStatus.Open, (DateTime?)Tomorrow), (hold.Status, hold.Until));
+    }
+
+    /// <summary>
+    /// A responder whose run yielded, on a moment, is counted when its wait lets it go, and held if the day is spent by then;
+    /// the hold, which has no attempt of its own, takes nothing from the yield: at midnight the next claim tells the run
+    /// what its own wait ended with, and that wait names the run it resumed.
+    /// </summary>
+    [Fact]
+    public async Task A_yielded_responder_held_at_the_limit_resumes_its_own_wait_at_midnight()
+    {
+        using var harness = Harness(limit: 2);
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, Today.AddHours(1));
+        var yielded = await QueuedAsync(harness, campaign);
+        var run = await RunsAndYieldsAsync(harness, yielded, until: Noon.AddHours(1));
+        harness.Clock.Now = new DateTimeOffset(Noon.AddHours(1));
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+        Assert.Empty(await harness.ClaimAsync(Ct));
+        Assert.Equal(WorkItemStatus.Waiting, (await ItemAsync(harness, yielded)).Status);
+
+        harness.Clock.Now = new DateTimeOffset(Tomorrow.AddHours(1));
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+        var work = Assert.Single(await harness.ClaimAsync(Ct));
+
+        await AssertResumedFromTheYieldAsync(harness, yielded, run, work);
+    }
+
+    /// <summary>The same yielded responder, held, let go by a person instead: the run is still told what the yield's wait ended with.</summary>
+    [Fact]
+    public async Task A_yielded_responder_held_at_the_limit_and_resumed_by_a_person_resumes_its_own_wait()
+    {
+        using var harness = Harness(limit: 2);
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, Today.AddHours(1));
+        var yielded = await QueuedAsync(harness, campaign);
+        var run = await RunsAndYieldsAsync(harness, yielded, until: Noon.AddHours(1));
+        harness.Clock.Now = new DateTimeOffset(Noon.AddHours(1));
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        await ResumeAsync(harness, yielded);
+        var work = Assert.Single(await harness.ClaimAsync(Ct));
+
+        await AssertResumedFromTheYieldAsync(harness, yielded, run, work);
+    }
+
+    /// <summary>
+    /// A person's resume lets one hold go, not every later wait: a responder resumed past the limit, which runs and yields
+    /// and is resumed by a person again, still carries the hold's error, and its next run is counted and held at the limit.
+    /// </summary>
+    [Fact]
+    public async Task A_responder_resumed_past_the_limit_that_yields_and_is_resumed_again_is_counted_and_held_again()
+    {
+        using var harness = Harness(limit: 2);
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, Today.AddHours(1), Today.AddHours(2));
+        var held = await QueuedAsync(harness, campaign);
+        Assert.Empty(await harness.ClaimAsync(Ct));
+        await ResumeAsync(harness, held);
+        Assert.Single(await harness.ClaimAsync(Ct));
+
+        await RunsAndYieldsAsync(harness, held, until: Noon.AddHours(6));
+        await ResumeAsync(harness, held);
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        var item = await ItemAsync(harness, held);
+        Assert.Equal(WorkItemStatus.Waiting, item.Status);
+        Assert.Equal(AttemptErrors.ResponderLaunchesSpent, item.LastError!.Code);
+        await using var db = harness.Open();
+        var waits = await db.WorkItemWaits.AsNoTracking().Where(w => w.WorkItemId == held).OrderBy(w => w.Id).ToListAsync(Ct);
+        Assert.Equal(3, waits.Count);
+        Assert.Equal((WaitStatus.Open, (int?)null, (DateTime?)Tomorrow), (waits[2].Status, waits[2].AttemptId, waits[2].Until));
+        Assert.Equal(2, await db.Journal.AsNoTracking().CountAsync(e => e.WorkItemId == item.PublicId && e.Kind == JournalKinds.WorkItemWaiting && e.Key == null, Ct));
+    }
+
+    /// <summary>The claimed run follows the yield's wait: told its attempt and its reason, numbered as its first resumption, and named on that wait.</summary>
+    private static async Task AssertResumedFromTheYieldAsync(DispatchHarness harness, int itemId, string yieldedAttempt, ClaimedWork work)
+    {
+        Assert.Equal(await PublicIdAsync(harness, itemId), work.WorkItemPublicId);
+        var resumption = Assert.IsType<Resumption>(work.Resumption);
+        Assert.Equal((yieldedAttempt, 1, WaitReleaseReason.MomentReached), (resumption.PreviousAttemptId, resumption.ResumptionNumber, resumption.WokeBecause));
+        Assert.Equal(new DateTimeOffset(Noon), resumption.WaitedSince);
+
+        await using var db = harness.Open();
+        var waits = await db.WorkItemWaits.AsNoTracking().Include(w => w.ResumedByAttempt).Where(w => w.WorkItemId == itemId).OrderBy(w => w.Id).ToListAsync(Ct);
+        Assert.Equal(2, waits.Count);
+        Assert.Equal(work.AttemptPublicId, waits[0].ResumedByAttempt?.PublicId);
+        Assert.Equal(((int?)null, (Attempt?)null), (waits[1].AttemptId, waits[1].ResumedByAttempt));
+    }
+
+    /// <summary>
+    /// The item's latest attempt starts now and its run yields on a moment, through <see cref="AttemptOutcomes.Wait"/>, as a
+    /// responder's executor would end it; the attempt's id comes back.
+    /// </summary>
+    private static async Task<string> RunsAndYieldsAsync(DispatchHarness harness, int itemId, DateTime until)
+    {
+        var now = harness.Clock.Now.UtcDateTime;
+        await using var scope = harness.Scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var item = await db.WorkItems.Include(w => w.Attempts).SingleAsync(w => w.Id == itemId, Ct);
+        var attempt = item.Attempts.OrderBy(a => a.Number).LastOrDefault();
+        if (attempt is null)
+        {
+            attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Running, now);
+            item.AttemptCount = 1;
+        }
+
+        (attempt.Status, attempt.StartedAt, item.Status) = (AttemptStatus.Running, now, WorkItemStatus.Processing);
+        await db.SaveChangesAsync(Ct);
+        scope.ServiceProvider.GetRequiredService<AttemptOutcomes>().Wait(db, item, attempt, [], mode: null, until, Actors.ForAttempt(attempt));
+        await db.SaveChangesAsync(Ct);
+        return attempt.PublicId;
     }
 
     private static DispatchHarness Harness(int limit, DateTime? now = null)
