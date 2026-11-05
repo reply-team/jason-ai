@@ -61,18 +61,33 @@ public class SubscriptionScanTests
         Assert.Equal([Failed], harness.SubscriptionRunner.InFlight);
     }
 
-    /// <summary>A chain starts only when every member can run on this machine: the kind waits at its line, and nothing is spent.</summary>
+    /// <summary>
+    /// A chain starts only when every member can run on this machine: the kind waits at its line, nothing is spent, and
+    /// the wait is said once for each load, by the kind, the line and the member, and not again at the next scan under
+    /// the same load.
+    /// </summary>
     [Fact]
-    public async Task A_kind_whose_chain_has_an_unavailable_member_is_not_offered()
+    public async Task A_kind_whose_chain_has_an_unavailable_member_is_not_offered_and_its_wait_is_said_once_for_each_load()
     {
         using var harness = new DispatchHarness(Noon);
         Load(harness, Subscriber("alpha", Failed), Subscriber("beta", PluginStatus.Unavailable, Failed));
-        Lines(harness, Failed);
+        var id = await PublicIdOfAsync(harness, Lines(harness, Failed)[0]);
         await CursorAsync(harness, Failed);
+        var said = $"Subscription kind {Failed} waits at line {id} on unavailable beta";
 
+        Assert.Equal(0, await harness.SubscriptionScanAsync(Ct));
         Assert.Equal(0, await harness.SubscriptionScanAsync(Ct));
 
         Assert.Empty(harness.SubscriptionRunner.InFlight);
+        Assert.Empty(harness.Handlers.Requests);
+        Assert.True(harness.SubscriptionRunner.HasFreeChild);
+        Assert.Single(harness.Logs.All, message => message == said);
+
+        Load(harness, Subscriber("alpha", Failed), Subscriber("beta", PluginStatus.Unavailable, Failed));
+        Assert.Equal(0, await harness.SubscriptionScanAsync(Ct));
+        Assert.Equal(0, await harness.SubscriptionScanAsync(Ct));
+
+        Assert.Equal(2, harness.Logs.All.Count(message => message == said));
     }
 
     [Theory]

@@ -136,6 +136,33 @@ public sealed class SubscriptionRunner(
         }
     }
 
+    /// <summary>Whether the wait of a kind under the load given has been said already.</summary>
+    public bool Noted(string snapshotId, string kind)
+    {
+        lock (_gate)
+        {
+            return _said.Contains((snapshotId, kind));
+        }
+    }
+
+    /// <summary>
+    /// Says that a kind waits at its line on a member that cannot run, once for each load: the scan says it for a kind it
+    /// passes over, and a turn says it for a member that became unavailable after the offer. Takes no child.
+    /// </summary>
+    public void NoteWaiting(string snapshotId, string kind, string linePublicId, string pluginId)
+    {
+        bool first;
+        lock (_gate)
+        {
+            first = _said.Add((snapshotId, kind));
+        }
+
+        if (first)
+        {
+            Waits(logger, kind, linePublicId, pluginId, null);
+        }
+    }
+
     /// <summary>Takes a kind's next turn; false, and nothing taken, while the kind has a chain in flight or every child is taken.</summary>
     public bool TryStart(string kind)
     {
@@ -406,17 +433,7 @@ public sealed class SubscriptionRunner(
 
             if (members.FirstOrDefault(id => snapshot.Find(id) is not { Status: PluginStatus.Valid }) is { } unavailable)
             {
-                bool first;
-                lock (_gate)
-                {
-                    first = _said.Add((snapshot.Id, kind));
-                }
-
-                if (first)
-                {
-                    Waits(logger, kind, batch[0].PublicId, unavailable, null);
-                }
-
+                NoteWaiting(snapshot.Id, kind, batch[0].PublicId, unavailable);
                 return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Waiting), null);
             }
 
