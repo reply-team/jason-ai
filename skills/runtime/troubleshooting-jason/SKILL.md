@@ -339,16 +339,18 @@ jason journal list --kind subscription_failed --human
 - **A `subscription_failed` line.** It is the lasting record of one chain that ended at one handler for one line:
   `{kind, line, plugin_id, class, code, attempts}`, never the envelope or the failure's message. `transient` is tried
   again by the runtime up to its limit before the line is written; every other class ends the chain there, and the kind
-  moves on to its next line. The code is the plugin's own, so read its README for what it means. `jason subscription
+  moves on to its next line. The code is the handler's own, a host rule's (a refused host, `docs/plugins.md` §9) or the protocol's, so say whose it is before explaining it; the plugin's README explains the plugin's own. `jason subscription
   runs --kind <kind>` shows each handler's outcome for the chains of that kind, newest first; those records are kept by
   count for each kind, so an old one may be gone while its `subscription_failed` line stays.
-- **A line handed twice.** Delivery is at least once: after a restart a chain runs again from its first handler, with
-  `attempt` above 1. That is the contract, not a fault, and it is the subscriber's to tell a repeat by.
+- **A line handed twice.** Delivery is at least once: after a restart a chain runs again from its first handler, and a
+  handler that was handed the line before sees `attempt` above 1, as it does after a transient retry (`attempt` counts
+  that plugin's own earlier entries for the line, plus one). That is the contract, not a fault, and it is the
+  subscriber's to tell a repeat by.
 - **A lag that does not shrink with nothing waiting.** Say so and collect `jason doctor`; the diagnostic file carries
   the subscriptions' figures and never an envelope.
 
 **A rewind is a person's act.** `jason subscription rewind --kind <kind> (--line <jrn_id> | --since <moment>)` moves a
-kind's cursor back so its chain hands lines again, to just before the named line or the first line written at or after
+kind's cursor back so its chain hands lines again, to just before the named line (a line of that kind) or the first line written at or after
 the moment; it is refused without `--actor human:<Name>`, and never goes forward. A moment needs its offset
 (`2026-11-05T09:00:00Z`): one without is answered `invalid` at `since`, naming the form. A rewind may hand a line again
 that was already handled, and a subscriber causing an effect twice is the case to warn about first. It supersedes a

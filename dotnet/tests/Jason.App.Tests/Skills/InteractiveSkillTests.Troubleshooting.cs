@@ -34,7 +34,7 @@ public partial class InteractiveSkillTests
     public void The_installation_skills_teach_the_journal_kinds_and_the_subscription_verbs()
     {
         var operating = Flattened("operating-the-installation");
-        foreach (var text in new[] { "`jason journal kinds", "jason subscription list", "`Plugins:Grants:<id>:Subscriptions`", "`Subscriptions:Order:<kind>`", "`waiting_on`" })
+        foreach (var text in new[] { "`jason journal kinds", "jason subscription list", "`Plugins:Grants:<id>:Subscriptions`", "`*` admits every declared kind and nothing more", "`Subscriptions:Order:<kind>`", "`waiting_on`" })
         {
             Assert.Contains(text, operating, StringComparison.Ordinal);
         }
@@ -43,7 +43,7 @@ public partial class InteractiveSkillTests
         foreach (var text in new[]
         {
             "`jason journal kinds", "jason subscription runs --kind", "jason subscription rewind --kind", "`subscription_failed`",
-            "`waiting_on`", "--actor human:<Name>", "`subscription_cursor_rewound`", "never goes forward", "A moment needs its offset",
+            "`waiting_on`", "--actor human:<Name>", "`subscription_cursor_rewound`", "never goes forward", "A moment needs its offset", "(a line of that kind)", "a host rule's",
         })
         {
             Assert.Contains(text, troubleshooting, StringComparison.Ordinal);
