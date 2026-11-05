@@ -7,16 +7,16 @@ namespace Jason.App.Tests.Skills;
 public partial class InteractiveSkillTests
 {
     /// <summary>
-    /// The troubleshooting skill's text changed to teach jason logs and jason doctor, and a host has read it, so it is verified and the
-    /// catalog records the reading; it still says which work a paused campaign lets through:
+    /// The troubleshooting skill teaches the subscription verbs since 0.29.0 and no host has read that text yet, so it is a draft; the
+    /// catalog lists it as one and carries no reading of it; it still says which work a paused campaign lets through:
     /// the field a contract declares, and the operations that declare it today, every one the catalogue runs there.
     /// </summary>
     [Fact]
-    public void The_troubleshooting_skill_is_verified_and_names_what_runs_in_a_paused_campaign()
+    public void The_troubleshooting_skill_is_a_draft_and_names_what_runs_in_a_paused_campaign()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
-        Assert.Equal("verified", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
-        Assert.Contains("| `troubleshooting-jason` | Claude Code", File.ReadAllText(SkillPack.Catalog()), StringComparison.Ordinal);
+        Assert.Equal("draft", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
+        Assert.DoesNotContain("| `troubleshooting-jason` | Claude Code", File.ReadAllText(SkillPack.Catalog()), StringComparison.Ordinal);
         Assert.Contains(
             "Only an active campaign's work is claimed, with one exception: a paused campaign still lets through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record`, `campaign.pause` and `message.cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one holds every item but theirs.",
             Flattened("troubleshooting-jason"),
@@ -24,6 +24,30 @@ public partial class InteractiveSkillTests
         Assert.Equal(
             ["campaign.pause", "message.cancel", "optout.record"],
             Jason.Contracts.Operations.OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The two installation skills teach the journal's kinds and the subscription verbs, and what the person alone does:
+    /// where a chain stands, why it waits, what a failed chain left, and a rewind that needs a named person and an offset.
+    /// </summary>
+    [Fact]
+    public void The_installation_skills_teach_the_journal_kinds_and_the_subscription_verbs()
+    {
+        var operating = Flattened("operating-the-installation");
+        foreach (var text in new[] { "`jason journal kinds", "jason subscription list", "`Plugins:Grants:<id>:Subscriptions`", "`Subscriptions:Order:<kind>`", "`waiting_on`" })
+        {
+            Assert.Contains(text, operating, StringComparison.Ordinal);
+        }
+
+        var troubleshooting = Flattened("troubleshooting-jason");
+        foreach (var text in new[]
+        {
+            "`jason journal kinds", "jason subscription runs --kind", "jason subscription rewind --kind", "`subscription_failed`",
+            "`waiting_on`", "--actor human:<Name>", "`subscription_cursor_rewound`", "never goes forward", "A moment needs its offset",
+        })
+        {
+            Assert.Contains(text, troubleshooting, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
