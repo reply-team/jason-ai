@@ -12,3 +12,4 @@
 # package's test prints the line to append. A line already here is never changed, and a line that changes or disappears
 # in a diff is refused in review.
 1.0.0 sha256:9239df983b3709868f9c9dd0cce591c2fc15e3d702678fa4f24a7ed84f2f545b
+1.0.1 sha256:16047a1247353080df6f91a625c1401b23f032ac6e9d35aab28abf1bdb8bdaf0

@@ -43,15 +43,23 @@ plugin may subscribe to.
 
 - **A receiver**: anything that takes a `POST` of JSON at a URL. A file is reached by a receiver of your own that writes
   one; the package has no way to write a file itself.
-- **Jason 0.29.0 or newer**, which has subscriptions.
+- **Jason 0.30.0 or newer**, whose release publishes this package. Subscriptions arrived in 0.29.0, which published
+  none.
 
 ## Installing it
 
-**1. Copy the package.** The directory name is the plugin id, so it has to be `journal-forwarder`:
+**1. Install the package.** Every release of Jason from 0.30.0 on publishes it as
+`jason-plugin-journal-forwarder.zip`, listed in that release's `checksums.txt`, and the Jason you run installs the one
+its own release published:
 
 ```sh
-cp -r plugins/journal-forwarder ~/.jason/plugins/journal-forwarder
+jason plugin install journal-forwarder
 ```
+
+It checks the package against its line in `checksums.txt` and, unpacked, against the content digest the release's
+manifest gives, and places it as `~/.jason/plugins/journal-forwarder` only once both hold. A different package already
+there is kept unless `--replace` says otherwise. When the runtime answers, the verb asks it to reload; the reload of
+step 4 is then the one that picks up the grant.
 
 **2. Grant it**, in `~/.jason/config/settings.json`:
 
@@ -97,15 +105,20 @@ pushed. Lines written before the reload are not: a kind starts at the end of the
 
 ## A receiver elsewhere than the loopback
 
-The manifest names `localhost:8787` and nothing else, so another host is the owner's edit of the package:
+The manifest names `localhost:8787` and nothing else, so another host is your edit of the installed copy:
 
-1. Copy the package into `~/.jason/plugins/journal-forwarder`, as above.
-2. In that copy's `plugin.yaml`, replace `hosts: [localhost:8787]` with your receiver's host, `hosts: [your.host]` (with
-   `:port` when it is not 443).
+1. Install the package with `jason plugin install journal-forwarder`, as above.
+2. In `~/.jason/plugins/journal-forwarder/plugin.yaml`, replace `hosts: [localhost:8787]` with your receiver's host,
+   `hosts: [your.host]` (with `:port` when it is not 443).
 3. Grant the same host, `"Http": ["your.host"]`, and set `JOURNAL_FORWARDER_URL` to an `https://` URL on it. A receiver
    other than on the loopback interface is reached over `https`; an `http` one fails with `http_scheme_not_allowed`.
 4. Reload. **Editing `plugin.yaml` changes the package's identity**: its `sha256:` digest is the copy's now, which
-   `jason plugin list` shows, and the copy is yours to keep current.
+   `jason plugin list` shows, and no release published it.
+
+From then on the copy is yours. `jason update` leaves it in place and says it differs from every package a release
+published, so an update never undoes your edit. A later version of the forwarder is yours to apply: read its
+changelog, and make your edit again on the new package. `jason plugin install journal-forwarder --replace` discards your
+edit, placing the package the release you run published in place of your copy.
 
 The plugin does not check the URL's host itself: the plugin host does, against the grant. A URL whose host the manifest
 and the grant do not both name ends the invocation as `http_host_not_allowed`, and nothing is sent.

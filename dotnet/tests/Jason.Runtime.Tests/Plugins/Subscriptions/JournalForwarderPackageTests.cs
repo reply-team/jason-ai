@@ -7,9 +7,10 @@ using Jason.Contracts.Ids;
 using Jason.Contracts.Journal;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
+using Jason.Contracts.Update;
 using Jason.Runtime.Persistence;
-using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Tests.Documentation;
@@ -334,7 +335,7 @@ public sealed class JournalForwarderPackageTests
         Assert.NotNull(plugin);
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Equal(PluginKind.Subscriber, plugin.Manifest.Kind);
-        Assert.Equal("1.0.0", plugin.Manifest.Version);
+        Assert.Equal("1.0.1", plugin.Manifest.Version);
         Assert.Equal(["localhost:8787"], plugin.Manifest.Capabilities.Http!.Hosts);
         Assert.Equal([UrlVariable, TokenVariable], plugin.Manifest.Capabilities.Env!.Variables);
         Assert.Null(plugin.Manifest.Capabilities.Api);
@@ -400,6 +401,41 @@ public sealed class JournalForwarderPackageTests
         var subscribable = JournalKindCatalog.All.Where(contract => contract.Subscribable).Select(contract => contract.Kind).Order(StringComparer.Ordinal);
         Assert.Equal(subscribable, declared.Order(StringComparer.Ordinal));
         Assert.Equal(declared.Count, declared.Distinct().Count());
+    }
+
+    /// <summary>
+    /// The package's README installs it from the release a person runs, by <c>jason plugin install journal-forwarder</c>,
+    /// never by a copy out of a checkout, which a person who installed Jason does not have. A receiver on another host is
+    /// an edit of the installed copy's <c>plugin.yaml</c>, after which the copy is the person's own, and the README says
+    /// the three things that follow from it: <c>jason update</c> leaves it and says it differs, a later version is theirs
+    /// to apply, and <c>--replace</c> discards the edit.
+    /// </summary>
+    [Fact]
+    public void The_readme_installs_the_package_from_the_release_and_an_edited_copy_is_the_person_s_own()
+    {
+        var readme = File.ReadAllText(Path.Combine(RepositoryTree.Root(), "plugins", Id, "README.md")).ReplaceLineEndings("\n");
+
+        var installing = Section(readme, "Installing it");
+        Assert.Contains($"Every release of Jason from 0.30.0 on publishes it as `{ReleaseAssets.JournalForwarderPlugin}`", installing, StringComparison.Ordinal);
+        Assert.Contains("jason plugin install journal-forwarder", installing, StringComparison.Ordinal);
+        Assert.DoesNotContain("cp -r plugins/journal-forwarder", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("Copy the package", readme, StringComparison.Ordinal);
+
+        var elsewhere = Section(readme, "A receiver elsewhere than the loopback");
+        Assert.Contains("`~/.jason/plugins/journal-forwarder/plugin.yaml`", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("From then on the copy is yours.", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("`jason update` leaves it in place and says it differs from every package a release published", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("A later version of the forwarder is yours to apply", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("`jason plugin install journal-forwarder --replace` discards your edit", elsewhere, StringComparison.Ordinal);
+    }
+
+    /// <summary>A section of a README, its heading to the next, with its whitespace made single spaces.</summary>
+    private static string Section(string readme, string heading)
+    {
+        var start = readme.IndexOf($"\n## {heading}\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"plugins/{Id}/README.md has no section '{heading}'.");
+        var end = readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        return Regex.Replace(readme[start..(end < 0 ? readme.Length : end)], "\\s+", " ");
     }
 
     /// <summary>The list beside the package that records the digest of each of its versions, as Reply's list does for Reply's.</summary>
