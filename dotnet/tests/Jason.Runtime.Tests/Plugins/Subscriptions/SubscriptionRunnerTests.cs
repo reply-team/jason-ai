@@ -398,6 +398,8 @@ public class SubscriptionRunnerTests
         Assert.Equal(["alpha|succeeded", "beta|"], Handled(stopped));
         Assert.Equal([$"{Failed}|0|0"], await PositionsAsync(harness));
         Assert.Empty(await JournalAsync(harness, JournalKinds.SubscriptionFailed));
+        Assert.Contains(harness.Logs.All, message => message.StartsWith($"Subscription handler alpha for {Failed} ended succeeded", StringComparison.Ordinal));
+        Assert.DoesNotContain(harness.Logs.All, message => message.StartsWith($"Subscription handler beta for {Failed} ended", StringComparison.Ordinal));
 
         Assert.Equal(SubscriptionTurn.Head, (await NewRunner(harness).RunNextAsync(Failed, Ct))!.Ended);
 
