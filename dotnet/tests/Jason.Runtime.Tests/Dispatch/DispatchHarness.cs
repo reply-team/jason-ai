@@ -14,6 +14,7 @@ using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -82,6 +83,9 @@ internal sealed class DispatchHarness : IDisposable
 
         // The respond step, as the runtime ships it: on, so a reply the read says wakes a responder where one can launch.
         services.AddSingleton<IOptionsMonitor<ResponderOptions>>(Responder);
+
+        // The subscription runner's numbers, as the runtime ships them unless a test changes them between turns.
+        services.AddSingleton<IOptionsMonitor<SubscriptionsOptions>>(Subscriptions);
         services.AddSingleton(_dir.Paths);
         services.AddSingleton(Registry);
         services.AddSingleton(Status);
@@ -132,6 +136,20 @@ internal sealed class DispatchHarness : IDisposable
 
     /// <summary>The reader the scan hands reads of accounts' events to, as the runtime's singleton holds it.</summary>
     public EventReader Reader => _provider.GetRequiredService<EventReader>();
+
+    /// <summary>The runner the scan offers subscribed kinds to, as the runtime's singleton holds it.</summary>
+    public SubscriptionRunner SubscriptionRunner => _provider.GetRequiredService<SubscriptionRunner>();
+
+    /// <summary>The subscription runner's settings, which a test may change between turns.</summary>
+    public TestOptionsMonitor<SubscriptionsOptions> Subscriptions { get; } = new(new SubscriptionsOptions());
+
+    /// <summary>Runs one subscription step, in a scope of its own, the way the scan runs it.</summary>
+    public async Task<int> SubscriptionScanAsync(CancellationToken ct)
+    {
+        using var scope = _provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        return await scope.ServiceProvider.GetRequiredService<SubscriptionScan>().ScanAsync(db, ct);
+    }
 
     /// <summary>Runs one events step, in a scope of its own, the way the scan runs it.</summary>
     public async Task<int> EventScanAsync(CancellationToken ct)
