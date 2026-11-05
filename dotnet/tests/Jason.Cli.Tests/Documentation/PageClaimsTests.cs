@@ -1461,8 +1461,9 @@ public partial class PageClaimsTests
     /// the first-use walkthrough: it is a check of the wiring, and the real work is a campaign. Nor a sandbox: it makes a
     /// real draft campaign at the person's provider and enrols their own address, and the published pages keep that word
     /// for an isolation boundary. A file path is not prose, and the executable's own "first runs" is another matter, so
-    /// neither is read as one. A sentence that names Codex may say "sandbox": Codex's sandbox is that isolation boundary,
-    /// the meaning the word is kept for.
+    /// neither is read as one. Codex's sandbox is that isolation boundary, the meaning the word is kept for, so the word
+    /// may stand in the phrases "its sandbox" and "Codex's sandbox" alone: a sentence that names Codex and runs on to list
+    /// other hosts says nothing else about a sandbox.
     /// </summary>
     [Theory]
     [InlineData("README.md")]
@@ -1474,8 +1475,7 @@ public partial class PageClaimsTests
     public void No_page_calls_the_wiring_check_by_a_name_it_had_before(string page)
     {
         var said = Regex.Split(Flat(Page(page.Split('/'))), @"(?<=[.!?])\s+")
-            .SelectMany(sentence => Regex.Matches(sentence, @"\b(?:first run|golden path|first[- ]use walkthrough|sandbox)\b", RegexOptions.IgnoreCase)
-                .Where(name => !(name.Value.Equals("sandbox", StringComparison.OrdinalIgnoreCase) && sentence.Contains("Codex", StringComparison.Ordinal)))
+            .SelectMany(sentence => Regex.Matches(sentence, @"\b(?:first run|golden path|first[- ]use walkthrough|(?<!\b(?:its|Codex's) )sandbox)\b", RegexOptions.IgnoreCase)
                 .Select(name => $"'{name.Value}' in: {sentence}"))
             .ToList();
         Assert.True(said.Count == 0, $"{page} still calls the wiring check by a name it had before: " + string.Join(" / ", said));
