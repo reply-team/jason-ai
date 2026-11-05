@@ -53,6 +53,7 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `install.sh` | the macOS and Linux install script, as this release was published with it |
 | `install.ps1` | the Windows install script, as this release was published with it |
 | `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |
+| `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at the tag, at the archive's root |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the

@@ -2,8 +2,8 @@
 # each packaging one platform through the same action ci.yml runs on every pull request, and smoke-testing what it
 # published, the Linux one first running the critical tier at the tag, the macOS one, in a job of its own that runs no
 # test, signing and notarizing its executable, and the Windows one, in a job of its own that runs no test either,
-# signing its executable through Artifact Signing, and one job that archives the Reply plugin's package from the tag's
-# tree; then the release job — the only one that may write to this repository — assembles the manifest and the
+# signing its executable through Artifact Signing, and one job that archives the plugins' packages, Reply's and the
+# journal forwarder's, from the tag's tree; then the release job — the only one that may write to this repository — assembles the manifest and the
 # checksums and publishes the release at once, with its notes and its assets, and a last job asks the Homebrew tap to
 # bump its formula. The release pull request into main, and its run on every platform, come before the tag: the tag
 # is that merge.
@@ -589,15 +589,15 @@ jobs:
           exit 0
 
   plugin:
-    name: The Reply plugin's package
+    name: The plugins' packages
     needs: version
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Once per release, not once per platform: the package is JavaScript, the same on every machine. Archived from the
-    # tag's own checkout, whose line endings .gitattributes fixes, so the archive unpacks to the content digest of the
+    # Once per release, not once per platform: a package is JavaScript, the same on every machine. Each is archived from
+    # the tag's own checkout, whose line endings .gitattributes fixes, so the archive unpacks to the content digest of the
     # package at the tag; the release's pull request ran the test that holds the script to that digest on this tree, on every
-    # platform.
+    # platform. A step per package, and an upload per package under a name of its own.
     steps:
       - uses: actions/checkout@v7
 
@@ -605,12 +605,22 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/Write-PluginArchive.ps1 -Package plugins/reply -Archive artifacts/release/jason-plugin-reply.zip
 
-      # Named so that the publishing job's download of jason-* brings it beside the archives, where the checksums are
+      - name: Archive plugins/journal-forwarder
+        shell: pwsh
+        run: ./.github/scripts/Write-PluginArchive.ps1 -Package plugins/journal-forwarder -Archive artifacts/release/jason-plugin-journal-forwarder.zip
+
+      # Named so that the publishing job's download of jason-* brings each beside the archives, where the checksums are
       # written.
       - uses: actions/upload-artifact@v7
         with:
           name: jason-plugin-reply
           path: artifacts/release/jason-plugin-reply.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-plugin-journal-forwarder
+          path: artifacts/release/jason-plugin-journal-forwarder.zip
           if-no-files-found: error
 
   ui:
@@ -619,7 +629,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Once per release, like the plugin's package, and built here rather than taken from CI: CI's zip carries the -dev
+    # Once per release, like the plugins' packages, and built here rather than taken from CI: CI's zip carries the -dev
     # version and is kept fourteen days, and `jason status` compares the default UI's version with the runtime's. The
     # page's checks and tests run on the tag's tree before it is packaged, as the runtime's do before it is archived.
     defaults:
@@ -701,15 +711,15 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           # The three fragments become manifest.json — what a running Jason reads to learn this release exists —
-          # and checksums.txt, which lists the plugin's and the UI's packages after the archives; the manifest names the
-          # plugin's under its plugins. A platform or a package missing from the download, or an archive that no
+          # and checksums.txt, which lists the plugins' and the UI's packages after the archives; the manifest names the
+          # plugins' under its plugins. A platform or a package missing from the download, or an archive that no
           # longer hashes to what its fragment says, stops the release here. The notes are read at the product's
           # address, which leads to the release's page in reply-team/jason-ai. Every release from 0.20.0 names
           # 0.19.0 as the oldest version that updates to it in one apply: 0.19.0 is the first applier that loads what it
           # needs and hands over to the new executable, so an older build goes through it first. The floor moves only
-          # when an applier change raises it. The plugin's entry is the tag's digest list, whose last line is the package
-          # this release publishes, so nothing is built or hashed here to say which package that is.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-ui.zip -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests
+          # when an applier change raises it. Each plugin's entry is the tag's digest list of that package, whose last line
+          # is the package this release publishes, so nothing is built or hashed here to say which package that is.
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-plugin-journal-forwarder.zip,jason-ui.zip -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests,plugins/journal-forwarder.digests
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 
@@ -823,7 +833,7 @@ jobs:
           # gh names an asset by its file name. The archives, the feed and the two packages were assembled under
           # artifacts/release; the install scripts are the tag's own, so a one-liner pinned to this release runs the
           # script it was published with.
-          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-ui.zip')
+          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-ui.zip')
           gh release create "v$env:VERSION" -R $repository @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
           if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }

@@ -23,10 +23,11 @@ at this version and released only after its tests passed.
 | `jason-linux-x64.tar.gz` | Linux on x64 |
 | `jason-osx-arm64.tar.gz` | macOS on Apple silicon |
 | `manifest.json` | what a running Jason reads to learn that this release exists |
-| `checksums.txt` | the SHA-256 of each archive and of the two packages, in `sha256sum` format |
+| `checksums.txt` | the SHA-256 of each archive and of each package, in `sha256sum` format |
 | `install.sh` | macOS and Linux: the install script this release was published with |
 | `install.ps1` | Windows: the install script this release was published with |
 | `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, which `jason plugin install reply` places in `~/.jason/plugins/reply` |
+| `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at `v{{version}}`, which `jason plugin install journal-forwarder` places in `~/.jason/plugins/journal-forwarder` |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |
 
 Each archive holds the executable, `LICENSE` (the MIT licence, which covers the whole repository, the runtime
