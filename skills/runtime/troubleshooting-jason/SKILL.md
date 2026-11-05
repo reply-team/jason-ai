@@ -344,7 +344,7 @@ jason journal list --kind subscription_failed --human
   count for each kind, so an old one may be gone while its `subscription_failed` line stays.
 - **A line handed twice.** Delivery is at least once: after a restart a chain runs again from its first handler, and a
   handler that was handed the line before sees `attempt` above 1, as it does after a transient retry (`attempt` counts
-  that plugin's own earlier entries for the line, plus one). That is the contract, not a fault, and it is the
+  that plugin's own earlier entries for the line in the chain's record, plus one; a rewind opens a new chain, which counts from 1 again). That is the contract, not a fault, and it is the
   subscriber's to tell a repeat by.
 - **A lag that does not shrink with nothing waiting.** Say so and collect `jason doctor`; the diagnostic file carries
   the subscriptions' figures and never an envelope.

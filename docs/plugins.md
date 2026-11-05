@@ -1716,7 +1716,7 @@ what it may answer; this section says how the runtime runs the chains.
 **What it is handed.** `operation` is the line's kind, so one `main.js` tells the kinds it subscribes to apart as a
 provider tells its operations apart; `input` is `{ line, envelope, attempt }`: the line as `journal.list` returns it,
 the envelope the handler before it returned — the empty object for the first — and how many times this plugin has been
-handed this line, this time included. The correlation id is the line's id, and the context names no campaign, work item
+handed this line in this chain's record, this time included; a rewind opens a new chain, which counts from 1 again. The correlation id is the line's id, and the context names no campaign, work item
 or attempt. A handler granted a Runtime API family (§9) carries a door for the line, and reads and writes Jason through
 `host.call` (§6).
 

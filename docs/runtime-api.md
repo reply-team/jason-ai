@@ -437,8 +437,9 @@ release to the next ([README](../README.md)); what a release changes is in its n
 
 What is not open in this version:
 
-- **No push.** The runtime pushes nothing to a program: no webhooks, streams or subscriptions, and a program asks.
-  The only programs it starts are its plugins and the roles it launches for work (`role.add`).
+- **No push.** The runtime pushes nothing to a program: no webhooks or streams, and a program asks.
+  The plugins it hands journal lines to by subscription are its own children (`docs/plugins.md` §16), not programs it
+  pushes to. The only programs it starts are its plugins and the roles it launches for work (`role.add`).
 - **No remote access.** The API answers on `127.0.0.1` alone, and nothing reaches it from another machine.
 - **No users.** One runtime serves the one account that owns the installation, and every caller acts with that
   account's authority.
