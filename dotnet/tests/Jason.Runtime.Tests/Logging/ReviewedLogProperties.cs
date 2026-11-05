@@ -24,6 +24,9 @@ internal static class ReviewedLogProperties
         // An events source's public id: the account a read hangs on, never its binding or its cursor (EventReader).
         "SourceId",
 
+        // A journal line's public id, the jrn_ id a subscribed kind's chain runs for (SubscriptionRunner).
+        "LineId",
+
         // Counts and numbers, and the envelope's renderings of a formatted number.
         "Count", "Plugins", "Candidates", "Problems", "Expired", "Lost", "Summoned", "Claimed", "Applied", "New",
         "Scan", "Exec", "Http", "Env", "Pid", "ExitCode", "DurationMs", "StatusCode", "Elapsed", "@r",
@@ -55,11 +58,15 @@ internal static class ReviewedLogProperties
 
         // Codes and closed words, and the envelope's level. A code is the runtime's own constant or a plugin outcome's
         // code, which the outcome validator holds to a snake_case token of at most 64 characters before anything logs it
-        // (Code: Claimer, PluginInvoker, NotificationSender, UpdateChecker, and Responder, whose codes are its own skip
-        // codes and the code of a domain error that refused a line). Verdict is "succeeded", "unknown", or
-        // "failed" or "protocol_failure" followed by a closed failure class and such a code (PluginInvoker).
+        // (Code: Claimer, PluginInvoker, NotificationSender, UpdateChecker, SubscriptionRunner, which writes "none" for a
+        // handler that succeeded, and Responder, whose codes are its own skip codes and the code of a domain error that
+        // refused a line). Verdict is "succeeded", "unknown", or "failed" or "protocol_failure" followed by a closed
+        // failure class and such a code (PluginInvoker).
         "Code", "Codes", "Class", "Verdict", "Source", "Console", "Section", "Channel", "Activated", "Operation",
         "EnvName", "SourceContext", "EventId", "@l",
+
+        // SubscriptionRunner: how a handler ended, "succeeded" or a closed failure class word.
+        "Outcome",
 
         // The kind of update feed, "default" or "configured", never its address (UpdateChecker).
         "Feed",
@@ -103,7 +110,8 @@ internal static class ReviewedLogProperties
 
         // JournalLines: the kind of a line written off its document, which is only ever checked, and so logged, when it is
         // one the runtime reserves and publishes a document for: one of the build's own constants, never a kind a person
-        // or an agent appended under a name of its own.
+        // or an agent appended under a name of its own. SubscriptionRunner: a subscribed kind, which a grant admits only
+        // when it is a kind the build publishes in its catalog of kinds.
         "Kind",
 
         // Claimer: the level of a memory file the host could not write as a read rule, "client", "project" or
@@ -120,7 +128,8 @@ internal static class ReviewedLogProperties
         // LiveSettings: validator and binding sentences, which name a setting by its path and describe a refused text
         // by its length. ParseFailure: a read failure's type and where the reader stopped, and for a stored value the
         // table and column the model names it by. InboundSync: why a read's result is not a page, a closed word or the
-        // ParseFailure sentence. Responder: the ParseFailure sentence.
+        // ParseFailure sentence. Responder: the ParseFailure sentence. SubscriptionRunner: the ParseFailure sentence or an
+        // exception's type name, never its message.
         "Failure",
     };
 

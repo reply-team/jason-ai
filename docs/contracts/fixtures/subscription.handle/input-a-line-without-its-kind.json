@@ -1,0 +1,44 @@
+{
+  "operation": "subscription.handle",
+  "version": 1,
+  "case": "every line names its kind, which is the operation word the handler is invoked under",
+  "input": {
+    "line": {
+      "id": "jrn_42",
+      "ts": "2026-10-16T09:00:00.000Z",
+      "actor": {
+        "type": "system",
+        "id": "runtime"
+      },
+      "campaign_id": "cmp_1",
+      "work_item_id": "wi_9",
+      "attempt_id": "att_3",
+      "key": "att_3",
+      "old": null,
+      "new": {
+        "code": "provider_unreachable",
+        "message": "The provider did not answer.",
+        "retriable": false,
+        "class": "transient"
+      },
+      "reason": null,
+      "contact_id": "cnt_5",
+      "campaign_name": "Spring",
+      "contact_name": "Okafor",
+      "work_item_kind": "provider_op",
+      "work_item_role": null,
+      "work_item_operation": "campaign.enroll",
+      "actor_role": null
+    },
+    "envelope": {},
+    "attempt": 1
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/line/kind",
+        "reason": "required"
+      }
+    ]
+  }
+}

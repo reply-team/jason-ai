@@ -28,6 +28,7 @@ public sealed class PluginService(
     SubscriptionOrderSource subscriptions,
     ReloadGate gate,
     SettingsFile settingsFile,
+    TimeProvider clock,
     ILogger<PluginService> logger)
 {
     public const int MaxReasonLength = 2000;
@@ -100,6 +101,7 @@ public sealed class PluginService(
             // could not be written down leaves the previous snapshot active and is simply repeated, instead of a new
             // snapshot running with no trace of when it began.
             JournalActivation(journal, db, actor, snapshot, candidate.Snapshot, reason);
+            await SubscriptionCursors.ReconcileAsync(db, chains.Chains, clock.GetUtcNow().UtcDateTime, cancellationToken).ConfigureAwait(false);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             registry.Replace(snapshot, load.Report);
             activator.Activate(candidate.Snapshot);

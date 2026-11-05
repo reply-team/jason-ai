@@ -267,7 +267,7 @@ public class SettingsBindingTests
             InboundOptions.Section => Refusal<InboundOptions>(settings),
             ResponderOptions.Section => Refusal<ResponderOptions>(settings),
             HarnessOptions.Section => Refusal<HarnessOptions>(settings),
-            SubscriptionOrderOptions.Section => Refusal<SubscriptionOrderOptions>(settings),
+            SubscriptionsOptions.Section => Refusal<SubscriptionsOptions>(settings),
             _ => throw new ArgumentOutOfRangeException(nameof(section), section, "a section this test does not know"),
         };
 
@@ -319,7 +319,7 @@ public class SettingsBindingTests
         (InboundOptions.Section, """{"Inbound":{"SyncSeconds":"SENTINEL"}}""", "Inbound:SyncSeconds could not be read as System.Int32."),
         (ResponderOptions.Section, """{"Responder":{"MaxAgeSeconds":"SENTINEL"}}""", "Responder:MaxAgeSeconds could not be read as System.Int32."),
         (HarnessOptions.Section, """{"Harness":{"Root":{"x":"SENTINEL"}}}""", "Harness:Root could not be read as System.String."),
-        (SubscriptionOrderOptions.Section, """{"Subscriptions":{"Order":"SENTINEL"}}""", "Subscriptions:Order could not be read as a map of journal kinds to lists of plugin ids."),
+        (SubscriptionsOptions.Section, """{"Subscriptions":{"Order":"SENTINEL"}}""", "Subscriptions:Order could not be read as a map of journal kinds to lists of plugin ids."),
     ];
 
     /// <summary>

@@ -1,0 +1,25 @@
+{
+  "kind": "subscription_failed",
+  "version": 1,
+  "case": "a handler that failed was handed the line at least once",
+  "body": {
+    "key": "workitem_failed",
+    "old": null,
+    "new": {
+      "kind": "workitem_failed",
+      "line": "jrn_01JC0000000000000000000042",
+      "plugin_id": "example-tickets",
+      "class": "permanent",
+      "code": "ticket_service_unauthorized",
+      "attempts": 0
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/new/attempts",
+        "reason": "minimum"
+      }
+    ]
+  }
+}

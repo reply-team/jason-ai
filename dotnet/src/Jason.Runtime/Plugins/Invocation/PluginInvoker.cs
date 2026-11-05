@@ -11,6 +11,7 @@ using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Plugins;
+using Jason.Contracts.Subscriptions;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Execution;
@@ -191,11 +192,21 @@ public sealed partial class PluginInvoker(
     /// <summary>
     /// Why this plugin may not answer this request, or null where it may. A provider performs canonical operations it
     /// implements and, where it declares the events contract, reads its accounts' events; a notification plugin performs
-    /// the delivery contract, in a version it declares, and nothing else.
+    /// the delivery contract, in a version it declares; and a plugin of any kind takes a line of a journal kind it was
+    /// granted a subscription to, the kind being the operation word.
     /// </summary>
     private static (string Code, string Message)? Unsuited(PluginInvocationRequest request, LoadedPlugin plugin)
     {
         var kind = plugin.Manifest.Kind.ToString().ToLowerInvariant();
+        if (request.Purpose == InvocationPurpose.Subscription)
+        {
+            // The frozen grant decides, never the plugin's kind: a provider, a notification plugin and a subscriber
+            // each take the kinds the person granted them, and nothing else.
+            return plugin.Grants.Subscriptions.Contains(request.Operation, StringComparer.Ordinal)
+                ? null
+                : (ProtocolCodes.PluginOperationUnsupported, $"The plugin '{request.PluginId}' is not granted a subscription to '{request.Operation}'.");
+        }
+
         if (request.Purpose == InvocationPurpose.Events)
         {
             if (!EventsCatalog.Knows(request.Operation))
@@ -240,11 +251,15 @@ public sealed partial class PluginInvoker(
             : (ProtocolCodes.PluginOperationUnsupported, $"The plugin '{request.PluginId}' does not implement '{request.Operation}'.");
     }
 
-    /// <summary>The contract version an envelope and its provenance carry: the operation contract's, the delivery contract's or the events contract's.</summary>
+    /// <summary>
+    /// The contract version an envelope and its provenance carry: the operation contract's, the delivery contract's, the
+    /// events contract's or the subscription contract's.
+    /// </summary>
     private static int ContractVersion(InvocationPurpose purpose) => purpose switch
     {
         InvocationPurpose.Delivery => DeliveryContract.CurrentVersion,
         InvocationPurpose.Events => EventsContract.CurrentVersion,
+        InvocationPurpose.Subscription => SubscriptionContract.CurrentVersion,
         _ => PluginProtocol.OperationContractVersion,
     };
 

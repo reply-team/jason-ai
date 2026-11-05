@@ -4,6 +4,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Logging;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Subscriptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -13,17 +14,18 @@ namespace Jason.Runtime.Dispatch;
 /// What one scan did. Zeros are the normal answer: most ticks find nothing to do. <paramref name="Synced"/> counts the
 /// conversation reads the scan started, <paramref name="Observed"/> the threads it said had moved, and
 /// <paramref name="EventReads"/> the read of an account's events it handed to the reader, one at most, and
-/// <paramref name="Resumed"/> the waiting items it released into the queue, and <paramref name="Responded"/> the responders
-/// a reply woke.
+/// <paramref name="Resumed"/> the waiting items it released into the queue, <paramref name="Responded"/> the responders
+/// a reply woke, and <paramref name="Subscribed"/> the subscribed kinds it offered the subscription runner.
 /// </summary>
-public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0, int Responded = 0);
+public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0, int Responded = 0, int Subscribed = 0);
 
 /// <summary>
 /// One pass of the dispatcher: give up what is overdue, take back what is lost, hand the reader the next read of an
 /// account's events, read the live campaigns' conversations, wake a responder for a reply about a campaign's own thread,
 /// summon a manager where a campaign wants one, release the
-/// waiting work whose wait is over, hand out what is ready, and, last, say once that something waits for a person:
-/// after the dispatch, so nothing the notifier does can strand work already claimed. In that order and in short
+/// waiting work whose wait is over, hand out what is ready, say once that something waits for a person — after the
+/// dispatch, so nothing the notifier does can strand work already claimed — and, last, offer the subscription runner the
+/// journal kinds whose chains have a line to take, so a chain sees what every step before it wrote. In that order and in short
 /// transactions, so no step holds the writer while another thinks. The events step only hands a read over — the
 /// reader reads off the scan — and comes before the inbound read, which leaves a campaign to the events only while
 /// their source is healthy. The read comes before the respond step and the summon so that a reply it says wakes the
@@ -137,6 +139,9 @@ public sealed class ScanRunner(
         // know that something waits for them.
         var notified = await InScopeAsync<Notifier, int>((step, db) => step.NotifyAsync(db, ct)).ConfigureAwait(false);
 
+        // Last: a subscribed kind's chain reacts to what the steps before it wrote, and starts nothing while draining.
+        var subscribed = await InScopeAsync<SubscriptionScan, int>((step, db) => step.ScanAsync(db, ct)).ConfigureAwait(false);
+
         status.LastScanAt = clock.GetUtcNow();
         status.Scans++;
         status.Summons += summoned;
@@ -166,7 +171,7 @@ public sealed class ScanRunner(
         }
 
         Scanned(logger, status.Scans, expired, lost, summoned, claimed.Count, null);
-        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed, responded);
+        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed, responded, subscribed);
     }
 
     private async Task<TResult> InScopeAsync<TStep, TResult>(Func<TStep, JasonDbContext, Task<TResult>> step)

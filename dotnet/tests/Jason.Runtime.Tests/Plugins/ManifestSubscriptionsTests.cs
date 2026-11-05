@@ -116,6 +116,23 @@ public sealed class ManifestSubscriptionsTests : IDisposable
         Assert.Equal((code, path), (problem.Code, problem.Path));
     }
 
+    /// <summary>
+    /// Against the runtime's own catalog: the line that says a chain failed is the runner's to write, and no plugin may
+    /// subscribe to it, so a manifest that declares it is refused, and so the runner never feeds on its own failures.
+    /// </summary>
+    [Fact]
+    public void The_line_that_says_a_chain_failed_is_a_kind_no_plugin_may_subscribe_to()
+    {
+        var manifest = TestPlugins.Manifest("fake", extra: "subscriptions: [subscription_failed]\n");
+
+        var result = ManifestReader.Read(
+            manifest, "fake", NewPackage(manifest), Bounds, PatternTiming.Default, probeTimeoutsHoldOnlyThePlugin: false, SubscribableKinds.Catalog);
+
+        Assert.Null(result.Manifest);
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal(("subscription_kind_not_subscribable", "subscriptions[0]"), (problem.Code, problem.Path));
+    }
+
     /// <summary>Nothing ties a subscription to a kind of plugin: a provider and a notification plugin may each declare one.</summary>
     /// <summary>
     /// A subscriber reaches the outside world the way any plugin does: it may request programs, hosts and variables, and

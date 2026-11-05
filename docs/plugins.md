@@ -1297,6 +1297,11 @@ escape reads the same in any page.
 }
 ```
 
+A child is started for one of four purposes, and `operation` says which: a canonical operation by its name, the
+delivery contract as `notification.send` (§14), the events contract as `events.read` (§15), or a subscription as the
+kind of the journal line its handler is handed (§17), with `operation_contract_version` the version of the contract
+that purpose speaks.
+
 The grants here are the **resolved policy** — what the user granted out of what the manifest
 requested — so the child enforces what the runtime decided and has no configuration of its own. No
 secret value is in the envelope but one: a handler's `door`, where the invocation has one, carries the capability the
@@ -1499,6 +1504,12 @@ are the operations' own examples; §7 says how to drive one through the host by 
 - **One installed version per id**, because the id is the directory name. Two plugins may implement
   the same operation; which one a campaign uses is a routing question: a route names the plugin, per
   campaign or for the whole installation.
+- **No cascades reach one step only.** A subscription passes over a line a plugin wrote and a line about a work item
+  a plugin created (§17), but not what follows from that work: a work item a plugin created may run a role, and a line
+  that names that item is passed over whoever wrote it, but what the role creates afterwards — new work items, new
+  contacts, its lines on other entities — is the role's own work and is handed to subscribers as any work's is, although
+  a handler caused it at one remove. A subscriber granted the `workitem` family can therefore feed itself
+  through a role; nothing in this version follows a cause further back, or bounds how often a kind's chains run.
 - **Notification plugins are not routed**: a route to one is refused at activation with
   `route_plugin_kind_not_invocable`; they are reached through the `Notifications` settings instead (§14).
 - **One install verb, for a release's own packages; no signing, no trust model.** Any other package is
@@ -1692,3 +1703,65 @@ route snapshots kept; edit the order before reloading. An order the settings can
 journal kind a plugin may subscribe to, an entry that is not a plugin id or is listed twice, text where a list belongs —
 stops a start, naming the setting, and rejects a reload with `subscriptions_settings_invalid` at the setting's path. A
 reload refused for both a route and an order names both. Neither problem names what was written, only where.
+
+## 17. Writing a subscriber
+
+A subscriber is handed journal lines of the kinds it was granted (§16), after the runtime wrote them. It is invoked for
+the subscription contract [`subscription.handle`](contracts/subscriptions/subscription.handle.md) by the runtime's own
+subscription runner; no work item names it and no route carries it. The contract page says what a handler is handed and
+what it may answer; this section says how the runtime runs the chains.
+
+**What it is handed.** `operation` is the line's kind, so one `main.js` tells the kinds it subscribes to apart as a
+provider tells its operations apart; `input` is `{ line, envelope, attempt }`: the line as `journal.list` returns it,
+the envelope the handler before it returned — the empty object for the first — and how many times this plugin has been
+handed this line, this time included. The correlation id is the line's id, and the context names no campaign, work item
+or attempt. A handler granted a Runtime API family (§9) carries a door for the line, and reads and writes Jason through
+`host.call` (§6).
+
+**What it answers.** `{ result: { envelope } }`: an object, handed as it stands to the next handler and kept with the
+chain's run when this handler is the last. It pins no identifier, and an envelope longer than
+`Subscriptions:EnvelopeBytes` — 64 KiB unless set otherwise, in bytes of the compact JSON the runtime writes to the handler — is refused against the handler
+that returned it, as `subscription_envelope_too_large`; an answer of any other shape is `subscription_answer_invalid`.
+
+**One line of a kind at a time, in the journal's order.** A kind's chain takes its next line only when the one before
+it has ended, and a kind is taken up to fifty lines at a turn before the next scan offers it again; different kinds run
+side by side. `Subscriptions:MaxParallel` — 2 unless set otherwise, at most 16 — is how many handlers, one child each,
+run at once across every kind. Each handler is given the contract's own timeout of an hour, lowered to the plugin's own
+`limits.timeout_ms`.
+
+**At least once.** The runtime records each handler's start before the child exists and its outcome after it ends, so a
+runtime stopped in the middle of a chain writes nothing more, and the next start runs the chain for the same line again
+from its first handler, each handler that was handed the line before seeing `attempt` above 1. An effect a handler
+causes is one it can tell it already caused. A turn that cannot finish for a reason of the runtime's own is logged, and the next scan offers the kind again
+from the same line.
+
+**Failures.** A `transient` failure is tried again by the same handler, with the envelope as it stood before it, up to
+`Subscriptions:TransientRetries` times — 3 unless set otherwise. The first wait is `Subscriptions:RetryBackoffSeconds`
+— 30 unless set otherwise — and each one after doubles it, held to an hour; a chain waiting out its backoff holds no
+child, so other kinds run meanwhile, and the kind waits at that line. Every other class, and a transient one whose
+retries are spent, ends the chain at that handler, for that line: the handlers after it are not invoked, the runtime
+writes one `subscription_failed` line naming the kind, the line, the plugin, the class, the code and the attempts —
+never the envelope or the failure's message — and the kind moves on to its next line. A chain that ends well writes no
+journal line.
+
+**A plugin that cannot run.** A member of a chain that loaded `unavailable` keeps its place (§16), and its kind waits at
+the line it reached, logged once for each load, until a reload makes the plugin available or takes it out of the chain.
+That is not a failure of the line, so nothing is written for it.
+
+**The position.** Each kind has a position in the journal: the last line its chain finished with. A kind first admitted
+by a load starts after the journal's last line then, never at its beginning. The position is read afresh before each
+line and moved only by the end that read it, so a rewind of the position during a turn is seen at the next line, never
+later. A kind no chain holds any more loses its position, and starts afresh if a later load admits it again.
+
+**No cascades.** A line written by a plugin — its actor is `plugin`, as everything a handler writes through `host.call`
+is — and a line about a work item a plugin created are passed over: the position moves past them, and no handler is
+invoked and no run recorded for them. What a handler does is therefore never handed to another handler as a new line.
+The rule reads one step only (§13): a work item a plugin created may run a role; a line that names that item is passed
+over whoever wrote it, but what the role creates afterwards — new work items, new contacts, its lines on other entities —
+is the role's own work, handed out as any work is.
+
+**The record.** The runtime keeps a record of each chain it started — its line, each handler's attempts and outcomes,
+and the envelope the last one returned — and keeps `Subscriptions:RunRecordsPerKind` of them for each kind, 1000 unless
+set otherwise; the oldest beyond that are deleted when the kind's next chain starts, and a chain in flight is never
+deleted. The lasting record of a failure is its `subscription_failed` line. The numbers under `Subscriptions` apply
+live; the order is read at a start and at each reload (§16).

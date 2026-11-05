@@ -116,7 +116,7 @@ public class SubscriptionReloadTests
         var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed" }, Ct)).Id;
 
         Settings(api.Paths, settings => Order(settings, Failed, "nobody"));
-        var order = api.Resolve<IOptionsMonitor<SubscriptionOrderOptions>>();
+        var order = api.Resolve<IOptionsMonitor<SubscriptionsOptions>>();
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (!Holds(order, Failed, "nobody") && DateTime.UtcNow < deadline)
         {
@@ -301,7 +301,7 @@ public class SubscriptionReloadTests
         Assert.Equal(SubscriptionProblemCodes.OrderUngranted, Assert.Single(report.Subscriptions).Code);
     }
 
-    private static bool Holds(IOptionsMonitor<SubscriptionOrderOptions> monitor, string kind, params string[] ids)
+    private static bool Holds(IOptionsMonitor<SubscriptionsOptions> monitor, string kind, params string[] ids)
     {
         try
         {

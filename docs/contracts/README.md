@@ -49,6 +49,8 @@ docs/contracts/
   fixtures/context/<key>/value-*.json   values, accepted and refused, with the pointer and reason of each refusal
   journal/<kind>.json              a kind of the runtime's own journal lines, a sixth family, embedded the same way
   fixtures/journal/<kind>/body-*.json   bodies, accepted and refused, with the pointer and reason of each refusal
+  subscriptions/<name>.json        the subscription contract, a seventh family, embedded the same way
+  subscriptions/<name>.md          the same contract explained, with a generated block
   block/provider_block.json        the provider block a blocked failure carries, written once for every operation
   block/provider_block.md          the same block explained
   fixtures/block/value-*.json      blocks, accepted and refused, with the pointer and reason of each refusal
@@ -117,6 +119,20 @@ result, four failure codes, its timeout and its conformance list. What it return
 provider's own flags — every kind a closed object, with nothing anybody wrote — and it pins nothing: a read finds the
 identifiers operations pinned and writes none. Its fixtures live beside the others' under
 [`fixtures/events.read/`](fixtures/events.read) and are run by the same tests.
+
+## The subscription contract
+
+A seventh family is published here, and it is none of the others:
+[`subscriptions/subscription.handle.json`](subscriptions/subscription.handle.md), what a plugin of any kind is invoked
+for when it subscribes to a journal kind and the person granted it — take one line of that kind after the runtime wrote
+it, with the envelope the previous handler of the kind's chain returned, and answer the envelope for the next. The line
+records what is already done, so no work item names a handler and no route carries one; it is under `subscriptions/`
+and read by a catalog of its own, for the reason the delivery and events contracts are. It has their fields and nothing
+more: its input, its result, two failure codes — the ones the runtime records against an answer that breaks the
+contract, since a handler fails under codes of its own — its timeout, which the plugin's own limit lowers, and its
+conformance list. The operation word a handler is invoked under is the line's kind, not this document's id, and a
+handler pins nothing. Its fixtures live beside the others' under
+[`fixtures/subscription.handle/`](fixtures/subscription.handle) and are run by the same tests.
 
 ## The provider block
 
@@ -333,6 +349,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`routes_updated`](journal/routes_updated.json) | `0.1.0` | yes | campaign, plugin | A campaign's route was set or taken away, so an operation, or the campaign's default, goes to the plugin it names or back to the routes above it. |
 | [`standing_approval_set`](journal/standing_approval_set.json) | `0.25.0` | yes | campaign | A person gave a campaign a standing approval for one category of reply, or replaced the one in force, so drafted replies it covers go without a decision each time. |
 | [`standing_approval_unset`](journal/standing_approval_unset.json) | `0.25.0` | yes | campaign | A person took back a campaign's standing approval for one category of reply, so drafted replies of it wait for a decision again. |
+| [`subscription_failed`](journal/subscription_failed.json) | `0.29.0` | no | plugin | A subscriber's handler ended in a final class for one line, so the chain of the line's kind ended there for that line and the kind moved on. |
 | [`suppression_added`](journal/suppression_added.json) | `0.1.0` | yes | none | An address or number was put on the do-not-contact register, so nothing reaches it on its channel. |
 | [`suppression_removed`](journal/suppression_removed.json) | `0.1.0` | yes | none | An address or number was taken off the do-not-contact register, which puts it back in reach. |
 | [`workitem_awaiting_approval`](journal/workitem_awaiting_approval.json) | `0.1.0` | yes | campaign, contact, work_item | A queued work item was parked to wait for a person's approval before it may run. |

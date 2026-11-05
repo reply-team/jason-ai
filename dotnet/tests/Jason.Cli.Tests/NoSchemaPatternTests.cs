@@ -26,6 +26,7 @@ public sealed class NoSchemaPatternTests
         Assert.NotEmpty(OperationCatalog.All);
         Assert.NotEmpty(DeliveryCatalog.All);
         Assert.NotEmpty(Jason.Contracts.Events.EventsCatalog.All);
+        Assert.NotEmpty(Jason.Contracts.Subscriptions.SubscriptionCatalog.All);
         Assert.NotEmpty(Jason.Contracts.Preferences.PreferenceCatalog.All);
         Assert.NotEmpty(Jason.Contracts.Context.ContextKeyCatalog.All);
         var help = await CliApp.RunAsync(["--help"], new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);

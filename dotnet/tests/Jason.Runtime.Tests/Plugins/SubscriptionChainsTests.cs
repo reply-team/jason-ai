@@ -23,7 +23,7 @@ public class SubscriptionChainsTests
                 Subscriber("zeta", [Failed], [Failed]),
                 Subscriber("alpha", [Failed, Created], [Failed, Created]),
                 Subscriber("mid", [Failed], [])),
-            new SubscriptionOrderOptions());
+            new SubscriptionsOptions());
 
         Assert.Empty(built.Problems);
         var chains = built.Chains!;
@@ -95,7 +95,7 @@ public class SubscriptionChainsTests
             Snapshot(
                 Subscriber("provider", [Failed], [Failed], kind: PluginKind.Provider),
                 Subscriber("notify", [Failed], [Failed], kind: PluginKind.Notification)),
-            new SubscriptionOrderOptions());
+            new SubscriptionsOptions());
 
         Assert.Equal(["notify", "provider"], built.Chains!.For(Failed));
     }
@@ -103,7 +103,7 @@ public class SubscriptionChainsTests
     [Fact]
     public void A_set_with_no_subscriber_has_no_chains()
     {
-        var built = SubscriptionChains.Build(Snapshot(TestPlugins.Loaded("fake")), new SubscriptionOrderOptions());
+        var built = SubscriptionChains.Build(Snapshot(TestPlugins.Loaded("fake")), new SubscriptionsOptions());
 
         Assert.Empty(built.Chains!.Kinds);
     }
@@ -150,9 +150,9 @@ public class SubscriptionChainsTests
     private static PluginSnapshot Snapshot(params LoadedPlugin[] plugins) =>
         PluginSnapshot.Empty(DateTime.UtcNow, SnapshotSource.Reload) with { Plugins = plugins };
 
-    private static SubscriptionOrderOptions Order(params (string Kind, string[] Ids)[] lists)
+    private static SubscriptionsOptions Order(params (string Kind, string[] Ids)[] lists)
     {
-        var options = new SubscriptionOrderOptions();
+        var options = new SubscriptionsOptions();
         foreach (var (kind, ids) in lists)
         {
             options.Order[kind] = [.. ids];

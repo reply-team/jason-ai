@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Events;
+using Jason.Contracts.Subscriptions;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Operations;
@@ -59,9 +60,11 @@ public class FixtureTests
         Assert.NotEmpty(OperationCatalog.All);
         Assert.NotEmpty(DeliveryCatalog.All);
         Assert.NotEmpty(EventsCatalog.All);
+        Assert.NotEmpty(SubscriptionCatalog.All);
         foreach (var id in OperationCatalog.All.Select(contract => contract.Id)
             .Concat(DeliveryCatalog.All.Select(contract => contract.Id))
-            .Concat(EventsCatalog.All.Select(contract => contract.Id)))
+            .Concat(EventsCatalog.All.Select(contract => contract.Id))
+            .Concat(SubscriptionCatalog.All.Select(contract => contract.Id)))
         {
             Assert.Contains(inputs, fixture => (string?)fixture["operation"] == id);
             Assert.Contains(outcomes, fixture => (string?)fixture["operation"] == id);
@@ -232,6 +235,12 @@ public class FixtureTests
         if (Events(fixture, relative) is { } events)
         {
             AnEventsOutcome(relative, events, outcome, expected, status);
+            return;
+        }
+
+        if (Subscription(fixture, relative) is { } subscription)
+        {
+            ASubscriptionOutcome(relative, subscription, outcome, expected, status);
             return;
         }
 
@@ -618,12 +627,54 @@ public class FixtureTests
     }
 
     /// <summary>
+    /// What a handler's outcome means: a success is an answer the output schema accepts — the envelope for the next
+    /// handler — and no identifiers, because a handler pins nothing; anything else beside a success is the runtime's
+    /// validation failure. A failure is the handler's own, under its own code and class, since a handler declares its
+    /// codes nowhere; only a transient one is tried again.
+    /// </summary>
+    private static void ASubscriptionOutcome(string relative, SubscriptionContract contract, PluginOutcome outcome, JsonObject expected, string status)
+    {
+        var resultProblems = outcome.Status == OutcomeStatus.Succeeded
+            ? [.. contract.CheckResult(outcome.Result), .. SubscriptionContract.CheckExternalIds(outcome.ExternalIds)]
+            : new List<SchemaProblem>();
+
+        switch (status)
+        {
+            case "succeeded":
+                Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+                Assert.True(resultProblems.Count == 0, $"{relative} succeeds with an answer refused at {Listed([.. resultProblems.Select(problem => problem.Pointer + " " + problem.Reason)])}.");
+                Assert.False((bool)expected["retriable"]!, "A line a handler took is not handed to it again.");
+                break;
+
+            case "failed":
+                Assert.Equal(OutcomeStatus.Failed, outcome.Status);
+                Assert.NotNull(outcome.Error);
+                Assert.Equal(Class(expected), outcome.Error.Class);
+                Assert.Equal(SubscriptionContract.Retriable(outcome.Error.Class), (bool)expected["retriable"]!);
+                break;
+
+            case "result_invalid":
+                Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+                TheStatedProblemsAndNoOthers(relative, expected, resultProblems);
+                Assert.Equal(FailureClass.Validation, Class(expected));
+                Assert.Equal(SubscriptionContract.AnswerInvalid, (string?)expected["code"]);
+                Assert.False((bool)expected["retriable"]!, "An answer outside the contract is deterministic, so a repeat would only break it again.");
+                break;
+
+            default:
+                Assert.Fail($"{relative} expects the unknown status `{status}`.");
+                break;
+        }
+    }
+
+    /// <summary>
     /// What the contract of an input fixture says of its input, in whichever family publishes it: an operation's reading
     /// is the one the runtime makes at the claim, its arguments' provider slot set aside.
     /// </summary>
     private static IReadOnlyList<SchemaProblem> InputProblems(JsonObject fixture, string relative) =>
         Delivery(fixture, relative)?.CheckInput(fixture["input"], PatternTiming.Default)
             ?? Events(fixture, relative)?.CheckInput(fixture["input"], PatternTiming.Default)
+            ?? Subscription(fixture, relative)?.CheckInput(fixture["input"], PatternTiming.Default)
             ?? Operation(fixture, relative).CheckInput(fixture["input"], PatternTiming.Default);
 
     /// <summary>The events contract a fixture names, or null where it names another family's.</summary>
@@ -631,6 +682,20 @@ public class FixtureTests
     {
         var id = (string?)fixture["operation"];
         if (id is null || EventsCatalog.Find(id) is not { } contract)
+        {
+            return null;
+        }
+
+        Assert.Equal(contract.Version, (int)fixture["version"]!);
+        Assert.False(string.IsNullOrWhiteSpace((string?)fixture["case"]), $"{relative} does not say which case it is.");
+        return contract;
+    }
+
+    /// <summary>The subscription contract a fixture names, or null where it names another family's.</summary>
+    private static SubscriptionContract? Subscription(JsonObject fixture, string relative)
+    {
+        var id = (string?)fixture["operation"];
+        if (id is null || SubscriptionCatalog.Find(id) is not { } contract)
         {
             return null;
         }

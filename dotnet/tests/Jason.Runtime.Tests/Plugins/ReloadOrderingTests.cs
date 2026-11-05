@@ -54,9 +54,10 @@ public class ReloadOrderingTests
             loader,
             routes,
             new RouteActivator(db, new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()), routes, TimeProvider.System),
-            new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionOrderOptions>(new SubscriptionOrderOptions())),
+            new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionsOptions>(new SubscriptionsOptions())),
             new ReloadGate(),
             new SettingsFile(new ConfigurationBuilder().Build()),
+            TimeProvider.System,
             NullLogger<PluginService>.Instance);
 
         await Assert.ThrowsAsync<RefusedSaveException>(() => service.ReloadAsync(new PluginReloadRequest(null, null), Ct));
@@ -100,7 +101,7 @@ public class ReloadOrderingTests
             new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()),
             routes,
             TimeProvider.System));
-        services.AddSingleton(new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionOrderOptions>(new SubscriptionOrderOptions())));
+        services.AddSingleton(new SubscriptionOrderSource(new TestOptionsMonitor<SubscriptionsOptions>(new SubscriptionsOptions())));
         await using var provider = services.BuildServiceProvider();
 
         var startup = new PluginStartupLoader(

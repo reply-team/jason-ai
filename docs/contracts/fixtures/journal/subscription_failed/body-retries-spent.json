@@ -1,0 +1,18 @@
+{
+  "kind": "subscription_failed",
+  "version": 1,
+  "case": "a transient failure tried again until the retries were spent",
+  "body": {
+    "key": "workitem_failed",
+    "old": null,
+    "new": {
+      "kind": "workitem_failed",
+      "line": "jrn_01JC0000000000000000000042",
+      "plugin_id": "example-tickets",
+      "class": "transient",
+      "code": "ticket_service_unreachable",
+      "attempts": 4
+    }
+  },
+  "expect": "valid"
+}
