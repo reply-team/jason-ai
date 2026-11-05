@@ -1151,6 +1151,26 @@ public sealed class DoctorComposerTests
         AssertAbsent(bundle, "SENTINEL_ENVELOPE", "SENTINEL_HANDLER_NOTE", "SENTINEL_KIND", "fake-provider");
     }
 
+    /// <summary>
+    /// A kind's chains the runtime refused to page are missing from the section, so the section says why, while the kinds
+    /// it did list stay whole: not cut short, only without the chains it could not read.
+    /// </summary>
+    [Fact]
+    public async Task A_kind_whose_chains_were_refused_is_listed_without_them_and_the_section_says_why()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) => operation == Operations.SubscriptionRuns ? Envelope(HttpStatusCode.InternalServerError, "internal_error") : null;
+
+        var section = Section(await ComposeAsync(dir, runtime), "subscriptions");
+
+        Assert.Equal("internal_error", Text(section["incomplete"]));
+        Assert.False(section["truncated"]!.GetValue<bool>());
+        var kind = Assert.Single(section["kinds"]!.AsArray())!;
+        Assert.Equal("campaign_created", Text(kind["kind"]));
+        Assert.Empty(kind["runs"]!.AsArray());
+    }
+
     private const string RoutingSnapshot = "rts_01J4ZQ8X5W3V2T1S0R9Q8P7N6A";
 
     private const string PluginSnapshot = "snp_01J4ZQ8X5W3V2T1S0R9Q8P7N6B";

@@ -141,6 +141,21 @@ public class SubscriptionServiceTests
         Assert.Equal(("kind", "required"), Detail(refused));
     }
 
+    /// <summary>A cursor another page handed out decodes, but names no run of this record, so it is refused rather than read as the start.</summary>
+    [Fact]
+    public async Task A_runs_cursor_that_is_no_page_of_runs_is_refused()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var lines = Lines(harness, Failed);
+        await RunAsync(harness, Failed, lines[0], SubscriptionRunStatus.Succeeded);
+        await using var db = harness.Open();
+
+        var refused = await Assert.ThrowsAsync<ValidationException>(
+            () => Service(harness, db).RunsAsync(new SubscriptionRunsRequest(Failed, null, Paging.EncodeCursor("jrn_01M6N43SV49XWWJMXJBX95DG7P")), Ct));
+
+        Assert.Equal(("cursor", "invalid"), Detail(refused));
+    }
+
     [Fact]
     public async Task A_rewind_to_a_line_moves_the_cursor_to_just_before_it_bumps_the_revision_and_says_so_in_a_line_of_its_own()
     {
