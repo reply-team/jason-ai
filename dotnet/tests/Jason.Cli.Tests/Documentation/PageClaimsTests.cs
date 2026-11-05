@@ -604,6 +604,7 @@ public partial class PageClaimsTests
     [InlineData("docs/release-and-update.md", "The journal forwarder is published the same way from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, the files of `plugins/journal-forwarder` at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`;")]
     [InlineData(".github/release-notes-template.md", "The journal forwarder's package is installed the same way, by `jason plugin install journal-forwarder`, into `~/.jason/plugins/journal-forwarder`;")]
     [InlineData("docs/plugins.md", "the journal forwarder from 0.30.0 on as `jason-plugin-journal-forwarder.zip`, each with its files at the archive's root,")]
+    [InlineData("README.md", "the Reply plugin and the journal forwarder, each one `jason plugin install` away")]
     public void The_pages_say_how_the_plugin_s_package_is_published_and_installed(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
