@@ -30,6 +30,10 @@ public sealed partial class InsideARunDocTests
         Assert.Contains($"in `{ExecutionEnvironment.AttemptIdVariable}` — says so on every request it sends, reads included", flat, StringComparison.Ordinal);
         Assert.Contains("it is not a credential, it opens nothing, and it fences nothing", flat, StringComparison.Ordinal);
         Assert.Contains($"answer it `{Status}` with the code `{Refusal.Code}` before the body is read, and record nothing", flat, StringComparison.Ordinal);
+        Assert.Contains(
+            "A value a header cannot carry, anything but visible ASCII, is not sent: `jason` says so in one line on stderr, naming the variable and never its value.",
+            flat,
+            StringComparison.Ordinal);
     }
 
     /// <summary>The bullet that lists a person's decisions lists exactly the five that refuse, the rule, and what it is worth.</summary>
