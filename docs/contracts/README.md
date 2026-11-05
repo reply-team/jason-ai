@@ -49,6 +49,8 @@ docs/contracts/
   fixtures/context/<key>/value-*.json   values, accepted and refused, with the pointer and reason of each refusal
   journal/<kind>.json              a kind of the runtime's own journal lines, a sixth family, embedded the same way
   fixtures/journal/<kind>/body-*.json   bodies, accepted and refused, with the pointer and reason of each refusal
+  subscriptions/<name>.json        the subscription contract, a seventh family, embedded the same way
+  subscriptions/<name>.md          the same contract explained, with a generated block
   block/provider_block.json        the provider block a blocked failure carries, written once for every operation
   block/provider_block.md          the same block explained
   fixtures/block/value-*.json      blocks, accepted and refused, with the pointer and reason of each refusal
@@ -117,6 +119,20 @@ result, four failure codes, its timeout and its conformance list. What it return
 provider's own flags — every kind a closed object, with nothing anybody wrote — and it pins nothing: a read finds the
 identifiers operations pinned and writes none. Its fixtures live beside the others' under
 [`fixtures/events.read/`](fixtures/events.read) and are run by the same tests.
+
+## The subscription contract
+
+A seventh family is published here, and it is none of the others:
+[`subscriptions/subscription.handle.json`](subscriptions/subscription.handle.md), what a plugin of any kind is invoked
+for when it subscribes to a journal kind and the person granted it — take one line of that kind after the runtime wrote
+it, with the envelope the previous handler of the kind's chain returned, and answer the envelope for the next. The line
+records what is already done, so no work item names a handler and no route carries one; it is under `subscriptions/`
+and read by a catalog of its own, for the reason the delivery and events contracts are. It has their fields and nothing
+more: its input, its result, two failure codes — the ones the runtime records against an answer that breaks the
+contract, since a handler fails under codes of its own — its timeout, which the plugin's own limit lowers, and its
+conformance list. The operation word a handler is invoked under is the line's kind, not this document's id, and a
+handler pins nothing. Its fixtures live beside the others' under
+[`fixtures/subscription.handle/`](fixtures/subscription.handle) and are run by the same tests.
 
 ## The provider block
 

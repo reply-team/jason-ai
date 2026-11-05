@@ -1,0 +1,56 @@
+{
+  "id": "subscription.handle",
+  "version": 1,
+  "intent": "Take one journal line of a kind the plugin subscribes to, after the runtime wrote it, with the envelope the previous handler of the kind's chain returned, and answer the envelope for the next. What the line records is already done; nothing a handler answers changes it.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "line": {
+        "type": "object",
+        "description": "The journal line exactly as journal.list returns it; the runtime reads it afresh for each invocation.",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "ts": { "type": "string", "minLength": 1 },
+          "actor": { "type": "object" },
+          "kind": { "type": "string", "minLength": 1 }
+        },
+        "required": ["id", "ts", "actor", "kind"]
+      },
+      "envelope": {
+        "type": "object",
+        "description": "What the previous handler of the chain returned; an empty object for the first handler, and for every handler when a line is handed out afresh."
+      },
+      "attempt": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "How many times this plugin has been handed this line, this time included."
+      }
+    },
+    "required": ["line", "envelope", "attempt"],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "envelope": {
+        "type": "object",
+        "description": "Handed as it stands to the next handler of the chain, and kept with the chain's run when this handler is the last."
+      }
+    },
+    "required": ["envelope"],
+    "additionalProperties": false
+  },
+  "failure_codes": [
+    { "code": "subscription_answer_invalid", "class": "validation", "when": "the runtime's record of an answer outside this contract: no envelope, an envelope that is not an object, a field beside it, or an identifier pinned" },
+    { "code": "subscription_envelope_too_large", "class": "validation", "when": "the runtime's record of an envelope longer, as compact JSON in UTF-8, than the bound Subscriptions:EnvelopeBytes sets" }
+  ],
+  "timeout_ms": 3600000,
+  "conformance": [
+    "Is invoked under the line's kind as its operation word, so one main.js tells the kinds it subscribes to apart as a provider tells its operations apart.",
+    "Answers {\"envelope\": {...}} and nothing else: an object, the empty object included, handed as it stands to the next handler; the runtime never reads inside it.",
+    "Pins nothing: an answer with external_ids is refused as subscription_answer_invalid.",
+    "Fails with codes of its own under one of the five classes; only transient is tried again, by the same handler with the envelope as it stood before it, and every other class ends the chain at that handler for that line.",
+    "Takes a line at least once: a line may be handed out again after a restart, with attempt above 1, so an effect a handler causes is one it can tell it already caused.",
+    "Reads and writes Jason only through host.call, by the families of the Runtime API its grant names; what it writes is not handed to another handler as a new line."
+  ]
+}

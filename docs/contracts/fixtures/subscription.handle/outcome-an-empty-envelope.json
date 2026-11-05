@@ -1,0 +1,25 @@
+{
+  "operation": "subscription.handle",
+  "version": 1,
+  "case": "the handler has nothing to pass on: the empty object is an envelope",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "envelope": {}
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 120,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 1
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}
