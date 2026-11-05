@@ -346,6 +346,16 @@ that is not that attempt does not call them.
 - `events.backfill`: asks for a span of an account to be read again.
 - `events.signal`: asks for an account to be read sooner.
 
+### `subscription`
+
+- `subscription.list`: every journal kind a plugin of the active load subscribes to, a page at a time in kind order:
+  its chain in order, the line its cursor stands after, its newest line, how many of its lines are due, the members
+  that keep its chain from starting, and the chain in flight.
+- `subscription.runs`: the records of one kind's chains, newest first: each handler's outcome, how the chain ended, and
+  the envelope the last handler returned.
+- `subscription.rewind`: a person moves a kind's cursor back, to just before a line of the kind or to a moment, so the
+  chain hands those lines to its plugins again; never forward, and each rewind is a `subscription_cursor_rewound` line.
+
 ## What a program can read
 
 - **Campaigns**: `campaign.list` and `campaign.get`; `campaign.summary` for counts, `campaign.activity` and
@@ -357,6 +367,8 @@ that is not that attempt does not call them.
   person's approval, `decision.list` and `decision.get` for the questions roles have asked.
 - **Blocks**: `block.list` and `block.get`, for what a provider said it refuses until a person clears the cause.
 - **Events**: `events.sources`, for every account whose events the runtime reads and how far that reading has got.
+- **Subscriptions**: `subscription.list`, for every subscribed journal kind, where its cursor stands and what keeps its
+  chain from starting.
 - **The journal**: `journal.list`, the record of what happened in each campaign, to its people and to its work, one
   line at a time, each with a `kind`, the actor, the time, and what changed. It is append-only: no operation changes
   or removes a line, so a line read once stays read. `journal.list` answers the newest line first, and its cursor pages

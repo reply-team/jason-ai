@@ -214,6 +214,7 @@ public static class CliApp
         root.Subcommands.Add(PluginCommands.Build(env, actor));
         root.Subcommands.Add(RouteCommands.Build(env, actor));
         root.Subcommands.Add(EventsCommands.Build(env, actor));
+        root.Subcommands.Add(SubscriptionCommands.Build(env, actor));
         root.Subcommands.Add(UiCommands.Build(env, actor));
         root.Subcommands.Add(Session.SessionCommands.Build(env, actor));
         root.Subcommands.Add(UpdateCommands.Build(env, actor));

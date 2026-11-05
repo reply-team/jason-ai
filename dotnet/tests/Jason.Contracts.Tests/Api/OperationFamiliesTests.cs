@@ -44,11 +44,11 @@ public class OperationFamiliesTests
             "campaign.activity_by_period", "campaign.get", "campaign.list", "campaign.list_contacts", "campaign.summary",
             "contact.get", "contact.list", "decision.get", "decision.list", "events.sources", "journal.kinds", "journal.list",
             "plugin.list", "preference.list", "profile.get", "profile.list", "project.get", "project.list", "report.get",
-            "report.list", "role.list", "rolenote.get", "rolenote.list", "route.list", "route.resolve", "suppression.list",
-            "workitem.count", "workitem.get", "workitem.list",
+            "report.list", "role.list", "rolenote.get", "rolenote.list", "route.list", "route.resolve", "subscription.list",
+            "suppression.list", "workitem.count", "workitem.get", "workitem.list",
         ];
 
-        Assert.Equal(35, reads.Length);
+        Assert.Equal(36, reads.Length);
         Assert.Equal(reads, OperationFamilies.OperationsOf([OperationFamilies.Read]).Order(StringComparer.Ordinal));
     }
 
@@ -70,8 +70,9 @@ public class OperationFamiliesTests
     }
 
     /// <summary>
-    /// The installation's and the UI's own doors read nothing a handler needs, and a conversation read spends a provider
-    /// call, so none of them is a read a grant opens.
+    /// The installation's and the UI's own doors read nothing a handler needs, a conversation read spends a provider call,
+    /// and a subscription run's record carries the envelopes other plugins' handlers made, so none of them is a read a
+    /// grant opens.
     /// </summary>
     [Theory]
     [InlineData("system.info")]
@@ -79,6 +80,7 @@ public class OperationFamiliesTests
     [InlineData("contact.threads")]
     [InlineData("contact.thread")]
     [InlineData("journal.kinds.extra")]
+    [InlineData("subscription.runs")]
     public void Not_every_question_is_a_read_a_grant_opens(string operation)
     {
         Assert.False(OperationFamilies.IsRead(operation));
@@ -104,6 +106,7 @@ public class OperationFamiliesTests
             "approval.approve", "approval.reject", "approval.set_standing", "approval.unset_standing", "block.clear",
             "decision.answer", "preference.set", "preference.unset", "workitem.resume", "workitem.complete",
             "workitem.heartbeat", "plugin.reload", "route.set", "system.shutdown", "ui.open", "suppression.remove",
+            "subscription.runs", "subscription.rewind",
         ];
         var everything = OperationFamilies.OperationsOf(OperationFamilies.All);
 

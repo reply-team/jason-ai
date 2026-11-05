@@ -156,17 +156,18 @@ public class DefaultActorTests
         Assert.Contains("human:<this account's name>", description, StringComparison.Ordinal);
         Assert.Contains("the paired browser", description, StringComparison.Ordinal);
         Assert.Contains("where that name cannot be read, as a person who gave no name", description, StringComparison.Ordinal);
+        Assert.Contains("rewinding a subscription", description, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// Every verb that reaches the runtime, run with the account's name set against a runtime that answers <c>{}</c>: each
-    /// request whose type takes an actor carries the account's person, and the ten that are a person's own word send
+    /// request whose type takes an actor carries the account's person, and the eleven that are a person's own word send
     /// nothing at all. Which types take one is read from the runtime's own registration of its operations and from the
     /// contracts, so a write that left the default out is a difference here however its body was built; and every
     /// operation that takes an actor is reached by some verb, so none is left out of the reading.
     /// </summary>
     [Fact]
-    public async Task Every_write_a_verb_makes_carries_the_account_s_person_but_the_ten()
+    public async Task Every_write_a_verb_makes_carries_the_account_s_person_but_the_eleven()
     {
         var takesAnActor = OperationsTakingAnActor();
         var reached = new HashSet<string>(StringComparer.Ordinal);
@@ -184,7 +185,7 @@ public class DefaultActorTests
             }
         }
 
-        foreach (var args in TheTen)
+        foreach (var args in TheEleven)
         {
             var refused = await RunEachAsync(args);
             Assert.True(refused.Exit == ExitCodes.Usage && refused.Requests.Count == 0, $"'jason {VerbOf(args)}' was not refused: exit {refused.Exit}, {refused.Requests.Count} request(s)");
@@ -221,7 +222,7 @@ public class DefaultActorTests
     }
 
     /// <summary>
-    /// The verbs above are every verb: each is run there, is one of the ten, or says here why it is not run, so a verb
+    /// The verbs above are every verb: each is run there, is one of the eleven, or says here why it is not run, so a verb
     /// added later is a difference in this row before it is a write nobody ran.
     /// </summary>
     [Fact]
@@ -233,7 +234,7 @@ public class DefaultActorTests
 
         Assert.Equal(
             leaves.Order(StringComparer.Ordinal),
-            Runs.Concat(TheTen).Select(VerbOf).Concat(NotRun.Keys).Order(StringComparer.Ordinal));
+            Runs.Concat(TheEleven).Select(VerbOf).Concat(NotRun.Keys).Order(StringComparer.Ordinal));
 
         void Walk(Command command, string path)
         {
@@ -249,10 +250,10 @@ public class DefaultActorTests
         }
     }
 
-    public static TheoryData<string[]> PersonsWord() => [.. TheTen];
+    public static TheoryData<string[]> PersonsWord() => [.. TheEleven];
 
     /// <summary>The verbs that are a person's own word: no default actor applies to any of them.</summary>
-    private static readonly string[][] TheTen =
+    private static readonly string[][] TheEleven =
     [
         ["approval", "approve", "apr_A"],
         ["approval", "reject", "apr_A"],
@@ -264,6 +265,7 @@ public class DefaultActorTests
         ["block", "clear", "blk_A"],
         ["workitem", "resume", "wi_A"],
         ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
+        ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
     ];
 
     /// <summary>One invocation of every other verb that reaches the runtime.</summary>
@@ -345,6 +347,8 @@ public class DefaultActorTests
         ["events", "sources"],
         ["events", "backfill", "--source", "evs_A", "--from", "2026-10-12T00:00:00Z", "--to", "2026-10-13T00:00:00Z"],
         ["events", "signal", "--source", "evs_A"],
+        ["subscription", "list"],
+        ["subscription", "runs", "--kind", "campaign_created"],
         ["ui", "open", "--no-open"],
         ["ui", "tokens"],
         ["ui", "revoke", "uit_A"],

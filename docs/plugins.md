@@ -1238,12 +1238,14 @@ family, or in none:
 No grant opens the rest: the installation's and the UI's own doors (every `system.` and `ui.` operation,
 `plugin.reload`, `route.set`, `route.unset`, `project.create`, `project.update`, `project.link`, `preference.set`,
 `preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `events.backfill`,
-`events.signal`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
+`events.signal`, `subscription.rewind`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
 `approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`,
 `suppression.remove`), an
 executor's fenced verbs (`workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait`), and the
 conversation reads `contact.threads` and `contact.thread`, which are no read here because answering one spends a
-provider call. An operation the API adds later is in none until it is classified, which a test holds. A family the
+provider call, and `subscription.runs`, whose records carry the envelopes other plugins' handlers made: a handler in a
+chain already holds the envelope handed to it, and a person reads the final one through the run token, so no plugin
+reads another chain's envelopes. `subscription.list` is a read by the rule above. An operation the API adds later is in none until it is classified, which a test holds. A family the
 manifest names that is not one of the seven is `api_family_unknown`.
 
 A subscriber granted `workitem` writes can feed itself through a role: an item it creates may run a role, and what

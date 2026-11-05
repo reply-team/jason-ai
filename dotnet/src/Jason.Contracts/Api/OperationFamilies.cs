@@ -59,6 +59,10 @@ public static class OperationFamilies
     /// <summary>
     /// The operations no grant opens: a person's own doors, the installation's, and an executor's fenced verbs. Lifting a
     /// do-not-contact entry is a decision about a person, so a plugin may add to the register and never take from it.
+    /// Moving a subscribed kind's cursor back is the installation's, beside asking for an account's events again. A
+    /// subscription run's record carries the envelopes other plugins' handlers made: a handler in the chain already holds
+    /// the envelope handed to it, and a person reads the final one through the run token, so no plugin reads another
+    /// chain's envelopes.
     /// </summary>
     public static IReadOnlySet<string> Never { get; } = new[]
     {
@@ -79,6 +83,7 @@ public static class OperationFamilies
         Operations.PluginReload,
         Operations.RouteSet, Operations.RouteUnset,
         Operations.EventsBackfill, Operations.EventsSignal,
+        Operations.SubscriptionRuns, Operations.SubscriptionRewind,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>Every operation the Runtime API publishes: the constants of <see cref="Operations"/>.</summary>
