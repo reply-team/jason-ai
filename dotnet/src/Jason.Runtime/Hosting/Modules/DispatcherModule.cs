@@ -111,8 +111,11 @@ public static class DispatcherModule
         services.AddHostedService(provider => provider.GetRequiredService<EventReader>());
 
         // The subscribed kinds' chains run off the scan: one runner, which is both what the scan offers a kind to and the
-        // service that runs its chains.
+        // service that runs its chains. It hands lines to handlers through the invoker the plugin module registers; a test
+        // registers its own first.
+        services.TryAddScoped<ISubscriptionInvoker, PluginSubscriptionInvoker>();
         services.AddSingleton<SubscriptionRunner>();
+        services.AddHostedService(provider => provider.GetRequiredService<SubscriptionRunner>());
 
         // Which skipped campaigns have been said, once per campaign and reason in the life of the process.
         services.AddSingleton<InboundSkips>();

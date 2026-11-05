@@ -1,4 +1,5 @@
 using System.Globalization;
+using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
@@ -8,6 +9,7 @@ using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Tests.Dispatch;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Tests.Plugins.Subscriptions;
 
@@ -101,6 +103,37 @@ internal static class SubscriptionsBed
         await using var db = harness.Open();
         return [.. (await db.SubscriptionCursors.AsNoTracking().OrderBy(cursor => cursor.Kind).ToListAsync(Ct))
             .Select(cursor => string.Create(CultureInfo.InvariantCulture, $"{cursor.Kind}|{cursor.AfterLine}|{cursor.Revision}"))];
+    }
+
+    /// <summary>A runner of a runtime that has just started over the same database: nothing in flight, nothing in memory.</summary>
+    public static SubscriptionRunner NewRunner(DispatchHarness harness) => new(
+        harness.Resolve<LiveSettings<SubscriptionsOptions>>(),
+        harness.Scopes,
+        harness.Resolve<PluginRegistry>(),
+        harness.Clock,
+        harness.Resolve<ILogger<SubscriptionRunner>>());
+
+    /// <summary>The journal's lines of the kind, oldest first.</summary>
+    public static async Task<List<JournalEntry>> JournalAsync(DispatchHarness harness, string kind)
+    {
+        await using var db = harness.Open();
+        return await db.Journal.AsNoTracking().Where(entry => entry.Kind == kind).OrderBy(entry => entry.Id).ToListAsync(Ct);
+    }
+
+    /// <summary>A work item of a new campaign, created by the actor type given: its public id.</summary>
+    public static async Task<string> WorkItemAsync(DispatchHarness harness, ActorType createdBy)
+    {
+        await using var db = harness.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var item = WorkItemFactory.NewAiRole(campaign, now: Noon, configure: item =>
+        {
+            item.CreatedByType = createdBy;
+            item.CreatedById = createdBy == ActorType.Plugin ? "watcher" : "rol_01K0maker";
+        });
+        db.Campaigns.Add(campaign);
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+        return item.PublicId;
     }
 
     public static async Task<List<SubscriptionRun>> RunsAsync(DispatchHarness harness)

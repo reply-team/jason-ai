@@ -9,6 +9,7 @@ using Jason.Runtime.Hosting.Modules;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Events;
 using Jason.Runtime.Tests.Events;
+using Jason.Runtime.Tests.Plugins.Subscriptions;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
@@ -117,6 +118,9 @@ internal sealed class DispatchHarness : IDisposable
         // The accounts' events are read through pages the test hands over rather than through a child.
         services.AddSingleton<IEventsInvoker>(Events);
 
+        // The subscribed kinds' handlers answer as the test says rather than through a child.
+        services.AddSingleton<ISubscriptionInvoker>(Handlers);
+
         // Where the claim finds the person's memory files: a root under this test's own home, which no test here marks,
         // so every root a role is told of is one a test made on purpose.
         services.AddSingleton(Harness.TestHarness.Folders(_dir.Home));
@@ -136,6 +140,9 @@ internal sealed class DispatchHarness : IDisposable
 
     /// <summary>The reader the scan hands reads of accounts' events to, as the runtime's singleton holds it.</summary>
     public EventReader Reader => _provider.GetRequiredService<EventReader>();
+
+    /// <summary>What each subscriber's handler answers, line by line, and what each was handed.</summary>
+    public FakeSubscriptionInvoker Handlers { get; } = new();
 
     /// <summary>The runner the scan offers subscribed kinds to, as the runtime's singleton holds it.</summary>
     public SubscriptionRunner SubscriptionRunner => _provider.GetRequiredService<SubscriptionRunner>();
