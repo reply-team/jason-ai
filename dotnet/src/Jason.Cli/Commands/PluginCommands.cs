@@ -67,7 +67,7 @@ public static class PluginCommands
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
         {
-            var by = ActorOption.Default(ActorOption.Parse(parseResult.GetValue(actor)), env.AccountName);
+            var by = ActorOption.Default(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env.AccountName);
             var named = parseResult.GetValue(id)!;
             if (!PluginIds.IsWellFormed(named))
             {
@@ -193,7 +193,7 @@ public static class PluginCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
 
             return OperationRunner.RunAsync(
                 env,
@@ -218,7 +218,7 @@ public static class PluginCommands
         {
             var body = RequestBody.Empty()
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return OperationRunner.RunAsync(
                 env,

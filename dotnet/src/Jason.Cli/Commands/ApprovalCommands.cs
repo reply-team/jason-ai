@@ -45,7 +45,7 @@ public static class ApprovalCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var statuses = parseResult.GetValue(status) ?? [];
             var body = RequestBody.Empty()
                 .Set("status", statuses.Length == 1 ? statuses[0] : null)
@@ -74,7 +74,7 @@ public static class ApprovalCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             VerbOptions.OneRendering(parseResult.GetValue(human), parseResult.GetValue(prompt));
             var body = RequestBody.Empty().Set("approval_id", parseResult.GetValue(id));
 
@@ -137,7 +137,7 @@ public static class ApprovalCommands
                 .Set("expires_at", parseResult.GetValue(expiresAt))
                 .Set("max_releases", parseResult.GetValue(maxReleases))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "approval set-standing", "a standing approval is a person's word given in advance");
 
             return OperationRunner.RunAsync(
@@ -169,7 +169,7 @@ public static class ApprovalCommands
                 .Set("campaign_id", parseResult.GetValue(id))
                 .Set("category", parseResult.GetValue(category))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "approval unset-standing", "a standing approval is taken back on a person's word");
 
             return OperationRunner.RunAsync(
@@ -195,7 +195,7 @@ public static class ApprovalCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(id))
                 .Set("limit", parseResult.GetValue(limit))
@@ -227,7 +227,7 @@ public static class ApprovalCommands
             var body = RequestBody.Empty()
                 .Set("approval_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, $"approval {verb}", "an approval is decided on a person's word");
 
             return OperationRunner.RunAsync(

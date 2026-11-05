@@ -13,24 +13,28 @@ public static class RuntimeCommands
         var runtime = new Command("runtime", "Inspect and control the local runtime process.");
 
         runtime.Subcommands.Add(Verb(
+            env,
             "status",
             "Show whether the runtime is reachable and what it reports about itself.",
             actor,
             (human, cancellationToken) => RuntimeStatusCommand.RunAsync(env, human, cancellationToken)));
 
         runtime.Subcommands.Add(Verb(
+            env,
             "stop",
             "Ask the running runtime to shut down and wait until its process is gone.",
             actor,
             (human, cancellationToken) => RuntimeStopCommand.RunAsync(env, human, cancellationToken)));
 
         runtime.Subcommands.Add(Verb(
+            env,
             "start",
             "Make sure a runtime is running, launching it in the background if none answers. Beside an update stopped part-way from its swap on, or an update ledger it cannot read, it starts nothing and says why; 'jason update apply' finishes the update.",
             actor,
             (human, cancellationToken) => RuntimeStartCommand.RunAsync(env, human, cancellationToken)));
 
         runtime.Subcommands.Add(Verb(
+            env,
             "restart",
             "Stop the running runtime, if any, and start a fresh one in the background. Beside an update stopped part-way from its swap on, or an update ledger it cannot read, it stops and starts nothing and says why.",
             actor,
@@ -41,7 +45,7 @@ public static class RuntimeCommands
         return runtime;
     }
 
-    private static Command Verb(string name, string description, Option<string?> actor, Func<bool, CancellationToken, Task<int>> run)
+    private static Command Verb(CliEnvironment env, string name, string description, Option<string?> actor, Func<bool, CancellationToken, Task<int>> run)
     {
         var command = new Command(name, description);
         var human = new Option<bool>("--human") { Description = "Render for people instead of printing the JSON response." };
@@ -50,7 +54,7 @@ public static class RuntimeCommands
         {
             // These verbs are about the process, not about business state, so no claim travels with them —
             // but a malformed claim is still refused here, so --actor behaves the same on every verb.
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             return run(parseResult.GetValue(human), cancellationToken);
         });
 

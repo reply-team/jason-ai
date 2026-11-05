@@ -69,7 +69,7 @@ public static class CampaignCommands
                 .Set("project_id", parseResult.GetValue(project))
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             if ((await WorkingFolder.FillProjectAsync(env, body, WorkingFolder.ByProjectOption, cancellationToken).ConfigureAwait(false)).ExitCode is { } stopped)
             {
@@ -94,7 +94,7 @@ public static class CampaignCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty().Set("campaign_id", parseResult.GetValue(id));
             return OperationRunner.RunAsync(env, Operations.CampaignGet, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken);
         });
@@ -125,7 +125,7 @@ public static class CampaignCommands
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var every = parseResult.GetValue(everyProject);
             if (every && parseResult.GetValue(project) is not null)
             {
@@ -214,7 +214,7 @@ public static class CampaignCommands
             }
 
             body.Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignUpdate, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
@@ -241,7 +241,7 @@ public static class CampaignCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("campaign_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, operation, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
@@ -274,7 +274,7 @@ public static class CampaignCommands
                 .Set("set", VerbOptions.Object(parseResult.GetValue(set), "--set"))
                 .Set("unset", VerbOptions.Strings(parseResult.GetValue(unset)))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignUpdateContext, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
@@ -309,7 +309,7 @@ public static class CampaignCommands
             body.Set("campaign_id", parseResult.GetValue(id))
                 .Set("match_by", parseResult.GetValue(matchBy))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignAddContacts, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Batch), cancellationToken)
@@ -339,7 +339,7 @@ public static class CampaignCommands
             body.Set("campaign_id", parseResult.GetValue(id))
                 .Set("contact_ids", VerbOptions.Strings(parseResult.GetValue(contact)))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignRemoveContacts, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.RemoveBatch), cancellationToken)
@@ -386,7 +386,7 @@ public static class CampaignCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_ids", Ids(parseResult.GetValue(ids)))
                 .Set("state", parseResult.GetValue(state))
@@ -417,7 +417,7 @@ public static class CampaignCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty().Set("campaign_ids", Ids(parseResult.GetValue(ids)));
             return OperationRunner.RunAsync(env, Operations.CampaignSummary, body, Named(env, parseResult.GetValue(human), CampaignRenderers.Summary), cancellationToken);
         });
@@ -445,7 +445,7 @@ public static class CampaignCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_ids", Ids(parseResult.GetValue(ids)))
                 .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
@@ -488,7 +488,7 @@ public static class CampaignCommands
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_ids", Ids(parseResult.GetValue(ids)))
                 .Set("count", parseResult.GetValue(count))

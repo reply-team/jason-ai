@@ -48,7 +48,7 @@ public static class ContactCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             fields.LayOver(body, parseResult);
             body.Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ContactCreate, body, new RunOptions(parseResult.GetValue(human), ContactRenderers.Contact), cancellationToken)
@@ -68,7 +68,7 @@ public static class ContactCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty().Set("contact_id", parseResult.GetValue(id));
             return OperationRunner.RunAsync(env, Operations.ContactGet, body, new RunOptions(parseResult.GetValue(human), ContactRenderers.Contact), cancellationToken);
         });
@@ -100,7 +100,7 @@ public static class ContactCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("value", parseResult.GetValue(value))
@@ -154,7 +154,7 @@ public static class ContactCommands
             }
 
             body.Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ContactUpdate, body, new RunOptions(parseResult.GetValue(human), ContactRenderers.Contact), cancellationToken)
@@ -181,7 +181,7 @@ public static class ContactCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("contact_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ContactArchive, body, new RunOptions(parseResult.GetValue(human), ContactRenderers.Contact), cancellationToken)
@@ -207,7 +207,7 @@ public static class ContactCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("contact_id", parseResult.GetValue(id))
                 .Set("plugin_id", parseResult.GetValue(plugin))
@@ -237,7 +237,7 @@ public static class ContactCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("contact_id", parseResult.GetValue(id))
                 .Set("thread_id", parseResult.GetValue(thread))

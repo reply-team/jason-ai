@@ -145,7 +145,7 @@ public class OperationRunnerTests
             return Response(HttpStatusCode.OK, responseBody);
         }));
 
-        var body = RequestBody.Empty().Set("name", "LatAm").SetActor(ActorOption.Parse("role:planner"));
+        var body = RequestBody.Empty().Set("name", "LatAm").SetActor(ActorOption.Parse("role:planner", null));
         var exit = await OperationRunner.RunAsync(env, "campaign.create", body, new RunOptions(Human: false), TestContext.Current.CancellationToken);
 
         Assert.Equal(ExitCodes.Success, exit);

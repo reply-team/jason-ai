@@ -77,7 +77,7 @@ public static class ReportCommands
                 .Set("uncertainty", parseResult.GetValue(uncertainty))
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
 
             // A report's author is never taken from the machine: the reporter names themselves, a person or a role.
             ActorOption.Named(body, "report submit", "a report is its reporter's word", $"write {ActorOption.Name} human:<Name> or {ActorOption.Name} role:<id>");
@@ -99,7 +99,7 @@ public static class ReportCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty().Set("report_id", parseResult.GetValue(id));
 
             return OperationRunner.RunAsync(
@@ -128,7 +128,7 @@ public static class ReportCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(campaign))
                 .Set("contact_id", parseResult.GetValue(contact))

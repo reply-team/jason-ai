@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.Text.Json.Nodes;
-using Jason.Contracts.Execution;
 
 namespace Jason.Cli;
 
@@ -78,12 +77,9 @@ public static class ActorOption
     /// caller's own — but a CLI running inside a launched executor is that attempt whether or not it says so, and
     /// the launcher puts the attempt's id in the environment for exactly this reason. Traceability that depended
     /// on an agent remembering a flag would be lost the first time one forgot. A verb that requires an actor, such
-    /// as <c>workitem resume</c>, is satisfied by that attempt in the same way.
+    /// as <c>workitem resume</c>, is satisfied by that attempt in the same way. The attempt is handed in, read through
+    /// <see cref="CliEnvironment.AttemptFromEnvironment"/> as the header is, so nothing here reads the process.
     /// </summary>
-    public static JsonObject? Parse(string? text) =>
-        Parse(text, Environment.GetEnvironmentVariable(ExecutionEnvironment.AttemptIdVariable));
-
-    /// <summary>The same decision with the environment handed in, so it can be read and tested without one.</summary>
     public static JsonObject? Parse(string? text, string? attemptFromEnvironment)
     {
         if (string.IsNullOrWhiteSpace(text))
