@@ -594,10 +594,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Once per release, not once per platform: a package is JavaScript, the same on every machine. Each is archived from
-    # the tag's own checkout, whose line endings .gitattributes fixes, so the archive unpacks to the content digest of the
-    # package at the tag; the release's pull request ran the test that holds the script to that digest on this tree, on every
-    # platform. A step per package, and an upload per package under a name of its own.
+    # Once per release, not once per platform: a package is JavaScript, the same on every machine. Each is archived
+    # from the tag's own checkout, whose line endings .gitattributes fixes, so the archive unpacks to the content digest
+    # of the package at the tag; the release's pull request ran the test that holds the script to that digest for each
+    # package the release publishes, on this tree, on every platform. A step per package, and an upload per package
+    # under a name of its own.
     steps:
       - uses: actions/checkout@v7
 
