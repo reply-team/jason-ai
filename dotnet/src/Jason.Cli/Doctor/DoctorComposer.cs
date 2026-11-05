@@ -112,7 +112,8 @@ public sealed record DoctorBundle(
 /// <para>
 /// <b>Sections, in this order:</b> <c>bundle</c> (what the file is and what was done to it), <c>versions</c>,
 /// <c>status</c> (the report <c>jason status</c> composes, with no provider CLI, so no program runs), <c>runtime</c>
-/// (<c>system.info</c> as projected, each plugin by its codes, whether the data directories agree), <c>config</c> (the
+/// (<c>system.info</c> as projected, each plugin by its codes, whether the data directories agree), <c>routes</c>,
+/// <c>subscriptions</c> (each subscribed kind's standing and its newest chains, never an envelope), <c>config</c> (the
 /// settings file and the <c>JASON_*</c> variables by shape), <c>logs</c>, <c>journal</c> and <c>work_items</c> (counted,
 /// never read for their values), and <c>journal_entries</c> only when the journal was asked for.
 /// </para>
@@ -214,6 +215,9 @@ public static partial class DoctorComposer
     /// <summary>The most pages one listing is read for: what bounds the requests as well as the counts.</summary>
     public const int MaxPages = 10;
 
+    /// <summary>The newest chains' records listed for each subscribed kind.</summary>
+    public const int RecentRuns = 20;
+
     /// <summary>The journal's newest entries listed by their metadata.</summary>
     public const int RecentEntries = 50;
 
@@ -236,10 +240,10 @@ public static partial class DoctorComposer
     public const long HeaderBytes = 64L * 1024;
 
     /// <summary>
-    /// The most a bundle can be: the lists' budgets, one <see cref="SectionBytes"/> for each of the nine sections, the
+    /// The most a bundle can be: the lists' budgets, one <see cref="SectionBytes"/> for each of the ten sections, the
     /// header's budget, and a kilobyte for the names that hold them together.
     /// </summary>
-    public const long MaxBundleBytes = RecentErrorsBytes + SliceBytes + JournalEntriesBytes + (9 * SectionBytes) + HeaderBytes + 1024;
+    public const long MaxBundleBytes = RecentErrorsBytes + SliceBytes + JournalEntriesBytes + (10 * SectionBytes) + HeaderBytes + 1024;
 
     /// <summary>The most problem codes listed for one plugin; <c>problem_codes_truncated</c> says where there were more.</summary>
     public const int MaxProblemCodes = 20;
@@ -305,6 +309,7 @@ public static partial class DoctorComposer
     private const string Status = "status";
     private const string Runtime = "runtime";
     private const string Routes = "routes";
+    private const string Subscriptions = "subscriptions";
     private const string Config = "config";
     private const string Logs = "logs";
     private const string Journal = "journal";
@@ -354,6 +359,7 @@ public static partial class DoctorComposer
         "work/",
         "plugin packages",
         "a route's account and its identity",
+        "the envelopes subscription chains carried, and any member of a handler's record besides its plugin, start, outcome, code and duration",
         "the names of execution profiles",
         "anything read from the harness root: no folder or file under it is listed or opened, so no memory file's name or word, and the folders a project link recorded travel only with --include-journal",
         "the id of a plugin this repository does not ship, the name of a role a person added or of a skill pack Jason does not ship: each is written as its alias, " + string.Join(", ", NameAliases.Marks.Values) + ", one per distinct name, numbered " + NameAliases.Numbering + ", and the mapping is never written",
@@ -443,6 +449,7 @@ public static partial class DoctorComposer
             var answered = runtime.Info is not null ? reader : null;
 
             var routes = answered is null ? null : await RoutesAsync(answered, InstalledPlugins.Ids(env.Paths), cancellationToken).ConfigureAwait(false);
+            var subscriptions = answered is null ? null : await SubscriptionsAsync(answered, InstalledPlugins.Ids(env.Paths), cancellationToken).ConfigureAwait(false);
             var journal = answered is null ? null : await JournalAsync(answered, now, includeJournal, cancellationToken).ConfigureAwait(false);
             var workItems = answered is null ? null : await WorkItemsAsync(answered, journal, cancellationToken).ConfigureAwait(false);
             var versions = VersionsSection(runtime.Info);
@@ -458,6 +465,7 @@ public static partial class DoctorComposer
                 new(Status, JsonSerializer.SerializeToNode(status, Dialect)!, status.Checks.Count),
                 new(Runtime, runtime.Node, runtime.Plugins),
                 routes ?? new Section(Routes, NotReadSection(notRead), 0),
+                subscriptions ?? new Section(Subscriptions, NotReadSection(notRead), 0),
                 new(Config, config.Node, config.Items),
                 new(Logs, logs.Node, logs.Items),
                 journal?.Summary is { } summary ? new Section(Journal, summary, journal.Recent) : new Section(Journal, NotReadSection(notRead), 0),
@@ -904,6 +912,121 @@ public static partial class DoctorComposer
         // An operation is shown when the catalogue knows it; no plugin id or public id is an operation.
         static string OperationShown(string operation) =>
             Jason.Contracts.Operations.OperationCatalog.Knows(operation) ? operation : SettingKey.Hidden;
+    }
+
+    /// <summary>One subscribed kind as the bundle shows it: where its cursor stands, its chain, and its newest chains' records.</summary>
+    private sealed record KindShown(
+        string Kind,
+        IReadOnlyList<string> Chain,
+        string? Cursor,
+        string? Head,
+        int Lag,
+        IReadOnlyList<string> WaitingOn,
+        InFlightShown? InFlight,
+        IReadOnlyList<RunShown> Runs);
+
+    /// <summary>The chain a kind has in flight, by its ids and moments.</summary>
+    private sealed record InFlightShown(string Run, string Line, DateTimeOffset StartedAt, DateTimeOffset? RetryAt);
+
+    /// <summary>One chain's record, without the envelope it carried.</summary>
+    private sealed record RunShown(string Id, string Line, string Status, DateTimeOffset StartedAt, DateTimeOffset? EndedAt, IReadOnlyList<HandlerShown> Handlers, FailureShown? Failure);
+
+    /// <summary>One handler's turn in a chain: who, when, how it ended and how long it took — the record's other members never.</summary>
+    private sealed record HandlerShown(string PluginId, DateTimeOffset? StartedAt, string? Outcome, string? Code, long? DurationMs);
+
+    /// <summary>The handler a failed chain stopped at, by its failure's class and code.</summary>
+    private sealed record FailureShown(string PluginId, string Class, string Code);
+
+    /// <summary>
+    /// Which plugins each subscribed journal kind is handed to, where its cursor stands against the newest line of the
+    /// kind, which members of its chain are not valid in the load, the chain in flight, and the newest
+    /// <see cref="RecentRuns"/> chains' records — what a stalled or failing subscriber is diagnosed from. Built by a
+    /// projection that has no field for an envelope: what one plugin's handler made for the next is a plugin's own text,
+    /// and so is any member of a handler's record besides the ones shown, so nothing has to be taken out. A kind the
+    /// catalogue does not know, a plugin this installation does not hold and an id the runtime did not mint are written
+    /// as the settings write a key nobody chose, and the chains of a kind the catalogue does not know are not asked for,
+    /// so the reads are bounded by the catalogue whatever the listing holds.
+    /// </summary>
+    private static async Task<Section> SubscriptionsAsync(Reader reader, IReadOnlySet<string> installed, CancellationToken cancellationToken)
+    {
+        if (reader.Closed)
+        {
+            return new Section(Subscriptions, NotReadSection(NotAttempted), 0);
+        }
+
+        var listed = new List<SubscriptionKindDto>();
+        var paged = await reader.PageAsync<SubscriptionKindDto>(Operations.SubscriptionList, new JsonObject(), listed.Add, cancellationToken).ConfigureAwait(false);
+        if (paged is { Pages: 0, Failure: { } unread })
+        {
+            return new Section(Subscriptions, NotReadSection(unread), 0);
+        }
+
+        string Shown(string? key) => SettingKey.Shown(key ?? string.Empty, installed);
+        string? ShownOrNull(string? key) => key is null ? null : Shown(key);
+        string WordShown(string? word) => word is not null && Code().IsMatch(word) ? word : SettingKey.Hidden;
+
+        var failure = paged.Failure;
+        var kinds = new List<KindShown>();
+        foreach (var kind in listed)
+        {
+            var known = kind.Kind is { } name && Jason.Contracts.Journal.JournalKindCatalog.Knows(name);
+            var runs = new List<RunShown>();
+            if (known && !reader.Closed)
+            {
+                var (page, refused) = await reader.AskAsync<Page<SubscriptionRunDto>>(
+                    Operations.SubscriptionRuns,
+                    new JsonObject { ["kind"] = kind.Kind, ["limit"] = RecentRuns },
+                    cancellationToken).ConfigureAwait(false);
+                if (page?.Items is null)
+                {
+                    failure ??= refused ?? UnreadableAnswer;
+                }
+                else
+                {
+                    runs.AddRange(page.Items.Where(run => run is not null).Take(RecentRuns).Select(run => new RunShown(
+                        Shown(run.Id),
+                        Shown(run.Line),
+                        Word(run.Status.ToString()),
+                        run.StartedAt,
+                        run.EndedAt,
+                        [.. (run.Handlers ?? []).OfType<JsonObject>().Select(Handler)],
+                        run.Failure is { } failed ? new FailureShown(Shown(failed.PluginId), WordShown(failed.Class), WordShown(failed.Code)) : null)));
+                }
+            }
+
+            kinds.Add(new KindShown(
+                known ? kind.Kind! : SettingKey.Hidden,
+                [.. (kind.Chain ?? []).Select(Shown)],
+                ShownOrNull(kind.Cursor),
+                ShownOrNull(kind.Head),
+                kind.Lag,
+                [.. (kind.WaitingOn ?? []).Select(Shown)],
+                kind.InFlight is { } flight ? new InFlightShown(Shown(flight.Run), Shown(flight.Line), flight.StartedAt, flight.RetryAt) : null,
+                runs));
+        }
+
+        var node = new JsonObject
+        {
+            ["kinds"] = JsonSerializer.SerializeToNode(kinds, Dialect),
+            [Keys.Truncated] = paged.Truncated,
+        };
+        if (failure is not null)
+        {
+            node[Keys.Incomplete] = failure;
+        }
+
+        return new Section(Subscriptions, node, kinds.Count);
+
+        // The members the runner writes, each only where it is what it should be; whatever else a record holds stays.
+        HandlerShown Handler(JsonObject record) => new(
+            Shown(TextOf(record["plugin_id"])),
+            DateTimeOffset.TryParse(TextOf(record["started_at"]), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var started) ? started : null,
+            TextOf(record["outcome"]) is { } outcome ? WordShown(outcome) : null,
+            TextOf(record["code"]) is { } code ? WordShown(code) : null,
+            record["duration_ms"] is JsonValue duration && duration.TryGetValue<long>(out var milliseconds) ? milliseconds : null);
+
+        static string? TextOf(JsonNode? node) =>
+            node is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
     }
 
     /// <summary>The runtime section, the answer it was made from, how many plugins it lists, and whether the data directories agree.</summary>

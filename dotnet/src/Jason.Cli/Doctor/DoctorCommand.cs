@@ -733,6 +733,11 @@ public static class DoctorCommand
                                snapshot ids, and each route by its operation or default, its plugin id and whether it
                                binds an account — never which account or the identity that stands for it. An operation
                                the catalogue does not know and a plugin not installed here are written as {SettingKey.Hidden}.
+              subscriptions    each subscribed journal kind: its chain of plugins, its cursor and newest line, its lag, the
+                               chain's members not valid in the load and the chain in flight; and its newest {DoctorComposer.RecentRuns} chains,
+                               each by its ids, status and moments, every handler by its plugin, start, outcome, code and
+                               duration, and a failure by its plugin, class and code — never the envelope a chain carried.
+                               A kind the catalogue does not know is written as {SettingKey.Hidden} and its chains are not asked for.
               config           the settings file and every JASON_* variable by shape — keys, types, lengths — with a
                                value only where the list below carries it.
               logs             the log files by name, size and time; the newest error and fatal events, at most {DoctorComposer.RecentErrors},
@@ -746,7 +751,7 @@ public static class DoctorCommand
                                says where they were found: {DoctorComposer.FromJournal}, or {DoctorComposer.FromListOldestFirst} when not one page of the
                                journal could be read, which is oldest first and misses the newest of a long list.
               journal_entries  only with --include-journal: the journal's entries whole, newest first.
-            The journal and the work items are read {DoctorComposer.PageSize} to a page and never past {DoctorComposer.MaxPages} pages.
+            The journal, the work items and the subscribed kinds are read {DoctorComposer.PageSize} to a page and never past {DoctorComposer.MaxPages} pages.
 
             Bounds, in the bundle's own bytes: recent_errors at most {Size(DoctorComposer.RecentErrorsBytes)} and the slice at most {Size(DoctorComposer.SliceBytes)}, each
             keeping the newest events; journal_entries at most {Size(DoctorComposer.JournalEntriesBytes)}, keeping the newest entries; the rest

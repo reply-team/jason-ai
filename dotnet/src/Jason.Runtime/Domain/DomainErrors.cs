@@ -345,6 +345,29 @@ public static class DomainErrors
     public static ConflictException EventBackfillLimit(string id, int limit) =>
         new("event_backfill_limit", string.Create(CultureInfo.InvariantCulture, $"Account '{id}' already has {limit} spans waiting to be read again; one has to end before another is asked for."));
 
+    /// <summary>The kind has no cursor: no plugin of the active load subscribes to it, so there is nothing to rewind.</summary>
+    public static NotFoundException SubscriptionKindUnsubscribed(string kind) =>
+        new("subscription_kind_unsubscribed", $"No plugin of the active load subscribes to kind '{kind}'; `jason subscription list` lists the kinds that are.");
+
+    /// <summary>A rewind names a line the journal does not hold, or one of another kind than the one rewound.</summary>
+    public static NotFoundException SubscriptionLineNotFound(string kind, string line) =>
+        new("subscription_line_not_found", $"The journal holds no line '{line}' of kind '{kind}'.");
+
+    /// <summary>
+    /// A rewind whose target is after the kind's cursor would pass lines over unhandled, which is a skip, and no person is
+    /// given one: the cursor moves back or stays.
+    /// </summary>
+    public static ConflictException SubscriptionRewindForward(string kind) =>
+        new("subscription_rewind_forward", $"The target is after the cursor of kind '{kind}'; a rewind moves a cursor back, never forward.");
+
+    public static InvalidRequestException SubscriptionRewindNotHuman(ActorType type) =>
+        new(
+            "subscription_rewind_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot rewind a subscription; handing lines to plugins again is a person's word.");
+
+    public static InvalidRequestException SubscriptionRewindActorRequired() =>
+        new("actor_required", "actor.id is required on a rewind: what is recorded has to name the person whose word it is.");
+
     public static NotFoundException ProjectNotFound(string id) => new("project_not_found", $"No project with id '{id}'.");
 
     public static NotFoundException ProjectSlugNotFound(string slug) => new("project_not_found", $"No project with slug '{slug}'.");

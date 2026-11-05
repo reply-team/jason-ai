@@ -1,0 +1,15 @@
+{
+  "kind": "subscription_cursor_rewound",
+  "version": 1,
+  "case": "a moment before the journal's first line puts the cursor at the start",
+  "body": {
+    "key": "campaign_created",
+    "old": {
+      "line": "jrn_01JC0000000000000000000090"
+    },
+    "new": {
+      "line": null
+    }
+  },
+  "expect": "valid"
+}

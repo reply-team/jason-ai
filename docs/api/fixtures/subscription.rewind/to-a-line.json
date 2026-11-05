@@ -1,0 +1,25 @@
+{
+  "operation": "subscription.rewind",
+  "case": "to-a-line",
+  "request": {
+    "kind": "campaign_created",
+    "line": "jrn_1",
+    "actor": {
+      "type": "human",
+      "id": "Marta"
+    },
+    "reason": "the queue lost a day"
+  },
+  "status": 200,
+  "response": {
+    "kind": "campaign_created",
+    "chain": [
+      "acme-forwarder"
+    ],
+    "cursor": "jrn_3",
+    "head": "jrn_2",
+    "lag": 2,
+    "waiting_on": [],
+    "in_flight": null
+  }
+}

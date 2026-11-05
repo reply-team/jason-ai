@@ -1,0 +1,22 @@
+{
+  "kind": "subscription_cursor_rewound",
+  "version": 1,
+  "case": "a cursor names a journal line by its public id and nothing else",
+  "body": {
+    "key": "campaign_created",
+    "old": {
+      "line": "jrn_01JC0000000000000000000090"
+    },
+    "new": {
+      "line": "41"
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/new/line",
+        "reason": "pattern"
+      }
+    ]
+  }
+}
