@@ -1765,3 +1765,11 @@ and the envelope the last one returned — and keeps `Subscriptions:RunRecordsPe
 set otherwise; the oldest beyond that are deleted when the kind's next chain starts, and a chain in flight is never
 deleted. The lasting record of a failure is its `subscription_failed` line. The numbers under `Subscriptions` apply
 live; the order is read at a start and at each reload (§16).
+
+**The smallest complete subscriber.** [`plugins/journal-forwarder`](../plugins/journal-forwarder/README.md) is a
+`kind: subscriber` package of one `main.js`: for each line it is handed it POSTs the line, the envelope and the attempt
+as JSON to one URL the person names in the environment, under `host.http` and a granted host, and answers the envelope
+it was handed unchanged. It declares every kind the catalog lets a plugin subscribe to, the person narrows them by the
+grant, and it takes no Runtime API family and so no `host.call`. Its README is the operator's page, and its failure
+codes (`forwarder_unreachable`, `forwarder_unauthorized`, `forwarder_refused`, `forwarder_url_missing`,
+`forwarder_url_invalid`) show how a handler's own codes sit under the five classes.
