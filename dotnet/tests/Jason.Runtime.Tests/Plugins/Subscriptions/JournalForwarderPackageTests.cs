@@ -442,17 +442,17 @@ public sealed class JournalForwarderPackageTests
     private const string DigestList = "plugins/journal-forwarder.digests";
 
     /// <summary>
-    /// The digest of the package as v0.29.0 published it, version 1.0.0, computed from that tag's tree. A published tag's
+    /// The digest of the package as v0.29.0 shipped it in its tree, version 1.0.0, computed from that tag's tree. A tag's
     /// tree never changes, so this line never does: it is what lets <c>jason update</c> read a copy a person made by hand
     /// from that release as version 1.0.0, a version the release has a later one of, and replace it.
     /// </summary>
-    private const string FirstPublished = "1.0.0 sha256:9239df983b3709868f9c9dd0cce591c2fc15e3d702678fa4f24a7ed84f2f545b";
+    private const string FirstShipped = "1.0.0 sha256:9239df983b3709868f9c9dd0cce591c2fc15e3d702678fa4f24a7ed84f2f545b";
 
     /// <summary>
     /// A package's version is its content, as for Reply's package: the digest of the whole package has one line on the list
     /// beside it, <c>plugins/journal-forwarder.digests</c>, for the version its manifest names, and that line is the last. The
     /// release's manifest names the package from this list, and the runtime built from the same tree carries the package it
-    /// names. The list's first line is the package 0.29.0 published. Each failure says what to do.
+    /// names. The list's first line is the package 0.29.0 shipped in its tree. Each failure says what to do.
     /// </summary>
     /// <remarks>
     /// A line that changes or disappears in a diff is what this test cannot see, since the list it reads is the changed list:
@@ -472,9 +472,9 @@ public sealed class JournalForwarderPackageTests
         Assert.True(
             File.Exists(path),
             $"{DigestList} is missing. It records the digest of each version of the package, one line per version, beside the "
-            + "package and outside it: create it with a header comment, the line of the package 0.29.0 published and this line:"
+            + "package and outside it: create it with a header comment, the line of the package 0.29.0 shipped in its tree and this line:"
             + Environment.NewLine
-            + FirstPublished
+            + FirstShipped
             + Environment.NewLine
             + line);
 
@@ -495,9 +495,9 @@ public sealed class JournalForwarderPackageTests
         }
 
         var problems = new List<string>();
-        if (listed.Count == 0 || $"{listed[0].Version} {listed[0].Digest}" != FirstPublished)
+        if (listed.Count == 0 || $"{listed[0].Version} {listed[0].Digest}" != FirstShipped)
         {
-            problems.Add($"The first line of {DigestList} is the package 0.29.0 published, and it is: {FirstPublished}");
+            problems.Add($"The first line of {DigestList} is the package 0.29.0 shipped in its tree, and it is: {FirstShipped}");
         }
 
         foreach (var twice in listed.GroupBy(entry => entry.Version, StringComparer.Ordinal).Where(group => group.Count() > 1))

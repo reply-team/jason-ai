@@ -35,8 +35,8 @@ included) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is
 `jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in
 `checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it. The journal forwarder's
 package is installed the same way, by `jason plugin install journal-forwarder`, into
-`~/.jason/plugins/journal-forwarder`; its README says how a copy edited to name another receiver stays your own. The UI's package is
-placed by `jason ui install`, which the install guide runs and `jason update apply` runs at its end.
+`~/.jason/plugins/journal-forwarder`; its README says how a copy edited to name another receiver stays your own. The
+UI's package is placed by `jason ui install`, which the install guide runs and `jason update apply` runs at its end.
 On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry and minimal
 images may not; the install script stops, with the runtime's own message, rather than install a program that does
 not start.

@@ -48,8 +48,9 @@ public static class ReleaseAssets
     public const string ReplyPlugin = "jason-plugin-reply.zip";
 
     /// <summary>
-    /// The journal forwarder's package: the files of <c>plugins/journal-forwarder</c> at the release's tag, at the archive's
-    /// root, published and listed as <see cref="ReplyPlugin"/> is, and placed by <c>jason plugin install journal-forwarder</c>.
+    /// The journal forwarder's package: the files of <c>plugins/journal-forwarder</c> at the release's tag, at the
+    /// archive's root, published and listed as <see cref="ReplyPlugin"/> is, and placed by
+    /// <c>jason plugin install journal-forwarder</c>.
     /// </summary>
     public const string JournalForwarderPlugin = "jason-plugin-journal-forwarder.zip";
 

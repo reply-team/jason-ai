@@ -4,7 +4,7 @@
 # `system.info`'s `released_plugins`; it is not the archive's checksum in `checksums.txt`. Each release's manifest carries
 # the whole list as plugins.journal-forwarder.recorded, from which `jason update check` reads an installed copy's version
 # by digest.
-# The list starts with 1.0.0, the package v0.29.0 published in its tree, computed from that tag's tree: a copy made by
+# The list starts with 1.0.0, the package v0.29.0 shipped in its tree, computed from that tag's tree: a copy made by
 # hand from that release is read as 1.0.0 and updated. It holds every version the package has had, published or not,
 # because every bump appends a line.
 # A version is its content: any change to a file of the package is a new version, and a new version appends its line at
