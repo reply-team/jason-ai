@@ -155,10 +155,11 @@ the message names the operation or the argument that is missing. Being reserved,
 block](#the-provider-block). Nothing is detected in advance. For a route the provider's API does not have, the
 provider's answer to the call is the detection. For an argument, a provider that refuses what it does not know answers,
 and that answer is the detection; a provider that ignores it gives nothing to read, so a package sends a new argument
-only once it knows the provider takes it, by a read it makes before the call. The runtime falls back to nothing: the
-code is final, and what to do instead is the agent's to choose, another way or telling the person. When a plugin answers
-it is [the plugin guide, section 8](../plugins.md#8-failure-classes). Each capability a provider may lack for a while is
-a line below: the operation or the argument, and what an agent does instead where it is not offered.
+only once it knows the provider takes it: by what it knows of the provider, or by a read it makes before the call. The
+runtime falls back to nothing: the code is final, and what to do instead is the agent's to choose, another way or
+telling the person. When a plugin answers it is [the plugin guide, section 8](../plugins.md#8-failure-classes). Each
+capability a provider may lack for a while is a line below: the operation or the argument, and what an agent does
+instead where it is not offered.
 
 - `message.send` and `social_invitation.send` with `send_after`: where the provider does not offer it, leave it out and
   create the item with `not_before` at the moment instead; it is claimed once the moment has passed and, being
