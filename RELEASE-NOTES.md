@@ -33,7 +33,7 @@ skills ship with Jason, and the separate skills repository is archived.
   neither needs a network or git. For Claude Code they land in `~/.claude/skills` (`.claude/skills` with `--project`) and
   for Codex in `~/.agents/skills` (`.agents/skills` with `--project`). On Claude Code they are now standalone skills,
   so the `reply-adapter:` prefix on their names is gone. Asking the command for `core`, `ai-sdr-core`, `runtime` or
-  `agentic-runtime` ends with one sentence saying that those ship with Jason. [reply-cli's
+  `agentic-runtime` is refused with one sentence saying that those ship with Jason. [reply-cli's
   README](https://github.com/reply-team/reply-cli/blob/v0.19.0/README.md#skills) has the commands and the full table of
   assistants.
 - **The skills repository `reply-team/reply-skills` is archived.** A plugin installed from its marketplace keeps working
@@ -42,7 +42,7 @@ skills ship with Jason, and the separate skills repository is archived.
   naming them in its report. Jason's own skills, installed by `jason skills install`, replace those two.
 - **Taking the business pack without the runtime.** A host's own skill tools can install it from this repository;
   [the skills page](https://github.com/reply-team/jason-ai/blob/v0.28.0/skills/README.md#taking-the-business-pack-without-the-runtime)
-  says how, and there is nothing more convenient than that.
+  says how.
 - **Thirteen skills are verified.** Claude Code 2.1.318 read the approvals, installation, campaign-work, troubleshooting
   and in-session planner skills and eight of the nine role skills against the published 0.27.0, and their status is now
   `verified`. The responder role skill stays `draft`: no host has yet read it handling a real reply.
@@ -96,6 +96,7 @@ that names another installation alone, so nothing is lost.
 
 On Linux, kitty, foot, gnome-terminal, xfce4-terminal, mate-terminal and wezterm are started in the form each takes;
 any other terminal program is given the host after `-e` as separate arguments.
+
 Under Windows PowerShell 5.1 and cmd.exe the inner quotes of `--value '{"host":"codex"}'` are lost, so give the value in a file:
 `jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`.
 
