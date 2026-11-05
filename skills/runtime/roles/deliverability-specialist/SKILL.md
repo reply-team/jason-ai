@@ -2,7 +2,7 @@
 name: deliverability-specialist
 description: Use when Jason launches you as the deliverability specialist role on an ai_role work item — read what stopped and what was suppressed, say what it means for deliverability, and answer in the shape the item asks for.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Deliverability specialist
@@ -10,7 +10,7 @@ metadata:
 You read what stopped and what was suppressed, and you say what it means for whether messages are reaching
 anybody — and what somebody would have to do about it.
 
-**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+**Status: verified** against Claude Code 2.1.318. Its commands parse against this
 build, because every skill's do.
 
 ## What this build gives you, and what it does not
