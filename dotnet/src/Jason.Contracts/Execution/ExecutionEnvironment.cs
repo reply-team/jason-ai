@@ -9,6 +9,10 @@ namespace Jason.Contracts.Execution;
 /// calling: a claim is still verified against the attempt the runtime knows, so a variable set by hand buys
 /// nothing that was not already true.
 /// </para>
+/// <para>
+/// The attempt's variable has a second purpose: a CLI that finds it sends its value with every request as
+/// <see cref="AttemptHeader"/>, and the verbs that are a person's own word refuse a request that carries it.
+/// </para>
 /// </summary>
 public static class ExecutionEnvironment
 {
@@ -17,4 +21,10 @@ public static class ExecutionEnvironment
 
     /// <summary>The work item that attempt belongs to.</summary>
     public const string WorkItemIdVariable = "JASON_WORK_ITEM_ID";
+
+    /// <summary>
+    /// The header a CLI running inside an attempt sends on every request, reads included, with the attempt's id: its
+    /// statement of where it runs, beside the token's statement of what it may do. It is never a fencing token.
+    /// </summary>
+    public const string AttemptHeader = "Jason-Attempt";
 }
