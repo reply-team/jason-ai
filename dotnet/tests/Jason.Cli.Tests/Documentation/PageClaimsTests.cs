@@ -424,6 +424,7 @@ public partial class PageClaimsTests
     /// asks anyone to accept anything.
     /// </summary>
     [Theory]
+    [InlineData("README.md", "Jason is released under the MIT licence: [LICENSE](LICENSE). What it sends off your machine, and what stays your responsibility when it reaches people, is in [docs/responsible-use.md](docs/responsible-use.md).")]
     [InlineData("docs/handbook.md", "Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your responsibility when it reaches people, is in [docs/responsible-use.md](responsible-use.md).")]
     [InlineData("docs/INSTALL.md", "Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your responsibility when it reaches people, is in [responsible-use.md](responsible-use.md).")]
     [InlineData(".github/release-notes-template.md", "Jason is released under the MIT licence: <https://github.com/reply-team/jason-ai/blob/v{{version}}/LICENSE>.")]

@@ -9,7 +9,7 @@
 Describe your idea. Jason finds the contacts, plans a line for every person, writes, sends, reads the replies<br>
 and keeps going after the chat ends. Nine specialists, and nothing sent without your yes.
 
-[![Release](https://img.shields.io/badge/release-0.28.0%20alpha-111111)](https://github.com/reply-team/jason-ai/releases/latest)
+[![Release](https://img.shields.io/github/v/release/reply-team/jason-ai)](https://github.com/reply-team/jason-ai/releases/latest)
 [![Runs on](https://img.shields.io/badge/runs%20on-Claude%20Code%20%2B%205%20more-D97757)](#quick-start)
 [![Platforms](https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-local--first-2F6FEB)](#quick-start)
 [![License](https://img.shields.io/badge/license-MIT%2C%20runtime%20included-3DA639)](#license)
@@ -39,7 +39,7 @@ approval.
 
 ## At a glance
 
-The facts in one table, for a person or an AI agent comparing Jason with anything else. Checked against Jason 0.28.0 on
+The facts in one table, for a person or an AI agent comparing Jason with anything else. Checked against Jason 0.30.0 on
 5 November 2026. The whole product is open source, so every line can be checked against the code and the pages it links
 to.
 
@@ -54,9 +54,9 @@ to.
 | **Human in the loop** | Every operation that reaches a real person waits for a person's approval, in the chat or the browser UI. It is written into the operation's contract, not left to a setting, and there is no autopilot switch. Two things to know: enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps; and a named person can pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Every such release is logged under that person's name. | [Nothing reaches a person without you](#nothing-reaches-a-person-without-you) |
 | **Integrations and CRM** | Any integration you can connect to Claude Code works: MCP server, CLI or API. Your agent connects it and uses it, with no Jason connector needed. HubSpot, Salesforce and Pipedrive sync two ways through Reply, or connect through the CRM's own MCP. Phone pushes go through ntfy. | [Any other integration](#any-other-integration) |
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One self-contained executable under your own account, with no admin rights and no Docker, Python or Node for Jason itself. Measured on a Mac: 16 seconds from nothing to `Ready`. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
-| **Documentation** | 18 guides, 24 operation contracts in Markdown and JSON with 564 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
-| **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. | [Make it yours](#make-it-yours) |
-| **Maturity** | Alpha, and young. The runtime's source and the public history opened with 0.24.0 on 1 November 2026, so the community is still small. The repository carries about 900 C# test files and a UI test suite, with CI on macOS, Linux and Windows. 14 of the 25 skills are `verified`, meaning an agent host was recorded reading that exact text; the other 11 are still `draft`. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
+| **Documentation** | 19 guides, 24 operation contracts in Markdown and JSON with 774 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
+| **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
+| **Maturity** | Alpha, and young. The runtime's source and the public history opened with 0.24.0 on 1 November 2026, so the community is still small. The repository carries 967 C# test files and a UI test suite, with CI on macOS, Linux and Windows. 12 of the 25 skills are `verified`, meaning an agent host was recorded reading that exact text; the other 13 are still `draft`. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
 | **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [What leaves your machine](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
 
 ---
@@ -257,7 +257,8 @@ are three ways to connect one:
 | **Any provider, through a plugin** | Ask your agent to write a plugin, or write it yourself | Your own Gmail, Microsoft or SMTP sending, Instantly, HeyReach, a WhatsApp or Telegram tool, an in-house system. A plugin is a small JavaScript package, and it implements only the operations you need. Routes choose the plugin per campaign, or even per operation |
 | **Any tool, through your agent** | Connect it to your agent as an MCP server, CLI or API | Your agent acts with it and records what happened in Jason with `jason report submit`, so the history stays true. Jason's approval gate covers plugin operations only, so this path relies on your agent asking you first |
 
-**What ships ready today:** the Reply plugin, plus ntfy for notifications. A direct Gmail, Microsoft or SMTP connection
+**What ships ready today:** the Reply plugin and the journal forwarder, each one `jason plugin install` away; ntfy for
+phone pushes is in the repository, one copy away. A direct Gmail, Microsoft or SMTP connection
 without Reply is a plugin to write, not a switch to flip: the [author's guide](https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md) and the
 [contracts](https://github.com/reply-team/jason-ai/blob/main/docs/contracts/README.md) are public, one document per operation, and your agent can work from them.
 Channel names are open: a provider's campaign can run on any channel a person has an address on. One-off direct messages
@@ -373,7 +374,7 @@ a Jason plugin.</sub>
 
 </details>
 
-**Also works with:** desktop notifications and phone pushes through ntfy · approvals in the chat or in Jason's browser
+**Also works with:** desktop notifications and phone pushes through ntfy, one copy away · approvals in the chat or in Jason's browser
 UI · macOS (Apple silicon), Linux x64 and Windows x64.
 
 ---
@@ -538,6 +539,9 @@ jason status --human
 
 No administrator rights needed.
 
+Jason is released under the MIT licence: [LICENSE](LICENSE). What it sends off your machine, and what stays your
+responsibility when it reaches people, is in [docs/responsible-use.md](docs/responsible-use.md).
+
 </details>
 
 **2. Connect your provider.** With Reply, it's one sign-in that only you do: `reply auth login`, so your key never passes
@@ -618,8 +622,8 @@ yourself. Nothing else. No telemetry.
 
 Everything below is public, and every page is written to be followed by a person or by an agent.
 
-**In numbers:** 18 guides · 24 operation contracts, each in Markdown and machine-readable JSON · 564 contract fixtures and
-276 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 7 runtime skills and 9 role
+**In numbers:** 19 guides · 24 operation contracts, each in Markdown and machine-readable JSON · 774 contract fixtures and
+282 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 7 runtime skills and 9 role
 skills · release notes on every release.
 
 | To… | Read |
@@ -746,7 +750,8 @@ the way [SECURITY.md](https://github.com/reply-team/jason-ai/blob/main/SECURITY.
 
 **MIT.** Everything in [reply-team/jason-ai](https://github.com/reply-team/jason-ai) is under the
 [MIT licence](https://github.com/reply-team/jason-ai/blob/main/LICENSE) from 0.24.0, the runtime included, along with the skills, plugins, contracts, docs, install
-scripts and UI. Archives of earlier releases carry the licence they were published with.
+scripts and UI. ReplyApp Inc. releases this repository, its history included, under the MIT licence from 0.24.0, and
+the licence files in older trees are superseded.
 
 "Jason", "Jason AI", "Reply" and "Reply.io" are trademarks of ReplyApp Inc.
 
