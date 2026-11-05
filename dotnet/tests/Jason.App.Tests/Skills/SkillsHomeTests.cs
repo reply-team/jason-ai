@@ -25,6 +25,7 @@ public class SkillsHomeTests
                 && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
 
     [Fact]
+    [Critical(Family.D3, "no document says the business pack is elsewhere")]
     public void No_public_document_still_says_the_business_half_has_not_moved()
     {
         foreach (var file in PublicDocuments())
@@ -46,6 +47,7 @@ public class SkillsHomeTests
     /// is published now.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "the old home is named as the former one")]
     public void A_document_that_names_the_old_home_names_it_as_the_former_one()
     {
         foreach (var file in PublicDocuments())
