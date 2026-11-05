@@ -10,8 +10,8 @@ using Jason.Runtime.Tests.Integration;
 namespace Jason.Runtime.Tests.Plugins.Invocation;
 
 /// <summary>
-/// A plugin of any kind is invoked for a journal kind it subscribes to, and only for one the person granted it: the kind
-/// gate of a subscription reads the frozen grant, never the plugin's kind, so a provider, a notification plugin and a
+/// A plugin of any kind is invoked for a journal kind it subscribes to, and only for one the person granted it: what
+/// admits a subscription is the frozen grant, never the plugin's kind, so a provider, a notification plugin and a
 /// subscriber are each admitted with the grant and refused without it, before a process exists.
 /// </summary>
 [Collection(ProcessEnvironmentCollection.Name)]
