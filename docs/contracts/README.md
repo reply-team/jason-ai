@@ -155,10 +155,11 @@ the message names the operation or the argument that is missing. Being reserved,
 block](#the-provider-block). Nothing is detected in advance. For a route the provider's API does not have, the
 provider's answer to the call is the detection. For an argument, a provider that refuses what it does not know answers,
 and that answer is the detection; a provider that ignores it gives nothing to read, so a package sends a new argument
-only once it knows the provider takes it, by a read it makes before the call. The runtime falls back to nothing: the
-code is final, and what to do instead is the agent's to choose, another way or telling the person. When a plugin answers
-it is [the plugin guide, section 8](../plugins.md#8-failure-classes). Each capability a provider may lack for a while is
-a line below: the operation or the argument, and what an agent does instead where it is not offered.
+only once it knows the provider takes it: by what it knows of the provider, or by a read it makes before the call. The
+runtime falls back to nothing: the code is final, and what to do instead is the agent's to choose, another way or
+telling the person. When a plugin answers it is [the plugin guide, section 8](../plugins.md#8-failure-classes). Each
+capability a provider may lack for a while is a line below: the operation or the argument, and what an agent does
+instead where it is not offered.
 
 - `message.send` and `social_invitation.send` with `send_after`: where the provider does not offer it, leave it out and
   create the item with `not_before` at the moment instead; it is claimed once the moment has passed and, being
@@ -283,14 +284,16 @@ keep is never lost to its own check. A pattern that does not finish in time is n
 line is written and nothing is said of it.
 
 **How a kind changes.** A kind the runtime starts writing arrives with its document in the same pull request. A body
-grows by optional fields only, each named in `field_since` with the release that added it; a field never changes
-meaning, and no field is removed. A kind is never renamed or retired while a release that writes it is supported. A
-closed list of words in a body may gain a word when a later release writes one, so a line written before then holds
-only the words that release knew. A test reads the documents and body fixtures of the last published release (at a
-release's own tag, the release before it) and refuses a document removed, a `since` changed, a body field removed or
-newly required, a `field_since` entry or an entity dropped, an entity once named on every line now named on some or
-changing `each`, a kind no longer subscribable, or a body the release published as valid that is refused now. A kind
-may become subscribable.
+grows by optional fields, and by a branch added to an `anyOf`, only, each field named in `field_since` with the release
+that added it; a field never changes meaning, and no field is removed. A kind is never renamed or retired while a
+release that writes it is supported. A closed list of words in a body may gain a word when a later release writes one,
+so a line written before then holds only the words that release knew. A test reads the documents and body fixtures of
+the last published release (at a release's own tag, the release before it) and refuses a document removed, a `since`
+changed, a body field removed or newly required (a field the release did not describe is not newly required of the body
+where only a branch added to an `anyOf` the release already had requires it, or only an object the release did not
+describe, since no body the release published could have needed it), a `field_since` entry or an entity dropped, an
+entity once named on every line now named on some or changing `each`, a kind no longer subscribable, or a body the
+release published as valid that is refused now. A kind may become subscribable.
 
 Every kind this build reserves, rendered from the documents by a test and compared whole:
 

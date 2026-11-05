@@ -216,6 +216,7 @@ public partial class ExecutionProfileDocTests
     /// over the two design pages alone.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "no page says a refused phrase")]
     public void No_Markdown_file_the_tree_holds_says_the_two_refused_phrases()
     {
         var root = RepositoryTree.Root();

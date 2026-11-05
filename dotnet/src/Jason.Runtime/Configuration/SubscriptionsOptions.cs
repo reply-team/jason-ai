@@ -52,7 +52,11 @@ public sealed class SubscriptionsOptions
     /// <summary>How many times a handler whose invocation ended transient is run again before the chain ends.</summary>
     public int TransientRetries { get; set; } = 3;
 
-    /// <summary>The wait before the first repeat of a transient handler, doubled at each repeat and held to an hour.</summary>
+    /// <summary>
+    /// The wait before the first repeat of a transient handler, doubled at each repeat and held to an hour; and the wait
+    /// before a kind whose turn gave out for a reason of the runtime's own is offered again, doubled at each give-out in a
+    /// row and held to the same hour.
+    /// </summary>
     public int RetryBackoffSeconds { get; set; } = 30;
 
     /// <summary>
