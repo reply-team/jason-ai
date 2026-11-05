@@ -36,10 +36,11 @@ skills ship with Jason, and the separate skills repository is archived.
   `agentic-runtime` is refused with one sentence saying that those ship with Jason. [reply-cli's
   README](https://github.com/reply-team/reply-cli/blob/v0.19.0/README.md#skills) has the commands and the full table of
   assistants.
-- **The skills repository `reply-team/reply-skills` is archived.** A plugin installed from its marketplace keeps working
-  and is read-only: it never updates. `reply skills install` removes the old `reply-adapter@reply-skills` plugin once the
-  copied skills are in place, and leaves `ai-sdr-core@reply-skills` and `agentic-runtime@reply-skills` installed,
-  naming them in its report. Jason's own skills, installed by `jason skills install`, replace those two.
+- **The skills repository `reply-team/reply-skills`, formerly the home of all three packs, is archived.** A plugin
+  installed from its marketplace keeps working and is read-only: it never updates. `reply skills install` removes the
+  old `reply-adapter@reply-skills` plugin once the copied skills are in place, and leaves `ai-sdr-core@reply-skills` and
+  `agentic-runtime@reply-skills` installed, naming them in its report. Jason's own skills, installed by
+  `jason skills install`, replace those two.
 - **Taking the business pack without the runtime.** A host's own skill tools can install it from this repository;
   [the skills page](https://github.com/reply-team/jason-ai/blob/v0.28.0/skills/README.md#taking-the-business-pack-without-the-runtime)
   says how.
