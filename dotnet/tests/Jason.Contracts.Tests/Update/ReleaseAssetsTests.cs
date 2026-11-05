@@ -45,6 +45,15 @@ public class ReleaseAssetsTests
         Assert.Equal("jason-plugin-reply.zip", ReleaseAssets.ReplyPlugin);
 
     /// <summary>
+    /// The journal forwarder's package is a release's own file as well, named as every plugin package is named, by its id
+    /// after <c>jason-plugin-</c>: that is the name the manifest's writer requires of a package it lists under
+    /// <c>plugins</c>, and the name <c>jason plugin install journal-forwarder</c> downloads.
+    /// </summary>
+    [Fact]
+    public void The_journal_forwarder_s_package_has_one_stable_asset_name() =>
+        Assert.Equal("jason-plugin-journal-forwarder.zip", ReleaseAssets.JournalForwarderPlugin);
+
+    /// <summary>
     /// The UI's package, which <c>jason ui install</c> fetches beside the checksums: one name for every release, its
     /// version inside its own <c>manifest.json</c>.
     /// </summary>
@@ -54,14 +63,14 @@ public class ReleaseAssetsTests
 
     /// <summary>
     /// Every file a release carries, in the order the workflow attaches them: the three archives, the feed and its
-    /// checksums, the two install scripts, the plugin's package and the UI's. Nine, and a tenth is a decision rather
-    /// than a drift.
+    /// checksums, the two install scripts, the two plugins' packages, Reply's and the journal forwarder's, and the UI's.
+    /// Ten, and an eleventh is a decision rather than a drift.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "the release's asset set")]
-    public void A_release_publishes_exactly_these_nine_files() =>
+    public void A_release_publishes_exactly_these_ten_files() =>
         Assert.Equal(
-            ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip", "jason-ui.zip"],
+            ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip", "jason-plugin-journal-forwarder.zip", "jason-ui.zip"],
             ReleaseAssets.Published);
 
     /// <summary>

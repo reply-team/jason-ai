@@ -138,7 +138,81 @@ public sealed class UpdatePluginsStepTests
         await applier.ApplyAsync(Request(installation), Ct);
 
         Assert.False(Path.Exists(installation.Paths.PluginPackageDirectory("reply")));
-        Assert.Contains("plugins: reply is not installed, so none was placed; run: jason plugin install reply", applier.Steps);
+        Assert.Contains("plugins: reply is not installed, so none was placed; `jason plugin install reply` installs it", applier.Steps);
+    }
+
+    /// <summary>The journal forwarder's package as the release before this one published it, and as this one publishes it.</summary>
+    private static PluginPackage ForwarderEarlier { get; } = Plugin("journal-forwarder", "1.0.0");
+
+    private static PluginPackage ForwarderLatest { get; } = Plugin("journal-forwarder", "1.0.1");
+
+    /// <summary>
+    /// A release publishes two packages, Reply's and the journal forwarder's, and the step knows neither by name: each
+    /// installed copy is read against its own id's record, so both behind are both replaced, each kept for a rollback,
+    /// each named in the ledger and in a line of its own.
+    /// </summary>
+    [Fact]
+    public async Task Each_released_package_is_read_against_its_own_record_and_both_behind_are_replaced()
+    {
+        using var installation = new FakeInstallation()
+            .WithInstalledPlugin(Earlier).WithInstalledPlugin(ForwarderEarlier)
+            .PublishingPlugin(Latest, Earlier).PublishingPlugin(ForwarderLatest, ForwarderEarlier);
+        var applier = installation.Applier();
+
+        var ledger = await applier.ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(Latest.Digest, installation.PluginDigest("reply"));
+        Assert.Equal(ForwarderLatest.Digest, installation.PluginDigest("journal-forwarder"));
+        Assert.Equal(ForwarderEarlier.Digest, PackageDigestOf(installation.Update.PreviousPlugin("journal-forwarder")));
+        Assert.Equal(
+            [
+                new UpdatePluginReplacement("journal-forwarder", ForwarderEarlier.Version, ForwarderEarlier.Digest, ForwarderLatest.Version, ForwarderLatest.Digest),
+                Replacement,
+            ],
+            installation.Ledger()!.Plugins.OrderBy(plugin => plugin.Id, StringComparer.Ordinal));
+        Assert.Contains(Replaced, applier.Steps);
+        Assert.Contains("plugins: journal-forwarder 1.0.0 -> 1.0.1", applier.Steps);
+    }
+
+    /// <summary>
+    /// The forwarder's copy a person edited to name another receiver has a digest no release recorded: it is theirs, so it
+    /// is left byte for byte with its own line, while Reply's package behind the release is replaced beside it; and a
+    /// forwarder nobody installed is named with the command that installs it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_forwarder_edited_here_or_not_installed_is_left_while_reply_s_package_is_replaced(bool installed)
+    {
+        using var installation = new FakeInstallation().WithInstalledPlugin(Earlier).PublishingPlugin(Latest, Earlier).PublishingPlugin(ForwarderLatest, ForwarderEarlier);
+        var manifest = Path.Combine(installation.Paths.PluginPackageDirectory("journal-forwarder"), "plugin.yaml");
+        byte[]? before = null;
+        if (installed)
+        {
+            installation.WithInstalledPlugin(ForwarderEarlier);
+            File.AppendAllText(manifest, "# receiver: another host\n");
+            before = File.ReadAllBytes(manifest);
+        }
+
+        var applier = installation.Applier();
+
+        var ledger = await applier.ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(Latest.Digest, installation.PluginDigest("reply"));
+        Assert.Equal([Replacement], installation.Ledger()!.Plugins);
+        Assert.Contains(Replaced, applier.Steps);
+        if (installed)
+        {
+            Assert.Equal(before, File.ReadAllBytes(manifest));
+            Assert.Contains("plugins: journal-forwarder differs from every package a release published, so it was left as it is", applier.Steps);
+        }
+        else
+        {
+            Assert.False(Path.Exists(installation.Paths.PluginPackageDirectory("journal-forwarder")));
+            Assert.Contains("plugins: journal-forwarder is not installed, so none was placed; `jason plugin install journal-forwarder` installs it", applier.Steps);
+        }
     }
 
     /// <summary>A release that publishes no plugin package says so in one line, and the update goes on to its end.</summary>
