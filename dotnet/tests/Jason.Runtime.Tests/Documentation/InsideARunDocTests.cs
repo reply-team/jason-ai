@@ -29,7 +29,7 @@ public sealed partial class InsideARunDocTests
         var flat = Flat(section);
         Assert.Contains($"in `{ExecutionEnvironment.AttemptIdVariable}` — says so on every request it sends, reads included", flat, StringComparison.Ordinal);
         Assert.Contains("it is not a credential, it opens nothing, and it fences nothing", flat, StringComparison.Ordinal);
-        Assert.Contains($"answer it `{Status}` with the code `{Refusal.Code}` before the body is read", flat, StringComparison.Ordinal);
+        Assert.Contains($"answer it `{Status}` with the code `{Refusal.Code}` before the body is read, and record nothing", flat, StringComparison.Ordinal);
     }
 
     /// <summary>The bullet that lists a person's decisions lists exactly the five that refuse, the rule, and what it is worth.</summary>
@@ -58,7 +58,7 @@ public sealed partial class InsideARunDocTests
             page,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"A request from inside a run is refused with `{Refusal.Code}` whoever it names, since the CLI names its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.",
+            $"An approval or an answer sent from inside a run is refused with `{Refusal.Code}` whoever it names, since the CLI names its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.",
             page,
             StringComparison.Ordinal);
     }
