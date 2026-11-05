@@ -1,0 +1,59 @@
+{
+  "kind": "subscription_cursor_rewound",
+  "version": 1,
+  "since": "0.29.0",
+  "summary": "A person moved a subscribed kind's cursor back, so the kind's chain hands its plugins again every line after the new cursor; every rewind is a line of its own.",
+  "subscribable": false,
+  "entities": {},
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "key",
+      "old",
+      "new"
+    ],
+    "properties": {
+      "key": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "description": "The kind whose cursor moved back."
+      },
+      "old": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "line"
+        ],
+        "properties": {
+          "line": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^jrn_",
+            "description": "The last line the kind's chain had handled before the rewind; null when it had handled none."
+          }
+        }
+      },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "line"
+        ],
+        "properties": {
+          "line": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^jrn_",
+            "description": "The line the cursor now stands after, the next line handed being the first of the kind after it; null when the cursor stands at the journal's start."
+          }
+        }
+      }
+    }
+  }
+}

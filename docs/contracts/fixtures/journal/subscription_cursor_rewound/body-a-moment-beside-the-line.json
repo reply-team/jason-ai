@@ -1,0 +1,23 @@
+{
+  "kind": "subscription_cursor_rewound",
+  "version": 1,
+  "case": "the moment a person asked for is not kept beside the line it resolved to",
+  "body": {
+    "key": "campaign_created",
+    "old": {
+      "line": "jrn_01JC0000000000000000000090"
+    },
+    "new": {
+      "line": "jrn_01JC0000000000000000000041",
+      "since": "2026-01-15T09:00:00Z"
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/new/since",
+        "reason": "additional_properties"
+      }
+    ]
+  }
+}
