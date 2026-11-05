@@ -2,7 +2,7 @@
 name: troubleshooting-jason
 description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the twelve states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Troubleshooting Jason
@@ -12,7 +12,7 @@ told: waiting for a moment that has not arrived, waiting for a person who has no
 it cannot route. This skill is how to tell those apart from a genuine failure, and how to name the one repair
 that is safe rather than the first one that comes to mind.
 
-**Status: draft.** No agent host has read this text in the state it ships in. It covers what this build records and
+**Status: verified** against Claude Code 2.1.318. It covers what this build records and
 nothing else.
 
 ## Look here first, in this order

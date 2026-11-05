@@ -2,7 +2,7 @@
 name: researcher
 description: Use when Jason launches you as the researcher role on an ai_role work item — find and verify what the brief asks about an account or a person, answer in the shape the item requires, and keep the campaign note that your later runs will read.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Researcher
@@ -10,7 +10,7 @@ metadata:
 You find and verify what the brief asks about an account or a person, and you answer with what you established
 and what you could not.
 
-**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+**Status: verified** against Claude Code 2.1.318. Its commands parse against this
 build, because every skill's do.
 
 <!-- craft:begin -->

@@ -10,8 +10,7 @@ so a skill cannot drift from the program it ships beside.
 
 **What they do not teach yet.** None of the seven mentions `jason skills install`; `jason skills update` is
 mentioned only by `operating-the-installation`, `jason status` only by it and `troubleshooting-jason`, and
-`jason logs` and `jason doctor` are taught by `troubleshooting-jason` only; both of those skills are drafts
-until a host reads them. `verified` in
+`jason logs` and `jason doctor` are taught by `troubleshooting-jason` only. `verified` in
 this repository means a named agent host read *that exact text* — its description and its body — while driving
 this runtime and the digest of what it read is recorded, so a verified text cannot gain the new verbs without
 being re-read by a host — which is why the ones verified before 0.2.0 still teach what this build did before those
@@ -22,25 +21,25 @@ verbs existed, correctly and incompletely.
 One per moment somebody asks for something, because a host chooses a skill by its description and a
 description that promises everything matches nothing.
 
-- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft** until a host reads its new text.
+- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **verified.**
   Turning an objective into durable campaign work and following it: the provider check, what the person has
   already written down, the campaign and its goals, the people it is about, provider operations and AI role work, what the
   runtime does with them afterwards, answering a conversation after the responder has been at it, and stopping or holding work.
-- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **draft** until a host reads its new text.
+- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.**
   What Jason is waiting for a person to decide: the approvals parked at a claim and the questions a running role
   raised — including when a notification brought the person — presented in their own words and recorded as their
   decision, and the standing approval a person sets in advance for one category of reply in a campaign.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft** until a host reads its new text.
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.**
   The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI and
   unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
   span of one again, the hosts it can launch, whether notifications reach the person and turning them off, whether a
   newer version exists, and installing it or taking it off again.
-- [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **draft** until a host reads its new text. Why
+- [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why
   work stopped: the runtime, the work item's error code and the chronicle; the states a person needs told
   apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
-- [`planner-in-session`](planner-in-session/SKILL.md) — **draft.** The planner's judgement in a person's own
+- [`planner-in-session`](planner-in-session/SKILL.md) — **verified.** The planner's judgement in a person's own
   conversation about a campaign: its first words on where the person's files live, an opening in the order a real
   start needs, with who writes and how the company sounds set as the person's word, taking a brief as it comes and
   asking for what is missing one question at a time, what stays a quick look, what is agreed with the person before
@@ -87,26 +86,25 @@ takes — held identical by a test. What
 differs between them is one paragraph of purpose and one of what this build can and cannot give that role — and,
 for a role that sits with a person, the judgement it shares with its session file (below).
 
-- [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** What a brief asks about an account or a person,
+- [`roles/researcher`](roles/researcher/SKILL.md) — **verified.** What a brief asks about an account or a person,
   found and verified: what counts as established, why anything from outside Jason is the host's doing and never
   the runtime's promise, an answer that says what was established and what was not, and what belongs in its note.
-- [`roles/manager`](roles/manager/SKILL.md) — **draft**, because it was re-authored onto the shared launch
-  contract after the run that last read it, and no host has read the text that ships. The review a manager
+- [`roles/manager`](roles/manager/SKILL.md) — **verified.** The review a manager
   is launched for: why it was
   woken, what a noticed reply or provider-event line asks of it and whose thread it is, what it reads and in which
   order, what it may decide alone, how it asks a person the one question it cannot answer, and the line it leaves in
   the chronicle every time; and for replies, the verdicts it reads by category and the responder it defers to.
-- [`roles/planner`](roles/planner/SKILL.md) — **draft.** The next short horizon of work: what a planner reads
+- [`roles/planner`](roles/planner/SKILL.md) — **verified.** The next short horizon of work: what a planner reads
   before it plans, the order a first campaign opens in, a campaign never split only to give some of its people
   another tone of voice, the goals a campaign is made with, what this build stores of a plan and what it does not, and how a horizon becomes work items a
   dispatcher will claim.
-- [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
+- [`roles/copywriter`](roles/copywriter/SKILL.md) — **verified.** The campaign-level messaging: what the campaign
   itself says about voice and guardrails, the tone and the sender it writes in, where the copy goes when it is
   written, when one text may be a template for a whole audience, and why writing it is not sending it.
-- [`roles/personalizer`](roles/personalizer/SKILL.md) — **draft.** The messaging adapted to one person: what
+- [`roles/personalizer`](roles/personalizer/SKILL.md) — **verified.** The messaging adapted to one person: what
   this runtime knows about them and where to read it, the tone and the sender's forms it writes in, where the
   wording goes afterwards, and why a contact record is not the place for it.
-- [`roles/critic`](roles/critic/SKILL.md) — **draft.** The review of a draft against the brief and the
+- [`roles/critic`](roles/critic/SKILL.md) — **verified.** The review of a draft against the brief and the
   guardrails: what to read before judging it, what a verdict is worth here, and why saying plainly what fails
   is the whole of the job.
 - [`roles/responder`](roles/responder/SKILL.md) — **draft.** What a reply means and what should happen
@@ -114,10 +112,10 @@ for a role that sits with a person, the judgement it shares with its session fil
   the data file beside the skill and by the person's own, the verdict is recorded first, and the reaction is an
   act of its own, a question for the person, or an answer in the person's own thread as a draft, which a person
   approves or a standing approval they set for its category releases.
-- [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the four things
+- [`roles/analyst`](roles/analyst/SKILL.md) — **verified.** What is working in a campaign, read off the four things
   this runtime keeps — the work items, the chronicle, the reports and the campaign's activity, with the replies counted by category over a window — and honest about
   where the record runs out.
-- [`roles/deliverability-specialist`](roles/deliverability-specialist/SKILL.md) — **draft.** What the
+- [`roles/deliverability-specialist`](roles/deliverability-specialist/SKILL.md) — **verified.** What the
   do-not-contact register and the failed items say about whether anything is arriving, and what somebody
   would have to do outside Jason about it.
 
@@ -127,15 +125,15 @@ SHA-256 of the text it read.
 
 | role | status | host that read it | Jason | the text it read |
 |---|---|---|---|---|
-| `manager` | draft (re-authored onto the contract since its last reading) | — | — | — |
-| `planner` | draft | — | — | — |
-| `researcher` | draft | — | — | — |
-| `copywriter` | draft | — | — | — |
-| `personalizer` | draft | — | — | — |
-| `critic` | draft | — | — | — |
+| `manager` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:d4b45e6f8d2470757427eb87bed9bbb4669d087dcbb29f91b145aad9f51bffb1` |
+| `planner` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:8e4f5ddb1a2b72a220c9cc83ad45d6ada9a6f308da405ef39f641d1afcbe1610` |
+| `researcher` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:767f398c45154333ba92825004f302571fa1b0e31e2c4080a538ab8e067692dd` |
+| `copywriter` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:2e39996997d944484db6a8a08169be0ba543901c2a7094bec23e27bc6a1aa7b4` |
+| `personalizer` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:1b322d94a7d22e9bace3d0a139c87d47bab5e6c1f78d22d38a01b35dee38c3dd` |
+| `critic` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:049652d75c7460fd7520cb9352735e272736cc2ef8873cc7736d61427aed526c` |
 | `responder` | draft | — | — | — |
-| `analyst` | draft | — | — | — |
-| `deliverability-specialist` | draft | — | — | — |
+| `analyst` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:95cf6cc2709682e71efdc8193efc29e94c1e9ab3411c3c043104873cf053f0af` |
+| `deliverability-specialist` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:d1ce3497f7b5420c8a465e9471598461bf64ff7f7409f142b77fb76983756585` |
 
 These are not read from here at run time. An operator composes the directory the runtime hands out,
 `<data>/skills/roles/<role>/`, from this pack and — later — from the business pack, and the runtime copies it
@@ -187,3 +185,8 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |
+| `approvals-and-questions` | Claude Code 2.1.318 | 0.27.0 | `sha256:ab486ffddeeeab9d668c42519a88ecd5e7274a47d887ae37073bf8c0b8e313b0` |
+| `managed-campaign-work` | Claude Code 2.1.318 | 0.27.0 | `sha256:1952b08363d464eb00a00a5f5d6bfaa3bbf908cb17f2083e01458a170061ea30` |
+| `operating-the-installation` | Claude Code 2.1.318 | 0.27.0 | `sha256:6f00510d45c957639e1dcbfdff5073f958bb377c612587c85a49e888df9ad7fc` |
+| `planner-in-session` | Claude Code 2.1.318 | 0.27.0 | `sha256:e17f4601e5a33040e188a639fdcbfe4f9c5dfafa7e4aa936d85150fcf7bcf3d9` |
+| `troubleshooting-jason` | Claude Code 2.1.318 | 0.27.0 | `sha256:31a98d12c9f7e59f0293871db5a50e23daee9ded2e10226bd479bfc6504e4f32` |
