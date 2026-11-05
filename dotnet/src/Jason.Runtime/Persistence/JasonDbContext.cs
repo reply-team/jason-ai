@@ -62,6 +62,10 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<Preference> Preferences => Set<Preference>();
 
+    public DbSet<SubscriptionCursor> SubscriptionCursors => Set<SubscriptionCursor>();
+
+    public DbSet<SubscriptionRun> SubscriptionRuns => Set<SubscriptionRun>();
+
     /// <summary>
     /// The one connection string for a database file. Spelled once because the provider pools connections per
     /// connection string: anything that wants to release a file's pooled connections must name it exactly.
@@ -141,6 +145,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<ProviderBlockScope>().HaveConversion<SnakeCaseEnumConverter<ProviderBlockScope>>().HaveMaxLength(32);
         configurationBuilder.Properties<ProviderBlockStatus>().HaveConversion<SnakeCaseEnumConverter<ProviderBlockStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<EventBackfillStatus>().HaveConversion<SnakeCaseEnumConverter<EventBackfillStatus>>().HaveMaxLength(32);
+        configurationBuilder.Properties<SubscriptionRunStatus>().HaveConversion<SnakeCaseEnumConverter<SubscriptionRunStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
         configurationBuilder.Properties<JsonArray>().HaveConversion<JsonArrayConverter, JsonArrayComparer>();
         configurationBuilder.Properties<JsonNode>().HaveConversion<JsonNodeConverter, JsonNodeComparer>();
@@ -824,6 +829,43 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             preference.ToTable(t => t.HasCheckConstraint("ck_preferences_value_json", "json_valid(value_json)"));
             preference.Property(p => p.ValueHash).HasMaxLength(80);
             preference.Property(p => p.UpdatedById).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<SubscriptionCursor>(cursor =>
+        {
+            cursor.ToTable("subscription_cursors");
+            cursor.HasKey(c => c.Id);
+
+            // One position per kind: there is nowhere for a second to go.
+            cursor.Property(c => c.Kind).HasMaxLength(64);
+            cursor.HasIndex(c => c.Kind).IsUnique();
+        });
+
+        modelBuilder.Entity<SubscriptionRun>(run =>
+        {
+            run.ToTable("subscription_runs", t =>
+            {
+                t.HasCheckConstraint("ck_subscription_runs_handlers_json", "json_valid(handlers_json)");
+                t.HasCheckConstraint("ck_subscription_runs_envelope_json", "envelope_json IS NULL OR json_valid(envelope_json)");
+            });
+            run.HasKey(r => r.Id);
+            run.Property(r => r.PublicId).HasMaxLength(40);
+            run.HasIndex(r => r.PublicId).IsUnique();
+            run.Property(r => r.Kind).HasMaxLength(64);
+            run.Property(r => r.LinePublicId).HasMaxLength(40);
+            run.Property(r => r.Handlers).HasColumnName("handlers_json").IsRequired();
+            run.Property(r => r.Envelope).HasColumnName("envelope_json");
+            run.Property(r => r.FailedPluginId).HasMaxLength(64);
+            run.Property(r => r.FailureClass).HasMaxLength(16);
+            run.Property(r => r.FailureCode).HasMaxLength(64);
+
+            // A kind's runs, newest last: the page a person reads and the prune at each insert.
+            run.HasIndex(r => new { r.Kind, r.Id });
+
+            // One chain in flight per kind, held where two writers cannot argue about it.
+            run.HasIndex(r => r.Kind, "ix_subscription_runs_one_running_per_kind")
+                .IsUnique()
+                .HasFilter("status = 'running'");
         });
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())

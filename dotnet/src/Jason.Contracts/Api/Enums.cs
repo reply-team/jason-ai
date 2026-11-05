@@ -380,3 +380,16 @@ public enum ReplyReaction
     Escalate,
     None,
 }
+
+/// <summary>
+/// Where the chain started for one journal line stands. <c>Running</c> while its handlers run or one waits to be tried
+/// again; <c>succeeded</c> when every handler answered; <c>failed</c> when one ended it; <c>superseded</c> when its kind's
+/// position moved under it — a rewind, or the kind left without a subscriber — so its end recorded nothing further.
+/// </summary>
+public enum SubscriptionRunStatus
+{
+    Running,
+    Succeeded,
+    Failed,
+    Superseded,
+}
