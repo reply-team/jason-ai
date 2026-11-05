@@ -401,12 +401,11 @@ public class ReplyEventsReadTests
     }
 
     /// <summary>
-    /// An account whose Reply has no change feed yet answers the read as a route Reply's API does not have: the bare 404.
-    /// That answer is how the package knows, so nothing is asked first, and the inbound sync goes on reading the account's
-    /// threads page by page.
+    /// A read of the change feed that Reply answers with a 404 carrying no code of its own is <c>events_unsupported</c>,
+    /// final: nothing is asked first, and the inbound sync goes on reading the account's threads page by page.
     /// </summary>
     [Fact]
-    public async Task An_account_whose_reply_has_no_feed_yet_is_events_unsupported()
+    public async Task A_feed_read_answered_with_a_404_without_reply_s_code_is_events_unsupported()
     {
         using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(501, Ago(10))).NotOffering("inbox_changes");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);

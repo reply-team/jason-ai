@@ -59,7 +59,8 @@ version changes with it, because the runtime compares an installed package's dig
 carries, and reads the versions only when the two differ; two packages under one version would make an earlier release's
 package look like one edited here, so `jason status` would not say it was left behind. The marketplace records the digest
 of each version the Reply package has had from 0.9.0 on, and of the earlier versions a release published, in
-[`plugins/reply.digests`](../plugins/reply.digests).
+[`plugins/reply.digests`](../plugins/reply.digests), and of each version the journal forwarder's has had, from the 1.0.0
+that 0.29.0 shipped in its tree, in [`plugins/journal-forwarder.digests`](../plugins/journal-forwarder.digests).
 
 ## 3. The manifest
 
@@ -234,9 +235,10 @@ manifest could name the arguments, a version check would be a way to run anythin
 ## 4. Installing, reloading and listing
 
 Installing a plugin is placing its directory in `~/.jason/plugins/` (override the data directory
-with `JASON_DATA_DIR`). The package this repository ships, the Reply plugin, is also published with every
-release from 0.11.0 on as `jason-plugin-reply.zip`, its files at the archive's root, and the release's
-`manifest.json` names it with the content digest of the tree it unpacks to. `jason plugin install <id>`
+with `JASON_DATA_DIR`). Two packages of this repository are also published with every release: the Reply
+plugin from 0.11.0 on as `jason-plugin-reply.zip`, and the journal forwarder from 0.30.0 on as
+`jason-plugin-journal-forwarder.zip`, each with its files at the archive's root, and the release's `manifest.json`
+names each with the content digest of the tree it unpacks to. `jason plugin install <id>`
 installs a package the release you run publishes: it downloads the file the manifest names, from that
 release's own directory, checks it against the release's `checksums.txt` and, unpacked, against that
 digest, and moves it in whole as `~/.jason/plugins/<id>`, or places nothing and exits 1 saying why. A
@@ -248,14 +250,15 @@ body and the runtime's refusal under `error`. A `.staging-<id>-…` or `.old-<id
 packages is what an interrupted install left: the runtime never reads it, and an `.old-` one holds the package
 the install replaced. Every other package is installed by copying its directory in.
 Step 3 of [the wiring check](golden-path.md) runs the verb.
-The runtime carries the package its own release publishes and says in `system.info`'s `released_plugins` whether the
-one installed is it, by content digest, so `jason status` names an earlier release's package left behind by a package
-manager's upgrade, or by an update that could not replace it. Before the update, `jason update check` names it from the
-other side: the newer release's manifest records the digest of each version on the package's list, so the check says
-which version is installed and which one that release publishes. It never names a package the list does not know: built
-or edited on that machine, or a version before the list's first line, 0.3.2. Whether that one is behind is
-`jason status`'s to say, by its version. `jason update apply` replaces exactly the packages the check names with the new
-release's, held to the same two checks before anything moves, and leaves every other package as it is.
+The runtime carries each package its own release publishes and says in `system.info`'s `released_plugins` whether the
+one installed of that id is it, by content digest, so `jason status` names an earlier release's package left behind
+by a package manager's upgrade, or by an update that could not replace it. Before the update, `jason update check`
+names it from the other side: the newer release's manifest records the digest of each version on the package's list,
+so the check says which version is installed and which one that release publishes. It never names a package the list
+does not know: built or edited on that machine, or, for Reply's package, a version before its list's first line,
+0.3.2. Whether that one is behind is `jason status`'s to say, by its version. `jason update apply` replaces exactly
+the packages the check names with the new release's, held to the same two checks before anything moves, and leaves
+every other package as it is.
 
 ```sh
 cp -r ./fake-provider ~/.jason/plugins/

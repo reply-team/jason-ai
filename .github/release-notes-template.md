@@ -23,17 +23,20 @@ at this version and released only after its tests passed.
 | `jason-linux-x64.tar.gz` | Linux on x64 |
 | `jason-osx-arm64.tar.gz` | macOS on Apple silicon |
 | `manifest.json` | what a running Jason reads to learn that this release exists |
-| `checksums.txt` | the SHA-256 of each archive and of the two packages, in `sha256sum` format |
+| `checksums.txt` | the SHA-256 of each archive and of each package, in `sha256sum` format |
 | `install.sh` | macOS and Linux: the install script this release was published with |
 | `install.ps1` | Windows: the install script this release was published with |
 | `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, which `jason plugin install reply` places in `~/.jason/plugins/reply` |
+| `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at `v{{version}}`, which `jason plugin install journal-forwarder` places in `~/.jason/plugins/journal-forwarder` |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |
 
 Each archive holds the executable, `LICENSE` (the MIT licence, which covers the whole repository, the runtime
 included) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by
 `jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in
-`checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it. The UI's package is
-placed by `jason ui install`, which the install guide runs and `jason update apply` runs at its end.
+`checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it. The journal forwarder's
+package is installed the same way, by `jason plugin install journal-forwarder`, into
+`~/.jason/plugins/journal-forwarder`; its README says how a copy edited to name another receiver stays your own. The
+UI's package is placed by `jason ui install`, which the install guide runs and `jason update apply` runs at its end.
 On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry and minimal
 images may not; the install script stops, with the runtime's own message, rather than install a program that does
 not start.
