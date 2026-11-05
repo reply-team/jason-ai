@@ -630,6 +630,7 @@ skills · release notes on every release.
 |---|---|
 | Understand why Jason exists, and who it isn't for | [Philosophy](https://github.com/reply-team/jason-ai/blob/main/docs/philosophy.md) |
 | Install it, update it or take it off | [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) · [Release and update](https://github.com/reply-team/jason-ai/blob/main/docs/release-and-update.md) |
+| Run the installation day to day: the runtime, the CLI, the plugins, the ecosystem | [Handbook](https://github.com/reply-team/jason-ai/blob/main/docs/handbook.md) |
 | Walk the whole path once, from empty to one approved operation | [The wiring check](https://github.com/reply-team/jason-ai/blob/main/docs/golden-path.md) |
 | See how the pieces fit | [Architecture](https://github.com/reply-team/jason-ai/blob/main/docs/architecture.md) · [Work execution](https://github.com/reply-team/jason-ai/blob/main/docs/work-execution.md) · [Campaign manager](https://github.com/reply-team/jason-ai/blob/main/docs/campaign-manager.md) · [Projects](https://github.com/reply-team/jason-ai/blob/main/docs/projects.md) |
 | Connect a provider or add a channel | [Plugin guide](https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md) · [Contracts](https://github.com/reply-team/jason-ai/blob/main/docs/contracts/README.md) · [Routing](https://github.com/reply-team/jason-ai/blob/main/docs/routing.md) · [Reply plugin](https://github.com/reply-team/jason-ai/blob/main/plugins/reply/README.md) |
@@ -740,7 +741,8 @@ offer, bad data or a burnt domain, and it doesn't pretend to.
 ## Getting help
 
 Something doesn't work? Open an [issue](https://github.com/reply-team/jason-ai/issues/new?template=problem.yml) with
-the file `jason doctor` wrote attached. Help with your own data, or a file made with `jason doctor --include-journal`,
+the file `jason doctor` wrote attached. A question or an idea? Start a
+[discussion](https://github.com/reply-team/jason-ai/discussions). Help with your own data, or a file made with `jason doctor --include-journal`,
 goes to **support@reply.io** and never to an issue: an issue is public the moment it's submitted. A vulnerability goes
 the way [SECURITY.md](https://github.com/reply-team/jason-ai/blob/main/SECURITY.md) says.
 

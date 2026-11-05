@@ -462,21 +462,27 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The README's licence section says MIT covers the runtime and the executable each release builds, and says once
-    /// that the repository is released under it with its history, so a licence file in an older tree is superseded.
+    /// The licence section of the README and of the handbook each says once that the repository is released under MIT
+    /// with its history, so a licence file in an older tree is superseded, and names the marks beside it. The handbook's
+    /// also opens by saying that MIT covers the runtime and the executable each release builds.
     /// </summary>
-    [Fact]
-    public void The_readme_s_licence_section_releases_the_repository_and_its_history_under_mit()
+    [Theory]
+    [InlineData("README.md", "\"Jason\", \"Jason AI\", \"Reply\" and \"Reply.io\" are trademarks of ReplyApp Inc.")]
+    [InlineData("docs/handbook.md", "The names \"Jason\", \"Jason AI\", \"Reply\" and \"Reply.io\", and their logos, are trademarks of ReplyApp Inc.")]
+    public void Each_page_s_licence_section_releases_the_repository_and_its_history_under_mit(string page, string marks)
     {
-        var text = Flat(Page("docs", "handbook.md"));
-        var licences = text.IndexOf("## License", StringComparison.Ordinal);
-        Assert.True(licences >= 0, "README has no License section.");
+        var section = Flat(Section(Page(page.Split('/')), "## License\n"));
 
-        Assert.Contains("Everything in this repository is MIT ([LICENSE](../LICENSE)), the runtime included, and so is the executable each release builds from it", text[licences..], StringComparison.Ordinal);
-        Assert.Contains(
-            "ReplyApp Inc. releases this repository, its history included, under the MIT licence from 0.24.0, and the licence files in older trees are superseded.",
-            text[licences..],
-            StringComparison.Ordinal);
+        Assert.True(
+            section.Contains("ReplyApp Inc. releases this repository, its history included, under the MIT licence from 0.24.0, and the licence files in older trees are superseded.", StringComparison.Ordinal),
+            $"{page}'s License section does not release the repository and its history under MIT in the repository's words.");
+        Assert.True(section.Contains(marks, StringComparison.Ordinal), $"{page}'s License section does not name the marks: {marks}");
+        if (page == "docs/handbook.md")
+        {
+            Assert.True(
+                section.Contains("Everything in this repository is MIT ([LICENSE](../LICENSE)), the runtime included, and so is the executable each release builds from it", StringComparison.Ordinal),
+                $"{page}'s License section does not open by saying MIT covers the runtime and the executable.");
+        }
     }
 
     /// <summary>
@@ -937,12 +943,19 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("one word from them runs", agent, StringComparison.Ordinal);
     }
 
+    /// <summary>The two sentences of the README that may name TypeScript, as the README says them.</summary>
+    private static readonly string[] TypeScriptSentences =
+    [
+        "The browser UI is TypeScript.",
+        "TypeScript would need a build step on every machine that edits the plugin, and the runtime would still load only the JavaScript it produces, so we do not recommend it.",
+    ];
+
     /// <summary>
     /// The README says what a plugin author meets today: a plugin is plain JavaScript, run by the engine the runtime
     /// embeds, and a <c>.ts</c> entry is refused at load. It never says TypeScript comes first, nor that plugins or the
     /// changes a person or an agent makes are written in TypeScript, which would send an agent to write a package the
-    /// runtime refuses. The browser UI is the one part of Jason it may name as TypeScript, and the one other sentence that
-    /// names it is the one that says why it is not recommended.
+    /// runtime refuses. Two sentences may name TypeScript, each pinned by its text: the one that says the browser UI is
+    /// TypeScript, and the one that says why it is not recommended for a plugin. Any other sentence that names it fails.
     /// </summary>
     [Fact]
     public void The_readme_says_plugins_are_plain_javascript_and_never_typescript()
@@ -958,9 +971,64 @@ public partial class PageClaimsTests
 
         var named = Regex.Split(readme, @"(?<=[.!?])\s+")
             .Where(sentence => sentence.Contains("TypeScript", StringComparison.OrdinalIgnoreCase))
-            .Where(sentence => !sentence.Contains("browser UI", StringComparison.Ordinal) && !sentence.Contains("so we do not recommend it", StringComparison.Ordinal))
+            .Where(sentence => !TypeScriptSentences.Contains(sentence, StringComparer.Ordinal))
             .ToList();
-        Assert.True(named.Count == 0, "The README names TypeScript for something other than the browser UI: " + string.Join(" / ", named));
+        Assert.True(named.Count == 0, "The README names TypeScript in a sentence other than the two it may: " + string.Join(" / ", named));
+    }
+
+    /// <summary>
+    /// Every count the README states is the tree's own, wherever the page states it: the facts table, the Maturity row and
+    /// "In numbers". The SDR operations and their families are what the sdr-operations skill's own source holds, one
+    /// fragment per family. When a count moves, the page changes, never this row.
+    /// </summary>
+    [Fact]
+    public void Every_count_the_readme_states_is_the_tree_s_own()
+    {
+        var root = Root();
+        var readme = Flat(Unquoted(Page("README.md"))).Replace("**", string.Empty, StringComparison.Ordinal);
+
+        string[] Files(string folder, string pattern) =>
+            Directory.GetFiles(Path.Combine(root, folder), pattern, SearchOption.AllDirectories)
+                .Where(file => !Path.GetRelativePath(root, file).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part => part is "bin" or "obj"))
+                .ToArray();
+        int Skills(params string[] folder) =>
+            Directory.GetDirectories(Path.Combine([root, .. folder])).Count(directory => File.Exists(Path.Combine(directory, "SKILL.md")));
+        var skills = Files("skills", "SKILL.md");
+        int Status(string status) => skills.Count(file => Regex.IsMatch(File.ReadAllText(file), $@"(?m)^  status: {status}\r?$"));
+        var families = Directory.GetFiles(Path.Combine(root, "skills", "business", "sdr-operations", "operations"), "*.yaml")
+            .Where(file => Regex.IsMatch(Path.GetFileName(file), @"^\d\d-"))
+            .ToArray();
+        var operations = families.Sum(file => Regex.Matches(File.ReadAllText(file), @"(?m)^  - name: ").Count);
+
+        (string Pattern, int[] Tree)[] counts =
+        [
+            (@"(\d+) guides", [Directory.GetFiles(Path.Combine(root, "docs"), "*.md").Length]),
+            (@"(\d+) operation contracts", [Directory.GetFiles(Path.Combine(root, "docs", "contracts", "operations"), "*.json").Length]),
+            (@"(\d+) (?:test|contract) fixtures", [Files(Path.Combine("docs", "contracts", "fixtures"), "*").Length]),
+            (@"(\d+) API fixtures", [Files(Path.Combine("docs", "api", "fixtures"), "*").Length]),
+            (@"(\d+) C# test files", [Files(Path.Combine("dotnet", "tests"), "*.cs").Length]),
+            (@"(\d+) business skills, (\d+) runtime skills and (\d+) role skills", [Skills("skills", "business"), Skills("skills", "runtime"), Skills("skills", "runtime", "roles")]),
+            (@"(\d+) of the (\d+) skills are `verified`", [Status("verified"), skills.Length]),
+            (@"the other (\d+) are still `draft`", [Status("draft")]),
+            (@"(\d+) SDR operations", [operations]),
+            (@"(\d+) SDR operations in (\d+) families", [operations, families.Length]),
+        ];
+
+        var wrong = new List<string>();
+        foreach (var (pattern, tree) in counts)
+        {
+            var said = Regex.Matches(readme, pattern);
+            if (said.Count == 0)
+            {
+                wrong.Add($"the README no longer states /{pattern}/");
+            }
+
+            wrong.AddRange(said
+                .Where(match => !match.Groups.Values.Skip(1).Select(group => int.Parse(group.Value, System.Globalization.CultureInfo.InvariantCulture)).SequenceEqual(tree))
+                .Select(match => $"'{match.Value}', where the tree has {string.Join(", ", tree)}"));
+        }
+
+        Assert.True(wrong.Count == 0, "The README states a count the tree does not have: " + string.Join(" / ", wrong));
     }
 
     /// <summary>
@@ -1388,25 +1456,24 @@ public partial class PageClaimsTests
     /// the first-use walkthrough: it is a check of the wiring, and the real work is a campaign. Nor a sandbox: it makes a
     /// real draft campaign at the person's provider and enrols their own address, and the published pages keep that word
     /// for an isolation boundary. A file path is not prose, and the executable's own "first runs" is another matter, so
-    /// neither is read as one. The README is held to the three old names alone: it names Codex's sandbox, which is that
-    /// isolation boundary, so "sandbox" there is the meaning the word is kept for.
+    /// neither is read as one. A sentence that names Codex may say "sandbox": Codex's sandbox is that isolation boundary,
+    /// the meaning the word is kept for.
     /// </summary>
     [Theory]
-    [InlineData("README.md", false)]
-    [InlineData("docs/handbook.md", true)]
-    [InlineData("docs/INSTALL.md", true)]
-    [InlineData("docs/golden-path.md", true)]
-    [InlineData("skills/runtime/operating-the-installation/SKILL.md", true)]
-    [InlineData("skills/runtime/managed-campaign-work/SKILL.md", true)]
-    public void No_page_calls_the_wiring_check_by_a_name_it_had_before(string page, bool sandbox)
+    [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
+    [InlineData("docs/INSTALL.md")]
+    [InlineData("docs/golden-path.md")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md")]
+    [InlineData("skills/runtime/managed-campaign-work/SKILL.md")]
+    public void No_page_calls_the_wiring_check_by_a_name_it_had_before(string page)
     {
-        var said = Regex.Match(
-            Flat(Page(page.Split('/'))),
-            sandbox
-                ? @"\b(?:first run|golden path|first[- ]use walkthrough|sandbox)\b"
-                : @"\b(?:first run|golden path|first[- ]use walkthrough)\b",
-            RegexOptions.IgnoreCase);
-        Assert.False(said.Success, $"{page} still says '{said.Value}' at offset {said.Index} of its flattened text.");
+        var said = Regex.Split(Flat(Page(page.Split('/'))), @"(?<=[.!?])\s+")
+            .SelectMany(sentence => Regex.Matches(sentence, @"\b(?:first run|golden path|first[- ]use walkthrough|sandbox)\b", RegexOptions.IgnoreCase)
+                .Where(name => !(name.Value.Equals("sandbox", StringComparison.OrdinalIgnoreCase) && sentence.Contains("Codex", StringComparison.Ordinal)))
+                .Select(name => $"'{name.Value}' in: {sentence}"))
+            .ToList();
+        Assert.True(said.Count == 0, $"{page} still calls the wiring check by a name it had before: " + string.Join(" / ", said));
     }
 
     /// <summary>
@@ -2327,7 +2394,11 @@ public partial class PageClaimsTests
     [GeneratedRegex(@"releases/download/v(?<version>[0-9]+\.[0-9]+\.[0-9]+)/|(?:--version|-Version) (?<version>[0-9]+\.[0-9]+\.[0-9]+)|These install (?<version>[0-9]+\.[0-9]+\.[0-9]+) with (?<version>[0-9]+\.[0-9]+\.[0-9]+)'s own script")]
     private static partial Regex PinnedVersion();
 
-    private static string Page(params string[] path)
+    private static string Page(params string[] path) =>
+        File.ReadAllText(Path.Combine([Root(), .. path])).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    /// <summary>The repository's root: the nearest directory above the test assembly that holds <c>global.json</c>.</summary>
+    private static string Root()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "global.json")))
@@ -2336,6 +2407,6 @@ public partial class PageClaimsTests
         }
 
         Assert.NotNull(directory);
-        return File.ReadAllText(Path.Combine([directory.FullName, .. path])).Replace("\r\n", "\n", StringComparison.Ordinal);
+        return directory.FullName;
     }
 }

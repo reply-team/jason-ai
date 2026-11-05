@@ -155,7 +155,7 @@ internal static class StatusChecks
         /// <summary>
         /// The repair for a profile that names a host this machine does not have: the profile, moved to a host it has, with
         /// that host's own program. The runtime refuses a move that keeps the program written for another host, and a
-        /// profile made as the README says carries one. A bundle's report names no profile, so there it is
+        /// profile made as the handbook says carries one. A bundle's report names no profile, so there it is
         /// <c>&lt;name&gt;</c>.
         /// </summary>
         public static string MoveProfile(string profile, AgentHostKind host) =>
