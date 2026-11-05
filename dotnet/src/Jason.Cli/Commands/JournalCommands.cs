@@ -6,7 +6,7 @@ namespace Jason.Cli.Commands;
 
 /// <summary>
 /// The <c>journal</c> verb group. The chronicle is append-only: there is a verb to add an entry and a verb to
-/// read entries back, and none to change one.
+/// read entries back, and none to change one; a third reads what each kind the runtime writes itself means.
 /// </summary>
 public static class JournalCommands
 {
@@ -18,6 +18,7 @@ public static class JournalCommands
         var journal = new Command("journal", "Append to and read the campaign chronicle.");
         journal.Subcommands.Add(Append(env, actor));
         journal.Subcommands.Add(List(env, actor));
+        journal.Subcommands.Add(Kinds(env, actor));
         return journal;
     }
 
@@ -94,6 +95,31 @@ public static class JournalCommands
                 .Set("cursor", parseResult.GetValue(cursor));
 
             return OperationRunner.RunAsync(env, Operations.JournalList, body, new RunOptions(parseResult.GetValue(human), JournalRenderers.EntryList), cancellationToken);
+        });
+
+        return command;
+    }
+
+    private static Command Kinds(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "kinds",
+            "Read the kinds of line the runtime writes itself, in kind order, each as its document under docs/contracts/journal/ publishes it.");
+        var limit = VerbOptions.Limit();
+        var cursor = VerbOptions.Cursor();
+        var human = VerbOptions.Human();
+        command.Options.Add(limit);
+        command.Options.Add(cursor);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            var body = RequestBody.Empty()
+                .Set("limit", parseResult.GetValue(limit))
+                .Set("cursor", parseResult.GetValue(cursor));
+
+            return OperationRunner.RunAsync(env, Operations.JournalKinds, body, new RunOptions(parseResult.GetValue(human), JournalRenderers.KindList), cancellationToken);
         });
 
         return command;

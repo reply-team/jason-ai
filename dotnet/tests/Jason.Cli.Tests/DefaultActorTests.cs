@@ -332,6 +332,7 @@ public class DefaultActorTests
         ["report", "list"],
         ["journal", "append", "cmp_A", "--kind", "observation"],
         ["journal", "list"],
+        ["journal", "kinds"],
         ["suppression", "add", "--channel", "email", "--value", "someone@example.com"],
         ["suppression", "remove", "--channel", "email", "--value", "someone@example.com", "--reason", "asked again"],
         ["suppression", "list"],

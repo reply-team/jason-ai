@@ -42,13 +42,13 @@ public class OperationFamiliesTests
         [
             "approval.get", "approval.list", "approval.list_standing", "block.get", "block.list", "campaign.activity",
             "campaign.activity_by_period", "campaign.get", "campaign.list", "campaign.list_contacts", "campaign.summary",
-            "contact.get", "contact.list", "decision.get", "decision.list", "events.sources", "journal.list", "plugin.list",
-            "preference.list", "profile.get", "profile.list", "project.get", "project.list", "report.get", "report.list",
-            "role.list", "rolenote.get", "rolenote.list", "route.list", "route.resolve", "suppression.list",
+            "contact.get", "contact.list", "decision.get", "decision.list", "events.sources", "journal.kinds", "journal.list",
+            "plugin.list", "preference.list", "profile.get", "profile.list", "project.get", "project.list", "report.get",
+            "report.list", "role.list", "rolenote.get", "rolenote.list", "route.list", "route.resolve", "suppression.list",
             "workitem.count", "workitem.get", "workitem.list",
         ];
 
-        Assert.Equal(34, reads.Length);
+        Assert.Equal(35, reads.Length);
         Assert.Equal(reads, OperationFamilies.OperationsOf([OperationFamilies.Read]).Order(StringComparer.Ordinal));
     }
 

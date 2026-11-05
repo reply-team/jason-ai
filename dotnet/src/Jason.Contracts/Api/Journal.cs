@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Jason.Contracts.Journal;
 
 namespace Jason.Contracts.Api;
 
@@ -38,3 +39,28 @@ public sealed record JournalListRequest(
     string? Cursor,
     string? ContactId = null,
     IReadOnlyList<string>? Kinds = null);
+
+public sealed record JournalKindsRequest(int? Limit, string? Cursor);
+
+/// <summary>
+/// One kind the runtime reserves for its own journal lines, as its document under <c>docs/contracts/journal/</c>
+/// publishes it: the release that first wrote it, the one sentence of what a line of it records, whether a plugin may
+/// subscribe to it, the entities its lines name and where, the release each later field of its body arrived in, and the
+/// body's schema exactly as the document writes it.
+/// </summary>
+public sealed record JournalKindDto(
+    string Kind,
+    int Version,
+    string Since,
+    string Summary,
+    bool Subscribable,
+    IReadOnlyDictionary<string, JournalKindEntityDto> Entities,
+    IReadOnlyDictionary<string, string> FieldSince,
+    JsonObject Body);
+
+/// <summary>
+/// Where a line of a kind names one entity: every place, as a list of JSON pointers into the line as
+/// <c>journal.list</c> answers it, even where the document writes one; whether every line names it; and whether a place
+/// names many of them.
+/// </summary>
+public sealed record JournalKindEntityDto(IReadOnlyList<string> At, JournalEntityPresence Presence, bool Each);

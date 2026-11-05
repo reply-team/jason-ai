@@ -313,6 +313,7 @@ that is not that attempt does not call them.
 
 - `journal.append`
 - `journal.list`
+- `journal.kinds`: every kind the runtime reserves for its own lines, in kind order, each as its document says it.
 
 ### `plugin`
 
@@ -363,6 +364,11 @@ that is not that attempt does not call them.
   which keeps the lines at or after a moment. A line carries the moment it was written, which can come before the
   moment it can be read. So a program that runs on its own timer reads with `since` set a minute before its last
   read, pages until `next_cursor` is `null`, and skips the ids it has already handled.
+  `journal.kinds` says what each kind the runtime writes itself means: every kind it reserves, in kind order, as its
+  document under [`contracts/journal/`](contracts/journal) publishes it — the release that first wrote it, the one
+  sentence of what a line records, whether a plugin may subscribe to it, the entities a line names and where, each place
+  a list of JSON pointers into the line as `journal.list` answers it, the release each later field arrived in, and the
+  schema of the line's `key`, `old` and `new`. A kind a person or an agent appends is not among them.
 
 ## What a program can write so its result comes back as a fact
 
