@@ -7,16 +7,16 @@ namespace Jason.App.Tests.Skills;
 public partial class InteractiveSkillTests
 {
     /// <summary>
-    /// The troubleshooting skill teaches the subscription verbs since 0.29.0 and no host has read that text yet, so it is a draft; the
-    /// catalog lists it as one and carries no reading of it; it still says which work a paused campaign lets through:
+    /// The troubleshooting skill teaches the subscription verbs since 0.29.0 and a host has read that text against 0.29.0, so it is
+    /// verified; the catalog lists it as one and carries the reading; it still says which work a paused campaign lets through:
     /// the field a contract declares, and the operations that declare it today, every one the catalogue runs there.
     /// </summary>
     [Fact]
-    public void The_troubleshooting_skill_is_a_draft_and_names_what_runs_in_a_paused_campaign()
+    public void The_troubleshooting_skill_is_verified_and_names_what_runs_in_a_paused_campaign()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
-        Assert.Equal("draft", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
-        Assert.DoesNotContain("| `troubleshooting-jason` | Claude Code", File.ReadAllText(SkillPack.Catalog()), StringComparison.Ordinal);
+        Assert.Equal("verified", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
+        Assert.Contains("| `troubleshooting-jason` | Claude Code", File.ReadAllText(SkillPack.Catalog()), StringComparison.Ordinal);
         Assert.Contains(
             "Only an active campaign's work is claimed, with one exception: a paused campaign still lets through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record`, `campaign.pause` and `message.cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one holds every item but theirs.",
             Flattened("troubleshooting-jason"),
