@@ -198,7 +198,7 @@ A send or an invitation through Reply carries no sending time in its own result:
 answer to a LinkedIn send gives a local time marked as UTC and its answer to an email gives none. `message.status`
 reports when a send went, and a message's own moment is read from its thread, where it is true UTC.
 
-Through Reply, a LinkedIn message that names a sending schedule ends `capability_not_offered` and nothing is sent: Reply's route for a LinkedIn message takes a moment and not a schedule. Propose the message without a schedule, so it goes at once, or on another channel; asking again meets the same answer.
+A Reply whose LinkedIn route takes no schedule answers `capability_not_offered`; propose the message without a schedule, so it goes at once, or on another channel; asking again meets the same answer.
 
 The approval preview shows a send's `send_after` and not the provider object beside the arguments, so a send that also
 names a sending schedule goes at the schedule's first opening at or after that moment, which may be later than the
