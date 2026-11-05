@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using Jason.Cli;
 using Jason.Cli.Http;
 using Jason.Contracts.Discovery;
@@ -175,6 +176,40 @@ public class InsideARunTests
 
         Assert.Equal(2, seen.Count);
         Assert.All(seen, attempt => Assert.Equal(sent is null ? null : new[] { sent }, attempt));
+    }
+
+    /// <summary>
+    /// Every request names the attempt because every client is made with it: each <c>new RuntimeClient(</c> under
+    /// <c>dotnet/src</c> passes the attempt the CLI's environment names, and the stderr that environment writes to. Most
+    /// sites are held by no row of their own, and <c>null</c> would compile, so the source is read.
+    /// </summary>
+    [Fact]
+    public void Every_client_the_source_makes_is_given_the_environments_attempt()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
+        {
+            root = root.Parent;
+        }
+
+        Assert.NotNull(root);
+        var sources = Directory.EnumerateFiles(Path.Combine(root.FullName, "dotnet", "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part => part is "bin" or "obj"));
+
+        var sites = new List<string>();
+        var held = new List<string>();
+        foreach (var path in sources)
+        {
+            var text = File.ReadAllText(path);
+            var name = Path.GetRelativePath(root.FullName, path);
+            sites.AddRange(Regex.Matches(text, @"new\s+(?:[\w.]+\.)?RuntimeClient\s*\(").Select(match => $"{name}@{match.Index}"));
+            held.AddRange(Regex.Matches(text, @"new\s+(?:[\w.]+\.)?RuntimeClient\s*\(\s*[^,()]+,\s*env\.AttemptFromEnvironment\(\),\s*env\.Error,")
+                .Select(match => $"{name}@{match.Index}"));
+        }
+
+        // A reading that found no client would pass on nothing, so the sites are counted first.
+        Assert.NotEmpty(sites);
+        Assert.Equal(sites, held);
     }
 
     /// <summary>The CLI does not decide the refusal: it sends, and prints the runtime's answer as it came, exiting 1.</summary>
