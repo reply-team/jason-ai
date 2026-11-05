@@ -34,10 +34,12 @@ public class SettingKeyTests
         var operation = OperationCatalog.All[0].Id;
         var campaign = PublicId.New("cmp");
         var workItem = PublicId.New("wi");
+        var subscriptionRun = PublicId.New("sbr");
 
         Assert.Equal(operation, SettingKey.Shown(operation, Installed));
         Assert.Equal(campaign, SettingKey.Shown(campaign, Installed));
         Assert.Equal(workItem, SettingKey.Shown(workItem, Installed));
+        Assert.Equal(subscriptionRun, SettingKey.Shown(subscriptionRun, Installed));
     }
 
     [Fact]

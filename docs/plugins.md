@@ -1238,12 +1238,14 @@ family, or in none:
 No grant opens the rest: the installation's and the UI's own doors (every `system.` and `ui.` operation,
 `plugin.reload`, `route.set`, `route.unset`, `project.create`, `project.update`, `project.link`, `preference.set`,
 `preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `events.backfill`,
-`events.signal`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
+`events.signal`, `subscription.rewind`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
 `approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`,
 `suppression.remove`), an
 executor's fenced verbs (`workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait`), and the
 conversation reads `contact.threads` and `contact.thread`, which are no read here because answering one spends a
-provider call. An operation the API adds later is in none until it is classified, which a test holds. A family the
+provider call, and `subscription.runs`, whose records carry the envelopes other plugins' handlers made: a handler in a
+chain already holds the envelope handed to it, and a person reads the final one through the run token, so no plugin
+reads another chain's envelopes. `subscription.list` is a read by the rule above. An operation the API adds later is in none until it is classified, which a test holds. A family the
 manifest names that is not one of the seven is `api_family_unknown`.
 
 A subscriber granted `workitem` writes can feed itself through a role: an item it creates may run a role, and what
@@ -1748,10 +1750,13 @@ journal line.
 the line it reached, logged once for each load, until a reload makes the plugin available or takes it out of the chain.
 That is not a failure of the line, so nothing is written for it.
 
-**The position.** Each kind has a position in the journal: the last line its chain finished with. A kind first admitted
-by a load starts after the journal's last line then, never at its beginning. The position is read afresh before each
-line and moved only by the end that read it, so a rewind of the position during a turn is seen at the next line, never
-later. A kind no chain holds any more loses its position, and starts afresh if a later load admits it again.
+**The position.** Each kind has a position in the journal: the line it stands after, of any kind. A kind first admitted
+by a load stands after the journal's last line then, never at its beginning; then after each line of the kind its chain
+finished with; and after a rewind, after the line before the first one it hands again. The position is read afresh
+before each line and moved only by the end that read it, so a rewind of the position during a turn is seen at the next
+line, never later. A kind no chain holds any more loses its position, and starts afresh if a later load admits it again.
+How a person reads where a kind stands, reads its chains' record and rewinds it is in the `subscription` section of
+[docs/runtime-api.md](runtime-api.md).
 
 **No cascades.** A line written by a plugin — its actor is `plugin`, as everything a handler writes through `host.call`
 is — and a line about a work item a plugin created are passed over: the position moves past them, and no handler is
@@ -1765,3 +1770,11 @@ and the envelope the last one returned — and keeps `Subscriptions:RunRecordsPe
 set otherwise; the oldest beyond that are deleted when the kind's next chain starts, and a chain in flight is never
 deleted. The lasting record of a failure is its `subscription_failed` line. The numbers under `Subscriptions` apply
 live; the order is read at a start and at each reload (§16).
+
+**The smallest complete subscriber.** [`plugins/journal-forwarder`](../plugins/journal-forwarder/README.md) is a
+`kind: subscriber` package of one `main.js`: for each line it is handed it POSTs the line, the envelope and the attempt
+as JSON to one URL the person names in the environment, under `host.http` and a granted host, and answers the envelope
+it was handed unchanged. It declares every kind the catalog lets a plugin subscribe to, the person narrows them by the
+grant, and it takes no Runtime API family and so no `host.call`. Its README is the operator's page, and its failure
+codes (`forwarder_unreachable`, `forwarder_unauthorized`, `forwarder_refused`, `forwarder_url_missing`,
+`forwarder_url_invalid`) show how a handler's own codes sit under the five classes.

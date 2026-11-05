@@ -1,0 +1,22 @@
+{
+  "operation": "subscription.list",
+  "case": "one-kind",
+  "request": {},
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "kind": "campaign_created",
+        "chain": [
+          "acme-forwarder"
+        ],
+        "cursor": "jrn_1",
+        "head": "jrn_2",
+        "lag": 1,
+        "waiting_on": [],
+        "in_flight": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

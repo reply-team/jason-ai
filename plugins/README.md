@@ -10,7 +10,9 @@ account their binding names; without a route it fails at the claim with `no_rout
 back to whichever other plugin happens to implement the operation. An operator writes routes with
 `jason route set`; [docs/plugins.md](../docs/plugins.md) §13 lists what is still missing. A
 notification plugin is reached because the `Notifications` settings name it, never by a route (its
-contract is [`notification.send`](../docs/contracts/notifications/notification.send.md)).
+contract is [`notification.send`](../docs/contracts/notifications/notification.send.md)). A subscriber is reached because the person granted
+it journal kinds, never by a route or by the `Notifications` settings; the runtime hands it each line of those kinds after
+it wrote it (its contract is [`subscription.handle`](../docs/contracts/subscriptions/subscription.handle.md)).
 
 This directory is the plugin marketplace of the repository. Each plugin lives in its own folder:
 
@@ -27,6 +29,7 @@ The index so far:
 |---|---|
 | [`reply/`](reply/README.md) | every operation this build publishes — `campaign.get`, `campaign.create`, `list_membership.add`, `campaign.enroll`, `campaign.pause`, `campaign.activate`, `optout.record`, `enrollment.stop`, `enrollment.list`, `engagement.summarize`, `conversation.list`, `conversation.get`, `conversation.reply`, `conversation.classify`, `conversation.close`, `conversation.reopen`, `contact.update`, `contact.delete`, `sender.list`, `schedule.list`, `social_invitation.send`, `message.send`, `message.status` and `message.cancel` — against a Reply account, performed through the Reply CLI, which owns the credential. Its README is the operator's page: what it needs, how it is installed today, the account a route names, every failure it reports, and what it cannot do. |
 | [`ntfy/`](ntfy/README.md) | the delivery contract `notification.send`: Jason's pointer — the counts the runtime composes, and where to look — published to an ntfy topic. Its README says what a topic on the public server means, the settings that name it, the token, a self-hosted server, and every outcome it reports. |
+| [`journal-forwarder/`](journal-forwarder/README.md) | the subscription contract `subscription.handle`: each journal line of a kind you grant it, POSTed as JSON to one URL you name, with the envelope answered unchanged. Its README says the settings that grant it, what the receiver gets and that delivery is at least once, and every outcome it reports. |
 
 [`reply.digests`](reply.digests) lists the digest of each version the Reply package has had from 0.9.0 on, and of the
 earlier versions a release published — the digest `jason plugin list` reports for an installed copy, whole in its JSON
@@ -44,6 +47,7 @@ four rules that hold whatever the operation — the recovery read on a repeated 
 failure's identifiers go, answering in the operation's own vocabulary, and working by a pin — are
 under "What the runtime holds you to" in that same section.
 
-[`ntfy/`](ntfy/README.md) is the smallest complete package to copy the shape of, and
+[`ntfy/`](ntfy/README.md) is the smallest complete package to copy the shape of for a notification plugin,
+[`journal-forwarder/`](journal-forwarder/README.md) for a subscriber, and
 [`reply/`](reply/README.md) the one that implements every published operation. The stand-in package the
 runtime's own tests drive is not published.

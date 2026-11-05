@@ -44,7 +44,7 @@ namespace Jason.Cli;
 /// <para>
 /// <c>doctor</c> is the sixth. It collects one installation into one file a person can read before they share
 /// it, and half of that — the files, the status checks — is not the runtime's to know. Of the runtime it asks
-/// only for what the runtime says about itself, its roles, profiles and routes, and for the journal and work-item pages
+/// only for what the runtime says about itself, its roles, profiles, routes and subscriptions, and for the journal and work-item pages
 /// it counts, keeping their metadata and dropping their values. It stands for no operation, takes no subcommands, and never
 /// answers 3: a bundle is most wanted when the runtime does not answer, so not answering is written into the
 /// bundle rather than given as a reason there is none.
@@ -214,6 +214,7 @@ public static class CliApp
         root.Subcommands.Add(PluginCommands.Build(env, actor));
         root.Subcommands.Add(RouteCommands.Build(env, actor));
         root.Subcommands.Add(EventsCommands.Build(env, actor));
+        root.Subcommands.Add(SubscriptionCommands.Build(env, actor));
         root.Subcommands.Add(UiCommands.Build(env, actor));
         root.Subcommands.Add(Session.SessionCommands.Build(env, actor));
         root.Subcommands.Add(UpdateCommands.Build(env, actor));

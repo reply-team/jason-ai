@@ -1,0 +1,15 @@
+{
+  "kind": "subscription_cursor_rewound",
+  "version": 1,
+  "case": "a person moved the cursor back to just before a line of the kind",
+  "body": {
+    "key": "campaign_created",
+    "old": {
+      "line": "jrn_01JC0000000000000000000090"
+    },
+    "new": {
+      "line": "jrn_01JC0000000000000000000041"
+    }
+  },
+  "expect": "valid"
+}

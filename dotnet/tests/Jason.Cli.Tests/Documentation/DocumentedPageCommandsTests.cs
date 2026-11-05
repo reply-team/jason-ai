@@ -75,6 +75,7 @@ public class DocumentedPageCommandsTests
         Path.Combine("docs", "contracts", "preferences", "tone_of_voice.md"),
         Path.Combine("docs", "contracts", "context", "goals.md"),
         Path.Combine("plugins", "ntfy", "README.md"),
+        Path.Combine("plugins", "journal-forwarder", "README.md"),
     ];
 
     public static TheoryData<string, string> DocumentedCommands()

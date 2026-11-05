@@ -29,14 +29,14 @@ description that promises everything matches nothing.
   What Jason is waiting for a person to decide: the approvals parked at a claim and the questions a running role
   raised — including when a notification brought the person — presented in their own words and recorded as their
   decision, and the standing approval a person sets in advance for one category of reply in a campaign.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.**
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft.**
   The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI and
   unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
-  span of one again, the hosts it can launch, whether notifications reach the person and turning them off, whether a
+  span of one again, the journal's kinds and the plugins that subscribe to them, the hosts it can launch, whether notifications reach the person and turning them off, whether a
   newer version exists, and installing it or taking it off again.
-- [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why
-  work stopped: the runtime, the work item's error code and the chronicle; the states a person needs told
-  apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
+- [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **draft.** Why
+  work stopped: the runtime, the work item's error code and the chronicle and its kinds; the states a person needs told
+  apart, a subscribing plugin that is behind or failing and the rewind that is a person's, the repairs that are safe, and the diagnostic file `jason doctor` writes.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
 - [`planner-in-session`](planner-in-session/SKILL.md) — **verified.** The planner's judgement in a person's own
@@ -187,6 +187,4 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |
 | `approvals-and-questions` | Claude Code 2.1.318 | 0.27.0 | `sha256:ab486ffddeeeab9d668c42519a88ecd5e7274a47d887ae37073bf8c0b8e313b0` |
 | `managed-campaign-work` | Claude Code 2.1.318 | 0.27.0 | `sha256:1952b08363d464eb00a00a5f5d6bfaa3bbf908cb17f2083e01458a170061ea30` |
-| `operating-the-installation` | Claude Code 2.1.318 | 0.27.0 | `sha256:6f00510d45c957639e1dcbfdff5073f958bb377c612587c85a49e888df9ad7fc` |
 | `planner-in-session` | Claude Code 2.1.318 | 0.27.0 | `sha256:e17f4601e5a33040e188a639fdcbfe4f9c5dfafa7e4aa936d85150fcf7bcf3d9` |
-| `troubleshooting-jason` | Claude Code 2.1.318 | 0.27.0 | `sha256:31a98d12c9f7e59f0293871db5a50e23daee9ded2e10226bd479bfc6504e4f32` |

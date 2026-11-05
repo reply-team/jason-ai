@@ -130,5 +130,9 @@ public static class Operations
     public const string EventsBackfill = "events.backfill";
     public const string EventsSignal = "events.signal";
 
+    public const string SubscriptionList = "subscription.list";
+    public const string SubscriptionRuns = "subscription.runs";
+    public const string SubscriptionRewind = "subscription.rewind";
+
     public static string Route(string operation) => $"/{ApiVersion.Current}/{operation}";
 }

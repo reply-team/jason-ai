@@ -101,8 +101,8 @@ A request that carries an `Origin` header naming anything but the runtime's own 
 - **Ids are prefixed ULIDs**, and the prefix says what an id names. Among them: `cmp_` a campaign, `cnt_` a contact,
   `wi_` a work item, `att_` an attempt, `apr_` an approval, `dec_` a question, `blk_` a block, `jrn_` a journal entry,
   `rpt_` a report, `prj_` a project, `rol_` a role, `prf_` an execution profile, `sup_` a do-not-contact entry, `uit_` a
-  UI token, `evs_` an event source, `evb_` a backfill, `rt_` a run of the runtime, and `rts_` and `snp_` the routing and
-  plugin snapshots a route and an approval name.
+  UI token, `evs_` an event source, `evb_` a backfill, `sbr_` a subscription chain's record, `rt_` a run of the runtime,
+  and `rts_` and `snp_` the routing and plugin snapshots a route and an approval name.
 - **Success is `200`** with the answer as it is, in no envelope.
 - **An error is any other status**, with one shape:
 
@@ -346,6 +346,18 @@ that is not that attempt does not call them.
 - `events.backfill`: asks for a span of an account to be read again.
 - `events.signal`: asks for an account to be read sooner.
 
+### `subscription`
+
+- `subscription.list`: every journal kind a plugin of the active load subscribes to, a page at a time in kind order:
+  its chain in order, the line its cursor stands after, its newest line, how many of its lines are due, the members
+  that keep its chain from starting, and the chain in flight.
+- `subscription.runs`: the records of one kind's chains, newest first: each handler's outcome, how the chain ended, and
+  the envelope the last handler returned.
+- `subscription.rewind`: a person moves a kind's cursor back, to just before a line of the kind or to just before the
+  first line written at or after a moment, so the chain hands those lines to its plugins again; never forward, and each
+  rewind is a `subscription_cursor_rewound` line. A line is stamped before it is saved, so a line stamped before the
+  moment but saved after one at it is handed again too: a rewind may repeat a line and never skips one.
+
 ## What a program can read
 
 - **Campaigns**: `campaign.list` and `campaign.get`; `campaign.summary` for counts, `campaign.activity` and
@@ -357,6 +369,9 @@ that is not that attempt does not call them.
   person's approval, `decision.list` and `decision.get` for the questions roles have asked.
 - **Blocks**: `block.list` and `block.get`, for what a provider said it refuses until a person clears the cause.
 - **Events**: `events.sources`, for every account whose events the runtime reads and how far that reading has got.
+- **Subscriptions**: `subscription.list`, for every subscribed journal kind, where its cursor stands and what keeps its
+  chain from starting, and `subscription.runs`, for the record of a kind's chains, newest first, each with the envelope
+  it ended with: a read the run token opens and no grant does.
 - **The journal**: `journal.list`, the record of what happened in each campaign, to its people and to its work, one
   line at a time, each with a `kind`, the actor, the time, and what changed. It is append-only: no operation changes
   or removes a line, so a line read once stays read. `journal.list` answers the newest line first, and its cursor pages

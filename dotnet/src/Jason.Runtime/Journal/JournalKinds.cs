@@ -256,6 +256,14 @@ public static partial class JournalKinds
     /// </summary>
     public const string SubscriptionFailed = "subscription_failed";
 
+    /// <summary>
+    /// A person moved a subscribed kind's cursor back, by a line of the kind or by a moment: keyed by the kind, with the
+    /// line the cursor stood after before and after the move, null at the journal's start. Every rewind is a line of its
+    /// own. Written by <c>subscription.rewind</c> only, as the person who asked; it names no campaign, and no program may
+    /// subscribe to it.
+    /// </summary>
+    public const string SubscriptionCursorRewound = "subscription_cursor_rewound";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -325,6 +333,7 @@ public static partial class JournalKinds
         PreferenceSet,
         PreferenceUnset,
         SubscriptionFailed,
+        SubscriptionCursorRewound,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);
