@@ -158,11 +158,16 @@ public sealed class JournalForwarderPackageTests
         });
     }
 
+    /// <summary>
+    /// The token, the whole URL and its query are found in no outcome, file, run or setting. The URL's path is not asserted
+    /// absent: the plugin host's own diagnostic names the host and the path of each request, and a secret belongs in the
+    /// query or the token. The row stands on the host's redaction of granted values as much as on the plugin.
+    /// </summary>
     [Theory]
     [InlineData(200)]
     [InlineData(500)]
     [InlineData(401)]
-    public async Task A_granted_token_travels_as_a_bearer_header_and_neither_it_nor_the_url_is_found_anywhere_else(int status)
+    public async Task A_granted_token_travels_as_a_bearer_header_and_the_token_the_whole_url_and_the_query_are_found_nowhere_else(int status)
     {
         using var receiver = new LoopbackNtfy { Status = status, Body = "{}" };
         await using var api = await PluginInvokerTests.StartAsync(paths => Install(paths, receiver.HostKey));
@@ -200,10 +205,12 @@ public sealed class JournalForwarderPackageTests
     [InlineData(403, "permanent", "forwarder_unauthorized")]
     [InlineData(400, "permanent", "forwarder_refused")]
     [InlineData(404, "permanent", "forwarder_refused")]
+    [InlineData(300, "permanent", "forwarder_refused")]
     [InlineData(302, "permanent", "forwarder_refused")]
     public async Task Each_answer_of_the_receiver_ends_in_its_class_and_code(int status, string outcome, string code)
     {
-        using var receiver = new LoopbackNtfy { Status = status, Body = "{}" };
+        const string Words = "receiver words that stay with the receiver";
+        using var receiver = new LoopbackNtfy { Status = status, Body = Words };
         await using var api = await PluginInvokerTests.StartAsync(paths => Install(paths, receiver.HostKey));
 
         await WithEnvironment(receiver.Server + "/", null, async () =>
@@ -214,6 +221,7 @@ public sealed class JournalForwarderPackageTests
 
             Assert.Equal((outcome, code), (Outcome(run), Code(run)));
             Assert.Single(receiver.Requests);
+            Assert.DoesNotContain(Words, InvocationFiles(api) + run.Handlers.ToJsonString() + run.Envelope?.ToJsonString() + run.FailureCode, StringComparison.Ordinal);
             if (outcome == "permanent")
             {
                 Assert.Equal((SubscriptionRunStatus.Failed, "permanent", code), (run.Status, run.FailureClass, run.FailureCode));
@@ -221,7 +229,10 @@ public sealed class JournalForwarderPackageTests
         });
     }
 
-    /// <summary>A refused connection, and a timeout, which the host reports the same way: the receiver may be back by the retry.</summary>
+    /// <summary>
+    /// A refused connection is transient: the receiver may be back by the retry. The host classes a timeout the same way, and
+    /// this row drives only the refused connection.
+    /// </summary>
     [Fact]
     public async Task A_receiver_that_does_not_answer_is_transient()
     {
@@ -275,7 +286,7 @@ public sealed class JournalForwarderPackageTests
 
             var run = await TakeAsync(api);
 
-            Assert.Equal((SubscriptionRunStatus.Failed, "http_host_not_allowed"), (run.Status, run.FailureCode));
+            Assert.Equal((SubscriptionRunStatus.Failed, "permanent", "http_host_not_allowed"), (run.Status, run.FailureClass, run.FailureCode));
             Assert.Empty(receiver.Requests);
             Assert.Empty(elsewhere.Requests);
         });
@@ -325,6 +336,50 @@ public sealed class JournalForwarderPackageTests
         Assert.Equal([UrlVariable, TokenVariable], plugin.Manifest.Capabilities.Env!.Variables);
         Assert.Null(plugin.Manifest.Capabilities.Api);
         Assert.Null(plugin.Manifest.Capabilities.Exec);
+    }
+
+    /// <summary>A scheme in capitals is the URL the host accepts, and the forwarder takes it.</summary>
+    [Fact]
+    public async Task A_url_with_its_scheme_in_capitals_is_posted_to()
+    {
+        using var receiver = new LoopbackNtfy();
+        await using var api = await PluginInvokerTests.StartAsync(paths => Install(paths, receiver.HostKey));
+
+        await WithEnvironment("HTTP://" + receiver.HostKey + "/hook", null, async () =>
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal(SubscriptionRunStatus.Succeeded, run.Status);
+            Assert.Single(receiver.Requests);
+        });
+    }
+
+    /// <summary>A line handed out again carries its attempt, and the receiver is told.</summary>
+    [Fact]
+    public async Task A_line_handed_out_again_is_posted_with_its_attempt()
+    {
+        using var receiver = new LoopbackNtfy();
+        await using var api = await PluginInvokerTests.StartAsync(paths => Install(paths, receiver.HostKey));
+
+        await WithEnvironment(receiver.Server + "/", null, async () =>
+        {
+            var request = new PluginInvocationRequest(
+                Id,
+                Kind,
+                new JsonObject { ["line"] = new JsonObject { ["id"] = "jrn_1", ["kind"] = Kind }, ["envelope"] = new JsonObject(), ["attempt"] = 2 },
+                null,
+                "jrn_1",
+                Purpose: InvocationPurpose.Subscription);
+
+            var result = await PluginInvokerTests.InvokeAsync(api, request, Ct);
+
+            Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
+            var request1 = Assert.Single(receiver.Requests);
+            Assert.Equal(2, JsonNode.Parse(request1.Body)!["attempt"]!.GetValue<int>());
+            Assert.Equal("jrn_1", request1.Headers["Jason-Line-Id"]);
+        });
     }
 
     /// <summary>

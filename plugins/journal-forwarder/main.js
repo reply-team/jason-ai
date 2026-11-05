@@ -2,7 +2,7 @@
 // envelope it was handed goes on unchanged, so a forwarder anywhere in a chain passes the envelope through. It reads
 // nothing of Jason and changes nothing in it. The URL and the optional bearer token come from the environment by name;
 // neither is ever written into a failure's message.
-const URL_SHAPE = /^https?:\/\/[^\s\/?#]+([\/?#]\S*)?$/;
+const URL_SHAPE = /^https?:\/\/[^\s\/?#]+([\/?#]\S*)?$/i;
 
 export function invoke(operation, input, context) {
   if (typeof operation !== "string" || !input || !input.line || input.line.kind !== operation) {
