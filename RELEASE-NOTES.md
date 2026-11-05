@@ -50,7 +50,8 @@ granted.
   the kind, the line, the plugin, the class and the code, and the kind moves on. What a handler does is never handed to
   another handler as a new line. Delivery is at least once: a line may be handed twice, after a restart in the middle of
   a chain too, and a handler tells a repeat by `attempt` in its input, which counts how many times that plugin has been
-  handed the line, this time included. The numbers under `Subscriptions` apply live. See
+  handed the line, this time included, so it is above 1 for a handler that saw the line before, after a transient retry
+  or after a restart. The numbers under `Subscriptions` apply live. See
   [the plugin guide](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/plugins.md#17-writing-a-subscriber).
 - **A handler reads and writes Jason through `host.call`.** A handler of a plugin you granted a Runtime API family calls
   Runtime API operations through a door the runtime opens for that one invocation, about that one line. The families
