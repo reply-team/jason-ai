@@ -262,8 +262,9 @@ public partial class PageClaimsTests
         + "they are the fifth and sixth declared verb-map exceptions. |";
 
     /// <summary>
-    /// The routes travel, and the pages that say what a bundle holds say so: the working notes name them among what the
-    /// runtime is asked, and the README says what a route is written as and that its account never is.
+    /// The routes and the subscriptions travel, and the pages that say what a bundle holds say so: the working notes name
+    /// them among what the runtime is asked, and the README says what a route and a subscribed kind are written as and
+    /// that a route's account and a chain's envelope never are.
     /// </summary>
     [Fact]
     public void The_pages_say_a_bundle_carries_the_routes_and_never_a_route_s_account()
@@ -272,7 +273,7 @@ public partial class PageClaimsTests
         var readme = Flat(Page("README.md"));
 
         Assert.Contains(
-            "of the runtime it asks only what the runtime says about itself, its roles, profiles and routes, and the journal and work-item pages it counts",
+            "of the runtime it asks only what the runtime says about itself, its roles, profiles, routes and subscriptions, and the journal and work-item pages it counts",
             notes,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -280,7 +281,11 @@ public partial class PageClaimsTests
             readme,
             StringComparison.Ordinal);
         Assert.Contains(
-            "the database, plugin packages, a route's account and its identity, the names of execution profiles, or anything read from the folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only `--include-journal` adds",
+            "which plugins each subscribed journal kind is handed to, where its cursor stands and how its newest chains ended, by status and code — never the envelope a chain carried",
+            readme,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "the database, plugin packages, a route's account and its identity, the envelopes subscription chains carried, the names of execution profiles, or anything read from the folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — whose folders and files it never lists or opens. Only `--include-journal` adds",
             readme,
             StringComparison.Ordinal);
     }
