@@ -59,10 +59,12 @@ skills ship with Jason, and the separate skills repository is archived.
   as they were.
 - **If you use reply-cli,** update it as its README says (`reply install`, or `npm install -g reply-cli`), then run
   `reply skills install` (or `reply skills update`) to take the skills that now ship with it.
-- **If you installed `ai-sdr-core@reply-skills` or `agentic-runtime@reply-skills` as plugins,** they keep loading beside
-  Jason's skills of the same names. Remove them with your host's own plugin command; on Claude Code that is
-  `claude plugin uninstall ai-sdr-core@reply-skills` and `claude plugin uninstall agentic-runtime@reply-skills`, with
-  `--scope project` for one installed in a project. For Codex, use the host's plugin command.
+- **If you installed `ai-sdr-core@reply-skills` or `agentic-runtime@reply-skills` as plugins,** the skills of
+  `ai-sdr-core` are an older copy of Jason's business pack and keep loading beside it under the plugin's prefix, and
+  those of `agentic-runtime` are retired, Jason's runtime skills replacing them. Remove both with your host's own plugin
+  command; on Claude Code that is `claude plugin uninstall ai-sdr-core@reply-skills` and
+  `claude plugin uninstall agentic-runtime@reply-skills`, with `--scope project` for one installed in a project. For
+  Codex, use the host's plugin command.
 - **The Reply plugin** is unchanged.
 - **From 0.26.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
