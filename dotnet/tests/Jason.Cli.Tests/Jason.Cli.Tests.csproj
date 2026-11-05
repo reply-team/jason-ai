@@ -21,6 +21,8 @@
     <Compile Include="../Jason.Runtime.Tests/Critical.cs" Link="Critical.cs" />
     <!-- The critical tier's table and its guard: each test assembly holds its own column of the table to what it discovers. -->
     <Compile Include="../Jason.Runtime.Tests/CriticalTier.cs" Link="CriticalTier.cs" />
+    <!-- The reading of compiled calls the runtime's guards use, so the CLI's own assembly is read the same way. -->
+    <Compile Include="../Jason.Runtime.Tests/CompiledCalls.cs" Link="CompiledCalls.cs" />
     <!-- The programs a test invents for a search path, npm's shim among them: the provider check finds a program by
          the same lookup the plugin registry does, so its rows write the same files. Where the stand-in CLI is comes
          with it; nothing here starts that one. -->

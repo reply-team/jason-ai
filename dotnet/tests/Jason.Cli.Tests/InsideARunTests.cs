@@ -181,10 +181,30 @@ public class InsideARunTests
     /// <summary>
     /// Every request names the attempt because every client is made with it: each <c>new RuntimeClient(</c> under
     /// <c>dotnet/src</c> passes the attempt the CLI's environment names, and the stderr that environment writes to. Most
-    /// sites are held by no row of their own, and <c>null</c> would compile, so the source is read.
+    /// sites are held by no row of their own, and <c>null</c> would compile, so the source is read. The text alone would
+    /// miss a construction it does not spell, <c>RuntimeClient client = new(…)</c> say, so the compiled CLI is read too:
+    /// every construction it makes stands at a site the text holds, and there are as many of one as of the other.
     /// </summary>
     [Fact]
     public void Every_client_the_source_makes_is_given_the_environments_attempt()
+    {
+        var (sites, held) = ClientSites();
+
+        // A reading that found no client would pass on nothing, so the sites are counted first.
+        Assert.NotEmpty(sites);
+        Assert.Equal(sites, held);
+
+        var constructions = CompiledCalls.In(typeof(RuntimeClient).Assembly.Location)
+            .Where(call => call.Target is { Namespace: "Jason.Cli.Http", Type: nameof(RuntimeClient), Member: ".ctor" })
+            .ToList();
+        Assert.All(constructions, call => Assert.True(
+            held.Any(site => site.File == call.File && site.Line >= call.StartLine && site.Line <= call.EndLine),
+            $"{call.File}:{call.StartLine} makes a RuntimeClient at no site the text holds to the environment's attempt."));
+        Assert.Equal(held.Count, constructions.Count);
+    }
+
+    /// <summary>Each <c>new RuntimeClient(</c> under <c>dotnet/src</c> by file and line, and the ones of them that pass the environment's attempt and stderr.</summary>
+    private static (List<(string File, int Line)> Sites, List<(string File, int Line)> Held) ClientSites()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
@@ -196,20 +216,18 @@ public class InsideARunTests
         var sources = Directory.EnumerateFiles(Path.Combine(root.FullName, "dotnet", "src"), "*.cs", SearchOption.AllDirectories)
             .Where(path => !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part => part is "bin" or "obj"));
 
-        var sites = new List<string>();
-        var held = new List<string>();
+        var sites = new List<(string File, int Line)>();
+        var held = new List<(string File, int Line)>();
         foreach (var path in sources)
         {
             var text = File.ReadAllText(path);
-            var name = Path.GetRelativePath(root.FullName, path);
-            sites.AddRange(Regex.Matches(text, @"new\s+(?:[\w.]+\.)?RuntimeClient\s*\(").Select(match => $"{name}@{match.Index}"));
-            held.AddRange(Regex.Matches(text, @"new\s+(?:[\w.]+\.)?RuntimeClient\s*\(\s*[^,()]+,\s*env\.AttemptFromEnvironment\(\),\s*env\.Error,")
-                .Select(match => $"{name}@{match.Index}"));
+            var name = Path.GetRelativePath(root.FullName, path).Replace('\\', '/');
+            (string, int) At(Match match) => (name, text.AsSpan(0, match.Index).Count('\n') + 1);
+            sites.AddRange(Regex.Matches(text, @"new\s+(?:[\w.]+\.)?RuntimeClient\s*\(").Select(At));
+            held.AddRange(Regex.Matches(text, @"new\s+(?:[\w.]+\.)?RuntimeClient\s*\(\s*[^,()]+,\s*env\.AttemptFromEnvironment\(\),\s*env\.Error,").Select(At));
         }
 
-        // A reading that found no client would pass on nothing, so the sites are counted first.
-        Assert.NotEmpty(sites);
-        Assert.Equal(sites, held);
+        return (sites, held);
     }
 
     /// <summary>The CLI does not decide the refusal: it sends, and prints the runtime's answer as it came, exiting 1.</summary>
