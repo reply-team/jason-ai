@@ -26,7 +26,7 @@ public sealed partial class BlockClearDocTests
     [Fact]
     public void The_readme_says_a_clear_from_a_role_or_a_run_is_refused_and_no_longer_that_an_agent_cannot_clear()
     {
-        var readme = Whitespace().Replace(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "README.md")), " ");
+        var readme = Whitespace().Replace(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", "handbook.md")), " ");
 
         Assert.Contains(
             "A person who has removed the cause says so under their name, and the next scan lets the work go; a clear that comes from a role or from a run is refused, and so is one that names no person:",

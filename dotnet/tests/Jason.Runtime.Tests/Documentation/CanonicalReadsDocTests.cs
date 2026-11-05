@@ -246,7 +246,8 @@ public sealed partial class CanonicalReadsDocTests
     /// whatever it is. The five pages that count say it at least once; the divergence file may not count at all.
     /// </summary>
     [Theory]
-    [InlineData("README.md", true)]
+    [InlineData("README.md", false)]
+    [InlineData("docs/handbook.md", true)]
     [InlineData("docs/plugins.md", true)]
     [InlineData("docs/reports.md", true)]
     [InlineData("docs/routing.md", true)]
