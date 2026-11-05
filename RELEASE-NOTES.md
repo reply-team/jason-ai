@@ -64,7 +64,7 @@ decisions can no longer be made from inside a run, and a campaign's responder is
   [Runtime API page](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/runtime-api.md) states it.
 - **Two more skills are `verified`.** `operating-the-installation` and `troubleshooting-jason` were read by a real
   agent host against the published 0.29.0 executable, did the job each teaches, and had every `jason` line they quote
-  held to that executable's `--help`; no text changed. The skills still marked `draft` are `researcher-in-session`,
+  held to that executable's `--help`; no instruction changed. The skills still marked `draft` are `researcher-in-session`,
   `roles/responder` and the nine skills of the business pack.
 - **The README is new, and the former README is the handbook.** The first page of the repository is now written for a
   reader who has not yet decided to install Jason. The former README, whole, is
@@ -94,7 +94,8 @@ decisions can no longer be made from inside a run, and a campaign's responder is
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
   lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
   install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
-  and `jason plugin install reply --replace` follow.
+  and `jason plugin install reply --replace` follow,
+  and `jason plugin install journal-forwarder --replace` too if you installed the forwarder.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
   `brew upgrade jason`, run `jason skills update`. Two skills changed their status line from `draft` to `verified`.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle
