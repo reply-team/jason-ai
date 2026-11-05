@@ -31,7 +31,8 @@ granted.
 - **The journal's kinds are published.** Every kind the runtime reserves for its own lines has one document under
   [`docs/contracts/journal/`](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/contracts/journal), saying what a
   line of the kind records, which things it names and whether a plugin may subscribe to it, and every line the runtime
-  writes is held to its document as it is written. `jason journal kinds` reads them, a page at a time, in kind order.
+  writes is checked against its document as it is written: the test suite refuses a line off its document, and an
+  installation writes it and its log names the kind. `jason journal kinds` reads them, a page at a time, in kind order.
   [The contracts page](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/contracts/README.md#the-journals-kinds)
   states the rules a document follows.
 - **A plugin subscribes by declaration and grant.** A manifest lists the kinds it wants under `subscriptions`; you admit
@@ -50,8 +51,8 @@ granted.
   the kind, the line, the plugin, the class and the code, and the kind moves on. What a handler does is never handed to
   another handler as a new line. Delivery is at least once: a line may be handed twice, after a restart in the middle of
   a chain too, and a handler tells a repeat by `attempt` in its input, which counts how many times that plugin has been
-  handed the line, this time included, so it is above 1 for a handler that saw the line before, after a transient retry
-  or after a restart. The numbers under `Subscriptions` apply live. See
+  handed the line in this chain's record, this time included, so it is above 1 after a transient retry or a restart; a
+  rewind opens a new chain, so it starts at 1 again, and that repeat is the person's own. The numbers under `Subscriptions` apply live. See
   [the plugin guide](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/plugins.md#17-writing-a-subscriber).
 - **A handler reads and writes Jason through `host.call`.** A handler of a plugin you granted a Runtime API family calls
   Runtime API operations through a door the runtime opens for that one invocation, about that one line. The families
@@ -62,7 +63,7 @@ granted.
   [The guide's capabilities section](https://github.com/reply-team/jason-ai/blob/v0.29.0/docs/plugins.md#9-capabilities-and-grants)
   lists them.
 - **`jason subscription list`, `runs` and `rewind`.** `list` shows, for each subscribed kind, the plugins of its chain,
-  where its position stands, the journal's last line of the kind, the lag between the two, and the members the current
+  where its position stands, the journal's last line of the kind, how many of its lines are due, and the members the current
   load cannot run. `runs --kind <kind>` pages the records of that kind's chains, newest first, each handler's outcome
   included. `rewind --kind <kind>` with `--line <id>` or `--since <moment>` moves the position back so the kind's lines
   are handed again; only a person may, so it takes `--actor human:<your-name>`, it refuses a target ahead of the
