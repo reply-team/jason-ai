@@ -50,7 +50,7 @@ public static class UiCommands
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             return InstallAsync(env, parseResult.GetValue(feed), parseResult.GetValue(human), cancellationToken);
         });
         return command;
@@ -105,7 +105,7 @@ public static class UiCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("approval_id", parseResult.GetValue(approval))
                 .Set("decision_id", parseResult.GetValue(question));
@@ -154,7 +154,7 @@ public static class UiCommands
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             return OperationRunner.RunAsync(env, Operations.UiTokens, RequestBody.Empty(), new RunOptions(parseResult.GetValue(human), UiRenderers.Tokens), cancellationToken);
         });
         return command;
@@ -171,7 +171,7 @@ public static class UiCommands
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var tokenId = parseResult.GetValue(id);
             var every = parseResult.GetValue(all);
             if (every == (tokenId is not null))

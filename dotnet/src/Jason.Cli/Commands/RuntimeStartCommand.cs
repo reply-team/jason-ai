@@ -258,7 +258,7 @@ public static class RuntimeStartCommand
         own.CancelAfter(bound);
 
         RuntimeResponse response;
-        using (var client = new RuntimeClient(descriptor, env.HttpHandler))
+        using (var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler))
         {
             try
             {

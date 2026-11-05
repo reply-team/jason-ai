@@ -8,11 +8,14 @@ using Microsoft.EntityFrameworkCore;
 namespace Jason.Runtime.Dispatch;
 
 /// <summary>
-/// What a role's run is told about the wait before it, composed at the claim from rows: the item's latest wait, when that
-/// wait was released — the attempt that waited, why the wait ended, and how each item it named stands now. A run that
-/// follows no wait, or whose item's latest wait closed some other way, is told nothing, however many waits were released
-/// before it. The first attempt the claim hands out after a release is recorded on the wait as the one it resumed, once;
-/// an attempt that retries after it is told the same, because the wait it follows is still the last one.
+/// What a role's run is told about the wait before it, composed at the claim from rows: the item's latest wait that an
+/// attempt ended in, when that wait was released — the attempt that waited, why the wait ended, and how each item it named
+/// stands now. A wait with no attempt of its own, which is what a limit the claim met holds an item in, is passed over: it
+/// was no run's, so it has nothing to tell one, and the run after it follows the wait before it. A run that follows no
+/// wait, or whose item's latest such wait closed some other way, is told nothing, however many waits were released before
+/// it; the number counts only released waits an attempt ended in. The first attempt the claim hands out after a release
+/// is recorded on the wait as the one it resumed, once; an attempt that retries after it is told the same, because the
+/// wait it follows is still the last one.
 /// </summary>
 public static class Resumptions
 {
@@ -29,7 +32,7 @@ public static class Resumptions
         var wait = await db.WorkItemWaits
             .Include(w => w.Attempt)
             .Include(w => w.Items)
-            .Where(w => w.WorkItemId == item.Id)
+            .Where(w => w.WorkItemId == item.Id && w.AttemptId != null)
             .OrderByDescending(w => w.Id)
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
@@ -40,7 +43,9 @@ public static class Resumptions
 
         wait.ResumedByAttempt ??= attempt;
         var number = await db.WorkItemWaits
-            .CountAsync(w => w.WorkItemId == item.Id && w.Status == WaitStatus.Released && w.Id <= wait.Id, ct)
+            .CountAsync(
+                w => w.WorkItemId == item.Id && w.AttemptId != null && w.Status == WaitStatus.Released && w.Id <= wait.Id,
+                ct)
             .ConfigureAwait(false);
 
         return new Resumption(

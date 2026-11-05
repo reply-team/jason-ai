@@ -49,7 +49,7 @@ public static class UpdateCommands
         {
             // About this build rather than about business state, so no claim travels with it — but a malformed
             // claim is still refused, so --actor behaves the same on every verb.
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             return CheckAsync(env, parseResult.GetValue(feed), parseResult.GetValue(human), cancellationToken);
         });
 
@@ -81,7 +81,7 @@ public static class UpdateCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             return ApplyAsync(
                 env,
                 parseResult.GetValue(feed),
@@ -283,7 +283,7 @@ public static class UpdateCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             return RollBackAsync(env, parseResult.GetValue(human), cancellationToken);
         });
 
@@ -300,7 +300,7 @@ public static class UpdateCommands
 
         command.SetAction(parseResult =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             return StatusAsync(env, parseResult.GetValue(human));
         });
 

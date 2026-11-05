@@ -52,7 +52,7 @@ public static class JournalCommands
                 .Set("key", parseResult.GetValue(key))
                 .Set("new", VerbOptions.Json(parseResult.GetValue(newValue), "--new"))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.JournalAppend, body, new RunOptions(parseResult.GetValue(human), JournalRenderers.Entry), cancellationToken)
@@ -84,7 +84,7 @@ public static class JournalCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(campaign))
                 .Set("work_item_id", parseResult.GetValue(workItem))
@@ -114,7 +114,7 @@ public static class JournalCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));

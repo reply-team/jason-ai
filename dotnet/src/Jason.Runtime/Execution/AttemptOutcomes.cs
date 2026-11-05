@@ -364,6 +364,46 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     }
 
     /// <summary>
+    /// Holds <paramref name="item"/> at a limit the claim met: it is held at the claim, with no attempt of its own, and
+    /// waits until <paramref name="until"/>, the moment the limit lets it go. The counterpart of <see cref="Park"/> for a
+    /// limit rather than a block, with one entry, the claim. The item's last error is <paramref name="error"/>, which
+    /// names the limit, the moment and the ways out, and the line says which limit held it and at what number. Nothing is
+    /// counted against the item's attempts, since the hold starts none; a wait an earlier attempt ended in stays the one
+    /// the item's next run resumes from (<see cref="Jason.Runtime.Dispatch.Resumptions"/>).
+    /// </summary>
+    public WorkItemWait Hold(JasonDbContext db, WorkItem item, DateTime until, AttemptErrorDto error, int limit, ActorRef actor)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(error);
+        var now = clock.GetUtcNow().UtcDateTime;
+        item.LastError = error;
+        WorkItemTransitions.Apply(item, WorkItemStatus.Waiting, now);
+
+        // No attempt, no items and no mode: the moment is the whole wait, and it is its own deadline.
+        var wait = new WorkItemWait { WorkItem = item, Until = until, Deadline = until, Status = WaitStatus.Open, OpenedAt = now };
+        db.WorkItemWaits.Add(wait);
+
+        var moment = JsonSerializer.SerializeToNode(WorkItemMapper.Utc(until), JasonJson.Options);
+        journal.Append(
+            db,
+            actor,
+            JournalKinds.WorkItemWaiting,
+            campaign: null,
+            key: null,
+            updated: new JsonObject
+            {
+                ["on"] = new JsonArray(),
+                ["mode"] = null,
+                ["until"] = moment,
+                ["deadline"] = moment?.DeepClone(),
+                ["held_by"] = new JsonObject { ["code"] = error.Code, ["limit"] = limit },
+            },
+            workItem: item);
+        return wait;
+    }
+
+    /// <summary>
     /// What an attempt of an operation a provider block holds says about the blocks of its plugin and binding, after its
     /// verdict. <see cref="BlockAnswer.GotPast"/> — it succeeded, or the provider judged the work itself — clears every
     /// open block that covers it and every block it was the trial of. <see cref="BlockAnswer.Blocked"/> opens the block <paramref name="said"/> names or sees

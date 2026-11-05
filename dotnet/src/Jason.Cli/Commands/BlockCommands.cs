@@ -39,7 +39,7 @@ public static class BlockCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var statuses = parseResult.GetValue(status) ?? [];
             var body = RequestBody.Empty()
                 .Set("statuses", statuses.Length > 0 ? new JsonArray([.. statuses.Select(s => JsonValue.Create(s))]) : null)
@@ -67,7 +67,7 @@ public static class BlockCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty().Set("block_id", parseResult.GetValue(id));
 
             return OperationRunner.RunAsync(
@@ -98,7 +98,7 @@ public static class BlockCommands
             var body = RequestBody.Empty()
                 .Set("block_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "block clear", "a block is cleared on a person's word");
 
             return OperationRunner.RunAsync(

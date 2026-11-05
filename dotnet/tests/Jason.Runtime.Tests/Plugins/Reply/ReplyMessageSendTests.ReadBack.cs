@@ -121,7 +121,7 @@ public partial class ReplyMessageSendTests
         if (hoursAgo < 23)
         {
             Assert.Equal("sent", (string?)ReplyOperations.Succeeded(Operation, result)["items"]![0]!["status"]);
-            Assert.Equal(["direct-send get email-1007", "account list", "direct-send get email-1", "contact get 1001", "contact send-email"], Lines(account));
+            Assert.Equal(["direct-send get email-1007", "account list", "contact get 1001", "contact send-email"], Lines(account));
             Assert.Equal(Key, account.Calls[^1].Option("--idempotency-key"));
             Assert.All(account.Calls.SkipLast(1), call => Assert.Null(call.Option("--idempotency-key")));
             Assert.Single(account.Sent);

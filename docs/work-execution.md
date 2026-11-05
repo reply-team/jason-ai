@@ -132,6 +132,8 @@ processing ──► waiting ──► created                     (what it wait
 
 created | processing ──► waiting ──► created           (a provider block held it: the block cleared, or let it through as its trial)
 
+created ──► waiting ──► created                        (a limit held it at the claim, with no attempt of its own: its moment came, or somebody resumed it)
+
 created | awaiting_approval | scheduled | processing | waiting | expired ──► cancelled
 created | awaiting_approval | waiting ──► expired      (the due date passed before anyone claimed or answered it, or while it waited)
 ```
@@ -160,7 +162,8 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   resumes work that was stopped. Work a provider block holds waits here too, with no run of its own behind the
   wait: the claim parks it before any attempt exists, or the attempt that met the block ends `blocked`. Its wait
   names the block rather than items or a moment, is bounded by the item's `due_at` alone, and is released with
-  `block_cleared` or `block_trial` (§Provider blocks).
+  `block_cleared` or `block_trial` (§Provider blocks). A responder its campaign's daily limit holds waits here as well,
+  held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule).
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
 - **`expired`** — the due date passed before anyone claimed it, before anyone answered the
@@ -229,6 +232,20 @@ Work the runtime cannot perform is failed inside the same transaction rather tha
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
+A responder is held, not failed, when its campaign has already started `Responder:MaxLaunchesPerDay` responder runs
+since 00:00Z: a failure would wake the manager, so the reply would reach it by a second path. The day is UTC, since a
+campaign has no time zone. The claim counts the attempts of the campaign's `ai_role` items of role `responder` that
+started since 00:00Z — an attempt the claim refused never started and spends nothing, and a responder queued by hand
+counts like one the respond step made — and holds the item in the same transaction: it moves to `waiting` with no
+attempt, its wait is the next 00:00Z, its `last_error` is `responder_launches_spent`, and one `workitem_waiting` line
+says `held_by` with the code and the limit. A held item does not make its campaign busy, so the campaign's other work
+is claimed at the next scan. There are three ways out. At 00:00Z the resume step releases it and the claim counts the
+new day as usual, so a day already spent by then holds it again. `workitem.resume` lets that one item go past the limit
+under the person's name: the claim takes it at its next turn and its run counts like any other. Every run counts,
+a resumption included, so a responder whose run yielded can be held too; let go, its next run is told about the wait
+its own run ended in, since the hold's wait has no attempt (§The launch envelope). Raising the setting
+applies at the next scan to work not yet held, while an item already held keeps its moment.
+
 ## Approvals
 
 An operation's contract says what approval it needs. Most published operations publish `auto`, which is
@@ -270,7 +287,9 @@ provenance, the coded failure, and one against the budget.
 with a name; a role or an attempt is refused with `approval_not_human`, and an absent actor with
 `actor_required`. What the runtime cannot do is tell a person from a process holding that person's own
 command line — that is the operator's trust to give. What it guarantees is that nothing inside it can
-approve anything, and that every decision names who made it.
+approve anything, and that every decision names who made it. An approval or an answer sent from inside a run is
+refused with `decided_inside_a_run` whoever it names, since the CLI names its attempt on every request it sends from
+there: a higher bar against a role deciding its own work, not a boundary.
 
 An approval is about one operation on one work item, and it is not the only thing a person is asked. A
 role that cannot decide *what to do next* raises a question instead — a decision, which outlives the
@@ -564,7 +583,9 @@ Its environment is the runtime's own plus the runtime's four and the constants a
 
 - `JASON_DATA_DIR`, pointing at the data directory;
 - `JASON_ATTEMPT_ID` and `JASON_WORK_ITEM_ID`, both non-secret values the envelope already carries, so
-  that an agent reporting through the CLI is its attempt without having to say so;
+  that an agent reporting through the CLI is its attempt without having to say so; and the CLI names
+  the attempt to the runtime on every request in the `Jason-Attempt` header, whatever actor it claims,
+  so the five verbs that are a person's own word refuse it (`decided_inside_a_run`);
 - the directory this build of Jason runs from, at the front of `PATH`, so the bare command word in
   `runtime.cli_command` reaches this runtime rather than whatever else answers for that name.
 
@@ -677,9 +698,10 @@ than what the provenance recorded.
 waiting — a responder the respond step wrote waiting on the read of its thread ([inbound sync](inbound-sync.md) §1) —
 since no attempt waited: that run reads what it waited on by the identifiers its context carries, with
 `jason workitem get`. A run that does follow a wait — the item's last run
-ended with `workitem.wait`, and the item's latest wait was released rather than closed some other way — is told about that wait here, composed **at the
+ended with `workitem.wait`, and the item's latest wait that an attempt ended in was released rather than closed some
+other way, a wait the claim held it in at a limit being passed over — is told about that wait here, composed **at the
 claim** from the rows the wait left: `previous_attempt_id` is the attempt that waited, `resumption_number`
-counts the item's released waits up to this one, `waited_since` is when the wait opened, and
+counts the item's released waits that an attempt ended in, up to this one, `waited_since` is when the wait opened, and
 `woke_because` is the reason the wait's release recorded, verbatim — `children_ended`, `moment_reached`,
 `wait_ceiling` or `resumed_by_actor`. A role's wait is released for one of those four: neither `block_cleared`
 nor `block_trial` occurs for a role's wait, since a provider block holds provider operations, and their relaunch
@@ -822,6 +844,7 @@ settings at all and are never refused for this reason.
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
+| `responder_launches_spent` | wait | the responder's campaign has started `Responder:MaxLaunchesPerDay` responder runs since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
 | the twenty pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
@@ -1095,6 +1118,7 @@ mistyped one.
 | `Responder:TimeoutSeconds` | `900` | 30..86400 | how long one responder run may take |
 | `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
+| `Responder:MaxLaunchesPerDay` | `25` | 1..1000 | how many responder runs one campaign may start in a UTC day, counted from 00:00Z; the claim holds a responder at the limit until the next 00:00Z (§The claim rule) |
 
 An item may override the three per-kind numbers for itself: `timeout_seconds` (30..86400),
 `heartbeat_seconds` (0, or 10..3600) and `max_attempts` (1..10). A `provider_op` item has one rule

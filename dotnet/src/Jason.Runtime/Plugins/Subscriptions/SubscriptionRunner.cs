@@ -42,6 +42,11 @@ namespace Jason.Runtime.Plugins.Subscriptions;
 /// with one <c>subscription_failed</c> line, and the kind moves on. A line a plugin wrote, or one about work a plugin
 /// created, is passed over: a handler's own acts never start another chain.
 /// </para>
+/// <para>
+/// A turn that cannot finish for a reason of the runtime's own gives out: the kind rests, holding no child, and is not
+/// offered again until a wait has passed that doubles with each give-out in a row, from the backoff's own setting and
+/// held to the same hour. The streak is kept in memory only and ends with the first turn that does not give out.
+/// </para>
 /// </remarks>
 public sealed class SubscriptionRunner(
     LiveSettings<SubscriptionsOptions> settings,
@@ -53,7 +58,10 @@ public sealed class SubscriptionRunner(
     /// <summary>How many lines of a kind, skipped ones included, one turn takes before the kind goes back to the scan.</summary>
     public const int LinesPerTurn = 50;
 
-    /// <summary>The longest wait before a transient handler is run again, whatever the doubling reaches.</summary>
+    /// <summary>
+    /// The longest of the two waits the doubling makes, whatever it reaches: before a transient handler is run again, and
+    /// before a kind whose turn gave out is offered again.
+    /// </summary>
     public const int MaximumBackoffSeconds = 3_600;
 
     private const string Contract = "subscription.handle";
@@ -86,10 +94,11 @@ public sealed class SubscriptionRunner(
         "Subscription runner stopped with {Count} chains in flight");
 
     // What a parser quotes is what the value held, so a parse failure is said by its sentence and never handed over whole.
-    private static readonly Action<ILogger, string, string, Exception?> GaveOut = LoggerMessage.Define<string, string>(
+    // Said at the first give-out of a streak, and again only for a failure other than the one said before it.
+    private static readonly Action<ILogger, string, string, int, Exception?> GaveOut = LoggerMessage.Define<string, string, int>(
         LogLevel.Warning,
         new EventId(6, nameof(GaveOut)),
-        "Subscription chain for {Kind} could not finish ({Failure}); the next scan offers it again");
+        "Subscription chain for {Kind} could not finish ({Failure}); it is not offered again for {WaitSeconds} s");
 
     private readonly SubscriptionContract _contract =
         SubscriptionCatalog.Find(Contract) ?? throw new InvalidOperationException("This build publishes no subscription.handle contract.");
@@ -97,6 +106,7 @@ public sealed class SubscriptionRunner(
     private readonly Lock _gate = new();
     private readonly List<Flight> _flight = [];
     private readonly HashSet<(string Snapshot, string Kind)> _said = [];
+    private readonly Dictionary<string, Rest> _rest = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _wake = new(0, int.MaxValue);
     private readonly SemaphoreSlim _settle = new(1, 1);
     private bool _settled;
@@ -163,13 +173,16 @@ public sealed class SubscriptionRunner(
         }
     }
 
-    /// <summary>Takes a kind's next turn; false, and nothing taken, while the kind has a chain in flight or every child is taken.</summary>
+    /// <summary>
+    /// Takes a kind's next turn; false, and nothing taken, while the kind has a chain in flight, rests after a give-out, or
+    /// every child is taken.
+    /// </summary>
     public bool TryStart(string kind)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(kind);
         lock (_gate)
         {
-            if (Find(kind) is not null || _children + DueWaiting() >= settings.Current.MaxParallel)
+            if (Find(kind) is not null || Rests(kind) || _children + DueWaiting() >= settings.Current.MaxParallel)
             {
                 return false;
             }
@@ -184,8 +197,8 @@ public sealed class SubscriptionRunner(
 
     /// <summary>
     /// The kind's next turn, run now on the caller's flow rather than by the service's own loop: the turn offered, the
-    /// backoff that is over, or a kind not in flight taken here while a child is free; null when none of these holds. A
-    /// test's way to run a turn at a moment it chooses; the runtime runs them in <see cref="ExecuteAsync"/>.
+    /// backoff that is over, or a kind neither in flight nor at rest taken here while a child is free; null when none of
+    /// these holds. A test's way to run a turn at a moment it chooses; the runtime runs them in <see cref="ExecuteAsync"/>.
     /// </summary>
     internal async Task<SubscriptionTurn?> RunNextAsync(string kind, CancellationToken ct)
     {
@@ -195,7 +208,7 @@ public sealed class SubscriptionRunner(
             flight = Find(kind);
             if (flight is null)
             {
-                if (_children + DueWaiting() >= settings.Current.MaxParallel)
+                if (Rests(kind) || _children + DueWaiting() >= settings.Current.MaxParallel)
                 {
                     return null;
                 }
@@ -285,11 +298,6 @@ public sealed class SubscriptionRunner(
         {
             // Stopped mid-turn: the record keeps what was under way, and the next start takes it up.
         }
-        catch (Exception ex)
-        {
-            var parse = ParseFailure.Is(ex);
-            GaveOut(logger, flight.Kind, parse ? ParseFailure.Describe(ex) : ex.GetType().Name, parse ? null : ex);
-        }
     }
 
     private List<Flight> TakeStartable()
@@ -333,11 +341,31 @@ public sealed class SubscriptionRunner(
     private async Task<SubscriptionTurn> TurnAsync(Flight flight, CancellationToken ct)
     {
         Paused? paused = null;
+        var tally = new Tally();
         try
         {
-            var (turn, pause) = await RunTurnAsync(flight, ct).ConfigureAwait(false);
+            var (turn, pause) = await RunTurnAsync(flight, tally, ct).ConfigureAwait(false);
             paused = pause;
+            lock (_gate)
+            {
+                _rest.Remove(flight.Kind);
+            }
+
             return turn;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // A fault of the runtime's own, which a stop is not: the kind rests, and nothing is written, since the
+            // database may be what failed.
+            var parse = ParseFailure.Is(ex);
+            var failure = parse ? ParseFailure.Describe(ex) : ex.GetType().Name;
+            var (wait, say) = RestAfterGiveOut(flight.Kind, failure);
+            if (say)
+            {
+                GaveOut(logger, flight.Kind, failure, wait, parse ? null : ex);
+            }
+
+            return new SubscriptionTurn(flight.Kind, tally.Lines, tally.Skipped, SubscriptionTurn.GaveOut);
         }
         finally
         {
@@ -364,50 +392,70 @@ public sealed class SubscriptionRunner(
         _wake.Release();
     }
 
+    /// <summary>
+    /// The kind's give-out streak grows by one and the kind rests for the wait that gives it, from
+    /// <c>Subscriptions:RetryBackoffSeconds</c> as it stands now, doubled at each give-out of the streak and held to
+    /// <see cref="MaximumBackoffSeconds"/>: the wait in seconds, and whether the give-out is said, which it is as the
+    /// first of its streak or with a failure other than the one said before it.
+    /// </summary>
+    private (int Wait, bool Say) RestAfterGiveOut(string kind, string failure)
+    {
+        var backoff = settings.Current.RetryBackoffSeconds;
+        lock (_gate)
+        {
+            var before = _rest.GetValueOrDefault(kind);
+            var giveOuts = (before?.GiveOuts ?? 0) + 1;
+            var wait = (int)Math.Min(MaximumBackoffSeconds, backoff * Math.Pow(2, giveOuts - 1));
+            _rest[kind] = new Rest(giveOuts, clock.GetUtcNow().AddSeconds(wait), failure);
+            return (wait, before is null || !string.Equals(before.Failure, failure, StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>Whether the kind waits out a give-out now: a kind at rest is no flight and holds no child.</summary>
+    private bool Rests(string kind) => _rest.TryGetValue(kind, out var rest) && rest.Until > clock.GetUtcNow();
+
     private Flight? Find(string kind) => _flight.Find(flight => string.Equals(flight.Kind, kind, StringComparison.Ordinal));
 
     private bool IsDue(Flight flight) => flight.Paused is { } paused && paused.Due <= clock.GetUtcNow();
 
     private int DueWaiting() => _flight.Count(flight => flight.State == FlightState.Waiting && IsDue(flight));
 
-    private async Task<(SubscriptionTurn Turn, Paused? Paused)> RunTurnAsync(Flight flight, CancellationToken ct)
+    private async Task<(SubscriptionTurn Turn, Paused? Paused)> RunTurnAsync(Flight flight, Tally tally, CancellationToken ct)
     {
         await SettleAsync(ct).ConfigureAwait(false);
         var kind = flight.Kind;
-        var lines = 0;
-        var skipped = 0;
 
         if (flight.Paused is { } resumed)
         {
             flight.Paused = null;
-            lines++;
+            tally.Lines++;
             var end = await ChainAsync(resumed.Chain, resumed.Handler, resumed.Envelope, ct).ConfigureAwait(false);
             if (end.Paused is not null)
             {
-                return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Backoff), end.Paused);
+                return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Backoff), end.Paused);
             }
 
             if (end.Superseded)
             {
-                return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Superseded), null);
+                return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Superseded), null);
             }
         }
 
-        while (lines + skipped < LinesPerTurn)
+        while (tally.Lines + tally.Skipped < LinesPerTurn)
         {
             await using var scope = scopes.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
             var cursor = await db.SubscriptionCursors.AsNoTracking().SingleOrDefaultAsync(row => row.Kind == kind, ct).ConfigureAwait(false);
             if (cursor is null)
             {
-                return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Gone), null);
+                return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Gone), null);
             }
 
             var batch = await db.Journal
                 .AsNoTracking()
                 .Where(line => line.Kind == kind && line.Id > cursor.AfterLine)
                 .OrderBy(line => line.Id)
-                .Take(LinesPerTurn - lines - skipped)
+                .Take(LinesPerTurn - tally.Lines - tally.Skipped)
                 .Select(line => new
                 {
                     line.Id,
@@ -419,7 +467,7 @@ public sealed class SubscriptionRunner(
                 .ConfigureAwait(false);
             if (batch.Count == 0)
             {
-                return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Head), null);
+                return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Head), null);
             }
 
             // A member that cannot run on this machine is no outcome: the kind waits at its line and nothing is spent,
@@ -428,13 +476,13 @@ public sealed class SubscriptionRunner(
             var members = snapshot.Subscriptions.For(kind);
             if (members.Count == 0)
             {
-                return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Waiting), null);
+                return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Waiting), null);
             }
 
             if (members.FirstOrDefault(id => snapshot.Find(id) is not { Status: PluginStatus.Valid }) is { } unavailable)
             {
                 NoteWaiting(snapshot.Id, kind, batch[0].PublicId, unavailable);
-                return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Waiting), null);
+                return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Waiting), null);
             }
 
             var leading = batch.TakeWhile(line => line.Skip).Count();
@@ -443,28 +491,28 @@ public sealed class SubscriptionRunner(
                 var past = batch[leading - 1].Id;
                 if (!await MoveAsync(db, cursor, past, ct).ConfigureAwait(false))
                 {
-                    return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Superseded), null);
+                    return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Superseded), null);
                 }
 
-                skipped += leading;
+                tally.Skipped += leading;
                 continue;
             }
 
-            lines++;
+            tally.Lines++;
             var chain = await StartAsync(db, snapshot, members, cursor, batch[0].Id, ct).ConfigureAwait(false);
             var end = await ChainAsync(chain, 0, [], ct).ConfigureAwait(false);
             if (end.Paused is not null)
             {
-                return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Backoff), end.Paused);
+                return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Backoff), end.Paused);
             }
 
             if (end.Superseded)
             {
-                return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Superseded), null);
+                return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Superseded), null);
             }
         }
 
-        return (new SubscriptionTurn(kind, lines, skipped, SubscriptionTurn.Limit), null);
+        return (new SubscriptionTurn(kind, tally.Lines, tally.Skipped, SubscriptionTurn.Limit), null);
     }
 
     /// <summary>Moves the position past lines passed over, where it still stands as the read found it.</summary>
@@ -835,6 +883,14 @@ public sealed class SubscriptionRunner(
         }
     }
 
+    /// <summary>What a turn has done so far: the lines whose chains it ran and the lines it passed over.</summary>
+    private sealed class Tally
+    {
+        public int Lines { get; set; }
+
+        public int Skipped { get; set; }
+    }
+
     private sealed class Flight(string kind)
     {
         public string Kind { get; } = kind;
@@ -865,6 +921,12 @@ public sealed class SubscriptionRunner(
 
     private sealed record Failure(string PluginId, string Class, string Code, int Attempts);
 
+    /// <summary>
+    /// A kind's give-out streak, in this runner's memory only: how many of its turns in a row gave out, until when it is
+    /// not offered, and the failure last said. A turn that ends without a give-out ends the streak; a reload does not.
+    /// </summary>
+    private sealed record Rest(int GiveOuts, DateTimeOffset Until, string Failure);
+
     private sealed record ChainEnd(Paused? Paused, bool Superseded)
     {
         public static ChainEnd Waiting(Paused paused) => new(paused, false);
@@ -893,4 +955,10 @@ public sealed record SubscriptionTurn(string Kind, int Lines, int Skipped, strin
 
     /// <summary>The kind has no position: no plugin in force subscribes to it.</summary>
     public const string Gone = "gone";
+
+    /// <summary>
+    /// The turn could not finish for a reason of the runtime's own; the kind is not offered again until its wait has
+    /// passed.
+    /// </summary>
+    public const string GaveOut = "gave_out";
 }

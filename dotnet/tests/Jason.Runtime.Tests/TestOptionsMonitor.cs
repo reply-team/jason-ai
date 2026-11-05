@@ -70,6 +70,10 @@ public static class TestOptions
     public static LiveSettings<RolesOptions> RoleSettings(RolesOptions? options = null) =>
         Seam(new TestOptionsMonitor<RolesOptions>(options ?? new RolesOptions()), RolesOptions.Section);
 
+    /// <summary>The seam over the respond step's section, which the claim reads for the day's limit of responder runs.</summary>
+    public static LiveSettings<ResponderOptions> ResponderSettings(ResponderOptions? options = null) =>
+        Seam(new TestOptionsMonitor<ResponderOptions>(options ?? new ResponderOptions()), ResponderOptions.Section);
+
     /// <summary>The seam of a runtime that has never read settings the validator accepted.</summary>
     public static LiveSettings<DispatcherOptions> NothingValidated() =>
         Settings(new ThrowingOptionsMonitor<DispatcherOptions>(new OptionsValidationException(

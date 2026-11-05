@@ -27,6 +27,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("are checked against that operation's argument schema, all but the one reserved key that [`args`](#the-input-a-plugin-receives) names")]
     [InlineData("One key of `args` is reserved for every operation and declared by none: **`provider`**, the provider's and its skills' own object, which a caller may place beside the arguments the document declares.")]
     [InlineData("The runtime never reads it: it holds the key to being a JSON object whose own member names are distinct, as every object a request carries must be, and to nothing else, refusing any other kind with `type` at the key's own pointer, sets it aside before the operation's argument schema applies, and hands it to the plugin exactly as written.")]
+    [InlineData("a field the release did not describe is not newly required of the body where only a branch added to an `anyOf` the release already had requires it, or only an object the release did not describe, since no body the release published could have needed it")]
     public void The_contracts_readme_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/contracts/README.md")), StringComparison.Ordinal);
 

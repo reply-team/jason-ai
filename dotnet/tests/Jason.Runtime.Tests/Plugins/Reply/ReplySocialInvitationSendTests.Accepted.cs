@@ -7,8 +7,8 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
 /// What Reply took, and the work item's own key, for an invitation as for a message: the invitation is made under the
-/// work item's idempotency key, a moment still ahead goes as <c>--send-after</c> once Reply is read to keep direct sends,
-/// and the result says what Reply said of the invitation: <c>sent</c> or <c>accepted</c> by Reply's state, the moment
+/// work item's idempotency key, a moment still ahead goes as <c>--send-after</c> with nothing read before it for it, and
+/// the result says what Reply said of the invitation: <c>sent</c> or <c>accepted</c> by Reply's state, the moment
 /// it holds it for, its reference and whether it can still be cancelled.
 /// </summary>
 public partial class ReplySocialInvitationSendTests
@@ -28,7 +28,7 @@ public partial class ReplySocialInvitationSendTests
         Assert.Equal(("accepted", "2099-11-03T14:30:00Z", "linkedin-scheduled-1001", true), ((string?)item["status"], (string?)item["accepted_for"], (string?)item["reference"], (bool)item["cancelable"]!));
         Assert.Equal("""{"external_id":null,"sent_at":null}""", item["invitation"]!.ToJsonString());
         Assert.Equal("""{"contact":"1001","send":"linkedin-scheduled-1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
-        Assert.Equal(["account list", "direct-send get email-1", "contact get 1001", "contact linkedin-connect"], Lines(account));
+        Assert.Equal(["account list", "contact get 1001", "contact linkedin-connect"], Lines(account));
         Assert.Equal(("2099-11-03T16:30:00+02:00", Key), (account.Calls[^1].Option("--send-after"), account.Calls[^1].Option("--idempotency-key")));
         Assert.All(account.Calls.SkipLast(1), call => Assert.Null(call.Option("--idempotency-key")));
         Assert.Equal("queued", (string?)Assert.Single(account.DirectSends)!["state"]);
@@ -103,45 +103,94 @@ public partial class ReplySocialInvitationSendTests
         Assert.Null(account.Calls[^1].Option("--send-after"));
     }
 
-    /// <summary>A moment the account's Reply does not keep is a capability not offered, naming the argument; nothing is sent.</summary>
-    [Fact]
-    public async Task A_moment_reply_does_not_keep_is_a_capability_not_offered_and_nothing_is_sent()
+    /// <summary>
+    /// Reply's direct-send routes are on every account, so nothing is read before an invitation to learn whether Reply
+    /// keeps them: one with a moment ahead and a repeat after an attempt that may have sent each go with no
+    /// <c>direct-send</c> read before them.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Nothing_is_read_before_an_invitation_to_learn_whether_reply_keeps_direct_sends(bool repeat)
     {
-        using var account = Planted().NotOffering("direct_send");
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = repeat
+            ? await InvokeAsync(api, Input(pinned: "1001"), attempt: 2, unsettledSince: Unsettled)
+            : await InvokeAsync(api, WithMoment(Input(pinned: "1001"), "2099-11-03T14:30:00Z"));
+
+        ReplyOperations.Succeeded(Operation, result);
+        Assert.Equal(["account list", "contact get 1001", "contact linkedin-connect"], Lines(account));
+        Assert.DoesNotContain(account.Calls, call => call.Line.StartsWith("direct-send get", StringComparison.Ordinal));
+        Assert.Single(account.Sent);
+    }
+
+    /// <summary>
+    /// A moment is not dropped: where Reply answers the invitation with a 404 that carries no code of Reply's own, it
+    /// ends <c>provider_call_failed</c>, final, with <c>reply.refused</c> and the 404 in its details, and nothing is sent.
+    /// </summary>
+    [Fact]
+    public async Task A_moment_whose_invitation_meets_a_404_without_reply_s_code_is_a_provider_call_failed()
+    {
+        using var account = Planted();
+        account.Refuses("contact linkedin-connect", "reply.refused", status: 404);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, WithMoment(Input(pinned: "1001"), "2099-11-03T14:30:00Z")));
 
-        Assert.Equal((UnjudgedOutcomeCodes.CapabilityNotOffered, FailureClass.Permanent), (error.Code, error.Class));
-        Assert.StartsWith("social_invitation.send: ", error.Message, StringComparison.Ordinal);
-        Assert.Contains("`send_after`", error.Message, StringComparison.Ordinal);
-        Assert.Equal(["account list", "direct-send get email-1"], Lines(account));
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal(("reply.refused", 404), ((string?)error.Details!["cli_code"], (int?)error.Details["status"]));
+        Assert.Null(error.Details["provider_code"]);
+        Assert.Equal(["account list", "contact get 1001", "contact linkedin-connect"], Lines(account));
+        Assert.Equal("2099-11-03T14:30:00Z", account.Calls[^1].Option("--send-after"));
         Assert.Empty(account.Sent);
     }
 
     /// <summary>
-    /// A repeat after an attempt that may have sent, where the account's Reply keeps no key, could invite the person twice:
-    /// it is not settled, and nothing is sent.
+    /// A repeat after an attempt that may have sent goes under the key with nothing read first; where Reply answers it with
+    /// a 404 that carries no code of Reply's own, the repeat cannot tell whether the earlier attempt went, so it is not
+    /// settled, and nothing is sent. That holds whichever way the person is named: by the identifier the pin gives, by
+    /// their fields for the command to import, and by the identifier the command named when it answered that Reply
+    /// already held them.
     /// </summary>
-    [Fact]
-    public async Task A_repeat_where_reply_keeps_no_key_is_not_settled_and_nothing_is_sent()
+    [Theory]
+    [InlineData("by id")]
+    [InlineData("by fields")]
+    [InlineData("held")]
+    public async Task A_repeat_whose_invitation_meets_a_404_without_reply_s_code_is_not_settled_and_nothing_is_sent(string named)
     {
-        using var account = Planted().NotOffering("direct_send");
+        using var account = named switch
+        {
+            "by fields" => new ReplyAccount().WithSender(34, "linkedin", "Ann Owner", SenderProfile),
+            "held" => Planted().Unlisted(1001),
+            _ => Planted(),
+        };
+        account.Refuses("contact linkedin-connect", "reply.refused", status: 404, match: named == "held" ? "--contact-id" : null);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
+        var input = named == "by id" ? Input(pinned: "1001") : Input();
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001"), attempt: 2, unsettledSince: Unsettled));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input, attempt: 2, unsettledSince: Unsettled));
 
         Assert.Equal(("send_not_settled", FailureClass.Permanent), (error.Code, error.Class));
-        Assert.Equal(["account list", "direct-send get email-1"], Lines(account));
+        Assert.Equal(("reply.refused", 404), ((string?)error.Details!["cli_code"], (int?)error.Details["status"]));
+        string[] calls = named switch
+        {
+            "by fields" => ["account list", "contact find", "contact linkedin-connect"],
+            "held" => ["account list", "contact find", "contact linkedin-connect", "contact get 1001", "contact linkedin-connect"],
+            _ => ["account list", "contact get 1001", "contact linkedin-connect"],
+        };
+        Assert.Equal(calls, Lines(account));
         Assert.Empty(account.Sent);
     }
 
     /// <summary>
     /// The key settles a repeat only while Reply still keeps it: inside the package's window from the moment the earliest
-    /// attempt that may have sent was claimed, the repeat reads first and goes under the key; past it, it is not settled,
-    /// nothing is read and nothing is sent.
+    /// attempt that may have sent was claimed, the repeat goes under the key; past it, it is not settled, nothing is read
+    /// and nothing is sent.
     /// </summary>
     [Theory]
     [InlineData(0.5, true)]
@@ -159,7 +208,7 @@ public partial class ReplySocialInvitationSendTests
         if (repeated)
         {
             Assert.Equal("sent", (string?)ReplyOperations.Succeeded(Operation, result)["items"]![0]!["status"]);
-            Assert.Equal(["account list", "direct-send get email-1", "contact get 1001", "contact linkedin-connect"], Lines(account));
+            Assert.Equal(["account list", "contact get 1001", "contact linkedin-connect"], Lines(account));
             Assert.Single(account.Sent);
             return;
         }
@@ -175,7 +224,7 @@ public partial class ReplySocialInvitationSendTests
     [Fact]
     public async Task A_later_attempt_after_settled_ones_reads_nothing_first()
     {
-        using var account = Planted().NotOffering("direct_send");
+        using var account = Planted();
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 

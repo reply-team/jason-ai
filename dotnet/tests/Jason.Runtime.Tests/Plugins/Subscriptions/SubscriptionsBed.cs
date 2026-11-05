@@ -69,22 +69,31 @@ internal static class SubscriptionsBed
     }
 
     /// <summary>
-    /// A line of the kind, written straight into the journal by the actor given and naming the work item given: its id,
-    /// which is what a position counts in.
+    /// A line of the kind, written straight into the journal by the actor given, naming the work item given and holding
+    /// the stored new value given as it is, read or not: its id, which is what a position counts in.
     /// </summary>
-    public static int Line(DispatchHarness harness, string kind, string actorType = "system", string actorId = "runtime", string? workItem = null)
+    public static int Line(DispatchHarness harness, string kind, string actorType = "system", string actorId = "runtime", string? workItem = null, string? newJson = null)
     {
         using var connection = new SqliteConnection($"Data Source={harness.DatabaseFile}");
         connection.Open();
+        if (newJson is not null)
+        {
+            // A stored value is written as given, the way an edit made with the columns' own checks turned off would.
+            using var pragma = connection.CreateCommand();
+            pragma.CommandText = "PRAGMA ignore_check_constraints = ON;";
+            pragma.ExecuteNonQuery();
+        }
+
         using var command = connection.CreateCommand();
         command.CommandText =
-            "INSERT INTO journal (public_id, ts, actor_type, actor_id, kind, key, work_item_id) VALUES ($id, $ts, $type, $actor, $kind, NULL, $item); SELECT last_insert_rowid();";
+            "INSERT INTO journal (public_id, ts, actor_type, actor_id, kind, key, work_item_id, new_json) VALUES ($id, $ts, $type, $actor, $kind, NULL, $item, $new); SELECT last_insert_rowid();";
         command.Parameters.AddWithValue("$id", PublicId.New("jrn"));
         command.Parameters.AddWithValue("$ts", Noon.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$type", actorType);
         command.Parameters.AddWithValue("$actor", actorId);
         command.Parameters.AddWithValue("$kind", kind);
         command.Parameters.AddWithValue("$item", (object?)workItem ?? DBNull.Value);
+        command.Parameters.AddWithValue("$new", (object?)newJson ?? DBNull.Value);
         return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
     }
 

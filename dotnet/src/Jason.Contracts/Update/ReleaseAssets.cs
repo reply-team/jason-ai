@@ -48,6 +48,13 @@ public static class ReleaseAssets
     public const string ReplyPlugin = "jason-plugin-reply.zip";
 
     /// <summary>
+    /// The journal forwarder's package: the files of <c>plugins/journal-forwarder</c> at the release's tag, at the
+    /// archive's root, published and listed as <see cref="ReplyPlugin"/> is, and placed by
+    /// <c>jason plugin install journal-forwarder</c>.
+    /// </summary>
+    public const string JournalForwarderPlugin = "jason-plugin-journal-forwarder.zip";
+
+    /// <summary>
     /// The UI's package: the build <c>npm run package</c> makes from <c>ui/</c> at the release's tag, with the release's
     /// version in its <c>manifest.json</c>. <c>jason ui install</c> places it as the default UI.
     /// </summary>
@@ -59,7 +66,7 @@ public static class ReleaseAssets
 
     /// <summary>Every file a release carries, in the order the release workflow attaches them.</summary>
     public static IReadOnlyList<string> Published { get; } =
-        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, Ui];
+        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, JournalForwarderPlugin, Ui];
 
     /// <summary>The archive a platform's release is published as.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The platform is not one this build publishes for.</exception>

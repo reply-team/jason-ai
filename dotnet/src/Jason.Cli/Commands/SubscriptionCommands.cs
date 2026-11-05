@@ -37,7 +37,7 @@ public static class SubscriptionCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
@@ -64,7 +64,7 @@ public static class SubscriptionCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("kind", parseResult.GetValue(kind))
                 .Set("limit", parseResult.GetValue(limit))
@@ -106,7 +106,7 @@ public static class SubscriptionCommands
                 .Set("line", parseResult.GetValue(line))
                 .Set("since", parseResult.GetValue(since))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "subscription rewind", "a subscription is rewound on a person's word");
 
             return OperationRunner.RunAsync(env, Operations.SubscriptionRewind, body, new RunOptions(parseResult.GetValue(human), SubscriptionRenderers.Kind), cancellationToken);

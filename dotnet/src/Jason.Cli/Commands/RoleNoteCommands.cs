@@ -50,7 +50,7 @@ public static class RoleNoteCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = level.Into(RequestBody.Empty(), parseResult);
 
             return OperationRunner.RunAsync(
@@ -87,7 +87,7 @@ public static class RoleNoteCommands
             body = body
                 .Set("note", document)
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.RoleNoteSet, body, new RunOptions(parseResult.GetValue(human), RoleNoteRenderers.Note), cancellationToken)
@@ -118,7 +118,7 @@ public static class RoleNoteCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(campaign))
                 .Set("project_id", parseResult.GetValue(project))

@@ -96,7 +96,7 @@ public static class OperationRunner
             return (Fail(env, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied), null);
         }
 
-        using var client = new RuntimeClient(descriptor, env.HttpHandler);
+        using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler);
         RuntimeResponse response;
         try
         {
