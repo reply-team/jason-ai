@@ -86,6 +86,19 @@ capability token nor a paired browser's is answered `401`, with `WWW-Authenticat
 A request that carries an `Origin` header naming anything but the runtime's own address is answered `403` with the code
 `origin_refused` before its token is read. A program that is not a browser sends no `Origin`, and is not affected.
 
+A `jason` launched inside a run — its environment names the attempt, in `JASON_ATTEMPT_ID` — says so on every request
+it sends, reads included, in one more header, whatever actor the request names:
+
+```
+Jason-Attempt: att_...
+```
+
+The header says where a request comes from; it is not a credential, it opens nothing, and it fences nothing: an
+operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
+person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), which answer it `403` with
+the code `decided_inside_a_run` before the body is read, and record nothing. A program that is not running inside an
+attempt sends no `Jason-Attempt`, and is not affected.
+
 ## The request form
 
 - **Every operation is `POST /v1/{noun}.{verb}`**, reads included, with a JSON body; an operation that needs nothing
@@ -399,7 +412,10 @@ that is not that attempt does not call them.
 - **A decision in a person's name**: `approval.approve`, `approval.reject`, `approval.set_standing`,
   `approval.unset_standing` and `decision.answer`. Each needs an `actor` of type `human` that names the person, and each is refused for any other type. The runtime cannot tell a
   person from a program that holds the token, so a program records only what a person decided
-  ([the approvals skill](../skills/runtime/approvals-and-questions/SKILL.md)).
+  ([the approvals skill](../skills/runtime/approvals-and-questions/SKILL.md)). A request to any of the five that
+  carries `Jason-Attempt`, as `jason` sends from inside a run, is answered `403` `decided_inside_a_run` whatever person
+  it names, and changes nothing: a person's word is given outside the run that asked. That is a higher bar, not a
+  boundary: a run that dropped the header and named a person would not be told apart.
 - **Work**: `workitem.create`, with `kind` `ai_role` for a role's work or `provider_op` for an operation a plugin
   performs, its arguments in the context's `input` and checked against the operation's contract
   ([docs/contracts/](contracts/README.md)). Work that reaches a real person waits for a person's approval, however it
