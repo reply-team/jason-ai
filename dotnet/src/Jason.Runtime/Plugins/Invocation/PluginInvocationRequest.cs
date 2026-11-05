@@ -58,11 +58,13 @@ public sealed record DoorRequest(string LineId);
 /// <summary>
 /// What a plugin is invoked for, which decides the kind of plugin that may answer: a provider performs a canonical
 /// operation, a notification plugin performs the delivery contract, and a provider that declares the events contract
-/// reads an account's events. None is ever invoked for another.
+/// reads an account's events, and a plugin of any kind takes a journal line of a kind it was granted a subscription to.
+/// None is ever invoked for another.
 /// </summary>
 public enum InvocationPurpose
 {
     CanonicalOperation,
     Delivery,
     Events,
+    Subscription,
 }
