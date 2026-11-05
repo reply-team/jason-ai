@@ -63,6 +63,25 @@ public partial class InboundSyncDocTests
             $"`Responder:MaxAgeSeconds` | `{defaults.MaxAgeSeconds}` | {ResponderOptions.MinimumMaxAgeSeconds}..{ResponderOptions.MaximumMaxAgeSeconds} |",
             page,
             StringComparison.Ordinal);
+        Assert.Contains(
+            $"`Responder:MaxLaunchesPerDay` | `{defaults.MaxLaunchesPerDay}` | {ResponderOptions.MinimumMaxLaunchesPerDay}..{ResponderOptions.MaximumMaxLaunchesPerDay} |",
+            page,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The page's cost section names the daily limit of responder runs once, with the default the runtime has, and
+    /// spells no count of its own: a count written out beside the setting would go stale when the default moved.
+    /// </summary>
+    [Fact]
+    public void The_cost_section_names_the_daily_limit_once_with_its_default()
+    {
+        var page = Flattened(Read("inbound-sync.md"));
+        var defaults = new ResponderOptions();
+
+        Assert.Single(Regex.Matches(page, Regex.Escape("`Responder:MaxLaunchesPerDay`")));
+        Assert.Contains($"`Responder:MaxLaunchesPerDay` (`{defaults.MaxLaunchesPerDay}` by default)", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("twenty-five", page, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

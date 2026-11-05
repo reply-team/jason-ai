@@ -59,7 +59,8 @@ version changes with it, because the runtime compares an installed package's dig
 carries, and reads the versions only when the two differ; two packages under one version would make an earlier release's
 package look like one edited here, so `jason status` would not say it was left behind. The marketplace records the digest
 of each version the Reply package has had from 0.9.0 on, and of the earlier versions a release published, in
-[`plugins/reply.digests`](../plugins/reply.digests).
+[`plugins/reply.digests`](../plugins/reply.digests), and of each version the journal forwarder's has had, from the 1.0.0
+that 0.29.0 shipped in its tree, in [`plugins/journal-forwarder.digests`](../plugins/journal-forwarder.digests).
 
 ## 3. The manifest
 
@@ -234,9 +235,10 @@ manifest could name the arguments, a version check would be a way to run anythin
 ## 4. Installing, reloading and listing
 
 Installing a plugin is placing its directory in `~/.jason/plugins/` (override the data directory
-with `JASON_DATA_DIR`). The package this repository ships, the Reply plugin, is also published with every
-release from 0.11.0 on as `jason-plugin-reply.zip`, its files at the archive's root, and the release's
-`manifest.json` names it with the content digest of the tree it unpacks to. `jason plugin install <id>`
+with `JASON_DATA_DIR`). Two packages of this repository are also published with every release: the Reply
+plugin from 0.11.0 on as `jason-plugin-reply.zip`, and the journal forwarder from 0.30.0 on as
+`jason-plugin-journal-forwarder.zip`, each with its files at the archive's root, and the release's `manifest.json`
+names each with the content digest of the tree it unpacks to. `jason plugin install <id>`
 installs a package the release you run publishes: it downloads the file the manifest names, from that
 release's own directory, checks it against the release's `checksums.txt` and, unpacked, against that
 digest, and moves it in whole as `~/.jason/plugins/<id>`, or places nothing and exits 1 saying why. A
@@ -248,14 +250,15 @@ body and the runtime's refusal under `error`. A `.staging-<id>-…` or `.old-<id
 packages is what an interrupted install left: the runtime never reads it, and an `.old-` one holds the package
 the install replaced. Every other package is installed by copying its directory in.
 Step 3 of [the wiring check](golden-path.md) runs the verb.
-The runtime carries the package its own release publishes and says in `system.info`'s `released_plugins` whether the
-one installed is it, by content digest, so `jason status` names an earlier release's package left behind by a package
-manager's upgrade, or by an update that could not replace it. Before the update, `jason update check` names it from the
-other side: the newer release's manifest records the digest of each version on the package's list, so the check says
-which version is installed and which one that release publishes. It never names a package the list does not know: built
-or edited on that machine, or a version before the list's first line, 0.3.2. Whether that one is behind is
-`jason status`'s to say, by its version. `jason update apply` replaces exactly the packages the check names with the new
-release's, held to the same two checks before anything moves, and leaves every other package as it is.
+The runtime carries each package its own release publishes and says in `system.info`'s `released_plugins` whether the
+one installed of that id is it, by content digest, so `jason status` names an earlier release's package left behind
+by a package manager's upgrade, or by an update that could not replace it. Before the update, `jason update check`
+names it from the other side: the newer release's manifest records the digest of each version on the package's list,
+so the check says which version is installed and which one that release publishes. It never names a package the list
+does not know: built or edited on that machine, or, for Reply's package, a version before its list's first line,
+0.3.2. Whether that one is behind is `jason status`'s to say, by its version. `jason update apply` replaces exactly
+the packages the check names with the new release's, held to the same two checks before anything moves, and leaves
+every other package as it is.
 
 ```sh
 cp -r ./fake-provider ~/.jason/plugins/
@@ -1734,17 +1737,19 @@ run at once across every kind. Each handler is given the contract's own timeout 
 **At least once.** The runtime records each handler's start before the child exists and its outcome after it ends, so a
 runtime stopped in the middle of a chain writes nothing more, and the next start runs the chain for the same line again
 from its first handler, each handler that was handed the line before seeing `attempt` above 1. An effect a handler
-causes is one it can tell it already caused. A turn that cannot finish for a reason of the runtime's own is logged, and the next scan offers the kind again
-from the same line.
+causes is one it can tell it already caused. A turn that cannot finish for a reason of the runtime's own is logged, once
+for as long as the same failure repeats, and the kind holds no child and is not offered again, from the same line, until
+a wait has passed: `Subscriptions:RetryBackoffSeconds` after the first such turn, doubled after each one in a row and
+held to an hour, and back to the first wait once a turn of the kind ends without one.
 
 **Failures.** A `transient` failure is tried again by the same handler, with the envelope as it stood before it, up to
-`Subscriptions:TransientRetries` times — 3 unless set otherwise. The first wait is `Subscriptions:RetryBackoffSeconds`
-— 30 unless set otherwise — and each one after doubles it, held to an hour; a chain waiting out its backoff holds no
-child, so other kinds run meanwhile, and the kind waits at that line. Every other class, and a transient one whose
-retries are spent, ends the chain at that handler, for that line: the handlers after it are not invoked, the runtime
-writes one `subscription_failed` line naming the kind, the line, the plugin, the class, the code and the attempts —
-never the envelope or the failure's message — and the kind moves on to its next line. A chain that ends well writes no
-journal line.
+`Subscriptions:TransientRetries` times — 3 unless set otherwise. The first wait is `Subscriptions:RetryBackoffSeconds` —
+30 unless set otherwise, the same number that paces a turn that could not finish — and each one after doubles it, held
+to an hour; a chain waiting out its backoff holds no child, so other kinds run meanwhile, and the kind waits at that
+line. Every other class, and a transient one whose retries are spent, ends the chain at that handler, for that line: the
+handlers after it are not invoked, the runtime writes one `subscription_failed` line naming the kind, the line, the
+plugin, the class, the code and the attempts — never the envelope or the failure's message — and the kind moves on to
+its next line. A chain that ends well writes no journal line.
 
 **A plugin that cannot run.** A member of a chain that loaded `unavailable` keeps its place (§16), and its kind waits at
 the line it reached, logged once for each load, until a reload makes the plugin available or takes it out of the chain.

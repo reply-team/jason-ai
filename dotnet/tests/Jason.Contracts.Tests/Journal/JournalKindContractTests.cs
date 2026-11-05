@@ -316,8 +316,9 @@ public sealed class JournalKindContractTests
     }
 
     /// <summary>
-    /// A document stays at version 1: a body grows by optional fields only, each named in <c>field_since</c>, so nothing
-    /// a reader relies on ever changes under the same name, and a kind is never given a second meaning.
+    /// A document stays at version 1: a body grows by optional fields, and by a branch added to an <c>anyOf</c>, only, each
+    /// field named in <c>field_since</c>, so nothing a reader relies on ever changes under the same name, and a kind is
+    /// never given a second meaning.
     /// </summary>
     [Fact]
     public void Every_published_document_is_at_version_1_and_names_fields_no_later_than_this_build()

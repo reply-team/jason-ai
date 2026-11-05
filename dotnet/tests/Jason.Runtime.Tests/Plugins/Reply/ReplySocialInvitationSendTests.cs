@@ -168,12 +168,12 @@ public partial class ReplySocialInvitationSendTests
     }
 
     /// <summary>
-    /// A route Reply's API does not have answers 404 with no code of Reply's own, which reply-cli passes through on a direct
-    /// send as it is: the invitation is a capability Reply does not offer yet, the message names the operation and quotes
-    /// nothing of Reply's sentence, and nothing is sent.
+    /// A 404 with no code of Reply's own on the invitation says that Reply's API changed under this package version: the
+    /// invitation fails <c>provider_call_failed</c>, final, with <c>reply.refused</c> and the 404 in its details, the
+    /// message quotes nothing of Reply's sentence, and nothing is sent.
     /// </summary>
     [Fact]
-    public async Task An_invitation_reply_s_api_has_no_route_for_is_a_capability_not_offered_naming_the_operation()
+    public async Task An_invitation_meeting_a_404_without_reply_s_code_is_a_provider_call_failed()
     {
         using var account = new ReplyAccount().WithSender(34, "linkedin", "Ann Owner", SenderProfile);
         account.Refuses(
@@ -184,9 +184,10 @@ public partial class ReplySocialInvitationSendTests
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input()));
 
-        Assert.Equal((UnjudgedOutcomeCodes.CapabilityNotOffered, FailureClass.Permanent), (error.Code, error.Class));
-        Assert.StartsWith("social_invitation.send: ", error.Message, StringComparison.Ordinal);
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
         Assert.DoesNotContain("No endpoint", error.Message, StringComparison.Ordinal);
+        Assert.Equal(("reply.refused", 404), ((string?)error.Details!["cli_code"], (int?)error.Details["status"]));
+        Assert.Null(error.Details["provider_code"]);
         Assert.Empty(account.Sent);
     }
 
@@ -840,7 +841,7 @@ public partial class ReplySocialInvitationSendTests
         var item = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(pinned: "1001"), attempt: 2, unsettledSince: Unsettled))["items"]![0]!;
 
         Assert.Equal(("sent", "linkedin-1001"), ((string?)item["status"], (string?)item["reference"]));
-        Assert.Equal(["account list", "direct-send get email-1", "contact get 1001", "contact linkedin-connect"], account.CallsSince(mark).Select(call => call.Line));
+        Assert.Equal(["account list", "contact get 1001", "contact linkedin-connect"], account.CallsSince(mark).Select(call => call.Line));
         Assert.Single(account.Sent);
     }
 

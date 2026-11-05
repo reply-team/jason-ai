@@ -8,6 +8,7 @@ using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Tests.Dispatch;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using static Jason.Runtime.Tests.Plugins.Subscriptions.FakeSubscriptionInvoker;
 using static Jason.Runtime.Tests.Plugins.Subscriptions.SubscriptionsBed;
 
@@ -633,11 +634,12 @@ public class SubscriptionRunnerTests
     }
 
     /// <summary>
-    /// A turn that gives out is said by its kind and the failure's type, never its message, and the kind is free again: the
-    /// next scan offers it, and the line it never reached is handed out then.
+    /// A turn that gives out is said by its kind and the failure's type, never its message, and the kind rests: it holds
+    /// no child, the scan does not offer it again until its wait has passed, and the line it never reached is handed out
+    /// then.
     /// </summary>
     [Fact]
-    public async Task A_turn_that_gives_out_is_said_by_its_kind_and_the_next_scan_offers_the_kind_again()
+    public async Task A_kind_that_gave_out_is_not_offered_again_until_its_wait_has_passed()
     {
         using var harness = new DispatchHarness(Noon);
         Load(harness, Subscriber("watcher", Failed));
@@ -650,18 +652,247 @@ public class SubscriptionRunnerTests
             // The scan reads no work item and the turn's first read of its lines does: that read is the one that fails.
             harness.Commands.FailNextWorkItemRead();
             Assert.Equal(1, await harness.SubscriptionScanAsync(Ct));
-            var said = $"Subscription chain for {Failed} could not finish (InvalidOperationException); the next scan offers it again";
+            var said = $"Subscription chain for {Failed} could not finish (InvalidOperationException); it is not offered again for 30 s";
             Assert.True(await DispatchHarness.EventuallyAsync(() => harness.Logs.Count(said) == 1, Ct));
             Assert.True(await DispatchHarness.EventuallyAsync(() => runner.InFlight.Count == 0, Ct));
             Assert.Empty(harness.Handlers.Requests);
+            Assert.True(runner.HasFreeChild);
 
+            Assert.Equal(0, await harness.SubscriptionScanAsync(Ct));
+            harness.Clock.Advance(TimeSpan.FromSeconds(29));
+            Assert.Equal(0, await harness.SubscriptionScanAsync(Ct));
+            Assert.Empty(harness.Handlers.Requests);
+
+            harness.Clock.Advance(TimeSpan.FromSeconds(1));
             Assert.Equal(1, await harness.SubscriptionScanAsync(Ct));
             Assert.True(await DispatchHarness.EventuallyAsync(() => RunsAsync(harness).GetAwaiter().GetResult().Any(run => run.Status == SubscriptionRunStatus.Succeeded), Ct));
+            Assert.Equal(1, harness.Logs.Count(said));
         }
         finally
         {
             await runner.StopAsync(Ct);
         }
+    }
+
+    /// <summary>
+    /// The wait after a give-out doubles with each one of the same streak, from <c>Subscriptions:RetryBackoffSeconds</c>
+    /// as it stands at that give-out, so a value changed in the middle of a streak paces the next wait, and none is longer
+    /// than an hour; the first give-out is the kind's first turn, offered at once.
+    /// </summary>
+    [Fact]
+    public async Task Each_give_out_of_a_streak_doubles_the_wait_before_the_next_offer_and_none_is_longer_than_an_hour()
+    {
+        using var harness = new DispatchHarness(Noon);
+        harness.Subscriptions.CurrentValue.RetryBackoffSeconds = 1000;
+        Load(harness, Subscriber("watcher", Failed));
+        Lines(harness, Failed);
+        await CursorAsync(harness, Failed);
+
+        var waits = new List<int>();
+        for (var giveOut = 0; giveOut < 6; giveOut++)
+        {
+            waits.Add(await GiveOutAsync(harness, Failed));
+            if (giveOut == 1)
+            {
+                // After the second give-out, whose wait of 2000 s is already set: the third is the first one paced by 300.
+                harness.Subscriptions.CurrentValue.RetryBackoffSeconds = 300;
+            }
+        }
+
+        Assert.Equal([0, 1000, 2000, 1200, 2400, 3600], waits);
+        Assert.Empty(await RunsAsync(harness));
+        Assert.Equal([$"{Failed}|0|0"], await PositionsAsync(harness));
+    }
+
+    /// <summary>
+    /// A streak is said once, at Warning, while its failure stays the same; a give-out of another failure in the same
+    /// streak is said again, with the wait it begins. The text of neither line carries the failure's message; a failure
+    /// that is not a parse failure is attached to its line as before, and a log file holds that exception whole.
+    /// </summary>
+    [Fact]
+    public async Task A_streak_of_one_failure_is_said_once_and_a_different_failure_is_said_again()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("watcher", Failed));
+        Lines(harness, Failed);
+        await CursorAsync(harness, Failed);
+
+        var waits = new List<int>();
+        for (var giveOut = 0; giveOut < 3; giveOut++)
+        {
+            waits.Add(await GiveOutAsync(harness, Failed));
+        }
+
+        Assert.Equal([0, 30, 60], waits);
+
+        // A fault of another type, met after the handler's start was recorded: the invoker itself throws.
+        harness.Clock.Advance(TimeSpan.FromSeconds(120));
+        harness.Handlers.Answer("watcher", (_, _) => throw new TimeoutException(Sentinel));
+        Assert.Equal(new SubscriptionTurn(Failed, 1, 0, SubscriptionTurn.GaveOut), await harness.SubscriptionRunner.RunNextAsync(Failed, Ct));
+
+        var said = harness.Logs.Lines
+            .Where(line => line.Message.StartsWith($"Subscription chain for {Failed} could not finish", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(
+            [
+                $"Subscription chain for {Failed} could not finish (InvalidOperationException); it is not offered again for 30 s",
+                $"Subscription chain for {Failed} could not finish (TimeoutException); it is not offered again for 240 s",
+            ],
+            said.Select(line => line.Message));
+        Assert.All(said, line => Assert.Equal(LogLevel.Warning, line.Level));
+        Assert.Equal([typeof(InvalidOperationException), typeof(TimeoutException)], said.Select(line => line.Exception?.GetType()));
+        Assert.DoesNotContain(harness.Logs.All, message => message.Contains(Sentinel, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A turn that gives out on a stored value it cannot read is said by the column and where the reader stopped, never by
+    /// what the value held, and the exception is not attached, since a log file would hold it whole; the kind rests as
+    /// after any other give-out.
+    /// </summary>
+    [Fact]
+    public async Task A_give_out_on_a_stored_value_that_cannot_be_read_is_said_by_its_column_with_no_exception_attached()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("watcher", Failed));
+        Line(harness, Failed, newJson: "{\"brief\": n" + Sentinel + "}");
+        await CursorAsync(harness, Failed);
+
+        Assert.Equal(SubscriptionTurn.GaveOut, (await harness.SubscriptionRunner.RunNextAsync(Failed, Ct))!.Ended);
+        Assert.Null(await harness.SubscriptionRunner.RunNextAsync(Failed, Ct));
+
+        var said = Assert.Single(harness.Logs.Lines, line => line.Message.StartsWith($"Subscription chain for {Failed} could not finish", StringComparison.Ordinal));
+        Assert.Equal(
+            $"Subscription chain for {Failed} could not finish (the value stored in journal.new_json cannot be read (JsonException at line 1, byte 12)); it is not offered again for 30 s",
+            said.Message);
+        Assert.Null(said.Exception);
+        Assert.False(harness.Logs.Mentions(Sentinel));
+        Assert.Empty(harness.Handlers.Requests);
+    }
+
+    /// <summary>
+    /// A kind at rest holds no child: with one child in all, the scan offers another kind while the first rests, though
+    /// the resting kind's line is the older one, and the resting kind is still refused when it is asked for.
+    /// </summary>
+    [Fact]
+    public async Task A_kind_at_rest_holds_no_child_and_another_kind_is_offered_and_runs_meanwhile()
+    {
+        using var harness = new DispatchHarness(Noon);
+        harness.Subscriptions.CurrentValue.MaxParallel = 1;
+        Load(harness, Subscriber("watcher", Failed, Requested));
+        Line(harness, Failed);
+        var requested = Line(harness, Requested);
+        await CursorAsync(harness, Failed);
+        await CursorAsync(harness, Requested);
+
+        Assert.Equal(0, await GiveOutAsync(harness, Failed));
+
+        Assert.True(harness.SubscriptionRunner.HasFreeChild);
+        Assert.Equal(1, await harness.SubscriptionScanAsync(Ct));
+        Assert.Equal([Requested], harness.SubscriptionRunner.InFlight);
+        Assert.Equal(SubscriptionTurn.Head, (await harness.SubscriptionRunner.RunNextAsync(Requested, Ct))!.Ended);
+        Assert.Equal([$"{Requested}|{requested}|1", $"{Failed}|0|0"], await PositionsAsync(harness));
+        Assert.Null(await harness.SubscriptionRunner.RunNextAsync(Failed, Ct));
+        Assert.Equal([Requested], harness.Handlers.Requests.Select(request => request.Operation));
+    }
+
+    /// <summary>
+    /// Any turn of the kind that ends without a give-out ends the streak: the next give-out waits one
+    /// <c>Subscriptions:RetryBackoffSeconds</c> again, and is said again as the first of a new streak.
+    /// </summary>
+    [Fact]
+    public async Task A_turn_that_ends_without_a_give_out_clears_the_streak()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("watcher", Failed));
+        Lines(harness, Failed);
+        await CursorAsync(harness, Failed);
+
+        Assert.Equal(0, await GiveOutAsync(harness, Failed));
+        Assert.Equal(30, await GiveOutAsync(harness, Failed));
+        harness.Clock.Advance(TimeSpan.FromSeconds(60));
+        Assert.Equal(new SubscriptionTurn(Failed, 1, 0, SubscriptionTurn.Head), await harness.SubscriptionRunner.RunNextAsync(Failed, Ct));
+
+        Lines(harness, Failed);
+        Assert.Equal(0, await GiveOutAsync(harness, Failed));
+        Assert.Equal(30, await GiveOutAsync(harness, Failed));
+        Assert.Equal(
+            2,
+            harness.Logs.Count($"Subscription chain for {Failed} could not finish (InvalidOperationException); it is not offered again for 30 s"));
+    }
+
+    /// <summary>
+    /// A give-out after a handler's start was recorded leaves the record at that line, so the kind's next turn hands the
+    /// line to the handler again: not before the wait has passed, and then once, told by <c>attempt</c> it is the second.
+    /// </summary>
+    [Fact]
+    public async Task A_handler_that_ran_before_a_give_out_is_not_handed_the_line_again_before_the_wait_has_passed()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("watcher", Failed));
+        var line = Line(harness, Failed);
+        await CursorAsync(harness, Failed);
+        harness.Handlers.Answer("watcher", (_, _) => throw new InvalidOperationException(Sentinel));
+
+        Assert.Equal(new SubscriptionTurn(Failed, 1, 0, SubscriptionTurn.GaveOut), await harness.SubscriptionRunner.RunNextAsync(Failed, Ct));
+        Assert.Null(await harness.SubscriptionRunner.RunNextAsync(Failed, Ct));
+        harness.Clock.Advance(TimeSpan.FromSeconds(29));
+        Assert.Null(await harness.SubscriptionRunner.RunNextAsync(Failed, Ct));
+        Assert.Single(harness.Handlers.Requests);
+        Assert.Equal(["watcher|"], Handled(Assert.Single(await RunsAsync(harness))));
+
+        harness.Clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(new SubscriptionTurn(Failed, 1, 0, SubscriptionTurn.Head), await harness.SubscriptionRunner.RunNextAsync(Failed, Ct));
+
+        Assert.Equal([1, 2], harness.Handlers.Requests.Select(request => request.Input["attempt"]!.GetValue<int>()));
+        var run = Assert.Single(await RunsAsync(harness));
+        Assert.Equal(SubscriptionRunStatus.Succeeded, run.Status);
+        Assert.Equal(["watcher|", "watcher|succeeded"], Handled(run));
+        Assert.Equal([$"{Failed}|{line}|1"], await PositionsAsync(harness));
+    }
+
+    /// <summary>
+    /// A streak lives in the runner's memory: a reload keeps it, and a runtime that starts again over the same database
+    /// starts afresh, its first give-out after the start waiting one <c>Subscriptions:RetryBackoffSeconds</c>.
+    /// </summary>
+    [Fact]
+    public async Task A_reload_keeps_a_streak_and_a_restart_starts_afresh()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("watcher", Failed));
+        Lines(harness, Failed);
+        await CursorAsync(harness, Failed);
+
+        Assert.Equal(0, await GiveOutAsync(harness, Failed));
+        Assert.Equal(30, await GiveOutAsync(harness, Failed));
+        Load(harness, Subscriber("watcher", Failed));
+        Assert.Equal(60, await GiveOutAsync(harness, Failed));
+
+        var restarted = NewRunner(harness);
+        Assert.Equal(0, await GiveOutAsync(harness, Failed, restarted));
+        Assert.Equal(30, await GiveOutAsync(harness, Failed, restarted));
+    }
+
+    /// <summary>
+    /// Asks for the kind's next turn a second at a time, with the turn's first read made to fail, until one runs: the
+    /// seconds that passed before the kind was offered. The turn that runs is a give-out that reached no line.
+    /// </summary>
+    private static async Task<int> GiveOutAsync(DispatchHarness harness, string kind, SubscriptionRunner? runner = null)
+    {
+        runner ??= harness.SubscriptionRunner;
+        harness.Commands.FailNextWorkItemRead();
+        for (var waited = 0; waited <= 2 * SubscriptionRunner.MaximumBackoffSeconds; waited++)
+        {
+            if (await runner.RunNextAsync(kind, Ct) is { } turn)
+            {
+                Assert.Equal(new SubscriptionTurn(kind, 0, 0, SubscriptionTurn.GaveOut), turn);
+                return waited;
+            }
+
+            harness.Clock.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        Assert.Fail($"{kind} was not offered within two hours.");
+        return -1;
     }
 
     private static SubscriptionRun Running(string kind, int line, DateTime? retryAt = null) => new()
