@@ -58,7 +58,10 @@ public sealed class SubscriptionRunner(
     /// <summary>How many lines of a kind, skipped ones included, one turn takes before the kind goes back to the scan.</summary>
     public const int LinesPerTurn = 50;
 
-    /// <summary>The longest wait before a transient handler is run again, whatever the doubling reaches.</summary>
+    /// <summary>
+    /// The longest of the two waits the doubling makes, whatever it reaches: before a transient handler is run again, and
+    /// before a kind whose turn gave out is offered again.
+    /// </summary>
     public const int MaximumBackoffSeconds = 3_600;
 
     private const string Contract = "subscription.handle";
@@ -95,7 +98,7 @@ public sealed class SubscriptionRunner(
     private static readonly Action<ILogger, string, string, int, Exception?> GaveOut = LoggerMessage.Define<string, string, int>(
         LogLevel.Warning,
         new EventId(6, nameof(GaveOut)),
-        "Subscription chain for {Kind} could not finish ({Failure}); it is offered again in {WaitSeconds} s");
+        "Subscription chain for {Kind} could not finish ({Failure}); it is not offered again for {WaitSeconds} s");
 
     private readonly SubscriptionContract _contract =
         SubscriptionCatalog.Find(Contract) ?? throw new InvalidOperationException("This build publishes no subscription.handle contract.");

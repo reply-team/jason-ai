@@ -1740,14 +1740,13 @@ a wait has passed: `Subscriptions:RetryBackoffSeconds` after the first such turn
 held to an hour, and back to the first wait once a turn of the kind ends without one.
 
 **Failures.** A `transient` failure is tried again by the same handler, with the envelope as it stood before it, up to
-`Subscriptions:TransientRetries` times — 3 unless set otherwise. The first wait is `Subscriptions:RetryBackoffSeconds`
-— 30 unless set otherwise, the same number that paces a turn that could not finish — and each one after doubles it,
-held to an hour; a chain waiting out its backoff holds no
-child, so other kinds run meanwhile, and the kind waits at that line. Every other class, and a transient one whose
-retries are spent, ends the chain at that handler, for that line: the handlers after it are not invoked, the runtime
-writes one `subscription_failed` line naming the kind, the line, the plugin, the class, the code and the attempts —
-never the envelope or the failure's message — and the kind moves on to its next line. A chain that ends well writes no
-journal line.
+`Subscriptions:TransientRetries` times — 3 unless set otherwise. The first wait is `Subscriptions:RetryBackoffSeconds` —
+30 unless set otherwise, the same number that paces a turn that could not finish — and each one after doubles it, held
+to an hour; a chain waiting out its backoff holds no child, so other kinds run meanwhile, and the kind waits at that
+line. Every other class, and a transient one whose retries are spent, ends the chain at that handler, for that line: the
+handlers after it are not invoked, the runtime writes one `subscription_failed` line naming the kind, the line, the
+plugin, the class, the code and the attempts — never the envelope or the failure's message — and the kind moves on to
+its next line. A chain that ends well writes no journal line.
 
 **A plugin that cannot run.** A member of a chain that loaded `unavailable` keeps its place (§16), and its kind waits at
 the line it reached, logged once for each load, until a reload makes the plugin available or takes it out of the chain.
