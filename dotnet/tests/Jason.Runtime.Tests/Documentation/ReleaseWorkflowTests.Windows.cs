@@ -102,7 +102,7 @@ public partial class ReleaseWorkflowTests
         const string ClientId = "          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}\n";
         const string TeamId = "          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}\n";
         const string Archive = "      - name: " + ArchivedWindows + "\n        shell: pwsh\n        env:\n          ARCHIVE: ${{ steps.package.outputs.archive }}\n";
-        const string PluginSteps = "  plugin:\n    name: The Reply plugin's package\n    needs: version\n    runs-on: ubuntu-latest\n";
+        const string PluginSteps = "  plugin:\n    name: The plugins' packages\n    needs: version\n    runs-on: ubuntu-latest\n";
         const string WindowsPackage = "      - name: Package\n        id: package\n        uses: ./.github/actions/package\n        with:\n          rid: win-x64\n";
         const string MatrixPackage = "          rid: ${{ matrix.rid }}\n          version: ${{ needs.version.outputs.version }}\n";
         const string Called = "  called:\n    needs: version\n    uses: ./.github/workflows/made-up.yml\n";
