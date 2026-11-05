@@ -12,17 +12,20 @@ using Microsoft.EntityFrameworkCore;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
-/// A send the provider does not offer yet. A route Reply's API does not have answers 404 with no code of Reply's own,
-/// which reply-cli passes through on a direct send as it is: <c>capability_not_offered</c>, permanent, its message naming
-/// the operation and quoting nothing of Reply's sentence, and the work item it ends is failed like any other permanent
-/// failure.
+/// A 404 with no code of Reply's own on a send. Reply's direct-send routes are on every account, so such an answer says
+/// that Reply's API changed under this package version: <c>provider_call_failed</c>, permanent, with <c>reply.refused</c>
+/// and the 404 in its details, its message quoting nothing of Reply's sentence, and nothing is sent; the work item it
+/// ends is failed like any other permanent failure.
 /// </summary>
 public partial class ReplyMessageSendTests
 {
     private static readonly DateTime Noon = new(2026, 10, 28, 12, 0, 0, DateTimeKind.Utc);
 
-    [Fact]
-    public async Task A_route_reply_s_api_does_not_have_is_a_capability_not_offered()
+    /// <summary>A send naming no moment and one naming a moment ahead end alike: a moment is never dropped.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("2099-11-03T14:00:00Z")]
+    public async Task A_404_without_reply_s_code_on_a_send_is_a_provider_call_failed_and_nothing_is_sent(string? moment)
     {
         const string detail = "No endpoint matches POST /v3/contacts/1001/send-direct-email.";
         using var account = ByEmail();
@@ -32,23 +35,27 @@ public partial class ReplyMessageSendTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email", pinned: "1001")));
+        var input = moment is null ? Input("email", pinned: "1001") : WithMoment(Input("email", pinned: "1001"), moment);
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
 
-        Assert.Equal((UnjudgedOutcomeCodes.CapabilityNotOffered, FailureClass.Permanent), (error.Code, error.Class));
-        Assert.StartsWith("message.send: ", error.Message, StringComparison.Ordinal);
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
         Assert.DoesNotContain(detail, error.Message, StringComparison.Ordinal);
-        Assert.Null(error.Details!["provider_code"]);
+        Assert.Equal(("reply.refused", 404), ((string?)error.Details!["cli_code"], (int?)error.Details["status"]));
+        Assert.Null(error.Details["provider_code"]);
+        Assert.Equal(["account list", "contact get 1001", "contact send-email"], Lines(account));
+        Assert.Equal(moment, account.Calls[^1].Option("--send-after"));
         Assert.Empty(account.Sent);
     }
 
     /// <summary>
-    /// The whole way, against an account whose Reply does not offer the direct email: one call, not repeated, the work item
-    /// failed with the code and its class, and the journal's line for it saying so. Offered, the same send goes.
+    /// The whole way, against an account whose Reply answers the direct email with a 404 that carries no code of its own:
+    /// one call, not repeated, the work item failed with the code and its class, and the journal's line for it saying so.
+    /// Answered, the same send goes.
     /// </summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task A_send_reply_does_not_offer_yet_ends_the_work_item_failed_and_the_journal_says_why(bool offered)
+    public async Task A_send_meeting_a_404_without_reply_s_code_ends_the_work_item_failed_and_the_journal_says_why(bool offered)
     {
         using var account = ByEmail().Offering("send_direct_email", offered);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -92,10 +99,9 @@ public partial class ReplyMessageSendTests
         }
 
         Assert.Equal((WorkItemStatus.Failed, AttemptStatus.Failed), (item.Status, attempt.Status));
-        Assert.Equal((UnjudgedOutcomeCodes.CapabilityNotOffered, FailureClass.Permanent, false), (item.LastError!.Code, item.LastError.Class, item.LastError.Retriable));
-        Assert.StartsWith("message.send: ", item.LastError.Message, StringComparison.Ordinal);
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent, false), (item.LastError!.Code, item.LastError.Class, item.LastError.Retriable));
         var line = await db.Journal.AsNoTracking().SingleAsync(entry => entry.Kind == JournalKinds.WorkItemFailed, Ct);
-        Assert.Equal((item.PublicId, UnjudgedOutcomeCodes.CapabilityNotOffered), (line.WorkItemId, (string?)line.New!["code"]));
+        Assert.Equal((item.PublicId, "provider_call_failed"), (line.WorkItemId, (string?)line.New!["code"]));
         Assert.Empty(account.Sent);
     }
 }

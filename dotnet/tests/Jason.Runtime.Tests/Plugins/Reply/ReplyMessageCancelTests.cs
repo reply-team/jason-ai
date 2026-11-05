@@ -217,13 +217,14 @@ public class ReplyMessageCancelTests
     }
 
     /// <summary>
-    /// A send Reply does not hold for this account is <c>send_not_found</c>; a route Reply's API does not have is the
-    /// capability not offered. Nothing is cancelled either way.
+    /// A send Reply does not hold for this account is <c>send_not_found</c>; a 404 with no code of Reply's own says Reply's
+    /// API changed under this package version, and is <c>provider_call_failed</c>, permanent. Nothing is cancelled either
+    /// way.
     /// </summary>
     [Theory]
     [InlineData("missing", "send_not_found")]
     [InlineData("not owned", "send_not_found")]
-    [InlineData("not offered", "capability_not_offered")]
+    [InlineData("bare 404", "provider_call_failed")]
     public async Task A_send_reply_does_not_hold_for_this_account_is_not_found(string why, string code)
     {
         using var account = new ReplyAccount();
@@ -231,7 +232,7 @@ public class ReplyMessageCancelTests
         {
             account.Refuses("direct-send cancel", "direct_send.not_owned", status: 403, replyCode: "directSend.notOwned");
         }
-        else if (why == "not offered")
+        else if (why == "bare 404")
         {
             account.NotOffering("direct_send");
         }

@@ -114,7 +114,7 @@ export const COMMANDS = {
   },
   "direct-send get": {
     "kind": "read",
-    "note": "A direct send Reply keeps, by its reference. Asked for two things. Of `email-1`, for every channel, before a send that names a moment and before a repeat after an attempt that may have sent: whether the account's Reply keeps direct sends — its own answer about the send it names, against no route at all. And first on a repeat, of the send an earlier attempt that may have sent returned (`context.unsettled_reference`): Reply's record of it, whose state answers the work item with nothing sent. And of the send the runtime names under `send.reference`: what message.status answers from."
+    "note": "A direct send Reply keeps, by its reference. Asked for two things. First on a repeat, of the send an earlier attempt that may have sent returned (`context.unsettled_reference`): Reply's record of it, whose state answers the work item with nothing sent. And of the send the runtime names under `send.reference`: what message.status answers from."
   },
   "direct-send cancel": {
     "kind": "write",
@@ -165,10 +165,12 @@ export const COMMANDS = {
 // written as text. An operation without that key reports it as `call_refused_before_it_was_sent`, as it reports every
 // `usage.*`.
 //
-// `reply.refused:404` is a refusal at 404 with no code of Reply's own, which is how Reply's API answers a route it does
-// not have. The CLI passes such a 404 through as it is on every command but the nine that read every 404 as the thing
-// they asked for not being found and `auth whoami`, which never answers `reply.refused`, as the row says. A 404 Reply
-// explains with a code keeps the row that code has.
+// `reply.refused:404` is a refusal at 404 with no code of Reply's own, which says Reply's API changed under this package
+// version. The CLI passes such a 404 through as it is on every command but the nine that read every 404 as the thing they
+// asked for not being found and `auth whoami`, which never answers `reply.refused`, as the row it lands on says: the
+// shared table has no key for it, so it is the CLI's `reply.refused`, unless the operation keeps a row of its own for it.
+// A key `repeat:reply.refused:404` is that row only for a repeat of a send, which such a 404 leaves unsettled. A 404
+// Reply explains with a code keeps the row that code has.
 //
 // `outcome.unknown` is never looked up here for a work command: the CLI answers it with exit 3, and `cli.js` reads an
 // exit 3 by the command's own read/write mark in `COMMANDS` before any code is mapped. Its row says what that ending is;
@@ -187,7 +189,6 @@ export const CODES = {
     "outcome.unknown": "answer_lost_on_a_write",
     "sequence.busy": "reply_busy",
     "reply.refused": "refusal_this_version_has_no_word_for",
-    "reply.refused:404": "route_not_offered",
     "reply.invalid_request": "refusal_this_version_has_no_word_for"
   },
   "per_operation": {
@@ -309,6 +310,7 @@ export const CODES = {
       "inbox.cursor_expired": "cursor_not_held",
       "inbox.cursor_refused": "cursor_not_held",
       "cursor:reply.refused:400": "cursor_not_held",
+      "reply.refused:404": "feed_answered_without_a_code",
       "usage": "command_not_known"
     },
     "social_invitation.send": {
@@ -328,7 +330,8 @@ export const CODES = {
       "linkedin.missing_variables": "text_would_render",
       "linkedin.feature_disabled": "feature_not_included",
       "access.feature_unavailable": "feature_not_included",
-      "idempotency_key.in_use": "key_in_use"
+      "idempotency_key.in_use": "key_in_use",
+      "repeat:reply.refused:404": "send_not_settled"
     },
     "message.status": {
       "direct_send.not_found": "send_not_found",
@@ -380,7 +383,8 @@ export const CODES = {
       "linkedin.missing_variables": "text_would_render",
       "linkedin.feature_disabled": "feature_not_included",
       "access.feature_unavailable": "feature_not_included",
-      "idempotency_key.in_use": "key_in_use"
+      "idempotency_key.in_use": "key_in_use",
+      "repeat:reply.refused:404": "send_not_settled"
     }
   }
 };
@@ -442,17 +446,10 @@ export const ROWS = {
       "note": "Reply asked for this call to be made later. The runtime waits and repeats the attempt."
     },
     "refusal_this_version_has_no_word_for": {
-      "when": "The CLI answered `reply.refused`, `reply.invalid_request` about a field this operation has no row for, or a code this version does not know.",
+      "when": "The CLI answered `reply.refused`, `reply.invalid_request` about a field this operation has no row for, or a code this version does not know. That holds for `reply.refused` at status 404 and no code of Reply's own, which means Reply's API changed under this package version: the CLI passes such a 404 through as it is on every command but `contact get`, `contact delete`, `inbox get`, `inbox reply`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`.",
       "code": "provider_call_failed",
       "class": "permanent",
       "note": "Reply refused the call in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
-    },
-    "route_not_offered": {
-      "when": "The CLI answered `reply.refused` at status 404 with no code of Reply's own: Reply's API has no route for the call, so the account's Reply does not offer it yet. The CLI passes such a 404 through as it is on every command but `contact get`, `contact delete`, `inbox get`, `inbox reply`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`.",
-      "code": "capability_not_offered",
-      "class": "permanent",
-      "quotes": "operation",
-      "note": "Reply does not offer this operation yet — its API has no route for the call — so nothing was done there. Asking again meets the same answer, so the attempt is not repeated; what to do instead is the agent's to choose."
     },
     "account_or_sender_blocked": {
       "when": "Not reported yet for the account. The CLI publishes no code that says Reply refused a call for the account's money or plan or a revoked key, and did nothing for it; this row is where such a code lands once it does (see the README, \"Endings every operation can meet\"). A sending account Reply refused for its own state is the sender's block, on the two sends' own rows.",
@@ -1248,13 +1245,6 @@ export const ROWS = {
         "class": "permanent",
         "note": "The invitation was cancelled at Reply before it went, so nothing was sent. Whether to propose it again is a person's to decide."
       },
-      "send_after_not_offered": {
-        "when": "The arguments name a moment still ahead in `send_after`, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not keep a direct send for a later moment. Decided before the send; nothing is sent.",
-        "code": "capability_not_offered",
-        "class": "permanent",
-        "quotes": "operation",
-        "note": "The account's Reply does not keep a direct send for a later moment, so the invitation that names one in `send_after` was not sent: it goes at that moment or not at all. Asking again meets the same answer; what to do instead is the agent's to choose."
-      },
       "send_after_unreadable": {
         "when": "The arguments name a moment in `send_after` that this package's `Date.parse` cannot read — the claim refuses any form but the one the document names, so this is a moment that form admits and the runtime does not read, or one given past the claim. It is never read as a moment already past. Decided before anything is read; nothing is sent.",
         "code": "provider_call_failed",
@@ -1262,10 +1252,10 @@ export const ROWS = {
         "note": "The moment in `send_after` is not one this package can read, so the invitation was not sent: it goes at the moment a person approved or not at all. Asking again meets the same answer; the moment is the agent's to write again."
       },
       "send_not_settled": {
-        "when": "A repeat after an attempt that may have sent — `context.unsettled_since` names when the earliest one was claimed — where `reply direct-send get` answered that Reply's API has no route for it: the account's Reply keeps no key on a direct send, so the repeat could send the person a second invitation. Decided before the send; nothing is sent.",
+        "when": "A repeat after an attempt that may have sent — `context.unsettled_since` names when the earliest one was claimed — whose send answered `reply.refused` at status 404 with no code of Reply's own: Reply's API changed under this package version, so nothing here says whether the earlier attempt went, or that the key settles the repeat. Nothing is sent.",
         "code": "send_not_settled",
         "class": "permanent",
-        "note": "The account's Reply keeps no key on a direct send, so repeating this invitation could send the person a second one, and nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
+        "note": "Reply answered this repeat with a 404 that carries no code of its own, so nothing says the key settles it, and repeating this invitation could send the person a second one. Nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
       },
       "send_not_settled_after_the_window": {
         "when": "A repeat 23 hours or more after `context.unsettled_since`, the moment the earliest attempt that may have sent was claimed: Reply keeps a direct send's key for a day, so the key may no longer settle the repeat. Where the runtime names the send such an attempt returned (`context.unsettled_reference`), Reply's record of it was read first and said nothing of it. Decided before the send; nothing is sent.",
@@ -1554,20 +1544,6 @@ export const ROWS = {
         "class": "permanent",
         "note": "The message was cancelled at Reply before it went, so nothing was sent. Whether to propose it again is a person's to decide."
       },
-      "send_after_not_offered": {
-        "when": "The arguments name a moment still ahead in `send_after`, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not keep a direct send for a later moment. Decided before the send; nothing is sent.",
-        "code": "capability_not_offered",
-        "class": "permanent",
-        "quotes": "operation",
-        "note": "The account's Reply does not keep a direct send for a later moment, so the message that names one in `send_after` was not sent: it goes at that moment or not at all. Asking again meets the same answer; what to do instead is the agent's to choose."
-      },
-      "schedule_not_offered": {
-        "when": "The provider's own object names a sending schedule in `provider.schedule_id`, and `reply direct-send get` answered that Reply's API has no route for it: the account's Reply does not time a direct send by a schedule. Decided before the send; nothing is sent.",
-        "code": "capability_not_offered",
-        "class": "permanent",
-        "quotes": "operation",
-        "note": "The account's Reply does not time a direct send by a schedule, so the message that names one in `provider.schedule_id` was not sent: it goes by the schedule or not at all. Asking again meets the same answer; what to do instead is the agent's to choose."
-      },
       "schedule_not_taken_on_the_route": {
         "when": "The provider's own object names a sending schedule in `provider.schedule_id`, and the send answered `reply.invalid_request` naming the field `scheduleId`: a Reply whose direct sends are deployed and whose LinkedIn routes do not take a schedule yet answers one so (scheduleId is not supported for LinkedIn sends in this version.). The package gives Reply only a schedule id it can read, so the field refused is the route not taking one, never a request built wrong. Nothing is sent.",
         "code": "capability_not_offered",
@@ -1612,10 +1588,10 @@ export const ROWS = {
         "note": "The moment in `send_after` is not one this package can read, so the message was not sent: it goes at the moment a person approved or not at all. Asking again meets the same answer; the moment is the agent's to write again."
       },
       "send_not_settled": {
-        "when": "A repeat after an attempt that may have sent — `context.unsettled_since` names when the earliest one was claimed — where `reply direct-send get` answered that Reply's API has no route for it: the account's Reply keeps no key on a direct send, so the repeat could send the person a second message. Decided before the send; nothing is sent.",
+        "when": "A repeat after an attempt that may have sent — `context.unsettled_since` names when the earliest one was claimed — whose send answered `reply.refused` at status 404 with no code of Reply's own: Reply's API changed under this package version, so nothing here says whether the earlier attempt went, or that the key settles the repeat. Nothing is sent.",
         "code": "send_not_settled",
         "class": "permanent",
-        "note": "The account's Reply keeps no key on a direct send, so repeating this message could send the person a second one, and nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
+        "note": "Reply answered this repeat with a 404 that carries no code of its own, so nothing says the key settles it, and repeating this message could send the person a second one. Nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
       },
       "send_not_settled_after_the_window": {
         "when": "A repeat 23 hours or more after `context.unsettled_since`, the moment the earliest attempt that may have sent was claimed: Reply keeps a direct send's key for a day, so the key may no longer settle the repeat. Where the runtime names the send such an attempt returned (`context.unsettled_reference`), Reply's record of it was read first and said nothing of it. Decided before the send; nothing is sent.",
@@ -1727,11 +1703,11 @@ export const ROWS = {
         "class": "transient",
         "note": "Reply refused the read in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing changes at Reply by reading, so the runtime reads again later, at a cadence that doubles while the refusal lasts."
       },
-      "route_not_offered": {
-        "when": "The CLI answered `reply.refused` at status 404 with no code of Reply's own: Reply's API has no route for the change feed, so the account's Reply does not offer it yet.",
+      "feed_answered_without_a_code": {
+        "when": "The CLI answered `reply.refused` at status 404 with no code of Reply's own: Reply's change feed answered a 404 without Reply's code.",
         "code": "events_unsupported",
         "class": "permanent",
-        "note": "This account's Reply has no change feed yet, so nothing was read; the inbound sync keeps reading the account's threads page by page. The runtime asks again after a day."
+        "note": "Reply's change feed answered a 404 without Reply's code, so nothing was read; the inbound sync keeps reading the account's threads page by page. The runtime asks again after a day."
       },
       "cursor_not_held": {
         "when": "The CLI answered `inbox.cursor_expired`, the cursor or the moment older than the 30 days Reply's feed holds, or `inbox.cursor_refused`, a cursor Reply says it never issued, one ahead of its clock among them; or, to a read handed a cursor, `reply.refused` at status 400 with a code of Reply's own.",
@@ -1795,8 +1771,10 @@ export function cutAnswerRow(operation, command) {
 // CLI's namespaces. An invalid request naming a field has a row of its own wherever the operation has one for that
 // field: the email, where the operation takes an address, because there the person's data is what Reply refused rather
 // than a request this package built wrong; and a send's text, which Reply holds to a length of its own. `variant` is
-// `template` for a send composed as one, and undefined otherwise.
-export function rowOf(operation, error, variant) {
+// `template` for a send composed as one, and undefined otherwise; `repeat` is true for a repeat of a send after an
+// attempt that may have sent. A 404 with no code of Reply's own is read by the operation's own key first: its repeat's,
+// then its own, then the shared one, then as the code it came under.
+export function rowOf(operation, error, variant, repeat) {
   const code = typeof error.code === "string" ? error.code : "";
   const own = has(CODES.per_operation, operation) ? CODES.per_operation[operation] : {};
   const details = error.details !== null && typeof error.details === "object" ? error.details : {};
@@ -1833,6 +1811,14 @@ export function rowOf(operation, error, variant) {
   }
 
   const unknown = unknownKey(code, error);
+  if (unknown !== null && repeat === true && has(own, "repeat:" + unknown)) {
+    return own["repeat:" + unknown];
+  }
+
+  if (unknown !== null && has(own, unknown)) {
+    return own[unknown];
+  }
+
   if (unknown !== null && has(CODES.shared, unknown)) {
     return CODES.shared[unknown];
   }
@@ -1862,8 +1848,8 @@ export function unexplainedRefusalRow(operation) {
   return has(own, "usage") ? own["usage"] : "call_refused_before_it_was_sent";
 }
 
-// The key of a refusal that says Reply's API has no route for the call, or null: a refusal at 404 with no code of
-// Reply's own.
+// The key of a refusal that says Reply's API changed under this package version, or null: a refusal at 404 with no code
+// of Reply's own.
 function unknownKey(code, error) {
   return code === "reply.refused" && typeof error.reply_code !== "string" && error.status === 404 ? code + ":404" : null;
 }

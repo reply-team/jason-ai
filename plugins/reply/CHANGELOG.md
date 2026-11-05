@@ -3,6 +3,22 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.14.5
+
+- Nothing is read before a send to learn whether the account's Reply keeps direct sends: the read of
+  `reply direct-send get email-1` before a message or an invitation that names a moment ahead or a sending schedule,
+  and before a repeat after an attempt that may have sent, is gone, since Reply's direct-send routes are on every
+  account. Such a send makes one call less before it goes, and every answer that carries Reply's code ends in the same
+  endings as before.
+- A 404 that carries no code of Reply's own, `reply.refused` at status 404, says Reply's API changed under this package
+  version. It ends the work `provider_call_failed`, permanent, with `reply.refused` and the 404 in its details, and
+  nothing was done: update the package (`jason update apply`) and, if the ending stays, report it. On a repeat of a send
+  whose earlier attempt may have gone it ends `send_not_settled` instead, and on the change feed `events_unsupported`,
+  whose account's replies are read thread by thread as before. Before, it was `capability_not_offered`.
+- The rows `send_after_not_offered` and `schedule_not_offered`, a moment or a schedule the account's Reply did not keep,
+  are gone with the read that reached them; a LinkedIn route that refuses a schedule is still `capability_not_offered`.
+- It needs reply-cli 0.18.0, as 0.14.4 does.
+
 ## 0.14.4
 
 - The README states what Reply does with a contact's later replies, as far as how Reply is built tells it. For a
