@@ -86,6 +86,63 @@ public class PluginPackageCheckTests
         Assert.Contains("reply 0.6.1 is installed;", check.Fact, StringComparison.Ordinal);
     }
 
+    private static readonly PluginPackageInfo ForwarderReleased = new("1.0.1", "sha256:forwarder");
+
+    private static ReleasedPluginInfo Forwarder(ReleasedPluginState state, PluginPackageInfo? installed) => new("journal-forwarder", state, ForwarderReleased, installed);
+
+    /// <summary>
+    /// A runtime whose release publishes Reply's package and the journal forwarder's names both, in the order it says them.
+    /// The forwarder not installed never fails the check, so Reply's current keeps it passing; a forwarder edited here to
+    /// name another receiver passes as built or edited here; one an earlier release published fails it with its own
+    /// command; and neither installed is absent.
+    /// </summary>
+    public static TheoryData<ReleasedPluginInfo, ReleasedPluginInfo, CheckState, string> TwoPackages() => new()
+    {
+        {
+            Forwarder(ReleasedPluginState.NotInstalled, null),
+            Reply(ReleasedPluginState.Current, Released),
+            CheckState.Ok,
+            "journal-forwarder is not installed; runtime 0.7.1 carries journal-forwarder 1.0.1, the package its release publishes, and `jason plugin install journal-forwarder` installs it."
+        },
+        {
+            Forwarder(ReleasedPluginState.Differs, new PluginPackageInfo("1.0.1", "sha256:other-host")),
+            Reply(ReleasedPluginState.Current, Released),
+            CheckState.Ok,
+            "journal-forwarder 1.0.1 is installed and is not the package runtime 0.7.1 carries (journal-forwarder 1.0.1); it names the same version or a later one, so it is a later release's package or one built or edited on this machine."
+        },
+        {
+            Forwarder(ReleasedPluginState.Behind, new PluginPackageInfo("1.0.0", "sha256:earlier-forwarder")),
+            Reply(ReleasedPluginState.Current, Released),
+            CheckState.Failed,
+            "`jason plugin install journal-forwarder --replace` places it in /data/plugins/journal-forwarder in place of the one there, and asks the runtime to load it."
+        },
+        {
+            Forwarder(ReleasedPluginState.NotInstalled, null),
+            Reply(ReleasedPluginState.NotInstalled, null),
+            CheckState.Absent,
+            "`jason plugin install journal-forwarder` installs it."
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(TwoPackages))]
+    public async Task Two_released_packages_are_each_named_and_the_forwarder_not_installed_never_fails_the_check(
+        ReleasedPluginInfo forwarder, ReleasedPluginInfo reply, CheckState state, string said)
+    {
+        var report = await ReportAsync(released: [forwarder, reply]);
+        var check = Assert.Single(report.Checks, c => c.Name == "plugin_package");
+
+        Assert.True(report.Ready);
+        Assert.False(check.Required);
+        Assert.Equal(state, check.State);
+        Assert.Contains(said, check.Fact, StringComparison.Ordinal);
+        Assert.Contains("reply", check.Fact, StringComparison.Ordinal);
+        Assert.True(
+            check.Fact.IndexOf("journal-forwarder", StringComparison.Ordinal) < check.Fact.IndexOf("reply", StringComparison.Ordinal),
+            $"The packages are named in the order the runtime says them: {check.Fact}");
+        Assert.Null(check.Fix);
+    }
+
     [Fact]
     public async Task A_runtime_whose_release_carries_no_package_has_none_to_compare()
     {
