@@ -1,6 +1,6 @@
 manifest_version: 1
 id: journal-forwarder
-version: 1.0.1
+version: 1.1.0
 kind: subscriber
 name: Journal forwarder
 description: Pushes each journal line of a kind it was granted, as JSON, to one URL the person names - the smallest complete subscriber.
@@ -9,12 +9,15 @@ contracts:
   protocol: [1]
 capabilities:
   http:
-    # The receiver. A loopback address by default; another host is named here instead, which is an owner's edit of this
-    # file: the package's digest changes with it, and the grant must name the same host (see README.md).
+    # The receiver. A loopback address by default; another host is the person's to grant, which is why the manifest says
+    # any_granted_host: it cannot know the host, and no edit of this file is needed (see README.md). The star in a grant
+    # still means localhost:8787 alone.
+    any_granted_host: true
     hosts: [localhost:8787]
   env:
-    # Where to push, and an optional bearer token for a receiver that requires one, both read with host.env. Neither is
-    # part of the manifest, and neither is ever logged or returned.
+    # Where to push, and an optional bearer token for a receiver that requires one, read with host.env where the keys url
+    # and token under Plugins:Config:journal-forwarder say nothing. Neither is part of the manifest, and neither is ever
+    # logged or returned. A secret never belongs in this file.
     variables: [JOURNAL_FORWARDER_URL, JOURNAL_FORWARDER_TOKEN]
 # Every journal kind a plugin may subscribe to, as the catalog stands for this version of the package. A declaration has no
 # wildcard; the person narrows these by the grant (Plugins:Grants:journal-forwarder:Subscriptions). A kind the catalog

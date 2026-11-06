@@ -8,11 +8,13 @@ using Jason.Contracts.Journal;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.Contracts.Update;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Plugins.Subscriptions;
+using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Tests.Documentation;
 using Jason.Runtime.Tests.Integration;
 using Jason.Runtime.Tests.Notifications;
@@ -20,14 +22,15 @@ using Jason.Runtime.Tests.Plugins.Invocation;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using System.Globalization;
 
 namespace Jason.Runtime.Tests.Plugins.Subscriptions;
 
 /// <summary>
 /// The journal-forwarder reference subscriber, through the real plugin host and the real subscription runner, against a
-/// server on the loopback interface. The package is copied and its one host, <c>localhost:8787</c>, replaced by the
-/// loopback server's: the owner's edit its README names, which makes a package of a different identity.
+/// server on the loopback interface. The package is copied as it stands and granted the loopback server's host, which its
+/// manifest never names: that is what <c>any_granted_host</c> lets a person do, so no row edits the package.
 /// </summary>
 [Collection(ProcessEnvironmentCollection.Name)]
 public sealed class JournalForwarderPackageTests
@@ -37,12 +40,13 @@ public sealed class JournalForwarderPackageTests
     private const string TokenVariable = "JOURNAL_FORWARDER_TOKEN";
     private const string Kind = "workitem_failed";
     private const string Token = "tk_jason_forwarder_test_0123456789";
+    private const string ConfiguredToken = "tk_jason_forwarder_configured_9876543210";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static string Shipped => Path.Combine(AppContext.BaseDirectory, "Fixtures", "plugins", Id);
 
-    /// <summary>The package copied into a data directory, its host replaced by the one given, and granted what a person grants it.</summary>
+    /// <summary>The package copied into a data directory as it stands, and granted the host given and what a person grants it.</summary>
     private static void Install(JasonPaths paths, string? host, params string[] granted)
     {
         var root = paths.PluginPackageDirectory(Id);
@@ -50,14 +54,6 @@ public sealed class JournalForwarderPackageTests
         foreach (var file in Directory.EnumerateFiles(Shipped))
         {
             File.Copy(file, Path.Combine(root, Path.GetFileName(file)));
-        }
-
-        if (host is not null)
-        {
-            var manifest = Path.Combine(root, "plugin.yaml");
-            var edited = File.ReadAllText(manifest).Replace("hosts: [localhost:8787]", $"hosts: [{host}]", StringComparison.Ordinal);
-            Assert.NotEqual(File.ReadAllText(manifest), edited);
-            File.WriteAllText(manifest, edited);
         }
 
         TestPlugins.Grant(paths, Id, http: [host ?? "localhost:8787"], env: [UrlVariable, TokenVariable]);
@@ -69,6 +65,37 @@ public sealed class JournalForwarderPackageTests
         var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
         settings["Plugins"]!["Grants"]![id]!["Subscriptions"] = new JsonArray([.. kinds.Select(kind => (JsonNode)JsonValue.Create(kind)!)]);
         File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString(JasonJson.Options), new UTF8Encoding(false));
+    }
+
+    /// <summary>What a person writes under <c>Plugins:Config:journal-forwarder</c>: the two keys the package reads.</summary>
+    private static void Configure(JasonPaths paths, string? url, string? token = null)
+    {
+        var configuration = new JsonObject();
+        if (url is not null)
+        {
+            configuration["url"] = url;
+        }
+
+        if (token is not null)
+        {
+            configuration["token"] = token;
+        }
+
+        var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
+        settings["Plugins"]!["Config"] = new JsonObject { [Id] = configuration };
+        File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString(JasonJson.Options), new UTF8Encoding(false));
+    }
+
+    /// <summary>The grant moved to one host, the runtime having read it, and the reload that freezes it.</summary>
+    private static async Task GrantHostAndReloadAsync(RuntimeApiFixture api, string host)
+    {
+        var settings = JsonNode.Parse(await File.ReadAllTextAsync(api.Paths.UserSettingsFile, Ct))!.AsObject();
+        settings["Plugins"]!["Grants"]![Id]!["Http"] = new JsonArray(host);
+        await File.WriteAllTextAsync(api.Paths.UserSettingsFile, settings.ToJsonString(JasonJson.Options), Ct);
+
+        var monitor = api.Resolve<IOptionsMonitor<PluginsOptions>>();
+        Assert.True(await DispatchHarness.EventuallyAsync(() => monitor.CurrentValue.Grants[Id].Http.Contains(host), Ct));
+        await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, null, Ct);
     }
 
     /// <summary>A line of the kind written straight into the journal after the load placed the kind's position: its public id.</summary>
@@ -196,6 +223,151 @@ public sealed class JournalForwarderPackageTests
             Assert.DoesNotContain("SECRETQUERY9876", everywhere, StringComparison.Ordinal);
             Assert.DoesNotContain(Token, File.ReadAllText(api.Paths.UserSettingsFile), StringComparison.Ordinal);
         });
+    }
+
+    /// <summary>The settings come before the environment, the URL and the token each on its own.</summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task What_the_settings_configure_comes_before_the_environment(bool url, bool token)
+    {
+        using var receiver = new LoopbackNtfy();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, receiver.HostKey);
+            Configure(paths, url ? receiver.Server + "/configured" : null, token ? ConfiguredToken : null);
+        });
+
+        await WithEnvironment(receiver.Server + "/environment", Token, async () =>
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal(SubscriptionRunStatus.Succeeded, run.Status);
+            var request = Assert.Single(receiver.Requests);
+            Assert.Equal(url ? "/configured" : "/environment", request.Path);
+            Assert.Equal($"Bearer {(token ? ConfiguredToken : Token)}", request.Headers["Authorization"]);
+        });
+    }
+
+    /// <summary>A URL left empty in the settings says nothing, so the environment still names the receiver.</summary>
+    [Fact]
+    public async Task A_configured_url_left_empty_leaves_the_environment_to_name_the_receiver()
+    {
+        using var receiver = new LoopbackNtfy();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, receiver.HostKey);
+            Configure(paths, string.Empty);
+        });
+
+        await WithEnvironment(receiver.Server + "/environment", null, async () =>
+        {
+            Line(api.Paths);
+
+            await TakeAsync(api);
+
+            Assert.Equal("/environment", Assert.Single(receiver.Requests).Path);
+        });
+    }
+
+    /// <summary>The codes of a URL the plugin cannot use are the codes the environment's URL has, and nothing is sent.</summary>
+    [Theory]
+    [InlineData("", "forwarder_url_missing")]
+    [InlineData("not a url", "forwarder_url_invalid")]
+    [InlineData("ftp://localhost:8787/hook", "forwarder_url_invalid")]
+    public async Task A_configured_url_the_plugin_cannot_use_ends_under_the_same_codes(string url, string code)
+    {
+        using var receiver = new LoopbackNtfy();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, receiver.HostKey);
+            Configure(paths, url);
+        });
+
+        await WithEnvironment(null, null, async () =>
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal((SubscriptionRunStatus.Failed, "permanent", code), (run.Status, run.FailureClass, run.FailureCode));
+            Assert.Empty(receiver.Requests);
+        });
+    }
+
+    /// <summary>What the settings hold travels where it is meant to, and is found in no outcome, file or provenance, a failure's included.</summary>
+    [Theory]
+    [InlineData(200)]
+    [InlineData(500)]
+    [InlineData(401)]
+    public async Task A_configured_token_and_url_reach_the_receiver_and_no_record(int status)
+    {
+        using var receiver = new LoopbackNtfy { Status = status, Body = "{}" };
+        var url = receiver.Server + "/hook/ab12?key=CONFIGUREDQUERY1234";
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, receiver.HostKey);
+            Configure(paths, url, ConfiguredToken);
+        });
+        var request = new PluginInvocationRequest(
+            Id,
+            Kind,
+            new JsonObject { ["line"] = new JsonObject { ["id"] = "jrn_1", ["kind"] = Kind }, ["envelope"] = new JsonObject(), ["attempt"] = 1 },
+            null,
+            "jrn_1",
+            Purpose: InvocationPurpose.Subscription);
+
+        var result = await PluginInvokerTests.InvokeAsync(api, request, Ct);
+
+        Assert.Equal($"Bearer {ConfiguredToken}", Assert.Single(receiver.Requests).Headers["Authorization"]);
+        var everywhere = InvocationFiles(api) + result.Outcome + result.Provenance;
+        Assert.DoesNotContain(ConfiguredToken, everywhere, StringComparison.Ordinal);
+        Assert.DoesNotContain(url, everywhere, StringComparison.Ordinal);
+        Assert.DoesNotContain("CONFIGUREDQUERY1234", everywhere, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A receiver on a port the manifest never declared, with no file of the package touched: the host refuses it until a
+    /// person grants it, the same settings file then delivers to it after one reload, and the package is still the one the
+    /// release published, which is what <c>jason update</c> reads by the digest on the list.
+    /// </summary>
+    [Fact]
+    public async Task A_receiver_the_manifest_never_named_is_refused_then_reached_by_a_grant_and_a_configuration_with_the_package_unedited()
+    {
+        using var receiver = new LoopbackNtfy();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, host: null);
+            Configure(paths, receiver.Server + "/hook", ConfiguredToken);
+        });
+        var declared = api.Resolve<PluginRegistry>().Snapshot.Find(Id)!.Manifest.Capabilities.Http!.Hosts;
+        Assert.DoesNotContain(receiver.HostKey, declared);
+
+        await WithEnvironment(null, null, async () =>
+        {
+            Line(api.Paths);
+            var refused = await TakeAsync(api);
+            Assert.Equal((SubscriptionRunStatus.Failed, "permanent", "http_host_not_allowed"), (refused.Status, refused.FailureClass, refused.FailureCode));
+            Assert.Empty(receiver.Requests);
+
+            await GrantHostAndReloadAsync(api, receiver.HostKey);
+
+            var line = Line(api.Paths);
+            var delivered = await TakeAsync(api);
+            Assert.Equal(SubscriptionRunStatus.Succeeded, delivered.Status);
+            var request = Assert.Single(receiver.Requests);
+            Assert.Equal(("/hook", line, $"Bearer {ConfiguredToken}"), (request.Path, request.Headers["Jason-Line-Id"], request.Headers["Authorization"]));
+        });
+
+        var installed = api.Resolve<PluginRegistry>().Snapshot;
+        var digest = PackageDigest.Compute(api.Paths.PluginPackageDirectory(Id)).Digest;
+        var plugin = installed.Find(Id)!;
+        Assert.Equal(digest, plugin.Digest);
+        Assert.Equal(File.ReadLines(Path.Combine(RepositoryTree.Root(), DigestList)).Last(), $"{plugin.Manifest.Version} {digest}");
+        Assert.Equal(ReleasedPluginState.Current, ReleasedPlugins.Embedded().Compare(installed).Single(entry => entry.Id == Id).State);
     }
 
     [Theory]
@@ -335,8 +507,9 @@ public sealed class JournalForwarderPackageTests
         Assert.NotNull(plugin);
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Equal(PluginKind.Subscriber, plugin.Manifest.Kind);
-        Assert.Equal("1.0.1", plugin.Manifest.Version);
+        Assert.Equal("1.1.0", plugin.Manifest.Version);
         Assert.Equal(["localhost:8787"], plugin.Manifest.Capabilities.Http!.Hosts);
+        Assert.True(plugin.Manifest.Capabilities.Http.AnyGrantedHost);
         Assert.Equal([UrlVariable, TokenVariable], plugin.Manifest.Capabilities.Env!.Variables);
         Assert.Null(plugin.Manifest.Capabilities.Api);
         Assert.Null(plugin.Manifest.Capabilities.Exec);
@@ -405,14 +578,11 @@ public sealed class JournalForwarderPackageTests
 
     /// <summary>
     /// The package's README installs it from the release a person runs, by <c>jason plugin install journal-forwarder</c>,
-    /// never by a copy out of a checkout, which a person who installed Jason does not have. A receiver on another host is
-    /// an edit of the installed copy's <c>plugin.yaml</c>, after which the copy is the person's own, and the README says
-    /// the four things that follow from it: <c>jason update</c> leaves it and says it differs, <c>jason status</c> reports
-    /// it as behind once a later version is published and names the <c>--replace</c> that discards the edit, a later
-    /// version is theirs to apply, and <c>--replace</c> discards the edit.
+    /// never by a copy out of a checkout, which a person who installed Jason does not have. A receiver on another host is a
+    /// grant and a configuration in the settings, each with its JSON, and no edit of the package.
     /// </summary>
     [Fact]
-    public void The_readme_installs_the_package_from_the_release_and_an_edited_copy_is_the_person_s_own()
+    public void The_readme_installs_the_package_from_the_release_and_a_receiver_elsewhere_edits_no_file_of_it()
     {
         var readme = File.ReadAllText(Path.Combine(RepositoryTree.Root(), "plugins", Id, "README.md")).ReplaceLineEndings("\n");
 
@@ -423,16 +593,13 @@ public sealed class JournalForwarderPackageTests
         Assert.DoesNotContain("Copy the package", readme, StringComparison.Ordinal);
 
         var elsewhere = Section(readme, "A receiver elsewhere than the loopback");
-        Assert.Contains("`~/.jason/plugins/journal-forwarder/plugin.yaml`", elsewhere, StringComparison.Ordinal);
-        Assert.Contains("From then on the copy is yours.", elsewhere, StringComparison.Ordinal);
-        Assert.Contains("`jason update` leaves it in place and says it differs from every package a release published", elsewhere, StringComparison.Ordinal);
-        Assert.Contains(
-            "Once a release publishes a later version of the forwarder, `jason status` reports your edited copy as behind, "
-            + "and the repair it names, `--replace`, is the discard below.",
-            elsewhere,
-            StringComparison.Ordinal);
-        Assert.Contains("A later version of the forwarder is yours to apply", elsewhere, StringComparison.Ordinal);
-        Assert.Contains("`jason plugin install journal-forwarder --replace` discards your edit", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("### The grant", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("### The configuration", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("\"Http\": [\"receiver.example.com\"]", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("\"url\": \"https://receiver.example.com/jason\", \"token\": \"a-token-of-yours\"", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("`jason plugin reload`", elsewhere, StringComparison.Ordinal);
+        Assert.DoesNotContain("From then on the copy is yours.", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("**Jason 0.31.0 or newer**", Section(readme, "What you need"), StringComparison.Ordinal);
     }
 
     /// <summary>A section of a README, its heading to the next, with its whitespace made single spaces.</summary>

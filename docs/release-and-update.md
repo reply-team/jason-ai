@@ -80,9 +80,10 @@ manifest's `plugins` (§3) rather than its artifacts, which are platforms. Insta
 unpacks it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 runs it — and
 what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002). The journal forwarder is
 published the same way from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, the files of `plugins/journal-forwarder`
-at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`; a copy a
-person edits there to name another receiver is theirs, which an update leaves in place, as
-[its README](../plugins/journal-forwarder/README.md) says. Any other plugin is installed as `docs/plugins.md` §4 says.
+at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`; a receiver
+on another host takes a grant and a configuration and no edit of the package, as
+[its README](../plugins/journal-forwarder/README.md) says, and a copy a person does edit is theirs, which an update
+leaves in place. Any other plugin is installed as `docs/plugins.md` §4 says.
 
 **The browser UI is published the same way, as `jason-ui.zip`:** `ui/` built once per release at the tag, with the
 release's version in its `manifest.json`, and listed in `checksums.txt` but not in the manifest. It is built at the
