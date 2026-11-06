@@ -47,6 +47,23 @@ public class RuntimeRunArgumentsTests
         Assert.Throws<RuntimeRunUsageException>(() => RuntimeRunArguments.Parse(["runtime", "run", "--detached", flag]));
     }
 
+    [Theory]
+    [InlineData("/a", "/b")]
+    [InlineData("/a", "/a")]
+    public void A_second_data_dir_is_a_usage_error_whatever_its_value(string first, string second)
+    {
+        var error = Assert.Throws<RuntimeRunUsageException>(
+            () => RuntimeRunArguments.Parse(["runtime", "run", "--data-dir", first, "--data-dir", second]));
+        Assert.Contains("--data-dir", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A usage error wins over help, wherever the unknown flag stands.</summary>
+    [Theory]
+    [InlineData(new object[] { new[] { "runtime", "run", "--help", "--bogus" } })]
+    [InlineData(new object[] { new[] { "runtime", "run", "--bogus", "--help" } })]
+    public void A_flag_it_does_not_know_wins_over_help(string[] args) =>
+        Assert.Throws<RuntimeRunUsageException>(() => RuntimeRunArguments.Parse(args));
+
     [Fact]
     public void A_path_after_the_data_dir_flag_is_its_value_and_not_an_unknown_argument() =>
         Assert.Equal("/srv/jason", RuntimeRunArguments.Parse(["runtime", "run", "--data-dir", "/srv/jason", "--detached"]).DataDirectory);
@@ -61,7 +78,7 @@ public class RuntimeRunArgumentsTests
 
     /// <summary>The verbs are never flags, and neither is anything before them: what stands where the flags begin is an argument the verb does not know.</summary>
     [Fact]
-    public void A_data_dir_before_the_verbs_is_not_read() =>
+    public void A_data_dir_before_the_verbs_is_refused() =>
         Assert.Throws<RuntimeRunUsageException>(() => RuntimeRunArguments.Parse(["runtime", "--data-dir", "/srv/jason"]));
 
     [Fact]
@@ -78,6 +95,9 @@ public class RuntimeRunArgumentsTests
     [InlineData(new object[] { new[] { "runtime", "run", "--data-dir", "--detached" } })]
     [InlineData(new object[] { new[] { "runtime", "run", "--data-dir", "   " } })]
     [InlineData(new object[] { new[] { "runtime", "run", "--data-dir", "--help" } })]
+    [InlineData(new object[] { new[] { "runtime", "run", "--data-dir", "-h" } })]
+    [InlineData(new object[] { new[] { "runtime", "run", "--data-dir", "-?" } })]
+    [InlineData(new object[] { new[] { "runtime", "run", "--data-dir", "-x" } })]
     public void A_data_dir_with_no_path_after_it_is_a_usage_error(string[] args) =>
         Assert.Throws<RuntimeRunUsageException>(() => RuntimeRunArguments.Parse(args));
 

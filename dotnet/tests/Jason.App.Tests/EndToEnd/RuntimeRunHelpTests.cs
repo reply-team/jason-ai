@@ -9,6 +9,7 @@ public class RuntimeRunHelpTests
     [Theory]
     [InlineData("--help")]
     [InlineData("-h")]
+    [InlineData("-?")]
     public async Task Help_prints_the_usage_on_stdout_and_starts_nothing(string help)
     {
         using var it = GoldenPath.Create("run-help");

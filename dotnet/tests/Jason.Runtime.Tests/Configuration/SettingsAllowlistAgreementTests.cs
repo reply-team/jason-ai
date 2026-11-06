@@ -97,8 +97,8 @@ public sealed class SettingsAllowlistAgreementTests
     /// A word at every text and every list item the runtime reads: no word leaves a leaf the list does not name. Twice over.
     /// A word nobody would choose, which no leaf may carry whatever the list says, since the list holds a text only to
     /// the closed set its setting reads. And, at every such leaf at once, a word each kind of the closed sets accepts: of
-    /// the leaves that carry it, none is one the list does not name as a text, so a path matched wider than the list
-    /// spells it, or one kind passed off as another, is seen.
+    /// the leaves that carry it, none is one the list names for another kind, so a widening that reaches a leaf the
+    /// runtime reads, or one kind passed off as another, is seen.
     /// </summary>
     [Fact]
     public void Of_a_word_at_every_text_and_list_item_the_runtime_reads_only_the_leaves_the_list_names_are_carried()
@@ -106,12 +106,17 @@ public sealed class SettingsAllowlistAgreementTests
         var leaves = Settings().Where(setting => setting.Type == typeof(string)).Select(setting => setting.Path).ToList();
         Assert.NotEmpty(leaves);
 
-        // The leaves the list names as a word from a closed set, from the list's own published lines.
-        var named = SettingsAllowlist.Default.Published
-            .Where(line => line.Contains("(one of ", StringComparison.Ordinal) || line.Contains("(a kind ", StringComparison.Ordinal))
+        // The leaves the list names for each closed set, from the list's own published lines.
+        HashSet<string> NamedFor(string kind) => SettingsAllowlist.Default.Published
+            .Where(line => line.Contains($"({kind}", StringComparison.Ordinal))
             .Select(line => line[..line.IndexOf(" (", StringComparison.Ordinal)])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        Assert.NotEmpty(named);
+        var namedFor = new Dictionary<string, HashSet<string>>
+        {
+            ["debug"] = NamedFor("one of "),
+            [ManagerTriggerKinds.All.First()] = NamedFor("a kind "),
+        };
+        Assert.All(namedFor.Values, Assert.NotEmpty);
 
         var unchosen = new JsonObject();
         for (var index = 0; index < leaves.Count; index++)
@@ -123,7 +128,7 @@ public sealed class SettingsAllowlistAgreementTests
         Assert.Empty(carriedUnchosen);
         Assert.DoesNotContain("SENTINEL", unchosenShape.ToJsonString(), StringComparison.Ordinal);
 
-        foreach (var word in new[] { "debug", ManagerTriggerKinds.All.First() })
+        foreach (var (word, named) in namedFor)
         {
             var chosen = new JsonObject();
             foreach (var leaf in leaves)
@@ -133,7 +138,7 @@ public sealed class SettingsAllowlistAgreementTests
 
             ConfigShape.Describe(chosen.ToJsonString(), SettingsAllowlist.Default, Installed, out var carried);
             var strays = carried.Where(path => !named.Contains(path)).ToList();
-            Assert.True(strays.Count == 0, $"'{word}' was carried at {string.Join(", ", strays)}, which the list does not name.");
+            Assert.True(strays.Count == 0, $"'{word}' was carried at {string.Join(", ", strays)}, which the list does not name for it.");
         }
     }
 
