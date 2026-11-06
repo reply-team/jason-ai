@@ -23,6 +23,9 @@ routine. What makes it a check-in is who created it and what it is for, not any 
 a person's approval. A user who has been away for a week comes back to one review, not a pile of
 them — and this is a rule the database keeps, not one the summon merely intends: a unique index over
 the open ones. Two writers both looking first would both see none and both insert.
+A check-in held at the day's limit (`Launches:MaxPerDay:manager`,
+[docs/work-execution.md](work-execution.md) §The claim rule) is open too, though the index does not see a waiting
+item: the summon reads its wait, so triggers while it is held add nothing and one review runs after 00:00Z.
 
 **Only `active` campaigns are reviewed.** A draft campaign is a backlog, a paused one was stopped on
 purpose, and an archived one is over. So a failure of work that runs in a paused campaign — the provider's own

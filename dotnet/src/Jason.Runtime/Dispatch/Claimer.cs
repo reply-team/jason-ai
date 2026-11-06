@@ -129,14 +129,14 @@ public sealed class Claimer(
                 ? ProviderOpPreflight.Check(await FactsAsync(db, item, routing, ct).ConfigureAwait(false), packages, routing, _timing)
                 : null;
 
-            // A responder its campaign has started enough of today is held, not refused: a failure would wake the manager,
-            // so the reply would reach it by a second path. It waits, with no attempt, for the next 00:00Z.
-            if (item.Kind == WorkItemKind.AiRole && string.Equals(item.Role, Responder.Role, StringComparison.Ordinal)
-                && limits.TryGetValue(item.Role!, out var limit)
+            // A role its campaign has started enough of today is held, not refused: a failure would wake the manager, and a
+            // responder's reply would reach it by a second path. It waits, with no attempt, for the next 00:00Z.
+            if (item.Kind == WorkItemKind.AiRole
+                && item.Role is { } role && limits.TryGetValue(role, out var limit)
                 && await SpentAsync(db, item, limit, today, ct).ConfigureAwait(false))
             {
                 var tomorrow = today.AddDays(1);
-                outcomes.Hold(db, item, tomorrow, LaunchesSpent(limit, today, tomorrow), limit, Actors.Dispatcher);
+                outcomes.Hold(db, item, tomorrow, LaunchesSpent(role, limit, today, tomorrow), limit, Actors.Dispatcher);
                 await SaveAsync(db, item, ct).ConfigureAwait(false);
                 continue;
             }
@@ -302,7 +302,7 @@ public sealed class Claimer(
     }
 
     /// <summary>
-    /// Whether the responder work of <paramref name="item"/>'s campaign has started <paramref name="limit"/> runs or more
+    /// Whether the work of <paramref name="item"/>'s role in its campaign has started <paramref name="limit"/> runs or more
     /// since <paramref name="today"/>, 00:00Z. A run counts when its attempt started, so an attempt the claim refused, which
     /// never started, spends nothing. One item is let go past the limit: a hold a person resumed. The hold alone writes its
     /// code as the item's last error, and its wait is the item's latest, released by a person, with no attempt and no
@@ -328,7 +328,7 @@ public sealed class Claimer(
             .CountAsync(
                 a => a.WorkItem!.CampaignId == item.CampaignId
                     && a.WorkItem.Kind == WorkItemKind.AiRole
-                    && a.WorkItem.Role == Responder.Role
+                    && a.WorkItem.Role == item.Role
                     && a.StartedAt >= today,
                 ct)
             .ConfigureAwait(false);
@@ -336,15 +336,15 @@ public sealed class Claimer(
     }
 
     /// <summary>
-    /// The last error of a responder held at the day's limit: the limit and its moment, and the three ways out — the next
+    /// The last error of an item held at its role's limit for the day: the limit and its moment, and the three ways out — the next
     /// 00:00Z, a person's resume, or a raised limit. Not retried: the moment releases it.
     /// </summary>
-    internal static AttemptErrorDto LaunchesSpent(int limit, DateTime today, DateTime tomorrow)
+    internal static AttemptErrorDto LaunchesSpent(string role, int limit, DateTime today, DateTime tomorrow)
     {
         var runs = limit == 1 ? "1 run" : string.Create(CultureInfo.InvariantCulture, $"{limit} runs");
         return new AttemptErrorDto(
             AttemptErrors.ResponderLaunchesSpent,
-            $"Responder work in this campaign has reached the limit Launches:MaxPerDay:responder sets, {runs} started since {Zulu(today)}; "
+            $"Work of the {role} role in this campaign has reached the limit Launches:MaxPerDay:{role} sets, {runs} started since {Zulu(today)}; "
             + $"this item waits until {Zulu(tomorrow)}. A person's workitem.resume lets it go sooner, past the limit, and a raised "
             + "limit applies from the next scan to work not yet held, while this item keeps its moment.",
             Retriable: false);
