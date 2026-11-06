@@ -28,8 +28,11 @@ public static class ToastHost
 
     public const int HostFailure = 4;
 
-    /// <summary>The longest line a toast is given; the pointer's lines are far shorter.</summary>
-    public const int MaxLine = 200;
+    /// <summary>
+    /// The longest line a toast is given, the delivery contract's bound on a message: the pointer as a whole is held to that bound, so
+    /// each of its two lines is within it. Windows wraps a line itself and cuts what does not fit the banner, and the counts come first.
+    /// </summary>
+    public const int MaxLine = 400;
 
     public static async Task<int> RunAsync(string[] args, TextReader stdin, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default)
     {

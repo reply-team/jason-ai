@@ -26,7 +26,7 @@ public static class SubscriptionRenderers
             return RenderText.WithCursor("no subscribed kinds: no plugin of the active load subscribes to a journal kind", page.NextCursor);
         }
 
-        var table = new HumanTable("KIND", "CHAIN", "CURSOR", "HEAD", "LAG", "WAITING ON", "IN FLIGHT");
+        var table = new HumanTable("KIND", "CHAIN", "CURSOR", "HEAD", "LAG", "WAITING ON", "IN FLIGHT", "RESTS UNTIL");
         foreach (var kind in page.Items)
         {
             table.Row(
@@ -36,7 +36,8 @@ public static class SubscriptionRenderers
                 kind.Head,
                 kind.Lag.ToString(CultureInfo.InvariantCulture),
                 kind.WaitingOn.Count == 0 ? null : string.Join(", ", kind.WaitingOn),
-                kind.InFlight?.Run);
+                kind.InFlight?.Run,
+                RenderText.Moment(kind.RestUntil));
         }
 
         return RenderText.WithCursor(table.Render(), page.NextCursor);
@@ -60,6 +61,7 @@ public static class SubscriptionRenderers
             Line("Lag:", kind.Lag.ToString(CultureInfo.InvariantCulture)),
             Line("Waiting on:", kind.WaitingOn is { Count: > 0 } waiting ? string.Join(", ", waiting) : null),
             Line("In flight:", kind.InFlight is { } run ? $"{run.Run} for {run.Line}, since {RenderText.Moment(run.StartedAt)}" : null),
+            Line("Rests until:", RenderText.Moment(kind.RestUntil)),
         ]);
     }
 

@@ -634,6 +634,97 @@ public class SummonerTests
             new DecisionAnswerRequest(decisionId, answer, null, new ActorRef(ActorType.Human, "ada"), null), Ct);
     }
 
+    /// <summary>
+    /// A check-in held at its role's limit is still the campaign's check-in: it waits, with no attempt and no block, and
+    /// the next trigger finds it open instead of writing a second one beside it, so a manager limited to one launch a day
+    /// has one held check-in however many triggers the day brings, and one launch after 00:00Z.
+    /// </summary>
+    [Fact]
+    public async Task Two_triggers_past_a_manager_s_limit_leave_one_held_check_in_and_one_launch_after_midnight()
+    {
+        using var harness = new DispatchHarness(Noon);
+        harness.Launches.CurrentValue = new LaunchesOptions { MaxPerDay = new(StringComparer.Ordinal) { ["manager"] = 1 } };
+        var campaign = await SeedAsync(harness, live: true);
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+        Assert.Equal(1, await SummonAsync(harness));
+        await RunCheckInAsync(harness);
+
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+        Assert.Equal(1, await SummonAsync(harness));
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+        Assert.Equal(0, await SummonAsync(harness));
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+        Assert.Equal(0, await SummonAsync(harness));
+
+        await using (var db = harness.Open())
+        {
+            var open = await db.WorkItems.AsNoTracking()
+                .Where(w => w.Role == ManagerCheckIn.Role && w.Status != WorkItemStatus.Succeeded)
+                .Select(w => w.Id)
+                .ToListAsync(Ct);
+            var held = Assert.Single(open);
+            Assert.Equal(WorkItemStatus.Waiting, (await db.WorkItems.AsNoTracking().SingleAsync(w => w.Id == held, Ct)).Status);
+        }
+
+        harness.Clock.Now = new DateTimeOffset(Noon.Date.AddDays(1));
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+        Assert.Single(await harness.ClaimAsync(Ct));
+    }
+
+    /// <summary>
+    /// What counts as a check-in still open: a hold does, and is how a refused insert is told from a failed one; a run that
+    /// yielded, whose wait names its attempt, and a check-in waiting on a provider block do not, as before.
+    /// </summary>
+    [Fact]
+    public async Task A_held_check_in_is_open_and_one_that_yielded_or_waits_on_a_block_is_not()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await SeedAsync(harness, live: true);
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+        await SummonAsync(harness);
+        await using var db = harness.Open();
+        var checkIn = await db.WorkItems.Include(w => w.Campaign).SingleAsync(w => w.Role == ManagerCheckIn.Role, Ct);
+        checkIn.Status = WorkItemStatus.Waiting;
+        var opener = WorkItemFactory.NewProviderOp(checkIn.Campaign!, "message.send", Noon);
+        db.WorkItems.Add(opener);
+        var block = BlockRows.Block(opener, Noon, Noon.AddHours(1));
+        db.ProviderBlocks.Add(block);
+        var wait = new WorkItemWait { WorkItem = checkIn, Until = Noon.AddDays(1), Deadline = Noon.AddDays(1), OpenedAt = Noon };
+        db.WorkItemWaits.Add(wait);
+        await db.SaveChangesAsync(Ct);
+        Assert.True(await Summoner.OpenCheckInAsync(db, checkIn.CampaignId, Ct));
+
+        wait.Attempt = WorkItemFactory.NewAttempt(checkIn, 1, AttemptStatus.Yielded, Noon);
+        await db.SaveChangesAsync(Ct);
+        Assert.False(await Summoner.OpenCheckInAsync(db, checkIn.CampaignId, Ct));
+
+        wait.Attempt = null;
+        wait.ProviderBlock = block;
+        await db.SaveChangesAsync(Ct);
+        Assert.False(await Summoner.OpenCheckInAsync(db, checkIn.CampaignId, Ct));
+
+        wait.ProviderBlock = null;
+        wait.Status = WaitStatus.Released;
+        await db.SaveChangesAsync(Ct);
+        Assert.False(await Summoner.OpenCheckInAsync(db, checkIn.CampaignId, Ct));
+    }
+
+    /// <summary>The check-in now open runs once, started now, and succeeds: a launch its day counts.</summary>
+    private static async Task RunCheckInAsync(DispatchHarness harness)
+    {
+        await using var db = harness.Open();
+        var checkIn = await db.WorkItems.SingleAsync(w => w.Role == ManagerCheckIn.Role && w.Status != WorkItemStatus.Succeeded, Ct);
+        var run = WorkItemFactory.NewAttempt(checkIn, 1, AttemptStatus.Succeeded, Noon);
+        run.StartedAt = Noon;
+        run.FinishedAt = Noon;
+        checkIn.AttemptCount = 1;
+        checkIn.Status = WorkItemStatus.Succeeded;
+        checkIn.FinishedAt = Noon;
+        await db.SaveChangesAsync(Ct);
+    }
+
     private static async Task<string> AttemptForCheckInAsync(DispatchHarness harness)
     {
         await using var db = harness.Open();

@@ -9,6 +9,7 @@ using Jason.Runtime.Harness;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Plugins.Manifest;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Configuration;
@@ -446,8 +447,67 @@ public sealed class InboundOptionsValidator : IValidateOptions<InboundOptions>
 }
 
 /// <summary>
-/// The respond step's numbers, each within its bounds: the queue's range, the time a check-in is held to, an age
-/// between an hour and thirty days, and between one and a thousand launches a campaign and day.
+/// Each role's daily limit: a key shaped like a role's name, a number between one and a thousand. A key the code does not
+/// know is shown as a placeholder, and the sentence that refuses one says its length and never its text.
+/// </summary>
+/// <remarks>
+/// The keys this number used to live under are found here, by their path in the configuration, so a file and a variable
+/// are the same refusal; a key a person kept is a limit they chose, and passing over it would raise it to the default
+/// without a word. The sentence names the path, never what is written there, and a refused live edit keeps the last good
+/// limits like any other.
+/// </remarks>
+/// <param name="configuration">The whole configuration, which the retired keys are looked up in.</param>
+public sealed partial class LaunchesOptionsValidator(IConfiguration configuration) : IValidateOptions<LaunchesOptions>
+{
+    private const string MapPath = LaunchesOptions.Section + ":" + nameof(LaunchesOptions.MaxPerDay);
+
+    private static readonly IReadOnlySet<string> NoPluginIds = new HashSet<string>();
+
+    /// <summary>Every key retired from this section's place, with the one that replaced it.</summary>
+    private static readonly (string Section, string Key, string Replacement)[] RetiredKeys =
+    [
+        (ResponderOptions.Section, "MaxLaunchesPerDay", MapPath + ":responder"),
+    ];
+
+    public ValidateOptionsResult Validate(string? name, LaunchesOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        foreach (var (section, key, replacement) in RetiredKeys)
+        {
+            // By the children, since a key written as null or as an empty object still counts as written.
+            if (configuration.GetSection(section).GetChildren().Any(child => string.Equals(child.Key, key, StringComparison.OrdinalIgnoreCase)))
+            {
+                failures.Add($"{section}:{key} was renamed to {replacement}; carry the value over by hand and take the old key out.");
+            }
+        }
+
+        foreach (var (role, limit) in options.MaxPerDay)
+        {
+            var setting = SettingKey.ShownPath($"{MapPath}:{role}", NoPluginIds);
+            if (!RoleName().IsMatch(role))
+            {
+                failures.Add(
+                    $"{setting} must be a role's name, lowercase letters, digits and hyphens starting with a letter, at most 64 characters; "
+                    + OptionRules.Written("key", role, "does not have that shape"));
+                continue;
+            }
+
+            OptionRules.Range(failures, setting, limit, LaunchesOptions.MinimumPerDay, LaunchesOptions.MaximumPerDay);
+        }
+
+        return OptionRules.Result(failures);
+    }
+
+    /// <summary>The shape of a role's name, as <see cref="RolesOptionsValidator"/> holds a profile's name to it.</summary>
+    [GeneratedRegex(@"^[a-z][a-z0-9-]{0,63}\z")]
+    private static partial Regex RoleName();
+}
+
+/// <summary>
+/// The respond step's numbers, each within its bounds: the queue's range, the time a check-in is held to and an age
+/// between an hour and thirty days.
 /// </summary>
 public sealed class ResponderOptionsValidator : IValidateOptions<ResponderOptions>
 {
@@ -465,12 +525,6 @@ public sealed class ResponderOptionsValidator : IValidateOptions<ResponderOption
             options.MaxAgeSeconds,
             ResponderOptions.MinimumMaxAgeSeconds,
             ResponderOptions.MaximumMaxAgeSeconds);
-        OptionRules.Range(
-            failures,
-            "Responder:MaxLaunchesPerDay",
-            options.MaxLaunchesPerDay,
-            ResponderOptions.MinimumMaxLaunchesPerDay,
-            ResponderOptions.MaximumMaxLaunchesPerDay);
 
         return OptionRules.Result(failures);
     }

@@ -411,6 +411,18 @@ public sealed class SubscriptionRunner(
         }
     }
 
+    /// <summary>
+    /// When the kind is offered again after a give-out, while it waits for that; null otherwise. A rest lives in this
+    /// process alone, so a restart forgets it.
+    /// </summary>
+    public DateTimeOffset? RestUntil(string kind)
+    {
+        lock (_gate)
+        {
+            return _rest.TryGetValue(kind, out var rest) && rest.Until > clock.GetUtcNow() ? rest.Until : null;
+        }
+    }
+
     /// <summary>Whether the kind waits out a give-out now: a kind at rest is no flight and holds no child.</summary>
     private bool Rests(string kind) => _rest.TryGetValue(kind, out var rest) && rest.Until > clock.GetUtcNow();
 

@@ -241,7 +241,7 @@ does. And a reply, or a read that failed, can wake the campaign's manager: what 
 A reply about the campaign's own thread also costs a pair: one `conversation.get` (one plugin child, seconds) and one
 responder launch of up to `Responder:TimeoutSeconds`, with the lifecycle lines of both items in the chronicle; a further
 move into a thread whose responder is still open costs one patch and no launch. The claim paces them — one item per
-campaign at a time, and no more responder runs started in a campaign in a UTC day than `Responder:MaxLaunchesPerDay`
+campaign at a time, and no more responder runs started in a campaign in a UTC day than `Launches:MaxPerDay:responder`
 (`25` by default) — so a burst of threads in one campaign is answered one after another, as many as that allows over a
 few hours and the rest from the next 00:00Z, and other campaigns are not held up; a responder over the day's limit
 waits, with no attempt and its thread's further moves still recorded on it, as [work execution](work-execution.md) says

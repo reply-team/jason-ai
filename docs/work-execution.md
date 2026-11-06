@@ -232,19 +232,21 @@ Work the runtime cannot perform is failed inside the same transaction rather tha
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
-A responder is held, not failed, when its campaign has already started `Responder:MaxLaunchesPerDay` responder runs
-since 00:00Z: a failure would wake the manager, so the reply would reach it by a second path. The day is UTC, since a
-campaign has no time zone. The claim counts the attempts of the campaign's `ai_role` items of role `responder` that
-started since 00:00Z — an attempt the claim refused never started and spends nothing, and a responder queued by hand
-counts like one the respond step made — and holds the item in the same transaction: it moves to `waiting` with no
-attempt, its wait is the next 00:00Z, its `last_error` is `responder_launches_spent`, and one `workitem_waiting` line
-says `held_by` with the code and the limit. A held item does not make its campaign busy, so the campaign's other work
-is claimed at the next scan. There are three ways out. At 00:00Z the resume step releases it and the claim counts the
-new day as usual, so a day already spent by then holds it again. `workitem.resume` lets that one item go past the limit
-under the person's name: the claim takes it at its next turn and its run counts like any other. Every run counts,
-a resumption included, so a responder whose run yielded can be held too; let go, its next run is told about the wait
-its own run ended in, since the hold's wait has no attempt (§The launch envelope). Raising the setting
-applies at the next scan to work not yet held, while an item already held keeps its moment.
+Work of a role is held, not failed, when `Launches:MaxPerDay:<role>` names the role and the item's campaign has already
+started that many runs of it since 00:00Z: a failure would wake the manager, and a responder's reply would reach it by a
+second path. The day is UTC, since a campaign has no time zone. The claim counts the attempts of the campaign's `ai_role`
+items of the item's role that started since 00:00Z — an attempt the claim refused never started and spends nothing, and
+an item queued by hand counts like one the runtime made — and holds the item in the same transaction: it moves to
+`waiting` with no attempt, its wait is the next 00:00Z, its `last_error` is `launches_spent`, and one
+`workitem_waiting` line says `held_by` with the code, the limit and the role. A held item does not make its campaign busy, so the
+campaign's other work is claimed at the next scan. There are three ways out. At 00:00Z the resume step releases it and
+the claim counts the new day as usual, so a day already spent by then holds it again. `workitem.resume` lets that one
+item go past the limit under the person's name: the claim takes it at its next turn and its run counts like any other.
+Every run counts, a resumption included, so a role whose run yielded can be held too; let go, its next run is told about
+the wait its own run ended in, since the hold's wait has no attempt (§The launch envelope). Raising the setting
+applies at the next scan to work not yet held, while an item already held keeps its moment. A held item keeps its due
+date and expires by it like any waiting item, and a held manager check-in is still the campaign's one check-in
+([docs/campaign-manager.md](campaign-manager.md) §1).
 
 ## Approvals
 
@@ -844,7 +846,8 @@ settings at all and are never refused for this reason.
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
-| `responder_launches_spent` | wait | the responder's campaign has started `Responder:MaxLaunchesPerDay` responder runs since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
+| `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
+| `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
 | the twenty pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
@@ -1118,7 +1121,11 @@ mistyped one.
 | `Responder:TimeoutSeconds` | `900` | 30..86400 | how long one responder run may take |
 | `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
-| `Responder:MaxLaunchesPerDay` | `25` | 1..1000 | how many responder runs one campaign may start in a UTC day, counted from 00:00Z; the claim holds a responder at the limit until the next 00:00Z (§The claim rule) |
+| `Launches:MaxPerDay:<role>` | `responder: 25` | 1..1000 | how many runs of a role one campaign may start in a UTC day, counted from 00:00Z; a role the map does not name has no limit, and the responder's number can be changed and not removed, a thousand being as high as it goes; the claim holds a role at its limit until the next 00:00Z (§The claim rule) |
+
+`Responder:MaxLaunchesPerDay`, the key the responder's limit had through 0.30.0, is refused wherever the configuration finds
+it: a start stops and says where the number went, nothing is carried over for you, and a live edit that names it keeps
+the last good limits, logged by the path and never by what is written there.
 
 An item may override the three per-kind numbers for itself: `timeout_seconds` (30..86400),
 `heartbeat_seconds` (0, or 10..3600) and `max_attempts` (1..10). A `provider_op` item has one rule

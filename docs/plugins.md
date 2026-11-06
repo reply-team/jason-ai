@@ -1527,7 +1527,7 @@ not published, and this guide and those documents are the whole of what a plugin
 ## 14. Writing a notification plugin
 
 A notification plugin carries Jason's pointer — how many approvals and questions are waiting, whether protective
-actions failed, accounts have events Jason did not read or provider blocks are open, and where to look — to a service
+actions failed, accounts have events Jason did not read, provider blocks are open or items wait on a launch budget, and where to look — to a service
 a person reads. It is invoked for one thing, the delivery contract
 [`notification.send`](contracts/notifications/notification.send.md), by the runtime's own notifier, and only when an
 operator has named it under `Notifications:Plugins:<id>`. No work item
@@ -1740,7 +1740,9 @@ from its first handler, each handler that was handed the line before seeing `att
 causes is one it can tell it already caused. A turn that cannot finish for a reason of the runtime's own is logged, once
 for as long as the same failure repeats, and the kind holds no child and is not offered again, from the same line, until
 a wait has passed: `Subscriptions:RetryBackoffSeconds` after the first such turn, doubled after each one in a row and
-held to an hour, and back to the first wait once a turn of the kind ends without one.
+held to an hour, and back to the first wait once a turn of the kind ends without one. `jason subscription list` says when
+that wait ends, as `rest_until`, while it lasts. The wait is kept in memory, so `rest_until` is null after a restart,
+which offers the kind at once, and it is not `in_flight.retry_at`, which is a handler's own retry within a chain.
 
 **Failures.** A `transient` failure is tried again by the same handler, with the envelope as it stood before it, up to
 `Subscriptions:TransientRetries` times — 3 unless set otherwise. The first wait is `Subscriptions:RetryBackoffSeconds` —

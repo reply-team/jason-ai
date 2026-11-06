@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Subscriptions;
 using Jason.Runtime.Tests.Integration;
@@ -28,6 +29,21 @@ public class SubscriptionEndpointTests
     private static readonly object Marta = new { type = "human", id = "Marta" };
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>The runner is composed with no dispatch loop as well, so the list reads it there, and nothing rests.</summary>
+    [Fact]
+    public async Task With_no_dispatch_loop_a_kind_is_listed_and_does_not_rest()
+    {
+        var clock = new FixedClock(Nine);
+        await using var api = await StartAsync(clock);
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring outreach" }, Ct);
+        await api.Resolve<SubscriptionRunner>().RunNextAsync(Created, Ct);
+
+        var listed = await api.PostOkAsync<Page<SubscriptionKindDto>>(Operations.SubscriptionList, new { }, Ct);
+
+        Assert.False(api.Resolve<LiveSettings<DispatcherOptions>>().Current.Enabled);
+        Assert.Null(Assert.Single(listed.Items).RestUntil);
+    }
 
     [Fact]
     public async Task A_kind_is_listed_its_chains_are_read_and_a_person_rewinds_it_over_the_api()

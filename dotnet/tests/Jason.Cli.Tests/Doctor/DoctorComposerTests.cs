@@ -1088,7 +1088,7 @@ public sealed class DoctorComposerTests
         runtime.Subscribed =
         [
             .. runtime.Subscribed,
-            new("SENTINEL_KIND", ["fake-provider"], null, null, 0, ["fake-provider"], null),
+            new("SENTINEL_KIND", ["fake-provider"], null, null, 0, ["fake-provider"], null, null),
         ];
 
         var bundle = await ComposeAsync(dir, runtime);
@@ -1271,6 +1271,38 @@ public sealed class DoctorComposerTests
         AssertAbsent(bundle, [.. NeverSentinels, .. JournalSentinels]);
         Assert.NotEmpty(Section(bundle, "work_items")["recent_failures"]!.AsArray());
         Assert.NotEmpty(Section(bundle, "journal")["recent"]!.AsArray());
+    }
+
+    /// <summary>
+    /// A hold's line names the role it held, and a role a person added is that person's word: with the journal asked for,
+    /// the line travels with the alias and never the name, the name being met there like every <c>role</c> of a section.
+    /// </summary>
+    [Fact]
+    public async Task With_the_journal_asked_for_a_hold_s_line_names_a_person_s_own_role_by_its_alias()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) =>
+        {
+            if (operation != Operations.JournalList)
+            {
+                return null;
+            }
+
+            var held = runtime.Entry(0);
+            held["kind"] = "workitem_waiting";
+            held["new"] = new JsonObject
+            {
+                ["on"] = new JsonArray(),
+                ["held_by"] = new JsonObject { ["code"] = "launches_spent", ["limit"] = 1, ["role"] = "sentinel-held-role" },
+            };
+            return Respond(HttpStatusCode.OK, new JsonObject { ["items"] = new JsonArray(held), ["next_cursor"] = null }.ToJsonString());
+        };
+
+        var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
+
+        AssertAbsent(bundle, "sentinel-held-role");
+        Assert.Equal("<role-1>", Text(Section(bundle, "journal_entries")["entries"]![0]!["new"]!["held_by"]!["role"]));
     }
 
     /// <summary>
@@ -3525,7 +3557,7 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
 
     /// <summary>What <c>subscription.list</c> answers: one kind with a chain of one, unless a test says.</summary>
     public IReadOnlyList<SubscriptionKindDto> Subscribed { get; set; } =
-        [new("campaign_created", ["fake-provider"], "jrn_00000000000000000000000001", "jrn_00000000000000000000000002", 1, [], null)];
+        [new("campaign_created", ["fake-provider"], "jrn_00000000000000000000000001", "jrn_00000000000000000000000002", 1, [], null, null)];
 
     /// <summary>What <c>subscription.runs</c> answers for a kind: a chain that ended well, with an envelope no bundle carries, and one that failed.</summary>
     public IReadOnlyList<SubscriptionRunDto> Runs { get; set; } =

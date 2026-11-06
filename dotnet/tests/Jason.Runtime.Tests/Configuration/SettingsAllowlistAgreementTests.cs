@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using Jason.Cli.Doctor;
+using Jason.Contracts.Api;
 using Jason.Contracts.Configuration;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
@@ -157,6 +158,25 @@ public sealed class SettingsAllowlistAgreementTests
         }
     }
 
+    private sealed class MapOfText
+    {
+        public Dictionary<string, string> Map { get; set; } = [];
+    }
+
+    private sealed class MapOfMapsOfNumbers
+    {
+        public Dictionary<string, Dictionary<string, int>> Map { get; set; } = [];
+    }
+
+    /// <summary>A map the walk has no branch for goes red here rather than passing with nothing to judge.</summary>
+    [Theory]
+    [InlineData(typeof(MapOfText))]
+    [InlineData(typeof(MapOfMapsOfNumbers))]
+    public void A_map_with_no_branch_in_the_walk_is_refused_rather_than_passed_over(Type options)
+    {
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Walk(options, "Section", []).ToList());
+    }
+
     private static IEnumerable<Setting> Walk(Type type, string path, IReadOnlyList<Type> chain)
     {
         if (chain.Contains(type))
@@ -192,11 +212,28 @@ public sealed class SettingsAllowlistAgreementTests
                 // The one map of lists is keyed by a journal kind: the order of that kind's subscribers.
                 yield return new Setting($"{child}:workitem_failed[]", typeof(string));
             }
+            else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>)
+                && propertyType.GetGenericArguments()[1] == typeof(int))
+            {
+                // The one map of numbers is keyed by a role. A shipped role's number travels; a person's own role is not on
+                // the list, so the sentinel written under one has to stay behind.
+                // A second map of numbers would be read as keyed by a role too, and the guard would not see it: it yields leaves.
+                foreach (var role in ShippedRoles.Names)
+                {
+                    yield return new Setting($"{child}:{role}", typeof(int));
+                }
+
+                yield return new Setting($"{child}:a-role-of-their-own", typeof(int));
+            }
             else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {
                 // The one map keyed by an operation is the routes'; the others are keyed by a plugin's id.
                 var key = property.Name == nameof(RoutesOptions.Operations) ? OperationCatalog.All[0].Id : "<id>";
-                foreach (var setting in Walk(propertyType.GetGenericArguments()[1], $"{child}:{key}", [.. chain, type]))
+                var leaves = Walk(propertyType.GetGenericArguments()[1], $"{child}:{key}", [.. chain, type]).ToList();
+                Assert.True(
+                    leaves.Count > 0 && !leaves.Any(leaf => leaf.Path.EndsWith(":Item", StringComparison.Ordinal)),
+                    $"{child} is a map this walk has no branch for: it yields no setting a test could reach.");
+                foreach (var setting in leaves)
                 {
                     yield return setting;
                 }

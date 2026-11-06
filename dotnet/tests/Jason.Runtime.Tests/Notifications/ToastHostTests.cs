@@ -332,14 +332,58 @@ public sealed class ToastHostTests
     [Fact]
     public async Task A_line_longer_than_a_toast_holds_is_rejected()
     {
-        var payload = Payload(ToastRegistration.Aumid, "one", new string('x', 201)).ToJsonString();
+        var payload = Payload(ToastRegistration.Aumid, "one", new string('x', 401)).ToJsonString();
 
         var (exit, stdout, stderr) = await RunAsync(["--protocol", "1"], payload);
 
         Assert.Equal(3, exit);
         Assert.Empty(stdout);
-        Assert.Contains("at most 200 characters", stderr, StringComparison.Ordinal);
+        Assert.Contains("at most 400 characters", stderr, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Every shape a pointer can take, at small counts and at the largest, goes through the command Windows is given and the
+    /// host's own refusal. A pointer that says at once that work waits, protective work failed and events were not read used to
+    /// be refused here, and a person who needed the toast at that moment got none.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryPointer))]
+    public void The_toast_host_takes_every_pointer_the_composer_can_make(bool waiting, bool failed, bool blocked, bool gaps, bool held, int count)
+    {
+        const string Id = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
+        var pointer = NotificationComposer.Compose(
+            waiting ? count : 0,
+            waiting ? count : 0,
+            failed ? new FailedProtectiveWork(count, [Id, Id, Id], count) : null,
+            gaps ? count : 0,
+            blocked ? new HeldByBlocks(count, count) : null,
+            held: held ? count : 0);
+
+        var launch = ToastCommands.Windows(["jason"], pointer);
+
+        Assert.Null(ToastHost.Refusal(launch.Stdin!, out _));
+    }
+
+    public static TheoryData<bool, bool, bool, bool, bool, int> EveryPointer()
+    {
+        var shapes = new TheoryData<bool, bool, bool, bool, bool, int>();
+        foreach (var count in new[] { 2, int.MaxValue })
+        {
+            for (var shape = 1; shape < 32; shape++)
+            {
+                shapes.Add((shape & 1) != 0, (shape & 2) != 0, (shape & 4) != 0, (shape & 8) != 0, (shape & 16) != 0, count);
+            }
+        }
+
+        return shapes;
+    }
+
+    /// <summary>The host's bound is the bound of the message the delivery contract takes, so the two cannot drift apart again.</summary>
+    [Fact]
+    public void The_longest_line_a_toast_takes_is_the_longest_message_the_delivery_contract_takes() =>
+        Assert.Equal(
+            ToastHost.MaxLine,
+            Jason.Contracts.Notifications.DeliveryCatalog.Find("notification.send")!.InputSchema["properties"]!["message"]!["maxLength"]!.GetValue<int>());
 
     /// <summary>Everywhere but Windows the mode has nothing to show with: a payload it would accept is usage there.</summary>
     [Fact]
