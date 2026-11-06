@@ -20,6 +20,7 @@
     "head": "jrn_2",
     "lag": 2,
     "waiting_on": [],
-    "in_flight": null
+    "in_flight": null,
+    "rest_until": null
   }
 }
