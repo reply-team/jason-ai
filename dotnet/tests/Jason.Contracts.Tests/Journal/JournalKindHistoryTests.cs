@@ -10,7 +10,7 @@ namespace Jason.Contracts.Tests.Journal;
 /// <summary>
 /// A kind's document only grows. A reader written against a release's documents keeps reading every line a later release
 /// writes, so a later document keeps every kind, every <c>since</c>, every body field, every entity and every
-/// <c>field_since</c> entry the published one had, accepts every body the release published as valid, and requires
+/// <c>field_since</c> entry the published one had, keeps every word of a closed list, accepts every body the release published as valid, and requires
 /// nothing the published one did not of a body the release described: a member only a branch added to an <c>anyOf</c> the
 /// release already had requires, or one inside an object the release never described, no published body could have
 /// needed. The release's branches are known by their place in the list alone, so a branch put before them, or a change to
@@ -92,20 +92,29 @@ public sealed class JournalKindHistoryTests
     [InlineData("named on every line")]
     [InlineData("a new branch requires an object the release never described")]
     [InlineData("an optional object the release never described requires its members")]
+    [InlineData("a word added to a closed list")]
+    [InlineData("a closed list opened")]
     public void A_document_that_only_grew_is_kept(string change)
     {
         var branched = change == "a new branch requires an object the release never described";
-        var published = branched ? Branched() : Published();
+        var listed = change is "a word added to a closed list" or "a closed list opened";
+        var published = listed ? Listed() : branched ? Branched() : Published();
         if (change == "became subscribable")
         {
             published["subscribable"] = false;
         }
 
         using var repository = new Repository(published);
-        var current = branched ? Branched() : Published();
+        var current = listed ? Listed() : branched ? Branched() : Published();
         var body = (JsonObject)current["body"]!["properties"]!["new"]!;
         switch (change)
         {
+            case "a word added to a closed list":
+                body["properties"]!["reason"] = JsonNode.Parse("""{ "enum": ["a holiday", "a strike", "a storm"] }""");
+                break;
+            case "a closed list opened":
+                body["properties"]!["reason"] = new JsonObject { ["type"] = "string" };
+                break;
             case "grew":
                 ((JsonObject)body["properties"]!)["note"] = new JsonObject { ["type"] = "string" };
                 ((JsonObject)current["field_since"]!)["/new/note"] = "0.31.0";
@@ -156,11 +165,15 @@ public sealed class JournalKindHistoryTests
     [InlineData("named on some lines", "`campaign` was named on every line and is now named on some")]
     [InlineData("each changed", "`contact` changed whether one place names one of them or many")]
     [InlineData("no longer subscribable", "was subscribable and is not now")]
+    [InlineData("a word removed from a closed list", "`/new/reason` no longer accepts `a strike`")]
+    [InlineData("a word removed from a list one branch holds", "`/new/kind` no longer accepts `b`")]
+    [InlineData("a const changed", "`/new/pinned` no longer accepts `yes`")]
     public void A_document_that_lost_or_narrowed_anything_is_refused(string change, string problem)
     {
-        var branched = change.Contains("branch", StringComparison.Ordinal);
-        var published = branched ? Branched() : Published();
-        var current = branched ? Branched() : Published();
+        var listed = change.Contains("list", StringComparison.Ordinal) || change == "a const changed";
+        var branched = !listed && change.Contains("branch", StringComparison.Ordinal);
+        var published = listed ? Listed() : branched ? Branched() : Published();
+        var current = listed ? Listed() : branched ? Branched() : Published();
         var body = (JsonObject)current["body"]!["properties"]!["new"]!;
         if (change == "newly required by a branch added to an allOf the release had")
         {
@@ -259,6 +272,15 @@ public sealed class JournalKindHistoryTests
                 break;
             case "no longer subscribable":
                 current["subscribable"] = false;
+                break;
+            case "a word removed from a closed list":
+                body["properties"]!["reason"] = JsonNode.Parse("""{ "enum": ["a holiday"] }""");
+                break;
+            case "a word removed from a list one branch holds":
+                body["anyOf"]![0]!["properties"]!["kind"] = JsonNode.Parse("""{ "enum": ["a"] }""");
+                break;
+            case "a const changed":
+                body["properties"]!["pinned"] = JsonNode.Parse("""{ "const": "no" }""");
                 break;
         }
 
@@ -361,6 +383,18 @@ public sealed class JournalKindHistoryTests
             yield return $"{kind}: `{place}` is no longer in the body.";
         }
 
+        // A place that left its closed list altogether accepts more than it did, and one no longer described is said above.
+        foreach (var (place, words) in was.Words.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            if (now.Words.TryGetValue(place, out var kept))
+            {
+                foreach (var word in words.Where(word => !kept.Contains(word)).Order(StringComparer.Ordinal))
+                {
+                    yield return $"{kind}: `{place}` no longer accepts `{word}`.";
+                }
+            }
+        }
+
         // Newly required narrows the kind only where a body the release described could have been held to it: the place
         // itself was described (and optional), or an object the release described, or a branch of the release's, requires it.
         foreach (var (place, by) in now.Required.Where(entry => !was.Required.ContainsKey(entry.Key)).OrderBy(entry => entry.Key, StringComparer.Ordinal))
@@ -408,6 +442,26 @@ public sealed class JournalKindHistoryTests
 
     private static bool IsTrue(JsonNode? node) => node is JsonValue value && value.GetValueKind() == JsonValueKind.True;
 
+    /// <summary>The words the closed list at <paramref name="at"/> accepts, <c>enum</c> and <c>const</c> alike, added to the place's.</summary>
+    private static void AddWords(Shape into, string at, JsonObject schema)
+    {
+        var listed = (schema["enum"] as JsonArray)?.ToList() ?? [];
+        if (schema.TryGetPropertyValue("const", out var single))
+        {
+            listed.Add(single);
+        }
+
+        foreach (var word in listed)
+        {
+            if (!into.Words.TryGetValue(at, out var words))
+            {
+                into.Words[at] = words = new(StringComparer.Ordinal);
+            }
+
+            words.Add(word is JsonValue value && value.GetValueKind() == JsonValueKind.String ? (string)value! : word?.ToJsonString() ?? "null");
+        }
+    }
+
     /// <summary>Where a place's requirement comes from, as the last published release reads it.</summary>
     private enum Requirement
     {
@@ -422,10 +476,15 @@ public sealed class JournalKindHistoryTests
     /// What a body describes and requires. <see cref="Required"/> keeps, for each place, where its requirement comes from,
     /// <see cref="Requirement.Release"/> wherever one of its requirements is; <see cref="Branches"/> holds every branch by
     /// its location in the document, such as <c>#/properties/new/anyOf/0</c>, for a later document to know the release's by.
+    /// <see cref="Words"/> holds, for each place with a closed list, every word any branch accepts there.
     /// </summary>
-    private sealed record Shape(HashSet<string> Described, Dictionary<string, Requirement> Required, Dictionary<string, JsonObject> Branches)
+    private sealed record Shape(
+        HashSet<string> Described,
+        Dictionary<string, Requirement> Required,
+        Dictionary<string, JsonObject> Branches,
+        Dictionary<string, HashSet<string>> Words)
     {
-        public static Shape Empty() => new(new(StringComparer.Ordinal), new(StringComparer.Ordinal), new(StringComparer.Ordinal));
+        public static Shape Empty() => new(new(StringComparer.Ordinal), new(StringComparer.Ordinal), new(StringComparer.Ordinal), new(StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -463,6 +522,8 @@ public sealed class JournalKindHistoryTests
                     }
                 }
             }
+
+            AddWords(into, at, schema);
 
             if (schema["required"] is JsonArray names)
             {
@@ -633,6 +694,18 @@ public sealed class JournalKindHistoryTests
               { "properties": { "added": { "type": "string" } } }
             ]
             """);
+        return document;
+    }
+
+    /// <summary>The made-up document with closed lists: a list, a list one branch holds, and a list of one word.</summary>
+    private static JsonObject Listed()
+    {
+        var document = Published();
+        var body = (JsonObject)document["body"]!["properties"]!["new"]!;
+        var properties = (JsonObject)body["properties"]!;
+        properties["reason"] = JsonNode.Parse("""{ "enum": ["a holiday", "a strike"] }""");
+        properties["pinned"] = JsonNode.Parse("""{ "const": "yes" }""");
+        body["anyOf"] = JsonNode.Parse("""[{ "properties": { "kind": { "enum": ["a", "b"] } } }]""");
         return document;
     }
 

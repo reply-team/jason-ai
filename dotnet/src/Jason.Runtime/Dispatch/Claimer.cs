@@ -310,7 +310,7 @@ public sealed class Claimer(
     /// </summary>
     private static async Task<bool> SpentAsync(JasonDbContext db, WorkItem item, int limit, DateTime today, CancellationToken ct)
     {
-        if (item.LastError?.Code == AttemptErrors.ResponderLaunchesSpent)
+        if (item.LastError?.Code is AttemptErrors.LaunchesSpent or AttemptErrors.ResponderLaunchesSpent)
         {
             var latest = await db.WorkItemWaits.AsNoTracking()
                 .Where(w => w.WorkItemId == item.Id)
@@ -343,7 +343,7 @@ public sealed class Claimer(
     {
         var runs = limit == 1 ? "1 run" : string.Create(CultureInfo.InvariantCulture, $"{limit} runs");
         return new AttemptErrorDto(
-            AttemptErrors.ResponderLaunchesSpent,
+            AttemptErrors.LaunchesSpent,
             $"Work of the {role} role in this campaign has reached the limit Launches:MaxPerDay:{role} sets, {runs} started since {Zulu(today)}; "
             + $"this item waits until {Zulu(tomorrow)}. A person's workitem.resume lets it go sooner, past the limit, and a raised "
             + "limit applies from the next scan to work not yet held, while this item keeps its moment.",

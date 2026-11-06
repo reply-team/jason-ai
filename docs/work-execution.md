@@ -237,8 +237,8 @@ started that many runs of it since 00:00Z: a failure would wake the manager, and
 second path. The day is UTC, since a campaign has no time zone. The claim counts the attempts of the campaign's `ai_role`
 items of the item's role that started since 00:00Z — an attempt the claim refused never started and spends nothing, and
 an item queued by hand counts like one the runtime made — and holds the item in the same transaction: it moves to
-`waiting` with no attempt, its wait is the next 00:00Z, its `last_error` is `responder_launches_spent`, and one
-`workitem_waiting` line says `held_by` with the code and the limit. A held item does not make its campaign busy, so the
+`waiting` with no attempt, its wait is the next 00:00Z, its `last_error` is `launches_spent`, and one
+`workitem_waiting` line says `held_by` with the code, the limit and the role. A held item does not make its campaign busy, so the
 campaign's other work is claimed at the next scan. There are three ways out. At 00:00Z the resume step releases it and
 the claim counts the new day as usual, so a day already spent by then holds it again. `workitem.resume` lets that one
 item go past the limit under the person's name: the claim takes it at its next turn and its run counts like any other.
@@ -846,7 +846,8 @@ settings at all and are never refused for this reason.
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
-| `responder_launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
+| `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
+| `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
 | the twenty pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 

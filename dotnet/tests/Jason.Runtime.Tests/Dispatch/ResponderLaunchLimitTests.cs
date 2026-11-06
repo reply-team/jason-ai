@@ -57,7 +57,7 @@ public class ResponderLaunchLimitTests
         Assert.Equal(WorkItemStatus.Waiting, item.Status);
         Assert.Empty(item.Attempts);
         Assert.Equal(0, item.AttemptCount);
-        Assert.Equal(AttemptErrors.ResponderLaunchesSpent, item.LastError!.Code);
+        Assert.Equal(AttemptErrors.LaunchesSpent, item.LastError!.Code);
         Assert.False(item.LastError.Retriable);
         Assert.Equal(
             "Work of the responder role in this campaign has reached the limit Launches:MaxPerDay:responder sets, 2 runs started since "
@@ -73,7 +73,7 @@ public class ResponderLaunchLimitTests
         var line = await db.Journal.AsNoTracking().SingleAsync(e => e.WorkItemId == item.PublicId && e.Kind == JournalKinds.WorkItemWaiting, Ct);
         Assert.Null(line.Key);
         Assert.Equal(
-            """{"on":[],"mode":null,"until":"2026-10-07T00:00:00.000Z","deadline":"2026-10-07T00:00:00.000Z","held_by":{"code":"responder_launches_spent","limit":2}}""",
+            """{"on":[],"mode":null,"until":"2026-10-07T00:00:00.000Z","deadline":"2026-10-07T00:00:00.000Z","held_by":{"code":"launches_spent","limit":2,"role":"responder"}}""",
             line.New!.ToJsonString());
         Assert.Equal((ActorType.System, "dispatcher"), (line.ActorType, line.ActorId));
         Assert.DoesNotContain(await db.Journal.AsNoTracking().Where(e => e.WorkItemId == item.PublicId).Select(e => e.Kind).ToListAsync(Ct), kind => kind == JournalKinds.WorkItemScheduled);
@@ -408,7 +408,7 @@ public class ResponderLaunchLimitTests
 
         var item = await ItemAsync(harness, held);
         Assert.Equal(WorkItemStatus.Waiting, item.Status);
-        Assert.Equal(AttemptErrors.ResponderLaunchesSpent, item.LastError!.Code);
+        Assert.Equal(AttemptErrors.LaunchesSpent, item.LastError!.Code);
         await using var db = harness.Open();
         var waits = await db.WorkItemWaits.AsNoTracking().Where(w => w.WorkItemId == held).OrderBy(w => w.Id).ToListAsync(Ct);
         Assert.Equal(3, waits.Count);
@@ -557,6 +557,30 @@ public class ResponderLaunchLimitTests
         Assert.Equal(WorkItemStatus.Expired, (await ItemAsync(harness, held)).Status);
         var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == held, Ct);
         Assert.True(wait.Status == WaitStatus.Expired, $"The wait of an expired item is {wait.Status}.");
+    }
+
+    /// <summary>
+    /// An item a 0.30.0 runtime held keeps that release's code as its last error, and a person's resume after the update
+    /// still lets it past the limit rather than sending it straight back.
+    /// </summary>
+    [Fact]
+    public async Task A_hold_written_under_the_old_code_and_resumed_after_an_update_is_not_held_again()
+    {
+        using var harness = Harness(limit: 1);
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, Today.AddHours(1));
+        var held = await QueuedAsync(harness, campaign);
+        Assert.Empty(await harness.ClaimAsync(Ct));
+        await using (var db = harness.Open())
+        {
+            var item = await db.WorkItems.SingleAsync(w => w.Id == held, Ct);
+            item.LastError = item.LastError! with { Code = AttemptErrors.ResponderLaunchesSpent };
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await ResumeAsync(harness, held);
+
+        Assert.Equal(await PublicIdAsync(harness, held), Assert.Single(await harness.ClaimAsync(Ct)).WorkItemPublicId);
     }
 
     /// <summary>The claimed run follows the yield's wait: told its attempt and its reason, numbered as its first resumption, and named on that wait.</summary>

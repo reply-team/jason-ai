@@ -397,7 +397,7 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
                 ["mode"] = null,
                 ["until"] = moment,
                 ["deadline"] = moment?.DeepClone(),
-                ["held_by"] = new JsonObject { ["code"] = error.Code, ["limit"] = limit },
+                ["held_by"] = new JsonObject { ["code"] = error.Code, ["limit"] = limit, ["role"] = item.Role },
             },
             workItem: item);
         return wait;
