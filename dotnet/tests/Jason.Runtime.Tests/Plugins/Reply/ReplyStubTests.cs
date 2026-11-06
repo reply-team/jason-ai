@@ -244,6 +244,92 @@ public class ReplyStubTests
     // The call log
     // -------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Several stand-ins in flight against one account, each writing lines of its own length, leave every line in the
+    /// log and every line whole. An append that took its position when the file was opened would let a short line
+    /// overwrite the head of a long one and lose the entry, leaving the tail behind; the log is the evidence a row
+    /// stands on, so a lost or a torn entry is a row that passes or fails for no reason of its own.
+    /// </summary>
+    [Fact]
+    public async Task Stand_ins_in_flight_together_leave_every_call_in_the_log_whole()
+    {
+        const int Writers = 8;
+        const int PerWriter = 25;
+        using var account = new ReplyAccount();
+
+        // Every writer is a real process; all of them have ended before the log is read, because each task awaits its
+        // own process to the end and the tasks are awaited together.
+        var results = new System.Collections.Concurrent.ConcurrentBag<(int ExitCode, string Stdout, string Stderr)>();
+        var runs = Enumerable.Range(0, Writers).Select(writer => Task.Run(async () =>
+        {
+            for (var call = 0; call < PerWriter; call++)
+            {
+                // The body is recorded with the entry, so its length sets the length of the line.
+                var body = new JsonObject { ["email"] = new string('x', 20 + ((writer * 37) + (call * 13)) % 400) + "@example.test" }.ToJsonString();
+                results.Add(await account.RunAsync(FindCall, body, Ct));
+            }
+        }, Ct)).ToArray();
+
+        try
+        {
+            await Task.WhenAll(runs).WaitAsync(TimeSpan.FromMinutes(2), Ct);
+        }
+        catch (TimeoutException)
+        {
+            Assert.Fail($"{Writers} stand-ins of {PerWriter} calls each did not all finish within two minutes: {runs.Count(run => !run.IsCompleted)} of the writers were still running.");
+        }
+
+        // A stand-in that gave up past its wait ends with a nonzero code and says why on stderr; the log alone would show
+        // only a count that is short.
+        var failed = results.Where(result => result.ExitCode != 0).ToList();
+        Assert.True(failed.Count == 0, $"{failed.Count} stand-ins ended with a nonzero exit code: {string.Join(" | ", failed.Select(result => $"{result.ExitCode} {result.Stderr}"))}");
+
+        var calls = account.Calls;
+        Assert.Equal(Writers * PerWriter, calls.Count);
+        Assert.All(calls, call => Assert.Equal("contact find", call.Command));
+    }
+
+    /// <summary>
+    /// What a reader does with a log that has a damaged line: a last line with no newline is a write still in flight and
+    /// is left out, while a line that is torn anywhere else is a failure and never skipped.
+    /// </summary>
+    [Fact]
+    public async Task A_reader_leaves_out_a_write_in_flight_and_fails_on_a_line_torn_in_the_middle()
+    {
+        using var account = new ReplyAccount();
+        await account.RunAsync([.. Prefix, "sequence", "get", "7"], Ct);
+        var file = Path.Combine(account.Root, ReplyAccount.CallsFile);
+        var whole = File.ReadAllText(file);
+        Assert.EndsWith("\n", whole, StringComparison.Ordinal);
+
+        await File.AppendAllTextAsync(file, whole[..(whole.Length / 2)], Ct);
+        Assert.Single(account.Calls);
+
+        await File.AppendAllTextAsync(file, "\n" + whole, Ct);
+        Assert.ThrowsAny<JsonException>(() => account.Calls);
+    }
+
+    /// <summary>
+    /// Every line the stand-in writes is one JSON object and its newline, so a blank line or a line that is not an object
+    /// between two whole ones is damage, and reading the log fails on it rather than passing over it.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("7")]
+    [InlineData("null")]
+    public async Task A_reader_fails_on_a_blank_or_a_non_object_line_in_the_middle(string damage)
+    {
+        using var account = new ReplyAccount();
+        await account.RunAsync([.. Prefix, "sequence", "get", "7"], Ct);
+        var file = Path.Combine(account.Root, ReplyAccount.CallsFile);
+        var whole = File.ReadAllText(file);
+
+        await File.AppendAllTextAsync(file, damage + "\n" + whole, Ct);
+
+        var failure = Assert.ThrowsAny<JsonException>(() => account.Calls);
+        Assert.Contains("line 2", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Every_call_is_recorded_before_it_runs()
     {
