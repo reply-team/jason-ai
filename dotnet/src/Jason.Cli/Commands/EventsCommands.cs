@@ -36,7 +36,7 @@ public static class EventsCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
@@ -82,7 +82,7 @@ public static class EventsCommands
                 .Set("from", parseResult.GetValue(from))
                 .Set("to", parseResult.GetValue(to))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return OperationRunner.RunAsync(env, Operations.EventsBackfill, body, new RunOptions(parseResult.GetValue(human), EventsRenderers.Backfill), cancellationToken);
         });
@@ -111,7 +111,7 @@ public static class EventsCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty().Set("source", parseResult.GetValue(source));
 
             return OperationRunner.RunAsync(env, Operations.EventsSignal, body, new RunOptions(parseResult.GetValue(human), EventsRenderers.Signal), cancellationToken);

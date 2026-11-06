@@ -34,6 +34,10 @@ internal static class ReviewedLogProperties
         // How many journal kinds a plugin is admitted to (PluginLoader).
         "Subscriptions",
 
+        // How many seconds a subscribed kind rests after a give-out: a number the runner computes from a numeric setting
+        // and holds to an hour (SubscriptionRunner).
+        "WaitSeconds",
+
         // How many pages a read of an account took, how many events it stored and how many the store already held (EventReader).
         "Pages", "Stored", "Duplicates",
 

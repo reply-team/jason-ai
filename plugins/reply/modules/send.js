@@ -23,16 +23,14 @@
 //
 // The send itself is made under the work item's idempotency key, and no other command of the attempt carries one; a
 // moment the arguments name that is still ahead goes beside it as `--send-after`, as written, and Reply holds the send
-// for it. A moment already past is no moment: the send goes as one that names none. Reply keeps the key and the moment
-// only where it keeps direct sends, which `direct-send get` of a reference no send is held under tells — Reply's own
-// answer about the send it names, against no route at all — so that is read first wherever it matters: before a send
-// that names a moment, which goes at that moment or not at all (`capability_not_offered`), before a message that names
-// the sending schedule Reply times it by (provider.js), which goes by that schedule or not at all (the same code), and
-// before a repeat after an attempt that may have sent, which without the key could send the person a second message
-// (`send_not_settled`). The schedule goes beside the key as `--schedule-id`, with the moment where one is named too.
-// Nothing is sent in either case. The runtime says when the earliest such attempt was claimed, `context.unsettled_since`,
-// and null where none was; Reply keeps a key for a day, so a repeat 23 hours or more after that moment is not settled by
-// it either, and ends before anything is sent. A later attempt after attempts that all settled is a first send again.
+// for it. A moment already past is no moment: the send goes as one that names none. A message may name the sending
+// schedule Reply times it by (provider.js), which goes beside the key as `--schedule-id`, with the moment where one is
+// named too. Reply's direct-send routes are on every account, so nothing is read before a send for any of this: a 404
+// with no code of Reply's own on the send says Reply's API changed under this package version, and ends it with nothing
+// sent (`provider_call_failed`, on a repeat `send_not_settled`). The runtime says when the earliest attempt that may
+// have sent was claimed, `context.unsettled_since`, and null where none was; Reply keeps a key for a day, so a repeat 23
+// hours or more after that moment is not settled by it, and ends before anything is sent. A later attempt after
+// attempts that all settled is a first send again.
 //
 // Where the runtime also names the send such an attempt returned, `context.unsettled_reference`, that send is read
 // first, by `direct-send get` of its reference, inside the window and past it: a read never makes a send twice. Reply's
@@ -48,7 +46,7 @@
 // under it. A send Reply answered with a failure is never repeated, since Reply keeps no key for it and a repeat would
 // be a new send. Either way the answer is the send the work item made Reply take. A command that imported the person
 // carries the key too, and Reply keeps it only where it took the send.
-import { offered, readOrNone, run, runOrHeld, runOrKept } from "./cli.js";
+import { readOrNone, run, runOrHeld, runOrKept } from "./cli.js";
 import { describe, fail, lostAnswerRow } from "./errors.js";
 import { contactNumber, sameAddress, sameValue, toEnsure, writtenAsItIs } from "./contacts.js";
 import { scheduleOf } from "./provider.js";
@@ -57,11 +55,8 @@ const SENDERS = "account list";
 const READ = "contact get";
 const PATCH = "contact update";
 
-// The read that tells whether the account's Reply keeps direct sends, of one reference in reply-cli's own spelling for
-// every channel, and the CLI's words for Reply's answer about the send it names, which only a Reply that keeps them gives.
+// The read of the send an earlier attempt returned.
 const CHECK = "direct-send get";
-const CHECKED = "email-1";
-const KEEPS = ["direct_send.not_found", "direct_send.not_owned"];
 
 // The row of a read of the send an earlier attempt returned that Reply answers as another account's (errors.js).
 const NOT_OWNED = "send_not_settled_not_owned";
@@ -192,18 +187,19 @@ export function recordedSend(operation, context) {
  */
 export function sendTo(operation, context, input, command, sender, flags, text, variant) {
   const keyed = flags.concat(keyedFlags(operation, context, input));
+  const repeat = isRepeat(context);
   const named = personFor(operation, context, input);
   if (named.stdin === undefined) {
-    return answered(runOrKept(context, sendRequest(operation, command, sender, named, keyed, text, variant)), named.learned);
+    return answered(runOrKept(context, sendRequest(operation, command, sender, named, keyed, text, variant, repeat)), named.learned);
   }
 
-  const first = runOrHeld(context, sendRequest(operation, command, sender, named, keyed, text, variant));
+  const first = runOrHeld(context, sendRequest(operation, command, sender, named, keyed, text, variant, repeat));
   if (first.held === undefined) {
     return answered(first, named.learned);
   }
 
   const held = read(operation, context, input, { flags: ["--contact-id", first.held], learned: { contact: first.held } });
-  return answered(runOrKept(context, sendRequest(operation, command, sender, held, keyed, text, variant)), held.learned);
+  return answered(runOrKept(context, sendRequest(operation, command, sender, held, keyed, text, variant, repeat)), held.learned);
 }
 
 function answered(ended, learned) {
@@ -231,25 +227,24 @@ export function readableMoment(operation, input) {
  * The flags a send carries beside its own: the work item's key, the moment it goes out after where the arguments name
  * one still ahead, as written (`readableMoment`), and for a message the sending schedule the provider's object names
  * (`scheduleOf`). A repeat after an attempt that may have sent goes only while Reply still keeps the key
- * (`repeatStillSettleable`). Before a send that names a moment or a schedule, and before such a repeat, the account's
- * Reply is read to keep direct sends; one that does not ends the attempt with nothing sent.
+ * (`repeatStillSettleable`). Nothing is read before the send for any of them.
  */
 function keyedFlags(operation, context, input) {
   const at = readableMoment(operation, input);
   const ahead = at !== null && at > Date.now();
   const schedule = operation === "message.send" ? scheduleOf(operation, input) : null;
-  const repeat = Boolean(context) && typeof context.unsettled_since === "string";
-  if (repeat && !repeatStillSettleable(context)) {
+  if (isRepeat(context) && !repeatStillSettleable(context)) {
     fail(operation, { call: null, row: "send_not_settled_after_the_window" }, undefined);
-  }
-
-  if ((ahead || schedule !== null || repeat) && !offered(context, { operation: operation, command: CHECK, operands: [CHECKED], pins: false }, KEEPS)) {
-    fail(operation, { call: CHECK, row: repeat ? "send_not_settled" : ahead ? "send_after_not_offered" : "schedule_not_offered" }, undefined);
   }
 
   return ["--idempotency-key", input.idempotency_key]
     .concat(ahead ? ["--send-after", input.args.send_after] : [])
     .concat(schedule !== null ? ["--schedule-id", schedule] : []);
+}
+
+/** Whether this attempt repeats one that may have sent: the runtime names when the earliest such attempt was claimed. */
+function isRepeat(context) {
+  return Boolean(context) && typeof context.unsettled_since === "string";
 }
 
 /** Whether Reply still keeps the key a repeat goes under: less than 23 hours since `context.unsettled_since`. */
@@ -339,7 +334,8 @@ export function momentOf(value) {
 // One run of the send's command: the person as `named` gives them, then `flags`, and on stdin the command's own input
 // alone for a person named by Reply's identifier, or one object, the person under `contact` and the input under
 // `message`, for a person named by their fields — or the person alone where the command reads no input of its own.
-function sendRequest(operation, command, sender, named, flags, text, variant) {
+// `repeat` says it repeats an attempt that may have sent, which a 404 with no code of Reply's own leaves unsettled.
+function sendRequest(operation, command, sender, named, flags, text, variant, repeat) {
   const stdin = named.stdin === undefined ? text : text === undefined ? named.stdin : { contact: named.stdin, message: text };
   return {
     operation: operation,
@@ -351,6 +347,7 @@ function sendRequest(operation, command, sender, named, flags, text, variant) {
     learned: named.learned,
     gone: named.pinned ? undefined : GONE,
     variant: variant,
+    repeat: repeat,
     kept: true,
     channel: command === "contact send-email" ? "email" : "linkedin",
   };

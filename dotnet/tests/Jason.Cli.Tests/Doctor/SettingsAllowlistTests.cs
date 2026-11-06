@@ -47,6 +47,7 @@ public sealed class SettingsAllowlistTests
         "Plugins:Invoker:VersionCheckTimeoutMs", "Plugins:Invoker:LogLineBytes",
         "Inbound:SyncSeconds", "Inbound:LookbackSeconds",
         "Responder:Priority", "Responder:TimeoutSeconds", "Responder:MaxAttempts", "Responder:MaxAgeSeconds",
+        "Responder:MaxLaunchesPerDay",
         "Subscriptions:RunRecordsPerKind", "Subscriptions:EnvelopeBytes", "Subscriptions:TransientRetries",
         "Subscriptions:RetryBackoffSeconds", "Subscriptions:MaxParallel",
     ];

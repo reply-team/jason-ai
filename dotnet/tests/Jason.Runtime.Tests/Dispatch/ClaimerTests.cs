@@ -2195,6 +2195,7 @@ public partial class ClaimerTests
                 new ExternalIdStore(journal, clock),
                 register ?? new NothingIsSuppressed(),
                 settings,
+                TestOptions.ResponderSettings(),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>(),
                 timing);

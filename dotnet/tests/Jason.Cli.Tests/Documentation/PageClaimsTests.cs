@@ -162,7 +162,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_readme_says_what_an_update_applied_by_an_older_build_needs()
     {
-        var readme = Flat(Page("README.md"));
+        var readme = Flat(Page("docs", "handbook.md"));
 
         Assert.Contains(
             "an update applied by a build before 0.12.0 needs one `jason skills update` after it",
@@ -178,7 +178,7 @@ public partial class PageClaimsTests
     /// before a plugin package was, or the eight it said before a person's own agent host was started by one.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "It is one of nine names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
+    [InlineData("docs/handbook.md", "It is one of nine names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
     [InlineData("docs/INSTALL.md", "It is one of nine names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
     [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **nine declared exceptions**")]
     public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
@@ -270,7 +270,7 @@ public partial class PageClaimsTests
     public void The_pages_say_a_bundle_carries_the_routes_and_never_a_route_s_account()
     {
         var notes = Flat(Page("CLAUDE.md"));
-        var readme = Flat(Page("README.md"));
+        var readme = Flat(Page("docs", "handbook.md"));
 
         Assert.Contains(
             "of the runtime it asks only what the runtime says about itself, its roles, profiles, routes and subscriptions, and the journal and work-item pages it counts",
@@ -296,7 +296,7 @@ public partial class PageClaimsTests
     /// pages said before named six things and left out most of what the journal's entries hold.
     /// </summary>
     [Theory]
-    [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("CLAUDE.md")]
     public void The_pages_say_what_the_journal_flag_adds_in_the_composers_own_words(string page)
     {
@@ -338,6 +338,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Theory]
     [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     [InlineData("docs/release-and-update.md")]
     [InlineData("CLAUDE.md")]
@@ -401,7 +402,7 @@ public partial class PageClaimsTests
     /// and the installer's default directory there is the one other tools share.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "only where the installer wrote it and its directory holds nothing but Jason")]
+    [InlineData("docs/handbook.md", "only where the installer wrote it and its directory holds nothing but Jason")]
     [InlineData("docs/INSTALL.md", "is one rule on both platforms")]
     [InlineData("docs/release-and-update.md", "only where the installer wrote it and its directory holds nothing but Jason")]
     [InlineData("dotnet/src/Jason.Cli/Uninstall/UninstallCommand.cs", "only where the installer wrote it and its directory holds nothing but Jason")]
@@ -424,6 +425,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Theory]
     [InlineData("README.md", "Jason is released under the MIT licence: [LICENSE](LICENSE). What it sends off your machine, and what stays your responsibility when it reaches people, is in [docs/responsible-use.md](docs/responsible-use.md).")]
+    [InlineData("docs/handbook.md", "Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your responsibility when it reaches people, is in [docs/responsible-use.md](responsible-use.md).")]
     [InlineData("docs/INSTALL.md", "Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your responsibility when it reaches people, is in [responsible-use.md](responsible-use.md).")]
     [InlineData(".github/release-notes-template.md", "Jason is released under the MIT licence: <https://github.com/reply-team/jason-ai/blob/v{{version}}/LICENSE>.")]
     public void Every_page_with_the_install_line_says_the_licence_after_it(string page, string sentence)
@@ -442,6 +444,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Theory]
     [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     [InlineData("docs/philosophy.md")]
     [InlineData("docs/release-and-update.md")]
@@ -459,21 +462,27 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The README's licence section says MIT covers the runtime and the executable each release builds, and says once
-    /// that the repository is released under it with its history, so a licence file in an older tree is superseded.
+    /// The licence section of the README and of the handbook each says once that the repository is released under MIT
+    /// with its history, so a licence file in an older tree is superseded, and names the marks beside it. The handbook's
+    /// also opens by saying that MIT covers the runtime and the executable each release builds.
     /// </summary>
-    [Fact]
-    public void The_readme_s_licence_section_releases_the_repository_and_its_history_under_mit()
+    [Theory]
+    [InlineData("README.md", "\"Jason\", \"Jason AI\", \"Reply\" and \"Reply.io\" are trademarks of ReplyApp Inc.")]
+    [InlineData("docs/handbook.md", "The names \"Jason\", \"Jason AI\", \"Reply\" and \"Reply.io\", and their logos, are trademarks of ReplyApp Inc.")]
+    public void Each_page_s_licence_section_releases_the_repository_and_its_history_under_mit(string page, string marks)
     {
-        var text = Flat(Page("README.md"));
-        var licences = text.IndexOf("## License", StringComparison.Ordinal);
-        Assert.True(licences >= 0, "README has no License section.");
+        var section = Flat(Section(Page(page.Split('/')), "## License\n"));
 
-        Assert.Contains("Everything in this repository is MIT ([LICENSE](LICENSE)), the runtime included, and so is the executable each release builds from it", text[licences..], StringComparison.Ordinal);
-        Assert.Contains(
-            "ReplyApp Inc. releases this repository, its history included, under the MIT licence from 0.24.0, and the licence files in older trees are superseded.",
-            text[licences..],
-            StringComparison.Ordinal);
+        Assert.True(
+            section.Contains("ReplyApp Inc. releases this repository, its history included, under the MIT licence from 0.24.0, and the licence files in older trees are superseded.", StringComparison.Ordinal),
+            $"{page}'s License section does not release the repository and its history under MIT in the repository's words.");
+        Assert.True(section.Contains(marks, StringComparison.Ordinal), $"{page}'s License section does not name the marks: {marks}");
+        if (page == "docs/handbook.md")
+        {
+            Assert.True(
+                section.Contains("Everything in this repository is MIT ([LICENSE](../LICENSE)), the runtime included, and so is the executable each release builds from it", StringComparison.Ordinal),
+                $"{page}'s License section does not open by saying MIT covers the runtime and the executable.");
+        }
     }
 
     /// <summary>
@@ -482,7 +491,7 @@ public partial class PageClaimsTests
     /// and who operates the address, and that the skills still come from the repository directly.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "The check, the install scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository directly.")]
+    [InlineData("docs/handbook.md", "The check, the install scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository directly.")]
     [InlineData("docs/INSTALL.md", "That request, and the downloads the install scripts, `jason update apply` and `jason ui install` make, go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases on GitHub.")]
     [InlineData("docs/release-and-update.md", "**Where it goes.** The default feed is on `get.jasonharness.ai`, an address Reply.io operates, which redirects every request under `/releases/` to the same path in the public repository's releases on GitHub.")]
     [InlineData("docs/release-and-update.md", "An installation built before 0.7.0 asks GitHub directly; both answer with the same file.")]
@@ -496,7 +505,7 @@ public partial class PageClaimsTests
     /// that say where the requests go point there, right after saying it, rather than repeat it.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "the skills come from this repository directly. What that address keeps, and for how long, is in [docs/responsible-use.md](docs/responsible-use.md#update-check-and-downloads).")]
+    [InlineData("docs/handbook.md", "the skills come from this repository directly. What that address keeps, and for how long, is in [docs/responsible-use.md](responsible-use.md#update-check-and-downloads).")]
     [InlineData("docs/INSTALL.md", "which redirects them to this repository's releases on GitHub. What that address keeps, and for how long, is in [responsible-use.md](responsible-use.md#update-check-and-downloads).")]
     public void The_pages_point_at_what_the_address_keeps_where_they_say_where_requests_go(string page, string said) =>
         Assert.Contains(said, Flat(Unquoted(Page(page.Split('/')))), StringComparison.Ordinal);
@@ -509,12 +518,12 @@ public partial class PageClaimsTests
     [Fact]
     public void The_readme_names_the_marks_beside_the_licences()
     {
-        var text = Flat(Page("README.md"));
+        var text = Flat(Page("docs", "handbook.md"));
         var licences = text.IndexOf("## License", StringComparison.Ordinal);
         Assert.True(licences >= 0, "README has no License section.");
 
         Assert.Contains(
-            "The names \"Jason\", \"Jason AI\", \"Reply\" and \"Reply.io\", and their logos, are trademarks of ReplyApp Inc. The licence grants no right to use them; [TRADEMARKS.md](TRADEMARKS.md) says what you may do with them without asking.",
+            "The names \"Jason\", \"Jason AI\", \"Reply\" and \"Reply.io\", and their logos, are trademarks of ReplyApp Inc. The licence grants no right to use them; [TRADEMARKS.md](../TRADEMARKS.md) says what you may do with them without asking.",
             text[licences..],
             StringComparison.Ordinal);
         Assert.DoesNotContain("## Naming", text, StringComparison.Ordinal);
@@ -536,16 +545,16 @@ public partial class PageClaimsTests
     /// the executable by hand keeps them too. The uninstall's pages say the files go with it, by name.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "with its licence and the third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
+    [InlineData("docs/handbook.md", "with its licence and the third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
     [InlineData("docs/INSTALL.md", "with its licence and the third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
-    [InlineData("README.md", "every archive carries the licence and the third-party notices, and an install keeps both beside the executable as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
+    [InlineData("docs/handbook.md", "every archive carries the licence and the third-party notices, and an install keeps both beside the executable as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
     [InlineData("docs/INSTALL.md", "unless a licence file is missing beside the executable")]
     [InlineData(".github/release-notes-template.md", "unless a licence file is missing beside the executable")]
     [InlineData(".github/release-notes-template.md", "If you then put the executable in place by hand, keep `LICENSE` and `THIRD-PARTY-NOTICES` beside it, named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.")]
     [InlineData("docs/INSTALL.md", "nothing but the executable, its two notice files (`jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`) and the `jason.previous.exe` an upgrade can leave beside it")]
     [InlineData("docs/INSTALL.md", "on macOS and Linux it removes those two files by name from a directory other tools share")]
     [InlineData("docs/INSTALL.md", "with `LICENSE` and `THIRD-PARTY-NOTICES` beside it, named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
-    [InlineData("README.md", "holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it")]
+    [InlineData("docs/handbook.md", "holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it")]
     [InlineData("docs/release-and-update.md", "holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it")]
     [InlineData("docs/release-and-update.md", "beside the executable only the executable and its two notice files")]
     public void The_pages_say_where_the_notice_files_are_kept_and_that_they_go(string page, string said) =>
@@ -571,25 +580,31 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The pages that list what a release publishes, or say how a plugin is installed, name the Reply plugin's package by
-    /// what it holds and how it is installed: the files of <c>plugins/reply</c> at the tag, placed by
-    /// <c>jason plugin install</c> once they match <c>checksums.txt</c>. None of them says plugins are installed from the
+    /// The pages that list what a release publishes, or say how a plugin is installed, name each plugin's package a release
+    /// publishes, Reply's and the journal forwarder's, by what it holds and how it is installed: the files of
+    /// <c>plugins/&lt;id&gt;</c> at the tag, placed by <c>jason plugin install</c> once they match <c>checksums.txt</c>. None of them says plugins are installed from the
     /// repository any more, or that the package is unpacked by hand; the package is never called an archive, which on those
     /// pages is a platform's.
     /// </summary>
     [Theory]
     [InlineData("docs/release-and-update.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |")]
+    [InlineData("docs/release-and-update.md", "| `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at the tag, at the archive's root |")]
     [InlineData("docs/release-and-update.md", "| `checksums.txt` | one `sha256sum` line per archive, and one for each package |")]
     [InlineData("docs/release-and-update.md", "Installing it is `jason plugin install reply`, which unpacks it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 runs it — and what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002).")]
     [InlineData("docs/release-and-update.md", "listed in `checksums.txt`, and named in the manifest's `plugins` (§3) rather than its artifacts, which are platforms.")]
     [InlineData("docs/release-and-update.md", "Nor does an added root field every reader since 0.1.0 skips, as `plugins` is:")]
     [InlineData(".github/release-notes-template.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, which `jason plugin install reply` places in `~/.jason/plugins/reply` |")]
-    [InlineData(".github/release-notes-template.md", "| `checksums.txt` | the SHA-256 of each archive and of the two packages, in `sha256sum` format |")]
+    [InlineData(".github/release-notes-template.md", "| `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at `v{{version}}`, which `jason plugin install journal-forwarder` places in `~/.jason/plugins/journal-forwarder` |")]
+    [InlineData(".github/release-notes-template.md", "| `checksums.txt` | the SHA-256 of each archive and of each package, in `sha256sum` format |")]
     [InlineData(".github/release-notes-template.md", "| `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |")]
     [InlineData(".github/release-notes-template.md", "The Reply plugin's package is installed by `jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in `checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it.")]
     [InlineData("docs/plugins.md", "`jason plugin install <id>` installs a package the release you run publishes: it downloads the file the manifest names, from that release's own directory, checks it against the release's `checksums.txt` and, unpacked, against that digest, and moves it in whole as `~/.jason/plugins/<id>`, or places nothing and exits 1 saying why.")]
     [InlineData("docs/release-and-update.md", "The Reply plugin is published beside the archives instead, from 0.11.0 on, as a package of its own:")]
-    [InlineData("README.md", "signs in with it, places the package from the release with `jason plugin install reply`, grants it that one program")]
+    [InlineData("docs/handbook.md", "signs in with it, places the package from the release with `jason plugin install reply`, grants it that one program")]
+    [InlineData("docs/release-and-update.md", "The journal forwarder is published the same way from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, the files of `plugins/journal-forwarder` at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`;")]
+    [InlineData(".github/release-notes-template.md", "The journal forwarder's package is installed the same way, by `jason plugin install journal-forwarder`, into `~/.jason/plugins/journal-forwarder`;")]
+    [InlineData("docs/plugins.md", "the journal forwarder from 0.30.0 on as `jason-plugin-journal-forwarder.zip`, each with its files at the archive's root,")]
+    [InlineData("README.md", "the Reply plugin and the journal forwarder, each one `jason plugin install` away")]
     public void The_pages_say_how_the_plugin_s_package_is_published_and_installed(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
@@ -604,7 +619,7 @@ public partial class PageClaimsTests
     /// guide's own lines are held above, and these are the walk-throughs beside it.
     /// </summary>
     [Theory]
-    [InlineData("README.md", "`jason ui install` places this release's browser UI, the page `jason ui open` opens; a runtime works without it.")]
+    [InlineData("docs/handbook.md", "`jason ui install` places this release's browser UI, the page `jason ui open` opens; a runtime works without it.")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "An update applied by a build before 0.12.0 has no such step, so it needs one `jason skills update` after it. After the skills it places the release's UI, and an update applied by a build older than that step places none, so `jason ui install` follows it; `jason status` names it until it has.")]
     public void The_walk_throughs_say_when_jason_ui_install_follows(string page, string said) =>
         Assert.Contains(said, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
@@ -634,7 +649,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_readme_says_to_start_the_install_session_without_connectors_above_the_prompt()
     {
-        var readme = Page("README.md");
+        var readme = Page("docs", "handbook.md");
         var fence = readme.IndexOf("```text\nInstall Jason on this machine", StringComparison.Ordinal);
         var sentence = readme.IndexOf("Start the agent session for the install without external connectors: the prompt below needs none.", StringComparison.Ordinal);
 
@@ -658,7 +673,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_readme_says_what_auto_mode_does_at_the_install_above_the_prompt()
     {
-        var readme = Page("README.md");
+        var readme = Page("docs", "handbook.md");
         var fence = readme.IndexOf("```text\nInstall Jason on this machine", StringComparison.Ordinal);
         Assert.True(fence > 0, "the prompt's fence is where the page has it");
         var above = Flat(readme[..fence]);
@@ -676,10 +691,12 @@ public partial class PageClaimsTests
     /// reading of record is still a person's own, pasting it from the published page into a fresh agent session after the
     /// release that publishes it. Until then the digest stands for a deliberate change, not for a reading.
     /// </summary>
-    [Fact]
-    public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector()
+    [Theory]
+    [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
+    public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector(string page)
     {
-        var prompt = Fenced(Page("README.md"), "```text\nInstall Jason on this machine");
+        var prompt = Fenced(Page(page.Split('/')), "```text\nInstall Jason on this machine");
         Assert.DoesNotContain("connector", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(PromptDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(prompt))));
     }
@@ -932,6 +949,94 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("one word from them runs", agent, StringComparison.Ordinal);
     }
 
+    /// <summary>The two sentences of the README that may name TypeScript, as the README says them.</summary>
+    private static readonly string[] TypeScriptSentences =
+    [
+        "The browser UI is TypeScript.",
+        "TypeScript would need a build step on every machine that edits the plugin, and the runtime would still load only the JavaScript it produces, so we do not recommend it.",
+    ];
+
+    /// <summary>
+    /// The README says what a plugin author meets today: a plugin is plain JavaScript, run by the engine the runtime
+    /// embeds, and a <c>.ts</c> entry is refused at load. It never says TypeScript comes first, nor that plugins or the
+    /// changes a person or an agent makes are written in TypeScript, which would send an agent to write a package the
+    /// runtime refuses. Two sentences may name TypeScript, each pinned by its text: the one that says the browser UI is
+    /// TypeScript, and the one that says why it is not recommended for a plugin. Any other sentence that names it fails.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_plugins_are_plain_javascript_and_never_typescript()
+    {
+        var page = Page("README.md");
+        var readme = Flat(Unquoted(page)).Replace("**", string.Empty, StringComparison.Ordinal);
+
+        Assert.Contains("Plugins are plain JavaScript.", readme, StringComparison.Ordinal);
+        Assert.Contains("write plain JavaScript. Plugins and other changes go in JavaScript against the published contracts.", readme, StringComparison.Ordinal);
+        Assert.Contains("\n### Plugins are JavaScript\n", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("TypeScript first", readme, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("#typescript-first", readme, StringComparison.Ordinal);
+
+        var named = Regex.Split(readme, @"(?<=[.!?])\s+")
+            .Where(sentence => sentence.Contains("TypeScript", StringComparison.OrdinalIgnoreCase))
+            .Where(sentence => !TypeScriptSentences.Contains(sentence, StringComparer.Ordinal))
+            .ToList();
+        Assert.True(named.Count == 0, "The README names TypeScript in a sentence other than the two it may: " + string.Join(" / ", named));
+    }
+
+    /// <summary>
+    /// Every count the README states is the tree's own, wherever the page states it: the facts table, the Maturity row and
+    /// "In numbers". The SDR operations and their families are what the sdr-operations skill's own source holds, one
+    /// fragment per family. When a count moves, the page changes, never this row.
+    /// </summary>
+    [Fact]
+    public void Every_count_the_readme_states_is_the_tree_s_own()
+    {
+        var root = Root();
+        var readme = Flat(Unquoted(Page("README.md"))).Replace("**", string.Empty, StringComparison.Ordinal);
+
+        string[] Files(string folder, string pattern) =>
+            Directory.GetFiles(Path.Combine(root, folder), pattern, SearchOption.AllDirectories)
+                .Where(file => !Path.GetRelativePath(root, file).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part => part is "bin" or "obj"))
+                .ToArray();
+        int Skills(params string[] folder) =>
+            Directory.GetDirectories(Path.Combine([root, .. folder])).Count(directory => File.Exists(Path.Combine(directory, "SKILL.md")));
+        var skills = Files("skills", "SKILL.md");
+        int Status(string status) => skills.Count(file => Regex.IsMatch(File.ReadAllText(file), $@"(?m)^  status: {status}\r?$"));
+        var families = Directory.GetFiles(Path.Combine(root, "skills", "business", "sdr-operations", "operations"), "*.yaml")
+            .Where(file => Regex.IsMatch(Path.GetFileName(file), @"^\d\d-"))
+            .ToArray();
+        var operations = families.Sum(file => Regex.Matches(File.ReadAllText(file), @"(?m)^  - name: ").Count);
+
+        (string Pattern, int[] Tree)[] counts =
+        [
+            (@"(\d+) guides", [Directory.GetFiles(Path.Combine(root, "docs"), "*.md").Length]),
+            (@"(\d+) operation contracts", [Directory.GetFiles(Path.Combine(root, "docs", "contracts", "operations"), "*.json").Length]),
+            (@"(\d+) (?:test|contract) fixtures", [Files(Path.Combine("docs", "contracts", "fixtures"), "*").Length]),
+            (@"(\d+) API fixtures", [Files(Path.Combine("docs", "api", "fixtures"), "*").Length]),
+            (@"(\d+) C# test files", [Files(Path.Combine("dotnet", "tests"), "*.cs").Length]),
+            (@"(\d+) business skills, (\d+) runtime skills and (\d+) role skills", [Skills("skills", "business"), Skills("skills", "runtime"), Skills("skills", "runtime", "roles")]),
+            (@"(\d+) of the (\d+) skills are `verified`", [Status("verified"), skills.Length]),
+            (@"the other (\d+) are still `draft`", [Status("draft")]),
+            (@"(\d+) SDR operations", [operations]),
+            (@"(\d+) SDR operations in (\d+) families", [operations, families.Length]),
+        ];
+
+        var wrong = new List<string>();
+        foreach (var (pattern, tree) in counts)
+        {
+            var said = Regex.Matches(readme, pattern);
+            if (said.Count == 0)
+            {
+                wrong.Add($"the README no longer states /{pattern}/");
+            }
+
+            wrong.AddRange(said
+                .Where(match => !match.Groups.Values.Skip(1).Select(group => int.Parse(group.Value, System.Globalization.CultureInfo.InvariantCulture)).SequenceEqual(tree))
+                .Select(match => $"'{match.Value}', where the tree has {string.Join(", ", tree)}"));
+        }
+
+        Assert.True(wrong.Count == 0, "The README states a count the tree does not have: " + string.Join(" / ", wrong));
+    }
+
     /// <summary>
     /// A person's own agent that lands on the README sees, within its first screen, what Jason is, why it was built, that
     /// installing it is the install page, and the prompt: the title, one paragraph, the short section on why Jason was
@@ -941,7 +1046,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_readme_opens_with_what_it_is_then_the_install_and_the_prompt()
     {
-        var lines = OutsideFences(Page("README.md"));
+        var lines = OutsideFences(Page("docs", "handbook.md"));
 
         Assert.Equal(
             ["## Why we built Jason", "## Installing", "## What this is", "## Architecture", "## Repository layout"],
@@ -959,7 +1064,8 @@ public partial class PageClaimsTests
             .Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(block => !block.StartsWith("# ", StringComparison.Ordinal) && !block.StartsWith('>'))
             .ToList();
-        Assert.True(opening.Count == 1, $"Before \"## Installing\" the README has {opening.Count} paragraphs besides the title and the alpha box; it has one.");
+        Assert.True(opening.Count == 2, $"Before \"## Installing\" the handbook has {opening.Count} paragraphs besides the title and the alpha box; it has the sentence that says what the page is, then one.");
+        Assert.StartsWith("This is the technical page of a Jason installation:", opening[0], StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -970,12 +1076,12 @@ public partial class PageClaimsTests
     [Fact]
     public void The_readme_s_first_screen_says_the_install_page_holds_the_rest()
     {
-        var readme = Page("README.md");
-        var licence = readme.IndexOf("Jason is released under the MIT licence: [LICENSE](LICENSE).", StringComparison.Ordinal);
+        var readme = Page("docs", "handbook.md");
+        var licence = readme.IndexOf("Jason is released under the MIT licence: [LICENSE](../LICENSE).", StringComparison.Ordinal);
         var prompt = readme.IndexOf("### Ask an agent to do it", StringComparison.Ordinal);
         Assert.True(licence > 0 && prompt > licence, "the README no longer has the licence sentence followed by the prompt's heading.");
 
-        var pointer = readme[licence..prompt].Split("\n\n").Select(Flat).SingleOrDefault(paragraph => paragraph.Contains("[docs/INSTALL.md](docs/INSTALL.md)", StringComparison.Ordinal));
+        var pointer = readme[licence..prompt].Split("\n\n").Select(Flat).SingleOrDefault(paragraph => paragraph.Contains("[docs/INSTALL.md](INSTALL.md)", StringComparison.Ordinal));
         Assert.True(pointer is not null, "Between the licence sentence and the prompt, no paragraph links the install page.");
         Assert.Contains("A one-liner installs the executable.", pointer, StringComparison.Ordinal);
         Assert.Contains("teaching it its skills", pointer, StringComparison.Ordinal);
@@ -1113,6 +1219,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Theory]
     [InlineData("README.md", null)]
+    [InlineData("docs/handbook.md", null)]
     [InlineData("docs/INSTALL.md", "**From a working tree.**")]
     public void No_page_teaches_a_release_with_source(string page, string? workingTree)
     {
@@ -1337,11 +1444,11 @@ public partial class PageClaimsTests
     [Fact]
     public void The_readme_names_the_wiring_check_and_where_the_real_work_begins()
     {
-        var readme = Flat(Page("README.md"));
+        var readme = Flat(Page("docs", "handbook.md"));
 
-        Assert.Contains("**The wiring check** — an empty installation brought to a routed plugin, one enrolment of your own address approved by you and performed against the provider, and the history it leaves — is [docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test.", readme, StringComparison.Ordinal);
+        Assert.Contains("**The wiring check** — an empty installation brought to a routed plugin, one enrolment of your own address approved by you and performed against the provider, and the history it leaves — is [docs/golden-path.md](golden-path.md), and every command on that page is executed by a test.", readme, StringComparison.Ordinal);
         Assert.Contains(
-            "It proves the wiring and is not the real work, which begins with a campaign planned with the business skills ([`campaign-planning`](skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles.",
+            "It proves the wiring and is not the real work, which begins with a campaign planned with the business skills ([`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles.",
             readme,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -1355,21 +1462,24 @@ public partial class PageClaimsTests
     /// the first-use walkthrough: it is a check of the wiring, and the real work is a campaign. Nor a sandbox: it makes a
     /// real draft campaign at the person's provider and enrols their own address, and the published pages keep that word
     /// for an isolation boundary. A file path is not prose, and the executable's own "first runs" is another matter, so
-    /// neither is read as one.
+    /// neither is read as one. Codex's sandbox is that isolation boundary, the meaning the word is kept for, so the word
+    /// may stand in the phrases "its sandbox" and "Codex's sandbox" alone: a sentence that names Codex and runs on to list
+    /// other hosts says nothing else about a sandbox.
     /// </summary>
     [Theory]
     [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     [InlineData("docs/golden-path.md")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md")]
     [InlineData("skills/runtime/managed-campaign-work/SKILL.md")]
     public void No_page_calls_the_wiring_check_by_a_name_it_had_before(string page)
     {
-        var said = Regex.Match(
-            Flat(Page(page.Split('/'))),
-            @"\b(?:first run|golden path|first[- ]use walkthrough|sandbox)\b",
-            RegexOptions.IgnoreCase);
-        Assert.False(said.Success, $"{page} still says '{said.Value}' at offset {said.Index} of its flattened text.");
+        var said = Regex.Split(Flat(Page(page.Split('/'))), @"(?<=[.!?])\s+")
+            .SelectMany(sentence => Regex.Matches(sentence, @"\b(?:first run|golden path|first[- ]use walkthrough|(?<!\b(?:its|Codex's) )sandbox)\b", RegexOptions.IgnoreCase)
+                .Select(name => $"'{name.Value}' in: {sentence}"))
+            .ToList();
+        Assert.True(said.Count == 0, $"{page} still calls the wiring check by a name it had before: " + string.Join(" / ", said));
     }
 
     /// <summary>
@@ -1895,7 +2005,7 @@ public partial class PageClaimsTests
     /// so, and neither keeps the sentence from before the repository was public.
     /// </summary>
     [Theory]
-    [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     public void No_page_says_a_404_means_no_release_yet(string page)
     {
@@ -1935,7 +2045,7 @@ public partial class PageClaimsTests
     /// table and INSTALL's. A check added to one and not the others is a drift nobody held before.
     /// </summary>
     [Theory]
-    [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     public async Task The_pages_list_the_optional_checks_status_prints_in_its_help(string page)
     {
@@ -1970,7 +2080,7 @@ public partial class PageClaimsTests
     /// told it could come.
     /// </summary>
     [Theory]
-    [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     public void The_pages_list_the_running_build_among_the_required_checks(string page)
     {
@@ -2070,7 +2180,7 @@ public partial class PageClaimsTests
     public void The_readme_says_an_uninstall_never_touches_the_folder_of_the_person_s_files() =>
         Assert.Contains(
             "The folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — is never touched, `--purge-data` included: it is yours.",
-            Flat(Page("README.md")),
+            Flat(Page("docs", "handbook.md")),
             StringComparison.Ordinal);
 
     /// <summary>
@@ -2177,16 +2287,15 @@ public partial class PageClaimsTests
     /// <summary>A page with the marks of a quoted block taken off, so a sentence quoted across lines reads as one.</summary>
     private static string Unquoted(string text) => System.Text.RegularExpressions.Regex.Replace(text, "(?m)^> ?", "");
 
-    /// <summary>The README's paste-in prompt: the fenced block under its own heading.</summary>
+    /// <summary>The README's paste-in prompt: the fenced block that opens with its first words.</summary>
     private static string Prompt()
     {
         var readme = Page("README.md");
-        var heading = readme.IndexOf("### Ask an agent to do it", StringComparison.Ordinal);
-        Assert.True(heading >= 0, "the README no longer has the prompt's heading.");
+        var open = readme.IndexOf("```text\nInstall Jason on this machine", StringComparison.Ordinal);
+        Assert.True(open >= 0, "the README no longer has the prompt as a fenced block.");
 
-        var open = readme.IndexOf("```text", heading, StringComparison.Ordinal);
         var close = readme.IndexOf("```", open + 7, StringComparison.Ordinal);
-        Assert.True(open > heading && close > open, "the README's prompt is no longer a fenced block under its heading.");
+        Assert.True(close > open, "the README's prompt is never closed.");
         return readme[open..close];
     }
 
@@ -2291,7 +2400,11 @@ public partial class PageClaimsTests
     [GeneratedRegex(@"releases/download/v(?<version>[0-9]+\.[0-9]+\.[0-9]+)/|(?:--version|-Version) (?<version>[0-9]+\.[0-9]+\.[0-9]+)|These install (?<version>[0-9]+\.[0-9]+\.[0-9]+) with (?<version>[0-9]+\.[0-9]+\.[0-9]+)'s own script")]
     private static partial Regex PinnedVersion();
 
-    private static string Page(params string[] path)
+    private static string Page(params string[] path) =>
+        File.ReadAllText(Path.Combine([Root(), .. path])).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    /// <summary>The repository's root: the nearest directory above the test assembly that holds <c>global.json</c>.</summary>
+    private static string Root()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "global.json")))
@@ -2300,6 +2413,6 @@ public partial class PageClaimsTests
         }
 
         Assert.NotNull(directory);
-        return File.ReadAllText(Path.Combine([directory.FullName, .. path])).Replace("\r\n", "\n", StringComparison.Ordinal);
+        return directory.FullName;
     }
 }

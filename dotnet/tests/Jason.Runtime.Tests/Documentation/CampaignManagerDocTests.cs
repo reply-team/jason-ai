@@ -125,6 +125,7 @@ public partial class CampaignManagerDocTests
             "decision_not_found",
             "decision_not_pending",
             "decision_not_human",
+            "decided_inside_a_run",
             "decision_option_unknown",
             "decision_reference_unresolved",
         })

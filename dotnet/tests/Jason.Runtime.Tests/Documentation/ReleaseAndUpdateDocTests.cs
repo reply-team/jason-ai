@@ -870,7 +870,7 @@ public class ReleaseAndUpdateDocTests
         Assert.Contains("every account on it has its own task there", page, StringComparison.Ordinal);
         Assert.Contains("another account's ordinary prompt can neither read nor change it", page, StringComparison.Ordinal);
         Assert.Contains("each registers their own", Source("docs/INSTALL.md").ReplaceLineEndings(" "), StringComparison.Ordinal);
-        Assert.Contains("one task per account", Source("README.md").ReplaceLineEndings(" "), StringComparison.Ordinal);
+        Assert.Contains("one task per account", Source("docs/handbook.md").ReplaceLineEndings(" "), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -884,6 +884,7 @@ public class ReleaseAndUpdateDocTests
         string[] places =
         [
             "README.md",
+            "docs/handbook.md",
             "docs/INSTALL.md",
             "docs/release-and-update.md",
             "skills/runtime/operating-the-installation/SKILL.md",
@@ -944,7 +945,7 @@ public class ReleaseAndUpdateDocTests
     {
         string[] places =
         [
-            "README.md",
+            "docs/handbook.md",
             "DEVELOPMENT.md",
             "dotnet/src/Jason.Cli/Commands/RuntimeStartCommand.cs",
         ];

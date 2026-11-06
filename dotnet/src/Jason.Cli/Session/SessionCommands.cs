@@ -46,7 +46,7 @@ public static class SessionCommands
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var approvalId = parseResult.GetValue(approval);
             var questionId = parseResult.GetValue(question);
             if ((approvalId is null) == (questionId is null))

@@ -868,11 +868,31 @@ public sealed class ReplyAccount : IDisposable
             }
 
             var calls = new List<ReplyCall>();
+            var number = 0;
             foreach (var line in ReadAllLines(file))
             {
-                if (line.Trim().Length == 0 || JsonNode.Parse(line) is not JsonObject call)
+                number++;
+
+                // Every line the stand-in writes is one JSON object, so a blank line, a scalar or a torn line anywhere in
+                // the log is damage, and it is named by its line rather than passed over.
+                if (line.Trim().Length == 0)
                 {
-                    continue;
+                    throw new JsonException($"The call log's line {number} is blank.");
+                }
+
+                JsonNode? node;
+                try
+                {
+                    node = JsonNode.Parse(line);
+                }
+                catch (JsonException failure)
+                {
+                    throw new JsonException($"The call log's line {number} is not whole JSON: {failure.Message}", failure);
+                }
+
+                if (node is not JsonObject call)
+                {
+                    throw new JsonException($"The call log's line {number} is not a JSON object.");
                 }
 
                 calls.Add(new ReplyCall(
@@ -1110,14 +1130,23 @@ public sealed class ReplyAccount : IDisposable
     private void Write(string fileName, JsonNode content) =>
         File.WriteAllText(Path.Combine(Root, fileName), content.ToJsonString(), new UTF8Encoding(false));
 
-    /// <summary>Reads a file another process may be appending to right now, which a plain read refuses.</summary>
+    /// <summary>
+    /// Reads a file another process may be appending to right now, which a plain read refuses. A last line with no
+    /// newline after it is a write in flight and is left out; a line that is malformed anywhere else is the caller's
+    /// to fail on, never skipped.
+    /// </summary>
     private static IEnumerable<string> ReadAllLines(string file)
     {
-        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        while (reader.ReadLine() is { } line)
+        string text;
+        using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        using (var reader = new StreamReader(stream))
         {
-            yield return line;
+            text = reader.ReadToEnd();
         }
+
+        var lines = text.Split('\n');
+
+        // The piece after the last newline is empty when the file ends whole, and a line still being written when not.
+        return lines.Take(lines.Length - 1);
     }
 }

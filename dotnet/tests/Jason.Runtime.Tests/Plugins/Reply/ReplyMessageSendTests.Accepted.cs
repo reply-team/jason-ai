@@ -8,8 +8,8 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
 /// What Reply took, and the work item's own key. The send is made under the work item's idempotency key, and no other
-/// command of the attempt carries one; a moment still ahead goes as <c>--send-after</c>, once Reply is read to keep
-/// direct sends at all. The result says what Reply said of the message: <c>sent</c> or <c>accepted</c> by Reply's
+/// command of the attempt carries one; a moment still ahead goes as <c>--send-after</c>, with nothing read before the
+/// send for it. The result says what Reply said of the message: <c>sent</c> or <c>accepted</c> by Reply's
 /// state, the moment it holds it for, its reference and whether it can still be cancelled.
 /// </summary>
 public partial class ReplyMessageSendTests
@@ -39,9 +39,7 @@ public partial class ReplyMessageSendTests
     }
 
     /// <summary>
-    /// A moment still ahead is read first: <c>direct-send get</c> of <c>email-1</c>, a reference no send is held under, on
-    /// every channel, says whether the account's Reply keeps direct sends, and then the moment goes as written, and Reply
-    /// holds the message for it.
+    /// A moment still ahead goes as written, on every channel, and Reply holds the message for it.
     /// </summary>
     [Theory]
     [InlineData("email")]
@@ -56,7 +54,7 @@ public partial class ReplyMessageSendTests
 
         Assert.Equal(("accepted", "2099-11-03T14:00:00Z", true), ((string?)item["status"], (string?)item["accepted_for"], (bool)item["cancelable"]!));
         Assert.Equal("""{"external_id":null,"sent_at":null}""", item["message"]!.ToJsonString());
-        Assert.Equal(["account list", "direct-send get email-1", "contact get 1001", FormatCommand(format)], Lines(account));
+        Assert.Equal(["account list", "contact get 1001", FormatCommand(format)], Lines(account));
         Assert.Equal("2099-11-03T09:00:00-05:00", account.Calls[^1].Option("--send-after"));
         Assert.Equal("queued", (string?)Assert.Single(account.DirectSends)!["state"]);
     }
@@ -129,80 +127,37 @@ public partial class ReplyMessageSendTests
     }
 
     /// <summary>
-    /// A moment the account's Reply does not keep is not dropped: the message goes at that moment or not at all, so it
-    /// fails <c>capability_not_offered</c>, its message naming the argument, and nothing is sent.
-    /// </summary>
-    [Fact]
-    public async Task A_moment_reply_does_not_keep_is_a_capability_not_offered_and_nothing_is_sent()
-    {
-        using var account = ByEmail().NotOffering("direct_send");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, WithMoment(Input("email", pinned: "1001"), "2099-11-03T14:00:00Z")));
-
-        Assert.Equal((UnjudgedOutcomeCodes.CapabilityNotOffered, FailureClass.Permanent), (error.Code, error.Class));
-        Assert.StartsWith("message.send: ", error.Message, StringComparison.Ordinal);
-        Assert.Contains("`send_after`", error.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain(account.Calls, call => call.Line == "contact send-email");
-        Assert.Empty(account.Sent);
-    }
-
-    /// <summary>
-    /// What tells that the account's Reply keeps direct sends is its own answer about the send <c>email-1</c> names: the
-    /// send itself, or that it holds no such send or none of this account's. A 404 with no code of Reply's own is no route
-    /// at all.
+    /// Reply's direct-send routes are on every account, so nothing is read before a send to learn whether Reply keeps
+    /// them: a send with a moment ahead, one timed by a schedule and a repeat after an attempt that may have sent each go
+    /// with no <c>direct-send</c> read before them, and the package names no reference to read for it.
     /// </summary>
     [Theory]
-    [InlineData("found", true)]
-    [InlineData("direct_send.not_found", true)]
-    [InlineData("direct_send.not_owned", true)]
-    [InlineData("no_route", false)]
-    public async Task Reply_s_own_answer_about_email_1_says_it_keeps_direct_sends_and_no_route_says_it_does_not(string answer, bool offered)
+    [InlineData("moment")]
+    [InlineData("schedule")]
+    [InlineData("repeat")]
+    public async Task Nothing_is_read_before_a_send_to_learn_whether_reply_keeps_direct_sends(string send)
     {
         using var account = ByEmail();
-        _ = answer switch
-        {
-            "found" => account.Returns("direct-send get", new JsonObject
-            {
-                ["reference"] = "email-1", ["channel"] = "email", ["contact_id"] = 2002, ["state"] = "sent", ["send_after"] = null,
-                ["sent_at"] = "2026-09-01T10:00:00Z", ["message_id"] = null, ["failure_reason"] = null, ["cancelled_at"] = null,
-            }),
-            "direct_send.not_owned" => account.Refuses("direct-send get", answer, status: 403, replyCode: "directSend.notOwned"),
-            "no_route" => account.NotOffering("direct_send"),
-            _ => account,
-        };
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await InvokeAsync(api, WithMoment(Input("email", pinned: "1001"), "2099-11-03T14:00:00Z"));
-
-        Assert.Equal("direct-send get email-1", account.Calls[1].Line);
-        if (offered)
+        var input = send switch
         {
-            Assert.Equal("accepted", (string?)ReplyOperations.Succeeded(Operation, result)["items"]![0]!["status"]);
-            Assert.Single(account.Sent);
-        }
-        else
-        {
-            Assert.Equal(UnjudgedOutcomeCodes.CapabilityNotOffered, ReplyOperations.Failed(Operation, result).Code);
-            Assert.Empty(account.Sent);
-        }
-    }
+            "moment" => WithMoment(Input("email", pinned: "1001"), "2099-11-03T14:00:00Z"),
+            "schedule" => WithSchedule(Input("email", pinned: "1001")),
+            _ => Input("email", pinned: "1001"),
+        };
+        var result = send == "repeat"
+            ? await InvokeAsync(api, input, attempt: 2, unsettledSince: Unsettled)
+            : await InvokeAsync(api, input);
 
-    /// <summary>
-    /// The reference read is one named constant, <c>email-1</c>, for every channel, and it is a reference reply-cli takes:
-    /// the CLI refuses one of another shape before it calls Reply at all.
-    /// </summary>
-    [Fact]
-    public void The_reference_read_is_email_1_for_every_channel_and_one_reply_cli_takes()
-    {
+        ReplyOperations.Succeeded(Operation, result);
+        Assert.Equal(["account list", "contact get 1001", "contact send-email"], Lines(account));
+        Assert.DoesNotContain(account.Calls, call => call.Line.StartsWith("direct-send get", StringComparison.Ordinal));
+        Assert.Single(account.Sent);
         var module = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "modules", "send.js"));
-
-        var named = Assert.Single(Regex.Matches(module, "^const CHECKED = \"([^\"]*)\";$", RegexOptions.Multiline));
-        Assert.Equal("email-1", named.Groups[1].Value);
-        Assert.Matches(Jason.ReplyCliStub.DirectSendReference.Pattern, named.Groups[1].Value);
-        Assert.Single(Regex.Matches(module, "\\bCHECKED\\b").Skip(1));
+        Assert.DoesNotContain("email-1\"", module, StringComparison.Ordinal);
+        Assert.All(new[] { "offered(", "send_after_not_offered", "schedule_not_offered" }, name => Assert.DoesNotContain(name, module, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -221,28 +176,47 @@ public partial class ReplyMessageSendTests
     }
 
     /// <summary>
-    /// A repeat after an attempt that may have sent is read first too, moment or none: where the account's Reply keeps no
-    /// key on a direct send, the repeat could send the person a second message, so it fails <c>send_not_settled</c> and
-    /// nothing is sent.
+    /// A repeat after an attempt that may have sent goes under the key with nothing read first; where Reply answers its
+    /// send with a 404 that carries no code of Reply's own, the repeat cannot tell whether the earlier attempt went, so it
+    /// fails <c>send_not_settled</c>, final, and nothing is sent. That holds whichever way the person is named: by the
+    /// identifier the pin gives, by their fields for the command to import, and by the identifier the command named
+    /// when it answered that Reply already held them.
     /// </summary>
-    [Fact]
-    public async Task A_repeat_where_reply_keeps_no_key_is_not_settled_and_nothing_is_sent()
+    [Theory]
+    [InlineData("by id")]
+    [InlineData("by fields")]
+    [InlineData("held")]
+    public async Task A_repeat_whose_send_meets_a_404_without_reply_s_code_is_not_settled_and_nothing_is_sent(string named)
     {
-        using var account = ByEmail().NotOffering("direct_send");
+        using var account = (named switch
+        {
+            "by fields" => new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox),
+            "held" => ByEmail().Unlisted(1001),
+            _ => ByEmail(),
+        }).NotOffering("send_direct_email");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
+        var input = named == "by id" ? Input("email", pinned: "1001") : Input("email");
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email", pinned: "1001"), attempt: 2, unsettledSince: Unsettled));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input, attempt: 2, unsettledSince: Unsettled));
 
         Assert.Equal(("send_not_settled", FailureClass.Permanent), (error.Code, error.Class));
-        Assert.Equal(["account list", "direct-send get email-1"], Lines(account));
+        Assert.Equal(("reply.refused", 404), ((string?)error.Details!["cli_code"], (int?)error.Details["status"]));
+        Assert.Null(error.Details["provider_code"]);
+        string[] calls = named switch
+        {
+            "by fields" => ["account list", "contact find", "contact send-email"],
+            "held" => ["account list", "contact find", "contact send-email", "contact get 1001", "contact send-email"],
+            _ => ["account list", "contact get 1001", "contact send-email"],
+        };
+        Assert.Equal(calls, Lines(account));
         Assert.Empty(account.Sent);
     }
 
     /// <summary>
     /// The key settles a repeat only while Reply still keeps it: inside the package's window from the moment the earliest
-    /// attempt that may have sent was claimed, the repeat reads first and goes under the key; past it, it is not settled,
-    /// nothing is read and nothing is sent.
+    /// attempt that may have sent was claimed, the repeat goes under the key; past it, it is not settled, nothing is read
+    /// and nothing is sent.
     /// </summary>
     [Theory]
     [InlineData(0.5, true)]
@@ -260,7 +234,7 @@ public partial class ReplyMessageSendTests
         if (repeated)
         {
             Assert.Equal("sent", (string?)ReplyOperations.Succeeded(Operation, result)["items"]![0]!["status"]);
-            Assert.Equal(["account list", "direct-send get email-1", "contact get 1001", "contact send-email"], Lines(account));
+            Assert.Equal(["account list", "contact get 1001", "contact send-email"], Lines(account));
             Assert.Equal(Key, account.Calls[^1].Option("--idempotency-key"));
             Assert.Single(account.Sent);
             return;
@@ -275,12 +249,12 @@ public partial class ReplyMessageSendTests
 
     /// <summary>
     /// A later attempt after attempts that all settled — each ended in an answer of Reply's that sent nothing — is a first
-    /// send again: nothing is read before it, even where the account's Reply keeps no key.
+    /// send again: nothing is read before it.
     /// </summary>
     [Fact]
     public async Task A_later_attempt_after_settled_ones_reads_nothing_first()
     {
-        using var account = ByEmail().NotOffering("direct_send");
+        using var account = ByEmail();
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 

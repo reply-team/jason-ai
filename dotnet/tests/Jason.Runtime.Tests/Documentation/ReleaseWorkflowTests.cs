@@ -1095,6 +1095,7 @@ public partial class ReleaseWorkflowTests
     /// workflows, the actions, the scripts and the pages. A release is published with the run's own token now.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "no page names the publication token")]
     public void No_workflow_script_or_page_names_the_publication_token()
     {
         var root = RepositoryRoot();
@@ -1269,7 +1270,7 @@ public partial class ReleaseWorkflowTests
         var text = Read(Release).ReplaceLineEndings("\n");
         const string TeamId = "          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}\n";
         const string Archive = "      - name: Read the signature of the archived macOS executable\n        shell: bash\n        env:\n          ARCHIVE: ${{ steps.package.outputs.archive }}\n";
-        const string PluginSteps = "  plugin:\n    name: The Reply plugin's package\n    needs: version\n    runs-on: ubuntu-latest\n";
+        const string PluginSteps = "  plugin:\n    name: The plugins' packages\n    needs: version\n    runs-on: ubuntu-latest\n";
         var six = string.Concat(AppleSecrets.Select(secret => $"          {secret.Input}: ${{{{ secrets.{secret.Secret} }}}}\n"));
 
         const string MacosPackage = "      - name: Package\n        id: package\n        uses: ./.github/actions/package\n        with:\n          rid: osx-arm64\n";
@@ -1720,44 +1721,81 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The Reply plugin's package is written once per release, not once per platform: by a job of its own, from the tag's
-    /// checkout, after the version was decided and holding no token. It is uploaded under a name the publishing job's
-    /// download takes, into the directory the checksums are written in, and the publishing job waits for that job, so
-    /// nothing is published without it. What the script writes is <see cref="PluginAssetTests"/>' subject.
+    /// Each plugin's package is written once per release, not once per platform: by one job of its own, from the tag's
+    /// checkout, after the version was decided and holding no token, a step per package. Each is uploaded under a name of its
+    /// own that the publishing job's download takes, into the directory the checksums are written in, and the publishing job
+    /// waits for that job, so nothing is published without every package. What the script writes is
+    /// <see cref="PluginAssetTests"/>' subject.
     /// </summary>
     [Fact]
-    public void The_plugin_s_package_is_written_once_by_a_job_of_its_own_and_reaches_the_release()
+    public void Each_plugin_s_package_is_written_once_by_the_plugins_job_and_reaches_the_release()
     {
+        var packages = ReleasedPackages();
         var jobs = Mapping(Parse(Read(Release)), "jobs");
         var writing = jobs.Children
             .Select(job => (Name: job.Key.ToString(), Job: (YamlMappingNode)job.Value))
             .SelectMany(found => (Node(found.Job, "steps") as YamlSequenceNode)?.Children.Cast<YamlMappingNode>().Select(step => (found.Name, found.Job, Step: step)) ?? [])
             .Where(found => Scalar(found.Step, "run")?.Contains("Write-PluginArchive.ps1", StringComparison.Ordinal) == true)
             .ToList();
-        var (name, job, step) = Assert.Single(writing);
+        var name = Assert.Single(writing.Select(found => found.Name).Distinct());
+        var job = writing[0].Job;
 
         Assert.Null(Node(job, "strategy"));
         Assert.Equal("version", Scalar(job, "needs"));
         Assert.Equal(
-            $"./.github/scripts/Write-PluginArchive.ps1 -Package plugins/reply -Archive artifacts/release/{ReleaseAssets.ReplyPlugin}",
-            Scalar(step, "run")!.Trim());
-        Assert.Null(Node(step, "continue-on-error"));
+            packages.Select(package => $"./.github/scripts/Write-PluginArchive.ps1 -Package plugins/{package.Id} -Archive artifacts/release/{package.Asset}"),
+            writing.Select(found => Scalar(found.Step, "run")!.Trim()));
+        Assert.All(writing, found => Assert.Null(Node(found.Step, "continue-on-error")));
 
         var steps = Assert.IsType<YamlSequenceNode>(Node(job, "steps")).Children.Cast<YamlMappingNode>().ToList();
         Assert.StartsWith("actions/checkout@", Scalar(steps[0], "uses"), StringComparison.Ordinal);
-        var upload = Mapping(Assert.Single(steps, one => Scalar(one, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true), "with");
-        Assert.Equal($"artifacts/release/{ReleaseAssets.ReplyPlugin}", Scalar(upload, "path"));
-        Assert.Equal("error", Scalar(upload, "if-no-files-found"));
+        var uploads = steps.Where(one => Scalar(one, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true).ToList();
+        Assert.Equal(
+            packages.Select(package => $"artifacts/release/{package.Asset}"),
+            uploads.Select(upload => Scalar(Mapping(upload, "with"), "path")));
 
         var publishing = PublishingJob();
         var download = Mapping(Assert.Single(PublishingSteps(), one => Scalar(one, "uses")?.StartsWith("actions/download-artifact@", StringComparison.Ordinal) == true), "with");
         var pattern = Scalar(download, "pattern")!;
-        var artifact = Scalar(upload, "name")!;
-        Assert.True(
-            Regex.IsMatch(artifact, "^" + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal) + "$"),
-            $"The plugin's package is uploaded as '{artifact}', which the publishing job's download of '{pattern}' does not take.");
+        var artifacts = uploads.Select(upload => Scalar(Mapping(upload, "with"), "name")!).ToList();
+        Assert.Equal(artifacts.Count, artifacts.Distinct(StringComparer.Ordinal).Count());
+        foreach (var (upload, artifact) in uploads.Zip(artifacts))
+        {
+            Assert.Equal("error", Scalar(Mapping(upload, "with"), "if-no-files-found"));
+            Assert.True(
+                Regex.IsMatch(artifact, "^" + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal) + "$"),
+                $"A plugin's package is uploaded as '{artifact}', which the publishing job's download of '{pattern}' does not take.");
+        }
+
+        // Each package is uploaded after the step that wrote it.
+        foreach (var (found, upload) in writing.Zip(uploads))
+        {
+            Assert.True(steps.IndexOf(found.Step) < steps.IndexOf(upload), $"'{Scalar(Mapping(upload, "with"), "path")}' is uploaded before it is written.");
+        }
+
         Assert.Equal("artifacts/release", Scalar(download, "path"));
         Assert.Contains(name, Assert.IsType<YamlSequenceNode>(Node(publishing, "needs")).Children.Select(need => need.ToString()));
+    }
+
+    /// <summary>
+    /// The plugin packages a release publishes, read from the names the code publishes: every file named
+    /// <c>jason-plugin-&lt;id&gt;.zip</c>, the name the manifest's writer requires of a package it lists under
+    /// <c>plugins</c>. Two, Reply's and the journal forwarder's, each a directory of the tree's <c>plugins/</c>; a third is
+    /// a decision of <see cref="ReleaseAssets"/>, and every test reading this follows it.
+    /// </summary>
+    private static IReadOnlyList<(string Id, string Asset)> ReleasedPackages()
+    {
+        const string Prefix = "jason-plugin-";
+        const string Suffix = ".zip";
+        var packages = ReleaseAssets.Published
+            .Where(name => name.StartsWith(Prefix, StringComparison.Ordinal) && name.EndsWith(Suffix, StringComparison.Ordinal))
+            .Select(name => (Id: name[Prefix.Length..^Suffix.Length], Asset: name))
+            .ToList();
+        Assert.Equal([(ReplyId, ReleaseAssets.ReplyPlugin), (ForwarderId, ReleaseAssets.JournalForwarderPlugin)], packages);
+        Assert.All(packages, package => Assert.True(
+            File.Exists(Path.Combine(RepositoryRoot(), "plugins", package.Id, "plugin.yaml")),
+            $"{package.Asset} is published, and plugins/{package.Id} is not a package of the tree."));
+        return packages;
     }
 
     /// <summary>
@@ -3029,7 +3067,7 @@ public partial class ReleaseWorkflowTests
 
         // A release's own notes are the other half of its body, so they are held to the same words whenever the file is
         // there; the next release rewrites it, and a sentence carried from the last one is caught before it ships again.
-        string[][] pages = [Notes, ["README.md"], ["docs", "INSTALL.md"], ["docs", "release-and-update.md"], ["docs", "architecture.md"]];
+        string[][] pages = [Notes, ["README.md"], ["docs", "handbook.md"], ["docs", "INSTALL.md"], ["docs", "release-and-update.md"], ["docs", "architecture.md"]];
         if (File.Exists(Path.Combine(RepositoryRoot(), "RELEASE-NOTES.md")))
         {
             pages = [.. pages, ["RELEASE-NOTES.md"]];
@@ -3718,6 +3756,51 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// The script knows no package by name: two lists name two packages, each under the id its list's file name gives, with
+    /// its own asset, version, digest and record, in the order the lists were given, and the checksums carry both after
+    /// the archives. Reply's and the journal forwarder's are the two a release carries.
+    /// </summary>
+    [Fact]
+    public void Two_digest_lists_name_two_packages_each_under_its_own_id()
+    {
+        using var tree = new TempTree();
+        var directory = Staged(tree);
+        var reply = DigestListOf(tree, ReplyId, ("0.8.0", OlderPackage), ("0.9.0", NewerPackage));
+        var forwarder = DigestListOf(tree, ForwarderId, ("1.0.0", OtherOlderPackage), ("1.0.1", OtherNewerPackage));
+
+        var (exit, _, stderr) = Workflows.Script(
+            NoEnvironment,
+            Path.Combine(RepositoryRoot(), Path.Combine(Script)),
+            "-Version", "0.2.0",
+            "-Directory", directory,
+            "-Require", string.Join(',', ReleaseAssets.Rids),
+            "-Plugins", string.Join(',', ReleaseAssets.ReplyPlugin, ReleaseAssets.JournalForwarderPlugin, ReleaseAssets.Ui),
+            "-PluginDigests", string.Join(',', reply, forwarder));
+        Assert.True(exit == 0, stderr);
+
+        var manifest = UpdateManifest.Read(File.ReadAllText(Path.Combine(directory, ReleaseAssets.Manifest)));
+        Assert.Equal([ReplyId, ForwarderId], manifest.Plugins.Keys);
+
+        var first = manifest.Plugins[ReplyId];
+        Assert.Equal(ReleaseAssets.ReplyPlugin, first.Asset);
+        Assert.Equal(SemanticVersion.Parse("0.9.0"), first.Version);
+        Assert.Equal(NewerPackage, first.Digest);
+        Assert.Equal([OlderPackage, NewerPackage], first.Recorded.OrderBy(entry => entry.Key).Select(entry => entry.Value));
+
+        var second = manifest.Plugins[ForwarderId];
+        Assert.Equal(ReleaseAssets.JournalForwarderPlugin, second.Asset);
+        Assert.Equal(SemanticVersion.Parse("1.0.1"), second.Version);
+        Assert.Equal(OtherNewerPackage, second.Digest);
+        Assert.Equal([OtherOlderPackage, OtherNewerPackage], second.Recorded.OrderBy(entry => entry.Key).Select(entry => entry.Value));
+
+        var lines = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Checksums)).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(ReleaseAssets.Rids.Count + 3, lines.Length);
+        Assert.Equal(
+            [ReleaseAssets.ReplyPlugin, ReleaseAssets.JournalForwarderPlugin, ReleaseAssets.Ui],
+            lines[ReleaseAssets.Rids.Count..].Select(line => line.Split("  ")[1]));
+    }
+
+    /// <summary>
     /// A list the script cannot read as the package's record is refused, and so is one for a package the release does not
     /// carry: either would put in the manifest a package nobody can fetch or a record no reader can trust, and a reader
     /// refuses a manifest with either whole. Nothing is written.
@@ -3756,17 +3839,25 @@ public partial class ReleaseWorkflowTests
 
     private static readonly string NewerPackage = "sha256:" + new string('b', 64);
 
+    private static readonly string OtherOlderPackage = "sha256:" + new string('c', 64);
+
+    private static readonly string OtherNewerPackage = "sha256:" + new string('d', 64);
+
     /// <summary>A Reply digest list as the repository keeps one: a comment, a blank line, then a line per version.</summary>
-    private static string DigestList(TempTree tree, params (string Version, string Digest)[] lines)
+    private static string DigestList(TempTree tree, params (string Version, string Digest)[] lines) =>
+        DigestListOf(tree, ReplyId, lines);
+
+    /// <summary>A package's digest list as the repository keeps one, named by the package's id.</summary>
+    private static string DigestListOf(TempTree tree, string id, params (string Version, string Digest)[] lines)
     {
-        var path = Path.Combine(tree.Root, "reply.digests");
+        var path = Path.Combine(tree.Root, $"{id}.digests");
         File.WriteAllText(path, string.Join('\n', ["# The digest of each version of the package.", string.Empty, .. lines.Select(line => $"{line.Version} {line.Digest}")]) + "\n");
         return path;
     }
 
     /// <summary>
     /// A directory the way the assembling job sees it after the download: one stand-in archive per platform and
-    /// the fragment the packaging action wrote for it, hashed the way the action hashes, and the plugin's package.
+    /// the fragment the packaging action wrote for it, hashed the way the action hashes, the plugins' packages and the UI's.
     /// </summary>
     private static string Staged(TempTree tree)
     {
@@ -3782,8 +3873,11 @@ public partial class ReleaseWorkflowTests
             File.WriteAllText(Path.Combine(directory, $"jason-{rid}.fragment.json"), JsonSerializer.Serialize(fragment) + "\n");
         }
 
-        File.WriteAllText(Path.Combine(directory, ReleaseAssets.ReplyPlugin), $"not really {ReleaseAssets.ReplyPlugin}");
-        File.WriteAllText(Path.Combine(directory, ReleaseAssets.Ui), $"not really {ReleaseAssets.Ui}");
+        foreach (var carried in (string[])[ReleaseAssets.ReplyPlugin, ReleaseAssets.JournalForwarderPlugin, ReleaseAssets.Ui])
+        {
+            File.WriteAllText(Path.Combine(directory, carried), $"not really {carried}");
+        }
+
         return directory;
     }
 
@@ -3937,7 +4031,7 @@ public partial class ReleaseWorkflowTests
         }
 
         // The release's notes are read at the product's own address, which redirects to where the release is
-        // published, the public repository. And its checksums carry the plugin's package, which the manifest does not.
+        // published, the public repository. And its checksums carry the packages, which the manifest's artifacts do not.
         if (workflow == Release[^1])
         {
             Assert.Equal("https://get.jasonharness.ai/releases/tag/v0.2.0", manifest.ReleaseNotesUrl);
@@ -3947,7 +4041,7 @@ public partial class ReleaseWorkflowTests
             Assert.Equal(SemanticVersion.Parse("0.19.0"), manifest.MinUpgradeFrom);
 
             var checksums = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Checksums));
-            foreach (var carried in (string[])[ReleaseAssets.ReplyPlugin, ReleaseAssets.Ui])
+            foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui])
             {
                 var package = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, carried))));
                 Assert.True(
@@ -3955,18 +4049,23 @@ public partial class ReleaseWorkflowTests
                     $"{workflow} runs `{invocation}`, and the checksums it wrote carry no line for {carried}:\n{checksums}");
             }
 
-            // The plugin's package is named from the tag's digest list: its last line is the package the release publishes,
+            // Each plugin's package is named from the tag's digest list: its last line is the package the release publishes,
             // the one a runtime built from the same tag carries, and every line is recorded for a reader holding an
             // installed copy's digest. The release's version stays the first "version" line, the one install.sh reads.
-            var reply = manifest.Plugins[ReplyId];
-            var released = Assert.Single(ReleasedPlugins.Embedded().Packages, plugin => plugin.Id == ReplyId);
-            Assert.Equal(ReleaseAssets.ReplyPlugin, reply.Asset);
-            Assert.Equal(PackageDigest.Compute(Path.Combine(RepositoryRoot(), "plugins", ReplyId)).Digest, reply.Digest);
-            Assert.Equal(released.Digest, reply.Digest);
-            Assert.Equal(SemanticVersion.Parse(released.Version), reply.Version);
-            Assert.Equal(
-                File.ReadAllLines(Path.Combine(RepositoryRoot(), ReplyDigests)).Where(line => line.Length > 0 && !line.StartsWith('#')),
-                reply.Recorded.OrderBy(entry => entry.Key).Select(entry => $"{entry.Key} {entry.Value}"));
+            Assert.Equal(ReleasedPackages().Select(package => package.Id), manifest.Plugins.Keys);
+            foreach (var (id, asset) in ReleasedPackages())
+            {
+                var named = manifest.Plugins[id];
+                var released = Assert.Single(ReleasedPlugins.Embedded().Packages, plugin => plugin.Id == id);
+                Assert.Equal(asset, named.Asset);
+                Assert.Equal(PackageDigest.Compute(Path.Combine(RepositoryRoot(), "plugins", id)).Digest, named.Digest);
+                Assert.Equal(released.Digest, named.Digest);
+                Assert.Equal(SemanticVersion.Parse(released.Version), named.Version);
+                Assert.Equal(
+                    File.ReadAllLines(Path.Combine(RepositoryRoot(), Digests(id))).Where(line => line.Length > 0 && !line.StartsWith('#')),
+                    named.Recorded.OrderBy(entry => entry.Key).Select(entry => $"{entry.Key} {entry.Value}"));
+            }
+
             Assert.Equal(
                 "\"version\": \"0.2.0\",",
                 File.ReadAllLines(Path.Combine(directory, ReleaseAssets.Manifest)).Select(line => line.Trim()).First(line => line.StartsWith("\"version\":", StringComparison.Ordinal)));
@@ -3977,28 +4076,34 @@ public partial class ReleaseWorkflowTests
             // the side it updates from is this tree, so a floor there would say nothing about any applier.
             Assert.Null(manifest.MinUpgradeFrom);
 
-            // Nor does a run's feed carry the plugin's package, so it names none.
+            // Nor does a run's feed carry a plugin's package, so it names none.
             Assert.Empty(manifest.Plugins);
         }
     }
 
     /// <summary>
-    /// The release names its plugin's package from the tag's own digest list, the file the package's test holds to the
-    /// package: the job that writes the manifest builds nothing and hashes nothing to say which package it publishes.
+    /// The release names each plugin's package from the tag's own digest list, the file the package's test holds to the
+    /// package, and carries every package it names: the job that writes the manifest builds nothing and hashes nothing to
+    /// say which packages it publishes.
     /// </summary>
     [Fact]
-    public void The_release_names_its_plugin_s_package_from_the_tag_s_digest_list()
+    public void The_release_names_each_plugin_s_package_from_the_tag_s_digest_list()
     {
         var line = Assert.Single(Read(Release).Split('\n'), line => line.Contains("./.github/scripts/Write-Manifest.ps1", StringComparison.Ordinal));
+        var packages = ReleasedPackages();
 
-        Assert.Contains($"-PluginDigests {ReplyDigests}", line, StringComparison.Ordinal);
-        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), ReplyDigests)), $"{ReplyDigests} is not in the repository.");
+        Assert.Contains($"-PluginDigests {string.Join(',', packages.Select(package => Digests(package.Id)))} ", line + " ", StringComparison.Ordinal);
+        Assert.Contains($"-Plugins {string.Join(',', [.. packages.Select(package => package.Asset), ReleaseAssets.Ui])} ", line, StringComparison.Ordinal);
+        Assert.All(packages, package => Assert.True(File.Exists(Path.Combine(RepositoryRoot(), Digests(package.Id))), $"{Digests(package.Id)} is not in the repository."));
     }
 
-    /// <summary>The Reply plugin's id, and its digest list, beside the package and outside it.</summary>
+    /// <summary>The Reply plugin's id and the journal forwarder's.</summary>
     private const string ReplyId = "reply";
 
-    private const string ReplyDigests = "plugins/reply.digests";
+    private const string ForwarderId = "journal-forwarder";
+
+    /// <summary>A package's digest list, beside the package and outside it.</summary>
+    private static string Digests(string id) => $"plugins/{id}.digests";
 
     public static TheoryData<string, string> ManifestInvocations()
     {
@@ -4048,11 +4153,12 @@ public partial class ReleaseWorkflowTests
             .Replace("$env:NEXT", "0.2.1", StringComparison.Ordinal)
             .Replace("$env:RID", ReleaseAssets.Rids[0], StringComparison.Ordinal);
 
-        // -PluginDigests names a path in the checkout the job runs in; here that is this repository.
+        // -PluginDigests names paths in the checkout the job runs in, a list PowerShell parses as an array; here they are in
+        // this repository, and the list stays an array.
         expanded = System.Text.RegularExpressions.Regex.Replace(
             expanded,
             @"-PluginDigests (\S+)",
-            list => $"-PluginDigests '{Path.Combine(RepositoryRoot(), list.Groups[1].Value)}'");
+            list => "-PluginDigests " + string.Join(',', list.Groups[1].Value.Split(',').Select(path => $"'{Path.Combine(RepositoryRoot(), path)}'")));
 
         // -Directory names where a runner downloaded the artifacts to; here it is the staged tree this test made.
         return System.Text.RegularExpressions.Regex.Replace(

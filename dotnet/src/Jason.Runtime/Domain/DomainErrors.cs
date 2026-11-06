@@ -242,6 +242,16 @@ public static class DomainErrors
             $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot answer a decision; a question raised for a person is a person's to answer.");
 
     /// <summary>
+    /// A person's own word — an approval, a rejection, a standing approval set or taken back, an answer — sent by a CLI that
+    /// says it runs inside an attempt, whatever actor the body claims. The attempt is quoted as the request named it and
+    /// never looked up: presence is the fact. The message carries the remedy, for the agent that reads it.
+    /// </summary>
+    public static ForbiddenException DecidedInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. An approval or an answer is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
+
+    /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody
     /// offered would be an answer that reads like a quotation and is not one.
     /// </summary>

@@ -85,7 +85,7 @@ public class ReplyMessageStatusTests
     /// (<c>directLinkedIn.missedWindow</c>), and one whose account's allowance stayed spent until its window passed — a
     /// block code as the send's fate, not a refusal when Reply took it — is <c>failed</c>, nothing having gone, with Reply's
     /// code carried as given and never <c>unknown</c>. So is every other <c>directLinkedIn.</c> code Reply gives a send's
-    /// fate once it times deferred LinkedIn sends itself, <c>directLinkedIn.unknown</c> among them, and one this version
+    /// fate, <c>directLinkedIn.unknown</c> among them, and one this version
     /// has never seen, <c>directLinkedIn.contactNotFound</c>; and a failure after Reply handed the send on, which carries
     /// no code at all and is never a malformed answer. The stand-in prints each record as reply-cli 0.18.0 does (reply-cli's
     /// <c>src/operations/direct-sends.ts</c>:54): the state as Reply gives it, and <c>failure_code</c> beside it.
@@ -120,7 +120,7 @@ public class ReplyMessageStatusTests
     }
 
     /// <summary>
-    /// A LinkedIn send Reply holds until its schedule's next opening, once Reply times deferred LinkedIn sends itself, is
+    /// A LinkedIn send Reply holds until its schedule's next opening is
     /// <c>waitingForSchedule</c> with no moment of its own, under its <c>linkedin-scheduled-</c> reference: <c>queued</c>,
     /// still cancelable, and naming no moment.
     /// </summary>
@@ -217,13 +217,14 @@ public class ReplyMessageStatusTests
 
     /// <summary>
     /// A reference Reply holds no send under, or not one this account may see, is <c>send_not_found</c>, permanent; so is
-    /// one reply-cli refuses to read as a reference at all. A route Reply's API does not have is the capability not offered.
+    /// one reply-cli refuses to read as a reference at all. A 404 with no code of Reply's own says Reply's API changed under
+    /// this package version, and is <c>provider_call_failed</c>, permanent.
     /// </summary>
     [Theory]
     [InlineData("missing", "send_not_found")]
     [InlineData("not owned", "send_not_found")]
     [InlineData("not a reference", "send_not_found")]
-    [InlineData("not offered", "capability_not_offered")]
+    [InlineData("bare 404", "provider_call_failed")]
     public async Task A_send_reply_does_not_hold_for_this_account_is_not_found(string why, string code)
     {
         using var account = new ReplyAccount();
@@ -232,7 +233,7 @@ public class ReplyMessageStatusTests
         {
             account.Refuses("direct-send get", "direct_send.not_owned", status: 403, replyCode: "directSend.notOwned");
         }
-        else if (why == "not offered")
+        else if (why == "bare 404")
         {
             account.NotOffering("direct_send");
         }

@@ -18,8 +18,8 @@ public class ActorOptionTests
     [Fact]
     public void An_absent_actor_parses_as_nothing()
     {
-        Assert.Null(ActorOption.Parse(null));
-        Assert.Null(ActorOption.Parse("   "));
+        Assert.Null(ActorOption.Parse(null, null));
+        Assert.Null(ActorOption.Parse("   ", null));
     }
 
     /// <summary>
@@ -46,26 +46,26 @@ public class ActorOptionTests
 
     [Fact]
     public void A_bare_type_parses_without_an_id() =>
-        Assert.Equal("{\"type\":\"human\"}", Serialize(ActorOption.Parse("human")));
+        Assert.Equal("{\"type\":\"human\"}", Serialize(ActorOption.Parse("human", null)));
 
     [Fact]
     public void A_human_with_an_id_parses() =>
-        Assert.Equal("{\"type\":\"human\",\"id\":\"ada\"}", Serialize(ActorOption.Parse("human:ada")));
+        Assert.Equal("{\"type\":\"human\",\"id\":\"ada\"}", Serialize(ActorOption.Parse("human:ada", null)));
 
     [Fact]
     public void A_role_with_an_id_parses() =>
-        Assert.Equal("{\"type\":\"role\",\"id\":\"planner\"}", Serialize(ActorOption.Parse("role:planner")));
+        Assert.Equal("{\"type\":\"role\",\"id\":\"planner\"}", Serialize(ActorOption.Parse("role:planner", null)));
 
     [Fact]
     public void A_running_attempt_may_claim_the_work_it_creates() =>
         Assert.Equal(
             "{\"type\":\"attempt\",\"id\":\"att_01K52JR0000000000000000001\"}",
-            Serialize(ActorOption.Parse("attempt:att_01K52JR0000000000000000001")));
+            Serialize(ActorOption.Parse("attempt:att_01K52JR0000000000000000001", null)));
 
     [Fact]
     public void An_attempt_without_an_id_is_a_usage_error()
     {
-        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse("attempt"));
+        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse("attempt", null));
 
         Assert.Contains("--actor", failure.Message, StringComparison.Ordinal);
         Assert.Contains("attempt:", failure.Message, StringComparison.Ordinal);
@@ -77,7 +77,7 @@ public class ActorOptionTests
     [InlineData("system:runtime")]
     public void System_is_reserved_for_the_runtime(string text)
     {
-        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse(text));
+        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse(text, null));
 
         Assert.Contains("--actor", failure.Message, StringComparison.Ordinal);
         Assert.Contains("reserved", failure.Message, StringComparison.Ordinal);
@@ -88,7 +88,7 @@ public class ActorOptionTests
     [InlineData("plugin:acme-forwarder")]
     public void A_plugin_is_not_an_actor_a_command_line_can_claim(string text)
     {
-        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse(text));
+        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse(text, null));
 
         Assert.Contains("--actor", failure.Message, StringComparison.Ordinal);
         Assert.Contains("host.call", failure.Message, StringComparison.Ordinal);
@@ -101,7 +101,7 @@ public class ActorOptionTests
     [InlineData("attempt:")]
     public void Anything_else_is_a_usage_error(string text)
     {
-        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse(text));
+        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse(text, null));
 
         Assert.Contains("--actor", failure.Message, StringComparison.Ordinal);
     }

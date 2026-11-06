@@ -43,7 +43,7 @@ public static class DecisionCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var statuses = parseResult.GetValue(status) ?? [];
             var body = RequestBody.Empty()
                 .Set("status", statuses.Length == 1 ? statuses[0] : null)
@@ -72,7 +72,7 @@ public static class DecisionCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             VerbOptions.OneRendering(parseResult.GetValue(human), parseResult.GetValue(prompt));
             var body = RequestBody.Empty().Set("decision_id", parseResult.GetValue(id));
 
@@ -131,7 +131,7 @@ public static class DecisionCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("work_item_id", parseResult.GetValue(id))
                 .Set("attempt_id", parseResult.GetValue(attempt))
@@ -154,7 +154,7 @@ public static class DecisionCommands
     /// </summary>
     private static Command Answer(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("answer", "Answer a question, as the person you are. The review that continues the work follows from it. " + ActorOption.NoDefault);
+        var command = new Command("answer", "Answer a question, as the person you are. The review that continues the work follows from it. " + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var id = DecisionId();
         var answer = new Option<string>("--answer")
         {
@@ -177,7 +177,7 @@ public static class DecisionCommands
                 .Set("answer", parseResult.GetValue(answer))
                 .Set("option", parseResult.GetValue(option))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "decision answer", "a question is answered on a person's word");
 
             return OperationRunner.RunAsync(

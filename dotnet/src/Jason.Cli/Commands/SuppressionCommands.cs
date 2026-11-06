@@ -40,7 +40,7 @@ public static class SuppressionCommands
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("value", parseResult.GetValue(value))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return OperationRunner.RunAsync(env, Operations.SuppressionAdd, body, new RunOptions(parseResult.GetValue(human), SuppressionRenderers.Suppression), cancellationToken);
         });
@@ -70,7 +70,7 @@ public static class SuppressionCommands
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("value", parseResult.GetValue(value))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return OperationRunner.RunAsync(env, Operations.SuppressionRemove, body, new RunOptions(parseResult.GetValue(human), SuppressionRenderers.Removed), cancellationToken);
         });
@@ -94,7 +94,7 @@ public static class SuppressionCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("value", parseResult.GetValue(value))

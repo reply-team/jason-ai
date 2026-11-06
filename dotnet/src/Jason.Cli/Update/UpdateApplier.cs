@@ -867,7 +867,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// <summary>What a package the step leaves as it is says about itself.</summary>
     private static string Left(PluginPlan plugin) => plugin.State switch
     {
-        PluginPlanState.NotInstalled => $"{plugin.Id} is not installed, so none was placed; run: jason plugin install {plugin.Id}",
+        PluginPlanState.NotInstalled => $"{plugin.Id} is not installed, so none was placed; `jason plugin install {plugin.Id}` installs it",
         PluginPlanState.Unreadable => $"{plugin.Id} could not be read as a package, so it was left as it is",
         PluginPlanState.Differs => $"{plugin.Id} differs from every package a release published, so it was left as it is",
         PluginPlanState.Current => $"{plugin.Id} {plugin.Installed} is current",

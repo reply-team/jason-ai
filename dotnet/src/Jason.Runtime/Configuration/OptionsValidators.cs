@@ -446,8 +446,8 @@ public sealed class InboundOptionsValidator : IValidateOptions<InboundOptions>
 }
 
 /// <summary>
-/// The respond step's numbers, each within its bounds: the queue's range, the time a check-in is held to, and an age
-/// between an hour and thirty days.
+/// The respond step's numbers, each within its bounds: the queue's range, the time a check-in is held to, an age
+/// between an hour and thirty days, and between one and a thousand launches a campaign and day.
 /// </summary>
 public sealed class ResponderOptionsValidator : IValidateOptions<ResponderOptions>
 {
@@ -465,6 +465,12 @@ public sealed class ResponderOptionsValidator : IValidateOptions<ResponderOption
             options.MaxAgeSeconds,
             ResponderOptions.MinimumMaxAgeSeconds,
             ResponderOptions.MaximumMaxAgeSeconds);
+        OptionRules.Range(
+            failures,
+            "Responder:MaxLaunchesPerDay",
+            options.MaxLaunchesPerDay,
+            ResponderOptions.MinimumMaxLaunchesPerDay,
+            ResponderOptions.MaximumMaxLaunchesPerDay);
 
         return OptionRules.Result(failures);
     }

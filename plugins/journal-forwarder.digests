@@ -1,0 +1,15 @@
+# The digest of each version of the journal forwarder's package, plugins/journal-forwarder: one line per version, the
+# version, a space, and the sha256 of the whole package as the runtime computes it — the number `jason plugin list` shows
+# for an installed copy. It is the digest of the package a release publishes, which that release's runtime reports in
+# `system.info`'s `released_plugins`; it is not the archive's checksum in `checksums.txt`. Each release's manifest carries
+# the whole list as plugins.journal-forwarder.recorded, from which `jason update check` reads an installed copy's version
+# by digest.
+# The list starts with 1.0.0, the package v0.29.0 shipped in its tree, computed from that tag's tree: a copy made by
+# hand from that release is read as 1.0.0 and updated. It holds every version the package has had, published or not,
+# because every bump appends a line.
+# A version is its content: any change to a file of the package is a new version, and a new version appends its line at
+# the end, after the last edit to the package, since every edit changes the digest; once the version is bumped, the
+# package's test prints the line to append. A line already here is never changed, and a line that changes or disappears
+# in a diff is refused in review.
+1.0.0 sha256:9239df983b3709868f9c9dd0cce591c2fc15e3d702678fa4f24a7ed84f2f545b
+1.0.1 sha256:430ee371cd1c4a31614d10d775ed83ecea7dec1dc03a70be29d4e2945b808afa

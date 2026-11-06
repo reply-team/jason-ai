@@ -84,10 +84,38 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
         return fixture;
     }
 
-    public async Task<(HttpStatusCode Status, string Body)> PostAsync(string operation, object? body, CancellationToken cancellationToken)
+    public Task<(HttpStatusCode Status, string Body)> PostAsync(string operation, object? body, CancellationToken cancellationToken) =>
+        PostAsync(operation, body, headers: null, cancellationToken);
+
+    /// <summary>The same call with headers of the test's own beside the bearer, for a rule a header decides.</summary>
+    public async Task<(HttpStatusCode Status, string Body)> PostAsync(string operation, object? body, IReadOnlyDictionary<string, string>? headers, CancellationToken cancellationToken)
     {
-        using var content = new StringContent(body is null ? "{}" : JsonSerializer.Serialize(body, JasonJson.Options), Encoding.UTF8, "application/json");
-        using var response = await _http!.PostAsync(Operations.Route(operation), content, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, Operations.Route(operation))
+        {
+            Content = new StringContent(body is null ? "{}" : JsonSerializer.Serialize(body, JasonJson.Options), Encoding.UTF8, "application/json"),
+        };
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>())
+        {
+            request.Headers.Add(name, value);
+        }
+
+        using var response = await _http!.SendAsync(request, cancellationToken);
+        return (response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken));
+    }
+
+    /// <summary>The body exactly as written, with headers of the test's own beside the bearer.</summary>
+    public async Task<(HttpStatusCode Status, string Body)> PostRawAsync(string operation, string body, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, Operations.Route(operation))
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+        foreach (var (name, value) in headers)
+        {
+            request.Headers.Add(name, value);
+        }
+
+        using var response = await _http!.SendAsync(request, cancellationToken);
         return (response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken));
     }
 

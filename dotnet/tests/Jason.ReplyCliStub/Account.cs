@@ -215,23 +215,38 @@ internal static partial class Account
     }
 
     /// <summary>
-    /// Appends one line to the log. Appended rather than rewritten, because two invocations of this program can
-    /// be in flight at once and a read-modify-write would quietly lose one of them.
+    /// Appends one line to the log, the whole of it, newline included, in a single write, while holding a lock file
+    /// beside the log.
     /// </summary>
+    /// <remarks>
+    /// Two invocations of this program may run at once. <c>FileMode.Append</c> seeks to the end of the file when the
+    /// stream is opened and not at each write (on Unix it is an open followed by a seek), so two processes that
+    /// opened the log together take the same position and the shorter line overwrites the head of the longer one.
+    /// What serializes them is the <c>.lock</c> file: exactly <c>FileShare.None</c> is the one share mode that .NET
+    /// turns into an exclusive lock on every platform (on Unix every other value takes a shared one), so a second
+    /// writer cannot open the lock until the first has finished, and it tries again after a short jittered sleep. The
+    /// lock file stays, empty, and is never deleted. The log's own share mode lets a reader read while a call is held
+    /// and guarantees nothing about writers. The wait is bounded to ten seconds and the failure past it is thrown, so
+    /// a stuck writer fails the call loudly instead of dropping its line. The log stream is declared after the lock
+    /// so that it is disposed first: releasing the lock while the log is still open would let the next writer open it
+    /// before this line is written, and the race above comes back.
+    /// </remarks>
     private static void Append(string file, string line)
     {
-        for (var attempt = 0; ; attempt++)
+        var bytes = new UTF8Encoding(false).GetBytes(line);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
         {
             try
             {
+                using var gate = new FileStream(file + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
                 using var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
-                using var writer = new StreamWriter(stream, new UTF8Encoding(false));
-                writer.Write(line);
+                stream.Write(bytes, 0, bytes.Length);
                 return;
             }
-            catch (IOException) when (attempt < 100)
+            catch (IOException) when (waited.Elapsed < TimeSpan.FromSeconds(10))
             {
-                Thread.Sleep(20);
+                Thread.Sleep(Random.Shared.Next(2, 15));
             }
         }
     }

@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
+using Jason.Contracts.Update;
 using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Tests.Documentation;
@@ -18,23 +19,45 @@ public class ReleasedPluginsTests
     private static readonly ReleasedPlugins Release = ReleasedPlugins.Of(new ReleasedPlugin("reply", "0.7.0", Released));
 
     /// <summary>
-    /// The files the build carries are the package in the tree, byte for byte: the build embeds the directory by a glob,
-    /// and this holds the glob to the directory, so a file added to the package cannot be left out of the binary.
+    /// The files the build carries are the package in the tree, byte for byte: the build embeds each directory by a glob,
+    /// and this holds the glob to the directory, so a file added to a package cannot be left out of the binary.
     /// </summary>
-    [Fact]
-    public void The_build_carries_the_reply_package_as_the_tree_holds_it()
+    [Theory]
+    [InlineData("reply")]
+    [InlineData("journal-forwarder")]
+    public void The_build_carries_each_released_package_as_the_tree_holds_it(string id)
     {
-        var tree = Path.Combine(RepositoryTree.Root(), "plugins", "reply");
-        var carried = ReleasedPlugins.PackageFiles(typeof(ReleasedPlugins).Assembly, "reply");
+        var tree = Path.Combine(RepositoryTree.Root(), "plugins", id);
+        var carried = ReleasedPlugins.PackageFiles(typeof(ReleasedPlugins).Assembly, id);
 
+        Assert.NotEmpty(carried);
         Assert.Equal(PackageDigest.Files(tree), carried.Select(file => file.Path).Order(StringComparer.Ordinal));
         Assert.Equal(PackageDigest.Compute(tree).Digest, PackageDigest.Compute(carried).Digest);
 
-        var package = Assert.Single(ReleasedPlugins.Embedded().Packages);
-        Assert.Equal("reply", package.Id);
+        var package = Assert.Single(ReleasedPlugins.Embedded().Packages, package => package.Id == id);
         Assert.Equal(PackageDigest.Compute(tree).Digest, package.Digest);
         var manifest = YamlToJson.Convert(File.ReadAllText(Path.Combine(tree, "plugin.yaml")))!;
         Assert.Equal(manifest["version"]!.GetValue<string>(), package.Version);
+    }
+
+    /// <summary>
+    /// The build carries exactly the packages its release publishes, the files named <c>jason-plugin-&lt;id&gt;.zip</c> in
+    /// <see cref="ReleaseAssets.Published"/>, Reply's and the journal forwarder's, in id order: a release asset the runtime
+    /// cannot name is half shipped, since <c>system.info</c>'s <c>released_plugins</c> and <c>jason status</c> compare an
+    /// installed package with the one the build carries.
+    /// </summary>
+    [Fact]
+    public void The_build_carries_exactly_the_packages_its_release_publishes()
+    {
+        const string Prefix = "jason-plugin-";
+        const string Suffix = ".zip";
+        var published = ReleaseAssets.Published
+            .Where(name => name.StartsWith(Prefix, StringComparison.Ordinal) && name.EndsWith(Suffix, StringComparison.Ordinal))
+            .Select(name => name[Prefix.Length..^Suffix.Length])
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(["journal-forwarder", "reply"], ReleasedPlugins.Embedded().Packages.Select(package => package.Id));
+        Assert.Equal(published, ReleasedPlugins.Embedded().Packages.Select(package => package.Id));
     }
 
     [Theory]

@@ -145,6 +145,7 @@ public sealed class SettingsAllowlist
         new("Responder:TimeoutSeconds", Kind.Integer32),
         new("Responder:MaxAttempts", Kind.Integer32),
         new("Responder:MaxAgeSeconds", Kind.Integer32),
+        new("Responder:MaxLaunchesPerDay", Kind.Integer32),
         new("Subscriptions:RunRecordsPerKind", Kind.Integer32),
         new("Subscriptions:EnvelopeBytes", Kind.Integer32),
         new("Subscriptions:TransientRetries", Kind.Integer32),

@@ -1,0 +1,17 @@
+{
+  "kind": "workitem_waiting",
+  "version": 1,
+  "case": "an item held at a limit waits for the moment the limit lets it go, and names it",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": {
+      "on": [],
+      "mode": null,
+      "until": null,
+      "deadline": null,
+      "held_by": { "code": "responder_launches_spent", "limit": 25 }
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

@@ -110,7 +110,7 @@ public static class WorkItemCommands
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.WorkItemCreate, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken)
@@ -135,7 +135,7 @@ public static class WorkItemCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("work_item_id", parseResult.GetValue(id))
                 .Set("include_snapshots", parseResult.GetValue(snapshots) ? JsonValue.Create(true) : null);
@@ -159,7 +159,7 @@ public static class WorkItemCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = filter.Body(parseResult)
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
@@ -179,7 +179,7 @@ public static class WorkItemCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             return OperationRunner.RunAsync(env, Operations.WorkItemCount, filter.Body(parseResult), new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItemCount), cancellationToken);
         });
 
@@ -288,7 +288,7 @@ public static class WorkItemCommands
                 .Set("execution_profile", parseResult.GetValue(executionProfile))
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
             Clear(body, parseResult.GetValue(clear));
 
             return await OperationRunner
@@ -316,7 +316,7 @@ public static class WorkItemCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("work_item_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.WorkItemCancel, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken)
@@ -347,7 +347,7 @@ public static class WorkItemCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("work_item_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "workitem resume", "a wait is ended on somebody's word", $"name who ends it, e.g. {ActorOption.Name} human:<Name>");
 
             return await OperationRunner
@@ -370,7 +370,7 @@ public static class WorkItemCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("work_item_id", parseResult.GetValue(id))
                 .Set("attempt_id", parseResult.GetValue(attempt));
@@ -397,7 +397,7 @@ public static class WorkItemCommands
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var value = await ResultAsync(env, parseResult.GetValue(result), parseResult.GetValue(resultFile), required: true, cancellationToken).ConfigureAwait(false);
             var body = RequestBody.Empty()
                 .Set("work_item_id", parseResult.GetValue(id))
@@ -438,7 +438,7 @@ public static class WorkItemCommands
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var value = await ResultAsync(env, parseResult.GetValue(result), parseResult.GetValue(resultFile), required: false, cancellationToken).ConfigureAwait(false);
             var body = RequestBody.Empty()
                 .Set("work_item_id", parseResult.GetValue(id))
@@ -488,7 +488,7 @@ public static class WorkItemCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("work_item_id", parseResult.GetValue(id))
                 .Set("attempt_id", parseResult.GetValue(attempt))

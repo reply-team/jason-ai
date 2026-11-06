@@ -1343,9 +1343,11 @@ simplicity) but does not outweigh the development leverage and richer domain-app
 here. TypeScript/Node remains suitable for surrounding components but not the selected
 deterministic core.
 
-The runtime is being ported to Rust in this repository, which supersedes the rejection of Rust as
-the core platform (REJ-PLAT-001). Until the port is complete, the C# runtime under `dotnet/` is
-the one released, and the baseline above is the one it is built on.
+The runtime is being rewritten in TypeScript in this repository, decided on 5 November 2026, which
+supersedes both the rejection of TypeScript/Node as the core platform (REJ-PLAT-001) and the port
+to Rust decided on 30 October 2026. Plugins stay JavaScript, under the contract the runtime
+enforces, whichever language the runtime is written in. Until the rewrite is complete, the C#
+runtime under `dotnet/` is the one released, and the baseline above is the one it is built on.
 
 ### 15.3 EF Core, Dapper, and Native AOT
 
@@ -1428,7 +1430,7 @@ future server or managed variants under different requirements.
 
 The repository is organised by deliverable, not by one language's convention, because it
 carries the runtime, the plugin marketplace and the skills together. The C# runtime sits under
-`dotnet/`, which keeps the root free for the Cargo workspace of the Rust port (15.2):
+`dotnet/`, which keeps the root free for the workspace of the TypeScript rewrite (15.2):
 
 ```text
 jason-ai/
@@ -1753,7 +1755,7 @@ original chat session.
 | DEC-PLAT-001 | Runtime is implemented in .NET and distributed as platform-specific self-contained builds. |
 | DEC-DATA-001 | EF Core is selected; Dapper is excluded; Native AOT is deferred until compatible and low-risk. |
 | DEC-INSTALL-001 | Standalone and Reply-assisted installation are both legitimate paths to the same user Runtime. |
-| DEC-INSTALL-002 | The Reply plugin ships as a release asset: every release publishes `jason-plugin-reply.zip`, the files of `plugins/reply` at the tag at the archive's root, built once and listed in `checksums.txt`, and named in the manifest's `plugins` with its version, file name, content digest and the digest of every version its list records, never among the manifest's artifacts, which are platforms. Installing it is `jason plugin install reply`: download, verify against `checksums.txt` and the manifest's content digest, unpack into the plugins directory; the package's content digest is its identity, and both installation paths of §15.5 rest on that asset. |
+| DEC-INSTALL-002 | The Reply plugin and, from 0.30.0 on, the journal forwarder ship as release assets: every release publishes `jason-plugin-reply.zip` and `jason-plugin-journal-forwarder.zip`, the files of `plugins/<id>` at the tag at the archive's root, each built once and listed in `checksums.txt`, and named in the manifest's `plugins` with its version, file name, content digest and the digest of every version its list records, never among the manifest's artifacts, which are platforms. Installing one is `jason plugin install <id>`: download, verify against `checksums.txt` and the manifest's content digest, unpack into the plugins directory; a package's content digest is its identity, and both installation paths of §15.5 rest on those assets. |
 | DEC-UPDATE-001 | Runtime may advertise updates; a short-lived CLI/installer performs controlled replacement. |
 | DEC-UPDATE-002 | The feed, the install lines and the release page name the product's own address, `get.jasonharness.ai`, which redirects `/releases/*` to the same path in the public repository's releases with a temporary redirect; the licence page, links into the tree and the skills source stay on GitHub, and the page `docs/responsible-use.md` never names the address. |
 | DEC-UPDATE-003 | An installation is Jason's own unless a package manager's own record says otherwise; a managed installation is updated and taken off by its manager, and Jason's verbs act only on what is Jason's (autostart, skills by receipt, data); and a status check says when the running runtime is not the build installed. |
@@ -1827,7 +1829,7 @@ architecture is explicitly revised with new evidence.
 | SUP-ORCH-001 | A daemon that scans workspaces and infers readiness/status from files. | A deterministic domain Runtime owns readiness and state transactionally. |
 | SUP-OSS-001 | Runtime, contracts, skills, and the public plugin mechanism remain open source; hosted provider capabilities remain external services. | DEC-OSS-003: the runtime, its source and everything else are open source under MIT. |
 | DEC-OSS-002 | Contracts, skills, the public plugin mechanism, documentation and the install path open (MIT) and published in `reply-team/jason-ai`, with the runtime released there as binaries without its source. | DEC-OSS-003: the runtime's source is open too, and developed in the same repository. |
-| REJ-PLAT-001 | Rejected: Go, TypeScript/Node, Rust, Java, or Python as the selected core Runtime platform, since none outweighed .NET's product fit and existing team leverage. | The runtime is being ported to Rust in this repository; until the port is complete, the C# runtime under `dotnet/` is the one released (DEC-PLAT-001, 15.2). |
+| REJ-PLAT-001 | Rejected: Go, TypeScript/Node, Rust, Java, or Python as the selected core Runtime platform, since none outweighed .NET's product fit and existing team leverage. | The runtime is being rewritten in TypeScript in this repository, which supersedes this rejection of TypeScript/Node and the Rust port before it; until the rewrite is complete, the C# runtime under `dotnet/` is the one released (DEC-PLAT-001, 15.2). |
 
 ### 20.2 Rejected under the accepted architecture
 

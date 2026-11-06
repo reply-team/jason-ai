@@ -84,7 +84,7 @@ public static class ReplyCommands
                 .Set("goal_id", parseResult.GetValue(goal))
                 .Set("decision_id", parseResult.GetValue(decision))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return OperationRunner.RunAsync(
                 env, Operations.ReplyRecord, body, new RunOptions(parseResult.GetValue(human), JournalRenderers.Entry), cancellationToken);

@@ -48,7 +48,7 @@ public static class ProjectCommands
             body.Set("name", parseResult.GetValue(name))
                 .Set("slug", parseResult.GetValue(slug))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ProjectCreate, body, new RunOptions(parseResult.GetValue(human), ProjectRenderers.Project), cancellationToken)
@@ -72,7 +72,7 @@ public static class ProjectCommands
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var (byId, bySlug) = (parseResult.GetValue(id), parseResult.GetValue(slug));
             if (byId is not null && bySlug is not null)
             {
@@ -115,7 +115,7 @@ public static class ProjectCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
-            ActorOption.Parse(parseResult.GetValue(actor));
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("query", parseResult.GetValue(query))
                 .Set("limit", parseResult.GetValue(limit))
@@ -147,7 +147,7 @@ public static class ProjectCommands
             body.Set("project_id", parseResult.GetValue(id))
                 .Set("name", parseResult.GetValue(name))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 
             return await OperationRunner
                 .RunAsync(env, Operations.ProjectUpdate, body, new RunOptions(parseResult.GetValue(human), ProjectRenderers.Project), cancellationToken)
@@ -206,7 +206,7 @@ public static class ProjectCommands
                 .Set("project_id", project)
                 .Set("path", folder)
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor)), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
             return OperationRunner.RunAsync(env, Operations.ProjectLink, body, new RunOptions(parseResult.GetValue(human), ProjectRenderers.Link), cancellationToken);
         });
 

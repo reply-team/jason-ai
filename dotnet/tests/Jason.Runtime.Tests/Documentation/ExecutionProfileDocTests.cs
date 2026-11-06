@@ -216,6 +216,7 @@ public partial class ExecutionProfileDocTests
     /// over the two design pages alone.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "no page says a refused phrase")]
     public void No_Markdown_file_the_tree_holds_says_the_two_refused_phrases()
     {
         var root = RepositoryTree.Root();
@@ -518,7 +519,7 @@ public partial class ExecutionProfileDocTests
     /// pipes to a shell is Jason's own one-liner. Cursor CLI, the host whose commands were once copied, is held to the link.
     /// </summary>
     [Theory]
-    [InlineData("README.md")]
+    [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     [InlineData("docs/execution-profiles.md")]
     public void A_host_s_install_is_a_link_to_its_own_page_and_no_command_copied_from_it(string file)

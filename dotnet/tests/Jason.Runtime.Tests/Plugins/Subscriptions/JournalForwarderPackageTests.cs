@@ -1,15 +1,19 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Journal;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
+using Jason.Contracts.Update;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Plugins.Subscriptions;
+using Jason.Runtime.Tests.Documentation;
 using Jason.Runtime.Tests.Integration;
 using Jason.Runtime.Tests.Notifications;
 using Jason.Runtime.Tests.Plugins.Invocation;
@@ -331,7 +335,7 @@ public sealed class JournalForwarderPackageTests
         Assert.NotNull(plugin);
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Equal(PluginKind.Subscriber, plugin.Manifest.Kind);
-        Assert.Equal("1.0.0", plugin.Manifest.Version);
+        Assert.Equal("1.0.1", plugin.Manifest.Version);
         Assert.Equal(["localhost:8787"], plugin.Manifest.Capabilities.Http!.Hosts);
         Assert.Equal([UrlVariable, TokenVariable], plugin.Manifest.Capabilities.Env!.Variables);
         Assert.Null(plugin.Manifest.Capabilities.Api);
@@ -398,4 +402,157 @@ public sealed class JournalForwarderPackageTests
         Assert.Equal(subscribable, declared.Order(StringComparer.Ordinal));
         Assert.Equal(declared.Count, declared.Distinct().Count());
     }
+
+    /// <summary>
+    /// The package's README installs it from the release a person runs, by <c>jason plugin install journal-forwarder</c>,
+    /// never by a copy out of a checkout, which a person who installed Jason does not have. A receiver on another host is
+    /// an edit of the installed copy's <c>plugin.yaml</c>, after which the copy is the person's own, and the README says
+    /// the four things that follow from it: <c>jason update</c> leaves it and says it differs, <c>jason status</c> reports
+    /// it as behind once a later version is published and names the <c>--replace</c> that discards the edit, a later
+    /// version is theirs to apply, and <c>--replace</c> discards the edit.
+    /// </summary>
+    [Fact]
+    public void The_readme_installs_the_package_from_the_release_and_an_edited_copy_is_the_person_s_own()
+    {
+        var readme = File.ReadAllText(Path.Combine(RepositoryTree.Root(), "plugins", Id, "README.md")).ReplaceLineEndings("\n");
+
+        var installing = Section(readme, "Installing it");
+        Assert.Contains($"Every release of Jason from 0.30.0 on publishes it as `{ReleaseAssets.JournalForwarderPlugin}`", installing, StringComparison.Ordinal);
+        Assert.Contains("jason plugin install journal-forwarder", installing, StringComparison.Ordinal);
+        Assert.DoesNotContain("cp -r plugins/journal-forwarder", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("Copy the package", readme, StringComparison.Ordinal);
+
+        var elsewhere = Section(readme, "A receiver elsewhere than the loopback");
+        Assert.Contains("`~/.jason/plugins/journal-forwarder/plugin.yaml`", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("From then on the copy is yours.", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("`jason update` leaves it in place and says it differs from every package a release published", elsewhere, StringComparison.Ordinal);
+        Assert.Contains(
+            "Once a release publishes a later version of the forwarder, `jason status` reports your edited copy as behind, "
+            + "and the repair it names, `--replace`, is the discard below.",
+            elsewhere,
+            StringComparison.Ordinal);
+        Assert.Contains("A later version of the forwarder is yours to apply", elsewhere, StringComparison.Ordinal);
+        Assert.Contains("`jason plugin install journal-forwarder --replace` discards your edit", elsewhere, StringComparison.Ordinal);
+    }
+
+    /// <summary>A section of a README, its heading to the next, with its whitespace made single spaces.</summary>
+    private static string Section(string readme, string heading)
+    {
+        var start = readme.IndexOf($"\n## {heading}\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"plugins/{Id}/README.md has no section '{heading}'.");
+        var end = readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        return Regex.Replace(readme[start..(end < 0 ? readme.Length : end)], "\\s+", " ");
+    }
+
+    /// <summary>The list beside the package that records the digest of each of its versions, as Reply's list does for Reply's.</summary>
+    private const string DigestList = "plugins/journal-forwarder.digests";
+
+    /// <summary>
+    /// The digest of the package as v0.29.0 shipped it in its tree, version 1.0.0, computed from that tag's tree. A tag's
+    /// tree never changes, so this line never does: it is what lets <c>jason update</c> read a copy a person made by hand
+    /// from that release as version 1.0.0, a version the release has a later one of, and replace it.
+    /// </summary>
+    private const string FirstShipped = "1.0.0 sha256:9239df983b3709868f9c9dd0cce591c2fc15e3d702678fa4f24a7ed84f2f545b";
+
+    /// <summary>
+    /// A package's version is its content, as for Reply's package: the digest of the whole package has one line on the list
+    /// beside it, <c>plugins/journal-forwarder.digests</c>, for the version its manifest names, and that line is the last. The
+    /// release's manifest names the package from this list, and the runtime built from the same tree carries the package it
+    /// names. The list's first line is the package 0.29.0 shipped in its tree. Each failure says what to do.
+    /// </summary>
+    /// <remarks>
+    /// A line that changes or disappears in a diff is what this test cannot see, since the list it reads is the changed list:
+    /// a line already on it is refused in review.
+    /// </remarks>
+    [Fact]
+    [Critical(Family.R1, "a package's version is its content")]
+    public void The_package_is_the_digest_its_version_has_on_the_list()
+    {
+        var root = RepositoryTree.Root();
+        var package = Path.Combine(root, "plugins", Id);
+        var version = YamlToJson.Convert(File.ReadAllText(Path.Combine(package, "plugin.yaml")))!["version"]!.GetValue<string>();
+        var digest = PackageDigest.Compute(package).Digest;
+        var line = $"{version} {digest}";
+
+        var path = Path.Combine(root, DigestList);
+        Assert.True(
+            File.Exists(path),
+            $"{DigestList} is missing. It records the digest of each version of the package, one line per version, beside the "
+            + "package and outside it: create it with a header comment, the line of the package 0.29.0 shipped in its tree and this line:"
+            + Environment.NewLine
+            + FirstShipped
+            + Environment.NewLine
+            + line);
+
+        var listed = new List<(string Version, string Digest)>();
+        foreach (var entry in File.ReadAllLines(path))
+        {
+            if (entry.Length == 0 || entry.StartsWith('#'))
+            {
+                continue;
+            }
+
+            Assert.True(
+                IsListLine(entry),
+                $"Not a line of {DigestList}: '{entry}'. A line is a bare version, X.Y.Z with no pre-release or build metadata, a "
+                + "space and the package's sha256:digest.");
+            var parts = entry.Split(' ');
+            listed.Add((parts[0], parts[1]));
+        }
+
+        var problems = new List<string>();
+        if (listed.Count == 0 || $"{listed[0].Version} {listed[0].Digest}" != FirstShipped)
+        {
+            problems.Add($"The first line of {DigestList} is the package 0.29.0 shipped in its tree, and it is: {FirstShipped}");
+        }
+
+        foreach (var twice in listed.GroupBy(entry => entry.Version, StringComparer.Ordinal).Where(group => group.Count() > 1))
+        {
+            problems.Add(
+                $"{DigestList} names version {twice.Key} {twice.Count()} times. A version has one line and a line is never changed: "
+                + "delete the line that was added or edited, put the package's content under a new version in plugin.yaml, and append "
+                + "the line for that version.");
+        }
+
+        var own = listed.Where(entry => entry.Version == version).ToList();
+        if (!IsListLine(line))
+        {
+            problems.Add(
+                $"plugin.yaml says version {version}, and a version on {DigestList} is a bare X.Y.Z, as the release's manifest writer "
+                + "reads one: give the package a version with no pre-release or build metadata.");
+        }
+        else if (own.Count == 0)
+        {
+            problems.Add(
+                $"plugin.yaml says version {version} and {DigestList} has no line for it. A version is its content, recorded once: "
+                + $"append this line to the end of {DigestList}, after the edits to the package are done, since every edit changes it:"
+                + Environment.NewLine
+                + line);
+        }
+        else if (own.Count == 1)
+        {
+            if (own[0].Digest != digest)
+            {
+                problems.Add(
+                    $"The package is not the content version {version} was recorded with: {DigestList} says {own[0].Digest}, the package "
+                    + $"is {digest}. A version is its content, so the version changes whenever any file of plugins/{Id} does: "
+                    + "bump the version in plugin.yaml and write the changelog entry, then run this test again, which prints the line "
+                    + $"to append to the end of {DigestList}. The line already there is left as it is.");
+            }
+
+            if (listed[^1].Version != version)
+            {
+                problems.Add(
+                    $"The last line of {DigestList} is for version {listed[^1].Version} and plugin.yaml says version {version}. A line is "
+                    + "appended at the end of the list, after the lines already there: put the line for version "
+                    + $"{version} at the end of {DigestList}.");
+            }
+        }
+
+        Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
+    }
+
+    /// <summary>A line of the list by the rule <c>.github/scripts/Write-Manifest.ps1</c> reads it with, character for character.</summary>
+    private static bool IsListLine(string entry) =>
+        Regex.IsMatch(entry, "^((0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)) (sha256:[0-9a-f]{64})$", RegexOptions.CultureInvariant);
 }

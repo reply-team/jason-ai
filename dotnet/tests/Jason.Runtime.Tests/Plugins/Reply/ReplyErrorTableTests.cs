@@ -505,14 +505,15 @@ public partial class ReplyErrorTableTests
     }
 
     /// <summary>
-    /// What says Reply does not offer what was asked is told where the table maps it: a route Reply's API does not have, in
-    /// the README's table of endings every operation can meet, under the code and the class the row gives it, and on every
-    /// command but those that cannot pass that 404 through, since they read a 404 as a thing not found.
+    /// A 404 with no code of Reply's own is told where the table maps it: in the README's table of endings every operation
+    /// can meet, under the code and the class the row gives it, on every command but those that cannot pass that 404
+    /// through, since they read a 404 as a thing not found, and with what a person does about it: Reply's API changed
+    /// under this package version, so update the package and, if the ending stays, report it.
     /// </summary>
     [Theory]
     [InlineData("Endings every operation can meet", "status 404 and no code of Reply's own")]
     [InlineData("Endings every operation can meet", "which reply-cli passes through as it is on every command but")]
-    public void The_readme_says_when_reply_does_not_offer_what_was_asked(string section, string when)
+    public void The_readme_says_what_a_404_without_reply_s_code_ends_in(string section, string when)
     {
         var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
         var heading = $"\n### {section}\n";
@@ -524,7 +525,12 @@ public partial class ReplyErrorTableTests
             line => line.StartsWith("| ", StringComparison.Ordinal) && line.Contains(when, StringComparison.Ordinal));
         var columns = row.Split('|');
 
-        Assert.Equal(($"`{UnjudgedOutcomeCodes.CapabilityNotOffered}`", "permanent"), (columns[2].Trim(), columns[3].Trim()));
+        var shared = ReplyErrorTable.Shared["refusal_this_version_has_no_word_for"]!.AsObject();
+        Assert.Equal(($"`{Text(shared, "code")}`", Text(shared, "class")), (columns[2].Trim(), columns[3].Trim()));
+        Assert.Equal(("`provider_call_failed`", "permanent"), (columns[2].Trim(), columns[3].Trim()));
+        Assert.Contains("Reply's API changed under this package version", columns[1], StringComparison.Ordinal);
+        Assert.Contains("`jason update apply`", columns[4], StringComparison.Ordinal);
+        Assert.Contains("report it", columns[4], StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -534,13 +540,13 @@ public partial class ReplyErrorTableTests
     /// could not see it.
     /// </summary>
     [Fact]
-    public void The_row_for_a_route_reply_does_not_offer_names_the_commands_the_readme_names()
+    public void The_row_a_404_without_reply_s_code_lands_on_names_the_commands_the_readme_names()
     {
         var commands = ReplyErrorTable.Commands.Select(command => command.Key).ToHashSet(StringComparer.Ordinal);
 
-        var told = CommandsNamed(RouteNotOfferedInTheReadme(), commands);
+        var told = CommandsNamed(BareNotFoundInTheReadme(), commands);
         Assert.NotEmpty(told);
-        Assert.Equal(told, CommandsNamed(Text(ReplyErrorTable.Shared["route_not_offered"]!.AsObject(), "when"), commands));
+        Assert.Equal(told, CommandsNamed(BareNotFoundInTheRow(), commands));
     }
 
     /// <summary>
@@ -553,7 +559,7 @@ public partial class ReplyErrorTableTests
     /// <c>auth whoami</c>, which answers through the CLI's own client and never as <c>reply.refused</c>.
     /// </summary>
     [Fact]
-    public void A_route_reply_does_not_offer_is_written_for_every_command_but_those_that_read_a_404_as_missing()
+    public void A_404_without_reply_s_code_is_written_for_every_command_but_those_that_read_a_404_as_missing()
     {
         var commands = ReplyErrorTable.Commands.Select(command => command.Key).ToHashSet(StringComparer.Ordinal);
         string[] never =
@@ -566,7 +572,7 @@ public partial class ReplyErrorTableTests
         ];
         Assert.All(never, command => Assert.Contains(command, commands));
 
-        foreach (var text in new[] { RouteNotOfferedInTheReadme(), Text(ReplyErrorTable.Shared["route_not_offered"]!.AsObject(), "when") })
+        foreach (var text in new[] { BareNotFoundInTheReadme(), BareNotFoundInTheRow() })
         {
             var start = text.IndexOf("on every command but ", StringComparison.Ordinal);
             Assert.True(start >= 0, text);
@@ -600,7 +606,7 @@ public partial class ReplyErrorTableTests
     }
 
     /// <summary>
-    /// A code reply-cli gives for a refusal Reply makes once it times deferred LinkedIn sends itself is told with the status
+    /// A code reply-cli gives for a refusal Reply makes as it times deferred LinkedIn sends itself is told with the status
     /// and the code Reply gives it: in the README's table for the operation, in one row under the code and the class the
     /// table's row gives it, and in the "when" of that row. A reader who meets either code in a trace finds it in both.
     /// </summary>
@@ -654,8 +660,69 @@ public partial class ReplyErrorTableTests
         Assert.Contains(named, Text(row, "when"), StringComparison.Ordinal);
     }
 
-    /// <summary>The first column of the README's row for a route Reply does not offer.</summary>
-    private static string RouteNotOfferedInTheReadme()
+    /// <summary>
+    /// A 404 with no code of Reply's own is read by the operation's own key for it before any other: a repeat of a send by
+    /// the key the send's request names a repeat with, then the operation's own 404 key, then the shared one, and only
+    /// then the CLI's code. The shared table holds no 404 key, so a 404 an operation has no key for is the CLI's
+    /// <c>reply.refused</c>, <c>provider_call_failed</c>, permanent; a repeat of either send whose write meets one is
+    /// <c>send_not_settled</c>, and the change feed's is <c>events_unsupported</c>. No 404 key lands on a capability not
+    /// offered.
+    /// </summary>
+    [Fact]
+    public void A_404_without_reply_s_code_is_read_by_the_operation_s_own_key_before_the_shared_one()
+    {
+        var module = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "modules", "errors.js")).ReplaceLineEndings("\n");
+        var start = module.IndexOf("export function rowOf(", StringComparison.Ordinal);
+        Assert.True(start >= 0, "errors.js has no rowOf.");
+        var body = module[start..module.IndexOf("\n}\n", start, StringComparison.Ordinal)];
+        int[] order =
+        [
+            body.IndexOf("has(own, \"repeat:\" + unknown)", StringComparison.Ordinal),
+            body.IndexOf("has(own, unknown)", StringComparison.Ordinal),
+            body.IndexOf("has(CODES.shared, unknown)", StringComparison.Ordinal),
+            body.IndexOf("has(own, code)", StringComparison.Ordinal),
+            body.IndexOf("has(CODES.shared, code)", StringComparison.Ordinal),
+        ];
+        Assert.All(order, at => Assert.True(at >= 0, body));
+        Assert.Equal(order.Order(), order);
+
+        Assert.DoesNotContain(ReplyErrorTable.Codes["shared"]!.AsObject(), entry => entry.Key.EndsWith(":404", StringComparison.Ordinal));
+        Assert.Equal("refusal_this_version_has_no_word_for", (string?)ReplyErrorTable.Codes["shared"]!["reply.refused"]);
+        Assert.Equal(("provider_call_failed", "permanent"), Ending("message.send", "refusal_this_version_has_no_word_for"));
+        foreach (var send in new[] { "message.send", "social_invitation.send" })
+        {
+            var key = (string?)ReplyErrorTable.Codes["per_operation"]![send]!["repeat:reply.refused:404"];
+            Assert.Equal("send_not_settled", key);
+            Assert.Equal(("send_not_settled", "permanent"), Ending(send, key!));
+            Assert.Null(ReplyErrorTable.Codes["per_operation"]![send]!["reply.refused:404"]);
+        }
+
+        var feed = (string?)ReplyErrorTable.Codes["per_operation"]!["events.read"]!["reply.refused:404"];
+        Assert.NotNull(feed);
+        Assert.Equal(("events_unsupported", "permanent"), Ending("events.read", feed));
+        var keys = ReplyErrorTable.Codes["per_operation"]!.AsObject()
+            .SelectMany(operation => operation.Value!.AsObject().Where(entry => entry.Key.EndsWith(":404", StringComparison.Ordinal)).Select(entry => (operation.Key, Row: (string)entry.Value!)));
+        Assert.All(keys, key => Assert.NotEqual(UnjudgedOutcomeCodes.CapabilityNotOffered, Ending(key.Key, key.Row).Code));
+    }
+
+    /// <summary>The code and the class the row an operation reaches by that name ends in: its own row, else the shared one.</summary>
+    private static (string Code, string Class) Ending(string operation, string name)
+    {
+        var row = (ReplyErrorTable.Own(operation)[name] ?? ReplyErrorTable.Shared[name])!.AsObject();
+        return (Text(row, "code"), Text(row, "class"));
+    }
+
+    /// <summary>The "when" of the shared row a 404 with no code of Reply's own lands on, from where it names that 404.</summary>
+    private static string BareNotFoundInTheRow()
+    {
+        var when = Text(ReplyErrorTable.Shared["refusal_this_version_has_no_word_for"]!.AsObject(), "when");
+        var start = when.IndexOf("status 404 and no code of Reply's own", StringComparison.Ordinal);
+        Assert.True(start >= 0, when);
+        return when[start..];
+    }
+
+    /// <summary>The first column of the README's row for a 404 with no code of Reply's own.</summary>
+    private static string BareNotFoundInTheReadme()
     {
         var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
         var row = Assert.Single(
