@@ -11,38 +11,75 @@ namespace Jason.App;
 /// is why it can be named at all: a Windows logon task carries no environment, so a registration that must
 /// bring its data directory with it has nowhere to put it but the command line.
 /// </param>
-public sealed record RuntimeRunArguments(bool Detached, string? DataDirectory = null)
+/// <param name="Help">
+/// The usage was asked for (<c>--help</c>, <c>-h</c> or <c>-?</c>): it is printed and nothing is started. A usage error
+/// wins over it: an argument the verb does not know is refused whatever else stands beside the help flag.
+/// </param>
+public sealed record RuntimeRunArguments(bool Detached, string? DataDirectory = null, bool Help = false)
 {
     private const string DetachedFlag = "--detached";
     private const string DataDirectoryFlag = "--data-dir";
 
+    /// <summary>The spellings that ask for the usage.</summary>
+    private static readonly string[] HelpFlags = ["--help", "-h", "-?"];
+
+    /// <summary>The usage's first line, which an error is printed beside.</summary>
+    public const string UsageLine = "usage: jason runtime run [--detached] [--data-dir <path>]";
+
+    /// <summary>What <c>jason runtime run --help</c> prints: the line, what each flag does, and what a person normally types instead.</summary>
+    public static readonly string Usage = string.Join(
+        Environment.NewLine,
+        UsageLine,
+        "  --detached         run as a background service: no console, standard streams on the null device; without it the runtime stays in the foreground.",
+        "  --data-dir <path>  the data directory this runtime owns, instead of JASON_DATA_DIR or ~/.jason.",
+        "  --help, -h, -?     print this and exit.",
+        "This is the verb a sign-in registration or a service manager runs; a person normally types `jason runtime start`.");
+
     /// <summary>Reads the flags that follow the <c>runtime run</c> verbs; the verbs themselves are never flags.</summary>
-    /// <exception cref="RuntimeRunUsageException">The data directory flag was given with no path after it.</exception>
+    /// <exception cref="RuntimeRunUsageException">The data directory flag was given with no path after it, or an argument is not one this verb knows.</exception>
     public static RuntimeRunArguments Parse(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
 
         var flags = args.Skip(2).ToArray();
-        return new RuntimeRunArguments(
-            flags.Contains(DetachedFlag, StringComparer.Ordinal),
-            DataDirectoryIn(flags));
-    }
-
-    private static string? DataDirectoryIn(string[] flags)
-    {
-        var flag = Array.IndexOf(flags, DataDirectoryFlag);
-        if (flag < 0)
+        var detached = false;
+        var help = false;
+        string? directory = null;
+        for (var at = 0; at < flags.Length; at++)
         {
-            return null;
+            var flag = flags[at];
+            if (string.Equals(flag, DetachedFlag, StringComparison.Ordinal))
+            {
+                detached = true;
+            }
+            else if (string.Equals(flag, DataDirectoryFlag, StringComparison.Ordinal))
+            {
+                // Refused rather than read as "the default". A runtime told nothing about its data directory takes
+                // ~/.jason, and the one caller that names it - a logon task, which has no environment to say it in -
+                // would get a background runtime on a database nobody meant, quietly, at every logon.
+                var value = at + 1 < flags.Length ? flags[at + 1] : null;
+                if (string.IsNullOrWhiteSpace(value) || value.StartsWith('-'))
+                {
+                    throw new RuntimeRunUsageException($"{DataDirectoryFlag} needs the path of a data directory after it.");
+                }
+
+                // A second one would be read by nobody, and the runtime would start on the first without a word.
+                directory = directory is null ? value : throw new RuntimeRunUsageException($"{DataDirectoryFlag} was given twice.");
+                at++;
+            }
+            else if (HelpFlags.Contains(flag, StringComparer.Ordinal))
+            {
+                help = true;
+            }
+            else
+            {
+                // Refused rather than ignored: a flag this verb never read would otherwise start a runtime that was
+                // not asked for the thing the flag names.
+                throw new RuntimeRunUsageException($"'{flag}' is not a flag of this verb.");
+            }
         }
 
-        // Refused rather than read as "the default". A runtime told nothing about its data directory takes
-        // ~/.jason, and the one caller that names it - a logon task, which has no environment to say it in -
-        // would get a background runtime on a database nobody meant, quietly, at every logon.
-        var directory = flag + 1 < flags.Length ? flags[flag + 1] : null;
-        return string.IsNullOrWhiteSpace(directory) || directory.StartsWith("--", StringComparison.Ordinal)
-            ? throw new RuntimeRunUsageException($"{DataDirectoryFlag} needs the path of a data directory after it.")
-            : directory;
+        return new RuntimeRunArguments(detached, directory, help);
     }
 }
 
