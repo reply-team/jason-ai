@@ -7,16 +7,17 @@ namespace Jason.App.Tests.Skills;
 public partial class InteractiveSkillTests
 {
     /// <summary>
-    /// The troubleshooting skill teaches the subscription verbs since 0.29.0 and a host has read that text against 0.29.0, so it is
-    /// verified; the catalog lists it as one and carries the reading; it still says which work a paused campaign lets through:
+    /// The troubleshooting skill was read against 0.29.0 and has moved since, so it is a draft again until a host reads it against
+    /// a published version: the catalog records no reading of this text. It still says which work a paused campaign lets through:
     /// the field a contract declares, and the operations that declare it today, every one the catalogue runs there.
     /// </summary>
     [Fact]
-    public void The_troubleshooting_skill_is_verified_and_names_what_runs_in_a_paused_campaign()
+    public void The_troubleshooting_skill_is_a_draft_and_names_what_runs_in_a_paused_campaign()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
-        Assert.Equal("verified", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
-        Assert.Contains("| `troubleshooting-jason` | Claude Code", File.ReadAllText(SkillPack.Catalog()), StringComparison.Ordinal);
+        Assert.Equal("draft", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
+        Assert.Contains("**Status: draft.**", Flattened("troubleshooting-jason"), StringComparison.Ordinal);
+        Assert.DoesNotContain("| `troubleshooting-jason` | Claude Code", File.ReadAllText(SkillPack.Catalog()), StringComparison.Ordinal);
         Assert.Contains(
             "Only an active campaign's work is claimed, with one exception: a paused campaign still lets through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record`, `campaign.pause` and `message.cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one holds every item but theirs.",
             Flattened("troubleshooting-jason"),
@@ -25,6 +26,22 @@ public partial class InteractiveSkillTests
             ["campaign.pause", "message.cancel", "optout.record"],
             Jason.Contracts.Operations.OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal));
     }
+
+    /// <summary>
+    /// A hold at a daily limit reads as state 11 and is no run's doing, so the state says what it is, where a person sees it, and
+    /// each of the three ways out, a raised limit among them with what it does not reach.
+    /// </summary>
+    [Theory]
+    [InlineData("**A budget hold is the claim's own wait, and no run stands behind it.**")]
+    [InlineData("`Launches:MaxPerDay:<role>` limits how many runs of a role one campaign starts in a UTC day")]
+    [InlineData("its `last_error` is `launches_spent`, whose message names the setting")]
+    [InlineData("its `workitem_waiting` line in the chronicle says `held_by` with the code, the limit and the role")]
+    [InlineData("A notification counts it among the items that wait on a budget")]
+    [InlineData("at 00:00Z the runtime releases the item by itself and counts the new day, so a day already spent by then holds it again")]
+    [InlineData("a person resumes that one item under their name, as above, and it goes past the limit with its run counted like any other")]
+    [InlineData("a person raises the setting, which applies from the next scan to work not yet held, while an item already held keeps its moment")]
+    public void The_troubleshooting_skill_says_what_a_budget_hold_is_and_its_three_ways_out(string sentence) =>
+        Assert.Contains(sentence, Flattened("troubleshooting-jason"), StringComparison.Ordinal);
 
     /// <summary>
     /// The two installation skills teach the journal's kinds and the subscription verbs, and what the person alone does:
