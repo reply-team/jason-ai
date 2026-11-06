@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -106,6 +107,40 @@ public sealed class BudgetHoldNotificationTests
         var line = await Sender(harness, FakeChannel.Delivering()).SendAsync((await HandedOverAsync(harness))!, Ct);
 
         Assert.True(line is null, $"A pointer was written for waits that are not holds: {line}");
+    }
+
+    /// <summary>
+    /// No attempt and no block do not make a hold: the respond step writes every responder waiting on its thread's read from its
+    /// creation, with no last error, and only the word on that error keeps each reply out of the count. <c>return errors.Count;</c>
+    /// at the end of the sender's count turns this row red.
+    /// </summary>
+    [Fact]
+    public async Task A_wait_from_creation_is_not_a_hold()
+    {
+        using var harness = await StartedAsync();
+        var held = await HeldAsync(harness);
+        var request = await HandedOverAsync(harness);
+        Assert.True(request is not null, "A hold woke no pointer.");
+        await using (var db = harness.Open())
+        {
+            var wait = await db.WorkItemWaits.SingleAsync(w => w.WorkItemId == held, Ct);
+            wait.Status = WaitStatus.Released;
+            var now = harness.Clock.Now.UtcDateTime;
+            var campaign = WorkItemFactory.NewCampaign(now: now);
+            db.Campaigns.Add(campaign);
+            var read = WorkItemFactory.NewProviderOp(campaign, operation: Responder.ReadOperation, now: now);
+            var responder = WorkItemFactory.NewAiRole(campaign, role: Responder.Role, now: now);
+            db.WorkItems.AddRange(read, responder);
+            await db.SaveChangesAsync(Ct);
+            harness.Resolve<AttemptOutcomes>().WaitFromCreation(db, responder, [read], Actors.Dispatcher);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var toast = FakeChannel.Delivering();
+        var line = await Sender(harness, toast).SendAsync(request, Ct);
+
+        Assert.True(line is null, $"A pointer was written for a wait that is not a hold: {line}");
+        Assert.Empty(toast.Messages);
     }
 
     /// <summary>A wait's line that names no limit is an ordinary wait, and says nothing to a person.</summary>
