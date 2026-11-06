@@ -15,7 +15,7 @@ namespace Jason.Cli.Update;
 /// <remarks>
 /// An installed package is named by its content, as the runtime names it: its digest, looked up in the release's record
 /// of each version's digest. A digest the record does not hold is a package the list does not know: built or edited on
-/// that machine, or a version before the list's first line, 0.3.2 — which <c>jason status</c> judges by its version — and
+/// that machine, or a version before the first line of that package's list (the Reply package's is 0.3.2, the forwarder's 1.0.0) — which <c>jason status</c> judges by its version — and
 /// the check never names it. A package that cannot be read is passed over in silence: what is wrong on the installed side
 /// is <c>jason status</c>'s to say. The <c>plugins</c> step of <c>jason update apply</c> reads the same plan, so the check
 /// names exactly the packages the apply replaces.
