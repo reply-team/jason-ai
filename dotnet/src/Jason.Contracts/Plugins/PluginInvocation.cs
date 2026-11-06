@@ -47,7 +47,7 @@ public sealed record EnvGrants(IReadOnlyList<string> Variables);
 
 /// <summary>
 /// The resolved policy — what the user granted out of what the manifest requested. The child enforces exactly
-/// this and has no configuration of its own; a capability absent here is a capability it cannot use.
+/// this and takes no policy from anywhere else; a capability absent here is a capability it cannot use.
 /// </summary>
 public sealed record InvocationGrants(ExecGrants? Exec, HttpGrants? Http, EnvGrants? Env);
 
@@ -78,7 +78,7 @@ public sealed record DoorLimits(int MaxCalls, int ResponseBytes, int TimeoutMs)
 /// A handler's door to the Runtime API: where the runtime listens on loopback, the capability the runtime minted for
 /// this one invocation, the journal line the invocation is about, and the operations the capability opens. The host
 /// holds it and makes every call itself; nothing of it is reachable from the plugin's JavaScript. The capability is
-/// the one secret an envelope carries, so a door never prints it.
+/// a secret, so a door never prints it.
 /// </summary>
 public sealed record InvocationDoor(string BaseUrl, string Capability, string LineId, IReadOnlyList<string> Operations, DoorLimits Limits)
 {
@@ -88,9 +88,10 @@ public sealed record InvocationDoor(string BaseUrl, string Capability, string Li
 
 /// <summary>
 /// One invocation, written to the child's stdin as a single JSON object and then end of file. Nothing about an
-/// invocation travels on argv beyond what a process listing may show. The one secret value that travels here is a
-/// handler's door capability, which the host masks wherever it writes and the runtime revokes when the invocation
-/// ends; granted environment variables reach the child by name, through its own environment.
+/// invocation travels on argv beyond what a process listing may show. Two kinds of secret value travel here: a
+/// handler's door capability, which the runtime revokes when the invocation ends, and the plugin's configuration, the
+/// text the settings hold for it, which the plugin alone reads; the host masks both wherever it writes. Granted
+/// environment variables reach the child by name, through its own environment.
 /// </summary>
 public sealed record PluginInvocation(
     int ProtocolVersion,
@@ -103,4 +104,5 @@ public sealed record PluginInvocation(
     InvocationContext Context,
     InvocationGrants Grants,
     InvocationLimits Limits,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] InvocationDoor? Door = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] InvocationDoor? Door = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull), JsonConverter(typeof(ConfigMapConverter))] IReadOnlyDictionary<string, string>? Config = null);

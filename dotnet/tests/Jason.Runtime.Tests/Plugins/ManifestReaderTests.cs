@@ -121,6 +121,14 @@ public class ManifestReaderTests : IDisposable
     [InlineData("capabilities:\n  http:\n    hosts: [\"api.example.test\", \"api.example.test\"]\n", "host_invalid", "capabilities.http.hosts[1]")]
     [InlineData("capabilities:\n  http:\n    hosts: [\"api.example.test\", \"localhost:8080\"]\n", null, null)]
 
+    // A host beyond the declared ones, which only a person's grant names.
+    [InlineData("capabilities:\n  http:\n    hosts: [api.example.test]\n    any_granted_host: true\n", null, null)]
+    [InlineData("capabilities:\n  http:\n    hosts: [api.example.test]\n    any_granted_host: false\n", null, null)]
+    [InlineData("capabilities:\n  http:\n    hosts: [api.example.test]\n    any_granted_host: \"true\"\n", "field_invalid", "capabilities.http.any_granted_host")]
+    [InlineData("capabilities:\n  http:\n    hosts: [api.example.test]\n    any_granted_host: 1\n", "field_invalid", "capabilities.http.any_granted_host")]
+    [InlineData("capabilities:\n  http:\n    any_granted_host: true\n", "field_required", "capabilities.http.hosts")]
+    [InlineData("capabilities:\n  http:\n    hosts: [api.example.test]\n    any_host: true\n", "unknown_field", "capabilities.http.any_host")]
+
     // Variables.
     [InlineData("capabilities:\n  env:\n    variables: [lower]\n", "variable_name_invalid", "capabilities.env.variables[0]")]
     // Critical: a reserved variable; a credential in a binding.
@@ -900,7 +908,7 @@ public class ManifestReaderTests : IDisposable
         "contracts", "contracts.protocol", "contracts.operations", "operations",
         "entry", "entry.module", "entry.function",
         "capabilities", "capabilities.exec", "capabilities.exec.executables",
-        "capabilities.http", "capabilities.http.hosts",
+        "capabilities.http", "capabilities.http.hosts", "capabilities.http.any_granted_host",
         "capabilities.env", "capabilities.env.variables",
         "capabilities.api",
         "limits", "limits.timeout_ms", "limits.memory_mb",

@@ -80,9 +80,10 @@ manifest's `plugins` (§3) rather than its artifacts, which are platforms. Insta
 unpacks it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 runs it — and
 what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002). The journal forwarder is
 published the same way from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, the files of `plugins/journal-forwarder`
-at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`; a copy a
-person edits there to name another receiver is theirs, which an update leaves in place, as
-[its README](../plugins/journal-forwarder/README.md) says. Any other plugin is installed as `docs/plugins.md` §4 says.
+at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`; a receiver
+on another host takes a grant and a configuration and no edit of the package, as
+[its README](../plugins/journal-forwarder/README.md) says, and a copy a person does edit is theirs, which an update
+leaves in place. Any other plugin is installed as `docs/plugins.md` §4 says.
 
 **The browser UI is published the same way, as `jason-ui.zip`:** `ui/` built once per release at the tag, with the
 release's version in its `manifest.json`, and listed in `checksums.txt` but not in the manifest. It is built at the
@@ -513,10 +514,17 @@ than half-read.
 An update replaces the executable and its two notice files, replaces each plugin package installed as an earlier
 release's, writes under `~/.jason/update/`, redeploys the skills this installation recorded, and places the new
 release's UI as `ui/default/`. It does not touch the rest of the data directory: not the database, not
-`~/.jason/config/settings.json` and the grants in it, not any other package under `~/.jason/plugins/`, not the logs,
+`~/.jason/config/settings.json` and the grants and plugin configuration in it, not any other package under
+`~/.jason/plugins/`, not the logs,
 not the work directories. Nor does it touch anything you registered with the machine to start Jason — a systemd unit,
 a scheduled task, a login item — because the file at the install path is replaced in place rather than moved
 elsewhere, so whatever points at that path still points at Jason.
+
+Because `settings.json` is left as you wrote it, a key a release renames stays there under its old name.
+`Responder:MaxLaunchesPerDay` is such a key: 0.31.0 renamed it to `Launches:MaxPerDay:responder`, and
+[`work-execution.md`](work-execution.md) has the map. A file that still names it stops the new runtime's first start, so
+the update stands at `started` with `update_not_healthy` and the runtime's sentence after "It said:". Carry the number
+over by hand, take the old key out, and `jason update apply` starts the runtime again.
 
 Its `plugins` step, between `swapped` and `started`, replaces each plugin package installed as an earlier version the
 new release records — the packages `jason update check` named (§5) — with the release's own. The archive is fetched from

@@ -597,6 +597,47 @@ public class PluginServiceTests
     /// <summary>A plugin memory ceiling below the floor the validator holds, which refuses the whole section.</summary>
     private const string InvalidPlugins = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"MemoryMb":0}}}""";
 
+    /// <summary>
+    /// A reload against structure in a plugin's configuration: rejected by the path, the previous snapshot still active,
+    /// and nothing typed there in the answer or the log.
+    /// </summary>
+    [Fact]
+    public async Task A_reload_against_structure_in_a_plugins_configuration_keeps_the_previous_snapshot()
+    {
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        var search = new TestSearchPath { Path = programs.Root };
+        var api = await StartAsync(search, paths =>
+        {
+            TestPlugins.InstallFakeProvider(paths);
+            TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"]);
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+        });
+        await using (api)
+        {
+            var active = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, null, Ct);
+
+            File.WriteAllText(api.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Plugins":{"Config":{"fake-provider":{"url":{"host":"SENTINEL_P_NESTED"}}}}}""");
+            var monitor = api.Resolve<IOptionsMonitor<PluginsOptions>>();
+            Assert.True(await DispatchHarness.EventuallyAsync(() => Unreadable(monitor), Ct));
+
+            var error = await api.PostErrorAsync(Operations.PluginReload, null, HttpStatusCode.Conflict, Ct);
+
+            Assert.Equal("plugin_reload_rejected", error.Code);
+            var detail = Assert.Single(error.Details!);
+            Assert.Equal("plugins_settings_invalid", detail.Code);
+            Assert.Equal("Plugins:Config:fake-provider:<key> could not be read as System.String.", detail.Message);
+
+            var listed = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
+            Assert.Equal(active.Snapshot.Id, listed.Snapshot.Id);
+            Assert.False(listed.Activated);
+
+            await api.Runtime.StopAsync();
+            var logs = string.Concat(Directory.GetFiles(api.Paths.LogsDirectory).Select(File.ReadAllText));
+            Assert.DoesNotContain("SENTINEL_P_NESTED", logs, StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>Text where the default plugin timeout wants a number, standing in for anything a person might type.</summary>
     private const string WrongTypeSentinel = "SENTINEL_P_TIMEOUT";
 

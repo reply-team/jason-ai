@@ -223,8 +223,25 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
             ValidateSubscriptionGrant(failures, $"Plugins:Grants:{pluginId}:Subscriptions", grant.Subscriptions, installed);
         }
 
+        // A key with children never reaches this map: the binder leaves it out and the section's refusal says so. A list
+        // directly under a plugin or at the section does reach it, flattened into keys of digits, and those are all that
+        // tell it from a map.
+        foreach (var (pluginId, entries) in options.Config)
+        {
+            if (IsIndex(pluginId))
+            {
+                failures.Add($"{SettingKey.ShownPath($"Plugins:Config:{pluginId}", installed.Value)} must be a plugin's id: this section is a map from a plugin's id to its configuration, and a list is not one.");
+            }
+            else if (entries.Keys.FirstOrDefault(IsIndex) is { } index)
+            {
+                failures.Add($"{SettingKey.ShownPath($"Plugins:Config:{pluginId}:{index}", installed.Value)} must be a name: a plugin's configuration is a flat map from a name to text, and a list is not one.");
+            }
+        }
+
         return OptionRules.Result(failures);
     }
+
+    private static bool IsIndex(string key) => key.Length > 0 && key.All(char.IsAsciiDigit);
 
     private static void ValidateGrantList(List<string> failures, string setting, List<string> entries, Lazy<IReadOnlySet<string>> installed)
     {

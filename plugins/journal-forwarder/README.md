@@ -16,9 +16,9 @@ runtime hands it, the plugin POSTs
   "attempt": 1 }
 ```
 
-to the URL in `JOURNAL_FORWARDER_URL`, and answers the envelope it was handed unchanged, so a forwarder placed anywhere in
-a chain passes the envelope through. It declares every kind the catalog lets a plugin subscribe to; what it is
-actually handed is what you grant (below).
+to the one URL you name, and answers the envelope it was handed unchanged, so a forwarder placed anywhere in a chain passes
+the envelope through. It declares every kind the catalog lets a plugin subscribe to; what it is actually handed is what
+you grant (below).
 
 The forwarder takes no `host.call`: it reads nothing of Jason and changes nothing in it, it only pushes what it is
 handed. Its manifest asks for `http` and two environment variables, and for no Runtime API family.
@@ -43,8 +43,9 @@ plugin may subscribe to.
 
 - **A receiver**: anything that takes a `POST` of JSON at a URL. A file is reached by a receiver of your own that writes
   one; the package has no way to write a file itself.
-- **Jason 0.30.0 or newer**, whose release publishes this package. Subscriptions arrived in 0.29.0, which published
-  none.
+- **Jason 0.31.0 or newer** for this version of the package, whose manifest says a word an earlier runtime refuses.
+  A release publishes the package its own runtime reads; 0.30.0 published 1.0.1. Subscriptions arrived in 0.29.0, which
+  published none.
 
 ## Installing it
 
@@ -90,6 +91,9 @@ set it as a user environment variable there:
 | `JOURNAL_FORWARDER_URL` | the one URL every line is POSTed to: `http://localhost:8787/jason`, or an `https://` URL of your receiver |
 | `JOURNAL_FORWARDER_TOKEN` | optional: a bearer token for a receiver that requires one. It is read with `host.env`, sent only as the `Authorization` header, and never logged or returned |
 
+The settings file can say both instead, and what it says comes first: see
+[The configuration](#the-configuration). Neither belongs in `plugin.yaml`.
+
 Keep a secret in the URL's query string or in the token, never in its path: the plugin host's diagnostics name the host
 and the path of every request, and never the query or the headers.
 
@@ -105,25 +109,57 @@ pushed. Lines written before the reload are not: a kind starts at the end of the
 
 ## A receiver elsewhere than the loopback
 
-The manifest names `localhost:8787` and nothing else, so another host is your edit of the installed copy:
+The manifest names `localhost:8787` and says `any_granted_host: true`: the host is yours to grant, and no file of the
+package changes. Two entries of `~/.jason/config/settings.json` say it, beside what step 2 wrote there.
 
-1. Install the package with `jason plugin install journal-forwarder`, as above.
-2. In `~/.jason/plugins/journal-forwarder/plugin.yaml`, replace `hosts: [localhost:8787]` with your receiver's host,
-   `hosts: [your.host]` (with `:port` when it is not 443).
-3. Grant the same host, `"Http": ["your.host"]`, and set `JOURNAL_FORWARDER_URL` to an `https://` URL on it. A receiver
-   other than on the loopback interface is reached over `https`; an `http` one fails with `http_scheme_not_allowed`.
-4. Reload. **Editing `plugin.yaml` changes the package's identity**: its `sha256:` digest is the copy's now, which
-   `jason plugin list` shows, and no release published it.
+### The grant
 
-From then on the copy is yours. `jason update` leaves it in place and says it differs from every package a release
-published, so an update never undoes your edit. Once a release publishes a later version of the forwarder,
-`jason status` reports your edited copy as behind, and the repair it names, `--replace`, is the discard below. A later
-version of the forwarder is yours to apply instead: read its changelog, and make your edit again on the new package.
-`jason plugin install journal-forwarder --replace` discards your edit, placing the package the release you run
-published in place of your copy.
+`Plugins:Grants:journal-forwarder:Http` names the receiver's host, with `:port` when it is not 443:
 
-The plugin does not check the URL's host itself: the plugin host does, against the grant. A URL whose host the manifest
-and the grant do not both name ends the invocation as `http_host_not_allowed`, and nothing is sent.
+```json
+{
+  "Plugins": {
+    "Grants": {
+      "journal-forwarder": {
+        "Http": ["receiver.example.com"],
+        "Subscriptions": ["workitem_failed", "approval_requested"]
+      }
+    }
+  }
+}
+```
+
+`["*"]` does not say it: a star means the hosts the manifest declares, so `localhost:8787` alone. A package that says
+`any_granted_host` asks for more than one that does not, and `jason plugin list --human` shows the word beside the
+capabilities. The plugin does not check the URL's host itself: the plugin host does, against the grant. A URL whose host
+the grant does not name ends the invocation as `http_host_not_allowed`, and nothing is sent.
+
+### The configuration
+
+`Plugins:Config:journal-forwarder` holds the URL and, where the receiver wants one, the token:
+
+```json
+{
+  "Plugins": {
+    "Config": {
+      "journal-forwarder": { "url": "https://receiver.example.com/jason", "token": "a-token-of-yours" }
+    }
+  }
+}
+```
+
+The plugin reads `url` and `token` first, and `JOURNAL_FORWARDER_URL` and `JOURNAL_FORWARDER_TOKEN` where these say
+nothing, so with both keys set the `Env` grant is not needed. It stays while either key is read from the environment;
+without it, a key the settings do not hold is probed once per invocation, and the probe is one debug line. A value here
+is handed to the plugin on stdin at each
+invocation; it is no part of the package, of the journal, of the logs, of `jason plugin list` or of a `jason doctor`
+bundle. A receiver other than on the loopback interface is reached over `https`; an `http` one fails with
+`http_scheme_not_allowed`.
+
+Run `jason plugin reload` after changing either entry: a load freezes both, as it freezes every grant.
+
+The package stays the one the release published, with the digest `jason plugin list` shows, so `jason update` moves it to
+the next version and both entries stand, since neither is in the package.
 
 ## What it reports
 
@@ -138,9 +174,9 @@ moves on to its next line; a transient one is tried again after a wait that doub
 | `forwarder_unreachable` (transient) | the receiver did not answer within the twenty seconds the plugin allows, or answered 408, 429 or 5xx. The runtime tries again after a wait that doubles |
 | `forwarder_unauthorized` (permanent) | the receiver answered 401 or 403: the token is wrong, or one is needed and none was set |
 | `forwarder_refused` (permanent) | any other answer the receiver will not change its mind about, such as 400 or 404, or a redirect, which is never followed |
-| `forwarder_url_missing` (permanent) | `JOURNAL_FORWARDER_URL` is not set in the runtime's environment, or the grant does not list it under `Env` |
+| `forwarder_url_missing` (permanent) | the key `url` under `Plugins:Config:journal-forwarder` says nothing, and `JOURNAL_FORWARDER_URL` is not set in the runtime's environment or the grant does not list it under `Env` |
 | `forwarder_url_invalid` (permanent) | the URL is not an `http://` or `https://` URL |
-| `http_host_not_allowed` (permanent) | the URL names a host the manifest and the grant do not both name |
+| `http_host_not_allowed` (permanent) | the URL names a host the grant does not name |
 | `http_scheme_not_allowed` (permanent) | the URL is `http://` to a host that is not `localhost`, `127.0.0.1` or `::1` |
 | `unknown_operation` (validation) | the plugin was invoked under anything but the line's own kind, which the runtime does not do |
 

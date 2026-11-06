@@ -113,7 +113,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   invocation goes to the child on stdin, exactly one outcome comes back on stdout, diagnostics are JSON
   Lines on stderr, and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3
   rejected, 4 host failure). Declaration is not permission: capabilities are requested by the manifest
-  and granted under `Plugins:Grants:<id>`, resolved and frozen at each load. A failure carries one of
+  and granted under `Plugins:Grants:<id>`, resolved and frozen at each load; a manifest's `any_granted_host` lets a person
+  grant a host it does not declare, and `*` still means the declared hosts alone. Configuration is `Plugins:Config:<id>`:
+  text only, frozen at each load, handed on stdin and read with `host.config`, a secret of the invocation, never in a
+  package. A failure carries one of
   five classes — `transient` is retried, `permanent`, `validation` and `blocked` are final, and `ambiguous` says the
   provider may already have acted, so it is repeated only where the operation's own contract declares
   that repeating it is safe or that a recovery read makes it safe. An activated load journals
@@ -200,7 +203,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   whose answers they carry, and the standing approvals
   people set: their categories, reactions, goals and limits, the effect, tool and operation a report
   names, the failure text and receipts notification channels reported, entries people and agents wrote
-  themselves, the names actors gave, and the reasons they typed — and it prints a warning; the runtime's
+  themselves, the names actors gave, and the reasons they typed — and it prints a warning; a plugin's configuration under
+  `Plugins:Config` travels under no flag, withheld whole, keys and values; the runtime's
   own report (`system_info`) travels projected, withholding channel detail, presence detail outside the
   runtime's own words, skill problem text and the release-notes URL, and the bundle says so; and before
   anything is written the home directory becomes `~`, a data directory other than `~/.jason` `<data>`

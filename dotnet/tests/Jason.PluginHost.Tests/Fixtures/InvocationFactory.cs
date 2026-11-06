@@ -36,6 +36,9 @@ public sealed class InvocationBuilder
 
     /// <summary>A handler's door to the Runtime API; null for every invocation that is not a handler's.</summary>
     public InvocationDoor? Door { get; set; }
+
+    /// <summary>What the settings say under the plugin's id; null for an invocation of a plugin nobody configured.</summary>
+    public IReadOnlyDictionary<string, string>? Config { get; set; }
 }
 
 /// <summary>A valid invocation envelope for a package on disk, and the smallest package to point it at.</summary>
@@ -67,7 +70,8 @@ public static class InvocationFactory
             builder.Context,
             builder.Grants,
             builder.Limits,
-            builder.Door);
+            builder.Door,
+            builder.Config);
     }
 
     /// <summary>Writes a package that is enough to run: a manifest placeholder, an entry module and its modules.</summary>

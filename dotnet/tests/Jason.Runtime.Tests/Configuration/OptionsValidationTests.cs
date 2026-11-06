@@ -665,6 +665,18 @@ public class OptionsValidationTests
                 return map;
             }
 
+            if (entry == typeof(Dictionary<string, string>))
+            {
+                // A plugin's configuration: a key and its text, and the key of digits a list leaves behind, which has a sentence.
+                map.Clear();
+                map[Next("sentinel{0:D3}-key")] = new Dictionary<string, string>
+                {
+                    [Next("sentinel{0:D3}_name")] = Next("ghp_SENTINEL{0:D3} value"),
+                    [Next("9{0:D8}")] = Next("ghp_SENTINEL{0:D3} value"),
+                };
+                return map;
+            }
+
             if (entry == typeof(int))
             {
                 // A map of numbers, the daily limits: one key shaped like a role's name, one that could never be one.

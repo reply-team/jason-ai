@@ -43,7 +43,7 @@ public sealed class SdkHarness : IDisposable
         Door = Invocation.Door is null ? null : new DoorService(Services, Invocation.Door);
         var defaults = new ExecService(Services);
         var exec = new ExecService(Services) { EndedWithin = endedWithin ?? defaults.EndedWithin, Kill = kill ?? defaults.Kill, Spending = spending };
-        Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new LogService(Services), Door));
+        Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new ConfigService(Services), new LogService(Services), Door));
     }
 
     public Engine Engine { get; }

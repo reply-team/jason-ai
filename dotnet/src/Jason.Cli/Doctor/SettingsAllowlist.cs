@@ -17,8 +17,9 @@ namespace Jason.Cli.Doctor;
 /// The list is made of two kinds of setting. Some are a switch or a word from a closed set — whether the dispatcher
 /// is on, how much the runtime logs, which chronicle kinds summon a manager review — and say how the runtime is set
 /// up. The rest are a number with a size, a count, a time or a port, each named one by one. Everything else a
-/// settings file can hold is a name, an address, a command, a program, a grant or a route's binding, and those are
-/// where a secret typed onto the wrong line ends up, so none of them is ever listed. What is named as never carried
+/// settings file can hold is a name, an address, a command, a program, a grant, a route's binding or a plugin's
+/// configuration, and those are where a secret typed onto the wrong line ends up, so none of them is ever listed; the
+/// last is withheld whole, its keys too. What is named as never carried
 /// is named in the tests, so nobody adds it by accident.
 /// </para>
 /// <para>

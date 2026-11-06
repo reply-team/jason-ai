@@ -212,6 +212,11 @@ public sealed class SettingsAllowlistAgreementTests
                 // The one map of lists is keyed by a journal kind: the order of that kind's subscribers.
                 yield return new Setting($"{child}:workitem_failed[]", typeof(string));
             }
+            else if (propertyType == typeof(Dictionary<string, Dictionary<string, string>>))
+            {
+                // The one map of maps of text is a plugin's configuration, and its keys are the plugin's own.
+                yield return new Setting($"{child}:<id>:url", typeof(string));
+            }
             else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>)
                 && propertyType.GetGenericArguments()[1] == typeof(int))
             {

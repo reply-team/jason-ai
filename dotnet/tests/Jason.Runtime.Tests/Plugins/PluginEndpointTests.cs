@@ -5,6 +5,7 @@ using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Plugins;
 
@@ -12,6 +13,29 @@ namespace Jason.Runtime.Tests.Plugins;
 public class PluginEndpointTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>The listing shows a host beyond the declared ones as every grant is shown, with the word that allowed it beside the capabilities.</summary>
+    [Fact]
+    public async Task The_listing_shows_the_grant_and_the_word_beside_the_capabilities()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                TestPlugins.InstallFakeProvider(paths);
+                var manifest = Path.Combine(paths.PluginsDirectory, TestPlugins.FakeProviderId, "plugin.yaml");
+                File.WriteAllText(manifest, File.ReadAllText(manifest).Replace("    hosts: [\"localhost:5555\"", "    any_granted_host: true\n    hosts: [\"localhost:5555\"", StringComparison.Ordinal));
+                TestPlugins.Grant(paths, TestPlugins.FakeProviderId, http: ["receiver.example.test"]);
+            },
+            configureServices: services => services.AddSingleton(TestPlugins.SearchPath));
+
+        var listed = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
+
+        var capabilities = Assert.Single(listed.Plugins).Capabilities!;
+        Assert.Equal(["receiver.example.test"], capabilities.Http!.Granted);
+        Assert.Equal(["localhost:5555", "127.0.0.1:5555"], capabilities.Http.Requested);
+        Assert.True(capabilities.AnyGrantedHost);
+    }
 
     [Fact]
     public async Task Both_operations_are_mapped_and_answer_the_registry()

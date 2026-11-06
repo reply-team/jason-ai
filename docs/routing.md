@@ -235,7 +235,8 @@ and `api key` are refused exactly as `api_key` is. The published list of fragmen
 is how the question is asked; "reads like a credential" is what it says.
 
 A credential reaches a plugin the way every secret does: through a variable its manifest declares under
-`capabilities.env`, granted by the user and read with `host.env`.
+`capabilities.env`, granted by the user and read with `host.env`, or through what the person wrote under
+`Plugins:Config:<id>`, read with `host.config` (`docs/plugins.md` §6).
 
 The package under [`plugins/reply/`](../plugins/reply/README.md) is the whole handshake in one place. Its
 manifest declares two optional fields, and a campaign somebody routed to it acts as the profile the

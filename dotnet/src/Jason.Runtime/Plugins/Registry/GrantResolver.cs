@@ -9,7 +9,8 @@ namespace Jason.Runtime.Plugins.Registry;
 /// <summary>
 /// What one plugin may actually use: the intersection of what its manifest requested and what the user granted,
 /// frozen at the reload that resolved it. Warnings name grants that asked for something the manifest never
-/// declared — nothing is ever granted that was not declared.
+/// declared — nothing is ever granted that was not declared, but for the one thing a manifest may declare by a word: a
+/// host a person names, where <see cref="HttpRequestSpec.AnyGrantedHost"/> says the manifest cannot know it.
 /// </summary>
 public sealed record ResolvedGrants(
     IReadOnlyList<string> Exec,
@@ -52,7 +53,13 @@ public static class GrantResolver
             : manifest.Capabilities.Exec.Executables.Select(executable => executable.Name).ToList();
 
         var exec = Match("exec", grant.Exec, executables, StringComparer.Ordinal, warnings);
-        var http = Match("http", grant.Http, manifest.Capabilities.Http?.Hosts ?? [], StringComparer.OrdinalIgnoreCase, warnings);
+        var http = Match(
+            "http",
+            grant.Http,
+            manifest.Capabilities.Http?.Hosts ?? [],
+            StringComparer.OrdinalIgnoreCase,
+            warnings,
+            manifest.Capabilities.Http?.AnyGrantedHost == true ? NamedHost : null);
         var env = Match("env", grant.Env, manifest.Capabilities.Env?.Variables ?? [], StringComparer.Ordinal, warnings);
         var api = Match("api", grant.Api, manifest.Capabilities.Api?.Families ?? [], StringComparer.Ordinal, warnings);
         return new ResolvedGrants(exec, http, env, warnings)
@@ -65,14 +72,17 @@ public static class GrantResolver
 
     /// <summary>
     /// Hosts are compared the way hosts are compared, programs, variable names and journal kinds exactly. Whatever matches is
-    /// recorded as the manifest spells it, so everything downstream compares one form.
+    /// recorded as the manifest spells it, so everything downstream compares one form. <paramref name="beyond"/> reads an
+    /// entry the manifest does not name, where it may name more than it declares; a star never reaches it, because a star
+    /// means what was declared.
     /// </summary>
     private static IReadOnlyList<string> Match(
         string capability,
         IReadOnlyList<string> granted,
         IReadOnlyList<string> requested,
         StringComparer comparer,
-        List<ManifestProblem> warnings)
+        List<ManifestProblem> warnings,
+        Func<string, string?>? beyond = null)
     {
         var resolved = new List<string>();
         for (var index = 0; index < granted.Count; index++)
@@ -88,7 +98,7 @@ public static class GrantResolver
                 continue;
             }
 
-            var match = requested.FirstOrDefault(name => comparer.Equals(name, entry));
+            var match = requested.FirstOrDefault(name => comparer.Equals(name, entry)) ?? beyond?.Invoke(entry);
             if (match is null)
             {
                 warnings.Add(new ManifestProblem(
@@ -102,6 +112,13 @@ public static class GrantResolver
         }
 
         return resolved;
+    }
+
+    /// <summary>An entry as a host, in the one form a manifest would write it, or nothing where no manifest could write it.</summary>
+    private static string? NamedHost(string entry)
+    {
+        var host = entry.ToLowerInvariant();
+        return ManifestRules.IsAllowedHost(host) ? host : null;
     }
 
     private static void Include(List<string> resolved, string name)
