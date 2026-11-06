@@ -93,6 +93,36 @@ public sealed class SettingsAllowlistAgreementTests
         Assert.DoesNotContain("SENTINEL", shape, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A map the walk has no branch for is red. Without this it passes in silence: a map of numbers or of texts yields no leaf, and a
+    /// map of maps yields only its indexer, so none of its settings is ever held to the list.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(MapOfFlags))]
+    [InlineData(typeof(MapOfTexts))]
+    [InlineData(typeof(MapOfMaps))]
+    public void A_map_the_walk_has_no_branch_for_is_red(Type options)
+    {
+        var refused = Assert.Throws<InvalidOperationException>(() => Walk(options, "Section", []).ToList());
+
+        Assert.Contains("Section:Map", refused.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class MapOfFlags
+    {
+        public Dictionary<string, bool> Map { get; set; } = [];
+    }
+
+    private sealed class MapOfTexts
+    {
+        public Dictionary<string, string> Map { get; set; } = [];
+    }
+
+    private sealed class MapOfMaps
+    {
+        public Dictionary<string, Dictionary<string, string>> Map { get; set; } = [];
+    }
+
     /// <summary>Every setting there is, by walking the option classes: a section's settings, down through the classes inside it.</summary>
     private static IEnumerable<Setting> Settings()
     {
@@ -117,7 +147,7 @@ public sealed class SettingsAllowlistAgreementTests
 
         foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (property.SetMethod is null)
+            if (property.SetMethod is null || property.GetIndexParameters().Length > 0)
             {
                 continue;
             }
@@ -159,7 +189,13 @@ public sealed class SettingsAllowlistAgreementTests
             {
                 // The one map keyed by an operation is the routes'; the others are keyed by a plugin's id.
                 var key = property.Name == nameof(RoutesOptions.Operations) ? OperationCatalog.All[0].Id : "<id>";
-                foreach (var setting in Walk(propertyType.GetGenericArguments()[1], $"{child}:{key}", [.. chain, type]))
+                var leaves = Walk(propertyType.GetGenericArguments()[1], $"{child}:{key}", [.. chain, type]).ToList();
+                if (leaves.Count == 0)
+                {
+                    throw new InvalidOperationException($"{child} is a map the walk has no branch for, so no setting of it is held to the list.");
+                }
+
+                foreach (var setting in leaves)
                 {
                     yield return setting;
                 }
