@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli;
+using Jason.Cli.Human;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 
@@ -92,7 +93,8 @@ public class SubscriptionCommandsTests
                     "jrn_01K7QN0000000000000000000C",
                     2,
                     ["crm-mirror"],
-                    new SubscriptionInFlightDto("sbr_01K7QN0000000000000000000A", "jrn_01K7QN0000000000000000000B", Noon, null)),
+                    new SubscriptionInFlightDto("sbr_01K7QN0000000000000000000A", "jrn_01K7QN0000000000000000000B", Noon, null),
+                    null),
             ],
             null);
         using var cli = new CliRun(JsonSerializer.Serialize(page, JasonJson.Options));
@@ -132,7 +134,7 @@ public class SubscriptionCommandsTests
     [Fact]
     public async Task Human_mode_renders_a_rewound_kind()
     {
-        var kind = new SubscriptionKindDto("campaign_created", ["journal-forwarder"], null, "jrn_01K7QN0000000000000000000C", 3, [], null);
+        var kind = new SubscriptionKindDto("campaign_created", ["journal-forwarder"], null, "jrn_01K7QN0000000000000000000C", 3, [], null, null);
         using var cli = new CliRun(JsonSerializer.Serialize(kind, JasonJson.Options));
 
         var exit = await cli.RunAsync("--actor", "human:marta", "subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-18T00:00:00Z", "--human");
@@ -141,5 +143,22 @@ public class SubscriptionCommandsTests
         Assert.Contains("Lag:", cli.Text, StringComparison.Ordinal);
         Assert.Contains("jrn_01K7QN0000000000000000000C", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A kind at rest says so in both human views, by the moment, and a kind that does not rest shows nothing there.</summary>
+    [Fact]
+    public async Task Human_mode_says_until_when_a_kind_rests()
+    {
+        var kind = new SubscriptionKindDto("campaign_created", ["journal-forwarder"], null, "jrn_01K7QN0000000000000000000C", 3, [], null, Noon.AddSeconds(30));
+        using var cli = new CliRun(JsonSerializer.Serialize(new Page<SubscriptionKindDto>([kind], null), JasonJson.Options));
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("subscription", "list", "--human"));
+
+        Assert.Contains("RESTS UNTIL", cli.Text, StringComparison.Ordinal);
+        Assert.Contains(RenderText.Moment(Noon.AddSeconds(30)), cli.Text, StringComparison.Ordinal);
+
+        using var rewound = new CliRun(JsonSerializer.Serialize(kind, JasonJson.Options));
+        await rewound.RunAsync("--actor", "human:marta", "subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-18T00:00:00Z", "--human");
+        Assert.Contains("Rests until:", rewound.Text, StringComparison.Ordinal);
     }
 }

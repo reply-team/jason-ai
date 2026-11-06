@@ -677,6 +677,15 @@ public class OptionsValidationTests
                 return map;
             }
 
+            if (entry == typeof(int))
+            {
+                // A map of numbers, the daily limits: one key shaped like a role's name, one that could never be one.
+                map.Clear();
+                map[Next("sentinel{0:D3}-key")] = Number;
+                map[Next("SENTINEL{0:D3} KEY")] = Number;
+                return map;
+            }
+
             if (!IsOptionClass(entry))
             {
                 throw new InvalidOperationException($"A map of {entry.Name} is not one this test fills.");

@@ -49,7 +49,8 @@ internal static class SafeBinding
     /// <remarks>
     /// The binder does not refuse everything it cannot read. A switch, a number or a word written as an object or a list
     /// is passed over, and the setting keeps its default; an entry of a map that holds a value of the wrong type — a
-    /// channel's switch written as text, text where a whole entry belongs — is left out of the map; an item of a list
+    /// channel's switch written as text, text where a whole entry belongs — is left out of the map, and one the map
+    /// already held keeps what the map started with; an item of a list
     /// that it cannot make — an object or a list where a word belongs — is left out of the list, and the items after it
     /// move up into its place; and text where a whole map, list or object belongs is passed over, leaving everything
     /// under it at its default. The binder goes on as though none of it had been written. So the section is compared
@@ -159,7 +160,7 @@ internal static class SafeBinding
                 foreach (var entry in section.GetChildren())
                 {
                     var held = map is not null && map.Contains(entry.Key);
-                    if (compare && !held)
+                    if (compare && (!held || Unreadable(entry, entryType)))
                     {
                         failures.Add(Unmade(entry, entryType, installed()));
                         continue;
@@ -226,6 +227,30 @@ internal static class SafeBinding
         catch (InvalidOperationException binder)
         {
             return SettingsFailure.Read(binder, installed()) ?? $"{SettingKey.ShownPath(item.Path, installed())} could not be read as {expected}.";
+        }
+    }
+
+    /// <summary>
+    /// Whether an entry the map already held was written with a value the binder cannot read. Left out of a map that
+    /// starts with that key, it looks like an entry the file kept: the map's own default stands in for what the file got
+    /// wrong, and only reading the entry on its own tells them apart.
+    /// </summary>
+    private static bool Unreadable(IConfigurationSection entry, Type entryType)
+    {
+        if (!IsText(entryType))
+        {
+            return false;
+        }
+
+        try
+        {
+            entry.Get(entryType);
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            // Unmade asks again and says why; the exception goes no further than this answer.
+            return true;
         }
     }
 

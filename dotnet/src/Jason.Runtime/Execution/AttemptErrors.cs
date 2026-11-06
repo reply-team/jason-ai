@@ -100,11 +100,20 @@ public static class AttemptErrors
     public const string ProviderBlocked = "provider_blocked";
 
     /// <summary>
-    /// Responder work in the item's campaign has started as many runs since 00:00Z as <c>Responder:MaxLaunchesPerDay</c>
-    /// allows. Not a refusal of the work: the claim holds the responder, with no attempt, until the next 00:00Z, and a
-    /// person's <c>workitem.resume</c> lets it go sooner. Only that hold writes this code.
+    /// Work of a role in the item's campaign has started as many runs since 00:00Z as <c>Launches:MaxPerDay:&lt;role&gt;</c>
+    /// allows. Not a refusal of the work: the claim holds the item, with no attempt, until the next 00:00Z, and a person's
+    /// <c>workitem.resume</c> lets it go sooner. Only that hold writes this code.
+    /// </summary>
+    public const string LaunchesSpent = "launches_spent";
+
+    /// <summary>
+    /// The code of the same hold as 0.30.0 wrote it, for a responder. Nothing writes it now; an item held under it still
+    /// carries it, and the claim reads it as the hold it is.
     /// </summary>
     public const string ResponderLaunchesSpent = "responder_launches_spent";
+
+    /// <summary>Whether a code is a hold at a daily limit, under either word.</summary>
+    public static bool IsDailyHold(string? code) => code is LaunchesSpent or ResponderLaunchesSpent;
 
     /// <summary>The operation acts on somebody and the work item names nobody.</summary>
     public const string ContactRequired = "contact_required";

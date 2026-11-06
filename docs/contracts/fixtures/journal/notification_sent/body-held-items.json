@@ -1,0 +1,20 @@
+{
+  "kind": "notification_sent",
+  "version": 1,
+  "case": "a notification that counted the items waiting on a daily limit of launches",
+  "body": {
+    "key": "notification",
+    "old": null,
+    "new": {
+      "notification_id": "ntf_01JC000000000000000000000C",
+      "counts": { "approvals": 0, "decisions": 0, "protective_failures": 0, "event_gaps": 0, "blocks": 0, "held": 3 },
+      "covered_through": "jrn_01JC000000000000000000000D",
+      "channels": [
+        { "channel": "desktop", "kind": "toast", "outcome": "delivered", "attempts": 1 }
+      ],
+      "last_delivered_at": "2026-11-05T09:15:02.418Z",
+      "delivered_through": "jrn_01JC000000000000000000000D"
+    }
+  },
+  "expect": "valid"
+}

@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Jason.Contracts.Api;
 
 namespace Jason.Contracts.Configuration;
 
@@ -18,7 +19,7 @@ public static class SettingsVocabulary
     public static IReadOnlySet<string> Names { get; } = new[]
     {
         // The sections.
-        "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound", "Responder", "Harness",
+        "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound", "Responder", "Launches", "Harness",
         "Subscriptions",
 
         // Runtime and Logging.
@@ -61,7 +62,10 @@ public static class SettingsVocabulary
         "SyncSeconds", "LookbackSeconds",
 
         // Responder; Priority, TimeoutSeconds and MaxAttempts are above.
-        "OnReply", "MaxAgeSeconds", "MaxLaunchesPerDay",
+        "OnReply", "MaxAgeSeconds",
+
+        // Launches: the daily limits, under a key that is a role; the roles Jason ships are joined below.
+        "MaxPerDay",
 
         // Harness.
         "Root",
@@ -70,7 +74,7 @@ public static class SettingsVocabulary
         // their chains works to; its MaxParallel is above. Subscriptions also names a grant's list of kinds, a section
         // above.
         "Order", "RunRecordsPerKind", "EnvelopeBytes", "TransientRetries", "RetryBackoffSeconds",
-    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+    }.Concat(ShippedRoles.Names).ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The whole path of each setting that is a list, with <c>*</c> for the one key of a map that stands in the path (a

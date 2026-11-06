@@ -47,7 +47,9 @@ public sealed class SettingsAllowlistTests
         "Plugins:Invoker:VersionCheckTimeoutMs", "Plugins:Invoker:LogLineBytes",
         "Inbound:SyncSeconds", "Inbound:LookbackSeconds",
         "Responder:Priority", "Responder:TimeoutSeconds", "Responder:MaxAttempts", "Responder:MaxAgeSeconds",
-        "Responder:MaxLaunchesPerDay",
+        "Launches:MaxPerDay:manager", "Launches:MaxPerDay:planner", "Launches:MaxPerDay:researcher", "Launches:MaxPerDay:copywriter",
+        "Launches:MaxPerDay:personalizer", "Launches:MaxPerDay:critic", "Launches:MaxPerDay:responder", "Launches:MaxPerDay:analyst",
+        "Launches:MaxPerDay:deliverability-specialist",
         "Subscriptions:RunRecordsPerKind", "Subscriptions:EnvelopeBytes", "Subscriptions:TransientRetries",
         "Subscriptions:RetryBackoffSeconds", "Subscriptions:MaxParallel",
     ];
@@ -63,6 +65,7 @@ public sealed class SettingsAllowlistTests
         "Routes:Operations:campaign.list:Plugin", "Routes:Operations:campaign.list:Binding:MaxCalls",
         "Notifications:Plugins:fake-provider:Binding", "Notifications:Plugins:fake-provider:Binding:Enabled",
         "Notifications:Plugins:fake-provider:Binding:Port",
+        "Responder:MaxLaunchesPerDay", "Launches:MaxPerDay:a-role-of-their-own", "Launches:MaxPerDay:<key>",
     ];
 
     /// <summary>What the parser makes of a piece of JSON, which for the literal <c>null</c> is no node at all.</summary>

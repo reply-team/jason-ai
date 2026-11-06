@@ -1,0 +1,17 @@
+{
+  "kind": "workitem_waiting",
+  "version": 1,
+  "case": "the claim held any role at its campaign's daily limit for that role, with no attempt of its own, until the next 00:00Z, and the line names the role",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": {
+      "on": [],
+      "mode": null,
+      "until": "2026-10-07T00:00:00.000Z",
+      "deadline": "2026-10-07T00:00:00.000Z",
+      "held_by": { "code": "launches_spent", "limit": 10, "role": "planner" }
+    }
+  },
+  "expect": "valid"
+}

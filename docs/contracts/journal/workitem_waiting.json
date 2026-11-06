@@ -11,7 +11,7 @@
     "contact": { "at": "/contact_id", "presence": "sometimes" },
     "provider_block": { "at": "/new/blocked_by/provider_block_id", "presence": "sometimes" }
   },
-  "field_since": { "/new/held_by": "0.30.0" },
+  "field_since": { "/new/held_by": "0.30.0", "/new/held_by/role": "0.31.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -46,12 +46,13 @@
           },
           "held_by": {
             "type": "object",
-            "description": "The limit the claim held it at, with no attempt of its own, until the moment the limit lets it go: the code its last error carries, and the number in force when it was held.",
+            "description": "The limit the claim held it at, with no attempt of its own, until the moment the limit lets it go: the code its last error carries, the number in force when it was held, and, since 0.31.0, the role it held.",
             "additionalProperties": false,
             "required": ["code", "limit"],
             "properties": {
-              "code": { "enum": ["responder_launches_spent"] },
-              "limit": { "type": "integer", "minimum": 1 }
+              "code": { "enum": ["responder_launches_spent", "launches_spent"] },
+              "limit": { "type": "integer", "minimum": 1 },
+              "role": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" }
             }
           }
         }

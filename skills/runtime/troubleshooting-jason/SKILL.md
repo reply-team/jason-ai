@@ -2,7 +2,7 @@
 name: troubleshooting-jason
 description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the twelve states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Troubleshooting Jason
@@ -12,8 +12,8 @@ told: waiting for a moment that has not arrived, waiting for a person who has no
 it cannot route. This skill is how to tell those apart from a genuine failure, and how to name the one repair
 that is safe rather than the first one that comes to mind.
 
-**Status: verified** against Claude Code 2.1.318. It covers what this build records and
-nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do. It covers what this build records and nothing else.
 
 ## Look here first, in this order
 
@@ -304,6 +304,17 @@ jason --actor human:ada block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the
 A clear is their word that the cause is gone, not a mute, and where the provider still refuses, the next call opens a
 new block. Do not cancel, recreate or resume a parked item: the block releases it by itself, and the same work, asked
 again or resumed, parks on the same block.
+
+**A budget hold is the claim's own wait, and no run stands behind it.** `Launches:MaxPerDay:<role>` limits how many runs of
+a role one campaign starts in a UTC day, and the item that would start one more is held, not failed, before any attempt.
+It reads as this same `waiting` state: its wait is the next 00:00Z, its `last_error` is `launches_spent`, whose message
+names the setting, and its `workitem_waiting` line in the chronicle says `held_by` with the code, the limit and the role.
+A notification counts it among the items that wait on a budget, and the campaign's other work goes on. There are three ways
+out: at 00:00Z the runtime releases the item by itself and counts the new day, so a day already spent by then holds it
+again; a person resumes that one item under their name, as above, and it goes past the limit with its run counted like any
+other; or a person raises the setting, which applies from the next scan to work not yet held, while an item already held
+keeps its moment. It keeps its due date and expires by it like any waiting item. Do not cancel or recreate it: it is not
+stuck, and the same work asked again counts against the same day.
 
 ### 12. A capability the provider does not offer yet
 

@@ -50,6 +50,16 @@ public sealed partial class SubscriptionProblemCodesDocTests
         .Where(field => field.IsLiteral && field.FieldType == typeof(string))
         .Select(field => (string)field.GetRawConstantValue()!);
 
+    /// <summary>A rest is read on two pages, and each says a restart forgets it and that it is not a handler's retry.</summary>
+    [Theory]
+    [InlineData("docs/plugins.md", "The wait is kept in memory, so `rest_until` is null after a restart, which offers the kind at once, and it is not `in_flight.retry_at`, which is a handler's own retry within a chain.")]
+    [InlineData("docs/runtime-api.md", "That is not `in_flight.retry_at`, a handler's own retry within a chain, and a restart forgets a rest, so `rest_until` is null after one.")]
+    public void The_pages_keep_a_kind_s_rest_apart_from_a_handler_s_retry(string page, string sentence) =>
+        Assert.Contains(sentence, Whitespace().Replace(Source(page), " "), StringComparison.Ordinal);
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
+
     /// <summary>The section, from its heading to the next heading of the same level.</summary>
     private static string Section()
     {

@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using Jason.Cli.Doctor;
+using Jason.Contracts.Api;
+using Jason.Contracts.Configuration;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 
@@ -92,6 +94,55 @@ public sealed class SettingsAllowlistAgreementTests
         Assert.DoesNotContain("SENTINEL", shape, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A word at every text and every list item the runtime reads: no word leaves a leaf the list does not name. Twice over.
+    /// A word nobody would choose, which no leaf may carry whatever the list says, since the list holds a text only to
+    /// the closed set its setting reads. And, at every such leaf at once, a word each kind of the closed sets accepts: of
+    /// the leaves that carry it, none is one the list names for another kind, so a widening that reaches a leaf the
+    /// runtime reads, or one kind passed off as another, is seen.
+    /// </summary>
+    [Fact]
+    public void Of_a_word_at_every_text_and_list_item_the_runtime_reads_only_the_leaves_the_list_names_are_carried()
+    {
+        var leaves = Settings().Where(setting => setting.Type == typeof(string)).Select(setting => setting.Path).ToList();
+        Assert.NotEmpty(leaves);
+
+        // The leaves the list names for each closed set, from the list's own published lines.
+        HashSet<string> NamedFor(string kind) => SettingsAllowlist.Default.Published
+            .Where(line => line.Contains($"({kind}", StringComparison.Ordinal))
+            .Select(line => line[..line.IndexOf(" (", StringComparison.Ordinal)])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var namedFor = new Dictionary<string, HashSet<string>>
+        {
+            ["debug"] = NamedFor("one of "),
+            [ManagerTriggerKinds.All.First()] = NamedFor("a kind "),
+        };
+        Assert.All(namedFor.Values, Assert.NotEmpty);
+
+        var unchosen = new JsonObject();
+        for (var index = 0; index < leaves.Count; index++)
+        {
+            Place(unchosen, leaves[index], JsonValue.Create($"SENTINEL-{index}")!);
+        }
+
+        var unchosenShape = ConfigShape.Describe(unchosen.ToJsonString(), SettingsAllowlist.Default, Installed, out var carriedUnchosen);
+        Assert.Empty(carriedUnchosen);
+        Assert.DoesNotContain("SENTINEL", unchosenShape.ToJsonString(), StringComparison.Ordinal);
+
+        foreach (var (word, named) in namedFor)
+        {
+            var chosen = new JsonObject();
+            foreach (var leaf in leaves)
+            {
+                Place(chosen, leaf, JsonValue.Create(word)!);
+            }
+
+            ConfigShape.Describe(chosen.ToJsonString(), SettingsAllowlist.Default, Installed, out var carried);
+            var strays = carried.Where(path => !named.Contains(path)).ToList();
+            Assert.True(strays.Count == 0, $"'{word}' was carried at {string.Join(", ", strays)}, which the list does not name for it.");
+        }
+    }
+
     /// <summary>Every setting there is, by walking the option classes: a section's settings, down through the classes inside it.</summary>
     private static IEnumerable<Setting> Settings()
     {
@@ -107,11 +158,6 @@ public sealed class SettingsAllowlistAgreementTests
         }
     }
 
-    private sealed class MapOfNumbers
-    {
-        public Dictionary<string, int> Map { get; set; } = [];
-    }
-
     private sealed class MapOfText
     {
         public Dictionary<string, string> Map { get; set; } = [];
@@ -124,7 +170,6 @@ public sealed class SettingsAllowlistAgreementTests
 
     /// <summary>A map the walk has no branch for goes red here rather than passing with nothing to judge.</summary>
     [Theory]
-    [InlineData(typeof(MapOfNumbers))]
     [InlineData(typeof(MapOfText))]
     [InlineData(typeof(MapOfMapsOfNumbers))]
     public void A_map_with_no_branch_in_the_walk_is_refused_rather_than_passed_over(Type options)
@@ -171,6 +216,19 @@ public sealed class SettingsAllowlistAgreementTests
             {
                 // The one map of maps of text is a plugin's configuration, and its keys are the plugin's own.
                 yield return new Setting($"{child}:<id>:url", typeof(string));
+            }
+            else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>)
+                && propertyType.GetGenericArguments()[1] == typeof(int))
+            {
+                // The one map of numbers is keyed by a role. A shipped role's number travels; a person's own role is not on
+                // the list, so the sentinel written under one has to stay behind.
+                // A second map of numbers would be read as keyed by a role too, and the guard would not see it: it yields leaves.
+                foreach (var role in ShippedRoles.Names)
+                {
+                    yield return new Setting($"{child}:{role}", typeof(int));
+                }
+
+                yield return new Setting($"{child}:a-role-of-their-own", typeof(int));
             }
             else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {

@@ -21,7 +21,7 @@ namespace Jason.Runtime.Plugins.Subscriptions;
 /// A rewind bumps the cursor's revision, so a chain in flight for the kind ends superseded at its end's guarded update,
 /// and the next scan offers the kind from where the rewind put it.
 /// </remarks>
-public sealed partial class SubscriptionService(JasonDbContext db, JournalWriter journal, PluginRegistry plugins, TimeProvider clock)
+public sealed partial class SubscriptionService(JasonDbContext db, JournalWriter journal, PluginRegistry plugins, SubscriptionRunner runner, TimeProvider clock)
 {
     /// <summary>The longest reason a rewind keeps, as the journal keeps a reason elsewhere.</summary>
     public const int MaxReasonLength = 2000;
@@ -190,7 +190,8 @@ public sealed partial class SubscriptionService(JasonDbContext db, JournalWriter
                     running.PublicId,
                     running.LinePublicId,
                     ContactMapper.ToOffset(running.StartedAt),
-                    running.RetryAt is { } retry ? ContactMapper.ToOffset(retry) : null));
+                    running.RetryAt is { } retry ? ContactMapper.ToOffset(retry) : null),
+            runner.RestUntil(cursor.Kind));
     }
 
     /// <summary>The public id of the journal line a cursor stands after; null at the journal's start.</summary>
