@@ -481,6 +481,27 @@ public class ProtocolFailureTests
         Assert.Equal("José 😀", (string?)JsonNode.Parse(wire)!["input"]!["note"]);
     }
 
+    /// <summary>
+    /// The envelope as it crossed: the key is there for a plugin a person configured and absent for one nobody did, so a
+    /// plugin that has nothing is told nothing rather than an empty map.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_envelope_has_a_config_key_only_for_a_plugin_a_person_configured(bool configured)
+    {
+        using var directory = new TempTree();
+        var said = Path.Combine(directory.Root, "codepoints.txt");
+        await using var api = await StartAsync(
+            Child("stdin-codepoints", said),
+            configured ? PluginInvokerTests.Configured(new JsonObject { ["url"] = "https://receiver.example.test/in" }) : null);
+
+        await InvokeAsync(api);
+
+        var envelope = JsonNode.Parse(FakeProviderCli.FromCodepoints(await File.ReadAllTextAsync(said, Ct)))!.AsObject();
+        Assert.Equal(configured, envelope.ContainsKey("config"));
+    }
+
     /// <summary>The stand-in vendor CLI, which ignores the protocol arguments the invoker appends to its own.</summary>
     private static CommandLocator Child(params string[] behaviour) =>
         new(["dotnet", FakeProviderCli.Dll, .. behaviour]);
