@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Jason.Contracts.Api;
 
 namespace Jason.Contracts.Plugins;
@@ -27,10 +28,14 @@ public sealed record ListCapabilityDto(IReadOnlyList<string> Requested, IReadOnl
 /// <summary>
 /// Requested against granted, for every capability: declaration is not permission, and it shows. <c>Subscriptions</c> is
 /// the journal kinds the manifest declares against the kinds the settings grant, null when it declares none.
+/// <c>AnyGrantedHost</c> is true where the manifest lets a person grant a host it does not declare, and absent otherwise.
 /// </summary>
 public sealed record PluginCapabilitiesDto(ExecCapabilityDto? Exec, ListCapabilityDto? Http, ListCapabilityDto? Env, ListCapabilityDto? Api = null)
 {
     public ListCapabilityDto? Subscriptions { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? AnyGrantedHost { get; init; }
 }
 
 /// <summary>

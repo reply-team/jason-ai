@@ -75,6 +75,61 @@ public class GrantResolverTests
         Assert.Equal("grants.http[0]", warning.Path);
     }
 
+    /// <summary>The word lets a person name a host the manifest could not know. It names no host itself, and the star stays the declared ones.</summary>
+    private static readonly CapabilityRequests AnyHost = new(null, new HttpRequestSpec(["api.example.test"], AnyGrantedHost: true), null);
+
+    [Fact]
+    [Critical(Family.R5, "a host beyond the declared ones takes the manifest's word and a person's grant")]
+    public void With_the_word_a_host_a_person_names_is_honoured_as_a_host_is_compared()
+    {
+        var grants = GrantResolver.Resolve(Manifest(AnyHost), new PluginGrant { Http = ["receiver.example.test", "127.0.0.1:9123", "API.Example.Test", "Other.Example.Test"] });
+
+        Assert.Equal(["receiver.example.test", "127.0.0.1:9123", "api.example.test", "other.example.test"], grants.Http);
+        Assert.Empty(grants.Warnings);
+    }
+
+    [Fact]
+    public void With_the_word_the_star_still_means_the_declared_hosts_alone()
+    {
+        var grants = GrantResolver.Resolve(Manifest(AnyHost), new PluginGrant { Http = ["*"] });
+
+        Assert.Equal(["api.example.test"], grants.Http);
+        Assert.Empty(grants.Warnings);
+    }
+
+    [Fact]
+    public void With_the_word_and_no_grant_nothing_is_granted()
+    {
+        Assert.Empty(GrantResolver.Resolve(Manifest(AnyHost), new PluginGrant()).Http);
+        Assert.Equal(ResolvedGrants.None, GrantResolver.Resolve(Manifest(AnyHost), null));
+    }
+
+    /// <summary>The word opens hosts, not patterns: what no manifest could declare, no grant can name.</summary>
+    [Theory]
+    [InlineData("*.example.test")]
+    [InlineData("https://receiver.example.test")]
+    [InlineData("receiver.example.test:99999")]
+    [InlineData("receiver.example.test/in")]
+    public void With_the_word_what_is_no_host_grants_nothing_and_says_so(string entry)
+    {
+        var grants = GrantResolver.Resolve(Manifest(AnyHost), new PluginGrant { Http = [entry] });
+
+        Assert.Empty(grants.Http);
+        Assert.Equal(ProblemCodes.GrantUnrequested, Assert.Single(grants.Warnings).Code);
+    }
+
+    [Fact]
+    public void The_word_opens_hosts_alone()
+    {
+        var capabilities = new CapabilityRequests(Requested.Exec, new HttpRequestSpec(["api.example.test"], AnyGrantedHost: true), Requested.Env);
+
+        var grants = GrantResolver.Resolve(Manifest(capabilities), new PluginGrant { Exec = ["curl"], Env = ["OTHER_TOKEN"] });
+
+        Assert.Empty(grants.Exec);
+        Assert.Empty(grants.Env);
+        Assert.Equal(2, grants.Warnings.Count);
+    }
+
     [Fact]
     [Critical(Family.R5, "declaration then grant")]
     public void A_capability_the_manifest_never_requested_cannot_be_granted_at_all()

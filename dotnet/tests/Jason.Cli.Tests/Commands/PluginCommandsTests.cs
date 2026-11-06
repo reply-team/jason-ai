@@ -103,6 +103,33 @@ public class PluginCommandsTests
         Assert.Contains("exec - | http - | env - | subscriptions 1/1", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>A grant beyond the declared hosts counts as every grant does, and the word that allows it stands beside the counts.</summary>
+    [Fact]
+    public async Task Human_mode_says_the_word_beside_the_capabilities()
+    {
+        var registry = TwoPlugins();
+        var forwarder = registry.Plugins[1] with
+        {
+            Capabilities = new PluginCapabilitiesDto(null, new ListCapabilityDto(["127.0.0.1:9123"], ["receiver.example.test", "127.0.0.1:9123"]), null)
+            {
+                AnyGrantedHost = true,
+            },
+        };
+        using var cli = new CliRun(JsonSerializer.Serialize(registry with { Plugins = [forwarder] }, JasonJson.Options));
+
+        await cli.RunAsync("plugin", "list", "--human");
+
+        Assert.Contains("exec - | http 2/1 | env - | subscriptions - | any_granted_host", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_package_without_the_word_keeps_the_answer_it_always_had()
+    {
+        var answer = JsonSerializer.Serialize(new PluginCapabilitiesDto(null, null, null), JasonJson.Options);
+
+        Assert.DoesNotContain("any_granted_host", answer, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_mode_counts_the_api_families_granted_against_those_requested()
     {
