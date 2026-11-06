@@ -280,7 +280,7 @@ function campaignGet(input, context) {
   const asked = campaignOf(input);
   if (typeof asked === "string" && asked.startsWith("configuration:")) {
     const quoted = host.config(asked.slice("configuration:".length));
-    throw host.fail({ class: "permanent", code: "campaign_not_found", message: "no campaign for " + quoted, details: { asked: quoted } });
+    fail("campaign.get", "campaign_not_found", { message: "no campaign for " + quoted, details: { asked: quoted } });
   }
 
   const answer = cli("campaign.get", context, ["campaign", "get"], { external_id: campaignOf(input) });
