@@ -40,6 +40,26 @@ namespace Jason.Cli.Doctor;
 /// </remarks>
 public static partial class ConfigShape
 {
+    /// <summary>The field a bundle writes in place of what it withholds whole.</summary>
+    public const string WithheldField = "withheld";
+
+    /// <summary>What that field says of a plugin's configuration.</summary>
+    public const string PluginConfiguration = "plugin_configuration";
+
+    /// <summary>The section a plugin's configuration lives in: what is under it is the plugin's, and all of it stays home.</summary>
+    private const string ConfigSection = "Plugins:Config";
+
+    /// <summary>
+    /// Whether a path is the section of a plugin's configuration or inside it, spelled in any case, as configuration keys
+    /// are matched. Read from the keys as written, since a key may itself hold colons and spell the whole path.
+    /// </summary>
+    public static bool IsPluginConfiguration(string path) =>
+        path.Equals(ConfigSection, StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith(ConfigSection + ":", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>All a bundle says of that section: that it is withheld. No type, no count, no length and no key.</summary>
+    public static JsonObject WithheldPluginConfiguration() => new() { [WithheldField] = PluginConfiguration };
+
     /// <summary>The most keys an object may have for them to be printed: more is a map somebody filled, not a record.</summary>
     private const int MaxKeys = 60;
 
@@ -217,6 +237,16 @@ public static partial class ConfigShape
                 if (!seen.Add(name))
                 {
                     duplicates++;
+                    continue;
+                }
+
+                // The section stays home whole, however it was spelled. Only its own name is printed: a key that goes
+                // on past it spells a plugin or a key of one, and those are the person's.
+                var written = Join(path, name);
+                if (IsPluginConfiguration(written))
+                {
+                    var section = written.Equals(ConfigSection, StringComparison.OrdinalIgnoreCase) && MayTravel(path, name);
+                    members[section ? name : KeyPlaceholder.For(++hidden)] = WithheldPluginConfiguration();
                     continue;
                 }
 

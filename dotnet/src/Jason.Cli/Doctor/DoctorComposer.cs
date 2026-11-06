@@ -368,6 +368,7 @@ public static partial class DoctorComposer
         "the directory the executable is in, outside the home directory and the package managers' prefixes: it is written as " + IdentityRewriter.MarkWords["install_dir_written_as"],
         "a skill source given with --source other than the public repository's own address — a fork's address or a folder — wherever it stands, and the ref it was taken at, unless that is a release tag, where a fact quotes a deployment: each is written as " + IdentityRewriter.MarkWords["skill_source_written_as"],
         "any setting or JASON_* value off the list",
+        "a plugin's configuration under Plugins:Config: the section is withheld whole, keys and values, in the settings file and in a JASON_* variable",
         "journal values unless --include-journal: " + JournalCarries,
     ];
 
@@ -1300,6 +1301,7 @@ public static partial class DoctorComposer
     /// setting is on the list with a value of its kind. A variable is text, so a value is judged as the JSON literal it
     /// spells: <c>4</c> is a number and <c>true</c> a switch, as the configuration binder reads them, and anything else is
     /// a string. One item of a list is recorded as the list's path and <c>[]</c>, as the allowlist publishes it.
+    /// A variable inside a plugin's configuration has neither: its name and that it is withheld.
     /// </summary>
     private static VariableRead Variable(string name, string value, SettingsAllowlist list, IReadOnlySet<string> installed)
     {
@@ -1315,6 +1317,16 @@ public static partial class DoctorComposer
             var parts = VariableSeparator().Split(name[VariablePrefix.Length..]);
             var keys = parts.Where((_, at) => at % 2 == 0).ToArray();
             var path = string.Join(':', keys);
+            if (ConfigShape.IsPluginConfiguration(path))
+            {
+                // The two keys of the section as typed, the separators too, and a mark for every key after them.
+                var marked = string.Concat(parts.Select((part, at) => at % 2 == 1 || at / 2 < 2 ? part : SettingKey.Hidden));
+                var withheld = name[..VariablePrefix.Length] + marked;
+                var section = ConfigShape.WithheldPluginConfiguration();
+                section["name"] = withheld;
+                return new VariableRead(withheld, section, null);
+            }
+
             var shownKeys = SettingKey.ShownPath(path, installed).Split(':');
             shown = name[..VariablePrefix.Length] + string.Concat(parts.Select((part, at) => at % 2 == 0 ? shownKeys[at / 2] : part));
             if (shownKeys.SequenceEqual(keys, StringComparer.Ordinal) && list.Carries(path, Literal(value)))

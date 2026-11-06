@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
@@ -188,6 +190,30 @@ public class PluginInvokerTests
         {
             Assert.DoesNotContain(value, await File.ReadAllTextAsync(file, Ct), StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// Everything the runtime says of a configured plugin leaves the value out: what it lists, what it journals of the load
+    /// and what it records of an invocation, whose result here is the plugin's own to carry.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S3, "a configuration value reaches no record")]
+    public async Task A_configuration_value_reaches_no_listing_journal_line_or_provenance()
+    {
+        var value = "config-" + Guid.NewGuid().ToString("N");
+        await using var api = await StartAsync(settings: Configured(new JsonObject { ["token"] = value }));
+
+        var read = await InvokeAsync(api, Request("config.read", new JsonObject { ["key"] = "token" }), Ct);
+        var (_, listed) = await api.PostAsync(Operations.PluginList, null, Ct);
+        var (_, lines) = await api.PostAsync(Operations.JournalList, new { limit = 200 }, Ct);
+
+        Assert.Equal(value, Assert.IsType<InvocationOutcome.Succeeded>(read.Outcome).Result!["value"]!.GetValue<string>());
+        Assert.DoesNotContain(value, listed, StringComparison.Ordinal);
+        Assert.Contains("plugins_reloaded", lines, StringComparison.Ordinal);
+        Assert.DoesNotContain(value, lines, StringComparison.Ordinal);
+        Assert.DoesNotContain(value, JsonSerializer.Serialize(read.Provenance, JasonJson.Options), StringComparison.Ordinal);
+        Assert.DoesNotContain(value, read.Provenance.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(value, api.Resolve<PluginRegistry>().Snapshot.Plugins.Single().ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>A reload is what hands a plugin an edited value, as it is for a grant; until then the snapshot keeps the one it froze.</summary>

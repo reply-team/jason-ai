@@ -36,6 +36,6 @@
     "Answers notification_unreachable for a service that did not answer or is unavailable for now, so the runtime tries once more.",
     "Answers notification_refused or notification_unauthorized for an answer that will not change by trying again.",
     "Returns at most a receipt: the service's own identifier for the message, at most 256 characters.",
-    "Keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with host.env."
+    "Keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with host.env or host.config."
   ]
 }

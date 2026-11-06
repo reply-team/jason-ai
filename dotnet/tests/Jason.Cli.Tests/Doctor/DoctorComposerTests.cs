@@ -774,6 +774,41 @@ public sealed class DoctorComposerTests
         Assert.Equal(["Dispatcher:MaxParallel", "Dispatcher:Enabled"], bundle.ValuesCarried);
     }
 
+    /// <summary>
+    /// The section of a plugin's configuration stays home by every road into a bundle: as a file, and as a variable, whose
+    /// name is the two keys of the section and a mark for each after them, a plugin's id included, with no shape at all.
+    /// </summary>
+    [Fact]
+    public async Task A_plugins_configuration_stays_home_by_the_file_and_by_a_variable()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Plugins":{"Config":{"fake-provider":{"url":"https://SENTINEL_FILE.example.test"}}}}""");
+        var variables = new Dictionary<string, string>
+        {
+            ["JASON_Plugins__Config__fake-provider__token"] = "SENTINEL_VARIABLE",
+            ["JASON_plugins:config__SENTINEL_NAME__5000"] = "5000",
+            ["JASON_Plugins__Config"] = "SENTINEL_SHORT",
+        };
+
+        var bundle = await ComposeAsync(dir, Running(dir), variables: variables);
+        var config = Section(bundle, "config");
+
+        var text = config.ToJsonString();
+        Assert.DoesNotContain("SENTINEL", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("fake-provider", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("token", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"value\"", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(bundle.ValuesCarried, path => path.Contains("Config", StringComparison.OrdinalIgnoreCase));
+        var environment = config["environment"]!.AsArray().ToDictionary(variable => Text(variable!["name"]), variable => variable!.AsObject());
+        Assert.Equal(3, environment.Count);
+        foreach (var name in (string[])["JASON_Plugins__Config__<key>__<key>", "JASON_plugins:config__<key>__<key>", "JASON_Plugins__Config"])
+        {
+            Assert.Equal("plugin_configuration", Text(environment[name]["withheld"]));
+            Assert.False(environment[name].ContainsKey("shape"));
+        }
+    }
+
     // ---- the runtime down, a read that fails midway, and one that times out --------------------------------------
 
     [Theory]

@@ -88,7 +88,7 @@ A plugin that performs this contract:
   once more;
 - answers `notification_refused` or `notification_unauthorized` for an answer that will not change by trying again;
 - returns at most a receipt: the service's own identifier for the message, at most 256 characters;
-- keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with `host.env`.
+- keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with `host.env` or `host.config`.
 
 The fixtures under [`../fixtures/notification.send/`](../fixtures/notification.send/) are run by the repository's
 tests against this document, so an example on this page and the contract cannot drift apart.

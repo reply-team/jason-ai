@@ -393,7 +393,7 @@ public sealed partial class PluginInvoker(
 
             var stderr = new StderrSink(
                 Path.Combine(workDir, "stderr.log"),
-                new Redactor([.. (grants.Env?.Variables ?? []).Select(Environment.GetEnvironmentVariable), door?.Capability]),
+                new Redactor([.. (grants.Env?.Variables ?? []).Select(Environment.GetEnvironmentVariable), .. plugin.Config.Values, door?.Capability]),
                 settings.Invoker.StderrBytes,
                 StderrTailChars);
 

@@ -58,6 +58,7 @@ public sealed class SettingsAllowlistTests
         "Update:FeedUrl", "Roles:DefaultExecutionProfile", "Roles:DefaultEntryCommand[]", "Roles:DefaultEntryCommand:0",
         "Plugins:Grants:fake-provider:Exec[]", "Plugins:Grants:fake-provider:Http[]", "Plugins:Grants:fake-provider:Env[]",
         "Plugins:Grants:fake-provider:Exec:0", "Plugins:Grants:fake-provider:Enabled",
+        "Plugins:Config:fake-provider:url", "Plugins:Config:fake-provider:Port", "Plugins:Config:fake-provider:Enabled",
         "Routes:Default:Plugin", "Routes:Default:Binding:Port", "Routes:Default:Binding:Enabled",
         "Routes:Operations:campaign.list:Plugin", "Routes:Operations:campaign.list:Binding:MaxCalls",
         "Notifications:Plugins:fake-provider:Binding", "Notifications:Plugins:fake-provider:Binding:Enabled",

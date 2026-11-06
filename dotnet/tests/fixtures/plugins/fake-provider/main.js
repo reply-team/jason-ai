@@ -276,6 +276,13 @@ function enrollmentResult(contactId, status, providerContact, providerCampaign, 
 }
 
 function campaignGet(input, context) {
+  // A provider whose refusal quotes its own configuration: what the host is there to mask.
+  const asked = campaignOf(input);
+  if (typeof asked === "string" && asked.startsWith("configuration:")) {
+    const quoted = host.config(asked.slice("configuration:".length));
+    throw host.fail({ class: "permanent", code: "campaign_not_found", message: "no campaign for " + quoted, details: { asked: quoted } });
+  }
+
   const answer = cli("campaign.get", context, ["campaign", "get"], { external_id: campaignOf(input) });
 
   return {

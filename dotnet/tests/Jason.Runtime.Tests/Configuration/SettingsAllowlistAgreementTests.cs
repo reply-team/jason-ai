@@ -107,6 +107,25 @@ public sealed class SettingsAllowlistAgreementTests
         }
     }
 
+    private sealed class MapOfNumbers
+    {
+        public Dictionary<string, int> Map { get; set; } = [];
+    }
+
+    private sealed class MapOfMapsOfNumbers
+    {
+        public Dictionary<string, Dictionary<string, int>> Map { get; set; } = [];
+    }
+
+    /// <summary>A map the walk has no branch for goes red here rather than passing with nothing to judge.</summary>
+    [Theory]
+    [InlineData(typeof(MapOfNumbers))]
+    [InlineData(typeof(MapOfMapsOfNumbers))]
+    public void A_map_with_no_branch_in_the_walk_is_refused_rather_than_passed_over(Type options)
+    {
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Walk(options, "Section", []).ToList());
+    }
+
     private static IEnumerable<Setting> Walk(Type type, string path, IReadOnlyList<Type> chain)
     {
         if (chain.Contains(type))
@@ -151,7 +170,11 @@ public sealed class SettingsAllowlistAgreementTests
             {
                 // The one map keyed by an operation is the routes'; the others are keyed by a plugin's id.
                 var key = property.Name == nameof(RoutesOptions.Operations) ? OperationCatalog.All[0].Id : "<id>";
-                foreach (var setting in Walk(propertyType.GetGenericArguments()[1], $"{child}:{key}", [.. chain, type]))
+                var leaves = Walk(propertyType.GetGenericArguments()[1], $"{child}:{key}", [.. chain, type]).ToList();
+                Assert.True(
+                    leaves.Count > 0 && !leaves.Any(leaf => leaf.Path.EndsWith(":Item", StringComparison.Ordinal)),
+                    $"{child} is a map this walk has no branch for: it yields no setting a test could reach.");
+                foreach (var setting in leaves)
                 {
                     yield return setting;
                 }

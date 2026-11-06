@@ -584,6 +584,8 @@ public sealed class PluginHostModeTests : IDisposable
 
     private const string DoorCapability = "door-capability-0123456789abcdef";
 
+    private const string ConfiguredValue = "configured-token-0123456789abcdef";
+
     private static InvocationDoor Door(string baseUrl = "http://127.0.0.1:9") =>
         new(baseUrl, DoorCapability, "jrn_01JDOORLINE", ["campaign.list"], DoorLimits.Standard);
 
@@ -618,6 +620,63 @@ public sealed class PluginHostModeTests : IDisposable
         Assert.Contains("\"code\":\"envelope_invalid\"", stderr.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(DoorCapability, stderr.ToString(), StringComparison.Ordinal);
         Assert.Equal(0, runner.Calls);
+    }
+
+    /// <summary>
+    /// A configuration value is a secret of this invocation: what the host says of a log line and of a failure, its message
+    /// and its details alike, carries the mask. The value is one a provider's own refusal might well quote.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S3, "a configuration value is masked on stderr and in a failure")]
+    public async Task A_configuration_value_is_masked_wherever_the_plugin_writes_it()
+    {
+        InvocationFactory.WritePackage(
+            _root,
+            """
+            export function invoke() {
+              const token = host.config("token");
+              host.log("info", "the token is " + token);
+              throw host.fail({ class: "permanent", code: "refused", message: "refused " + token, details: { said: token } });
+            }
+            """);
+        var invocation = InvocationFactory.Create(
+            _root,
+            "echo.run",
+            configure: builder => builder.Config = new Dictionary<string, string> { ["token"] = ConfiguredValue });
+
+        var (exit, stdout, stderr) = await RunAsync(Argv(), invocation);
+
+        Assert.Equal(HostExitCodes.Completed, exit);
+        Assert.DoesNotContain(ConfiguredValue, stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain(ConfiguredValue, stdout, StringComparison.Ordinal);
+        Assert.Contains(Redactor.Mask, stderr, StringComparison.Ordinal);
+        var error = JsonNode.Parse(stdout)!["error"]!;
+        Assert.Equal("refused " + Redactor.Mask, error["message"]!.GetValue<string>());
+        Assert.Equal(Redactor.Mask, error["details"]!["said"]!.GetValue<string>());
+    }
+
+    /// <summary>Two limits the page states: a value too short to tell from a word is left alone, and a success is the plugin's own.</summary>
+    [Fact]
+    public async Task A_short_value_and_a_successful_result_are_not_masked()
+    {
+        InvocationFactory.WritePackage(
+            _root,
+            """
+            export function invoke() {
+              host.log("info", "the region is " + host.config("region"));
+              return { result: { token: host.config("token") } };
+            }
+            """);
+        var invocation = InvocationFactory.Create(
+            _root,
+            "echo.run",
+            configure: builder => builder.Config = new Dictionary<string, string> { ["token"] = ConfiguredValue, ["region"] = "eu-west" });
+
+        var (exit, stdout, stderr) = await RunAsync(Argv(), invocation);
+
+        Assert.Equal(HostExitCodes.Completed, exit);
+        Assert.Contains("the region is eu-west", stderr, StringComparison.Ordinal);
+        Assert.Contains(ConfiguredValue, stdout, StringComparison.Ordinal);
     }
 
     /// <summary>The door's capability is a secret of this invocation: wherever the plugin writes it, stderr carries the mask.</summary>

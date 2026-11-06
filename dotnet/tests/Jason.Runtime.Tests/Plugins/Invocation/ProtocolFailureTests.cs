@@ -197,6 +197,30 @@ public class ProtocolFailureTests
         Assert.Contains("refused the invocation", failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The child masks what it writes, and the runtime masks what it reads: a host that broke before it could still leaves a
+    /// configuration value on the stream, and the copy on disk and the tail a failure quotes carry the mask.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S3, "the runtime masks a configuration value on a child's stderr")]
+    public async Task A_configuration_value_a_child_left_on_stderr_is_masked_by_the_runtime()
+    {
+        const string Value = "configured-token-0123456789abcdef";
+        await using var api = await StartAsync(
+            Child("stderr-exit", "4", "the token is " + Value),
+            PluginInvokerTests.Configured(new JsonObject { ["token"] = Value }));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginNoOutcome, failure.Code);
+        Assert.DoesNotContain(Value, failure.StderrTail!, StringComparison.Ordinal);
+        Assert.Contains(Redactor.Mask, failure.StderrTail!, StringComparison.Ordinal);
+        var kept = await File.ReadAllTextAsync(Path.Combine(result.Launch!.WorkDir, "stderr.log"), Ct);
+        Assert.DoesNotContain(Value, kept, StringComparison.Ordinal);
+        Assert.Contains(Redactor.Mask, kept, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_child_that_broke_on_its_own_left_no_outcome()
     {

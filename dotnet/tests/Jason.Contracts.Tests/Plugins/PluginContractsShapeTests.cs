@@ -167,6 +167,15 @@ public class PluginContractsShapeTests
         Assert.DoesNotContain("capability-value", (SampleInvocation() with { Door = door }).ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>An envelope holds a person's configuration, and printing one prints none of it.</summary>
+    [Fact]
+    public void An_envelope_never_prints_a_configuration_value()
+    {
+        var configured = SampleInvocation() with { Config = new Dictionary<string, string> { ["token"] = "configured-value" } };
+
+        Assert.DoesNotContain("configured-value", configured.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A plugin's configuration travels at the top of the envelope, never in its context. Its keys are the person's own
     /// words: the envelope's snake case stops at them, because <c>chatId</c> is what the plugin asks for.
