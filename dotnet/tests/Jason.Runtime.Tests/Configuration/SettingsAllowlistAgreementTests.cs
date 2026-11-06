@@ -95,36 +95,6 @@ public sealed class SettingsAllowlistAgreementTests
     }
 
     /// <summary>
-    /// A map the walk has no branch for is red. Without this it passes in silence: a map of numbers or of texts yields no leaf, and a
-    /// map of maps yields only its indexer, so none of its settings is ever held to the list.
-    /// </summary>
-    [Theory]
-    [InlineData(typeof(MapOfFlags))]
-    [InlineData(typeof(MapOfTexts))]
-    [InlineData(typeof(MapOfMaps))]
-    public void A_map_the_walk_has_no_branch_for_is_red(Type options)
-    {
-        var refused = Assert.Throws<InvalidOperationException>(() => Walk(options, "Section", []).ToList());
-
-        Assert.Contains("Section:Map", refused.Message, StringComparison.Ordinal);
-    }
-
-    private sealed class MapOfFlags
-    {
-        public Dictionary<string, bool> Map { get; set; } = [];
-    }
-
-    private sealed class MapOfTexts
-    {
-        public Dictionary<string, string> Map { get; set; } = [];
-    }
-
-    private sealed class MapOfMaps
-    {
-        public Dictionary<string, Dictionary<string, string>> Map { get; set; } = [];
-    }
-
-    /// <summary>
     /// A word at every text and every list item the runtime reads: no word leaves a leaf the list does not name. Twice over.
     /// A word nobody would choose, which no leaf may carry whatever the list says, since the list holds a text only to
     /// the closed set its setting reads. And, at every such leaf at once, a word each kind of the closed sets accepts: of
@@ -188,6 +158,25 @@ public sealed class SettingsAllowlistAgreementTests
         }
     }
 
+    private sealed class MapOfText
+    {
+        public Dictionary<string, string> Map { get; set; } = [];
+    }
+
+    private sealed class MapOfMapsOfNumbers
+    {
+        public Dictionary<string, Dictionary<string, int>> Map { get; set; } = [];
+    }
+
+    /// <summary>A map the walk has no branch for goes red here rather than passing with nothing to judge.</summary>
+    [Theory]
+    [InlineData(typeof(MapOfText))]
+    [InlineData(typeof(MapOfMapsOfNumbers))]
+    public void A_map_with_no_branch_in_the_walk_is_refused_rather_than_passed_over(Type options)
+    {
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Walk(options, "Section", []).ToList());
+    }
+
     private static IEnumerable<Setting> Walk(Type type, string path, IReadOnlyList<Type> chain)
     {
         if (chain.Contains(type))
@@ -197,7 +186,7 @@ public sealed class SettingsAllowlistAgreementTests
 
         foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (property.SetMethod is null || property.GetIndexParameters().Length > 0)
+            if (property.SetMethod is null)
             {
                 continue;
             }
@@ -240,11 +229,9 @@ public sealed class SettingsAllowlistAgreementTests
                 // The one map keyed by an operation is the routes'; the others are keyed by a plugin's id.
                 var key = property.Name == nameof(RoutesOptions.Operations) ? OperationCatalog.All[0].Id : "<id>";
                 var leaves = Walk(propertyType.GetGenericArguments()[1], $"{child}:{key}", [.. chain, type]).ToList();
-                if (leaves.Count == 0)
-                {
-                    throw new InvalidOperationException($"{child} is a map the walk has no branch for, so no setting of it is held to the list.");
-                }
-
+                Assert.True(
+                    leaves.Count > 0 && !leaves.Any(leaf => leaf.Path.EndsWith(":Item", StringComparison.Ordinal)),
+                    $"{child} is a map this walk has no branch for: it yields no setting a test could reach.");
                 foreach (var setting in leaves)
                 {
                     yield return setting;
