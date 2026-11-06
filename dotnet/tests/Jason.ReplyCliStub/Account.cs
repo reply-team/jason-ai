@@ -224,15 +224,16 @@ internal static partial class Account
     /// the log together take the same position and the shorter line overwrites the head of the longer one. What
     /// serializes them is the <c>.lock</c> file: exactly <c>FileShare.None</c> is the one share mode that .NET turns
     /// into an exclusive lock on every platform (on Unix every other value takes a shared one), so a second writer
-    /// cannot open the lock until the first has finished and fails to open it, and it tries again after a short
-    /// jittered sleep. The lock file stays, empty, and is never deleted. The log's own share mode lets a reader read
-    /// while a call is held and guarantees nothing about writers. The wait is bounded to a few seconds and the failure
-    /// past it is thrown, so a stuck writer fails the call loudly instead of dropping its line.
+    /// cannot open the lock until the first has finished, and it tries again after a short jittered sleep. The lock file stays, empty, and is never deleted. The log's own share mode lets a reader read
+    /// while a call is held and guarantees nothing about writers. The wait is bounded to ten seconds and the failure
+    /// past it is thrown, so a stuck writer fails the call loudly instead of dropping its line. The log stream is declared
+    /// after the lock so that it is disposed first: releasing the lock while the log is still open would let the next
+    /// writer open it before this line is written, and the race above comes back.
     /// </remarks>
     private static void Append(string file, string line)
     {
         var bytes = new UTF8Encoding(false).GetBytes(line);
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
         while (true)
         {
             try
@@ -242,7 +243,7 @@ internal static partial class Account
                 stream.Write(bytes, 0, bytes.Length);
                 return;
             }
-            catch (IOException) when (DateTime.UtcNow < deadline)
+            catch (IOException) when (waited.Elapsed < TimeSpan.FromSeconds(10))
             {
                 Thread.Sleep(Random.Shared.Next(2, 15));
             }

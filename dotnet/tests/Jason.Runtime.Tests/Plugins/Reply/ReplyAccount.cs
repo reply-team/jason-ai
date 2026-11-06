@@ -868,11 +868,26 @@ public sealed class ReplyAccount : IDisposable
             }
 
             var calls = new List<ReplyCall>();
+            var number = 0;
             foreach (var line in ReadAllLines(file))
             {
-                if (line.Trim().Length == 0 || JsonNode.Parse(line) is not JsonObject call)
+                number++;
+
+                // Every line the stand-in writes is one JSON object, so a blank line, a scalar or a torn line anywhere in
+                // the log is damage, and it is named by its line rather than passed over.
+                JsonObject call;
+                try
                 {
-                    continue;
+                    call = JsonNode.Parse(line) as JsonObject
+                        ?? throw new JsonException($"The call log's line {number} is not a JSON object.");
+                }
+                catch (JsonException) when (line.Trim().Length == 0)
+                {
+                    throw new JsonException($"The call log's line {number} is blank.");
+                }
+                catch (JsonException failure) when (!failure.Message.StartsWith("The call log's line", StringComparison.Ordinal))
+                {
+                    throw new JsonException($"The call log's line {number} is not whole JSON: {failure.Message}", failure);
                 }
 
                 calls.Add(new ReplyCall(
