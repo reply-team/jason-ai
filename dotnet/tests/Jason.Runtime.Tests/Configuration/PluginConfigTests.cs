@@ -61,6 +61,8 @@ public sealed class PluginConfigTests
     [InlineData("""{"Plugins":{"Config":{"fake-provider":["SENTINEL"]}}}""", "Plugins:Config:fake-provider:<key> must be a name: a plugin's configuration is a flat map from a name to text, and a list is not one.")]
     [InlineData("""{"Plugins":{"Config":{"fake-provider":{"0":"SENTINEL"}}}}""", "Plugins:Config:fake-provider:<key> must be a name: a plugin's configuration is a flat map from a name to text, and a list is not one.")]
     [InlineData("""{"Plugins":{"Config":{"not-installed":["SENTINEL"]}}}""", "Plugins:Config:<key>:<key> must be a name: a plugin's configuration is a flat map from a name to text, and a list is not one.")]
+    [InlineData("""{"Plugins":{"Config":[{"url":"SENTINEL"}]}}""", "Plugins:Config:<key> must be a plugin's id: this section is a map from a plugin's id to its configuration, and a list is not one.")]
+    [InlineData("""{"Plugins":{"Config":{"0":{"url":"SENTINEL"}}}}""", "Plugins:Config:<key> must be a plugin's id: this section is a map from a plugin's id to its configuration, and a list is not one.")]
     public void Structure_is_refused_by_its_path_and_never_by_what_was_written(string settings, string expected)
     {
         using var dir = new TempDataDir();

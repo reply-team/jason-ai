@@ -618,9 +618,10 @@ an optional setting's ordinary answer, so nothing is recorded for it, and a defa
 **A value is text.** A section is a flat map from a key to a string. `host.config` hands back what the settings hold,
 so a token of digits arrives as written, a number as its text, and a boolean as the text the settings keep for it: `true`
 arrives as `"True"`. A plugin that wants a number parses its text. A key is matched as a configuration key is, without
-regard to case. A key with children, a nested object or a list, is refused by its path, and so is a key of digits alone,
-because the settings cannot tell one from a list's index: a start fails, saying where, a live edit keeps the last good
-settings, and a reload keeps the previous snapshot. A value left `null` or `{}` holds nothing and answers `null`.
+regard to case. A key with children, a nested object or a list, is refused by its path, and so is a key or a plugin's id
+of digits alone, because the settings cannot tell one from a list's index: a start fails, saying where, a live edit keeps
+the last good settings, and a reload keeps the previous snapshot. A value left `null` or `{}` holds nothing and answers
+`null`.
 
 **A load freezes it**, as it freezes a grant, so a change takes effect at the next `jason plugin reload`. A section for
 a plugin that is not installed is never read, so a person may configure a package before installing it. This is
