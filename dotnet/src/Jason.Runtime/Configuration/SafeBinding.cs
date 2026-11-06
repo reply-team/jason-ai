@@ -250,7 +250,7 @@ internal static class SafeBinding
             // Words the binder's pattern does not know: the entry's own path and type say it instead.
         }
 
-        return $"{SettingKey.ShownPath(entry.Path, installedPluginIds)} could not be read as {entryType}.";
+        return $"{SettingKey.ShownPath(entry.Path, installedPluginIds)} could not be read as {Named(entryType)}.";
     }
 
     /// <summary>
@@ -292,10 +292,14 @@ internal static class SafeBinding
     /// <summary>What has to be where text was written instead: a map of entries, a list of items, or an object.</summary>
     private static string Expected(Type type, Shape shape) => shape switch
     {
-        Shape.Map => $"a map of {ElementType(type)}",
+        Shape.Map => $"a map of {Named(ElementType(type))}",
         Shape.List => $"a list of {ElementType(type)}",
         _ => type.ToString(),
     };
+
+    /// <summary>A type as a sentence names it: a map as the map it is, rather than by its generic name.</summary>
+    private static string Named(Type type) =>
+        typeof(IDictionary).IsAssignableFrom(type) ? Expected(type, Shape.Map) : type.ToString();
 
     /// <summary>The type of a map's entries or of a list's items: the last of its type's arguments.</summary>
     private static Type ElementType(Type type) =>

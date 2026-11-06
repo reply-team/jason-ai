@@ -222,6 +222,16 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
             ValidateSubscriptionGrant(failures, $"Plugins:Grants:{pluginId}:Subscriptions", grant.Subscriptions, installed);
         }
 
+        // A key with children never reaches this map: the binder leaves it out and the section's refusal says so. A list
+        // directly under a plugin does reach it, flattened into keys of digits, and those are all that tell it from a map.
+        foreach (var (pluginId, entries) in options.Config)
+        {
+            if (entries.Keys.FirstOrDefault(key => key.Length > 0 && key.All(char.IsAsciiDigit)) is { } index)
+            {
+                failures.Add($"{SettingKey.ShownPath($"Plugins:Config:{pluginId}:{index}", installed.Value)} must be a name: a plugin's configuration is a flat map from a name to text, and a list is not one.");
+            }
+        }
+
         return OptionRules.Result(failures);
     }
 

@@ -42,7 +42,7 @@ public static class SettingsVocabulary
         "DefaultExecutionProfile", "DefaultEntryCommand", "MaxStdoutBytes", "MaxSkillBytes",
 
         // Plugins: who is granted what, then the limits every invocation runs under.
-        "Grants", "Limits", "Exec", "Http", "Invoker", "Env", "Api",
+        "Grants", "Config", "Limits", "Exec", "Http", "Invoker", "Env", "Api",
         "TimeoutMs", "MaxTimeoutMs", "MemoryMb", "MaxMemoryMb", "MaxStatements", "MaxRecursion",
         "OutputBytes", "MaxCalls",
         "ResponseBytes", "RequestBytes",

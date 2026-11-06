@@ -206,6 +206,53 @@ public class PluginLoaderTests
         Assert.Empty(plugin.Grants.Http);
     }
 
+    /// <summary>
+    /// A plugin's configuration is frozen as its grants are: what the settings said at this load, copied, so an edit
+    /// reaches a plugin at the next load and never under a running one. A key written as nothing reads as unset.
+    /// </summary>
+    [Fact]
+    public async Task A_plugins_configuration_is_frozen_at_the_load_and_a_key_written_as_nothing_is_no_key()
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        TestPlugins.InstallFakeProvider(dir.Paths);
+        var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["url"] = "https://receiver.example.test/in",
+            ["empty"] = string.Empty,
+            ["unset"] = null!,
+        };
+
+        var load = await NewLoader(dir.Paths, programs, options =>
+        {
+            options.Config[TestPlugins.FakeProviderId] = settings;
+            options.Config["not-installed"] = new(StringComparer.OrdinalIgnoreCase) { ["url"] = "https://other.example.test/in" };
+        }).LoadAsync(SnapshotSource.Reload, Ct);
+        settings["url"] = "https://later.example.test/in";
+
+        var plugin = Assert.Single(load.Snapshot!.Plugins);
+        Assert.Equal(PluginStatus.Valid, plugin.Status);
+        Assert.Empty(plugin.Problems);
+        Assert.Equal(2, plugin.Config.Count);
+        Assert.Equal("https://receiver.example.test/in", plugin.Config["URL"]);
+        Assert.Equal(string.Empty, plugin.Config["empty"]);
+        Assert.False(plugin.Config.ContainsKey("unset"));
+    }
+
+    [Fact]
+    public async Task A_plugin_nobody_configured_has_an_empty_configuration()
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        TestPlugins.InstallFakeProvider(dir.Paths);
+
+        var load = await NewLoader(dir.Paths, programs).LoadAsync(SnapshotSource.Reload, Ct);
+
+        Assert.Empty(Assert.Single(load.Snapshot!.Plugins).Config);
+    }
+
     [Fact]
     public async Task A_version_command_runs_for_a_granted_program()
     {

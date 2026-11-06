@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Manifest;
 
@@ -22,5 +23,8 @@ public sealed record LoadedPlugin(
     PluginStatus Status,
     IReadOnlyList<ManifestProblem> Problems)
 {
+    /// <summary>What the settings said under <c>Plugins:Config:&lt;id&gt;</c> at this load: a key to its text, matched as a configuration key is.</summary>
+    public IReadOnlyDictionary<string, string> Config { get; init; } = FrozenDictionary<string, string>.Empty;
+
     public bool Supports(string operation) => Manifest.Operations.Contains(operation, StringComparer.Ordinal);
 }

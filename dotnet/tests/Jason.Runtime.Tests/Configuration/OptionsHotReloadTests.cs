@@ -779,6 +779,46 @@ public class OptionsHotReloadTests
         Assert.Equal("Invalid Jason configuration: " + failure, refused.Message);
     }
 
+    /// <summary>A plugin's configuration is flat: a key with children stops a start by the path, and the words stay out.</summary>
+    [Theory]
+    [InlineData("""{"Dispatcher":{"Enabled":false},"Plugins":{"Config":{"some-plugin":{"url":{"host":"SENTINEL_C_NESTED"}}}}}""", "Plugins:Config:<key>:<key> could not be read as System.String.")]
+    [InlineData("""{"Dispatcher":{"Enabled":false},"Plugins":{"Config":{"some-plugin":["SENTINEL_C_LIST"]}}}""", "Plugins:Config:<key>:<key> must be a name: a plugin's configuration is a flat map from a name to text, and a list is not one.")]
+    public async Task Structure_in_a_plugins_configuration_stops_the_start_by_path(string settings, string failure)
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, settings);
+
+        var refused = await StartRefusedAsync(dir.Paths);
+
+        Assert.Equal("Invalid Jason configuration: " + failure, refused.Message);
+    }
+
+    /// <summary>
+    /// The same structure typed into the file of a running runtime: it is refused, the configuration read before it is
+    /// what the runtime keeps, and the words typed there reach no log line.
+    /// </summary>
+    [Fact]
+    public async Task Structure_typed_into_a_plugins_configuration_live_keeps_the_last_good_settings()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Plugins":{"Config":{"some-plugin":{"url":"https://receiver.example.test/first"}}}}"""));
+        var settings = fixture.Resolve<LiveSettings<PluginsOptions>>();
+
+        File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Plugins":{"Config":{"some-plugin":{"url":{"host":"SENTINEL_C_LIVE"}}}}}""");
+        Assert.True(await TestOptions.RefusedAsync(settings, Ct));
+
+        Assert.True(settings.TryCurrent(out var kept));
+        Assert.Equal("https://receiver.example.test/first", kept.Config["some-plugin"]["url"]);
+
+        await fixture.Runtime.StopAsync();
+        var logs = string.Concat(Directory.GetFiles(fixture.Paths.LogsDirectory).Select(File.ReadAllText));
+        Assert.Contains("Plugins:Config:<key>:<key>", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL_C_LIVE", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain("receiver.example.test", logs, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A start that has to be refused, run so that a start that is not refused stops again at once rather than leaving a
     /// runtime behind it, and fails the test.
