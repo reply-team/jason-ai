@@ -11,7 +11,7 @@ directory, the zip therefore has the content digest the package has where it was
 holds this script to.
 
 .PARAMETER Package
-The package's directory: plugins/reply, as the release's checkout holds it.
+The package's directory, plugins/<id> (plugins/reply, say), as the release's checkout holds it.
 
 .PARAMETER Archive
 The zip to write, a relative path being from where PowerShell stands. An archive already there is replaced.

@@ -1385,11 +1385,16 @@ public partial class ReleaseWorkflowTests
         Assert.DoesNotContain("--prerelease", created.Item, StringComparison.Ordinal);
         Assert.DoesNotContain("- -", created.Item, StringComparison.Ordinal);
 
-        // And every file a release publishes reaches gh as an asset, each a path of its own.
-        foreach (var name in ReleaseAssets.Published)
-        {
-            Assert.Matches($@"(^| )\S*/{Regex.Escape(name)}( |$)", created.Item);
-        }
+        // And every file a release publishes reaches gh as an asset, each a path of its own: the arguments after the notes
+        // file are exactly the published files, once each, in the order the workflow attaches them, from the folder each is
+        // taken from - the install scripts are the tag's own, the rest were assembled under artifacts/release.
+        const string notesFile = "--notes-file artifacts/release/notes.md ";
+        var assets = created.Item[(created.Item.IndexOf(notesFile, StringComparison.Ordinal) + notesFile.Length)..]
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var expected = ReleaseAssets.Published
+            .Select(name => (ReleaseAssets.InstallScripts.Contains(name) ? "install/" : "artifacts/release/") + name)
+            .ToArray();
+        Assert.Equal(expected, assets);
 
         if (existing == "none")
         {
