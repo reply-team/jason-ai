@@ -13,7 +13,7 @@ public sealed record ToastLaunch(IReadOnlyList<string> Command, string? Stdin, I
 /// The exact command a toast is on each platform. Composed here and asserted by tests, never shown by one: on Windows
 /// it is this executable's own <c>toast-host</c> mode with the payload on stdin, on macOS <c>osascript</c>, and on
 /// Linux <c>notify-send</c>, or <c>gdbus</c> where it is absent. Nothing reaches a command line but the pointer
-/// itself, which is two counts and where to look.
+/// itself, which is counts and where to look.
 /// </summary>
 public static class ToastCommands
 {
