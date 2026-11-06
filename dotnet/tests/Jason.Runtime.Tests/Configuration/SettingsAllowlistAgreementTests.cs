@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using Jason.Cli.Doctor;
+using Jason.Contracts.Configuration;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 
@@ -90,6 +91,50 @@ public sealed class SettingsAllowlistAgreementTests
         }
 
         Assert.DoesNotContain("SENTINEL", shape, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A word at every text and every list item the runtime reads: no word leaves a leaf the list does not name. Twice over.
+    /// A word nobody would choose, which no leaf may carry whatever the list says, since the list holds a text only to
+    /// the closed set its setting reads. And, at every such leaf at once, a word each kind of the closed sets accepts: of
+    /// the leaves that carry it, none is one the list does not name as a text, so a path matched wider than the list
+    /// spells it, or one kind passed off as another, is seen.
+    /// </summary>
+    [Fact]
+    public void Of_a_word_at_every_text_and_list_item_the_runtime_reads_only_the_leaves_the_list_names_are_carried()
+    {
+        var leaves = Settings().Where(setting => setting.Type == typeof(string)).Select(setting => setting.Path).ToList();
+        Assert.NotEmpty(leaves);
+
+        // The leaves the list names as a word from a closed set, from the list's own published lines.
+        var named = SettingsAllowlist.Default.Published
+            .Where(line => line.Contains("(one of ", StringComparison.Ordinal) || line.Contains("(a kind ", StringComparison.Ordinal))
+            .Select(line => line[..line.IndexOf(" (", StringComparison.Ordinal)])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.NotEmpty(named);
+
+        var unchosen = new JsonObject();
+        for (var index = 0; index < leaves.Count; index++)
+        {
+            Place(unchosen, leaves[index], JsonValue.Create($"SENTINEL-{index}")!);
+        }
+
+        var unchosenShape = ConfigShape.Describe(unchosen.ToJsonString(), SettingsAllowlist.Default, Installed, out var carriedUnchosen);
+        Assert.Empty(carriedUnchosen);
+        Assert.DoesNotContain("SENTINEL", unchosenShape.ToJsonString(), StringComparison.Ordinal);
+
+        foreach (var word in new[] { "debug", ManagerTriggerKinds.All.First() })
+        {
+            var chosen = new JsonObject();
+            foreach (var leaf in leaves)
+            {
+                Place(chosen, leaf, JsonValue.Create(word)!);
+            }
+
+            ConfigShape.Describe(chosen.ToJsonString(), SettingsAllowlist.Default, Installed, out var carried);
+            var strays = carried.Where(path => !named.Contains(path)).ToList();
+            Assert.True(strays.Count == 0, $"'{word}' was carried at {string.Join(", ", strays)}, which the list does not name.");
+        }
     }
 
     /// <summary>Every setting there is, by walking the option classes: a section's settings, down through the classes inside it.</summary>
