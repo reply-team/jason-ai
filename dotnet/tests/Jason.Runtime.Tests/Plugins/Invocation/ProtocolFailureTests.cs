@@ -221,6 +221,33 @@ public class ProtocolFailureTests
         Assert.Contains(Redactor.Mask, kept, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The same value in the JSON line a child leaves, which spells it as an escape. Both copies are read back parsed: the raw
+    /// text would pass unmasked, since the value is not in it under its own spelling.
+    /// </summary>
+    [Theory]
+    [InlineData("https://receiver.example.test/in?a=1&key=configured0123")]
+    [InlineData("base64+token/0123456789abc=")]
+    [InlineData("quote\"token0123456789")]
+    [InlineData("tok\u00E9n-0123456789abcdef")]
+    public async Task A_value_json_escapes_on_a_childs_stderr_is_masked_by_the_runtime(string value)
+    {
+        var line = new JsonObject { ["level"] = "info", ["message"] = "said", ["data"] = new JsonObject { ["said"] = value } }.ToJsonString();
+        await using var api = await StartAsync(
+            Child("stderr-exit", "4", line),
+            PluginInvokerTests.Configured(new JsonObject { ["token"] = value }));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        var kept = await File.ReadAllTextAsync(Path.Combine(result.Launch!.WorkDir, "stderr.log"), Ct);
+        foreach (var copy in new[] { failure.StderrTail!, kept })
+        {
+            var said = JsonNode.Parse(copy.Split('\n').Single(text => text.TrimStart().StartsWith('{')))!;
+            Assert.Equal(Redactor.Mask, said["data"]!["said"]!.GetValue<string>());
+        }
+    }
+
     [Fact]
     public async Task A_child_that_broke_on_its_own_left_no_outcome()
     {

@@ -655,6 +655,51 @@ public sealed class PluginHostModeTests : IDisposable
         Assert.Equal(Redactor.Mask, error["details"]!["said"]!.GetValue<string>());
     }
 
+    /// <summary>
+    /// A value holding what JSON escapes, the commonest being a receiver's URL with a second query parameter. The rows read
+    /// the parsed leaves of the details, the block and a log line's data: the host's raw text proves nothing here, because a
+    /// value the writer escaped is absent from it under its own spelling whether it was masked or not.
+    /// </summary>
+    [Theory]
+    [InlineData("https://receiver.example.test/in?a=1&key=configured0123")]
+    [InlineData("base64+token/0123456789abc=")]
+    [InlineData("quote\"token0123456789")]
+    [InlineData("tok\u00E9n-0123456789abcdef")]
+    public async Task A_value_json_escapes_is_masked_in_the_details_the_block_and_a_log_line(string value)
+    {
+        InvocationFactory.WritePackage(
+            _root,
+            """
+            export function invoke() {
+              const token = host.config("token");
+              host.log("info", "said", { said: token, nested: ["quoted " + token] });
+              throw host.fail({
+                class: "blocked",
+                code: "provider_blocked",
+                message: "refused " + token,
+                details: { said: token, nested: { quoted: "quoted " + token } },
+                block: { scope: "account", reason: "billing", link: "https://provider.example/" + token },
+              });
+            }
+            """);
+        var invocation = InvocationFactory.Create(
+            _root,
+            "echo.run",
+            configure: builder => builder.Config = new Dictionary<string, string> { ["token"] = value });
+
+        var (exit, stdout, stderr) = await RunAsync(Argv(), invocation);
+
+        Assert.Equal(HostExitCodes.Completed, exit);
+        var error = JsonNode.Parse(stdout)!["error"]!;
+        Assert.Equal("refused " + Redactor.Mask, error["message"]!.GetValue<string>());
+        Assert.Equal(Redactor.Mask, error["details"]!["said"]!.GetValue<string>());
+        Assert.Equal("quoted " + Redactor.Mask, error["details"]!["nested"]!["quoted"]!.GetValue<string>());
+        Assert.Equal("https://provider.example/" + Redactor.Mask, error["block"]!["link"]!.GetValue<string>());
+        var line = Assert.Single(ModeRun.Records(ModeRun.Lines(stderr)), record => record["message"]?.GetValue<string>() == "said");
+        Assert.Equal(Redactor.Mask, line["data"]!["said"]!.GetValue<string>());
+        Assert.Equal("quoted " + Redactor.Mask, line["data"]!["nested"]![0]!.GetValue<string>());
+    }
+
     /// <summary>Two limits the page states: a value too short to tell from a word is left alone, and a success is the plugin's own.</summary>
     [Fact]
     public async Task A_short_value_and_a_successful_result_are_not_masked()
