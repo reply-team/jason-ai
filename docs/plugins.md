@@ -99,6 +99,7 @@ capabilities:                    # every section optional; absent means "not req
         version_command: ["--version"]
   http:
     hosts: ["api.example.com", "localhost:5555"]   # 1..32; exact match, no wildcards
+    any_granted_host: true       # optional; a person may grant a host beyond these (§9)
   env:
     variables: [FAKE_TOKEN]      # 1..32; the variables host.env may read
   api: [read, journal.append]    # optional; the Runtime API families host.call may reach (§9)
@@ -135,6 +136,7 @@ subscriptions: [workitem_failed] # optional; required for a subscriber: the jour
 | `…executables[i].min_version` | `major.minor.patch`; needs a `version_command` | `field_invalid` |
 | `…executables[i].version_command` | exactly one of `["--version"]`, `["-v"]`, `["-V"]`, `["version"]` | `field_invalid` |
 | `capabilities.http.hosts` | required inside `http`; 1..32 lowercase `host` or `host:port` (port 1–65535), exact, unique, no scheme, no path, no wildcards | `field_required`, `field_invalid`, `host_invalid` |
+| `capabilities.http.any_granted_host` | optional; `true` or `false`, and `false` when absent. A switch, never text that reads like one | `field_invalid` |
 | `capabilities.env.variables` | required inside `env`; 1..32 names `^[A-Z][A-Z0-9_]{0,63}$`, unique | `field_required`, `field_invalid`, `variable_name_invalid` |
 | a variable named `JASON_…` | never; the prefix is reserved for the runtime | `variable_reserved` |
 | a variable that decides what a program loads | never; the same names `host.exec` refuses — `LD_*`, `DYLD_*`, `COMPlus_*`, `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `NODE_OPTIONS`, `PYTHONPATH`, `JAVA_TOOL_OPTIONS`, `PATH` and the rest listed under `host.exec` below. A granted variable is copied into every child the plugin starts, so being handed one and setting one end in the same place | `field_invalid` |
@@ -177,6 +179,11 @@ does not list is refused, `argument_unsupported`, so your code never meets an ar
 ignore; work that does not carry it reaches your code as it always has. It asks for nothing a person grants, so it is
 no capability, and like `binding` the key is optional and additive: `manifest_version` stays `1`, and a runtime too
 old to read the key refuses the package rather than send it an argument it never checked.
+
+`capabilities.http.any_granted_host` is additive the same way: `manifest_version` stays `1`, and a runtime older than
+0.31.0 refuses the package by the same unknown-key rule. §9 says what the word does and what it costs. No key of a
+manifest holds a secret: a secret belongs under `Plugins:Config` (§6, `host.config`) or in the environment (§6,
+`host.env`), never in `plugin.yaml`, which is the package and travels with it.
 
 `settles_by_key` says which of the sends whose document settles a lost answer by the work item's key — today
 `message.send` and `social_invitation.send` — the plugin makes under that key on every attempt, so that a repeat is
@@ -443,7 +450,7 @@ that plugin's own word for a call that never became work, and a contract expecti
 among its `failure_codes` (§7).
 
 **Promises.** `async function invoke` works: the host drains the job queue and unwraps the promise
-within the budget. The six `host.*` functions are synchronous — they block until the program or the
+within the budget. The seven `host.*` functions are synchronous — they block until the program or the
 request finishes — so there is nothing to `await` on them, nor on `host.call`.
 
 **Modules.** Only relative specifiers ending in `.js` or `.mjs`, only inside the package: `./x.js`,
@@ -473,7 +480,7 @@ and `null` alike. No secret is ever in `context`.
 
 ## 6. The Host SDK
 
-`host` is a plain JavaScript object with exactly six read-only functions, closed to extension, and a seventh,
+`host` is a plain JavaScript object with exactly seven read-only functions, closed to extension, and an eighth,
 `host.call`, only where the invocation carries a door to the Runtime API. It is not a wrapped CLR instance, so there
 is no member surface beyond those functions and no type to walk back into the host program. Every function takes **one options object** and refuses an unknown key with a
 `TypeError` you can catch: `timeoutMs` next to `timeout_ms` would otherwise make a capped call look
@@ -589,7 +596,45 @@ The value of a variable that is **both** declared in the manifest and granted by
 the child's own environment. Anything else — an undeclared name, a declared but ungranted one, a
 `JASON_*` name whatever a grant says — is `undefined`, and the attempt is written to stderr as an
 `env_probe` line naming the variable and never a value, so a plugin probing for what it was not given
-is visible. Values never travel in the envelope; they reach the child by name.
+is visible. A variable's value never travels in the envelope; it reaches the child by name.
+
+### `host.config`
+
+```js
+const url = host.config("url");   // a string, or null
+```
+
+What the person wrote for this plugin under `Plugins:Config:<id>` in `~/.jason/config/settings.json`, as the last load
+froze it:
+
+```json
+{ "Plugins": { "Config": { "fake-provider": { "url": "https://api.example.com/v2", "token": "a-token-of-yours" } } } }
+```
+
+No manifest declares it and no grant admits it: it is a value channel and opens nothing. A host, a program or a variable
+it names is reached only by a grant (§9). There are no defaults and no schema: a key the section does not hold is `null`,
+an optional setting's ordinary answer, so nothing is recorded for it, and a default is your own code's.
+
+**A value is text.** A section is a flat map from a key to a string. `host.config` hands back what the settings hold,
+so a token of digits arrives as written, a number as its text, and a boolean as the text the settings keep for it: `true`
+arrives as `"True"`. A plugin that wants a number parses its text. A key is matched as a configuration key is, without
+regard to case. A key with children, a nested object or a list, is refused by its path, and so is a key of digits alone,
+because the settings cannot tell one from a list's index: a start fails, saying where, a live edit keeps the last good
+settings, and a reload keeps the previous snapshot. A value left `null` or `{}` holds nothing and answers `null`.
+
+**A load freezes it**, as it freezes a grant, so a change takes effect at the next `jason plugin reload`. A section for
+a plugin that is not installed is never read, so a person may configure a package before installing it. This is
+settings, read by the runtime for the plugin; it is never a named preference, which is what a person states about the
+client ([`docs/projects.md`](projects.md) §7).
+
+**A value is a secret of the invocation.** It reaches the child on stdin and nowhere else: never its environment, its
+argv or a file of its working directory. The host masks each value wherever it writes, a failure's message and details
+included, and the runtime masks them in the stderr it copies. No value is in the log, the journal, an attempt, the
+provenance, `jason plugin list` or the `plugins_reloaded` line, and a `jason doctor` bundle withholds the whole section,
+keys and values, with a mark that says so. Two limits are yours to know. A value under 8 characters is not masked, since
+masking text that short would mangle ordinary words. And a successful result is not masked at all: what you return is
+yours to keep clean, so returning a configured value is a conformance failure of your plugin, not something the host
+catches.
 
 ### `host.log`
 
@@ -993,8 +1038,9 @@ like one is refused at load with `binding_secret_like`, because a binding is wri
 people who operate an installation, and a field named `api_token` is an invitation to put a secret in
 a file that was never meant to hold one. Punctuation is no way around it: the name is read with its
 separators dropped, so `x-api-key` is refused exactly as `api_key` is. A credential reaches you the way every secret does: through a
-variable your manifest declares under `capabilities.env`, granted by the user and read with `host.env`
-(§6), never through the envelope. The worked example below is exactly this shape — its binding names
+variable your manifest declares under `capabilities.env`, granted by the user and read with `host.env`,
+or through what the person wrote under `Plugins:Config:<id>` and `host.config` reads (§6), never through
+a binding. The worked example below is exactly this shape — its binding names
 the account to act in, and the program it acts with comes from a granted variable.
 
 ### Checking yourself against the fixtures
@@ -1200,6 +1246,13 @@ grants everything requested for that capability. An absent list, an absent plugi
 copied package grants nothing — the default is nothing, and a plugin with no grants still loads as
 `valid`. An entry the manifest never requested grants nothing and is reported as a
 `grant_unrequested` warning at `grants.<capability>[i]`; it does not make the plugin unavailable.
+One word changes that for one list. Where a manifest says `capabilities.http.any_granted_host: true`, an explicit host in
+`Http` is honoured though the manifest does not name it, and is compared as a declared host is; an entry that is no host
+still grants nothing and is the same warning. `*` still means the declared hosts alone, `plugin list` shows the grant as
+it shows every grant and the word beside the capabilities, and with no grant nothing is granted. A package that says the
+word asks for more than one that does not: it leaves where its requests may go to the person, and the person's grant is
+all that holds it to that place. It suits a plugin whose host is the person's own, such as a receiver, and a plugin that
+talks to one vendor's API has no use for it.
 A fifth list, `Subscriptions`, grants journal kinds out of those the manifest's `subscriptions`
 declares, by the same rules: `*` admits every declared kind, a kind the manifest does not declare
 admits nothing and is a `grant_unrequested` warning at `grants.subscriptions[i]`, and a declared kind
@@ -1292,6 +1345,7 @@ escape reads the same in any page.
   "input": { "…": "the operation's arguments, at most 1 MiB" },
   "context": { "binding": null, "attempt_id": null, "attempt_number": null,
                "work_item_id": null, "campaign_id": null, "runtime_version": "0.1.0" },
+  "config": { "url": "https://api.example.com/v2" },
   "grants": { "exec": { "executables": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "launch": null } ] },
               "http": { "hosts": ["api.example.com"] },
               "env": { "variables": ["FAKE_TOKEN"] } },
@@ -1308,9 +1362,12 @@ kind of the journal line its handler is handed (§17), with `operation_contract_
 that purpose speaks.
 
 The grants here are the **resolved policy** — what the user granted out of what the manifest
-requested — so the child enforces what the runtime decided and has no configuration of its own. No
-secret value is in the envelope but one: a handler's `door`, where the invocation has one, carries the capability the
-runtime minted for that invocation, beside the address, the journal line, the operations it opens and the limits. It
+requested — so the child enforces what the runtime decided and reads no settings of its own. Two things in the
+envelope are secret and nothing else is. `config`, absent where the person wrote nothing, is what they wrote under
+`Plugins:Config:<id>`, frozen at the load and read with `host.config` (§6): it travels on stdin only, and the host and
+the runtime mask each value as §6 says, a value under 8 characters excepted. And a handler's `door`, where the invocation
+has one, carries the capability the runtime minted for that invocation, beside the address, the journal line, the
+operations it opens and the limits. It
 travels on stdin only, never on argv, in the environment or in a file; the host masks it wherever it writes and the
 runtime redacts it from the stderr it copies; and it is dead when the invocation ends however it ends, at the latest at
 the invocation's deadline plus the kill grace and one call's bound of 30 seconds, which covers the start of the child
@@ -1570,7 +1627,8 @@ once more, thirty seconds later), `notification_refused` and `notification_unaut
 
 **The binding names an account, never a credential.** A field named like a credential at any depth is refused before
 anything starts, as `binding_invalid`, and so is a binding the manifest's own `binding` schema refuses. A secret is
-read with `host.env` from a variable the manifest declares under `capabilities.env` and the operator grants; it is sent
+read with `host.env` from a variable the manifest declares under `capabilities.env` and the operator grants, or with
+`host.config` from what the operator wrote under `Plugins:Config:<id>`; it is sent
 in a header, and never logged or returned.
 
 **A self-hosted service.** `capabilities.http.hosts` names the hosts the package may reach, and a grant can only

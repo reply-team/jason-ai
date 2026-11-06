@@ -113,7 +113,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   invocation goes to the child on stdin, exactly one outcome comes back on stdout, diagnostics are JSON
   Lines on stderr, and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3
   rejected, 4 host failure). Declaration is not permission: capabilities are requested by the manifest
-  and granted under `Plugins:Grants:<id>`, resolved and frozen at each load. A failure carries one of
+  and granted under `Plugins:Grants:<id>`, resolved and frozen at each load; a manifest's `any_granted_host` lets a person
+  grant a host it does not declare, and `*` still means the declared hosts alone. Configuration is `Plugins:Config:<id>`:
+  text only, frozen at each load, handed on stdin and read with `host.config`, a secret of the invocation, never in a
+  package. A failure carries one of
   five classes — `transient` is retried, `permanent`, `validation` and `blocked` are final, and `ambiguous` says the
   provider may already have acted, so it is repeated only where the operation's own contract declares
   that repeating it is safe or that a recovery read makes it safe. An activated load journals
