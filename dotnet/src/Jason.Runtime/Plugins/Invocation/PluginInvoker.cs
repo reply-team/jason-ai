@@ -346,7 +346,8 @@ public sealed partial class PluginInvoker(
                 request.UnsettledReference),
             grants,
             Limits(settings, plugin, timeoutMs),
-            door);
+            door,
+            plugin.Config.Count == 0 ? null : plugin.Config);
 
         var workDir = paths.PluginInvocationDirectory(provenance.InvocationId);
         Directory.CreateDirectory(workDir);

@@ -4,11 +4,14 @@ using Jason.Contracts;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Tests.Integration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Plugins.Invocation;
 
@@ -156,6 +159,57 @@ public class PluginInvokerTests
         {
             Environment.SetEnvironmentVariable(UngrantedVariable, null);
         }
+    }
+
+    /// <summary>
+    /// A value under <c>Plugins:Config</c>, from the settings file to the plugin's hand, through the real child. The envelope
+    /// on stdin is how it gets there: the program the plugin starts does not see it, nor does the command line, nor a file
+    /// of the working directory.
+    /// </summary>
+    [Fact]
+    public async Task A_plugin_reads_its_configuration_through_stdin_and_by_no_other_road()
+    {
+        var value = "config-" + Guid.NewGuid().ToString("N");
+        await using var api = await StartAsync(settings: Configured(new JsonObject { ["chatId"] = value, ["digits"] = "0012345" }));
+
+        var read = await InvokeAsync(api, Request("config.read", new JsonObject { ["key"] = "chatId" }), Ct);
+        var digits = await InvokeAsync(api, Request("config.read", new JsonObject { ["key"] = "digits" }), Ct);
+        var unset = await InvokeAsync(api, Request("config.read", new JsonObject { ["key"] = "other" }), Ct);
+        var program = await InvokeAsync(api, Request("exec.run", Exec("chatId")), Ct);
+
+        Assert.Equal(value, Assert.IsType<InvocationOutcome.Succeeded>(read.Outcome).Result!["value"]!.GetValue<string>());
+        Assert.Equal("0012345", Assert.IsType<InvocationOutcome.Succeeded>(digits.Outcome).Result!["value"]!.GetValue<string>());
+        Assert.Null(Assert.IsType<InvocationOutcome.Succeeded>(unset.Outcome).Result!["value"]);
+        Assert.Equal("object", Assert.IsType<InvocationOutcome.Succeeded>(unset.Outcome).Result!["type"]!.GetValue<string>());
+        Assert.Equal("<unset>", Stdout(program));
+
+        Assert.DoesNotContain(value, string.Join(' ', read.Launch!.Command), StringComparison.Ordinal);
+        foreach (var file in Directory.GetFiles(read.Launch.WorkDir, "*", SearchOption.AllDirectories))
+        {
+            Assert.DoesNotContain(value, await File.ReadAllTextAsync(file, Ct), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>A reload is what hands a plugin an edited value, as it is for a grant; until then the snapshot keeps the one it froze.</summary>
+    [Fact]
+    public async Task An_edited_value_reaches_the_plugin_at_the_next_reload()
+    {
+        await using var api = await StartAsync(settings: Configured(new JsonObject { ["url"] = "https://first.example.test/in" }));
+
+        var settings = JsonNode.Parse(await File.ReadAllTextAsync(api.Paths.UserSettingsFile, Ct))!;
+        settings["Plugins"]!["Config"]![TestPlugins.FakeProviderId]!["url"] = "https://second.example.test/in";
+        await File.WriteAllTextAsync(api.Paths.UserSettingsFile, settings.ToJsonString(), Ct);
+        var monitor = api.Resolve<IOptionsMonitor<PluginsOptions>>();
+        Assert.True(await DispatchHarness.EventuallyAsync(
+            () => monitor.CurrentValue.Config[TestPlugins.FakeProviderId]["url"].Contains("second", StringComparison.Ordinal),
+            Ct));
+
+        var before = await InvokeAsync(api, Request("config.read", new JsonObject { ["key"] = "url" }), Ct);
+        await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, null, Ct);
+        var after = await InvokeAsync(api, Request("config.read", new JsonObject { ["key"] = "url" }), Ct);
+
+        Assert.Equal("https://first.example.test/in", Assert.IsType<InvocationOutcome.Succeeded>(before.Outcome).Result!["value"]!.GetValue<string>());
+        Assert.Equal("https://second.example.test/in", Assert.IsType<InvocationOutcome.Succeeded>(after.Outcome).Result!["value"]!.GetValue<string>());
     }
 
     [Fact]
@@ -752,6 +806,13 @@ public class PluginInvokerTests
         var invoker = scope.ServiceProvider.GetRequiredService<PluginInvoker>();
         return await invoker.InvokeAsync(request, kill);
     }
+
+    /// <summary>A settings file holding this configuration for the fixture package.</summary>
+    internal static string Configured(JsonObject config) => new JsonObject
+    {
+        ["Dispatcher"] = new JsonObject { ["Enabled"] = false },
+        ["Plugins"] = new JsonObject { ["Config"] = new JsonObject { [TestPlugins.FakeProviderId] = config } },
+    }.ToJsonString();
 
     internal static PluginInvocationRequest Request(
         string operation,

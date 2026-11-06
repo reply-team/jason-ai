@@ -167,6 +167,41 @@ public class PluginContractsShapeTests
         Assert.DoesNotContain("capability-value", (SampleInvocation() with { Door = door }).ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A plugin's configuration travels at the top of the envelope, never in its context. Its keys are the person's own
+    /// words: the envelope's snake case stops at them, because <c>chatId</c> is what the plugin asks for.
+    /// </summary>
+    [Fact]
+    public void A_configuration_travels_at_the_top_of_the_envelope_with_its_keys_as_they_were_written()
+    {
+        var config = new Dictionary<string, string> { ["chatId"] = "0012345", ["URL"] = "https://receiver.example.test/in" };
+
+        var json = JsonSerializer.Serialize(SampleInvocation() with { Config = config }, JasonJson.Options);
+
+        var envelope = JsonNode.Parse(json)!.AsObject();
+        Assert.Equal("0012345", envelope["config"]!["chatId"]!.GetValue<string>());
+        Assert.Equal("https://receiver.example.test/in", envelope["config"]!["URL"]!.GetValue<string>());
+        Assert.Null(envelope["context"]!["config"]);
+
+        var back = JsonSerializer.Deserialize<PluginInvocation>(json, JasonJson.Options)!;
+        Assert.Equal("0012345", back.Config!["CHATID"]);
+        Assert.False(back.Config.ContainsKey("other"));
+    }
+
+    /// <summary>
+    /// An envelope with no configuration is byte for byte the one a plugin nobody configured has always been handed, and
+    /// an envelope from before the field reads as one with none: the protocol's number does not move.
+    /// </summary>
+    [Fact]
+    public void A_plugin_nobody_configured_has_no_key_for_it_and_the_protocol_does_not_move()
+    {
+        var json = JsonSerializer.Serialize(SampleInvocation(), JasonJson.Options);
+
+        Assert.DoesNotContain("\"config\"", json, StringComparison.Ordinal);
+        Assert.Null(JsonSerializer.Deserialize<PluginInvocation>(json, JasonJson.Options)!.Config);
+        Assert.Equal(1, PluginProtocol.CurrentVersion);
+    }
+
     /// <summary>The door's bounds are fixed numbers of the protocol, not settings.</summary>
     [Fact]
     public void A_door_is_bounded_by_fixed_numbers()

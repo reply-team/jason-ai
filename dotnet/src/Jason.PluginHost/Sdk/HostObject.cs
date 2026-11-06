@@ -8,7 +8,7 @@ namespace Jason.PluginHost.Sdk;
 /// <summary>
 /// The <c>host</c> object, built by hand rather than wrapped around a CLR instance. That is the whole point:
 /// a wrapped object would carry a type, a constructor and a member surface a plugin could walk; this one has
-/// six functions — seven where the invocation carries a door to the Runtime API — no prototype of its own and nothing
+/// seven functions — eight where the invocation carries a door to the Runtime API — no prototype of its own and nothing
 /// that can be added to it or replaced.
 /// </summary>
 public static class HostObject
@@ -21,6 +21,7 @@ public static class HostObject
         ExecService exec,
         HttpService http,
         EnvService env,
+        ConfigService config,
         LogService log,
         DoorService? door = null)
     {
@@ -29,12 +30,14 @@ public static class HostObject
         ArgumentNullException.ThrowIfNull(exec);
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(log);
 
         var host = new JsObject(engine);
         Add(engine, host, "exec", 1, (_, args) => exec.Invoke(engine, args));
         Add(engine, host, "http", 1, (_, args) => http.Invoke(engine, args));
         Add(engine, host, "env", 1, (_, args) => env.Read(engine, args));
+        Add(engine, host, "config", 1, (_, args) => config.Read(engine, args));
         Add(engine, host, "log", 2, (_, args) => log.Log(engine, args));
         Add(engine, host, "fail", 1, (_, args) => HostFailure.Create(engine, args));
         Add(engine, host, "channelKey", 2, (_, args) => ChannelKeyFunction.Of(engine, args));

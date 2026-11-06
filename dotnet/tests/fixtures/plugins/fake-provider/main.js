@@ -389,6 +389,9 @@ export function invoke(operation, input, context) {
     case "env.read":
       return { result: { value: host.env(input.name) ?? null } };
 
+    case "config.read":
+      return { result: { value: host.config(input.key), type: typeof host.config(input.key) } };
+
     case "log.emit":
       host.log(input.level ?? "info", input.message, input.data);
       return { result: { logged: true } };
