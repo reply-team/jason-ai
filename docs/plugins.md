@@ -1632,9 +1632,11 @@ read with `host.env` from a variable the manifest declares under `capabilities.e
 in a header, and never logged or returned.
 
 **A self-hosted service.** `capabilities.http.hosts` names the hosts the package may reach, and a grant can only
-narrow it. A plugin for a service people also run themselves names the public host; an operator who runs their own
-edits `hosts` in their copy, grants the same host, and names the server in the binding. The edit changes the
-package's `sha256:` digest, so their copy is a package of its own.
+narrow it unless the manifest says `any_granted_host` (§9). A plugin for a service people also run themselves names the
+public host. Where the manifest does not say the word, an operator who runs their own edits `hosts` in their copy,
+grants the same host, and names the server in the binding; the edit changes the package's `sha256:` digest, so their
+copy is a package of its own. Where it does, the operator grants the host by name and names the server in the binding,
+and the package stays the one that was published.
 
 **The outcomes a person sees** are the `notification_sent` line's: `delivered` with the receipt, `failed` with the
 code and class, or `not_attempted` with `unavailable`, `not_declared` or `binding_invalid` — in `jason runtime status
