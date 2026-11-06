@@ -875,19 +875,24 @@ public sealed class ReplyAccount : IDisposable
 
                 // Every line the stand-in writes is one JSON object, so a blank line, a scalar or a torn line anywhere in
                 // the log is damage, and it is named by its line rather than passed over.
-                JsonObject call;
-                try
-                {
-                    call = JsonNode.Parse(line) as JsonObject
-                        ?? throw new JsonException($"The call log's line {number} is not a JSON object.");
-                }
-                catch (JsonException) when (line.Trim().Length == 0)
+                if (line.Trim().Length == 0)
                 {
                     throw new JsonException($"The call log's line {number} is blank.");
                 }
-                catch (JsonException failure) when (!failure.Message.StartsWith("The call log's line", StringComparison.Ordinal))
+
+                JsonNode? node;
+                try
+                {
+                    node = JsonNode.Parse(line);
+                }
+                catch (JsonException failure)
                 {
                     throw new JsonException($"The call log's line {number} is not whole JSON: {failure.Message}", failure);
+                }
+
+                if (node is not JsonObject call)
+                {
+                    throw new JsonException($"The call log's line {number} is not a JSON object.");
                 }
 
                 calls.Add(new ReplyCall(

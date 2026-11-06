@@ -245,10 +245,10 @@ public class ReplyStubTests
     // -------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Several stand-ins in flight against one account, each writing lines of its own length, leave every line in the log
-    /// and every line whole. An append that took its position when the file was opened would let a short line overwrite
-    /// the head of a long one and lose the entry, leaving the tail behind; the log is the evidence a row stands on, so a lost or a
-    /// torn entry is a row that passes or fails for no reason of its own.
+    /// Several stand-ins in flight against one account, each writing lines of its own length, leave every line in the
+    /// log and every line whole. An append that took its position when the file was opened would let a short line
+    /// overwrite the head of a long one and lose the entry, leaving the tail behind; the log is the evidence a row
+    /// stands on, so a lost or a torn entry is a row that passes or fails for no reason of its own.
     /// </summary>
     [Fact]
     public async Task Stand_ins_in_flight_together_leave_every_call_in_the_log_whole()
