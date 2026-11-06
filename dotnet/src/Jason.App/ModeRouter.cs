@@ -102,8 +102,14 @@ public static class ModeRouter
         }
         catch (RuntimeRunUsageException error)
         {
-            Console.Error.WriteLine($"usage: jason runtime run [--detached] [--data-dir <path>] - {error.Message}");
+            Console.Error.WriteLine($"{RuntimeRunArguments.UsageLine} - {error.Message}");
             return Task.FromResult(2);
+        }
+
+        if (arguments.Help)
+        {
+            Console.Out.WriteLine(RuntimeRunArguments.Usage);
+            return Task.FromResult(0);
         }
 
         TextWriter? refusals = null;
