@@ -514,7 +514,8 @@ than half-read.
 An update replaces the executable and its two notice files, replaces each plugin package installed as an earlier
 release's, writes under `~/.jason/update/`, redeploys the skills this installation recorded, and places the new
 release's UI as `ui/default/`. It does not touch the rest of the data directory: not the database, not
-`~/.jason/config/settings.json` and the grants in it, not any other package under `~/.jason/plugins/`, not the logs,
+`~/.jason/config/settings.json` and the grants and plugin configuration in it, not any other package under
+`~/.jason/plugins/`, not the logs,
 not the work directories. Nor does it touch anything you registered with the machine to start Jason — a systemd unit,
 a scheduled task, a login item — because the file at the install path is replaced in place rather than moved
 elsewhere, so whatever points at that path still points at Jason.

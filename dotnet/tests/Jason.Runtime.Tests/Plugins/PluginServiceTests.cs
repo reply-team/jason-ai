@@ -597,7 +597,6 @@ public class PluginServiceTests
     /// <summary>A plugin memory ceiling below the floor the validator holds, which refuses the whole section.</summary>
     private const string InvalidPlugins = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"MemoryMb":0}}}""";
 
-    /// <summary>Text where the default plugin timeout wants a number, standing in for anything a person might type.</summary>
     /// <summary>
     /// A reload against structure in a plugin's configuration: rejected by the path, the previous snapshot still active,
     /// and nothing typed there in the answer or the log.
@@ -639,6 +638,7 @@ public class PluginServiceTests
         }
     }
 
+    /// <summary>Text where the default plugin timeout wants a number, standing in for anything a person might type.</summary>
     private const string WrongTypeSentinel = "SENTINEL_P_TIMEOUT";
 
     private const string WrongTypedPlugins = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"TimeoutMs":"SENTINEL_P_TIMEOUT"}}}""";

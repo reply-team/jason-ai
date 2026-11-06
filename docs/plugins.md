@@ -178,10 +178,11 @@ The claim reads the list before anything runs. Work that carries such an argumen
 does not list is refused, `argument_unsupported`, so your code never meets an argument it would have to drop or
 ignore; work that does not carry it reaches your code as it always has. It asks for nothing a person grants, so it is
 no capability, and like `binding` the key is optional and additive: `manifest_version` stays `1`, and a runtime too
-old to read the key refuses the package rather than send it an argument it never checked.
+old to read the key rejects the reload, as every package problem does, rather than send it an argument it never checked.
 
 `capabilities.http.any_granted_host` is additive the same way: `manifest_version` stays `1`, and a runtime older than
-0.31.0 refuses the package by the same unknown-key rule. §9 says what the word does and what it costs. No key of a
+0.31.0 rejects the reload, as every package problem does, by the same unknown-key rule. §9 says what the word does and
+what it costs. No key of a
 manifest holds a secret: a secret belongs under `Plugins:Config` (§6, `host.config`) or in the environment (§6,
 `host.env`), never in `plugin.yaml`, which is the package and travels with it.
 
@@ -198,7 +199,8 @@ runtime reads before it repeats such a send after an ambiguous end (§7): a pack
 that end final. A name the list cannot mean — an operation the plugin does not implement, or one whose document does
 not rest its recovery read on the key — is a package problem, so a misplaced promise rejects the reload rather than
 sit unread. The same holds for this key as for `arguments`: it is optional and additive, `manifest_version` stays `1`,
-and a runtime too old to read it refuses the package with `unknown_field`, which is the guard it was meant to meet.
+and a runtime too old to read it rejects the reload with `unknown_field`, as every package problem does, which is the
+guard it was meant to meet.
 
 `templates` says on which channels the plugin writes an operation's message as a template — one the provider fills in
 for the person — rather than only as final text. An operation's document names the channels its message may be a
@@ -617,7 +619,8 @@ an optional setting's ordinary answer, so nothing is recorded for it, and a defa
 
 **A value is text.** A section is a flat map from a key to a string. `host.config` hands back what the settings hold,
 so a token of digits arrives as written, a number as its text, and a boolean as the text the settings keep for it: `true`
-arrives as `"True"`. A plugin that wants a number parses its text. A key is matched as a configuration key is, without
+in the settings file arrives as `"True"`, and a `JASON_*` variable's text as it was written. A plugin that wants a number
+parses its text. A key is matched as a configuration key is, without
 regard to case. A key with children, a nested object or a list, is refused by its path, and so is a key or a plugin's id
 of digits alone, because the settings cannot tell one from a list's index: a start fails, saying where, a live edit keeps
 the last good settings, and a reload keeps the previous snapshot. A value left `null` or `{}` holds nothing and answers
@@ -625,9 +628,9 @@ the last good settings, and a reload keeps the previous snapshot. A value left `
 refused like one.
 
 **A load freezes it**, as it freezes a grant, so a change takes effect at the next `jason plugin reload`. A section for
-a plugin that is not installed is never read, so a person may configure a package before installing it. This is
-settings, read by the runtime for the plugin; it is never a named preference, which is what a person states about the
-client ([`docs/projects.md`](projects.md) §7).
+a plugin that is not installed is handed to nothing, and its shape is checked like any other, so a person may configure a
+package before installing it. This is settings, read by the runtime for the plugin; it is never a named preference, which
+is what a person states about the client ([`docs/projects.md`](projects.md) §7).
 
 **A value is a secret of the invocation.** It reaches the child on stdin and nowhere else: never its environment, its
 argv or a file of its working directory. The host masks each value wherever it writes, a failure's message and details

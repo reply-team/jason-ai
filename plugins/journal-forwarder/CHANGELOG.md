@@ -12,7 +12,7 @@ first, and `JOURNAL_FORWARDER_URL` and `JOURNAL_FORWARDER_TOKEN` where they say 
 A copy edited under an earlier version stays the person's: `jason plugin install journal-forwarder --replace` puts the
 release's package in its place, and the host and the URL then go in the settings as the README says.
 
-Jason 0.31.0 or newer: an earlier runtime refuses the manifest's new word.
+Jason 0.31.0 or newer: an earlier runtime rejects the reload, as every package problem does, over the manifest's new word.
 
 ## 1.0.1
 
