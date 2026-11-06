@@ -112,6 +112,11 @@ public sealed class SettingsAllowlistAgreementTests
         public Dictionary<string, int> Map { get; set; } = [];
     }
 
+    private sealed class MapOfText
+    {
+        public Dictionary<string, string> Map { get; set; } = [];
+    }
+
     private sealed class MapOfMapsOfNumbers
     {
         public Dictionary<string, Dictionary<string, int>> Map { get; set; } = [];
@@ -120,6 +125,7 @@ public sealed class SettingsAllowlistAgreementTests
     /// <summary>A map the walk has no branch for goes red here rather than passing with nothing to judge.</summary>
     [Theory]
     [InlineData(typeof(MapOfNumbers))]
+    [InlineData(typeof(MapOfText))]
     [InlineData(typeof(MapOfMapsOfNumbers))]
     public void A_map_with_no_branch_in_the_walk_is_refused_rather_than_passed_over(Type options)
     {
