@@ -269,7 +269,14 @@ public class ReplyStubTests
             }
         }, Ct)).ToArray();
 
-        await Task.WhenAll(runs).WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        try
+        {
+            await Task.WhenAll(runs).WaitAsync(TimeSpan.FromMinutes(2), Ct);
+        }
+        catch (TimeoutException)
+        {
+            Assert.Fail($"{Writers} stand-ins of {PerWriter} calls each did not all finish within two minutes: {runs.Count(run => !run.IsCompleted)} of the writers were still running.");
+        }
 
         var calls = account.Calls;
         Assert.Equal(Writers * PerWriter, calls.Count);

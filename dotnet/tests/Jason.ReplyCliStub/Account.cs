@@ -215,16 +215,19 @@ internal static partial class Account
     }
 
     /// <summary>
-    /// Appends one line to the log, the whole of it, newline included, in a single write.
+    /// Appends one line to the log, the whole of it, newline included, in a single write, while holding a lock file
+    /// beside the log.
     /// </summary>
     /// <remarks>
-    /// <c>FileMode.Append</c> seeks to the end of the file when the stream is opened, not at each write, so two
-    /// processes that opened the file together take the same position and the shorter line overwrites the head of the
-    /// longer one. What makes an append safe is the share mode: with <c>FileShare.Read</c> a second writer cannot open
-    /// the file while the first holds it, meets a sharing violation, and tries again once the first has closed it and
-    /// the end of the file has moved. Readers are let in, because a test reads the log while a stand-in is held. The
-    /// wait is bounded to a few seconds, and past it the violation is thrown, so a stuck writer fails the call loudly
-    /// instead of dropping its line.
+    /// Two invocations of this program may run at once. <c>FileMode.Append</c> seeks to the end of the file when the
+    /// stream is opened and not at each write (on Unix it is an open followed by a seek), so two processes that opened
+    /// the log together take the same position and the shorter line overwrites the head of the longer one. What
+    /// serializes them is the <c>.lock</c> file: exactly <c>FileShare.None</c> is the one share mode that .NET turns
+    /// into an exclusive lock on every platform (on Unix every other value takes a shared one), so a second writer
+    /// cannot open the lock until the first has finished and fails to open it, and it tries again after a short
+    /// jittered sleep. The lock file stays, empty, and is never deleted. The log's own share mode lets a reader read
+    /// while a call is held and guarantees nothing about writers. The wait is bounded to a few seconds and the failure
+    /// past it is thrown, so a stuck writer fails the call loudly instead of dropping its line.
     /// </remarks>
     private static void Append(string file, string line)
     {
@@ -234,7 +237,8 @@ internal static partial class Account
         {
             try
             {
-                using var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.Read | FileShare.Delete);
+                using var gate = new FileStream(file + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                using var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
                 stream.Write(bytes, 0, bytes.Length);
                 return;
             }
