@@ -354,6 +354,23 @@ public sealed class ConfigShapeTests
         Assert.DoesNotContain("12345", described.ToJsonString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The map of daily limits is keyed by a role. A number under a role Jason ships travels; a person's own role is their
+    /// word, so its key is a placeholder and its number stays behind.
+    /// </summary>
+    [Fact]
+    public void A_limit_travels_under_a_shipped_role_and_stays_behind_under_a_person_s_own()
+    {
+        var described = Describe("""{"Launches":{"MaxPerDay":{"manager":424242,"SENTINEL-their-role":737373}}}""");
+
+        var limits = At(described["shape"]!, "Launches", "MaxPerDay");
+        Assert.Equal(["manager", "<key>"], Names(limits));
+        Assert.Equal(424242, At(limits, "manager")["value"]!.GetValue<int>());
+        Assert.Equal("""{"type":"integer"}""", At(limits, "<key>").ToJsonString());
+        Assert.DoesNotContain("SENTINEL", described.ToJsonString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("737373", described.ToJsonString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_plugin_is_shown_by_its_id_only_where_it_is_installed()
     {

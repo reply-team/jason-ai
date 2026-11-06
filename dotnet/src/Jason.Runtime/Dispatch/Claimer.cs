@@ -40,7 +40,7 @@ public sealed class Claimer(
     ExternalIdStore identifiers,
     ISuppressionCheck suppression,
     LiveSettings<DispatcherOptions> settings,
-    LiveSettings<ResponderOptions> responders,
+    LiveSettings<LaunchesOptions> launches,
     JasonPaths paths,
     ILogger<Claimer> logger,
     PatternTiming? timing = null)
@@ -106,9 +106,9 @@ public sealed class Claimer(
         // halfway through a scan belongs to the next scan, not to half of this one.
         var globalDefault = roles.Current.DefaultExecutionProfile;
 
-        // And the responder's daily limit, for the same reason: a limit raised halfway through a scan applies from the
-        // next one. The day is UTC, since a campaign has no time zone of its own.
-        var launches = responders.Current.MaxLaunchesPerDay;
+        // And the daily limits, for the same reason: a limit raised halfway through a scan applies from the next one. The
+        // day is UTC, since a campaign has no time zone of its own.
+        var limits = launches.Current.MaxPerDay;
         var today = now.Date;
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
@@ -132,10 +132,11 @@ public sealed class Claimer(
             // A responder its campaign has started enough of today is held, not refused: a failure would wake the manager,
             // so the reply would reach it by a second path. It waits, with no attempt, for the next 00:00Z.
             if (item.Kind == WorkItemKind.AiRole && string.Equals(item.Role, Responder.Role, StringComparison.Ordinal)
-                && await SpentAsync(db, item, launches, today, ct).ConfigureAwait(false))
+                && limits.TryGetValue(item.Role!, out var limit)
+                && await SpentAsync(db, item, limit, today, ct).ConfigureAwait(false))
             {
                 var tomorrow = today.AddDays(1);
-                outcomes.Hold(db, item, tomorrow, LaunchesSpent(launches, today, tomorrow), launches, Actors.Dispatcher);
+                outcomes.Hold(db, item, tomorrow, LaunchesSpent(limit, today, tomorrow), limit, Actors.Dispatcher);
                 await SaveAsync(db, item, ct).ConfigureAwait(false);
                 continue;
             }
@@ -343,7 +344,7 @@ public sealed class Claimer(
         var runs = limit == 1 ? "1 run" : string.Create(CultureInfo.InvariantCulture, $"{limit} runs");
         return new AttemptErrorDto(
             AttemptErrors.ResponderLaunchesSpent,
-            $"Responder work in this campaign has reached the limit Responder:MaxLaunchesPerDay sets, {runs} started since {Zulu(today)}; "
+            $"Responder work in this campaign has reached the limit Launches:MaxPerDay:responder sets, {runs} started since {Zulu(today)}; "
             + $"this item waits until {Zulu(tomorrow)}. A person's workitem.resume lets it go sooner, past the limit, and a raised "
             + "limit applies from the next scan to work not yet held, while this item keeps its moment.",
             Retriable: false);

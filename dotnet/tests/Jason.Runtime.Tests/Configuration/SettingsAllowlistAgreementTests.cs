@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using Jason.Cli.Doctor;
+using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 
@@ -141,6 +142,18 @@ public sealed class SettingsAllowlistAgreementTests
             {
                 // The one map of lists is keyed by a journal kind: the order of that kind's subscribers.
                 yield return new Setting($"{child}:workitem_failed[]", typeof(string));
+            }
+            else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>)
+                && propertyType.GetGenericArguments()[1] == typeof(int))
+            {
+                // The one map of numbers is keyed by a role. A shipped role's number travels; a person's own role is not on
+                // the list, so the sentinel written under one has to stay behind.
+                foreach (var role in ShippedRoles.Names)
+                {
+                    yield return new Setting($"{child}:{role}", typeof(int));
+                }
+
+                yield return new Setting($"{child}:a-role-of-their-own", typeof(int));
             }
             else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {

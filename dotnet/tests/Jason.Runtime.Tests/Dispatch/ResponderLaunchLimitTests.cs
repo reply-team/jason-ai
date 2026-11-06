@@ -60,7 +60,7 @@ public class ResponderLaunchLimitTests
         Assert.Equal(AttemptErrors.ResponderLaunchesSpent, item.LastError!.Code);
         Assert.False(item.LastError.Retriable);
         Assert.Equal(
-            "Responder work in this campaign has reached the limit Responder:MaxLaunchesPerDay sets, 2 runs started since "
+            "Responder work in this campaign has reached the limit Launches:MaxPerDay:responder sets, 2 runs started since "
             + "2026-10-06T00:00:00Z; this item waits until 2026-10-07T00:00:00Z. A person's workitem.resume lets it go sooner, "
             + "past the limit, and a raised limit applies from the next scan to work not yet held, while this item keeps its moment.",
             item.LastError.Message);
@@ -183,7 +183,7 @@ public class ResponderLaunchLimitTests
         var held = await QueuedAsync(harness, campaign);
         Assert.Empty(await harness.ClaimAsync(Ct));
 
-        harness.Responder.CurrentValue = new ResponderOptions { MaxLaunchesPerDay = 3 };
+        Limit(harness, 3);
         var next = await QueuedAsync(harness, campaign);
         var work = Assert.Single(await harness.ClaimAsync(Ct));
 
@@ -484,9 +484,12 @@ public class ResponderLaunchLimitTests
     private static DispatchHarness Harness(int limit, DateTime? now = null)
     {
         var harness = new DispatchHarness(now ?? Noon);
-        harness.Responder.CurrentValue = new ResponderOptions { MaxLaunchesPerDay = limit };
+        Limit(harness, limit);
         return harness;
     }
+
+    private static void Limit(DispatchHarness harness, int limit) =>
+        harness.Launches.CurrentValue = new LaunchesOptions { MaxPerDay = new(StringComparer.Ordinal) { ["responder"] = limit } };
 
     private static async Task<int> CampaignAsync(DispatchHarness harness)
     {

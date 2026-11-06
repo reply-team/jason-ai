@@ -84,6 +84,7 @@ internal sealed class DispatchHarness : IDisposable
 
         // The respond step, as the runtime ships it: on, so a reply the read says wakes a responder where one can launch.
         services.AddSingleton<IOptionsMonitor<ResponderOptions>>(Responder);
+        services.AddSingleton<IOptionsMonitor<LaunchesOptions>>(Launches);
 
         // The subscription runner's numbers, as the runtime ships them unless a test changes them between turns.
         services.AddSingleton<IOptionsMonitor<SubscriptionsOptions>>(Subscriptions);
@@ -175,6 +176,8 @@ internal sealed class DispatchHarness : IDisposable
 
     /// <summary>The notification settings the scan reads. Off until a test turns them on.</summary>
     public TestOptionsMonitor<ResponderOptions> Responder { get; } = new(new ResponderOptions());
+
+    public TestOptionsMonitor<LaunchesOptions> Launches { get; } = new(new LaunchesOptions());
 
     public TestOptionsMonitor<NotificationsOptions> Notifications { get; } = new(new NotificationsOptions { Enabled = false });
 

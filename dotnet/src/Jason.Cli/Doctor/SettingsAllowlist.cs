@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Logs;
+using Jason.Contracts.Api;
 using Jason.Contracts.Configuration;
 
 namespace Jason.Cli.Doctor;
@@ -145,7 +146,7 @@ public sealed class SettingsAllowlist
         new("Responder:TimeoutSeconds", Kind.Integer32),
         new("Responder:MaxAttempts", Kind.Integer32),
         new("Responder:MaxAgeSeconds", Kind.Integer32),
-        new("Responder:MaxLaunchesPerDay", Kind.Integer32),
+        .. ShippedRoles.Names.Select(role => new Entry($"Launches:MaxPerDay:{role}", Kind.Integer32)),
         new("Subscriptions:RunRecordsPerKind", Kind.Integer32),
         new("Subscriptions:EnvelopeBytes", Kind.Integer32),
         new("Subscriptions:TransientRetries", Kind.Integer32),

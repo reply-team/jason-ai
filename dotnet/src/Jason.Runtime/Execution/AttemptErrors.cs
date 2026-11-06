@@ -100,7 +100,7 @@ public static class AttemptErrors
     public const string ProviderBlocked = "provider_blocked";
 
     /// <summary>
-    /// Responder work in the item's campaign has started as many runs since 00:00Z as <c>Responder:MaxLaunchesPerDay</c>
+    /// Responder work in the item's campaign has started as many runs since 00:00Z as <c>Launches:MaxPerDay:responder</c>
     /// allows. Not a refusal of the work: the claim holds the responder, with no attempt, until the next 00:00Z, and a
     /// person's <c>workitem.resume</c> lets it go sooner. Only that hold writes this code.
     /// </summary>
