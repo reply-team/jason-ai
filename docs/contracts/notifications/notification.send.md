@@ -13,13 +13,14 @@ it. Where the two seem to differ, the document is right and this page is a bug.
 When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — or a protective
 action fails, the person should find out without asking. The runtime's notifier waits for a burst of these to settle and
 then sends **one pointer**: how many approvals and questions are waiting, whether protective actions failed, accounts
-have events Jason did not read or provider blocks are open, and where to look. A notification plugin carries that
-pointer to a service the person reads, such as an ntfy topic on their phone.
+have events Jason did not read or provider blocks are open, how many items wait on a launch budget, and where to
+look. A notification plugin carries that pointer to a service the person reads, such as an ntfy topic on their phone.
 
 What the plugin receives is `title`, `message` and the two counts, `approvals` and `decisions`. The message may also say
 that protective actions failed, and name up to three campaigns by public id — an opaque `cmp_…` that names nothing by
-itself — and count the accounts whose events Jason did not read and the open provider blocks, with the work items they
-hold. Nothing else about the work travels: no campaign's name, no contact, no subject, no question's words, no error.
+itself — and count the accounts whose events Jason did not read, the open provider blocks, with the work items they
+hold, and how many items wait on a launch budget. Nothing else about the work travels: no campaign's name, no contact,
+no subject, no question's words, no error.
 The person reads what waits in their own session, through their agent or `jason approval list` and
 `jason decision list`.
 
@@ -88,7 +89,7 @@ A plugin that performs this contract:
   once more;
 - answers `notification_refused` or `notification_unauthorized` for an answer that will not change by trying again;
 - returns at most a receipt: the service's own identifier for the message, at most 256 characters;
-- keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with `host.env`.
+- keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with `host.env` or `host.config`.
 
 The fixtures under [`../fixtures/notification.send/`](../fixtures/notification.send/) are run by the repository's
 tests against this document, so an example on this page and the contract cannot drift apart.

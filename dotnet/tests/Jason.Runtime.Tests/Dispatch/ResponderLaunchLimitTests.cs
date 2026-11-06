@@ -20,8 +20,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
-/// How many responder runs one campaign may start in a UTC day. The claim counts the responder attempts of the item's
-/// campaign that started since 00:00Z, and a responder it finds at the limit is held, not failed: it waits, with no
+/// How many runs of a role one campaign may start in a UTC day, the responder's first among them. The claim counts the attempts of the item's role in its
+/// campaign that started since 00:00Z, and an item it finds at the limit is held, not failed: it waits, with no
 /// attempt, until the next 00:00Z, so the reply it would answer never reaches the manager by a second path. The count
 /// reads columns and the clock only.
 /// </summary>
@@ -57,10 +57,10 @@ public class ResponderLaunchLimitTests
         Assert.Equal(WorkItemStatus.Waiting, item.Status);
         Assert.Empty(item.Attempts);
         Assert.Equal(0, item.AttemptCount);
-        Assert.Equal(AttemptErrors.ResponderLaunchesSpent, item.LastError!.Code);
+        Assert.Equal(AttemptErrors.LaunchesSpent, item.LastError!.Code);
         Assert.False(item.LastError.Retriable);
         Assert.Equal(
-            "Responder work in this campaign has reached the limit Responder:MaxLaunchesPerDay sets, 2 runs started since "
+            "Work of the responder role in this campaign has reached the limit Launches:MaxPerDay:responder sets, 2 runs started since "
             + "2026-10-06T00:00:00Z; this item waits until 2026-10-07T00:00:00Z. A person's workitem.resume lets it go sooner, "
             + "past the limit, and a raised limit applies from the next scan to work not yet held, while this item keeps its moment.",
             item.LastError.Message);
@@ -73,7 +73,7 @@ public class ResponderLaunchLimitTests
         var line = await db.Journal.AsNoTracking().SingleAsync(e => e.WorkItemId == item.PublicId && e.Kind == JournalKinds.WorkItemWaiting, Ct);
         Assert.Null(line.Key);
         Assert.Equal(
-            """{"on":[],"mode":null,"until":"2026-10-07T00:00:00.000Z","deadline":"2026-10-07T00:00:00.000Z","held_by":{"code":"responder_launches_spent","limit":2}}""",
+            """{"on":[],"mode":null,"until":"2026-10-07T00:00:00.000Z","deadline":"2026-10-07T00:00:00.000Z","held_by":{"code":"launches_spent","limit":2,"role":"responder"}}""",
             line.New!.ToJsonString());
         Assert.Equal((ActorType.System, "dispatcher"), (line.ActorType, line.ActorId));
         Assert.DoesNotContain(await db.Journal.AsNoTracking().Where(e => e.WorkItemId == item.PublicId).Select(e => e.Kind).ToListAsync(Ct), kind => kind == JournalKinds.WorkItemScheduled);
@@ -183,7 +183,7 @@ public class ResponderLaunchLimitTests
         var held = await QueuedAsync(harness, campaign);
         Assert.Empty(await harness.ClaimAsync(Ct));
 
-        harness.Responder.CurrentValue = new ResponderOptions { MaxLaunchesPerDay = 3 };
+        Limit(harness, 3);
         var next = await QueuedAsync(harness, campaign);
         var work = Assert.Single(await harness.ClaimAsync(Ct));
 
@@ -408,7 +408,7 @@ public class ResponderLaunchLimitTests
 
         var item = await ItemAsync(harness, held);
         Assert.Equal(WorkItemStatus.Waiting, item.Status);
-        Assert.Equal(AttemptErrors.ResponderLaunchesSpent, item.LastError!.Code);
+        Assert.Equal(AttemptErrors.LaunchesSpent, item.LastError!.Code);
         await using var db = harness.Open();
         var waits = await db.WorkItemWaits.AsNoTracking().Where(w => w.WorkItemId == held).OrderBy(w => w.Id).ToListAsync(Ct);
         Assert.Equal(3, waits.Count);
@@ -440,6 +440,147 @@ public class ResponderLaunchLimitTests
         var resumption = Assert.IsType<Resumption>(Assert.Single(await harness.ClaimAsync(Ct)).Resumption);
 
         Assert.Equal((run, 1, WaitReleaseReason.MomentReached), (resumption.PreviousAttemptId, resumption.ResumptionNumber, resumption.WokeBecause));
+    }
+
+    /// <summary>
+    /// The limit is no one role's: a role the map names, shipped or a person's own, is held at it exactly as a responder is,
+    /// its last error naming the role's own setting, and a role the map does not name has no limit however it has run: it
+    /// is claimed at the next scan, the campaign's turn of this one having gone to the hold.
+    /// </summary>
+    [Theory]
+    [InlineData("planner")]
+    [InlineData("manager")]
+    [InlineData("a-role-of-their-own")]
+    public async Task A_role_the_map_names_is_held_at_its_limit_and_one_it_does_not_name_is_not(string role)
+    {
+        using var harness = new DispatchHarness(Noon);
+        Limits(harness, (role, 1));
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, "researcher", Today.AddHours(1), Today.AddHours(2));
+        await LaunchedAsync(harness, campaign, role, Today.AddHours(3));
+        var held = await QueuedAsync(harness, campaign, role);
+        var free = await QueuedAsync(harness, campaign, "researcher");
+
+        Assert.Empty(await harness.ClaimAsync(Ct));
+        var work = Assert.Single(await harness.ClaimAsync(Ct));
+
+        Assert.Equal(await PublicIdAsync(harness, free), work.WorkItemPublicId);
+        await using var db = harness.Open();
+        var item = await db.WorkItems.AsNoTracking().Include(w => w.Attempts).SingleAsync(w => w.Id == held, Ct);
+        Assert.Equal(WorkItemStatus.Waiting, item.Status);
+        Assert.Empty(item.Attempts);
+        Assert.Equal(
+            $"Work of the {role} role in this campaign has reached the limit Launches:MaxPerDay:{role} sets, 1 run started since "
+            + "2026-10-06T00:00:00Z; this item waits until 2026-10-07T00:00:00Z. A person's workitem.resume lets it go sooner, "
+            + "past the limit, and a raised limit applies from the next scan to work not yet held, while this item keeps its moment.",
+            item.LastError!.Message);
+        var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == held, Ct);
+        Assert.Equal((WaitStatus.Open, (int?)null, (int?)null, Tomorrow), (wait.Status, wait.AttemptId, wait.ProviderBlockId, wait.Until!.Value));
+    }
+
+    /// <summary>A role's day is spent by that role's runs alone: each role of the map counts its own, in its own campaign.</summary>
+    [Fact]
+    public async Task One_role_s_runs_do_not_spend_another_role_s_limit()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Limits(harness, ("planner", 1), ("critic", 1));
+        var campaign = await CampaignAsync(harness);
+        var other = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, "critic", Today.AddHours(1));
+        await LaunchedAsync(harness, other, "planner", Today.AddHours(1));
+        var queued = await QueuedAsync(harness, campaign, "planner");
+
+        var work = Assert.Single(await harness.ClaimAsync(Ct));
+
+        Assert.Equal(await PublicIdAsync(harness, queued), work.WorkItemPublicId);
+    }
+
+    /// <summary>The ways out hold for every role: a person's resume lets a held planner go past its limit.</summary>
+    [Fact]
+    public async Task A_held_role_a_person_resumes_is_claimed_though_its_day_is_spent()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Limits(harness, ("planner", 1));
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, "planner", Today.AddHours(1));
+        var held = await QueuedAsync(harness, campaign, "planner");
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        await ResumeAsync(harness, held);
+
+        Assert.Equal(await PublicIdAsync(harness, held), Assert.Single(await harness.ClaimAsync(Ct)).WorkItemPublicId);
+    }
+
+    /// <summary>
+    /// A hold has no attempt, so it shadows no resumption on any role: a planner that yielded, held when its wait let it
+    /// go, is told at midnight what its own wait ended with.
+    /// </summary>
+    [Fact]
+    public async Task A_hold_with_no_attempt_shadows_no_resumption_of_a_role_that_yielded()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Limits(harness, ("planner", 2));
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, "planner", Today.AddHours(1));
+        var yielded = await QueuedAsync(harness, campaign, "planner");
+        var run = await RunsAndYieldsAsync(harness, yielded, until: Noon.AddHours(1));
+        harness.Clock.Now = new DateTimeOffset(Noon.AddHours(1));
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        harness.Clock.Now = new DateTimeOffset(Tomorrow.AddHours(1));
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+
+        await AssertResumedFromTheYieldAsync(harness, yielded, run, Assert.Single(await harness.ClaimAsync(Ct)));
+    }
+
+    /// <summary>
+    /// A hold keeps the item's due date: a held planner whose moment to be done passes before midnight expires like any
+    /// waiting item, and its wait closes with it.
+    /// </summary>
+    [Fact]
+    public async Task A_held_role_past_its_due_date_expires_and_its_wait_closes_with_it()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Limits(harness, ("planner", 1));
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, "planner", Today.AddHours(1));
+        var held = await QueuedAsync(harness, campaign, "planner", dueAt: Noon.AddHours(1));
+        Assert.Empty(await harness.ClaimAsync(Ct));
+        Assert.Equal(WorkItemStatus.Waiting, (await ItemAsync(harness, held)).Status);
+
+        harness.Clock.Now = new DateTimeOffset(Noon.AddHours(2));
+        await using var scope = harness.Scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<Expirer>().ExpireAsync(db, Ct));
+
+        Assert.Equal(WorkItemStatus.Expired, (await ItemAsync(harness, held)).Status);
+        var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == held, Ct);
+        Assert.True(wait.Status == WaitStatus.Expired, $"The wait of an expired item is {wait.Status}.");
+    }
+
+    /// <summary>
+    /// An item a 0.30.0 runtime held keeps that release's code as its last error, and a person's resume after the update
+    /// still lets it past the limit rather than sending it straight back.
+    /// </summary>
+    [Fact]
+    public async Task A_hold_written_under_the_old_code_and_resumed_after_an_update_is_not_held_again()
+    {
+        using var harness = Harness(limit: 1);
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, Today.AddHours(1));
+        var held = await QueuedAsync(harness, campaign);
+        Assert.Empty(await harness.ClaimAsync(Ct));
+        await using (var db = harness.Open())
+        {
+            var item = await db.WorkItems.SingleAsync(w => w.Id == held, Ct);
+            item.LastError = item.LastError! with { Code = AttemptErrors.ResponderLaunchesSpent };
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await ResumeAsync(harness, held);
+
+        Assert.Equal(await PublicIdAsync(harness, held), Assert.Single(await harness.ClaimAsync(Ct)).WorkItemPublicId);
     }
 
     /// <summary>The claimed run follows the yield's wait: told its attempt and its reason, numbered as its first resumption, and named on that wait.</summary>
@@ -484,9 +625,14 @@ public class ResponderLaunchLimitTests
     private static DispatchHarness Harness(int limit, DateTime? now = null)
     {
         var harness = new DispatchHarness(now ?? Noon);
-        harness.Responder.CurrentValue = new ResponderOptions { MaxLaunchesPerDay = limit };
+        Limit(harness, limit);
         return harness;
     }
+
+    private static void Limit(DispatchHarness harness, int limit) => Limits(harness, (Responder.Role, limit));
+
+    private static void Limits(DispatchHarness harness, params (string Role, int Limit)[] limits) =>
+        harness.Launches.CurrentValue = new LaunchesOptions { MaxPerDay = limits.ToDictionary(l => l.Role, l => l.Limit, StringComparer.Ordinal) };
 
     private static async Task<int> CampaignAsync(DispatchHarness harness)
     {
@@ -498,13 +644,17 @@ public class ResponderLaunchLimitTests
     }
 
     /// <summary>One finished responder per moment, each with one attempt that started then.</summary>
-    private static async Task LaunchedAsync(DispatchHarness harness, int campaignId, params DateTime[] started)
+    private static Task LaunchedAsync(DispatchHarness harness, int campaignId, params DateTime[] started) =>
+        LaunchedAsync(harness, campaignId, Responder.Role, started);
+
+    /// <summary>One finished item of the role per moment, each with one attempt that started then.</summary>
+    private static async Task LaunchedAsync(DispatchHarness harness, int campaignId, string role, params DateTime[] started)
     {
         await using var db = harness.Open();
         var campaign = await db.Campaigns.SingleAsync(c => c.Id == campaignId, Ct);
         foreach (var moment in started)
         {
-            var item = WorkItemFactory.NewAiRole(campaign, role: Responder.Role, now: moment);
+            var item = WorkItemFactory.NewAiRole(campaign, role: role, now: moment);
             item.CreatedByType = ActorType.System;
             item.CreatedById = "dispatcher";
             Ended(item, WorkItemStatus.Succeeded, AttemptStatus.Succeeded, claimed: moment, started: moment);
@@ -514,16 +664,17 @@ public class ResponderLaunchLimitTests
         await db.SaveChangesAsync(Ct);
     }
 
-    /// <summary>A responder ready to be claimed, as the respond step leaves one once its read has ended.</summary>
-    private static async Task<int> QueuedAsync(DispatchHarness harness, int campaignId)
+    /// <summary>An item of the role, a responder unless it says, ready to be claimed, as the respond step leaves one once its read has ended.</summary>
+    private static async Task<int> QueuedAsync(DispatchHarness harness, int campaignId, string role = Responder.Role, DateTime? dueAt = null)
     {
         await using var db = harness.Open();
         var campaign = await db.Campaigns.SingleAsync(c => c.Id == campaignId, Ct);
-        var item = WorkItemFactory.NewAiRole(campaign, role: Responder.Role, now: harness.Clock.Now.UtcDateTime, configure: w =>
+        var item = WorkItemFactory.NewAiRole(campaign, role: role, now: harness.Clock.Now.UtcDateTime, configure: w =>
         {
             w.CreatedByType = ActorType.System;
             w.CreatedById = "dispatcher";
             w.Priority = 50;
+            w.DueAt = dueAt;
         });
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(Ct);

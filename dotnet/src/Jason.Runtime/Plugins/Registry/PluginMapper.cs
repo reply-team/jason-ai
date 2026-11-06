@@ -56,6 +56,7 @@ public static class PluginMapper
                 manifest.Capabilities.Api is null ? null : new ListCapabilityDto(manifest.Capabilities.Api.Families, plugin.Grants.Api))
             {
                 Subscriptions = manifest.Subscriptions.Count == 0 ? null : new ListCapabilityDto(manifest.Subscriptions, plugin.Grants.Subscriptions),
+                AnyGrantedHost = manifest.Capabilities.Http?.AnyGrantedHost == true ? true : null,
             },
             new PluginLimitsDto(plugin.Limits.TimeoutMs, plugin.Limits.MemoryMb),
 

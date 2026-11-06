@@ -42,6 +42,54 @@ public sealed class ConfigShapeTests
     /// <summary>The description of one value written at an unlisted place: <c>Update:FeedUrl</c> is a string and never a value.</summary>
     private static string Feed(string json) => At(Shape("{\"Update\":{\"FeedUrl\":" + json + "}}"), "Update", "FeedUrl").ToJsonString();
 
+    // A plugin's configuration: the section, whole, in every way a file can spell it.
+
+    private const string Withheld = """{"withheld":"plugin_configuration"}""";
+
+    /// <summary>Nothing of the section travels: no plugin, no key, no size, no type, no value and not how many there are.</summary>
+    [Theory]
+    [InlineData("""{"Plugins":{"Config":{"fake-provider":{"url":"https://SENTINEL.example.test","Port":"5000","token":"SENTINEL"}}}}""")]
+    [InlineData("""{"PLUGINS":{"CONFIG":{"fake-provider":{"url":"SENTINEL"}}}}""")]
+    [InlineData("""{"Plugins":{"Config":["SENTINEL"]}}""")]
+    [InlineData("""{"Plugins":{"Config":"SENTINEL"}}""")]
+    [InlineData("""{"Plugins:Config":{"fake-provider":{"url":"SENTINEL"}}}""")]
+    public void The_section_of_a_plugins_configuration_is_withheld_whole(string text)
+    {
+        var described = Describe(text).ToJsonString();
+
+        Assert.Contains(Withheld, described, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL", described, StringComparison.Ordinal);
+        Assert.DoesNotContain("fake-provider", described, StringComparison.Ordinal);
+        Assert.DoesNotContain("url", described, StringComparison.Ordinal);
+        Assert.DoesNotContain("token", described, StringComparison.Ordinal);
+    }
+
+    /// <summary>A key that spells a path inside the section reaches the same settings, so it is the section, and its own name stays home too.</summary>
+    [Theory]
+    [InlineData("""{"Plugins:Config:fake-provider":{"url":"SENTINEL"}}""")]
+    [InlineData("""{"Plugins:Config:fake-provider:url":"SENTINEL"}""")]
+    [InlineData("""{"plugins:config:SENTINEL":{"url":"SENTINEL"}}""")]
+    [InlineData("""{"Plugins":{"Config:fake-provider":{"url":"SENTINEL"}}}""")]
+    [InlineData("""{"Plugins":{"Config:fake-provider:url":"SENTINEL"}}""")]
+    public void A_key_that_spells_a_path_inside_the_section_is_the_section(string text)
+    {
+        var described = Describe(text).ToJsonString();
+
+        Assert.Contains(Withheld, described, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL", described, StringComparison.Ordinal);
+        Assert.DoesNotContain("fake-provider", described, StringComparison.Ordinal);
+        Assert.DoesNotContain("url", described, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void What_stands_beside_the_section_is_described_as_ever()
+    {
+        var shape = Shape("""{"Plugins":{"Config":{"fake-provider":{"url":"x"}},"Exec":{"MaxCalls":7}}}""");
+
+        Assert.Equal(7, At(shape, "Plugins", "Exec", "MaxCalls")["value"]!.GetValue<int>());
+        Assert.Equal(Withheld, At(shape, "Plugins", "Config").ToJsonString());
+    }
+
     // The file that is not there, the one that is not JSON, and what is said about each.
 
     [Fact]
@@ -352,6 +400,23 @@ public sealed class ConfigShapeTests
 
         Assert.Equal(["<key>", "1234"], Names(At(described["shape"]!, "Manager", "Triggers")));
         Assert.DoesNotContain("12345", described.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The map of daily limits is keyed by a role. A number under a role Jason ships travels; a person's own role is their
+    /// word, so its key is a placeholder and its number stays behind.
+    /// </summary>
+    [Fact]
+    public void A_limit_travels_under_a_shipped_role_and_stays_behind_under_a_person_s_own()
+    {
+        var described = Describe("""{"Launches":{"MaxPerDay":{"manager":424242,"SENTINEL-their-role":737373}}}""");
+
+        var limits = At(described["shape"]!, "Launches", "MaxPerDay");
+        Assert.Equal(["manager", "<key>"], Names(limits));
+        Assert.Equal(424242, At(limits, "manager")["value"]!.GetValue<int>());
+        Assert.Equal("""{"type":"integer"}""", At(limits, "<key>").ToJsonString());
+        Assert.DoesNotContain("SENTINEL", described.ToJsonString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("737373", described.ToJsonString(), StringComparison.Ordinal);
     }
 
     [Fact]

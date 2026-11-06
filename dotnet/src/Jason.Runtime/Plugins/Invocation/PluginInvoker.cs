@@ -346,7 +346,8 @@ public sealed partial class PluginInvoker(
                 request.UnsettledReference),
             grants,
             Limits(settings, plugin, timeoutMs),
-            door);
+            door,
+            plugin.Config.Count == 0 ? null : plugin.Config);
 
         var workDir = paths.PluginInvocationDirectory(provenance.InvocationId);
         Directory.CreateDirectory(workDir);
@@ -392,7 +393,7 @@ public sealed partial class PluginInvoker(
 
             var stderr = new StderrSink(
                 Path.Combine(workDir, "stderr.log"),
-                new Redactor([.. (grants.Env?.Variables ?? []).Select(Environment.GetEnvironmentVariable), door?.Capability]),
+                new Redactor([.. (grants.Env?.Variables ?? []).Select(Environment.GetEnvironmentVariable), .. plugin.Config.Values, door?.Capability]),
                 settings.Invoker.StderrBytes,
                 StderrTailChars);
 

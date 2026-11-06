@@ -224,8 +224,40 @@ public sealed class Notifier(
         var asked = folded is null || folded.Lines == 0 ? null : new Burst(folded.Lines, folded.Oldest, folded.Newest);
         var protective = failed is null || failed.Lines == 0 ? null : new Burst(failed.Lines, failed.Oldest, failed.Newest);
         var unread = gaps is null || gaps.Lines == 0 ? null : new Burst(gaps.Lines, gaps.Oldest, gaps.Newest);
-        var held = blocks is null || blocks.Lines == 0 ? null : new Burst(blocks.Lines, blocks.Oldest, blocks.Newest);
-        return Joined(Joined(Joined(asked, protective), unread), held);
+        var blocked = blocks is null || blocks.Lines == 0 ? null : new Burst(blocks.Lines, blocks.Oldest, blocks.Newest);
+        return Joined(Joined(Joined(Joined(asked, protective), unread), blocked), await HoldsAsync(db, after, upTo, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// The holds in <c>(after, upTo]</c>, as one burst. Only a line's payload says it is one, so this reads the lines of the
+    /// kind rather than aggregating them, a batch at a time over the kind index, and no read returns rows without a bound.
+    /// </summary>
+    private static async Task<Burst?> HoldsAsync(JasonDbContext db, int after, int upTo, CancellationToken ct)
+    {
+        Burst? held = null;
+        var from = after;
+        while (true)
+        {
+            var position = from;
+            var lines = await BudgetHoldLines.Of(db)
+                .Where(e => e.Id > position && e.Id <= upTo)
+                .OrderBy(e => e.Id)
+                .Take(ReadBatch)
+                .Select(e => new { e.Id, e.Ts, e.New })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            foreach (var line in lines.Where(line => BudgetHoldLines.Holds(line.New)))
+            {
+                held = held?.With(line.Ts) ?? new Burst(1, line.Ts, line.Ts);
+            }
+
+            if (lines.Count < ReadBatch)
+            {
+                return held;
+            }
+
+            from = lines[^1].Id;
+        }
     }
 
     /// <summary>Two bursts as one: every line of both, from the oldest of either to the newest.</summary>
@@ -263,10 +295,16 @@ public sealed class Notifier(
         var blocks = lines.Any(line => line.Kind == ProviderBlockLines.Kind)
             ? (await ProviderBlockLines.First(db).Where(e => e.Id >= oldest && e.Id <= newest.Id).Select(e => e.Id).ToListAsync(ct).ConfigureAwait(false)).ToHashSet()
             : new HashSet<int>();
+
+        // A wait's line wakes one only when it names the limit that held the item, which only its payload says.
+        var holds = lines.Any(line => line.Kind == BudgetHoldLines.Kind)
+            ? (await BudgetHoldLines.Of(db).Where(e => e.Id >= oldest && e.Id <= newest.Id).Select(e => new { e.Id, e.New }).ToListAsync(ct).ConfigureAwait(false))
+                .Where(line => BudgetHoldLines.Holds(line.New)).Select(line => line.Id).ToHashSet()
+            : new HashSet<int>();
         state.Advance(
             newest.Id,
             newest.PublicId,
-            lines.Where(line => Triggers.Contains(line.Kind) || protective.Contains(line.Id) || line.Kind == EventGapLines.Kind || blocks.Contains(line.Id)).Select(line => line.Ts));
+            lines.Where(line => Triggers.Contains(line.Kind) || protective.Contains(line.Id) || line.Kind == EventGapLines.Kind || blocks.Contains(line.Id) || holds.Contains(line.Id)).Select(line => line.Ts));
         if (lines.Count < ReadBatch)
         {
             return;

@@ -1,7 +1,7 @@
 {
   "id": "notification.send",
   "version": 1,
-  "intent": "Put a pointer in front of a person: how many approvals and questions are waiting in Jason, whether protective actions failed, accounts have events Jason did not read or provider blocks are open, and where to look. Nothing else about the work travels.",
+  "intent": "Put a pointer in front of a person: how many approvals and questions are waiting in Jason, whether protective actions failed, accounts have events Jason did not read, provider blocks are open or work waits on a launch budget, and where to look. Nothing else about the work travels.",
   "input_schema": {
     "type": "object",
     "properties": {
@@ -36,6 +36,6 @@
     "Answers notification_unreachable for a service that did not answer or is unavailable for now, so the runtime tries once more.",
     "Answers notification_refused or notification_unauthorized for an answer that will not change by trying again.",
     "Returns at most a receipt: the service's own identifier for the message, at most 256 characters.",
-    "Keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with host.env."
+    "Keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with host.env or host.config."
   ]
 }

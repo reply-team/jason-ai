@@ -265,7 +265,7 @@ public enum Family
     /// <summary>A skill's verified row is earned.</summary>
     D2,
 
-    /// <summary>A published document is true of the tree it ships in: no page says what the tree has outgrown.</summary>
+    /// <summary>A published document is true of the tree it ships in: no file it ships says what the tree has outgrown.</summary>
     D3,
 
     /// <summary>Edges and bounds: caps, cuts through a character, timeouts that are never verdicts, races decided once.</summary>

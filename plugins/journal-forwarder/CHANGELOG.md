@@ -3,6 +3,17 @@
 This package versions independently of the Jason runtime, under SemVer. It declares every journal kind a plugin may
 subscribe to, so a version that adds a kind to its manifest is a new version of the package.
 
+## 1.1.0
+
+A receiver on another host no longer asks for an edit of the package. The manifest says `any_granted_host: true`, so a
+host a person names in `Plugins:Grants:journal-forwarder:Http` is honoured, while `*` still means `localhost:8787` alone;
+this asks for more than 1.0.1 did. The plugin reads the keys `url` and `token` under `Plugins:Config:journal-forwarder`
+first, and `JOURNAL_FORWARDER_URL` and `JOURNAL_FORWARDER_TOKEN` where they say nothing. The failure codes are unchanged.
+A copy edited under an earlier version stays the person's: `jason plugin install journal-forwarder --replace` puts the
+release's package in its place, and the host and the URL then go in the settings as the README says.
+
+Jason 0.31.0 or newer: an earlier runtime rejects the reload, as every package problem does, over the manifest's new word.
+
 ## 1.0.1
 
 The package is published with every release of Jason from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, and the

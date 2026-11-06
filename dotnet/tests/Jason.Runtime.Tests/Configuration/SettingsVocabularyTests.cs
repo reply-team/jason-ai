@@ -1,4 +1,5 @@
 using System.Reflection;
+using Jason.Contracts.Api;
 using Jason.Contracts.Configuration;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Notifications;
@@ -22,6 +23,9 @@ public class SettingsVocabularyTests
             expected.Add((string)section.GetField("Section")!.GetRawConstantValue()!);
             Walk(section, expected, []);
         }
+
+        // The limits of launches are keyed by a role, and a role Jason ships is a name the code already knows.
+        expected.UnionWith(ShippedRoles.Names.Where(role => !expected.Contains(role, StringComparer.OrdinalIgnoreCase)));
 
         Assert.Equal(expected, SettingsVocabulary.Names.Order(StringComparer.Ordinal));
     }
@@ -61,6 +65,7 @@ public class SettingsVocabularyTests
                 typeof(UpdateOptions),
                 typeof(NotificationsOptions),
                 typeof(InboundOptions),
+                typeof(LaunchesOptions),
                 typeof(HarnessOptions),
                 typeof(SubscriptionsOptions),
             },

@@ -59,7 +59,7 @@ public sealed class InvocationRunner : IInvocationRunner
         var exec = Kill is null ? new ExecService(services) : new ExecService(services) { Kill = Kill };
         engine.SetValue(
             HostObject.Name,
-            HostObject.Build(engine, services, exec, http, new EnvService(services), new LogService(services), door));
+            HostObject.Build(engine, services, exec, http, new EnvService(services), new ConfigService(services), new LogService(services), door));
 
         var end = new Ending(invocation, diagnostics, watch, budget);
         try

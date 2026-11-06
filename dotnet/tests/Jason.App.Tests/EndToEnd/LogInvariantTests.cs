@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Tests.Logging;
 
 namespace Jason.App.Tests.EndToEnd;
@@ -18,7 +19,8 @@ namespace Jason.App.Tests.EndToEnd;
 /// wrong type, a reload's reason and a timestamp the request door cannot read, and the keys a campaign and a work item
 /// were created with — made, repeated, sent again with a different request and once too long to be a key — and the text of
 /// a line a subscriber's chain is handed and the envelope that chain hands on, after its handler read the campaign back
-/// through its door. None of them may appear anywhere in the log, whole or in part, and neither may a bearer: the run
+/// through its door, and a value of a plugin's configuration that the provider's refusal quotes. None of them may appear
+/// anywhere in the log, whole or in part, and neither may a bearer: the run
 /// token by its value, the door's by its shape.
 /// </summary>
 /// <remarks>
@@ -102,6 +104,7 @@ public class LogInvariantTests
             ["a work item's idempotency key"] = SentinelPrefix + "WKEY_" + mark,
             ["a subscribed line's text"] = SentinelPrefix + "LINE_" + mark,
             ["a chain's envelope"] = SentinelPrefix + "ENVELOPE_" + mark,
+            ["a plugin's configured token"] = SentinelPrefix + "CONFIG_" + mark,
 
             // A role name is lowercase with hyphens, and is what the message of an attempt the claim refuses quotes.
             ["a role nothing can launch"] = "sentinel-role-" + mark,
@@ -110,7 +113,7 @@ public class LogInvariantTests
         using var it = GoldenPath.Create("log-invariant");
         var workspace = Path.Combine(it.Root, "provider-account");
         Directory.CreateDirectory(workspace);
-        await File.WriteAllTextAsync(it.Paths.UserSettingsFile, Settings(workspace), Ct);
+        await File.WriteAllTextAsync(it.Paths.UserSettingsFile, Settings(workspace, sentinels["a plugin's configured token"]), Ct);
 
         // Installing a plugin is copying its directory. The second copy is the candidate that does not load: its
         // manifest names a kind there is no such thing as, so the load at startup is rejected whole.
@@ -233,13 +236,43 @@ public class LogInvariantTests
             }.ToJsonString(JasonJson.Options))))["id"]!;
         var unlaunchable = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
             it, "workitem", "create", campaign, "--kind", "ai_role", "--role", sentinels["a role nothing can launch"])))["id"]!;
+
+        // A provider that quotes its own configuration when it refuses: what the host masks, and what the failure then keeps.
+        var quoting = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+            it,
+            "workitem",
+            "create",
+            campaign,
+            "--kind",
+            "provider_op",
+            "--operation",
+            "campaign.get",
+            "--input",
+            new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "configuration:token" } }.ToJsonString(JasonJson.Options))))["id"]!;
         GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, "campaign", "start", campaign));
 
-        var refused =await GoldenPath.PollAsync(it, provider, item => GoldenPath.Finished((string?)item["status"]));
+        var refused = await GoldenPath.PollAsync(it, provider, item => GoldenPath.Finished((string?)item["status"]));
         Assert.Equal("failed", (string?)refused["status"]);
         var failure = Assert.Single(refused["attempts"]!.AsArray())!["error"]!;
         Assert.Equal("campaign_not_found", (string?)failure["code"]);
         Assert.Equal("permanent", (string?)failure["class"]);
+
+        var masked = await GoldenPath.PollAsync(it, quoting, item => GoldenPath.Finished((string?)item["status"]));
+        Assert.Equal("failed", (string?)masked["status"]);
+        Assert.Contains(Redactor.Mask, (string?)Assert.Single(masked["attempts"]!.AsArray())!["error"]!["message"], StringComparison.Ordinal);
+
+        // The value was planted, handed over and quoted, and no record any read can reach holds it: the work item with its
+        // attempt, the plugin's listing, the journal, and a bundle made with everything a bundle can be asked to carry.
+        var bundle = Path.Combine(it.Root, "bundle.json");
+        Assert.Equal(ExitCodes.Success, (await GoldenPath.JasonAsync(it, "doctor", "--include-journal", "--output", bundle)).ExitCode);
+        var records = new[]
+        {
+            masked.ToJsonString(),
+            GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "plugin", "list"))).ToJsonString(),
+            GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "journal", "list", "--limit", "200"))).ToJsonString(),
+            await File.ReadAllTextAsync(bundle, Ct),
+        };
+        Assert.All(records, record => Assert.DoesNotContain(sentinels["a plugin's configured token"], record, StringComparison.Ordinal));
 
         // The claim's own refusal. Its message quotes the sentinel, which is what makes the absence of it from the log
         // worth something: the line that says how the attempt ended must say the code and not the message.
@@ -306,17 +339,17 @@ public class LogInvariantTests
         // so — or until the wait runs out, which the end of the test reports with what the log did say.
         await File.WriteAllTextAsync(
             it.Paths.UserSettingsFile,
-            Settings(workspace, settings => settings["Manager"] = new JsonObject { ["Triggers"] = new JsonArray(sentinels["a refused trigger"]) }),
+            Settings(workspace, sentinels["a plugin's configured token"], settings => settings["Manager"] = new JsonObject { ["Triggers"] = new JsonArray(sentinels["a refused trigger"]) }),
             Ct);
         await LoggedAsync(it, Refusal("Manager"));
 
         await File.WriteAllTextAsync(
             it.Paths.UserSettingsFile,
-            Settings(workspace, settings => settings["Dispatcher"]!["Enabled"] = sentinels["a setting of the wrong type"]),
+            Settings(workspace, sentinels["a plugin's configured token"], settings => settings["Dispatcher"]!["Enabled"] = sentinels["a setting of the wrong type"]),
             Ct);
         await LoggedAsync(it, Refusal("Dispatcher"));
 
-        await File.WriteAllTextAsync(it.Paths.UserSettingsFile, Settings(workspace), Ct);
+        await File.WriteAllTextAsync(it.Paths.UserSettingsFile, Settings(workspace, sentinels["a plugin's configured token"]), Ct);
 
         var stopped = await GoldenPath.JasonAsync(it, "runtime", "stop");
         var events = Events(it.Paths);
@@ -358,9 +391,9 @@ public class LogInvariantTests
 
     /// <summary>
     /// The settings of this run: the loudest log level the validator accepts, a dispatcher that ticks every second,
-    /// one attempt per item, the package's grant, and the route that sends provider work to it.
+    /// one attempt per item, the package's grant and its configuration, and the route that sends provider work to it.
     /// </summary>
-    private static string Settings(string workspace, Action<JsonObject>? edit = null)
+    private static string Settings(string workspace, string configuredToken, Action<JsonObject>? edit = null)
     {
         var settings = new JsonObject
         {
@@ -378,6 +411,7 @@ public class LogInvariantTests
                     [PluginId] = new JsonObject { ["Exec"] = new JsonArray("*") },
                     [Subscriber] = new JsonObject { ["Api"] = new JsonArray("read"), ["Subscriptions"] = new JsonArray("campaign_created") },
                 },
+                ["Config"] = new JsonObject { [PluginId] = new JsonObject { ["token"] = configuredToken } },
             },
             ["Routes"] = new JsonObject
             {

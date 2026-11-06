@@ -774,6 +774,41 @@ public sealed class DoctorComposerTests
         Assert.Equal(["Dispatcher:MaxParallel", "Dispatcher:Enabled"], bundle.ValuesCarried);
     }
 
+    /// <summary>
+    /// The section of a plugin's configuration stays home by every road into a bundle: as a file, and as a variable, whose
+    /// name is the two keys of the section and a mark for each after them, a plugin's id included, with no shape at all.
+    /// </summary>
+    [Fact]
+    public async Task A_plugins_configuration_stays_home_by_the_file_and_by_a_variable()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Plugins":{"Config":{"fake-provider":{"url":"https://SENTINEL_FILE.example.test"}}}}""");
+        var variables = new Dictionary<string, string>
+        {
+            ["JASON_Plugins__Config__fake-provider__token"] = "SENTINEL_VARIABLE",
+            ["JASON_plugins:config__SENTINEL_NAME__5000"] = "5000",
+            ["JASON_Plugins__Config"] = "SENTINEL_SHORT",
+        };
+
+        var bundle = await ComposeAsync(dir, Running(dir), variables: variables);
+        var config = Section(bundle, "config");
+
+        var text = config.ToJsonString();
+        Assert.DoesNotContain("SENTINEL", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("fake-provider", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("token", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"value\"", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(bundle.ValuesCarried, path => path.Contains("Config", StringComparison.OrdinalIgnoreCase));
+        var environment = config["environment"]!.AsArray().ToDictionary(variable => Text(variable!["name"]), variable => variable!.AsObject());
+        Assert.Equal(3, environment.Count);
+        foreach (var name in (string[])["JASON_Plugins__Config__<key>__<key>", "JASON_plugins:config__<key>__<key>", "JASON_Plugins__Config"])
+        {
+            Assert.Equal("plugin_configuration", Text(environment[name]["withheld"]));
+            Assert.False(environment[name].ContainsKey("shape"));
+        }
+    }
+
     // ---- the runtime down, a read that fails midway, and one that times out --------------------------------------
 
     [Theory]
@@ -1088,7 +1123,7 @@ public sealed class DoctorComposerTests
         runtime.Subscribed =
         [
             .. runtime.Subscribed,
-            new("SENTINEL_KIND", ["fake-provider"], null, null, 0, ["fake-provider"], null),
+            new("SENTINEL_KIND", ["fake-provider"], null, null, 0, ["fake-provider"], null, null),
         ];
 
         var bundle = await ComposeAsync(dir, runtime);
@@ -1271,6 +1306,38 @@ public sealed class DoctorComposerTests
         AssertAbsent(bundle, [.. NeverSentinels, .. JournalSentinels]);
         Assert.NotEmpty(Section(bundle, "work_items")["recent_failures"]!.AsArray());
         Assert.NotEmpty(Section(bundle, "journal")["recent"]!.AsArray());
+    }
+
+    /// <summary>
+    /// A hold's line names the role it held, and a role a person added is that person's word: with the journal asked for,
+    /// the line travels with the alias and never the name, the name being met there like every <c>role</c> of a section.
+    /// </summary>
+    [Fact]
+    public async Task With_the_journal_asked_for_a_hold_s_line_names_a_person_s_own_role_by_its_alias()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) =>
+        {
+            if (operation != Operations.JournalList)
+            {
+                return null;
+            }
+
+            var held = runtime.Entry(0);
+            held["kind"] = "workitem_waiting";
+            held["new"] = new JsonObject
+            {
+                ["on"] = new JsonArray(),
+                ["held_by"] = new JsonObject { ["code"] = "launches_spent", ["limit"] = 1, ["role"] = "sentinel-held-role" },
+            };
+            return Respond(HttpStatusCode.OK, new JsonObject { ["items"] = new JsonArray(held), ["next_cursor"] = null }.ToJsonString());
+        };
+
+        var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
+
+        AssertAbsent(bundle, "sentinel-held-role");
+        Assert.Equal("<role-1>", Text(Section(bundle, "journal_entries")["entries"]![0]!["new"]!["held_by"]!["role"]));
     }
 
     /// <summary>
@@ -3525,7 +3592,7 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
 
     /// <summary>What <c>subscription.list</c> answers: one kind with a chain of one, unless a test says.</summary>
     public IReadOnlyList<SubscriptionKindDto> Subscribed { get; set; } =
-        [new("campaign_created", ["fake-provider"], "jrn_00000000000000000000000001", "jrn_00000000000000000000000002", 1, [], null)];
+        [new("campaign_created", ["fake-provider"], "jrn_00000000000000000000000001", "jrn_00000000000000000000000002", 1, [], null, null)];
 
     /// <summary>What <c>subscription.runs</c> answers for a kind: a chain that ended well, with an envelope no bundle carries, and one that failed.</summary>
     public IReadOnlyList<SubscriptionRunDto> Runs { get; set; } =

@@ -1062,7 +1062,8 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             return null;
         }
 
-        UnknownKeys(http, "capabilities.http", ["hosts"]);
+        UnknownKeys(http, "capabilities.http", ["hosts", "any_granted_host"]);
+        var anyGrantedHost = ReadAnyGrantedHost(http);
         const string path = "capabilities.http.hosts";
         if (!Has(http, "hosts"))
         {
@@ -1093,10 +1094,29 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             }
         }
 
-        return new HttpRequestSpec(hosts);
+        return new HttpRequestSpec(hosts, anyGrantedHost);
     }
 
-    private static bool IsAllowedHost(string host)
+    /// <summary>The word that lets a person grant a host the manifest does not name: a switch, never text that reads like one.</summary>
+    private bool ReadAnyGrantedHost(JsonObject http)
+    {
+        const string path = "capabilities.http.any_granted_host";
+        if (!Has(http, "any_granted_host"))
+        {
+            return false;
+        }
+
+        if (http["any_granted_host"] is JsonValue value && value.TryGetValue<bool>(out var word))
+        {
+            return word;
+        }
+
+        Add(ProblemCodes.FieldInvalid, path, $"{path} is true or false.");
+        return false;
+    }
+
+    /// <summary>What a manifest may name as a host: a lowercase name with an optional port, matched exactly.</summary>
+    internal static bool IsAllowedHost(string host)
     {
         if (!HostName().IsMatch(host))
         {

@@ -197,6 +197,57 @@ public class ProtocolFailureTests
         Assert.Contains("refused the invocation", failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The child masks what it writes, and the runtime masks what it reads: a host that broke before it could still leaves a
+    /// configuration value on the stream, and the copy on disk and the tail a failure quotes carry the mask.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S3, "the runtime masks a configuration value on a child's stderr")]
+    public async Task A_configuration_value_a_child_left_on_stderr_is_masked_by_the_runtime()
+    {
+        const string Value = "configured-token-0123456789abcdef";
+        await using var api = await StartAsync(
+            Child("stderr-exit", "4", "the token is " + Value),
+            PluginInvokerTests.Configured(new JsonObject { ["token"] = Value }));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginNoOutcome, failure.Code);
+        Assert.DoesNotContain(Value, failure.StderrTail!, StringComparison.Ordinal);
+        Assert.Contains(Redactor.Mask, failure.StderrTail!, StringComparison.Ordinal);
+        var kept = await File.ReadAllTextAsync(Path.Combine(result.Launch!.WorkDir, "stderr.log"), Ct);
+        Assert.DoesNotContain(Value, kept, StringComparison.Ordinal);
+        Assert.Contains(Redactor.Mask, kept, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same value in the JSON line a child leaves, which spells it as an escape. Both copies are read back parsed: the raw
+    /// text would pass unmasked, since the value is not in it under its own spelling.
+    /// </summary>
+    [Theory]
+    [InlineData("https://receiver.example.test/in?a=1&key=configured0123")]
+    [InlineData("base64+token/0123456789abc=")]
+    [InlineData("quote\"token0123456789")]
+    [InlineData("tok\u00E9n-0123456789abcdef")]
+    public async Task A_value_json_escapes_on_a_childs_stderr_is_masked_by_the_runtime(string value)
+    {
+        var line = new JsonObject { ["level"] = "info", ["message"] = "said", ["data"] = new JsonObject { ["said"] = value } }.ToJsonString();
+        await using var api = await StartAsync(
+            Child("stderr-exit", "4", line),
+            PluginInvokerTests.Configured(new JsonObject { ["token"] = value }));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        var kept = await File.ReadAllTextAsync(Path.Combine(result.Launch!.WorkDir, "stderr.log"), Ct);
+        foreach (var copy in new[] { failure.StderrTail!, kept })
+        {
+            var said = JsonNode.Parse(copy.Split('\n').Single(text => text.TrimStart().StartsWith('{')))!;
+            Assert.Equal(Redactor.Mask, said["data"]!["said"]!.GetValue<string>());
+        }
+    }
+
     [Fact]
     public async Task A_child_that_broke_on_its_own_left_no_outcome()
     {
@@ -428,6 +479,27 @@ public class ProtocolFailureTests
         var wire = FakeProviderCli.FromCodepoints(await File.ReadAllTextAsync(said, Ct));
         Assert.True(wire.Length > 0 && wire.All(char.IsAscii), $"The invocation crossed as '{wire}'.");
         Assert.Equal("José 😀", (string?)JsonNode.Parse(wire)!["input"]!["note"]);
+    }
+
+    /// <summary>
+    /// The envelope as it crossed: the key is there for a plugin a person configured and absent for one nobody did, so a
+    /// plugin that has nothing is told nothing rather than an empty map.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_envelope_has_a_config_key_only_for_a_plugin_a_person_configured(bool configured)
+    {
+        using var directory = new TempTree();
+        var said = Path.Combine(directory.Root, "codepoints.txt");
+        await using var api = await StartAsync(
+            Child("stdin-codepoints", said),
+            configured ? PluginInvokerTests.Configured(new JsonObject { ["url"] = "https://receiver.example.test/in" }) : null);
+
+        await InvokeAsync(api);
+
+        var envelope = JsonNode.Parse(FakeProviderCli.FromCodepoints(await File.ReadAllTextAsync(said, Ct)))!.AsObject();
+        Assert.Equal(configured, envelope.ContainsKey("config"));
     }
 
     /// <summary>The stand-in vendor CLI, which ignores the protocol arguments the invoker appends to its own.</summary>

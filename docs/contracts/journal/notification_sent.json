@@ -5,7 +5,7 @@
   "summary": "A notification pointing at what waits for a person went out, with the counts it carried and what each channel did with it.",
   "subscribable": true,
   "entities": {},
-  "field_since": { "/new/counts/protective_failures": "0.5.0", "/new/delivered_through": "0.5.0", "/new/counts/event_gaps": "0.12.0", "/new/counts/blocks": "0.18.0" },
+  "field_since": { "/new/counts/protective_failures": "0.5.0", "/new/delivered_through": "0.5.0", "/new/counts/event_gaps": "0.12.0", "/new/counts/blocks": "0.18.0", "/new/counts/held": "0.31.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -29,7 +29,8 @@
               "decisions": { "type": "integer", "minimum": 0, "description": "Questions raised for a person." },
               "protective_failures": { "type": "integer", "minimum": 0, "description": "Protective work that failed since the last notification that reached anybody." },
               "event_gaps": { "type": "integer", "minimum": 0, "description": "Accounts whose provider events went unread for a span." },
-              "blocks": { "type": "integer", "minimum": 0, "description": "Open provider blocks holding work." }
+              "blocks": { "type": "integer", "minimum": 0, "description": "Open provider blocks holding work." },
+              "held": { "type": "integer", "minimum": 0, "description": "Work items waiting on a daily limit of launches as the notification was sent, in every campaign." }
             }
           },
           "covered_through": { "type": ["null", "string"], "pattern": "^jrn_", "description": "The journal line the notification counted through, or null where it counted none." },

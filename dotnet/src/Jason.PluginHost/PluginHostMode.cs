@@ -131,15 +131,13 @@ public static class PluginHostMode
     }
 
     /// <summary>
-    /// The values of the granted variables, read from this process's own environment — the only place they exist,
-    /// since no secret travels in the envelope. They are known here so that nothing the host writes can leak one.
-    /// </summary>
-    /// <summary>
-    /// The values this invocation must never write: those of the variables it was granted, and the door's capability
-    /// where it carries one.
+    /// The values this invocation must never write: those of the variables it was granted, read from this process's own
+    /// environment, the only place they exist; its plugin's configuration; and the door's capability where it carries one.
+    /// They are known here so that nothing the host writes can leak one.
     /// </summary>
     internal static Redactor KnownSecrets(PluginInvocation invocation) =>
         new((invocation.Grants.Env?.Variables ?? [])
             .Select(Environment.GetEnvironmentVariable)
+            .Concat(invocation.Config?.Values ?? [])
             .Append(invocation.Door?.Capability));
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Logs;
+using Jason.Contracts.Api;
 using Jason.Contracts.Configuration;
 
 namespace Jason.Cli.Doctor;
@@ -16,8 +17,9 @@ namespace Jason.Cli.Doctor;
 /// The list is made of two kinds of setting. Some are a switch or a word from a closed set — whether the dispatcher
 /// is on, how much the runtime logs, which chronicle kinds summon a manager review — and say how the runtime is set
 /// up. The rest are a number with a size, a count, a time or a port, each named one by one. Everything else a
-/// settings file can hold is a name, an address, a command, a program, a grant or a route's binding, and those are
-/// where a secret typed onto the wrong line ends up, so none of them is ever listed. What is named as never carried
+/// settings file can hold is a name, an address, a command, a program, a grant, a route's binding or a plugin's
+/// configuration, and those are where a secret typed onto the wrong line ends up, so none of them is ever listed; the
+/// last is withheld whole, its keys too. What is named as never carried
 /// is named in the tests, so nobody adds it by accident.
 /// </para>
 /// <para>
@@ -145,7 +147,7 @@ public sealed class SettingsAllowlist
         new("Responder:TimeoutSeconds", Kind.Integer32),
         new("Responder:MaxAttempts", Kind.Integer32),
         new("Responder:MaxAgeSeconds", Kind.Integer32),
-        new("Responder:MaxLaunchesPerDay", Kind.Integer32),
+        .. ShippedRoles.Names.Select(role => new Entry($"Launches:MaxPerDay:{role}", Kind.Integer32)),
         new("Subscriptions:RunRecordsPerKind", Kind.Integer32),
         new("Subscriptions:EnvelopeBytes", Kind.Integer32),
         new("Subscriptions:TransientRetries", Kind.Integer32),

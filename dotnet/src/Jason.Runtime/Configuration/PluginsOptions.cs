@@ -92,6 +92,8 @@ public sealed class PluginsOptions
 
     public Dictionary<string, PluginGrant> Grants { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    public Dictionary<string, Dictionary<string, string>> Config { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public PluginLimitsOptions Limits { get; set; } = new();
 
     public PluginExecOptions Exec { get; set; } = new();

@@ -507,7 +507,18 @@ internal static class GoldenPath
         var command = string.Join(' ', args);
 
         var budget = within ?? Step;
-        await process.WaitForExitAsync(Ct).WaitAsync(budget, Ct);
+        try
+        {
+            await process.WaitForExitAsync(Ct).WaitAsync(budget, Ct);
+        }
+        catch (TimeoutException)
+        {
+            // A step that outlives its bound is ended with whatever it started, so a run that failed by a runtime that
+            // started fails here and does not leave the test run waiting on a process nobody will stop.
+            process.Kill(entireProcessTree: true);
+            throw;
+        }
+
         return new CliResult(
             process.ExitCode,
             (await output.WaitAsync(budget, Ct)).Trim(),

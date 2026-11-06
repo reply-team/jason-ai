@@ -124,18 +124,37 @@ public sealed class Summoner(
     /// it consumes no chronicle either, so an event that arrives while a review is open is still above the
     /// watermark when that review ends and summons the next one.
     /// </summary>
-    private static async Task<IReadOnlyList<Waiting>> WaitingAsync(JasonDbContext db, CancellationToken ct) =>
-        await db.Campaigns
+    private static async Task<IReadOnlyList<Waiting>> WaitingAsync(JasonDbContext db, CancellationToken ct)
+    {
+        var checkIns = OpenCheckIns(db);
+        return await db.Campaigns
             .AsNoTracking()
-            .Where(campaign => campaign.Status == CampaignStatus.Active
-                && !db.WorkItems.Any(item => item.CampaignId == campaign.Id
-                    && item.Role == ManagerCheckIn.Role
-                    && item.CreatedByType == ActorType.System
-                    && Open.Contains(item.Status)))
+            .Where(campaign => campaign.Status == CampaignStatus.Active && !checkIns.Any(item => item.CampaignId == campaign.Id))
             .OrderBy(campaign => campaign.Id)
             .Select(campaign => new Waiting(campaign.Id, campaign.PublicId))
             .ToListAsync(ct)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The system's check-ins that stop a second one: in a status of <see cref="Open"/>, or waiting with no attempt and no
+    /// block on their wait, which is a check-in held at the manager's daily limit. Such a check-in is the review that will
+    /// run after 00:00Z, so a trigger meanwhile summons no second check-in beside it; it summons the next review once the
+    /// held one has run, which the limit may hold to the next day. A check-in whose run yielded or that a provider block
+    /// parked is not one of these. The unique index does not see a hold, because a waiting status is not in its filter, so
+    /// this look alone keeps the one.
+    /// </summary>
+    private static IQueryable<WorkItem> OpenCheckIns(JasonDbContext db) =>
+        db.WorkItems
+            .AsNoTracking()
+            .Where(item => item.Role == ManagerCheckIn.Role
+                && item.CreatedByType == ActorType.System
+                && (Open.Contains(item.Status)
+                    || (item.Status == WorkItemStatus.Waiting
+                        && db.WorkItemWaits.Any(wait => wait.WorkItemId == item.Id
+                            && wait.Status == WaitStatus.Open
+                            && wait.AttemptId == null
+                            && wait.ProviderBlockId == null))));
 
     /// <summary>A campaign this scan will consider: the key the queries take, and the name a person reads.</summary>
     private sealed record Waiting(int Id, string PublicId);
@@ -292,14 +311,7 @@ public sealed class Summoner(
     /// being lost, and an insert refused while none does is something else entirely.
     /// </summary>
     public static Task<bool> OpenCheckInAsync(JasonDbContext db, int campaignId, CancellationToken ct) =>
-        db.WorkItems
-            .AsNoTracking()
-            .AnyAsync(
-                item => item.CampaignId == campaignId
-                    && item.Role == ManagerCheckIn.Role
-                    && item.CreatedByType == ActorType.System
-                    && Open.Contains(item.Status),
-                ct);
+        OpenCheckIns(db).AnyAsync(item => item.CampaignId == campaignId, ct);
 
     /// <summary>
     /// Which of these lines are a check-in's own: about a check-in, about one's attempt, or written <em>by</em>

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Frozen;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
@@ -256,7 +257,10 @@ public sealed class PluginLoader(
                 Clamp(manifest.Limits.TimeoutMs ?? settings.Limits.TimeoutMs, settings.Limits.MaxTimeoutMs),
                 Clamp(manifest.Limits.MemoryMb ?? settings.Limits.MemoryMb, settings.Limits.MaxMemoryMb)),
             status,
-            problems);
+            problems)
+        {
+            Config = FrozenConfig(settings.Config.GetValueOrDefault(manifest.Id)),
+        };
 
         var candidateStatus = status == PluginStatus.Valid ? CandidateStatus.Valid : CandidateStatus.Unavailable;
         return (new CandidateReport(candidate.Name, manifest.Id, candidateStatus, problems), plugin);
@@ -308,6 +312,10 @@ public sealed class PluginLoader(
         new(candidate.Name, id, CandidateStatus.Invalid, [new ManifestProblem(code, path, message)]);
 
     private static int Clamp(int asked, int ceiling) => Math.Min(asked, ceiling);
+
+    /// <summary>A plugin's configuration as this load saw it, copied; a key written as nothing is no key.</summary>
+    private static FrozenDictionary<string, string> FrozenConfig(Dictionary<string, string>? config) =>
+        (config ?? []).Where(entry => entry.Value is not null).ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     private static string Codes(IReadOnlyList<ManifestProblem> problems) =>
         string.Join(", ", problems.Select(problem => problem.Code).Distinct(StringComparer.Ordinal));

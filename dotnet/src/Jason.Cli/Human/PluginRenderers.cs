@@ -133,7 +133,10 @@ public static class PluginRenderers
             line += $" | api {Counts(capabilities.Api.Granted?.Count ?? 0, capabilities.Api.Requested?.Count ?? 0)}";
         }
 
-        return line + $" | subscriptions {subscriptions}";
+        line += $" | subscriptions {subscriptions}";
+
+        // A host the grant names beyond the declared ones counts as any grant does; the word that allows it stands beside them.
+        return capabilities.AnyGrantedHost == true ? line + " | any_granted_host" : line;
     }
 
     private static string Counts(int granted, int requested) =>

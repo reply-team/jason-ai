@@ -12,7 +12,11 @@ public sealed record ExecutableRequest(string Name, string? MinVersion, IReadOnl
 
 public sealed record ExecRequestSpec(IReadOnlyList<ExecutableRequest> Executables);
 
-public sealed record HttpRequestSpec(IReadOnlyList<string> Hosts);
+/// <summary>
+/// The hosts a plugin asks for. <c>AnyGrantedHost</c> asks for more: that a person may grant a host the manifest could not
+/// know, the receiver of a plugin whose address is theirs. It names no host; what it opens is what a grant names.
+/// </summary>
+public sealed record HttpRequestSpec(IReadOnlyList<string> Hosts, bool AnyGrantedHost = false);
 
 public sealed record EnvRequestSpec(IReadOnlyList<string> Variables);
 

@@ -88,6 +88,7 @@ public static class DispatcherModule
         services.AddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
         services.AddSingleton(Seam<InboundOptions>(InboundOptions.Section));
         services.AddSingleton(Seam<ResponderOptions>(ResponderOptions.Section));
+        services.AddSingleton(Seam<LaunchesOptions>(LaunchesOptions.Section));
         services.AddSingleton(Seam<SubscriptionsOptions>(SubscriptionsOptions.Section));
 
         // Named here because the summon creates work through the work-item service, and that service reads the
