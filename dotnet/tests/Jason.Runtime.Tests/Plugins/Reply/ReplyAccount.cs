@@ -1110,14 +1110,23 @@ public sealed class ReplyAccount : IDisposable
     private void Write(string fileName, JsonNode content) =>
         File.WriteAllText(Path.Combine(Root, fileName), content.ToJsonString(), new UTF8Encoding(false));
 
-    /// <summary>Reads a file another process may be appending to right now, which a plain read refuses.</summary>
+    /// <summary>
+    /// Reads a file another process may be appending to right now, which a plain read refuses. A last line with no
+    /// newline after it is a write in flight and is left out; a line that is malformed anywhere else is the caller's
+    /// to fail on, never skipped.
+    /// </summary>
     private static IEnumerable<string> ReadAllLines(string file)
     {
-        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        while (reader.ReadLine() is { } line)
+        string text;
+        using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        using (var reader = new StreamReader(stream))
         {
-            yield return line;
+            text = reader.ReadToEnd();
         }
+
+        var lines = text.Split('\n');
+
+        // The piece after the last newline is empty when the file ends whole, and a line still being written when not.
+        return lines.Take(lines.Length - 1);
     }
 }

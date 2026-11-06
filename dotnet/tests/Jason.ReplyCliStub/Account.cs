@@ -215,23 +215,32 @@ internal static partial class Account
     }
 
     /// <summary>
-    /// Appends one line to the log. Appended rather than rewritten, because two invocations of this program can
-    /// be in flight at once and a read-modify-write would quietly lose one of them.
+    /// Appends one line to the log, the whole of it, newline included, in a single write.
     /// </summary>
+    /// <remarks>
+    /// <c>FileMode.Append</c> seeks to the end of the file when the stream is opened, not at each write, so two
+    /// processes that opened the file together take the same position and the shorter line overwrites the head of the
+    /// longer one. What makes an append safe is the share mode: with <c>FileShare.Read</c> a second writer cannot open
+    /// the file while the first holds it, meets a sharing violation, and tries again once the first has closed it and
+    /// the end of the file has moved. Readers are let in, because a test reads the log while a stand-in is held. The
+    /// wait is bounded to a few seconds, and past it the violation is thrown, so a stuck writer fails the call loudly
+    /// instead of dropping its line.
+    /// </remarks>
     private static void Append(string file, string line)
     {
-        for (var attempt = 0; ; attempt++)
+        var bytes = new UTF8Encoding(false).GetBytes(line);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (true)
         {
             try
             {
-                using var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
-                using var writer = new StreamWriter(stream, new UTF8Encoding(false));
-                writer.Write(line);
+                using var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.Read | FileShare.Delete);
+                stream.Write(bytes, 0, bytes.Length);
                 return;
             }
-            catch (IOException) when (attempt < 100)
+            catch (IOException) when (DateTime.UtcNow < deadline)
             {
-                Thread.Sleep(20);
+                Thread.Sleep(Random.Shared.Next(2, 15));
             }
         }
     }

@@ -244,6 +244,58 @@ public class ReplyStubTests
     // The call log
     // -------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Several stand-ins in flight against one account, each writing lines of its own length, leave every line in the log
+    /// and every line whole. An append that took its position when the file was opened would let a short line land on
+    /// the tail of a long one and lose the entry it overwrote; the log is the evidence a row stands on, so a lost or a
+    /// torn entry is a row that passes or fails for no reason of its own.
+    /// </summary>
+    [Fact]
+    public async Task Stand_ins_in_flight_together_leave_every_call_in_the_log_whole()
+    {
+        const int Writers = 8;
+        const int PerWriter = 25;
+        using var account = new ReplyAccount();
+
+        // Every writer is a real process; all of them have ended before the log is read, because each task awaits its
+        // own process to the end and the tasks are awaited together.
+        var runs = Enumerable.Range(0, Writers).Select(writer => Task.Run(async () =>
+        {
+            for (var call = 0; call < PerWriter; call++)
+            {
+                // The body is recorded with the entry, so its length sets the length of the line.
+                var body = new string('x', 20 + ((writer * 37) + (call * 13)) % 400);
+                await account.RunAsync(FindCall, body, Ct);
+            }
+        }, Ct)).ToArray();
+
+        await Task.WhenAll(runs).WaitAsync(TimeSpan.FromSeconds(10), Ct);
+
+        var calls = account.Calls;
+        Assert.Equal(Writers * PerWriter, calls.Count);
+        Assert.All(calls, call => Assert.Equal("contact find", call.Command));
+    }
+
+    /// <summary>
+    /// What a reader does with a log that has a damaged line: a last line with no newline is a write still in flight and
+    /// is left out, while a line that is torn anywhere else is a failure and never skipped.
+    /// </summary>
+    [Fact]
+    public async Task A_reader_leaves_out_a_write_in_flight_and_fails_on_a_line_torn_in_the_middle()
+    {
+        using var account = new ReplyAccount();
+        await account.RunAsync([.. Prefix, "sequence", "get", "7"], Ct);
+        var file = Path.Combine(account.Root, ReplyAccount.CallsFile);
+        var whole = File.ReadAllText(file);
+        Assert.EndsWith("\n", whole, StringComparison.Ordinal);
+
+        await File.AppendAllTextAsync(file, whole[..(whole.Length / 2)], Ct);
+        Assert.Single(account.Calls);
+
+        await File.AppendAllTextAsync(file, "\n" + whole, Ct);
+        Assert.ThrowsAny<JsonException>(() => account.Calls);
+    }
+
     [Fact]
     public async Task Every_call_is_recorded_before_it_runs()
     {
