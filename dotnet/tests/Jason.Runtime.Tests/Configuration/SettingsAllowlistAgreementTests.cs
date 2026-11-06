@@ -217,6 +217,7 @@ public sealed class SettingsAllowlistAgreementTests
             {
                 // The one map of numbers is keyed by a role. A shipped role's number travels; a person's own role is not on
                 // the list, so the sentinel written under one has to stay behind.
+                // A second map of numbers would be read as keyed by a role too, and the guard would not see it: it yields leaves.
                 foreach (var role in ShippedRoles.Names)
                 {
                     yield return new Setting($"{child}:{role}", typeof(int));

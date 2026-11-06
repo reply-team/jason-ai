@@ -442,7 +442,11 @@ public sealed class JournalKindHistoryTests
 
     private static bool IsTrue(JsonNode? node) => node is JsonValue value && value.GetValueKind() == JsonValueKind.True;
 
-    /// <summary>The words the closed list at <paramref name="at"/> accepts, <c>enum</c> and <c>const</c> alike, added to the place's.</summary>
+    /// <summary>
+    /// The words the closed list at <paramref name="at"/> accepts, <c>enum</c> and <c>const</c> alike, added to the place's. A place's
+    /// words are a union over its branches, so a word one <c>anyOf</c> branch drops while another keeps it is not seen as removed, nor
+    /// a closed list an <c>allOf</c> branch narrows.
+    /// </summary>
     private static void AddWords(Shape into, string at, JsonObject schema)
     {
         var listed = (schema["enum"] as JsonArray)?.ToList() ?? [];
