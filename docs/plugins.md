@@ -621,7 +621,8 @@ arrives as `"True"`. A plugin that wants a number parses its text. A key is matc
 regard to case. A key with children, a nested object or a list, is refused by its path, and so is a key or a plugin's id
 of digits alone, because the settings cannot tell one from a list's index: a start fails, saying where, a live edit keeps
 the last good settings, and a reload keeps the previous snapshot. A value left `null` or `{}` holds nothing and answers
-`null`.
+`null`. An empty list arrives as the empty text, and a key written with a colon is read as a key with children and
+refused like one.
 
 **A load freezes it**, as it freezes a grant, so a change takes effect at the next `jason plugin reload`. A section for
 a plugin that is not installed is never read, so a person may configure a package before installing it. This is

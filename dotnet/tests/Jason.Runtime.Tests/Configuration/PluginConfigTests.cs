@@ -55,6 +55,7 @@ public sealed class PluginConfigTests
     [Theory]
     [InlineData("""{"Plugins":{"Config":{"fake-provider":{"url":{"host":"SENTINEL"}}}}}""", "Plugins:Config:fake-provider:<key> could not be read as System.String.")]
     [InlineData("""{"Plugins":{"Config":{"fake-provider":{"url":["SENTINEL"]}}}}""", "Plugins:Config:fake-provider:<key> could not be read as System.String.")]
+    [InlineData("""{"Plugins":{"Config":{"fake-provider":{"a:b":"SENTINEL"}}}}""", "Plugins:Config:fake-provider:<key> could not be read as System.String.")]
     [InlineData("""{"Plugins":{"Config":{"not-installed":{"url":{"host":"SENTINEL"}}}}}""", "Plugins:Config:<key>:<key> could not be read as System.String.")]
     [InlineData("""{"Plugins":{"Config":{"fake-provider":"SENTINEL"}}}""", "Plugins:Config:fake-provider could not be read as a map of System.String.")]
     [InlineData("""{"Plugins":{"Config":"SENTINEL"}}""", "Plugins:Config could not be read as a map of a map of System.String.")]
@@ -88,6 +89,13 @@ public sealed class PluginConfigTests
     public void A_key_written_as_nothing_is_not_refused(string settings)
     {
         Assert.Single(Read(settings).Config);
+    }
+
+    /// <summary>An empty list has no children to refuse, and the settings hold it as the empty text, which is what a plugin is handed.</summary>
+    [Fact]
+    public void An_empty_list_under_a_key_is_the_empty_text()
+    {
+        Assert.Equal(string.Empty, Read("""{"Plugins":{"Config":{"fake-provider":{"url":[]}}}}""").Config[Plugin]["url"]);
     }
 
     private static PluginsOptions Read(string settings)
