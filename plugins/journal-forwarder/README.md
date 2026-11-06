@@ -149,7 +149,9 @@ the grant does not name ends the invocation as `http_host_not_allowed`, and noth
 ```
 
 The plugin reads `url` and `token` first, and `JOURNAL_FORWARDER_URL` and `JOURNAL_FORWARDER_TOKEN` where these say
-nothing, so with both keys set the `Env` grant is not needed. A value here is handed to the plugin on stdin at each
+nothing, so with both keys set the `Env` grant is not needed. It stays while either key is read from the environment;
+without it, a key the settings do not hold is probed once per invocation, and the probe is one debug line. A value here
+is handed to the plugin on stdin at each
 invocation; it is no part of the package, of the journal, of the logs, of `jason plugin list` or of a `jason doctor`
 bundle. A receiver other than on the loopback interface is reached over `https`; an `http` one fails with
 `http_scheme_not_allowed`.
