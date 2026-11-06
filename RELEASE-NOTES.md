@@ -19,99 +19,103 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.30.0
+# Jason 0.31.0
 
-## What is new since 0.29.0
+## What is new since 0.30.0
 
-The Reply plugin now sends on every account without first asking Reply whether it keeps direct sends, a person's own
-decisions can no longer be made from inside a run, and a campaign's responder is held to a daily limit of runs.
+Any role can now be held to a daily limit of launches per campaign, and you are told when work waits on one; and a plugin is
+configured in the settings, without editing its package.
 
-- **The journal forwarder is a release asset.** Each release now publishes it as `jason-plugin-journal-forwarder.zip`
-  beside the Reply plugin's package, and `jason plugin install journal-forwarder` places the one your Jason's own
-  release published, after checking it against the release's `checksums.txt` and its content digest. You no longer copy
-  it out of a checkout. The package is version 1.0.1; its code is as it was, and its
-  [README](https://github.com/reply-team/jason-ai/blob/v0.30.0/plugins/journal-forwarder/README.md) now installs it with
-  that command and says what an edited copy means for later updates. `jason status` and `jason update check` name the
-  forwarder as they name the Reply package, and a forwarder you never installed is never a failure.
-- **The Reply package is 0.14.5.** It makes one call fewer before a send: it no longer reads whether the account's Reply
-  keeps direct sends before a `message.send` or `social_invitation.send` that names a moment ahead or a sending
-  schedule, or before a repeat after an attempt that may have sent, since Reply's direct-send routes are on every
-  account. A 404 that carries no code of Reply's own now means that Reply's API changed under this package version, no
-  longer that the route is missing: the work ends `provider_call_failed`, permanent, with `reply.refused` and the 404 in
-  its details and nothing done, so run `jason update apply` and report the ending if it stays. A repeat whose send
-  itself answers that 404 ends `send_not_settled` instead, and the inbox change feed ends `events_unsupported`, whose
-  account's replies are read thread by thread as before. The endings `send_after_not_offered` and
-  `schedule_not_offered` are gone with the read that reached them. A LinkedIn route that refuses a sending schedule is
-  still `capability_not_offered`. The package still needs reply-cli 0.18.0. Its
-  [README](https://github.com/reply-team/jason-ai/blob/v0.30.0/plugins/reply/README.md) holds the error table.
-- **A campaign's responder is held to a daily limit of runs.** `Responder:MaxLaunchesPerDay` in `settings.json` is 25 by
-  default and accepts 1 to 1000; it applies at the next scan. Once a campaign's responder has started that many runs
-  since 00:00Z, further responder work for that campaign waits, with no attempt of its own and no notification: the work
-  item is `waiting` with the error `responder_launches_spent`, and the campaign's other work goes on. It goes on at the
-  next 00:00Z, or sooner if a person resumes that item with `jason workitem resume`, which lets that one item past the
-  limit under their name, or raises the limit, which applies to work not yet held. Every run counts, a resumption and a
-  responder queued by hand included; another role's run and a provider operation do not.
-  [The work-execution page](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/work-execution.md#the-claim-rule)
-  has the rule, and [the inbound-sync page](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/inbound-sync.md)
-  says what it means for a burst of replies.
-- **A person's word is refused from inside a run.** Approving or rejecting an approval, setting or taking back a
-  standing approval, and answering a question are now answered `403` with the code `decided_inside_a_run` when the
-  request comes from a `jason` launched inside an attempt, whatever person it names; nothing is recorded. Inside a run
-  the CLI names its attempt in a `Jason-Attempt` header on every request, and the refusal says what to do instead: leave
-  the decision to the person (`jason approval list`, `jason decision list`) or raise it as a decision. A program of your
-  own that does not run inside an attempt is not affected. This is a higher bar against a role deciding its own work,
-  not a security boundary: the runtime still cannot tell a person from a program that holds the token. The
-  [Runtime API page](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/runtime-api.md) states it.
-- **Two more skills are `verified`.** `operating-the-installation` and `troubleshooting-jason` were read by a real
-  agent host against the published 0.29.0 executable, did the job each teaches, and had every `jason` line they quote
-  held to that executable's `--help`; no instruction changed. The skills still marked `draft` are `researcher-in-session`,
-  `roles/responder` and the nine skills of the business pack.
-- **The README is new, and the former README is the handbook.** The first page of the repository is now written for a
-  reader who has not yet decided to install Jason. The former README, whole, is
-  [`docs/handbook.md`](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/handbook.md), and the new
-  [README](https://github.com/reply-team/jason-ai/blob/v0.30.0/README.md) links to it.
+- **A daily limit of launches for any role.** `Launches:MaxPerDay:<role>` in `settings.json` limits how many runs of a role
+  one campaign starts in a UTC day, from 1 to 1000. It is the setting that held only the responder in 0.30.0, and the
+  responder keeps its default of 25 (`Launches:MaxPerDay:responder`); a role the map does not name has no limit. The
+  responder's limit can be changed and not removed. A value that is not a number, or is outside 1 to 1000, stops the
+  start and names the setting by its path, and a role's name must be lowercase letters, digits and hyphens starting with
+  a letter. A run that would pass its role's limit is held, not failed: the work item is `waiting` with no attempt until
+  the next 00:00Z, its `last_error` is `launches_spent`, and its `workitem_waiting` line in the chronicle says `held_by`
+  with the code, the limit and the role. There are three ways out: the next 00:00Z, which releases the item, though a day
+  already spent holds it again; `jason workitem resume`, by a person, which lets that one item past the limit and counts
+  its run; and a higher limit, which applies at the next scan to work not yet held. A held manager check-in stays the
+  campaign's one check-in, and the campaign's other work goes on. See
+  [the claim rule](https://github.com/reply-team/jason-ai/blob/v0.31.0/docs/work-execution.md#the-claim-rule).
+- **The notification counts what waits on a limit.** The pointer gains a sixth count, `counts.held`, said as "2 items wait
+  on a budget." with a place to look, `jason workitem list --status waiting`, and recorded in the `notification_sent`
+  line. It counts every held item as the pointer is sent, whichever campaign it is in. See
+  [the notifications page](https://github.com/reply-team/jason-ai/blob/v0.31.0/docs/notifications.md).
+- **A plugin is configured in the settings.** `Plugins:Config:<id>` in `settings.json` is a flat map from a key to text
+  that the plugin reads, and a load freezes it as it freezes grants, so `jason plugin reload` applies a change. No file
+  of the package changes, so the package stays the one a release published and `jason update` still moves it. A value
+  there is a secret: it reaches the plugin on stdin, is masked wherever Jason writes it, and is in no log, journal line,
+  attempt or `jason plugin list`, and a `jason doctor` bundle withholds the whole section. A value is text, with no
+  defaults and no schema, and a key with children is refused by its path. See
+  [the plugin guide](https://github.com/reply-team/jason-ai/blob/v0.31.0/docs/plugins.md#6-the-host-sdk).
+- **A package may let you grant a host it does not declare.** A manifest that says `capabilities.http.any_granted_host: true`
+  lets a person name a host in `Plugins:Grants:<id>:Http`; `*` still means the declared hosts alone. Such a package asks
+  for more than one that does not, because your grant is all that holds it to a host, and `jason plugin list` shows the
+  word beside its capabilities. See
+  [grants](https://github.com/reply-team/jason-ai/blob/v0.31.0/docs/plugins.md#9-capabilities-and-grants).
+- **The journal forwarder is 1.1.0.** A receiver on another host takes a grant and a configuration, with no edit of
+  the package: `Plugins:Config:journal-forwarder` holds `url` and `token`, which the plugin reads before
+  `JOURNAL_FORWARDER_URL` and `JOURNAL_FORWARDER_TOKEN`, and its manifest says `any_granted_host`. It needs Jason
+  0.31.0 or newer. Its
+  [README](https://github.com/reply-team/jason-ai/blob/v0.31.0/plugins/journal-forwarder/README.md) shows both entries.
+- **`jason subscription list` says when a kind rests.** A kind whose turn could not finish, for a reason of the
+  runtime's own, shows when it is offered again as `rest_until`. A rest is kept in memory, so the field is null after a
+  restart, and it is not `in_flight.retry_at`, which is a handler's own retry.
+- **`jason runtime run --help` prints its usage.** `--help`, `-h` and `-?` print what the verb takes and exit 0 without
+  starting anything. The verb now refuses what it does not know: an unknown argument, a `--data-dir` whose value starts
+  with `-`, and a `--data-dir` given twice are named on stderr and exit 2, where they used to be ignored and a runtime
+  started. The starts Jason makes itself pass only `--detached` and `--data-dir`, so they are unaffected.
+- **`troubleshooting-jason` teaches the hold, and is `draft` again.** Its state 11 says what a hold is, where it is seen
+  and the three ways out. No agent host has read that text, so its status went back from `verified` to `draft`. The
+  skills marked `draft` are `researcher-in-session`, `roles/responder`, `troubleshooting-jason` and the nine skills of
+  the business pack.
+- **For a plugin author:** `host` gains `host.config(key)`, which answers the text or `null`, and the invocation gains a
+  `config` object, absent where nothing is configured; protocol stays 1. A value is text, so a boolean arrives as
+  `True` and a number is parsed by your code. The host masks each value, except one under 8 characters, and a
+  successful result is not masked at all: what you return is yours to keep clean.
+  [The guide](https://github.com/reply-team/jason-ai/blob/v0.31.0/docs/plugins.md#6-the-host-sdk) states both limits.
 
-## Fixed since 0.29.0
+## Fixed since 0.30.0
 
-- **A start no longer waits for a slow network share.** At every start the runtime writes each host's missing import
-  file (`CLAUDE.md`, `GEMINI.md`) into the harness root and into every folder recorded for a project or a campaign.
-  That sweep ran inside the start, so a recorded folder on a slow or absent network share held the runtime's first
-  answer, and the CLI's wait for the start, for as long as one directory check on it took. The sweep now runs in the
-  background and the runtime answers at once. A folder read, or a role launched, in the first moments after a start may
-  therefore not have its import file yet, as
-  [the projects page](https://github.com/reply-team/jason-ai/blob/v0.30.0/docs/projects.md) says; a folder moved during
-  the sweep is skipped and gains its file at the next start.
-- **A subscribed kind whose turn gives out now rests.** In 0.29.0 a fault of the runtime's own that stopped a
-  subscribed kind's turn was logged and the kind was offered again at the next scan with no pause, so a fault that
-  lasted repeated at every scan. The turn now ends as given out and the kind is offered again only after a wait:
-  `Subscriptions:RetryBackoffSeconds` after the first give-out, doubled after each one in a row, and never longer than
-  an hour. The setting is read at each give-out. The warning is logged once per streak and again only when the failure
-  differs, and it names the kind, the failure and the wait. The streak is kept in memory: a reload keeps it, a restart
-  begins afresh, and a turn that ends without a give-out ends it.
+- **The Windows toast shows the longest pointers.** A pointer saying at once that work waits, protective work failed and
+  events were not read was longer than the toast's line bound of 200 characters, so Windows refused it: nothing showed and
+  the delivery was recorded as failed with `toast_rejected`. The bound is now the delivery contract's 400, which every
+  pointer fits.
+- **A secret holding `&`, `+`, a quote or a non-ASCII letter is masked.** A granted variable, or a configured value, with
+  such a character was masked in a failure's message but not in its details and block, nor in a log line's data, where
+  it is written in the form JSON gives it. It is masked in all of them now.
 
-## Upgrading from 0.29.0
+## Upgrading from 0.30.0
 
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
   lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
-  install line and Homebrew place the executable alone, so after either, `jason skills update`, `jason ui install`
-  and `jason plugin install reply --replace` follow,
-  and `jason plugin install journal-forwarder --replace` too if you installed the forwarder.
+  install line and Homebrew place the executable alone, so after either, `jason skills update` and `jason ui install`
+  follow, and `jason plugin install journal-forwarder --replace` too if you installed the forwarder.
+- **Rename the responder's limit before you start 0.31.0.** `Responder:MaxLaunchesPerDay`, from any place the
+  configuration is read, stops the start until it is renamed to `Launches:MaxPerDay:responder`, and so does the variable
+  `JASON_Responder__MaxLaunchesPerDay`; nothing is carried over for you. `jason update apply` leaves `settings.json` as
+  you wrote it, so with the old key still there the update stands at `started` with `update_not_healthy` and the
+  runtime's sentence after "It said:". Rename the key by hand and run `jason update apply` again. A responder that
+  0.30.0 held carries `responder_launches_spent`, and 0.31.0 reads that as held too.
 - **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`. Two skills changed their status line from `draft` to `verified`.
+  `brew upgrade jason`, run `jason skills update`. One skill changed its status line, `troubleshooting-jason`, from
+  `verified` to `draft`.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle
   stay as they were.
-- **The Reply plugin** changed to 0.14.5. `jason update apply` replaces an installed Reply package that is an earlier
-  version this release records, byte for byte as published, and leaves one built or edited on your machine alone; after
-  the install line or `brew upgrade jason`, which run no apply, `jason plugin install reply --replace` places it.
-- **The journal forwarder** is installable from the release with `jason plugin install journal-forwarder`. A copy you
-  took from the repository for 0.29.0 and did not edit is replaced by `jason update apply` with 1.0.1; a copy you
-  edited, as a receiver other than `localhost:8787` needs, is yours and is left as it is, so there is nothing to do, and
-  `--replace` would discard your edit.
-- **A responder past 25 runs a day** is held from this release: for a campaign whose responder ran more than 25 times in
-  a UTC day, the 26th run waits until 00:00Z. Raise `Responder:MaxLaunchesPerDay` in `settings.json` to keep the old
-  pace.
-- **A run's agent that approved or answered in a person's name** is now refused; the person decides.
-- **From 0.28.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
+- **The Reply plugin** is unchanged at 0.14.5.
+- **The journal forwarder** is 1.1.0. `jason update apply` replaces a copy you did not edit, byte for byte as published,
+  and leaves one you edited alone, since it is yours; after the install line or `brew upgrade jason`,
+  `jason plugin install journal-forwarder --replace` places it. A copy you edited under 1.0.1 to name another receiver
+  can go back to the published package: put the receiver's host in `Plugins:Grants:journal-forwarder:Http` and its
+  `url` and `token` in `Plugins:Config:journal-forwarder`, as the README shows, then run `--replace` and
+  `jason plugin reload`. A forwarder you never installed is left alone.
+- **A runtime older than 0.31.0 rejects the forwarder 1.1.0** over the manifest's `any_granted_host`: the whole reload
+  is rejected, as every package problem rejects it, so an older runtime needs the forwarder package its own release published.
+- **A script of your own that runs `jason runtime run`** is refused if it passes anything the verb does not know. A
+  hand-made logon registration carrying another flag fails at its next start with exit 2, and its error goes nowhere on
+  Windows and macOS, so run the registered line by hand to read why.
+- **From 0.29.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
 
