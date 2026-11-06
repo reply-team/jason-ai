@@ -98,6 +98,79 @@ public sealed class NotificationComposerTests
     public void A_negative_block_count_is_not_a_pointer(int blocks, int held) =>
         Assert.Throws<ArgumentOutOfRangeException>(() => NotificationComposer.Compose(0, 0, blocks: new HeldByBlocks(blocks, held)));
 
+    /// <summary>A hold alone says how many items wait and sends a person to the one list that shows them.</summary>
+    [Theory]
+    [InlineData(1, "1 item waits on a budget.")]
+    [InlineData(3, "3 items wait on a budget.")]
+    [InlineData(10_000, "10k+ items wait on a budget.")]
+    public void A_hold_alone_says_how_many_items_wait_on_a_budget(int held, string summary)
+    {
+        var message = NotificationComposer.Compose(0, 0, held: held);
+
+        Assert.Equal((summary, NotificationComposer.LookAtHeld), (message.Summary, message.Look));
+        Assert.Equal("Ask your agent what is held, or run jason workitem list --status waiting.", message.Look);
+        Assert.Equal(held, message.Held);
+    }
+
+    /// <summary>
+    /// Said after failed protective work and before a block, and failed and held share one command: a pointer says at most
+    /// one list of work items, and where it says both, one filter shows both.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, false, false, "2 approvals are waiting in Jason. 3 items wait on a budget.", "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status waiting.")]
+    [InlineData(false, true, false, false, "1 protective action failed in Jason, in cmp_A. 3 items wait on a budget.", "Ask your agent what failed and what is held, or run jason workitem list --status failed --status expired --status waiting.")]
+    [InlineData(true, true, false, false, "2 approvals are waiting in Jason. 1 protective action failed in Jason, in cmp_A. 3 items wait on a budget.", "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status failed --status expired --status waiting.")]
+    [InlineData(false, false, true, false, "3 items wait on a budget. 1 provider block holds 2 work items.", "Ask your agent, or run jason workitem list --status waiting and jason block list.")]
+    [InlineData(false, false, false, true, "3 items wait on a budget. 1 account has events Jason did not read.", "Ask your agent, or run jason workitem list --status waiting and jason events sources.")]
+    [InlineData(false, true, true, true, "1 protective action failed in Jason. 3 items wait on a budget. 1 provider block holds 2 work items. 1 account has events Jason did not read.", "Ask your agent, or run jason workitem list --status failed --status expired --status waiting, jason block list and jason events sources.")]
+    public void A_hold_beside_other_things_is_said_in_its_place_and_points_at_each_of_them(bool waiting, bool failed, bool blocked, bool gaps, string summary, string look)
+    {
+        var message = NotificationComposer.Compose(
+            waiting ? 2 : 0,
+            0,
+            failed ? new FailedProtectiveWork(1, ["cmp_A"], 0) : null,
+            gaps ? 1 : 0,
+            blocked ? new HeldByBlocks(1, 2) : null,
+            held: 3);
+
+        Assert.Equal((summary, look), (message.Summary, message.Look));
+    }
+
+    /// <summary>
+    /// Beside a hold, failed protective work names one campaign and counts the rest, and beside a hold and a block it names
+    /// none: six things with a campaign named would not fit the message the delivery contract takes.
+    /// </summary>
+    [Fact]
+    public void Failed_protective_work_beside_a_hold_names_one_campaign_and_beside_a_block_as_well_none()
+    {
+        var failures = new FailedProtectiveWork(5, ["cmp_A", "cmp_B", "cmp_C"], 2);
+
+        Assert.Equal(
+            "5 protective actions failed in Jason, in cmp_A and 4 more. 1 item waits on a budget.",
+            NotificationComposer.Compose(0, 0, failures, held: 1).Summary);
+        Assert.Equal(
+            "5 protective actions failed in Jason. 1 item waits on a budget. 1 provider block holds 2 work items.",
+            NotificationComposer.Compose(0, 0, failures, blocks: new HeldByBlocks(1, 2), held: 1).Summary);
+    }
+
+    /// <summary>No hold says nothing: no sentence and no command.</summary>
+    [Fact]
+    public void No_hold_is_no_sentence() =>
+        Assert.Equal(NotificationComposer.Compose(1, 0), NotificationComposer.Compose(1, 0, held: 0));
+
+    [Fact]
+    public void A_negative_hold_count_is_not_a_pointer() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => NotificationComposer.Compose(0, 0, held: -1));
+
+    /// <summary>One approval beside a hold is still the one item a click can open.</summary>
+    [Fact]
+    public void One_item_beside_a_hold_is_still_carried()
+    {
+        const string Approval = "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6";
+
+        Assert.Equal(Approval, NotificationComposer.Compose(1, 0, item: Approval, held: 2).Item);
+    }
+
     /// <summary>
     /// The longest pointer the composer can make, whatever the counts — every count at four digits or far past them —
     /// still fits the message the delivery contract takes, read from the contract itself: a longer one would be refused
@@ -125,6 +198,46 @@ public sealed class NotificationComposerTests
             Assert.True(pointer.Text.Length <= bound, $"At {count} the longest pointer {shape} is {pointer.Text.Length} characters; the delivery contract takes {bound}: {pointer.Text}");
             Assert.True(pointer.Text.Length == length, $"At {count} the longest pointer {shape} is {pointer.Text.Length} characters, not {length}: {pointer.Text}");
         }
+    }
+
+    /// <summary>
+    /// Every shape a pointer with a hold can take, every count past four digits, held to its exact length. The longest two
+    /// are the hold beside both waits, failed protective work and a gap, which names one campaign, and those with a block
+    /// as well, which names none: 381 and 393 of the 400.
+    /// </summary>
+    [Theory]
+    [Critical(Family.N3, "the message fits the contract")]
+    [InlineData(false, false, false, false, 102)]
+    [InlineData(true, false, false, false, 190)]
+    [InlineData(false, true, false, false, 241)]
+    [InlineData(true, true, false, false, 313)]
+    [InlineData(false, false, true, false, 153)]
+    [InlineData(false, false, false, true, 160)]
+    [InlineData(false, false, true, true, 221)]
+    [InlineData(true, false, true, false, 251)]
+    [InlineData(true, false, false, true, 258)]
+    [InlineData(true, false, true, true, 319)]
+    [InlineData(false, true, true, false, 227)]
+    [InlineData(false, true, false, true, 283)]
+    [InlineData(false, true, true, true, 295)]
+    [InlineData(true, true, true, false, 325)]
+    [InlineData(true, true, false, true, 381)]
+    [InlineData(true, true, true, true, 393)]
+    public void Every_shape_of_a_pointer_with_a_hold_fits_the_delivery_contract(bool waiting, bool failed, bool blocked, bool gaps, int length)
+    {
+        const string Id = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
+        const int Count = int.MaxValue;
+        var pointer = NotificationComposer.Compose(
+            waiting ? Count : 0,
+            waiting ? Count : 0,
+            failed ? new FailedProtectiveWork(Count, [Id, Id, Id], Count) : null,
+            gaps ? Count : 0,
+            blocked ? new HeldByBlocks(Count, Count) : null,
+            held: Count);
+        var bound = Jason.Contracts.Notifications.DeliveryCatalog.Find("notification.send")!.InputSchema["properties"]!["message"]!["maxLength"]!.GetValue<int>();
+
+        Assert.True(pointer.Text.Length <= bound, $"A pointer with a hold is {pointer.Text.Length} characters; the delivery contract takes {bound}: {pointer.Text}");
+        Assert.True(pointer.Text.Length == length, $"This shape is {pointer.Text.Length} characters, not {length}: {pointer.Text}");
     }
 
     /// <summary>A count is said as it is up to four digits, and past them as "10k+": a toast needs the size of it, not the figure.</summary>

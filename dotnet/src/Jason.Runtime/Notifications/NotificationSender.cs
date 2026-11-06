@@ -3,6 +3,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -149,13 +150,14 @@ public sealed class NotificationSender(
         var failedWork = await FailedAsync(request, ct).ConfigureAwait(false);
         var gaps = await GapsAsync(request, ct).ConfigureAwait(false);
         var blocks = await BlocksAsync(request, ct).ConfigureAwait(false);
-        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0 && blocks.Blocks == 0)
+        var held = await HeldAsync(ct).ConfigureAwait(false);
+        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0 && blocks.Blocks == 0 && held == 0)
         {
             status.NothingWaited(clock.GetUtcNow());
             return null;
         }
 
-        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null, item);
+        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null, item, held);
         var outcomes = await Task.WhenAll(channels.Resolve(settings.Current).Select(channel => DeliverAsync(channel, message, request.NotificationId, ct))).ConfigureAwait(false);
         var now = clock.GetUtcNow();
 
@@ -180,7 +182,8 @@ public sealed class NotificationSender(
             failedWork.Count,
             reached ? request.CoveredThrough : request.DeliveredThrough,
             gaps,
-            blocks.Blocks);
+            blocks.Blocks,
+            held);
 
         await using (var scope = scopes.CreateAsyncScope())
         {
@@ -319,6 +322,24 @@ public sealed class NotificationSender(
             .CountAsync(wait => wait.Status == WaitStatus.Open && wait.ProviderBlockId != null && open.Contains(wait.ProviderBlockId.Value), ct)
             .ConfigureAwait(false);
         return new HeldByBlocks(open.Count, held);
+    }
+
+    /// <summary>
+    /// The items that wait on a daily limit of launches as this one is sent, in every campaign: a wait with no attempt and
+    /// no block, on an item whose last error carries either word. Counted now, as approvals are, so a hold let go before
+    /// the send is not said and one still standing is said again beside whatever woke the next pointer. The error is a
+    /// converted column, so the word is read here rather than in the query.
+    /// </summary>
+    private async Task<int> HeldAsync(CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var errors = await db.WorkItemWaits.AsNoTracking()
+            .Where(wait => wait.Status == WaitStatus.Open && wait.AttemptId == null && wait.ProviderBlockId == null)
+            .Select(wait => wait.WorkItem!.LastError)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return errors.Count(error => AttemptErrors.IsDailyHold(error?.Code));
     }
 
     private static Task<int?> IdOfAsync(JasonDbContext db, string publicId, CancellationToken ct) =>

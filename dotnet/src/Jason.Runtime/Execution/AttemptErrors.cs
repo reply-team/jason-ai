@@ -112,6 +112,9 @@ public static class AttemptErrors
     /// </summary>
     public const string ResponderLaunchesSpent = "responder_launches_spent";
 
+    /// <summary>Whether a code is a hold at a daily limit, under either word.</summary>
+    public static bool IsDailyHold(string? code) => code is LaunchesSpent or ResponderLaunchesSpent;
+
     /// <summary>The operation acts on somebody and the work item names nobody.</summary>
     public const string ContactRequired = "contact_required";
 

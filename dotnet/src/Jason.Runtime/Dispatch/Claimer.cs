@@ -310,7 +310,7 @@ public sealed class Claimer(
     /// </summary>
     private static async Task<bool> SpentAsync(JasonDbContext db, WorkItem item, int limit, DateTime today, CancellationToken ct)
     {
-        if (item.LastError?.Code is AttemptErrors.LaunchesSpent or AttemptErrors.ResponderLaunchesSpent)
+        if (AttemptErrors.IsDailyHold(item.LastError?.Code))
         {
             var latest = await db.WorkItemWaits.AsNoTracking()
                 .Where(w => w.WorkItemId == item.Id)

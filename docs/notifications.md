@@ -7,7 +7,7 @@ the contract for the `Notifications` section of the settings, the toast, notific
 
 ## 1. What notifies, and what does not
 
-Five things, and only these:
+Six things, and only these:
 
 - **an approval parked at a claim** — a provider operation that needs a person's yes before it runs
   ([work-execution.md](work-execution.md));
@@ -29,15 +29,20 @@ Five things, and only these:
   holds are the work items parked on it, as `block.get`'s `held_count` counts them, so a pointer's count,
   `jason block get` and `jason workitem list --block` agree. Whether a block is the account's or one sending account's,
   and what lifts it, is read at `jason block list`; the pointer says only how many.
+- **an item held at a daily limit of launches** — a role spent what `Launches:MaxPerDay` allows it for the day, in a
+  campaign, and the claim set the item aside until the next UTC day ([work-execution.md](work-execution.md)). It wakes
+  a pointer once, by the `workitem_waiting` line that names `held_by`, and the pointer counts every item that waits
+  on such a limit as it is sent, whichever campaign it is in; a hold let go before the pointer is sent is not said.
 
 Nothing else notifies: not an answer, not an approval given or refused, not a review, not finished work, not other work
 that failed, not a block that cleared, and not a protective action somebody cancelled — a cancellation is a decision. A
 person who answers a question is not told that they answered it.
 
-A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, how many
-accounts have events Jason did not read, how many provider blocks hold how many work items, and where to look. It
-decides nothing, and nothing is approved by reacting to it. An approval is a person's decision, recorded as theirs, made
-where they read what they are approving — through their agent, or `jason approval list` and `jason approval approve`.
+A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, how
+many accounts have events Jason did not read, how many provider blocks hold how many work items, how many items
+wait on a budget, and where to look. It decides nothing, and nothing is approved by reacting to it. An approval
+is a person's decision, recorded as theirs, made where they read what they are approving — through their agent,
+or `jason approval list` and `jason approval approve`.
 
 ## 2. When
 
@@ -94,17 +99,28 @@ Jason
 Ask your agent what is blocked, or run jason block list.
 ```
 
-The title; how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst answered
-before it was said says nothing at all; how many protective actions failed, how many accounts have events Jason did not
-read, and how many provider blocks opened, **since the last notification that reached anybody** — counted from that
-one's line, so a notification that reached nobody leaves them for the next; of those blocks, only the ones still open
-when it is sent, with the work items they hold then; and where to look. Said beside anything else, a provider block or
-an account whose events were not read makes where to look the commands of each thing alone, in the order they are said —
-"Ask your agent, or run jason approval list, jason decision list, jason workitem list --status failed --status expired,
-jason block list and jason events sources." — so that five things said at once still fit the message the delivery
-contract takes; beside a provider block, failed protective work names one campaign and counts the rest. Past three
-campaigns, the rest are counted: "… in cmp_…, cmp_…, cmp_… and 2 more." A count past 9999 is said as "10k+", so the
-longest pointer fits whatever the counts are; the line keeps the counts themselves. That is every field.
+And where items wait on a daily limit of launches:
+
+```text
+Jason
+2 items wait on a budget.
+Ask your agent what is held, or run jason workitem list --status waiting.
+```
+
+The title; how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst
+answered before it was said says nothing at all; how many protective actions failed, how many accounts have events
+Jason did not read, and how many provider blocks opened, **since the last notification that reached anybody**
+— counted from that one's line, so a notification that reached nobody leaves them for the next; of those blocks,
+only the ones still open when it is sent, with the work items they hold then; how many items wait on a daily limit,
+counted when it is sent, as approvals are; and where to look. Said beside anything else, a hold, a provider block
+or an account whose events were not read makes where to look the commands of each thing alone, in the order they
+are said — "Ask your agent, or run jason approval list, jason decision list, jason workitem list --status failed
+--status expired, jason block list and jason events sources." — and failed protective work and a hold share
+one command, jason workitem list --status failed --status expired --status waiting, so that six things said at
+once still fit the message the delivery contract takes; beside a provider block or a hold, failed protective work
+names one campaign and counts the rest, and beside both it names none. Past three campaigns, the rest are counted:
+"… in cmp_…, cmp_…, cmp_… and 2 more." A count past 9999 is said as "10k+", so the longest pointer fits
+whatever the counts are; the line keeps the counts themselves. That is every field.
 
 **What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a
 question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a
@@ -112,7 +128,8 @@ work item or attempt. A campaign's public id travels only in the sentence about 
 of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not read,
 nothing travels but how many such accounts there are. Of a provider block, nothing travels but how many blocks there are
 and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign.
-The pointer is made from five counts, those ids, and nothing else — and in the Windows toast alone, when exactly one
+Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. The pointer
+is made from six counts, those ids, and nothing else — and in the Windows toast alone, when exactly one
 approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a click opens on (§7). That id is never
 in the words, never in a plugin channel's input, and never in a toast on macOS or Linux. A campaign's name is the plainest example of why: it
 is often a customer's name or a deal, written by the person for themselves, and a notification is read by whoever can
@@ -190,6 +207,11 @@ runtime's log, read with `jason logs`, as a warning naming the source, the code 
 line came before it was counted by an earlier pointer — and were still open when this notification was sent, counted by
 block however many campaigns were told about one. It is carried forward by a notification that reached nobody the same
 way, and sent to a channel only as words, beside the work items those blocks held then, which the line does not keep.
+
+`counts.held` is how many items waited on a daily limit when this notification was sent, read as it was sent, as
+`counts.approvals` is: an open wait of no attempt and no block whose item's last error is `launches_spent`, or
+`responder_launches_spent`, the code a 0.30.0 runtime wrote. It is not carried forward, and a line written before 0.31.0
+has none.
 
 A notification is a pointer. Each channel's outcome is one of `delivered`; `failed`, with its code and class — a
 server still unreachable after its one retry is failed, and so is a delivery whose input the runtime's own half of the
