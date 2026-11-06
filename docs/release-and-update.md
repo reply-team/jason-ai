@@ -520,6 +520,12 @@ not the work directories. Nor does it touch anything you registered with the mac
 a scheduled task, a login item — because the file at the install path is replaced in place rather than moved
 elsewhere, so whatever points at that path still points at Jason.
 
+Because `settings.json` is left as you wrote it, a key a release renames stays there under its old name.
+`Responder:MaxLaunchesPerDay` is such a key: 0.31.0 renamed it to `Launches:MaxPerDay:responder`, and
+[`work-execution.md`](work-execution.md) has the map. A file that still names it stops the new runtime's first start, so
+the update stands at `started` with `update_not_healthy` and the runtime's sentence after "It said:". Carry the number
+over by hand, take the old key out, and `jason update apply` starts the runtime again.
+
 Its `plugins` step, between `swapped` and `started`, replaces each plugin package installed as an earlier version the
 new release records — the packages `jason update check` named (§5) — with the release's own. The archive is fetched from
 the release's own directory and held to its line in `checksums.txt`, and the tree it unpacks to to the digest the
