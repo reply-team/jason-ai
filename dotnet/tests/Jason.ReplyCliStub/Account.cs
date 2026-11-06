@@ -237,7 +237,7 @@ internal static partial class Account
         {
             try
             {
-                using var gate = new FileStream(file + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                using var gate = new FileStream(file + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
                 using var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
                 stream.Write(bytes, 0, bytes.Length);
                 return;
