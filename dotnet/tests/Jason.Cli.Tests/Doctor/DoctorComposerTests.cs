@@ -1088,7 +1088,7 @@ public sealed class DoctorComposerTests
         runtime.Subscribed =
         [
             .. runtime.Subscribed,
-            new("SENTINEL_KIND", ["fake-provider"], null, null, 0, ["fake-provider"], null),
+            new("SENTINEL_KIND", ["fake-provider"], null, null, 0, ["fake-provider"], null, null),
         ];
 
         var bundle = await ComposeAsync(dir, runtime);
@@ -3557,7 +3557,7 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
 
     /// <summary>What <c>subscription.list</c> answers: one kind with a chain of one, unless a test says.</summary>
     public IReadOnlyList<SubscriptionKindDto> Subscribed { get; set; } =
-        [new("campaign_created", ["fake-provider"], "jrn_00000000000000000000000001", "jrn_00000000000000000000000002", 1, [], null)];
+        [new("campaign_created", ["fake-provider"], "jrn_00000000000000000000000001", "jrn_00000000000000000000000002", 1, [], null, null)];
 
     /// <summary>What <c>subscription.runs</c> answers for a kind: a chain that ended well, with an envelope no bundle carries, and one that failed.</summary>
     public IReadOnlyList<SubscriptionRunDto> Runs { get; set; } =

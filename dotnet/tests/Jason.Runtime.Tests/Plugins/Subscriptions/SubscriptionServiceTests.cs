@@ -379,8 +379,76 @@ public class SubscriptionServiceTests
         Assert.Equal([$"{Failed}|{lines[0]}|1"], await PositionsAsync(harness));
     }
 
-    private static SubscriptionService Service(DispatchHarness harness, JasonDbContext db) =>
-        new(db, new JournalWriter(harness.Clock), harness.Resolve<PluginRegistry>(), harness.Clock);
+    /// <summary>
+    /// A turn that could not finish rests the kind, which holds no child and shows in no flight: the list says until when,
+    /// to the moment the kind is offered again and not past it.
+    /// </summary>
+    [Fact]
+    public async Task A_kind_at_rest_says_until_when_and_nothing_once_that_moment_has_come()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("beta", Failed));
+        Lines(harness, Failed);
+        await CursorAsync(harness, Failed);
+        await GiveOutAsync(harness, harness.SubscriptionRunner);
+        var seconds = harness.Subscriptions.CurrentValue.RetryBackoffSeconds;
+        var until = harness.Clock.GetUtcNow().AddSeconds(seconds);
+
+        Assert.Equal(until, (await ListedAsync(harness)).RestUntil);
+        Assert.Null((await ListedAsync(harness)).InFlight);
+
+        harness.Clock.Advance(TimeSpan.FromSeconds(seconds - 1));
+        Assert.Equal(until, (await ListedAsync(harness)).RestUntil);
+
+        harness.Clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.Null((await ListedAsync(harness)).RestUntil);
+    }
+
+    /// <summary>A rest lives in the runtime that took it: the runner of the next start knows of none.</summary>
+    [Fact]
+    public async Task A_rest_is_forgotten_by_a_restart()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("beta", Failed));
+        Lines(harness, Failed);
+        await CursorAsync(harness, Failed);
+        await GiveOutAsync(harness, harness.SubscriptionRunner);
+
+        Assert.NotNull((await ListedAsync(harness)).RestUntil);
+        Assert.Null((await ListedAsync(harness, NewRunner(harness))).RestUntil);
+    }
+
+    /// <summary>A handler's own retry is the chain's, in flight, and is no rest of the kind.</summary>
+    [Fact]
+    public async Task A_chain_waiting_on_a_handler_s_retry_is_in_flight_and_does_not_rest()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, Subscriber("beta", Failed));
+        var lines = Lines(harness, Failed);
+        await CursorAsync(harness, Failed);
+        await RunAsync(harness, Failed, lines[0], SubscriptionRunStatus.Running, retryAt: Noon.AddMinutes(2));
+
+        var kind = await ListedAsync(harness);
+
+        Assert.Equal(new DateTimeOffset(Noon.AddMinutes(2)), kind.InFlight!.RetryAt);
+        Assert.Null(kind.RestUntil);
+    }
+
+    /// <summary>The kind's turn, with its first read made to fail: a give-out that reached no line, and a rest.</summary>
+    private static async Task GiveOutAsync(DispatchHarness harness, SubscriptionRunner runner)
+    {
+        harness.Commands.FailNextWorkItemRead();
+        Assert.Equal(SubscriptionTurn.GaveOut, (await runner.RunNextAsync(Failed, Ct))!.Ended);
+    }
+
+    private static async Task<SubscriptionKindDto> ListedAsync(DispatchHarness harness, SubscriptionRunner? runner = null)
+    {
+        await using var db = harness.Open();
+        return Assert.Single((await Service(harness, db, runner).ListAsync(new SubscriptionListRequest(null, null), Ct)).Items);
+    }
+
+    private static SubscriptionService Service(DispatchHarness harness, JasonDbContext db, SubscriptionRunner? runner = null) =>
+        new(db, new JournalWriter(harness.Clock), harness.Resolve<PluginRegistry>(), runner ?? harness.SubscriptionRunner, harness.Clock);
 
     private static SubscriptionRewindRequest Rewind(string? line = null, string? since = null, string? reason = null) =>
         new(Failed, line, since, new ActorRef(ActorType.Human, Person), reason);

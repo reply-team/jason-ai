@@ -1740,7 +1740,9 @@ from its first handler, each handler that was handed the line before seeing `att
 causes is one it can tell it already caused. A turn that cannot finish for a reason of the runtime's own is logged, once
 for as long as the same failure repeats, and the kind holds no child and is not offered again, from the same line, until
 a wait has passed: `Subscriptions:RetryBackoffSeconds` after the first such turn, doubled after each one in a row and
-held to an hour, and back to the first wait once a turn of the kind ends without one.
+held to an hour, and back to the first wait once a turn of the kind ends without one. `jason subscription list` says when
+that wait ends, as `rest_until`, while it lasts. The wait is kept in memory, so `rest_until` is null after a restart,
+which offers the kind at once, and it is not `in_flight.retry_at`, which is a handler's own retry within a chain.
 
 **Failures.** A `transient` failure is tried again by the same handler, with the envelope as it stood before it, up to
 `Subscriptions:TransientRetries` times — 3 unless set otherwise. The first wait is `Subscriptions:RetryBackoffSeconds` —

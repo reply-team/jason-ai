@@ -16,6 +16,7 @@ public sealed record SubscriptionListRequest(int? Limit, string? Cursor);
 /// <param name="Lag">How many lines of the kind are after the cursor.</param>
 /// <param name="WaitingOn">The members of the chain that cannot run on this machine now, so no chain of the kind starts; empty when none.</param>
 /// <param name="InFlight">The kind's chain that has started and not ended; null when none.</param>
+/// <param name="RestUntil">When a kind whose turn could not finish, for a reason of the runtime's own, is offered again; null while it does not rest, and after a restart, which forgets a rest. Not <see cref="SubscriptionInFlightDto.RetryAt"/>, which is a handler's own retry within a chain.</param>
 public sealed record SubscriptionKindDto(
     string Kind,
     IReadOnlyList<string> Chain,
@@ -23,7 +24,8 @@ public sealed record SubscriptionKindDto(
     string? Head,
     int Lag,
     IReadOnlyList<string> WaitingOn,
-    SubscriptionInFlightDto? InFlight);
+    SubscriptionInFlightDto? InFlight,
+    DateTimeOffset? RestUntil);
 
 /// <summary>
 /// The chain of a kind that has started and not ended: its run, its line, when it started, and when a handler that failed
