@@ -139,7 +139,8 @@ public sealed class Summoner(
     /// <summary>
     /// The system's check-ins that stop a second one: in a status of <see cref="Open"/>, or waiting with no attempt and no
     /// block on their wait, which is a check-in held at the manager's daily limit. Such a check-in is the review that will
-    /// run after 00:00Z, so a trigger meanwhile adds nothing to it; a check-in whose run yielded or that a provider block
+    /// run after 00:00Z, so a trigger meanwhile summons no second check-in beside it; it summons the next review once the
+    /// held one has run, which the limit may hold to the next day. A check-in whose run yielded or that a provider block
     /// parked is not one of these. The unique index does not see a hold, because a waiting status is not in its filter, so
     /// this look alone keeps the one.
     /// </summary>
