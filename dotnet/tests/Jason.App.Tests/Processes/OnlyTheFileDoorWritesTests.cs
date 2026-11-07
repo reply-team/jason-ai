@@ -94,6 +94,8 @@ public class OnlyTheFileDoorWritesTests
     [InlineData(nameof(FileOffenders.SetsAttributes), "calls File.SetAttributes")]
     [InlineData(nameof(FileOffenders.SetsAUnixMode), "calls File.SetUnixFileMode")]
     [InlineData(nameof(FileOffenders.MapsAFile), "calls MemoryMappedFile.CreateFromFile")]
+    [InlineData(nameof(FileOffenders.MakesATemporaryFile), "calls Path.GetTempFileName")]
+    [InlineData(nameof(FileOffenders.MakesATemporaryDirectory), "calls Directory.CreateTempSubdirectory")]
     [InlineData(nameof(FileOffenders.InALambda), "calls File.WriteAllText")]
     [InlineData(nameof(FileOffenders.InAnAsyncMethod), "calls File.Delete")]
     [InlineData(nameof(FileOffenders.InAnIterator), "makes a FileStream")]
@@ -157,8 +159,9 @@ public class OnlyTheFileDoorWritesTests
                 || (type == typeof(DirectoryInfo) && name is nameof(DirectoryInfo.Create) or nameof(DirectoryInfo.CreateSubdirectory) or nameof(DirectoryInfo.Delete) or nameof(DirectoryInfo.MoveTo))
                 || (type == typeof(FileSystemInfo) && name is nameof(FileSystemInfo.Delete) or nameof(FileSystemInfo.CreateAsSymbolicLink))
                 || (type == typeof(RandomAccess) && name is nameof(RandomAccess.Write) or nameof(RandomAccess.WriteAsync) or nameof(RandomAccess.SetLength))
-                || (type == typeof(Directory) && name is nameof(Directory.CreateDirectory) or nameof(Directory.Delete) or nameof(Directory.Move) or nameof(Directory.CreateSymbolicLink))
-                || (type == typeof(MemoryMappedFile) && name == nameof(MemoryMappedFile.CreateFromFile)))
+                || (type == typeof(Directory) && name is nameof(Directory.CreateDirectory) or nameof(Directory.Delete) or nameof(Directory.Move) or nameof(Directory.CreateSymbolicLink) or nameof(Directory.CreateTempSubdirectory))
+                || (type == typeof(MemoryMappedFile) && name == nameof(MemoryMappedFile.CreateFromFile))
+                || (type == typeof(Path) && name == nameof(Path.GetTempFileName)))
             {
                 yield return $"calls {type!.Name}.{name}";
             }

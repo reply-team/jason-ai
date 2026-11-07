@@ -112,6 +112,10 @@ internal static class FileOffenders
 
     public static MemoryMappedFile MapsAFile() => MemoryMappedFile.CreateFromFile("x");
 
+    public static string MakesATemporaryFile() => Path.GetTempFileName();
+
+    public static DirectoryInfo MakesATemporaryDirectory() => Directory.CreateTempSubdirectory();
+
     public static Action InALambda() => () => File.WriteAllText("x", "y");
 
     public static async Task InAnAsyncMethod()
