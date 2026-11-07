@@ -173,6 +173,42 @@ public sealed class TelegramPackageTests
         }
     }
 
+    /// <summary>Telegram's own words for a failure reach the line through the channel's detail, after the package's, at each answer that can carry them.</summary>
+    [Theory]
+    [InlineData(401, """{"ok":false,"error_code":401,"description":"Unauthorized"}""", "the server did not accept the bot token (401): Unauthorized")]
+    [InlineData(404, """{"ok":false,"error_code":404,"description":"Not Found"}""", "the server did not accept the bot token (404): Not Found")]
+    [InlineData(429, """{"ok":false,"error_code":429,"description":"Too Many Requests: retry after 5"}""", "the server cannot take messages for now (429): Too Many Requests: retry after 5")]
+    [InlineData(503, """{"ok":false,"error_code":503,"description":"Service Unavailable"}""", "the server cannot take messages for now (503): Service Unavailable")]
+    [InlineData(400, """{"ok":false,"error_code":400,"description":"Bad Request: chat not found"}""", "the server refused the message (400): Bad Request: chat not found")]
+    [InlineData(200, """{"ok":false,"description":"Bad Request: chat not found"}""", "the server did not send the message: Bad Request: chat not found")]
+    public async Task Telegram_s_description_is_the_detail_of_a_failure(int status, string body, string detail)
+    {
+        var (outcome, server, api) = await DeliverAsync(status, body, ConfigToken, null);
+        using (server)
+        await using (api)
+        {
+            Assert.Equal(detail, outcome.Detail);
+        }
+    }
+
+    /// <summary>A description is one line of the detail: at most its first two hundred units, whatever Telegram sent.</summary>
+    [Theory]
+    [InlineData(200)]
+    [InlineData(201)]
+    [InlineData(4000)]
+    public async Task A_description_past_two_hundred_is_cut_to_its_first_two_hundred(int length)
+    {
+        var description = string.Concat(Enumerable.Range(0, length).Select(index => (char)('a' + (index % 26))));
+        var body = new JsonObject { ["ok"] = false, ["error_code"] = 400, ["description"] = description }.ToJsonString();
+
+        var (outcome, server, api) = await DeliverAsync(400, body, ConfigToken, null);
+        using (server)
+        await using (api)
+        {
+            Assert.Equal("the server refused the message (400): " + description[..200], outcome.Detail);
+        }
+    }
+
     [Fact]
     public async Task A_server_that_does_not_answer_is_unreachable_and_the_token_is_not_in_the_outcome()
     {
