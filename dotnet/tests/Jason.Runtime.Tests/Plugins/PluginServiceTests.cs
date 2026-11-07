@@ -100,6 +100,43 @@ public class PluginServiceTests
         Assert.Equal(["read", "journal.append"], plugin.Capabilities.Api!.Requested);
         Assert.Equal(["journal.append"], plugin.Capabilities.Api.Granted);
         Assert.Null(plugin.Capabilities.Env);
+        Assert.Null(plugin.Capabilities.Files);
+    }
+
+    [Fact]
+    public async Task The_directories_a_plugin_is_granted_are_listed_as_the_person_wrote_them()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "jason-file-grants", Guid.NewGuid().ToString("N"));
+        await using var api = await StartAsync(new TestSearchPath(), paths =>
+        {
+            TestPlugins.Write(
+                paths,
+                "acme-writer",
+                TestPlugins.Manifest("acme-writer", extra: "capabilities:\n  files:\n    append: true\n"),
+                "export function invoke() { return { result: {} }; }");
+            TestPlugins.Grant(paths, "acme-writer", files: [folder]);
+        });
+
+        var plugin = Assert.Single((await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { Reason = "after installing" }, Ct)).Plugins);
+
+        Assert.Equal(PluginStatus.Valid, plugin.Status);
+        Assert.True(plugin.Capabilities.Files!.Append);
+        Assert.Equal([folder], plugin.Capabilities.Files.Granted);
+    }
+
+    [Fact]
+    public async Task A_plugin_that_asks_to_write_and_was_granted_nowhere_says_so()
+    {
+        await using var api = await StartAsync(new TestSearchPath(), paths => TestPlugins.Write(
+            paths,
+            "acme-writer",
+            TestPlugins.Manifest("acme-writer", extra: "capabilities:\n  files:\n    append: true\n"),
+            "export function invoke() { return { result: {} }; }"));
+
+        var plugin = Assert.Single((await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { Reason = "after installing" }, Ct)).Plugins);
+
+        Assert.True(plugin.Capabilities.Files!.Append);
+        Assert.Empty(plugin.Capabilities.Files.Granted);
     }
 
     [Fact]
