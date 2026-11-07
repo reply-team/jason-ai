@@ -271,7 +271,11 @@ directories are `Plugins:Grants:<id>:Files` in the same settings file, each an a
 each `jason plugin reload`. A directory is refused when it is the home directory or a folder holding it, the top of a
 drive, a share or the file system, the data directory or the harness root, or a folder inside or holding either of
 those two; a folder inside the home directory is where a person grants, and it is allowed. A relative path, `~` and
-`*` are refused too. Any refusal is `grant_path_refused` and rejects the whole reload, so the previous load stays.
+`*` are refused too. Any refusal is `grant_path_refused` and rejects the whole reload, so the previous load stays;
+at a start there is no previous load, so the runtime comes up with no plugin loaded until the setting is fixed and
+`jason plugin reload` is run. `jason plugin list` says why: its `last_reload` has `activated` false and, in the
+plugin's entry of `candidates`, a problem `grant_path_refused` at `grants.files[i]`; `--human` prints it under
+"last reload rejected".
 Give the plugin a directory of its own, never a folder another program runs from or reads its instructions from;
 `docs/plugins.md` §9 says the rest, and `plugins/journal-forwarder` is the plugin that uses it.
 
@@ -407,8 +411,8 @@ old package for the release's and asks the runtime to load it; replacing a packa
 ask first. `jason update check` says it before the update: its `plugin_updates` names each package installed here that
 the newer release publishes a later version of, exactly the ones the apply replaces, with both versions, and is `[]`
 when nothing installed here that the record holds is behind. It never names a package the list does not know: built or
-edited on that machine, or a version before its package's list begins, which for the Reply package is 0.3.2 and for every other is 1.0.0;
-whether that one is behind is `jason status`'s to say, by its version.
+edited on that machine, or a version before its package's list begins, which for the Reply package is 0.3.2 and
+for every other is 1.0.0; whether that one is behind is `jason status`'s to say, by its version.
 
 ## Installing it in the first place
 
