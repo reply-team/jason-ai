@@ -45,7 +45,7 @@ public sealed class FilesServiceTests : IDisposable
             _package.Root,
             builder =>
             {
-                builder.Grants = new InvocationGrants(null, null, null, new FilesGrants(directories ?? [new FileDirectoryGrant(_directory, _directory)]));
+                builder.Grants = new InvocationGrants(null, null, null, new FilesGrants(directories ?? [new FileDirectoryGrant(_directory, FolderPaths.Real(_directory))]));
                 configure?.Invoke(builder);
             },
             remaining: remaining,
@@ -87,11 +87,26 @@ public sealed class FilesServiceTests : IDisposable
         Assert.Equal([.. Utf8.GetBytes("first\nвторая строка\n")], Bytes(File("a.jsonl")));
     }
 
+    /// <summary>
+    /// What every refusal in this class stands on. All of them share one code, so a grant the door takes for a moved directory
+    /// would satisfy a row meant to prove something else.
+    /// </summary>
+    [Fact]
+    [Critical(Family.X2, "the directory the refusals are proved on takes a plain line, so each refusal comes from what its row names")]
+    public void The_fixture_s_grant_takes_a_plain_line()
+    {
+        using var harness = Granted();
+
+        harness.Evaluate(Call(File("plain.log"), "plain"));
+
+        Assert.Equal("plain\n", Text(File("plain.log")));
+    }
+
     [Fact]
     public void The_file_and_the_directory_are_made_at_the_first_line()
     {
         var directory = Path.Combine(_package.Outside, "not", "yet");
-        using var harness = Granted(directories: [new FileDirectoryGrant(directory, directory)]);
+        using var harness = Granted(directories: [new FileDirectoryGrant(directory, FolderPaths.Real(directory))]);
 
         harness.Evaluate(Call(Path.Combine(directory, "a.log"), "here"));
 
@@ -270,8 +285,10 @@ public sealed class FilesServiceTests : IDisposable
     {
         var target = Path.Combine(_package.Outside, "target.log");
         System.IO.File.WriteAllText(target, "first\n");
-        LinkToAFile(File("link.log"), target);
         using var harness = Granted();
+        harness.Evaluate(Call(File("plain.log"), "plain"));
+        Assert.Equal("plain\n", Text(File("plain.log")));
+        LinkToAFile(File("link.log"), target);
 
         Assert.Equal(HostOutcomeCodes.FilePathNotAllowed, Refused(harness, File("link.log")).Code);
         Assert.Equal("first\n", Text(target));
@@ -515,7 +532,7 @@ public sealed class FilesServiceTests : IDisposable
     [Fact]
     public void A_grant_written_with_a_separator_at_its_end_takes_the_same_directory()
     {
-        using var harness = Granted(directories: [new FileDirectoryGrant(_directory + Path.DirectorySeparatorChar, _directory)]);
+        using var harness = Granted(directories: [new FileDirectoryGrant(_directory + Path.DirectorySeparatorChar, FolderPaths.Real(_directory))]);
 
         harness.Evaluate(Call(File("a.log"), "here"));
 
@@ -703,7 +720,7 @@ public sealed class FilesServiceTests : IDisposable
         using var package = new TempPackage(mainJs);
         var invocation = InvocationFactory.Create(package.Root, "echo.run", configure: builder =>
         {
-            builder.Grants = new InvocationGrants(null, null, null, new FilesGrants([new FileDirectoryGrant(_directory, _directory)]));
+            builder.Grants = new InvocationGrants(null, null, null, new FilesGrants([new FileDirectoryGrant(_directory, FolderPaths.Real(_directory))]));
             builder.Limits = InvocationFactory.DefaultLimits with { TimeoutMs = timeoutMs, MaxStatements = 2_000_000_000 };
         });
         using var stderr = new StringWriter();

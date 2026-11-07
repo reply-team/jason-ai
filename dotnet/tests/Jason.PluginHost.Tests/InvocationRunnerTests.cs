@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Harness;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
@@ -431,7 +432,7 @@ public sealed class InvocationRunnerTests
         public string Append => "host.appendLine(" + JsonSerializer.Serialize(Target) + ", \"a line\");";
 
         public InvocationGrants Grants(HttpGrants? http = null) =>
-            new(null, http, null, new FilesGrants([new FileDirectoryGrant(_directory, _directory)]));
+            new(null, http, null, new FilesGrants([new FileDirectoryGrant(_directory, FolderPaths.Real(_directory))]));
 
         public void Dispose()
         {
