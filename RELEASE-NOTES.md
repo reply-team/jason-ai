@@ -70,6 +70,15 @@ one command, and the journal forwarder can write its lines to a file in a direct
 - **The Reply plugin's page says what is detected of a contact's later replies.** Reply 0.14.6 changes its README alone:
   what Reply detects of later replies by email, and which of it was observed on an account, as the known issue below
   says.
+- **`operating-the-installation` says where a plugin may write, and is `draft` again.** It says that the directories
+  a plugin may append lines to are `Plugins:Grants:<id>:Files`, each an absolute path, read at a start and at each
+  `jason plugin reload`, and what is refused as `grant_path_refused`, which rejects the whole reload: the home directory
+  or a folder holding it, the top of a drive, a share or the file system, the data directory or the harness root, a
+  folder inside or holding either of those two, a relative path, `~` and `*`. It also says that `jason update check`
+  names no package installed as a version before its package's list of published digests begins, which for the Reply
+  package is 0.3.2 and for every other is 1.0.0. No agent host has read that text, so its status went back from
+  `verified` to `draft`. The skills marked `draft` are `operating-the-installation`, `researcher-in-session`,
+  `roles/responder`, `troubleshooting-jason` and the nine skills of the business pack.
 - **For a plugin author: a file to append to.** `host.appendLine(path, text)` adds one line to a file directly in a
   directory a person granted, and is the only way a plugin writes a file. A manifest asks with
   `capabilities.files: { append: true }` and names no place; any kind of plugin may ask, and `manifest_version` stays
@@ -129,13 +138,15 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.31.0 took
   over that word, as every package problem rejects it, so an older runtime needs the forwarder its own release
   published. Its failure code `forwarder_url_missing` is now `forwarder_receiver_missing`, said when neither a URL nor a
   file is named: a filter of your own on `subscription_failed` lines that names the old code needs the new one.
-- **Skills:** none changed. The update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`.
+- **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
+  `brew upgrade jason`, run `jason skills update`. One skill changed its status line, `operating-the-installation`, from
+  `verified` to `draft`.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle
   stay as they were.
 - **From 0.30.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
+
 ## Known issues
 
 On Windows, a campaign's move to another project can be refused for the instant the background import-file sweep writes
