@@ -228,6 +228,11 @@ sent — and an answer it could not measure is failed `validation_timed_out`, `a
 `silenced` covers `disabled_for_application` (Jason switched off), `disabled_for_user` (every app switched off),
 `disabled_by_group_policy` and `disabled_by_manifest`.
 
+A delivery that failed with an answer carries that answer's message as the line's `detail`, cut to at most 500 characters,
+after the host has masked the values of the variables the plugin was granted and of its configuration, a value under 8
+characters excepted. An answer of class `blocked`, which the delivery family does not declare, is recorded as
+`result_invalid` with the runtime's own sentence in place of the plugin's message.
+
 `attempts` is written for every outcome but `not_attempted` — `delivered`, `silenced` and `failed` each say how many
 times the channel was tried.
 
