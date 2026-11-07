@@ -96,6 +96,7 @@ public sealed class TelegramPackageTests
         string chat = Chat)
     {
         var server = new LoopbackNtfy { Status = status, Body = body };
+        var previous = Environment.GetEnvironmentVariable(TokenVariable);
         Environment.SetEnvironmentVariable(TokenVariable, envToken);
         try
         {
@@ -103,9 +104,14 @@ public sealed class TelegramPackageTests
             var outcome = await Channel(api, ChatBinding(chat)).DeliverAsync(Message, "ntf_01K0test", Ct);
             return (outcome, server, api);
         }
+        catch
+        {
+            server.Dispose();
+            throw;
+        }
         finally
         {
-            Environment.SetEnvironmentVariable(TokenVariable, null);
+            Environment.SetEnvironmentVariable(TokenVariable, previous);
         }
     }
 
@@ -125,7 +131,10 @@ public sealed class TelegramPackageTests
             Assert.Equal(Message.Text, body["text"]!.GetValue<string>());
             Assert.DoesNotContain(ConfigToken, request.Body, StringComparison.Ordinal);
             Assert.DoesNotContain(ConfigToken, outcome.ToString(), StringComparison.Ordinal);
-            Assert.DoesNotContain("AAF-made-up", InvocationFiles(api), StringComparison.Ordinal);
+            // The positive control: the host's own line about the call is in the files, with the token masked in the path.
+            var written = InvocationFiles(api);
+            Assert.Contains("\"path\":\"/bot[redacted]/sendMessage\"", written, StringComparison.Ordinal);
+            Assert.DoesNotContain("AAF-made-up", written, StringComparison.Ordinal);
         }
     }
 
@@ -224,6 +233,7 @@ public sealed class TelegramPackageTests
     [InlineData("-9007199254740993", "\"chat_id\":\"-9007199254740993\"")]
     [InlineData("9007199254740991", "\"chat_id\":9007199254740991")]
     [InlineData("007", "\"chat_id\":\"007\"")]
+    [InlineData("-0", "\"chat_id\":\"-0\"")]
     public async Task The_chat_travels_as_a_number_when_a_number_holds_it_exactly(string chat, string expected)
     {
         var (outcome, server, api) = await DeliverAsync(200, Answered, ConfigToken, null, chat);
@@ -253,9 +263,12 @@ public sealed class TelegramPackageTests
     [InlineData("@abcde", true)]
     [InlineData("", false)]
     [InlineData("@abcd", false)]
+    [InlineData("@Abcde", true)]
     [InlineData("jason_alerts", false)]
     [InlineData("@jason alerts", false)]
     [InlineData("12a", false)]
+    [InlineData("12345678901234567890", true)]
+    [InlineData("123456789012345678901", false)]
     [InlineData("1234567890123456789012", false)]
     [InlineData("-", false)]
     [InlineData("-1001234567890\n", false)]
