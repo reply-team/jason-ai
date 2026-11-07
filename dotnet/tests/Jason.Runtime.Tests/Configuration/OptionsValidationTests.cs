@@ -65,6 +65,7 @@ public class OptionsValidationTests
             Limits = new PluginLimitsOptions { TimeoutMs = 999, MemoryMb = 8 },
             Exec = new PluginExecOptions { MaxCalls = 0 },
             Http = new PluginHttpOptions { TimeoutMs = 999 },
+            Files = new PluginFilesOptions { LineBytes = 1023, MaxCalls = 1001 },
             Invoker = new PluginInvokerOptions { KillGraceMs = 60_001 },
         });
 
@@ -73,6 +74,8 @@ public class OptionsValidationTests
         Assert.Contains("Plugins:Limits:MemoryMb must be between 16 and 1024; got 8.", result.Failures!);
         Assert.Contains("Plugins:Exec:MaxCalls must be between 1 and 1000; got 0.", result.Failures!);
         Assert.Contains("Plugins:Http:TimeoutMs must be between 1000 and 300000; got 999.", result.Failures!);
+        Assert.Contains("Plugins:Files:LineBytes must be between 1024 and 16777216; got 1023.", result.Failures!);
+        Assert.Contains("Plugins:Files:MaxCalls must be between 1 and 1000; got 1001.", result.Failures!);
         Assert.Contains("Plugins:Invoker:KillGraceMs must be between 0 and 60000; got 60001.", result.Failures!);
     }
 

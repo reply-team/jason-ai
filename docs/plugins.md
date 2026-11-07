@@ -1229,8 +1229,9 @@ are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missin
 `plugin_syntax_error`, `plugin_memory_exceeded`, `plugin_statement_limit`, `plugin_recursion_limit`,
 `capability_not_granted`, `executable_not_allowed`, `exec_limit`, `http_host_not_allowed`,
 `http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit`,
-`module_not_allowed` and `api_limit`. All of them are `permanent`, and every operation's check passes them but the events
-family's (§15).
+`module_not_allowed`, `api_limit`, `file_path_not_allowed`, `file_line_too_large`, `file_line_multiline`, `file_limit` and
+`file_write_failed`. All of them are `permanent` but `file_write_failed`, which is `transient`, and every operation's
+check passes them but the events family's (§15).
 
 ## 9. Capabilities and grants
 

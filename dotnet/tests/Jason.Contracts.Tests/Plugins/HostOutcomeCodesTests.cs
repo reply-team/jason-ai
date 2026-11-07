@@ -26,6 +26,10 @@ public class HostOutcomeCodesTests
     [InlineData(HostOutcomeCodes.PluginException)]
     [InlineData(HostOutcomeCodes.CapabilityNotGranted)]
     [InlineData(HostOutcomeCodes.PluginTimeout)]
+    [InlineData(HostOutcomeCodes.FilePathNotAllowed)]
+    [InlineData(HostOutcomeCodes.FileLineTooLarge)]
+    [InlineData(HostOutcomeCodes.FileLineMultiline)]
+    [InlineData(HostOutcomeCodes.FileLimit)]
     public void Every_host_code_is_written_permanent(string code)
     {
         Assert.True(HostOutcomeCodes.Writes(FailureClass.Permanent, code), $"the host writes `{code}` permanent, and the list says it does not.");
@@ -41,6 +45,18 @@ public class HostOutcomeCodesTests
         var ambiguous = HostOutcomeCodes.All.Where(code => HostOutcomeCodes.Writes(FailureClass.Ambiguous, code));
 
         Assert.Equal([HostOutcomeCodes.PluginTimeout], ambiguous);
+    }
+
+    /// <summary>
+    /// An append the disk refused is the one host ending that is no rule: the same line may go through on a second try,
+    /// and a plugin that does not catch it ends transient, which every operation's check has to pass.
+    /// </summary>
+    [Fact]
+    public void Only_a_failed_append_is_also_written_transient()
+    {
+        var transient = HostOutcomeCodes.All.Where(code => HostOutcomeCodes.Writes(FailureClass.Transient, code));
+
+        Assert.Equal([HostOutcomeCodes.FileWriteFailed], transient);
     }
 
     /// <summary>

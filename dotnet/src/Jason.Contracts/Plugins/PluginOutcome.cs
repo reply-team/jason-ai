@@ -24,14 +24,16 @@ public sealed record OutcomeError(
 
 /// <summary>
 /// What the invocation cost, counted by the host rather than claimed by the plugin. <c>ApiCalls</c> counts the Runtime
-/// API calls a handler made through its door, and is left out where there were none.
+/// API calls a handler made through its door, and <c>FileCalls</c> the appends started; each is left out where there
+/// were none.
 /// </summary>
 public sealed record OutcomeDiagnostics(
     long DurationMs,
     int ExecCalls,
     int HttpCalls,
     int LogLines,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int ApiCalls = 0);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int ApiCalls = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int FileCalls = 0);
 
 /// <summary>
 /// The one JSON object the child writes to stdout. Stdout belongs to the host alone — a plugin has no

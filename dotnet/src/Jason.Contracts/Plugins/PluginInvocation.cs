@@ -46,18 +46,31 @@ public sealed record HttpGrants(IReadOnlyList<string> Hosts);
 public sealed record EnvGrants(IReadOnlyList<string> Variables);
 
 /// <summary>
-/// The resolved policy — what the user granted out of what the manifest requested. The child enforces exactly
-/// this and takes no policy from anywhere else; a capability absent here is a capability it cannot use.
+/// One directory a plugin may append lines in, frozen at the load: as the person wrote it, and where that led then, so
+/// the door can tell a directory it was given from one that has moved since.
 /// </summary>
 public sealed record FileDirectoryGrant(string Written, string Real);
 
-public sealed record InvocationGrants(ExecGrants? Exec, HttpGrants? Http, EnvGrants? Env);
+public sealed record FilesGrants(IReadOnlyList<FileDirectoryGrant> Directories);
+
+/// <summary>
+/// The resolved policy — what the user granted out of what the manifest requested. The child enforces exactly
+/// this and takes no policy from anywhere else; a capability absent here is a capability it cannot use.
+/// </summary>
+public sealed record InvocationGrants(
+    ExecGrants? Exec,
+    HttpGrants? Http,
+    EnvGrants? Env,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FilesGrants? Files = null);
 
 public sealed record ExecLimits(int OutputBytes, int MaxCalls);
 
 public sealed record HttpLimits(int ResponseBytes, int RequestBytes, int MaxCalls, int TimeoutMs);
 
 public sealed record LogLimits(int LineBytes, int TotalBytes);
+
+/// <summary>What one invocation may append: the bytes of one line with its line feed, and how many calls.</summary>
+public sealed record FileLimits(int LineBytes, int MaxCalls);
 
 /// <summary>Everything the child bounds itself by: the engine's budget and the caps of each SDK function.</summary>
 public sealed record InvocationLimits(
@@ -67,7 +80,8 @@ public sealed record InvocationLimits(
     int MaxRecursion,
     ExecLimits Exec,
     HttpLimits Http,
-    LogLimits Log);
+    LogLimits Log,
+    FileLimits Files);
 
 /// <summary>The bounds of one door: how many calls, how large an answer, and how long one call may take.</summary>
 public sealed record DoorLimits(int MaxCalls, int ResponseBytes, int TimeoutMs)

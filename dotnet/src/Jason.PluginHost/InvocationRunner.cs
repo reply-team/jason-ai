@@ -43,7 +43,7 @@ public sealed class InvocationRunner : IInvocationRunner
 
         var limits = invocation.Limits;
         var watch = Stopwatch.StartNew();
-        var budget = new CallBudget(limits.Exec.MaxCalls, limits.Http.MaxCalls, invocation.Door?.Limits.MaxCalls ?? 0);
+        var budget = new CallBudget(limits.Exec.MaxCalls, limits.Http.MaxCalls, invocation.Door?.Limits.MaxCalls ?? 0, limits.Files.MaxCalls);
         var engine = EngineFactory.Create(limits, new PackageModuleLoader(invocation.Plugin.Root), deadline);
         var services = new HostServices(
             invocation,
@@ -59,7 +59,7 @@ public sealed class InvocationRunner : IInvocationRunner
         var exec = Kill is null ? new ExecService(services) : new ExecService(services) { Kill = Kill };
         engine.SetValue(
             HostObject.Name,
-            HostObject.Build(engine, services, exec, http, new EnvService(services), new ConfigService(services), new LogService(services), door));
+            HostObject.Build(engine, services, exec, http, new EnvService(services), new ConfigService(services), new LogService(services), new FilesService(services), door));
 
         var end = new Ending(invocation, diagnostics, watch, budget);
         try
@@ -276,7 +276,7 @@ public sealed class InvocationRunner : IInvocationRunner
         }
 
         private OutcomeDiagnostics Cost() =>
-            new(watch.ElapsedMilliseconds, budget.ExecCalls, budget.HttpCalls, diagnostics.LogLines, budget.ApiCalls);
+            new(watch.ElapsedMilliseconds, budget.ExecCalls, budget.HttpCalls, diagnostics.LogLines, budget.ApiCalls, budget.FileCalls);
 
         /// <summary>
         /// The details and the block are the plugin's own words and may quote a value the host knows to be a

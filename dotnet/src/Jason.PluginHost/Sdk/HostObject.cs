@@ -8,7 +8,7 @@ namespace Jason.PluginHost.Sdk;
 /// <summary>
 /// The <c>host</c> object, built by hand rather than wrapped around a CLR instance. That is the whole point:
 /// a wrapped object would carry a type, a constructor and a member surface a plugin could walk; this one has
-/// seven functions — eight where the invocation carries a door to the Runtime API — no prototype of its own and nothing
+/// eight functions — nine where the invocation carries a door to the Runtime API — no prototype of its own and nothing
 /// that can be added to it or replaced.
 /// </summary>
 public static class HostObject
@@ -23,6 +23,7 @@ public static class HostObject
         EnvService env,
         ConfigService config,
         LogService log,
+        FilesService files,
         DoorService? door = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -32,6 +33,7 @@ public static class HostObject
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(log);
+        ArgumentNullException.ThrowIfNull(files);
 
         var host = new JsObject(engine);
         Add(engine, host, "exec", 1, (_, args) => exec.Invoke(engine, args));
@@ -41,6 +43,7 @@ public static class HostObject
         Add(engine, host, "log", 2, (_, args) => log.Log(engine, args));
         Add(engine, host, "fail", 1, (_, args) => HostFailure.Create(engine, args));
         Add(engine, host, "channelKey", 2, (_, args) => ChannelKeyFunction.Of(engine, args));
+        Add(engine, host, "appendLine", 2, (_, args) => files.Append(engine, args));
         if (door is not null)
         {
             Add(engine, host, "call", 2, (_, args) => door.Invoke(engine, args));

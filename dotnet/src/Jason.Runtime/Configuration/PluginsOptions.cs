@@ -73,6 +73,14 @@ public sealed class PluginHttpOptions
     public int TimeoutMs { get; set; } = 30_000;
 }
 
+/// <summary>What one invocation may append through the file door: the UTF-8 bytes of one line with its line feed, and how many calls.</summary>
+public sealed class PluginFilesOptions
+{
+    public int LineBytes { get; set; } = 1_048_576;
+
+    public int MaxCalls { get; set; } = 64;
+}
+
 /// <summary>What the runtime side of an invocation bounds: what it reads back, and how patiently it kills.</summary>
 public sealed class PluginInvokerOptions
 {
@@ -105,6 +113,8 @@ public sealed class PluginsOptions
     public PluginExecOptions Exec { get; set; } = new();
 
     public PluginHttpOptions Http { get; set; } = new();
+
+    public PluginFilesOptions Files { get; set; } = new();
 
     public PluginInvokerOptions Invoker { get; set; } = new();
 }

@@ -677,6 +677,8 @@ public class ProviderOutcomeRecorderTests
     [InlineData(HostOutcomeCodes.PluginException, FailureClass.Permanent)]
     [InlineData(HostOutcomeCodes.CapabilityNotGranted, FailureClass.Permanent)]
     [InlineData(HostOutcomeCodes.PluginTimeout, FailureClass.Ambiguous)]
+    [InlineData(HostOutcomeCodes.FilePathNotAllowed, FailureClass.Permanent)]
+    [InlineData(HostOutcomeCodes.FileWriteFailed, FailureClass.Transient)]
     public async Task A_host_ending_under_the_class_the_host_gives_it_stands(string code, FailureClass failureClass)
     {
         using var database = new TestDatabase();

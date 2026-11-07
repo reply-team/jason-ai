@@ -43,6 +43,7 @@ public sealed class SettingsAllowlistTests
         "Plugins:Limits:MaxStatements", "Plugins:Limits:MaxRecursion",
         "Plugins:Exec:OutputBytes", "Plugins:Exec:MaxCalls",
         "Plugins:Http:ResponseBytes", "Plugins:Http:RequestBytes", "Plugins:Http:MaxCalls", "Plugins:Http:TimeoutMs",
+        "Plugins:Files:LineBytes", "Plugins:Files:MaxCalls",
         "Plugins:Invoker:OutcomeBytes", "Plugins:Invoker:StderrBytes", "Plugins:Invoker:KillGraceMs",
         "Plugins:Invoker:VersionCheckTimeoutMs", "Plugins:Invoker:LogLineBytes",
         "Inbound:SyncSeconds", "Inbound:LookbackSeconds",

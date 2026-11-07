@@ -45,7 +45,7 @@ public static class SettingsVocabulary
         // Plugins: who is granted what, then the limits every invocation runs under.
         "Grants", "Config", "Limits", "Exec", "Http", "Files", "Invoker", "Env", "Api",
         "TimeoutMs", "MaxTimeoutMs", "MemoryMb", "MaxMemoryMb", "MaxStatements", "MaxRecursion",
-        "OutputBytes", "MaxCalls",
+        "OutputBytes", "MaxCalls", "LineBytes",
         "ResponseBytes", "RequestBytes",
         "OutcomeBytes", "StderrBytes", "KillGraceMs", "VersionCheckTimeoutMs", "LogLineBytes",
 
