@@ -492,9 +492,10 @@ and `null` alike. No secret is ever in `context`.
 
 `host` is a plain JavaScript object with exactly eight read-only functions, closed to extension, and a ninth,
 `host.call`, only where the invocation carries a door to the Runtime API. It is not a wrapped CLR instance, so there
-is no member surface beyond those functions and no type to walk back into the host program. Every function takes **one options object** and refuses an unknown key with a
-`TypeError` you can catch: `timeoutMs` next to `timeout_ms` would otherwise make a capped call look
-uncapped. A key whose value is `undefined` counts as absent.
+is no member surface beyond those functions and no type to walk back into the host program. `host.exec`, `host.http` and
+`host.fail` take **one options object** and refuse an unknown key with a `TypeError` you can catch: `timeoutMs` next to
+`timeout_ms` would otherwise make a capped call look uncapped. A key whose value is `undefined` counts as absent. The others
+take the arguments their sections show.
 
 Calling a capability the user did not grant is **not** a catchable error: the whole invocation fails
 `permanent` with `capability_not_granted` and `details: { capability, requested }`, because a plugin
@@ -697,23 +698,28 @@ on every platform, although only Windows keeps them for its devices, so a packag
 | What holds | Otherwise | How |
 |---|---|---|
 | the plugin was granted a directory | `capability_not_granted`, `details: { capability: "files" }` | ends the invocation |
-| the path is a well-named plain file directly in a granted directory, and that directory still leads where it did at the load | `file_path_not_allowed` | ends the invocation |
+| the path names a granted directory and a well-formed name | `file_path_not_allowed` | ends the invocation |
 | the text holds no line break | `file_line_multiline` | ends the invocation |
 | the line, with its line feed, is at most `Plugins:Files:LineBytes` (1 MiB) in UTF-8 | `file_line_too_large`, `details: { limit: "files.line_bytes", max }` | ends the invocation |
-| at most `Plugins:Files:MaxCalls` (64) lines per invocation | `file_limit`, `details: { limit: "files.max_calls" }` | ends the invocation |
+| at most `Plugins:Files:MaxCalls` (64) lines per invocation | `file_limit`, `details: { limit: "files.max_calls", max }` | ends the invocation |
 | the disk took the line | `file_write_failed`, `transient`, `details: { file }` | a failure you can catch |
 
 Whatever breaks a rule is `permanent` and ends the invocation like a capability that was not granted, because no plugin
 code can make it right. A directory, a named pipe or a link where the file should be is `file_path_not_allowed`, and so
 is a directory that a link moved since the load, until a reload freezes where it leads now. Only what the disk did is
 yours to catch: `file_write_failed` is the failure `host.fail` builds, with `name` `JasonFailure`, so a plugin with
-another place to report to can go on and report there, and rethrow.
+another place to report to can go on and report there, and end on a word of its own with `host.fail`. One that does not
+catch it, or throws it on as it came, ends as §8 says.
 
 **One open per line.** A subscription runs one chain per kind, so several hosts may write one file at the same moment.
-Each line takes its own open, which keeps every other writer out for as long as the line takes, and a reader that leaves
-the file open to writers, as `tail -f` does, is not in the way. Measured with four processes: any wider sharing loses
+Each line takes its own open, which keeps every other writer out for as long as the line takes. A reader that takes no lock, as `tail -f` and a log shipper do, is not in the way, nor is one that closes between reads, as PowerShell's `Get-Content -Wait` does; on Linux and macOS a .NET program that keeps the file open holds a shared lock for as long as it does, and an append then waits up to ten seconds and fails `file_write_failed`. Measured with four processes: any wider sharing loses
 lines. A writer that holds the file is waited for, up to ten seconds and never past what is left of the invocation; past
-that the call is `file_write_failed`.
+that the call is `file_write_failed`. Grant a directory on a local disk: a file system without `flock` locks nothing and
+says nothing.
+
+**A refused line comes off.** Whatever of a line the disk took before it refused the rest is cut away while the open is held,
+so the next line starts where this one did. What a killed process left cannot be: after a kill a reader drops a line without
+a line feed, and one a later line has joined does not parse.
 
 A line that passed the rules counts as a call that may have acted, so a timeout after one is `ambiguous` (§8), and the
 outcome's diagnostics count them as `file_calls`. On stderr each line is an `append`
@@ -1280,8 +1286,10 @@ are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missin
 `capability_not_granted`, `executable_not_allowed`, `exec_limit`, `http_host_not_allowed`,
 `http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit`,
 `module_not_allowed`, `api_limit`, `file_path_not_allowed`, `file_line_too_large`, `file_line_multiline`, `file_limit` and
-`file_write_failed`. All of them are `permanent` but `file_write_failed`, which is `transient`, and every operation's
-check passes them but the events family's (§15).
+`file_write_failed`. All of them are `permanent` but `file_write_failed`, which is `transient` to a plugin that catches it.
+Nothing caught, it ends `ambiguous` once a `host.exec`, `host.http` or `host.call` was started in the invocation, since a
+repeat would make that call again, and `transient` otherwise; the append's own count is left out, since the disk refused it.
+Every operation's check passes them but the events family's (§15).
 
 ## 9. Capabilities and grants
 
@@ -1343,7 +1351,9 @@ manifest does not ask grants nothing and is the usual `grant_unrequested` warnin
 shows the directories, and a `jason doctor` bundle carries no grant, this one included.
 
 A directory may not be the home directory, the top of a drive, a folder holding the home directory, the data directory, a
-folder inside it or one holding it. What is compared is where a path leads, so a link does not reach any of them. A
+folder inside it or one holding it, the harness root, a folder inside it or one holding it. The harness root's folders hold
+memory files the runtime never writes a word of, and its door does not write there for a plugin either. What is compared is
+where a path leads, so a link does not reach any of them. A
 relative path and `~` are refused, and so is `*`, which has nothing to expand when no manifest names a path. A directory
 refused for any of these is a package problem, not a warning: `grant_path_refused` at `grants.files[i]` rejects the whole
 reload (§4), since a load that froze it would open a place no plugin may write in.
@@ -1545,7 +1555,8 @@ What is **not** prevented: this is not a container, a virtual machine or a kerne
 boundary — it is not a sandbox, and the documentation will not call it one. The plugin host runs
 under your own operating-system identity with your own permissions. A granted program can do whatever
 that program can do, a granted host can be sent whatever the plugin wants to send it, and a granted directory can be
-given any file and any line the plugin wants to write there. Plugin
+given any file and any line the plugin wants to write there, so never grant a folder another program runs from or reads
+its instructions from (a logon's startup folder, LaunchAgents, autostart, `.ssh`, an agent host's instruction folder). Plugin
 packages are **executable local code that you installed**, and the grants are the real boundary —
 which is why the default is that nothing is granted.
 
@@ -1640,9 +1651,10 @@ are the operations' own examples; §7 says how to drive one through the host by 
 - **`host.http` is deliberately narrow**: `GET` and `POST`, exact hosts with no wildcards, text
   bodies only — no binary, no streaming — no automatic redirects, no cookies, no injected
   credentials.
-- **`host.appendLine` checks, then opens.** A link in the file's place is refused, but between that check and the open
-  another program running under the same account could put one there, and the line would follow it. A plugin cannot
-  make a link.
+- **`host.appendLine` checks, then opens.** A symbolic link or a junction in the file's place is refused. A hard link is
+  not: it is a plain file to the check, and the line goes where it points. Between the last check and the open another
+  program running under the same account could put a link there, or swap the directory or one of its ancestors, and the
+  line would follow it. The host makes no link; a program granted to `host.exec` can.
 - **Invocation directories are kept.** `~/.jason/work/plugins/<invocation_id>/` holds `stderr.log`
   and nothing else, and nothing is cleaned up in this version.
 - **One installed version per id**, because the id is the directory name. Two plugins may implement

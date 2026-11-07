@@ -16,10 +16,12 @@ namespace Jason.PluginHost.Sdk;
 /// </summary>
 /// <remarks>
 /// Several hosts write one file at the same moment, so each line takes its own open, and the open keeps every other writer
-/// out for as long as the line takes: <c>FileShare.Read</c> on Windows, which leaves a reader in, and <c>FileShare.None</c>
-/// elsewhere, an advisory lock that only another writer takes, so a reader is not stopped there either. Four processes
-/// measured it: any wider share loses lines. Elsewhere the file is opened for reading as well, because a write-only open of
-/// a named pipe would wait for a reader.
+/// out for as long as the line takes: <c>FileShare.Read</c> on Windows and <c>FileShare.None</c> elsewhere, an advisory lock.
+/// A reader that takes no lock, as <c>tail -f</c> and a log shipper do, is not in the way, nor is one that closes between
+/// reads, as PowerShell's <c>Get-Content -Wait</c> does; on Linux and macOS a .NET program that keeps the file open holds a
+/// shared lock for as long as it does, and an append then waits up to ten seconds and fails <c>file_write_failed</c>. Four
+/// processes measured it: any wider share loses lines. Elsewhere the file is opened for reading as well, because a
+/// write-only open of a named pipe would wait for a reader.
 /// A path never reaches a message, a detail or a diagnostic record: a directory is a person's, and one set through a
 /// plugin's configuration is a known secret that would read as a mask.
 /// </remarks>

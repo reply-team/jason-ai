@@ -96,7 +96,8 @@ The settings file can say both instead, and what it says comes first: see
 [The configuration](#the-configuration). Neither belongs in `plugin.yaml`.
 
 A token kept in its own setting is masked wherever it appears; a secret written inside a URL's path is masked only as part
-of the whole URL, which the diagnostics do not print.
+of the whole URL, which the diagnostics do not print. Keep a secret in the token setting, never in the URL's path: the host
+masks a token it knows, and a path is printed as a path in the http records.
 
 **4. Reload:**
 
@@ -185,7 +186,8 @@ where it may write is yours to say, in two entries of `~/.jason/config/settings.
 ```
 
 `Files` lists directories, as absolute paths, and the file stands directly in one of them; give the plugin a directory of
-its own. The directory and the file are made at the first line, and the file is only ever added to: nothing in Jason trims,
+its own, and never a folder another program runs from or reads its instructions from (a logon's startup folder,
+LaunchAgents, autostart, `.ssh`, an agent host's instruction folder). The directory and the file are made at the first line, and the file is only ever added to: nothing in Jason trims,
 renames or deletes it. `file` may instead be `JOURNAL_FORWARDER_FILE` in the runtime's environment, listed under `Env` in the
 grant, and the key comes first, as `url` does. With a file alone, the grant names no host and no URL is needed. Run
 `jason plugin reload` after changing either entry. Section 9 of the
@@ -203,13 +205,17 @@ and `attempt` says which try wrote it.
 
 **With both, the file goes first.** When the disk refuses the line the plugin still POSTs it, so the receiver has it, and
 then ends as `file_write_failed`, and the runtime tries again. A repeat therefore reaches the receiver too, which drops it.
+A permanent refusal of the POST is reported only once the disk accepts again.
 
 **A refused rule is a misconfiguration.** A file outside the directories you granted, a name the plugin host refuses, no
 directory granted at all, or a line longer than the host allows ends the invocation where it stands, in either order of
 receivers: nothing further is sent, the failure is permanent, and only a change to the settings repairs it. A URL that is
 not one (`forwarder_url_invalid`) is found first, so nothing has been added to the file by then.
 
-A reader that leaves the file open to writers, as `tail -f` does, is not in the way.
+A reader that takes no lock, as `tail -f` and a log shipper do, is not in the way, nor is one that closes between reads, as PowerShell's `Get-Content -Wait` does; on Linux and macOS a .NET program that keeps the file open holds a shared lock for as long as it does, and an append then waits up to ten seconds and fails `file_write_failed`.
+
+A line the disk refused part of the way comes off again; what a killed process left cannot, so after a kill a reader drops a
+line without a line feed, and one a later line has joined is not JSON.
 
 ## What it reports
 
@@ -228,7 +234,7 @@ moves on to its next line; a transient one is tried again after a wait that doub
 | `forwarder_url_invalid` (permanent) | the URL is not an `http://` or `https://` URL |
 | `http_host_not_allowed` (permanent) | the URL names a host the grant does not name |
 | `http_scheme_not_allowed` (permanent) | the URL is `http://` to a host that is not `localhost`, `127.0.0.1` or `::1` |
-| `file_write_failed` (transient) | the disk did not take the line: it is full, the file is read-only, or another writer held it too long. The runtime tries again after a wait that doubles |
+| `file_write_failed` (transient) | the disk did not take the line: it is full, the file is read-only, another writer held it too long, or on Linux or macOS a .NET program keeps the file open. The runtime tries again after a wait that doubles |
 | `file_path_not_allowed` (permanent) | the file does not stand directly in a directory you granted, its name is one the plugin host refuses, or something other than a plain file stands in its place |
 | `capability_not_granted` (permanent) | a file is named and `Plugins:Grants:journal-forwarder:Files` grants no directory |
 | `file_line_too_large` (permanent) | the line is longer than `Plugins:Files:LineBytes`, 1 MiB unless you set it |
