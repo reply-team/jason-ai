@@ -87,7 +87,7 @@ outcome. A delivery Slack answered with `ok: false` carries Slack's own error wo
 | Outcome | When |
 |---|---|
 | `delivered` | Slack answered `ok`; the receipt is the message's `ts` |
-| `failed` `notification_unreachable` (transient) | Slack did not answer, answered 429 or 5xx, answered something that is not its documented JSON, or said `ratelimited`, `fatal_error`, `internal_error`, `service_unavailable`, `request_timeout`, `team_added_to_org` or `org_login_required`. The runtime tries once more, thirty seconds later |
+| `failed` `notification_unreachable` (transient) | Slack did not answer, answered 429 or 5xx, answered something that is not its documented JSON, or said `ratelimited`, `rate_limited`, `fatal_error`, `internal_error`, `service_unavailable`, `request_timeout`, `team_added_to_org` or `org_login_required`. The runtime tries once more, thirty seconds later |
 | `failed` `notification_unauthorized` (permanent) | no token was found, Slack answered 401 or 403, or said `invalid_auth`, `not_authed`, `token_revoked`, `token_expired`, `account_inactive`, `missing_scope`, `not_allowed_token_type`, `no_permission` or `team_access_not_granted` |
 | `failed` `notification_refused` (permanent) | any other answer, such as `channel_not_found`, `not_in_channel` or `is_archived`, and any word this table does not list |
 | `failed` `http_host_not_allowed` (permanent) | the grant does not name `slack.com` |
