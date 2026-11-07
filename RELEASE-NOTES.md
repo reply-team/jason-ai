@@ -57,11 +57,11 @@ one command, and the journal forwarder can write its lines to a file in a direct
   [its README](https://github.com/reply-team/jason-ai/blob/v0.32.0/plugins/ntfy/README.md#your-own-server).
 - **The journal forwarder writes to a file.** The forwarder, 1.2.0, adds each line to a file in a directory you grant,
   beside its POST or instead of it: the directory goes under `Plugins:Grants:journal-forwarder:Files` and the file under
-  the key `file` of `Plugins:Config:journal-forwarder`, or in `JOURNAL_FORWARDER_FILE` where that says nothing. What it
-  adds is the POST's body, one JSON object per line. With both, the file goes first; a disk that refuses the line still
-  leaves the POST, and the handler then ends with the disk's failure, so the line is offered again. The file is only
-  ever added to, and it holds what the journal says, names and reasons included, so it is a place you trust with that.
-  Its
+  the key `file` of `Plugins:Config:journal-forwarder`, or in a granted `JOURNAL_FORWARDER_FILE` where that says
+  nothing. What it adds is the POST's body, one JSON object per line. With both, the file goes first; a disk that
+  refuses the line still leaves the POST, and the handler then ends with the disk's failure, so the line is offered
+  again. The file is only ever added to, and it holds what the journal says, names and reasons included, so it is a
+  place you trust with that. Its
   [README](https://github.com/reply-team/jason-ai/blob/v0.32.0/plugins/journal-forwarder/README.md#a-file-instead-of-a-receiver-or-beside-one)
   shows both entries.
 - **`jason plugin list` says where a plugin may write.** A plugin whose manifest asks to write a file shows the
@@ -113,8 +113,8 @@ one command, and the journal forwarder can write its lines to a file in a direct
   class alone; the failure's message is now the `notification_sent` line's `detail`, cut to at most 500 characters,
   after the plugin host has masked it as the plugin-author note says. A cut that would fall inside a character written
   as two UTF-16 units steps back one, so the kept text is whole.
-- **The Reply plugin's page no longer says that answering keeps a conversation visible.** That holds for a direct email
-  and not for a sequence email; the known issue below says what does hold.
+- **The Reply plugin's page no longer says that answering keeps a conversation visible.** That holds for a direct email;
+  on a sequence thread the known issue below says what is detected.
 
 ## Upgrading from 0.31.0
 
