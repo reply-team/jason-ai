@@ -24,7 +24,7 @@ stays an underscore. The token is never part of the binding, and the plugin neve
 - **A Slack app with a bot token.** Create an app at [api.slack.com/apps](https://api.slack.com/apps), give its bot the
   `chat:write` scope, install it to your workspace and copy the *Bot User OAuth Token* (it starts with `xoxb-`).
 - **The bot in the channel.** Invite it from the channel itself (`/invite @your-bot`); a bot that is not a member cannot
-  post to a channel, except one that has `chat:write.public`.
+  post to a channel, except a public one when the bot has `chat:write.public`.
 - **Jason 0.32.0 or newer**, which installs the package with `jason plugin install slack`.
 
 ## Installing it
@@ -80,8 +80,9 @@ shown as a toast; `jason runtime status --human` says what each channel did last
 
 ## What it reports
 
-Every outcome is a line in the journal (`jason journal list --kind notification_sent`). A failed delivery carries
-Slack's own error word in the line's `detail`.
+Each notification is one line in the journal (`jason journal list --kind notification_sent`), with every channel's
+outcome. A delivery Slack answered with `ok: false` carries Slack's own error word in the line's `detail`, or
+`unspecified` when the answer is not a word; any other failure carries the package's own sentence.
 
 | Outcome | When |
 |---|---|

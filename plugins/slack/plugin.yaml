@@ -8,7 +8,7 @@ homepage: https://github.com/reply-team/jason-ai/tree/main/plugins/slack
 contracts:
   protocol: [1]
   # The delivery contract this package performs, notification.send version 1. A notification plugin implements no
-  # canonical operation, so this manifest has no `operations` list.
+  # canonical operation: the `operations` list names versions of the delivery contract.
   operations: [1]
 capabilities:
   http:

@@ -18,7 +18,7 @@ namespace Jason.Runtime.Tests.Notifications;
 
 /// <summary>
 /// The Slack plugin, through the real plugin host, against a stand-in for Slack's Web API on the loopback interface.
-/// The package is copied, its one host and the one line that names the API's base replaced by the stand-in's, so the
+/// The package is copied, its one host and the one line that names the method's URL replaced by the stand-in's, so the
 /// copy is a package of a different identity; the digest test reads the shipped directory and never the copy.
 /// </summary>
 public sealed class SlackPackageTests
@@ -40,7 +40,7 @@ public sealed class SlackPackageTests
     private static string Shipped => Path.Combine(AppContext.BaseDirectory, "Fixtures", "plugins", Id);
 
     /// <summary>
-    /// The package copied into a data directory with its host and its one base-URL line replaced by the stand-in's, and
+    /// The package copied into a data directory with its host and its one method-URL line replaced by the stand-in's, and
     /// granted that host and the token variable; a token for the settings is written under <c>Plugins:Config:slack</c>.
     /// </summary>
     private static void Install(JasonPaths paths, string? host, string? configuredToken = null)
@@ -143,6 +143,7 @@ public sealed class SlackPackageTests
         });
 
         Assert.Equal(ChannelResult.Delivered, outcome.Result);
+        Assert.Contains("\"path\":\"/api/chat.postMessage\"", written, StringComparison.Ordinal);
         Assert.DoesNotContain(EnvToken, written, StringComparison.Ordinal);
         Assert.DoesNotContain(Message.Text, written, StringComparison.Ordinal);
         Assert.DoesNotContain(EnvToken, outcome.ToString(), StringComparison.Ordinal);
@@ -186,17 +187,6 @@ public sealed class SlackPackageTests
     [InlineData(200, "<html>not json</html>", "notification_unreachable", FailureClass.Transient)]
     [InlineData(200, "{}", "notification_unreachable", FailureClass.Transient)]
     [InlineData(200, """{"ok":"yes"}""", "notification_unreachable", FailureClass.Transient)]
-    [InlineData(200, """{"ok":false,"error":"invalid_auth"}""", "notification_unauthorized", FailureClass.Permanent)]
-    [InlineData(200, """{"ok":false,"error":"not_authed"}""", "notification_unauthorized", FailureClass.Permanent)]
-    [InlineData(200, """{"ok":false,"error":"token_revoked"}""", "notification_unauthorized", FailureClass.Permanent)]
-    [InlineData(200, """{"ok":false,"error":"missing_scope"}""", "notification_unauthorized", FailureClass.Permanent)]
-    [InlineData(200, """{"ok":false,"error":"team_access_not_granted"}""", "notification_unauthorized", FailureClass.Permanent)]
-    [InlineData(200, """{"ok":false,"error":"ratelimited"}""", "notification_unreachable", FailureClass.Transient)]
-    [InlineData(200, """{"ok":false,"error":"fatal_error"}""", "notification_unreachable", FailureClass.Transient)]
-    [InlineData(200, """{"ok":false,"error":"internal_error"}""", "notification_unreachable", FailureClass.Transient)]
-    [InlineData(200, """{"ok":false,"error":"service_unavailable"}""", "notification_unreachable", FailureClass.Transient)]
-    [InlineData(200, """{"ok":false,"error":"request_timeout"}""", "notification_unreachable", FailureClass.Transient)]
-    [InlineData(200, """{"ok":false,"error":"org_login_required"}""", "notification_unreachable", FailureClass.Transient)]
     [InlineData(200, """{"ok":false,"error":"channel_not_found"}""", "notification_refused", FailureClass.Permanent)]
     [InlineData(200, """{"ok":false,"error":"not_in_channel"}""", "notification_refused", FailureClass.Permanent)]
     [InlineData(200, """{"ok":false,"error":"is_archived"}""", "notification_refused", FailureClass.Permanent)]
@@ -205,6 +195,46 @@ public sealed class SlackPackageTests
     public async Task Its_answers_map_to_the_contract(int status, string body, string code, FailureClass @class)
     {
         using var slack = new LoopbackNtfy { Status = status, Body = body };
+
+        var outcome = await DeliverAsync(slack);
+
+        Assert.Equal((ChannelResult.Failed, code, (FailureClass?)@class), (outcome.Result, outcome.Code, outcome.Class));
+    }
+
+    private static readonly string[] UnauthorizedWords =
+    [
+        "invalid_auth", "not_authed", "token_revoked", "token_expired", "account_inactive", "missing_scope",
+        "not_allowed_token_type", "no_permission", "team_access_not_granted",
+    ];
+
+    private static readonly string[] TransientWords =
+    [
+        "ratelimited", "rate_limited", "fatal_error", "internal_error", "service_unavailable", "request_timeout",
+        "team_added_to_org", "org_login_required",
+    ];
+
+    /// <summary>Every word of the package's two lists, each with its code and class, so neither list can lose a word unseen.</summary>
+    public static TheoryData<string, string, FailureClass> EveryListedWord()
+    {
+        var data = new TheoryData<string, string, FailureClass>();
+        foreach (var word in UnauthorizedWords)
+        {
+            data.Add(word, "notification_unauthorized", FailureClass.Permanent);
+        }
+
+        foreach (var word in TransientWords)
+        {
+            data.Add(word, "notification_unreachable", FailureClass.Transient);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryListedWord))]
+    public async Task Every_listed_error_word_maps_to_its_code_and_class(string word, string code, FailureClass @class)
+    {
+        using var slack = new LoopbackNtfy { Status = 200, Body = new JsonObject { ["ok"] = false, ["error"] = word }.ToJsonString() };
 
         var outcome = await DeliverAsync(slack);
 
@@ -339,7 +369,7 @@ public sealed class SlackPackageTests
         Assert.Equal([TokenVariable], plugin.Manifest.Capabilities.Env!.Variables);
     }
 
-    /// <summary>The base URL is one constant on a line of its own, which is what the test copy rewrites.</summary>
+    /// <summary>The method URL is one constant on a line of its own, which is what the test copy rewrites.</summary>
     [Fact]
     public void The_api_base_is_one_constant_on_its_own_line()
     {
