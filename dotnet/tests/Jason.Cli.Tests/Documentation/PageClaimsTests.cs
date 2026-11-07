@@ -581,7 +581,7 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// The pages that list what a release publishes, or say how a plugin is installed, name each plugin's package a release
-    /// publishes, Reply's and the journal forwarder's, by what it holds and how it is installed: the files of
+    /// publishes by what it holds and how it is installed: the files of
     /// <c>plugins/&lt;id&gt;</c> at the tag, placed by <c>jason plugin install</c> once they match <c>checksums.txt</c>. None of them says plugins are installed from the
     /// repository any more, or that the package is unpacked by hand; the package is never called an archive, which on those
     /// pages is a platform's.
@@ -589,12 +589,18 @@ public partial class PageClaimsTests
     [Theory]
     [InlineData("docs/release-and-update.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |")]
     [InlineData("docs/release-and-update.md", "| `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at the tag, at the archive's root |")]
+    [InlineData("docs/release-and-update.md", "| `jason-plugin-ntfy.zip` | the ntfy plugin's package: the files of `plugins/ntfy` at the tag, at the archive's root |")]
+    [InlineData("docs/release-and-update.md", "| `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at the tag, at the archive's root |")]
+    [InlineData("docs/release-and-update.md", "| `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at the tag, at the archive's root |")]
     [InlineData("docs/release-and-update.md", "| `checksums.txt` | one `sha256sum` line per archive, and one for each package |")]
     [InlineData("docs/release-and-update.md", "Installing it is `jason plugin install reply`, which unpacks it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 runs it — and what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002).")]
     [InlineData("docs/release-and-update.md", "listed in `checksums.txt`, and named in the manifest's `plugins` (§3) rather than its artifacts, which are platforms.")]
     [InlineData("docs/release-and-update.md", "Nor does an added root field every reader since 0.1.0 skips, as `plugins` is:")]
     [InlineData(".github/release-notes-template.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, which `jason plugin install reply` places in `~/.jason/plugins/reply` |")]
     [InlineData(".github/release-notes-template.md", "| `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at `v{{version}}`, which `jason plugin install journal-forwarder` places in `~/.jason/plugins/journal-forwarder` |")]
+    [InlineData(".github/release-notes-template.md", "| `jason-plugin-ntfy.zip` | the ntfy plugin's package: the files of `plugins/ntfy` at `v{{version}}`, which `jason plugin install ntfy` places in `~/.jason/plugins/ntfy` |")]
+    [InlineData(".github/release-notes-template.md", "| `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at `v{{version}}`, which `jason plugin install slack` places in `~/.jason/plugins/slack` |")]
+    [InlineData(".github/release-notes-template.md", "| `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at `v{{version}}`, which `jason plugin install telegram` places in `~/.jason/plugins/telegram` |")]
     [InlineData(".github/release-notes-template.md", "| `checksums.txt` | the SHA-256 of each archive and of each package, in `sha256sum` format |")]
     [InlineData(".github/release-notes-template.md", "| `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |")]
     [InlineData(".github/release-notes-template.md", "The Reply plugin's package is installed by `jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in `checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it.")]
@@ -602,9 +608,14 @@ public partial class PageClaimsTests
     [InlineData("docs/release-and-update.md", "The Reply plugin is published beside the archives instead, from 0.11.0 on, as a package of its own:")]
     [InlineData("docs/handbook.md", "signs in with it, places the package from the release with `jason plugin install reply`, grants it that one program")]
     [InlineData("docs/release-and-update.md", "The journal forwarder is published the same way from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, the files of `plugins/journal-forwarder` at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`;")]
+    [InlineData("docs/release-and-update.md", "ntfy, Slack and Telegram are published the same way from 0.32.0 on, as `jason-plugin-ntfy.zip`, `jason-plugin-slack.zip` and `jason-plugin-telegram.zip`, each placed by `jason plugin install <id>`.")]
     [InlineData(".github/release-notes-template.md", "The journal forwarder's package is installed the same way, by `jason plugin install journal-forwarder`, into `~/.jason/plugins/journal-forwarder`;")]
-    [InlineData("docs/plugins.md", "the journal forwarder from 0.30.0 on as `jason-plugin-journal-forwarder.zip`, each with its files at the archive's root,")]
-    [InlineData("README.md", "the Reply plugin and the journal forwarder, each one `jason plugin install` away")]
+    [InlineData(".github/release-notes-template.md", "The packages of ntfy, Slack and Telegram are installed the same way, each by `jason plugin install <id>`, into `~/.jason/plugins/<id>`;")]
+    [InlineData("docs/plugins.md", "the journal forwarder from 0.30.0 on as `jason-plugin-journal-forwarder.zip`, and ntfy, Slack and Telegram from 0.32.0 on as `jason-plugin-ntfy.zip`, `jason-plugin-slack.zip` and `jason-plugin-telegram.zip`, each with its files at the archive's root,")]
+    [InlineData("docs/INSTALL.md", "today the Reply plugin's, the journal forwarder's, ntfy's, Slack's and Telegram's")]
+    [InlineData("plugins/README.md", "Each of these five is published with every release, Reply's from 0.11.0, the journal forwarder's from 0.30.0, and ntfy's, Slack's and Telegram's from 0.32.0, as `jason-plugin-<id>.zip`, and `jason plugin install <id>` places it.")]
+    [InlineData("README.md", "the Reply plugin, the journal forwarder, and ntfy, Slack and Telegram for notifications, each one `jason plugin install` away.")]
+    [InlineData("README.md", "desktop notifications, and phone pushes, Slack and Telegram each one `jason plugin install` away")]
     public void The_pages_say_how_the_plugin_s_package_is_published_and_installed(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));

@@ -1,6 +1,6 @@
 manifest_version: 1
 id: ntfy
-version: 1.0.2
+version: 1.0.3
 kind: notification
 name: ntfy
 description: Delivers Jason's notifications to an ntfy topic - the pointer the runtime composes, and nothing else.
@@ -8,12 +8,14 @@ homepage: https://github.com/reply-team/jason-ai/tree/main/plugins/ntfy
 contracts:
   protocol: [1]
   # The delivery contract this package performs, notification.send version 1. A notification plugin implements no
-  # canonical operation, so this manifest has no `operations` list.
+  # canonical operation: the `operations` list names versions of the delivery contract.
   operations: [1]
 capabilities:
   http:
-    # The public server. A self-hosted server is named here instead, which is an owner's edit of this file: the
-    # package's digest changes with it, and the grant must name the same host (see README.md).
+    # The public server. A server of your own is yours to grant, which is why the manifest says any_granted_host: no edit
+    # of this file is needed, and the binding's server names it (see README.md). The star in a grant still means ntfy.sh
+    # alone.
+    any_granted_host: true
     hosts: [ntfy.sh]
   env:
     # An access token for a server that requires one, read with host.env and sent as a bearer header. It is never

@@ -422,8 +422,8 @@ was left running across an upgrade that replaced the executable — a package ma
 hand — because that runtime is still the old build and starts its plugin hosts from the old image. Its repair is
 `jason runtime restart`.
 
-`plugin_package` compares each plugin package the release you run publishes — today the Reply plugin's and the journal
-forwarder's — with the package
+`plugin_package` compares each plugin package the release you run publishes — today the Reply plugin's, the journal
+forwarder's, ntfy's, Slack's and Telegram's — with the package
 of that id installed, by content digest, offline: the runtime carries its release's package and asks no network. An
 earlier release's package fails it: a package manager's upgrade replaces the executable and leaves
 `~/.jason/plugins/reply` as it was, and so does an update whose `plugins:` line says the package was not replaced. Its

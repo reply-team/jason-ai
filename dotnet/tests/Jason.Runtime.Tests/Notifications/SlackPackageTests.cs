@@ -387,6 +387,7 @@ public sealed class SlackPackageTests
     /// version the manifest names, and that line is the last.
     /// </summary>
     [Fact]
+    [Critical(Family.R1, "a package's version is its content")]
     public void The_package_is_the_digest_its_version_has_on_the_list()
     {
         var root = RepositoryTree.Root();

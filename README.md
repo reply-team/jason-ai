@@ -257,8 +257,8 @@ are three ways to connect one:
 | **Any provider, through a plugin** | Ask your agent to write a plugin, or write it yourself | Your own Gmail, Microsoft or SMTP sending, Instantly, HeyReach, a WhatsApp or Telegram tool, an in-house system. A plugin is a small JavaScript package, and it implements only the operations you need. Routes choose the plugin per campaign, or even per operation |
 | **Any tool, through your agent** | Connect it to your agent as an MCP server, CLI or API | Your agent acts with it and records what happened in Jason with `jason report submit`, so the history stays true. Jason's approval gate covers plugin operations only, so this path relies on your agent asking you first |
 
-**What ships ready today:** the Reply plugin and the journal forwarder, each one `jason plugin install` away; ntfy for
-phone pushes is in the repository, one copy away. A direct Gmail, Microsoft or SMTP connection
+**What ships ready today:** the Reply plugin, the journal forwarder, and ntfy, Slack and Telegram for notifications, each
+one `jason plugin install` away. A direct Gmail, Microsoft or SMTP connection
 without Reply is a plugin to write, not a switch to flip: the [author's guide](https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md) and the
 [contracts](https://github.com/reply-team/jason-ai/blob/main/docs/contracts/README.md) are public, one document per operation, and your agent can work from them.
 Channel names are open: a provider's campaign can run on any channel a person has an address on. One-off direct messages
@@ -374,7 +374,7 @@ a Jason plugin.</sub>
 
 </details>
 
-**Also works with:** desktop notifications and phone pushes through ntfy, one copy away · approvals in the chat or in Jason's browser
+**Also works with:** desktop notifications, and phone pushes, Slack and Telegram each one `jason plugin install` away · approvals in the chat or in Jason's browser
 UI · macOS (Apple silicon), Linux x64 and Windows x64.
 
 ---

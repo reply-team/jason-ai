@@ -25,6 +25,9 @@ public class ReleasedPluginsTests
     [Theory]
     [InlineData("reply")]
     [InlineData("journal-forwarder")]
+    [InlineData("ntfy")]
+    [InlineData("slack")]
+    [InlineData("telegram")]
     public void The_build_carries_each_released_package_as_the_tree_holds_it(string id)
     {
         var tree = Path.Combine(RepositoryTree.Root(), "plugins", id);
@@ -42,9 +45,9 @@ public class ReleasedPluginsTests
 
     /// <summary>
     /// The build carries exactly the packages its release publishes, the files named <c>jason-plugin-&lt;id&gt;.zip</c> in
-    /// <see cref="ReleaseAssets.Published"/>, Reply's and the journal forwarder's, in id order: a release asset the runtime
-    /// cannot name is half shipped, since <c>system.info</c>'s <c>released_plugins</c> and <c>jason status</c> compare an
-    /// installed package with the one the build carries.
+    /// <see cref="ReleaseAssets.Published"/>, in id order: a release asset the runtime cannot name is half shipped, since
+    /// <c>system.info</c>'s <c>released_plugins</c> and <c>jason status</c> compare an installed package with the one the
+    /// build carries.
     /// </summary>
     [Fact]
     public void The_build_carries_exactly_the_packages_its_release_publishes()
@@ -56,7 +59,7 @@ public class ReleasedPluginsTests
             .Select(name => name[Prefix.Length..^Suffix.Length])
             .Order(StringComparer.Ordinal);
 
-        Assert.Equal(["journal-forwarder", "reply"], ReleasedPlugins.Embedded().Packages.Select(package => package.Id));
+        Assert.Equal(["journal-forwarder", "ntfy", "reply", "slack", "telegram"], ReleasedPlugins.Embedded().Packages.Select(package => package.Id));
         Assert.Equal(published, ReleasedPlugins.Embedded().Packages.Select(package => package.Id));
     }
 

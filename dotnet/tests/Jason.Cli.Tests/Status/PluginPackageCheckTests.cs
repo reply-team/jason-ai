@@ -6,9 +6,9 @@ namespace Jason.Cli.Tests.Status;
 
 /// <summary>
 /// jason status says whether the installed plugin packages are the ones this runtime's release publishes. Optional, so it
-/// never decides readiness: an earlier release's package fails it, and the fact carries the repair in words, since no
-/// command installs a package; a package with the same version or a later one passes with a line that says it is a later release's or one built or edited here; no package is absent; and
-/// a runtime older than the section, or one that did not answer, cannot tell.
+/// never decides readiness: an earlier release's package fails it, and the fact names the command that places this
+/// release's; a package with the same version or a later one passes with a line that says it is a later release's or one built or edited here; no package is absent; and
+/// a runtime older than the section, or one that did not answer, cannot tell. The packages not installed are one sentence.
 /// </summary>
 public class PluginPackageCheckTests
 {
@@ -120,7 +120,7 @@ public class PluginPackageCheckTests
             Forwarder(ReleasedPluginState.NotInstalled, null),
             Reply(ReleasedPluginState.NotInstalled, null),
             CheckState.Absent,
-            "`jason plugin install journal-forwarder` installs it."
+            "journal-forwarder and reply are not installed; runtime 0.7.1 carries each, the package its release publishes, and `jason plugin install <id>` installs one."
         },
     };
 
@@ -141,6 +141,63 @@ public class PluginPackageCheckTests
             check.Fact.IndexOf("journal-forwarder", StringComparison.Ordinal) < check.Fact.IndexOf("reply", StringComparison.Ordinal),
             $"The packages are named in the order the runtime says them: {check.Fact}");
         Assert.Null(check.Fix);
+    }
+
+    private static ReleasedPluginInfo NotInstalled(string id) => new(id, ReleasedPluginState.NotInstalled, ForwarderReleased, null);
+
+    /// <summary>
+    /// A release publishes more packages than a person installs, so the ones not installed are one sentence, naming their
+    /// ids where the first of them stands, and every other package keeps its own: the check's length follows what there
+    /// is to do, and what there is to do is the same for each. The state follows the rule it always did.
+    /// </summary>
+    [Fact]
+    public async Task The_packages_not_installed_are_one_sentence_naming_their_ids()
+    {
+        var check = await CheckAsync(released:
+        [
+            NotInstalled("journal-forwarder"),
+            NotInstalled("ntfy"),
+            Reply(ReleasedPluginState.Current, Released),
+            NotInstalled("slack"),
+            NotInstalled("telegram"),
+        ]);
+
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Equal(
+            "journal-forwarder, ntfy, slack and telegram are not installed; runtime 0.7.1 carries each, the package its release publishes, and `jason plugin install <id>` installs one. "
+            + "reply 0.7.0 is installed, the package runtime 0.7.1 carries.",
+            check.Fact);
+    }
+
+    /// <summary>A package behind still fails the check beside the ones not installed, and still says its own command.</summary>
+    [Fact]
+    public async Task A_package_behind_keeps_its_own_sentence_beside_the_ones_not_installed()
+    {
+        var check = await CheckAsync(released:
+        [
+            Reply(ReleasedPluginState.Behind, new PluginPackageInfo("0.6.1", "sha256:earlier")),
+            NotInstalled("slack"),
+            NotInstalled("telegram"),
+        ]);
+
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Contains("`jason plugin install reply --replace` places it in /data/plugins/reply", check.Fact, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "slack and telegram are not installed; runtime 0.7.1 carries each, the package its release publishes, and `jason plugin install <id>` installs one.",
+            check.Fact,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>None of a release's packages installed is absent, as it was, in that one sentence.</summary>
+    [Fact]
+    public async Task Every_package_not_installed_is_absent_in_one_sentence()
+    {
+        var check = await CheckAsync(released: [NotInstalled("journal-forwarder"), NotInstalled("ntfy"), NotInstalled("reply"), NotInstalled("slack"), NotInstalled("telegram")]);
+
+        Assert.Equal(CheckState.Absent, check.State);
+        Assert.Equal(
+            "journal-forwarder, ntfy, reply, slack and telegram are not installed; runtime 0.7.1 carries each, the package its release publishes, and `jason plugin install <id>` installs one.",
+            check.Fact);
     }
 
     [Fact]

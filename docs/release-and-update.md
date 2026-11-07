@@ -54,6 +54,9 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `install.ps1` | the Windows install script, as this release was published with it |
 | `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |
 | `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at the tag, at the archive's root |
+| `jason-plugin-ntfy.zip` | the ntfy plugin's package: the files of `plugins/ntfy` at the tag, at the archive's root |
+| `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at the tag, at the archive's root |
+| `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at the tag, at the archive's root |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
@@ -83,7 +86,9 @@ published the same way from 0.30.0 on, as `jason-plugin-journal-forwarder.zip`, 
 at the tag, and `jason plugin install journal-forwarder` places it in `~/.jason/plugins/journal-forwarder`; a receiver
 on another host takes a grant and a configuration and no edit of the package, as
 [its README](../plugins/journal-forwarder/README.md) says, and a copy a person does edit is theirs, which an update
-leaves in place. Any other plugin is installed as `docs/plugins.md` §4 says.
+leaves in place. ntfy, Slack and Telegram are published the same way from 0.32.0 on, as `jason-plugin-ntfy.zip`,
+`jason-plugin-slack.zip` and `jason-plugin-telegram.zip`, each placed by `jason plugin install <id>`. Any other plugin
+is installed as `docs/plugins.md` §4 says.
 
 **The browser UI is published the same way, as `jason-ui.zip`:** `ui/` built once per release at the tag, with the
 release's version in its `manifest.json`, and listed in `checksums.txt` but not in the manifest. It is built at the
@@ -138,7 +143,7 @@ nothing to break when an API version retires.
 | `asset` (in `artifacts.<rid>`) | a file name, and only a file name: letters, digits, dot, dash, underscore. Never a path and never a URL. |
 | `sha256` (in `artifacts.<rid>`) | 64 lowercase hexadecimal characters, with no `sha256:` prefix. |
 | `size` (in `artifacts.<rid>`) | the archive's size in bytes, a positive number. |
-| `plugins` | the plugin packages the release publishes beside its archives, by plugin id, or `null`: every release from 0.20.0 names the Reply plugin's, every release from 0.30.0 the journal forwarder's beside it, and a release with no list names none. The last field, after `artifacts`. A reader before 0.20.0 skips it, as it skips every root field it does not read. Read by `jason update check` (§5) and by the applier's `plugins` step (§7), not by the advertisement. A malformed `plugins` is refused with the whole feed by every reader from 0.20.0 on, the applier included, so its shape changes only with the schema. |
+| `plugins` | the plugin packages the release publishes beside its archives, by plugin id, or `null`: every release from 0.20.0 names the Reply plugin's, every release from 0.30.0 the journal forwarder's beside it, every release from 0.32.0 ntfy's, Slack's and Telegram's beside those, and a release with no list names none. The last field, after `artifacts`. A reader before 0.20.0 skips it, as it skips every root field it does not read. Read by `jason update check` (§5) and by the applier's `plugins` step (§7), not by the advertisement. A malformed `plugins` is refused with the whole feed by every reader from 0.20.0 on, the applier included, so its shape changes only with the schema. |
 | `version` (in `plugins.<id>`) | the version of the package the release publishes, SemVer. |
 | `asset` (in `plugins.<id>`) | the package's file name beside the archives, under the rule an archive's `asset` follows; its line in `checksums.txt` is the one the package is checked against. |
 | `digest` (in `plugins.<id>`) | the package's content digest, `sha256:` and 64 hexadecimal characters: what the runtime computes over the unpacked files, and what `jason plugin list` shows for an installed copy. |
@@ -220,8 +225,8 @@ published, and none that came before.
 ### And what it says about the plugin packages its release publishes
 
 `system.info` carries a `released_plugins` section as well, read with no network: the runtime carries the plugin
-packages its own release publishes beside its archives — today the Reply plugin's and the journal forwarder's — and
-says, for each, how the package of that id installed stands against it:
+packages its own release publishes beside its archives — today the Reply plugin's, the journal forwarder's, ntfy's,
+Slack's and Telegram's — and says, for each, how the package of that id installed stands against it:
 
 ```json
 [{ "id": "journal-forwarder", "state": "not_installed", "released": { "version": "1.0.1", "digest": "sha256:…" }, "installed": null },
