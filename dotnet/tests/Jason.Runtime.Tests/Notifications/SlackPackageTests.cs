@@ -239,6 +239,7 @@ public sealed class SlackPackageTests
         var outcome = await DeliverAsync(slack);
 
         Assert.Equal((ChannelResult.Failed, code, (FailureClass?)@class), (outcome.Result, outcome.Code, outcome.Class));
+        Assert.Contains(word, outcome.Detail, StringComparison.Ordinal);
     }
 
     /// <summary>Slack's error word reaches the line through the channel's detail, and the pointer and the token do not.</summary>
@@ -371,7 +372,7 @@ public sealed class SlackPackageTests
 
     /// <summary>The method URL is one constant on a line of its own, which is what the test copy rewrites.</summary>
     [Fact]
-    public void The_api_base_is_one_constant_on_its_own_line()
+    public void The_method_url_is_one_constant_on_its_own_line()
     {
         var source = File.ReadAllLines(Path.Combine(Shipped, "main.js"));
 
