@@ -3,6 +3,19 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.14.6
+
+- The README states what Reply detects of a contact's later replies by email, in a Jason user's words. A direct email's
+  replies are all detected, any number, a reply after an answer sent from Reply's inbox included; a second reply to a
+  sequence email is not; after an answer sent from Reply's inbox on a sequence thread a reply is detected only when its
+  own headers reference that answer; no auto-reply or out-of-office is stored on a direct thread; a reply with no
+  `In-Reply-To` and no `References` is dropped; and a reply to a send older than 40 days is not matched unless a newer
+  send to that address exists. The first two statements were observed on an account; the others are read from how
+  Reply is built and have not been observed.
+- The README no longer says that an answer through `conversation.reply` keeps a conversation visible to Jason: an
+  answer helps only when the contact's reply references it. Nothing the package does has changed; update the package
+  (`jason update apply`) to have the page.
+
 ## 0.14.5
 
 - Nothing is read before a send to learn whether the account's Reply keeps direct sends: the read of
