@@ -1395,11 +1395,9 @@ public class ReplyPackageTests
         Assert.Contains("No auto-reply or out-of-office is stored on a direct thread.", readme, StringComparison.Ordinal);
         Assert.Contains("`In-Reply-To` and `References` are both empty is dropped", readme, StringComparison.Ordinal);
         Assert.Contains("older than 40 days is not matched unless a newer send to that address exists", readme, StringComparison.Ordinal);
-        Assert.DoesNotContain("An answer sent from Reply's inbox therefore helps only when the contact's reply references it.", readme, StringComparison.Ordinal);
-        Assert.Contains("A later reply is detected when it answers a message this side sent from the inbox, its own headers referencing it; a second reply to the sequence email itself is not.", readme, StringComparison.Ordinal);
+        Assert.Contains("On a sequence thread, a reply after an answer sent from Reply's inbox is detected only when its own headers reference that answer; a second reply to the sequence email itself is not.", readme, StringComparison.Ordinal);
         Assert.Contains("A LinkedIn thread keeps later messages, so they are read.", readme, StringComparison.Ordinal);
-        Assert.DoesNotContain("The first two statements were observed", readme, StringComparison.Ordinal);
-        Assert.Contains("The first statement, on direct email, was observed on an account. The others, the one about LinkedIn among them, are read from how Reply is built and have not been observed; an observation on one account confirms or corrects them.", readme, StringComparison.Ordinal);
+        Assert.Contains("That a direct email's replies are all detected, any number, was observed on an account. The others, the one about LinkedIn among them, are read from how Reply is built and have not been observed; an observation on one account confirms or corrects them.", readme, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1416,8 +1414,8 @@ public class ReplyPackageTests
         Assert.Contains("later replies", section, StringComparison.Ordinal);
         Assert.Contains("observed", section, StringComparison.Ordinal);
         Assert.DoesNotContain("The first two statements were observed", section, StringComparison.Ordinal);
-        Assert.Contains("The first statement, on direct email, was observed on an account", section, StringComparison.Ordinal);
-        Assert.Contains("its own headers reference it", section, StringComparison.Ordinal);
+        Assert.Contains("That a direct email's replies are all detected, any number, was observed on an account;", section, StringComparison.Ordinal);
+        Assert.Contains("On a sequence thread, a reply after an answer sent from Reply's inbox is detected only when its own headers reference that answer; a second reply to the sequence email itself is not.", section, StringComparison.Ordinal);
         Assert.Contains("`jason update apply`", section, StringComparison.Ordinal);
         Assert.StartsWith(" ## 0.14.4 ", Flat(ChangelogSection(2)), StringComparison.Ordinal);
     }

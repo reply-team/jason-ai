@@ -127,8 +127,8 @@ its conversations when the read's turn comes.
 
 A read lists only what the provider stores. A provider may detect a contact's later replies only under rules of its
 own, such as which message a reply answers, so a reply that arrives before any answer may leave no line; a reply is
-therefore acted on or parked when it is read, not left for a second one. Which messages a provider keeps is for its plugin to say, under
-what it cannot do; for the plugin this repository ships, that is
+therefore acted on or parked when it is read, not left for a second one. Which messages a provider keeps is for its
+plugin to say, under what it cannot do; for the plugin this repository ships, that is
 [its README](../plugins/reply/README.md#what-it-cannot-do).
 
 The read's own work item keeps the page it read as its result, as every read does — subjects and previews included. The

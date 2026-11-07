@@ -205,9 +205,8 @@ public partial class InboundSyncDocTests
     /// <summary>
     /// A read lists what the provider stores, so the page says, as a principle, that a provider may detect a contact's
     /// later replies only under rules of its own, such as which message a reply answers, and that a reply is therefore
-    /// acted on or parked when it is read, and sends a
-    /// reader to the plugin's own statement of the fact. It names no provider and describes none. The link names a
-    /// heading the plugin's README holds.
+    /// acted on or parked when it is read, and sends a reader to the plugin's own statement of the fact. It names no
+    /// provider and describes none. The link names a heading the plugin's README holds.
     /// </summary>
     [Fact]
     public void The_page_says_a_provider_may_detect_later_replies_only_under_rules_of_its_own_and_points_at_the_plugin()

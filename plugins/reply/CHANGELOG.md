@@ -10,12 +10,12 @@ absorbed by a release of this package alone.
   sequence email is not; after an answer sent from Reply's inbox on a sequence thread a reply is detected only when its
   own headers reference that answer; no auto-reply or out-of-office is stored on a direct thread; a reply with no
   `In-Reply-To` and no `References` is dropped; and a reply to a send older than 40 days is not matched unless a newer
-  send to that address exists. The first statement, on direct email, was observed on an account; the others are read
-  from how Reply is built and have not been observed.
-- The README no longer says that an answer through `conversation.reply` keeps a conversation visible to Jason. A
-  later reply is detected when it answers a message this side sent from the inbox, because its own headers reference
-  it; a second reply to the sequence email itself is not. Nothing the package does has changed; update the package
-  (`jason update apply`) to have the page.
+  send to that address exists. That a direct email's replies are all detected, any number, was observed on an account;
+  the others are read from how Reply is built and have not been observed.
+- The README no longer says that an answer through `conversation.reply` keeps a conversation visible to Jason. On
+  a sequence thread, a reply after an answer sent from Reply's inbox is detected only when its own headers reference
+  that answer; a second reply to the sequence email itself is not. Nothing the package does has changed; update the
+  package (`jason update apply`) to have the page.
 
 ## 0.14.5
 

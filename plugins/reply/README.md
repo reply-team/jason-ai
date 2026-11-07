@@ -1245,17 +1245,18 @@ reported as cancelled, whatever the exit.
   `conversation.get` and the change feed `events.read` follows, and Jason's inbound sync says nothing of it. What
   Reply detects, as a Jason user meets it:
   - A direct email's replies are all detected, any number, a reply after an answer sent from Reply's inbox included.
-  - A second reply to a sequence email is not detected: Reply takes one reply to each email it sent.
+  - A second reply to a sequence email is not detected: Reply takes one reply to each email it sent, the first.
   - After an answer sent from Reply's inbox on a sequence thread, a reply is detected only when the reply's own
     headers reference that answer; a reply to the original sequence email is dropped.
   - No auto-reply or out-of-office is stored on a direct thread.
   - A reply whose `In-Reply-To` and `References` are both empty is dropped.
   - A reply to a send older than 40 days is not matched unless a newer send to that address exists.
 
-  A later reply is detected when it answers a message this side sent from the inbox, its own headers referencing it; a
-  second reply to the sequence email itself is not. A LinkedIn thread keeps later messages, so they are read. The first
-  statement, on direct email, was observed on an account. The others, the one about LinkedIn among them, are read from
-  how Reply is built and have not been observed; an observation on one account confirms or corrects them.
+  On a sequence thread, a reply after an answer sent from Reply's inbox is detected only when its own headers
+  reference that answer; a second reply to the sequence email itself is not. That a direct email's replies are all
+  detected, any number, was observed on an account. The others, the one about LinkedIn among them, are read from how
+  Reply is built and have not been observed; an observation on one account confirms or corrects them. A LinkedIn thread
+  keeps later messages, so they are read.
 - **The package asks for 256 MiB of memory.** The budget counts what an invocation allocates, every answer it reads
   included, and an answer can be as large as the exec capture (`Plugins:Exec:OutputBytes`, 4 MiB by default). It is
   under the installation's default ceiling of 512 MiB (`Plugins:Limits:MaxMemoryMb`). An installation that lowers
