@@ -1,0 +1,27 @@
+manifest_version: 1
+id: telegram
+version: 1.0.0
+kind: notification
+name: Telegram
+description: Delivers Jason's notifications to a Telegram chat - the pointer the runtime composes, and nothing else.
+homepage: https://github.com/reply-team/jason-ai/tree/main/plugins/telegram
+contracts:
+  protocol: [1]
+  # The delivery contract this package performs, notification.send version 1. A notification plugin implements no
+  # canonical operation, so this manifest has no `operations` list.
+  operations: [1]
+capabilities:
+  http:
+    hosts: [api.telegram.org]
+  env:
+    # The bot's token, read with host.env when it is not written under Plugins:Config:telegram. It is never part of the
+    # binding. Telegram's API takes it in the path of every request; the plugin host masks it wherever it would write it.
+    variables: [TELEGRAM_BOT_TOKEN]
+binding:
+  type: object
+  properties:
+    chat:
+      type: string
+      pattern: "^(-?[0-9]{1,20}|@[A-Za-z0-9_]{5,32})$"
+  required: [chat]
+  additionalProperties: false
