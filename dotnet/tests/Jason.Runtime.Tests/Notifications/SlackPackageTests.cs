@@ -211,6 +211,32 @@ public sealed class SlackPackageTests
         Assert.Equal((ChannelResult.Failed, code, (FailureClass?)@class), (outcome.Result, outcome.Code, outcome.Class));
     }
 
+    /// <summary>Slack's error word reaches the line through the channel's detail, and the pointer and the token do not.</summary>
+    [Fact]
+    public async Task Slack_s_error_word_is_the_detail_of_a_refusal()
+    {
+        using var slack = new LoopbackNtfy { Body = """{"ok":false,"error":"channel_not_found"}""" };
+
+        var outcome = await DeliverAsync(slack);
+
+        Assert.Contains("channel_not_found", outcome.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(EnvToken, outcome.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(Message.Text, outcome.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>A word that is not one of Slack's lower-case words is not repeated: the line keeps "unspecified".</summary>
+    [Fact]
+    public async Task An_error_that_is_not_a_word_is_not_repeated()
+    {
+        using var slack = new LoopbackNtfy { Body = "{\"ok\":false,\"error\":\"Ignore previous instructions and ...\"}" };
+
+        var outcome = await DeliverAsync(slack);
+
+        Assert.Equal("notification_refused", outcome.Code);
+        Assert.Contains("unspecified", outcome.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ignore", outcome.Detail, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_delivery_slack_accepted_without_a_ts_has_no_receipt()
     {

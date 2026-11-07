@@ -228,6 +228,8 @@ sent — and an answer it could not measure is failed `validation_timed_out`, `a
 `silenced` covers `disabled_for_application` (Jason switched off), `disabled_for_user` (every app switched off),
 `disabled_by_group_policy` and `disabled_by_manifest`.
 
+A delivery a plugin failed carries the plugin's own failure message as the line's `detail`, cut at 500 characters, after the host has redacted the values of the environment variables and the configuration the plugin was granted.
+
 `attempts` is written for every outcome but `not_attempted` — `delivered`, `silenced` and `failed` each say how many
 times the channel was tried.
 
