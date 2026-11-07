@@ -31,9 +31,10 @@ The topic travels in the body rather than in the path, so the line the plugin ho
 ## Installing it
 
 **1. Place the package.** Every release of Jason from 0.32.0 on publishes it as `jason-plugin-ntfy.zip`. If you edited
-`plugin.yaml` in a copy of 1.0.2 to reach your own server, that copy reads as behind and `jason status` advises
-`--replace`. `--replace` drops the edit, and the edit is no longer needed: grant the host and keep the binding, as
-[Your own server](#your-own-server) says.
+`plugin.yaml` in a copy of an earlier version to reach your own server, that copy reads as behind and `jason status`
+advises `--replace`. `--replace` drops the edit, and the edit is no longer needed: grant the host and keep the binding,
+as [Your own server](#your-own-server) says. A copy whose grant was `"*"` loses its server after `--replace`, since the
+star means `ntfy.sh`, so grant the host by name first.
 
 ```sh
 jason plugin install ntfy

@@ -861,9 +861,9 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "gh release delete exited with $LASTEXITCODE" }
           }
 
-          # gh names an asset by its file name. The archives, the feed and the six packages, the five plugins' and
-          # the UI's, were assembled under artifacts/release; the install scripts are the tag's own, so a one-liner
-          # pinned to this release runs the script it was published with.
+          # gh names an asset by its file name. The archives, the feed, the packages of reply, journal-forwarder, ntfy,
+          # slack and telegram and the UI's were assembled under artifacts/release; the install scripts are the tag's
+          # own, so a one-liner pinned to this release runs the script it was published with.
           $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-plugin-ntfy.zip', 'artifacts/release/jason-plugin-slack.zip', 'artifacts/release/jason-plugin-telegram.zip', 'artifacts/release/jason-ui.zip')
           gh release create "v$env:VERSION" -R $repository @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }

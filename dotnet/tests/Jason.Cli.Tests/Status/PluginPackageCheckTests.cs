@@ -6,8 +6,8 @@ namespace Jason.Cli.Tests.Status;
 
 /// <summary>
 /// jason status says whether the installed plugin packages are the ones this runtime's release publishes. Optional, so it
-/// never decides readiness: an earlier release's package fails it, and the fact carries the repair in words, since no
-/// command installs a package; a package with the same version or a later one passes with a line that says it is a later release's or one built or edited here; no package is absent; and
+/// never decides readiness: an earlier release's package fails it, and the fact names the command that places this
+/// release's; a package with the same version or a later one passes with a line that says it is a later release's or one built or edited here; no package is absent; and
 /// a runtime older than the section, or one that did not answer, cannot tell. The packages not installed are one sentence.
 /// </summary>
 public class PluginPackageCheckTests

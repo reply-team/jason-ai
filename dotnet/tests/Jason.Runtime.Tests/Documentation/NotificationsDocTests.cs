@@ -131,6 +131,7 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/plugins.md", "a `notification` plugin was asked for a canonical operation, or a provider for a delivery")]
     [InlineData("docs/plugins.md", "**Notification plugins are not routed**: a route to one is refused at activation with `route_plugin_kind_not_invocable`; they are reached through the `Notifications` settings instead (§14).")]
     [InlineData("docs/plugins.md", "## 14. Writing a notification plugin")]
+    [InlineData("docs/plugins.md", "**Testing it.** A loopback server stands in for the service. Grant `127.0.0.1:<port>` and put that host in a copy of the manifest, or grant it alone where the manifest says `any_granted_host`, then invoke the package through the plugin host the way §12 describes, with an input like the one above. The ntfy package's own tests do the latter, end to end.")]
     [InlineData("docs/routing.md", "the plugin is a notification plugin, which performs no canonical operation; it is reached through the `Notifications` settings instead")]
     [InlineData("docs/routing.md", "rather than with what it is; it is reached through the `Notifications` settings instead.")]
     [InlineData("docs/work-execution.md", "A parked approval and a raised question are notified as a pointer ([notifications.md](notifications.md)); pull is still the floor: a person finds out what is waiting, and decides, by asking (`jason approval list`).")]

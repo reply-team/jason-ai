@@ -1652,9 +1652,9 @@ and the package stays the one that was published.
 code and class, or `not_attempted` with `unavailable`, `not_declared` or `binding_invalid` — in `jason runtime status
 --human`, and in `jason status`'s `notifications` check.
 
-**Testing it.** A loopback server stands in for the service: grant `127.0.0.1:<port>`, put that host in a copy of the
-manifest, and invoke the package through the plugin host the way §12 describes, with an input like the one above. The
-ntfy package's own tests are this, end to end.
+**Testing it.** A loopback server stands in for the service. Grant `127.0.0.1:<port>` and put that host in a copy of the
+manifest, or grant it alone where the manifest says `any_granted_host`, then invoke the package through the plugin host
+the way §12 describes, with an input like the one above. The ntfy package's own tests do the latter, end to end.
 
 ## 15. Writing an events plugin
 
