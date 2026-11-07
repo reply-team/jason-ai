@@ -266,6 +266,13 @@ change is not in force until the person has reloaded. Writing them is the person
 `docs/plugins.md` §16 and §17 say the rest, and `plugins/journal-forwarder` in the plugin marketplace is the smallest
 complete subscriber.
 
+A plugin may also ask to append lines to a file, and what it may write into is the person's to say, as well: the directories
+are `Plugins:Grants:<id>:Files` in the same settings file, each an absolute path, read at a start and at each
+`jason plugin reload`. A directory that is the home directory, the top of a drive, the data directory, the harness root,
+or a folder inside or holding any of these is refused, as are a relative path, `~` and `*`, and the refusal rejects the whole reload
+with `grant_path_refused`. Give the plugin a directory of its own; `docs/plugins.md` §9 says the rest, and
+`plugins/journal-forwarder` is the plugin that uses it.
+
 `jason subscription list` answers where each subscribed kind stands: its chain, its cursor, its newest line and how many
 of its lines are due, the chain in flight if any, and `waiting_on`, which names the members of the chain the current load
 cannot run because they are `unavailable`. A kind waiting on a plugin is not failing: it stays at its line until a
@@ -398,7 +405,7 @@ old package for the release's and asks the runtime to load it; replacing a packa
 ask first. `jason update check` says it before the update: its `plugin_updates` names each package installed here that
 the newer release publishes a later version of, exactly the ones the apply replaces, with both versions, and is `[]`
 when nothing installed here that the record holds is behind. It never names a package the list does not know: built or
-edited on that machine, or a version before the list's first line, 0.3.2; whether that one is behind is `jason status`'s
+edited on that machine, or a version before its package's list begins, which for the Reply package is 0.3.2 and for every other is 1.0.0; whether that one is behind is `jason status`'s
 to say, by its version.
 
 ## Installing it in the first place
