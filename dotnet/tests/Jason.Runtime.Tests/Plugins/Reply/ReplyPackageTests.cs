@@ -1373,9 +1373,9 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// What Reply detects of a contact's later replies is stated as a Jason user meets it: the two direct-email
-    /// statements said to be observed on an account, the rest said to be read from how Reply is built and not observed,
-    /// and an answer sent from Reply's inbox said to help only when the contact's reply references it. The earlier
+    /// What Reply detects of a contact's later replies is stated as a Jason user meets it: the first, direct-email
+    /// statement said to be observed on an account, the rest said to be read from how Reply is built and not observed,
+    /// and a later reply said to be detected when it answers a message this side sent from the inbox. The earlier
     /// sentences, that an answer keeps the conversation visible and that only a first reply is read, are gone.
     /// </summary>
     [Fact]
@@ -1395,12 +1395,18 @@ public class ReplyPackageTests
         Assert.Contains("No auto-reply or out-of-office is stored on a direct thread.", readme, StringComparison.Ordinal);
         Assert.Contains("`In-Reply-To` and `References` are both empty is dropped", readme, StringComparison.Ordinal);
         Assert.Contains("older than 40 days is not matched unless a newer send to that address exists", readme, StringComparison.Ordinal);
-        Assert.Contains("An answer sent from Reply's inbox therefore helps only when the contact's reply references it.", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("An answer sent from Reply's inbox therefore helps only when the contact's reply references it.", readme, StringComparison.Ordinal);
+        Assert.Contains("A later reply is detected when it answers a message this side sent from the inbox, its own headers referencing it; a second reply to the sequence email itself is not.", readme, StringComparison.Ordinal);
         Assert.Contains("A LinkedIn thread keeps later messages, so they are read.", readme, StringComparison.Ordinal);
-        Assert.Contains("The first two statements were observed on an account. The others, the one about LinkedIn among them, are read from how Reply is built and have not been observed; an observation on one account confirms or corrects them.", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("The first two statements were observed", readme, StringComparison.Ordinal);
+        Assert.Contains("The first statement, on direct email, was observed on an account. The others, the one about LinkedIn among them, are read from how Reply is built and have not been observed; an observation on one account confirms or corrects them.", readme, StringComparison.Ordinal);
     }
 
-    /// <summary>The changelog opens with 0.14.6, which says what the README now states of later replies.</summary>
+    /// <summary>
+    /// The changelog opens with 0.14.6, which says what the README now states of later replies, only the first statement
+    /// observed and the rest read from how Reply is built, and keeps 0.14.4, the version that changed the earlier
+    /// sentence that only a contact's first reply is read, as history.
+    /// </summary>
     [Fact]
     public void The_changelog_opens_with_0_14_6_what_the_readme_now_says_of_later_replies()
     {
@@ -1409,7 +1415,11 @@ public class ReplyPackageTests
         Assert.StartsWith(" ## 0.14.6 ", section, StringComparison.Ordinal);
         Assert.Contains("later replies", section, StringComparison.Ordinal);
         Assert.Contains("observed", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("The first two statements were observed", section, StringComparison.Ordinal);
+        Assert.Contains("The first statement, on direct email, was observed on an account", section, StringComparison.Ordinal);
+        Assert.Contains("its own headers reference it", section, StringComparison.Ordinal);
         Assert.Contains("`jason update apply`", section, StringComparison.Ordinal);
+        Assert.StartsWith(" ## 0.14.4 ", Flat(ChangelogSection(2)), StringComparison.Ordinal);
     }
 
     /// <summary>The changelog's section at this position, newest first, from its heading up to the next one.</summary>
