@@ -30,7 +30,9 @@ public sealed partial class HostCodesDocTests
     [InlineData("docs/plugins.md", "Unreachable by construction, not a pattern")]
     [InlineData("docs/plugins.md", "A read made on a person's request outside any work item is held to the list by the same check")]
     [InlineData("docs/plugins.md", "The events family is the one exception: its reads refuse every code the events contract does not declare, the host's included (§15).")]
-    [InlineData("docs/plugins.md", "All of them are `permanent`, and every operation's check passes them but the events family's (§15).")]
+    [InlineData("docs/plugins.md", "All of them are `permanent` but `file_write_failed`, which is `transient` to a plugin that catches it.")]
+    [InlineData("docs/plugins.md", "Nothing caught, it ends `ambiguous` once a `host.exec`, `host.http` or `host.call` was started in the invocation")]
+    [InlineData("docs/plugins.md", "Every operation's check passes them but the events family's (§15).")]
     [InlineData("docs/plugins.md", "Any other failure, the host's own codes of §8 included, is answered `result_invalid`.")]
     [InlineData("docs/contracts/README.md", "pass under the class the host writes them with ([the plugin guide, section 8](../plugins.md#8-failure-classes)); the events family alone refuses those as well.")]
     public void The_pages_say_where_the_host_s_codes_pass_and_where_they_do_not(string page, string sentence)

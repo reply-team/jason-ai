@@ -147,8 +147,8 @@ public sealed class UpdatePluginsStepTests
     private static PluginPackage ForwarderLatest { get; } = Plugin("journal-forwarder", "1.0.1");
 
     /// <summary>
-    /// A release publishes two packages, Reply's and the journal forwarder's, and the step knows neither by name: each
-    /// installed copy is read against its own id's record, so both behind are both replaced, each kept for a rollback,
+    /// A release publishes several packages, and the step knows none of them by name: each installed copy is read against
+    /// its own id's record, so two behind are both replaced, each kept for a rollback,
     /// each named in the ledger and in a line of its own.
     /// </summary>
     [Fact]

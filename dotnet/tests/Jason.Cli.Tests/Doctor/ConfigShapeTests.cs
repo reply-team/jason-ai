@@ -908,6 +908,7 @@ public sealed class ConfigShapeTests
                      "Update:FeedUrl", "Roles:DefaultExecutionProfile", "Roles:DefaultEntryCommand[]",
                      "Routes:Default:Plugin", $"Routes:Operations:{operation}:Plugin",
                      "Plugins:Grants:fake-provider:Exec[]", "Plugins:Grants:fake-provider:Http[]", "Plugins:Grants:fake-provider:Env[]",
+                     "Plugins:Grants:fake-provider:Files[]",
 
                      // A binding is free-form: whatever a person typed under a name the settings know, so these
                      // are the names that would collide with a listed one if a path were not matched whole.

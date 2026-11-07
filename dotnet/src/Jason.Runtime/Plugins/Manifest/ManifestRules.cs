@@ -879,12 +879,39 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
 
         if (root["capabilities"] is not JsonObject capabilities)
         {
-            Add(ProblemCodes.FieldInvalid, "capabilities", "capabilities is a mapping of exec, http, env and api.");
+            Add(ProblemCodes.FieldInvalid, "capabilities", "capabilities is a mapping of exec, http, env, api and files.");
             return new CapabilityRequests(null, null, null);
         }
 
-        UnknownKeys(capabilities, "capabilities", ["exec", "http", "env", "api"]);
-        return new CapabilityRequests(ReadExec(capabilities), ReadHttp(capabilities), ReadEnv(capabilities), ReadApi(capabilities));
+        UnknownKeys(capabilities, "capabilities", ["exec", "http", "env", "api", "files"]);
+        return new CapabilityRequests(ReadExec(capabilities), ReadHttp(capabilities), ReadEnv(capabilities), ReadApi(capabilities), ReadFiles(capabilities));
+    }
+
+    /// <summary>
+    /// The host's one file door: a package asks for it by a switch that is <c>true</c> or absent, and names no path, since
+    /// which directories it may write in is a person's to say, in the grant.
+    /// </summary>
+    private FilesRequestSpec? ReadFiles(JsonObject capabilities)
+    {
+        if (!Has(capabilities, "files"))
+        {
+            return null;
+        }
+
+        if (capabilities["files"] is not JsonObject files)
+        {
+            Add(ProblemCodes.FieldInvalid, "capabilities.files", "capabilities.files is a mapping with append: true.");
+            return null;
+        }
+
+        UnknownKeys(files, "capabilities.files", ["append"]);
+        if (files["append"] is JsonValue value && value.TryGetValue<bool>(out var word) && word)
+        {
+            return new FilesRequestSpec(Append: true);
+        }
+
+        Add(ProblemCodes.FieldInvalid, "capabilities.files.append", "capabilities.files.append is true: appending a line is the only thing the door does.");
+        return null;
     }
 
     /// <summary>

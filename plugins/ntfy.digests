@@ -1,0 +1,16 @@
+# The digest of each version of the ntfy plugin's package, plugins/ntfy: one line per version, the version, a space, and
+# the sha256 of the whole package as the runtime computes it — the number `jason plugin list` shows for an installed copy.
+# It is the digest of the package a release publishes, which that release's runtime reports in `system.info`'s
+# `released_plugins`; it is not the archive's checksum in `checksums.txt`. Each release's manifest carries the whole list as
+# plugins.ntfy.recorded, from which `jason update check` reads an installed copy's version by digest.
+# The list starts with 1.0.0, the package v0.2.0 shipped in its tree; 1.0.1 first shipped at v0.5.0 and 1.0.2 at v0.7.0,
+# each line computed from that tag's tree: a copy made by hand from any of those releases is read as its version and
+# updated. It holds every version the package has had, published or not, because every bump appends a line.
+# A version is its content: any change to a file of the package is a new version, and a new version appends its line at
+# the end, after the last edit to the package, since every edit changes the digest; once the version is bumped, the
+# package's test prints the line to append. A line already here is never changed, and a line that changes or disappears
+# in a diff is refused in review.
+1.0.0 sha256:16394c9b2ff439c19a42a3bc069502bfd6b12c44b21e2a7be4448ac0eebefc12
+1.0.1 sha256:b95b95345e0dd6cf2933f38a58f1c558c4db5f5d1517d095ec1ed7ae203bec32
+1.0.2 sha256:bcd90d5dcdd558ac42a5d27b699bb1b9a3b129c8efb7fb887021192a9a0d8a34
+1.0.3 sha256:d50982cc87d84c724eab1ae6bc216daed0d11055b0bd5e4592a88e8870f5d87f

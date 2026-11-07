@@ -114,7 +114,7 @@ public static class PluginRenderers
     {
         if (capabilities is null
             || (capabilities.Exec is null && capabilities.Http is null && capabilities.Env is null && capabilities.Api is null
-                && capabilities.Subscriptions is null))
+                && capabilities.Subscriptions is null && capabilities.Files is null))
         {
             return null;
         }
@@ -134,6 +134,12 @@ public static class PluginRenderers
         }
 
         line += $" | subscriptions {subscriptions}";
+
+        // A manifest names no place, so the directories granted stand alone, and a plugin that asks for none keeps its line.
+        if (capabilities.Files is not null)
+        {
+            line += string.Create(CultureInfo.InvariantCulture, $" | files {capabilities.Files.Granted?.Count ?? 0}");
+        }
 
         // A host the grant names beyond the declared ones counts as any grant does; the word that allows it stands beside them.
         return capabilities.AnyGrantedHost == true ? line + " | any_granted_host" : line;

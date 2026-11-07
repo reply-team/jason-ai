@@ -21,8 +21,12 @@
     <None Include="../../../plugins/reply/**" LinkBase="Fixtures/plugins/reply" CopyToOutputDirectory="PreserveNewest" />
     <!-- The ntfy reference package, linked the same way, so its tests install the very files that ship. -->
     <None Include="../../../plugins/ntfy/**" LinkBase="Fixtures/plugins/ntfy" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The telegram notification package, linked the same way. -->
+    <None Include="../../../plugins/telegram/**" LinkBase="Fixtures/plugins/telegram" CopyToOutputDirectory="PreserveNewest" />
     <!-- The journal-forwarder reference subscriber, linked the same way. -->
     <None Include="../../../plugins/journal-forwarder/**" LinkBase="Fixtures/plugins/journal-forwarder" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The slack notification package, linked the same way. -->
+    <None Include="../../../plugins/slack/**" LinkBase="Fixtures/plugins/slack" CopyToOutputDirectory="PreserveNewest" />
     <!-- The one table of LinkedIn profile links, which the migration that re-keys stored links is fed. -->
     <Compile Include="../Jason.Contracts.Tests/Channels/LinkedInKeyVectors.cs" Link="LinkedInKeyVectors.cs" />
   </ItemGroup>

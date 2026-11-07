@@ -33,7 +33,7 @@ internal static partial class CriticalTier
     public static readonly IReadOnlyDictionary<Family, int[]> Cases = new Dictionary<Family, int[]>
     {
         //              App  Cli  Contracts  PluginHost  Runtime
-        [Family.B1] =  [  7,   2,   4,   2,   6],
+        [Family.B1] =  [  9,   2,   4,   2,   6],
         [Family.B2] =  [  4,   2,   0,   0,   6],
         [Family.B3] =  [  0,   0,   4,   1,  29],
         [Family.B4] =  [  0,   0,   0,   0,   7],
@@ -58,11 +58,11 @@ internal static partial class CriticalTier
         [Family.P3] =  [  0,   0,   0,   0,   3],
         [Family.S1] =  [  0,   1,   9,   0,  23],
         [Family.S2] =  [  2,   1,  10,   0,  41],
-        [Family.S3] =  [  0,   3,   3,   5,  27],
+        [Family.S3] =  [  0,   3,   3,   9,  27],
         [Family.S4] =  [  0,  29,   0,   0,   3],
         [Family.S5] =  [  0,   0,   0,   0,  17],
         [Family.S6] =  [  0,   0,   0,   0, 133],
-        [Family.R1] =  [  0,   0,  12,   9,  26],
+        [Family.R1] =  [  0,   0,  12,   9,  30],
         [Family.R2] =  [  0,  25,  10,   0,  22],
         [Family.R3] =  [  0,   1,  30,   0,  15],
         [Family.R4] =  [  0,   0,   0,   8,   0],
@@ -88,7 +88,7 @@ internal static partial class CriticalTier
         [Family.D2] =  [  4,   0,   0,   0,   0],
         [Family.D3] =  [  2,   0,   0,   0,   2],
         [Family.X1] =  [  0,  10,   3,   1,  14],
-        [Family.X2] =  [  0,  20,   4,   1,  24],
+        [Family.X2] =  [  0,  20,   4,   3,  24],
         [Family.X3] =  [  0,   1,   0,   0,   6],
     };
 
@@ -101,11 +101,11 @@ internal static partial class CriticalTier
     /// </summary>
     public static readonly (int TierMethods, int Methods, int Cases)[] Sizes =
     [
-        (26, 362, 518),       // Jason.App.Tests
-        (148, 2219, 3803),    // Jason.Cli.Tests
-        (104, 794, 3734),     // Jason.Contracts.Tests
-        (44, 223, 343),       // Jason.PluginHost.Tests
-        (604, 5055, 9831),    // Jason.Runtime.Tests
+        (28, 375, 607),       // Jason.App.Tests
+        (148, 2250, 3917),    // Jason.Cli.Tests
+        (104, 804, 3890),     // Jason.Contracts.Tests
+        (47, 282, 450),       // Jason.PluginHost.Tests
+        (608, 5206, 10280),   // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>

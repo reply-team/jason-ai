@@ -379,6 +379,29 @@ public sealed class NotificationSenderTests
         Assert.Throws<InvalidOperationException>(() => sender.Enqueue(Request()));
     }
 
+    /// <summary>
+    /// A plugin's failure text is cut where it enters, so the stored line and the status read the same value, and a cut
+    /// that falls inside a surrogate pair steps back rather than leave a half that is written as U+FFFD.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_failed_plugin_outcome_s_detail_is_cut_to_500_in_the_stored_line_and_the_status(bool splitsAPair)
+    {
+        using var harness = Harness();
+        await Waiting.ApprovalsAsync(harness, 1, Ct);
+        var detail = splitsAPair ? new string('a', 499) + "\U0001F600" + "tail" : new string('d', 900);
+        var channel = FakeChannel.Failing("notification_rejected", FailureClass.Permanent, detail: detail);
+
+        await Sender(harness, channel).SendAsync(Request(), Ct);
+
+        var entry = Assert.Single(await LinesAsync(harness));
+        var stored = entry.New!["channels"]![0]!["detail"]!.GetValue<string>();
+        Assert.Equal(splitsAPair ? 499 : 500, stored.Length);
+        Assert.DoesNotContain('\uFFFD', stored);
+        Assert.Equal(stored, Assert.Single(harness.NotificationStatus.Snapshot().Channels).Outcome.Detail);
+    }
+
     /// <summary>What <c>system.info</c> will show: the last notification and each channel's last outcome.</summary>
     [Fact]
     public async Task The_status_keeps_the_last_outcome_of_each_channel()

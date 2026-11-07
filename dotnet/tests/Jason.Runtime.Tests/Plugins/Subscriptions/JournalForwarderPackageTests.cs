@@ -38,6 +38,7 @@ public sealed class JournalForwarderPackageTests
     private const string Id = "journal-forwarder";
     private const string UrlVariable = "JOURNAL_FORWARDER_URL";
     private const string TokenVariable = "JOURNAL_FORWARDER_TOKEN";
+    private const string FileVariable = "JOURNAL_FORWARDER_FILE";
     private const string Kind = "workitem_failed";
     private const string Token = "tk_jason_forwarder_test_0123456789";
     private const string ConfiguredToken = "tk_jason_forwarder_configured_9876543210";
@@ -56,7 +57,7 @@ public sealed class JournalForwarderPackageTests
             File.Copy(file, Path.Combine(root, Path.GetFileName(file)));
         }
 
-        TestPlugins.Grant(paths, Id, http: [host ?? "localhost:8787"], env: [UrlVariable, TokenVariable]);
+        TestPlugins.Grant(paths, Id, http: [host ?? "localhost:8787"], env: [UrlVariable, TokenVariable, FileVariable]);
         Subscribe(paths, Id, granted.Length == 0 ? ["*"] : granted);
     }
 
@@ -275,7 +276,7 @@ public sealed class JournalForwarderPackageTests
 
     /// <summary>The codes of a URL the plugin cannot use are the codes the environment's URL has, and nothing is sent.</summary>
     [Theory]
-    [InlineData("", "forwarder_url_missing")]
+    [InlineData("", "forwarder_receiver_missing")]
     [InlineData("not a url", "forwarder_url_invalid")]
     [InlineData("ftp://localhost:8787/hook", "forwarder_url_invalid")]
     public async Task A_configured_url_the_plugin_cannot_use_ends_under_the_same_codes(string url, string code)
@@ -427,8 +428,8 @@ public sealed class JournalForwarderPackageTests
     }
 
     [Theory]
-    [InlineData(null, "forwarder_url_missing")]
-    [InlineData("", "forwarder_url_missing")]
+    [InlineData(null, "forwarder_receiver_missing")]
+    [InlineData("", "forwarder_receiver_missing")]
     [InlineData("not a url", "forwarder_url_invalid")]
     [InlineData("ftp://localhost:8787/hook", "forwarder_url_invalid")]
     [InlineData("localhost:8787/hook", "forwarder_url_invalid")]
@@ -498,7 +499,7 @@ public sealed class JournalForwarderPackageTests
     }
 
     [Fact]
-    public async Task The_shipped_package_loads_as_a_subscriber_that_asks_for_http_and_two_variables_and_no_api()
+    public async Task The_shipped_package_loads_as_a_subscriber_that_asks_for_http_files_and_three_variables_and_no_api()
     {
         await using var api = await PluginInvokerTests.StartAsync(paths => Install(paths, host: null));
 
@@ -507,12 +508,324 @@ public sealed class JournalForwarderPackageTests
         Assert.NotNull(plugin);
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Equal(PluginKind.Subscriber, plugin.Manifest.Kind);
-        Assert.Equal("1.1.0", plugin.Manifest.Version);
+        Assert.Equal("1.2.0", plugin.Manifest.Version);
         Assert.Equal(["localhost:8787"], plugin.Manifest.Capabilities.Http!.Hosts);
         Assert.True(plugin.Manifest.Capabilities.Http.AnyGrantedHost);
-        Assert.Equal([UrlVariable, TokenVariable], plugin.Manifest.Capabilities.Env!.Variables);
+        Assert.Equal([UrlVariable, TokenVariable, FileVariable], plugin.Manifest.Capabilities.Env!.Variables);
+        Assert.True(plugin.Manifest.Capabilities.Files!.Append);
         Assert.Null(plugin.Manifest.Capabilities.Api);
         Assert.Null(plugin.Manifest.Capabilities.Exec);
+    }
+
+    /// <summary>A directory outside everything a test owns: a grant may not stand in a runtime's data directory or be its home.</summary>
+    private sealed class Folder : IDisposable
+    {
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-forwarder-file-" + Guid.NewGuid().ToString("N"));
+
+        public string Directory => Path.Combine(_root, "granted-directory");
+
+        public string File => Path.Combine(Directory, "lines.jsonl");
+
+        public string[] Lines() => System.IO.File.ReadAllLines(File, new UTF8Encoding(false));
+
+        /// <summary>A file the disk will not add to, whoever asks: a failure of the disk, on every platform, without a full one.</summary>
+        public void RefuseWrites()
+        {
+            Assert.SkipWhen(Environment.UserName == "root", "root writes a read-only file all the same.");
+            System.IO.Directory.CreateDirectory(Directory);
+            System.IO.File.WriteAllText(File, string.Empty);
+            System.IO.File.SetAttributes(File, FileAttributes.ReadOnly);
+        }
+
+        public void Dispose()
+        {
+            if (System.IO.Directory.Exists(_root))
+            {
+                if (System.IO.File.Exists(File))
+                {
+                    System.IO.File.SetAttributes(File, FileAttributes.Normal);
+                }
+
+                System.IO.Directory.Delete(_root, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>The directory granted, and, with <paramref name="file"/>, the key that names the file; the host's grant goes when no receiver is wanted.</summary>
+    private static void GrantFile(JasonPaths paths, string directory, string? file = null, string? url = null, bool noHost = false)
+    {
+        var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
+        var grant = settings["Plugins"]!["Grants"]![Id]!.AsObject();
+        grant["Files"] = new JsonArray(directory);
+        if (noHost)
+        {
+            grant.Remove("Http");
+        }
+
+        var configuration = new JsonObject();
+        if (file is not null)
+        {
+            configuration["file"] = file;
+        }
+
+        if (url is not null)
+        {
+            configuration["url"] = url;
+        }
+
+        settings["Plugins"]!["Config"] = new JsonObject { [Id] = configuration };
+        File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString(JasonJson.Options), new UTF8Encoding(false));
+    }
+
+    /// <summary>The line handed to the plugin directly, as a chain would hand it, so a row can hand it again.</summary>
+    private static async Task<InvocationOutcome> HandAsync(RuntimeApiFixture api, int attempt)
+    {
+        var request = new PluginInvocationRequest(
+            Id,
+            Kind,
+            new JsonObject { ["line"] = new JsonObject { ["id"] = "jrn_1", ["kind"] = Kind }, ["envelope"] = new JsonObject(), ["attempt"] = attempt },
+            null,
+            "jrn_1",
+            Purpose: InvocationPurpose.Subscription);
+        return (await PluginInvokerTests.InvokeAsync(api, request, Ct)).Outcome;
+    }
+
+    /// <summary>A file and no receiver at all: the line is the body a POST would carry, one JSON object on one line, and no host is granted.</summary>
+    [Fact]
+    public async Task A_file_alone_takes_each_line_as_the_body_a_post_would_carry()
+    {
+        using var folder = new Folder();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, host: null);
+            GrantFile(paths, folder.Directory, file: folder.File, noHost: true);
+        });
+
+        await WithEnvironment(null, null, async () =>
+        {
+            var line = Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal(SubscriptionRunStatus.Succeeded, run.Status);
+            var body = JsonNode.Parse(Assert.Single(folder.Lines()))!.AsObject();
+            Assert.Equal(["line", "envelope", "attempt"], body.Select(pair => pair.Key));
+            Assert.Equal((line, Kind), (body["line"]!["id"]!.GetValue<string>(), body["line"]!["kind"]!.GetValue<string>()));
+            Assert.Equal(1, body["attempt"]!.GetValue<int>());
+        });
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_settings_name_the_file_first_and_the_environment_after_them(bool configured)
+    {
+        using var folder = new Folder();
+        var environment = Path.Combine(folder.Directory, "environment.jsonl");
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, host: null);
+            GrantFile(paths, folder.Directory, file: configured ? folder.File : null, noHost: true);
+        });
+        Environment.SetEnvironmentVariable(FileVariable, environment);
+        try
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal(SubscriptionRunStatus.Succeeded, run.Status);
+            Assert.Equal(configured, File.Exists(folder.File));
+            Assert.Equal(!configured, File.Exists(environment));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(FileVariable, null);
+        }
+    }
+
+    [Fact]
+    public async Task Both_receivers_take_the_same_line_byte_for_byte()
+    {
+        using var folder = new Folder();
+        using var receiver = new LoopbackNtfy();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, receiver.HostKey);
+            GrantFile(paths, folder.Directory, file: folder.File, url: receiver.Server + "/hook");
+        });
+
+        await WithEnvironment(null, null, async () =>
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal(SubscriptionRunStatus.Succeeded, run.Status);
+            Assert.Equal(Assert.Single(receiver.Requests).Body, Assert.Single(folder.Lines()));
+        });
+    }
+
+    /// <summary>The disk's refusal does not cost the receiver the line, and the line still fails, with the first failure.</summary>
+    [Theory]
+    [InlineData(200)]
+    [InlineData(500)]
+    public async Task A_file_the_disk_refuses_still_leaves_the_post_and_the_first_failure_is_what_ends_the_handler(int status)
+    {
+        using var folder = new Folder();
+        using var receiver = new LoopbackNtfy { Status = status };
+        folder.RefuseWrites();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, receiver.HostKey);
+            GrantFile(paths, folder.Directory, file: folder.File, url: receiver.Server + "/hook");
+        });
+
+        await WithEnvironment(null, null, async () =>
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal(("transient", "file_write_failed"), (Outcome(run), Code(run)));
+            Assert.Single(receiver.Requests);
+        });
+    }
+
+    [Fact]
+    public async Task A_file_the_disk_refuses_with_no_receiver_is_the_same_failure()
+    {
+        using var folder = new Folder();
+        folder.RefuseWrites();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, host: null);
+            GrantFile(paths, folder.Directory, file: folder.File, noHost: true);
+        });
+
+        await WithEnvironment(null, null, async () =>
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal(("transient", "file_write_failed"), (Outcome(run), Code(run)));
+        });
+    }
+
+    /// <summary>One invocation has one outcome, so a repeat for the receiver adds the line again, and the line's id tells a reader so.</summary>
+    [Fact]
+    public async Task A_failed_post_leaves_the_line_in_the_file_and_the_repeat_adds_it_again()
+    {
+        using var folder = new Folder();
+        using var receiver = new LoopbackNtfy { Status = 503 };
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, receiver.HostKey);
+            GrantFile(paths, folder.Directory, file: folder.File, url: receiver.Server + "/hook");
+        });
+
+        await WithEnvironment(null, null, async () =>
+        {
+            var first = Assert.IsType<InvocationOutcome.Failed>(await HandAsync(api, attempt: 1));
+            Assert.Equal("forwarder_unreachable", first.Error.Code);
+            Assert.Single(folder.Lines());
+
+            receiver.Status = 200;
+            Assert.IsType<InvocationOutcome.Succeeded>(await HandAsync(api, attempt: 2));
+
+            var ids = folder.Lines().Select(line => JsonNode.Parse(line)!["line"]!["id"]!.GetValue<string>()).ToList();
+            Assert.Equal(["jrn_1", "jrn_1"], ids);
+        });
+    }
+
+    /// <summary>A rule refused is a misconfiguration: nothing a plugin may catch, so it ends where it stands and nothing is sent.</summary>
+    [Theory]
+    [InlineData("elsewhere", "file_path_not_allowed")]
+    [InlineData("bad name", "file_path_not_allowed")]
+    [InlineData("ungranted", "capability_not_granted")]
+    public async Task A_file_the_rules_refuse_ends_the_line_where_it_stands_and_posts_nothing(string shape, string code)
+    {
+        using var folder = new Folder();
+        using var other = new Folder();
+        using var receiver = new LoopbackNtfy();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, receiver.HostKey);
+            GrantFile(
+                paths,
+                folder.Directory,
+                file: shape switch
+                {
+                    "elsewhere" => other.File,
+                    "bad name" => Path.Combine(folder.Directory, "a line.jsonl"),
+                    _ => folder.File,
+                },
+                url: receiver.Server + "/hook");
+            if (shape == "ungranted")
+            {
+                var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
+                settings["Plugins"]!["Grants"]![Id]!.AsObject().Remove("Files");
+                File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString(JasonJson.Options), new UTF8Encoding(false));
+            }
+        });
+
+        await WithEnvironment(null, null, async () =>
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal((SubscriptionRunStatus.Failed, "permanent", code), (run.Status, run.FailureClass, run.FailureCode));
+            Assert.Empty(receiver.Requests);
+            Assert.False(File.Exists(other.File));
+        });
+    }
+
+    /// <summary>A URL the plugin cannot use says so before anything is written, so a repair is not a repeat of the line.</summary>
+    [Fact]
+    public async Task A_url_the_plugin_cannot_use_ends_the_line_before_the_file_has_it()
+    {
+        using var folder = new Folder();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, host: null);
+            GrantFile(paths, folder.Directory, file: folder.File, url: "not a url");
+        });
+
+        await WithEnvironment(null, null, async () =>
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal((SubscriptionRunStatus.Failed, "permanent", "forwarder_url_invalid"), (run.Status, run.FailureClass, run.FailureCode));
+            Assert.False(File.Exists(folder.File));
+        });
+    }
+
+    /// <summary>The directory is a person's: what the handler's records keep of the file is its name.</summary>
+    [Fact]
+    public async Task The_directory_reaches_no_record_of_the_invocation()
+    {
+        using var folder = new Folder();
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+        {
+            Install(paths, host: null);
+            GrantFile(paths, folder.Directory, file: folder.File, noHost: true);
+        });
+
+        await WithEnvironment(null, null, async () =>
+        {
+            Line(api.Paths);
+
+            var run = await TakeAsync(api);
+
+            Assert.Equal(SubscriptionRunStatus.Succeeded, run.Status);
+            var records = InvocationFiles(api);
+            Assert.Contains("lines.jsonl", records, StringComparison.Ordinal);
+            Assert.DoesNotContain(Path.GetFileName(folder.Directory), records + run.Handlers.ToJsonString(), StringComparison.Ordinal);
+        });
     }
 
     /// <summary>A scheme in capitals is the URL the host accepts, and the forwarder takes it.</summary>
@@ -599,7 +912,10 @@ public sealed class JournalForwarderPackageTests
         Assert.Contains("\"url\": \"https://receiver.example.com/jason\", \"token\": \"a-token-of-yours\"", elsewhere, StringComparison.Ordinal);
         Assert.Contains("`jason plugin reload`", elsewhere, StringComparison.Ordinal);
         Assert.DoesNotContain("From then on the copy is yours.", elsewhere, StringComparison.Ordinal);
-        Assert.Contains("**Jason 0.31.0 or newer**", Section(readme, "What you need"), StringComparison.Ordinal);
+        Assert.Contains("**Jason 0.32.0 or newer**", Section(readme, "What you need"), StringComparison.Ordinal);
+        Assert.DoesNotContain("no way to write a file", readme, StringComparison.Ordinal);
+        Assert.Contains("`forwarder_receiver_missing`", readme, StringComparison.Ordinal);
+        Assert.Contains("\"Files\": [\"", Section(readme, "A file instead of a receiver, or beside one"), StringComparison.Ordinal);
     }
 
     /// <summary>A section of a README, its heading to the next, with its whitespace made single spaces.</summary>

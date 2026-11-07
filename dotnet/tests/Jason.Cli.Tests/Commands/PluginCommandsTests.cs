@@ -131,6 +131,40 @@ public class PluginCommandsTests
     }
 
     [Fact]
+    public void A_package_that_asks_for_no_files_keeps_the_answer_it_always_had()
+    {
+        var answer = JsonSerializer.Serialize(new PluginCapabilitiesDto(null, null, null), JasonJson.Options);
+
+        Assert.DoesNotContain("\"files\"", answer, StringComparison.Ordinal);
+    }
+
+    /// <summary>A manifest names no place, so there is nothing to count the directories against.</summary>
+    [Fact]
+    public async Task Human_mode_counts_the_directories_a_plugin_may_write_in()
+    {
+        var registry = TwoPlugins();
+        var writer = registry.Plugins[1] with
+        {
+            Capabilities = new PluginCapabilitiesDto(null, null, null) { Files = new FilesCapabilityDto(true, ["/srv/lines", "/srv/other"]) },
+        };
+        using var cli = new CliRun(JsonSerializer.Serialize(registry with { Plugins = [writer] }, JasonJson.Options));
+
+        await cli.RunAsync("plugin", "list", "--human");
+
+        Assert.Contains("exec - | http - | env - | subscriptions - | files 2", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_says_nothing_of_files_for_a_plugin_that_asks_for_none()
+    {
+        using var cli = new CliRun(JsonSerializer.Serialize(TwoPlugins(), JasonJson.Options));
+
+        await cli.RunAsync("plugin", "list", "--human");
+
+        Assert.DoesNotContain("files", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Human_mode_counts_the_api_families_granted_against_those_requested()
     {
         var registry = TwoPlugins();

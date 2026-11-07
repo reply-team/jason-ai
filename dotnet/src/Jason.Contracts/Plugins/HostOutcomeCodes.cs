@@ -57,22 +57,38 @@ public static class HostOutcomeCodes
     /// <summary>The plugin asked the Runtime API through its door for more calls, or a larger request, than the door allows.</summary>
     public const string ApiLimit = "api_limit";
 
+    /// <summary>A path outside the granted directories, a file name the door refuses, or something other than a plain file at the end of it.</summary>
+    public const string FilePathNotAllowed = "file_path_not_allowed";
+
+    public const string FileLineTooLarge = "file_line_too_large";
+
+    /// <summary>A line break inside what the door takes as one line: a plugin handing it two lines has a bug that no size would say.</summary>
+    public const string FileLineMultiline = "file_line_multiline";
+
+    public const string FileLimit = "file_limit";
+
+    /// <summary>The disk, or a file held past the wait, refused an append: the one host code that is no rule, so the plugin may catch it.</summary>
+    public const string FileWriteFailed = "file_write_failed";
+
     /// <summary>Every code above.</summary>
     public static IReadOnlySet<string> All { get; } = new[]
     {
         PluginException, BadReturn, ResultTooLarge, PluginSyntaxError, EntryFunctionMissing, PluginTimeout,
         PluginMemoryExceeded, PluginStatementLimit, PluginRecursionLimit, CapabilityNotGranted, ExecutableNotAllowed,
         ExecLimit, HttpHostNotAllowed, HttpSchemeNotAllowed, HttpMethodNotAllowed, HttpHeaderNotAllowed, HttpLimit,
-        ModuleNotAllowed, ApiLimit,
+        ModuleNotAllowed, ApiLimit, FilePathNotAllowed, FileLineTooLarge, FileLineMultiline, FileLimit, FileWriteFailed,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Whether <paramref name="code"/> under <paramref name="failureClass"/> is an ending the host writes. Every one of
-    /// them is permanent, and a timeout is ambiguous as well once an external call was started, since the provider may
-    /// have acted before the time ran out. A plugin can write any of these words through <c>host.fail</c> under any
-    /// class; under another class it is the plugin's word, not the host's.
+    /// them is permanent, a timeout is ambiguous as well once an external call was started, since the provider may have
+    /// acted before the time ran out, and an append the disk refused is transient, or ambiguous once a call that reaches
+    /// outside was started before it. A plugin can write any of these words through <c>host.fail</c> under any class; under
+    /// another class it is the plugin's word, not the host's.
     /// </summary>
     public static bool Writes(FailureClass failureClass, string code) =>
         All.Contains(code)
-        && (failureClass == FailureClass.Permanent || (failureClass == FailureClass.Ambiguous && string.Equals(code, PluginTimeout, StringComparison.Ordinal)));
+        && (failureClass == FailureClass.Permanent
+            || (failureClass == FailureClass.Ambiguous && code is PluginTimeout or FileWriteFailed)
+            || (failureClass == FailureClass.Transient && string.Equals(code, FileWriteFailed, StringComparison.Ordinal)));
 }

@@ -129,6 +129,13 @@ public class ManifestReaderTests : IDisposable
     [InlineData("capabilities:\n  http:\n    any_granted_host: true\n", "field_required", "capabilities.http.hosts")]
     [InlineData("capabilities:\n  http:\n    hosts: [api.example.test]\n    any_host: true\n", "unknown_field", "capabilities.http.any_host")]
 
+    // Files: one word, which names no path.
+    [InlineData("capabilities:\n  files:\n    append: false\n", "field_invalid", "capabilities.files.append")]
+    [InlineData("capabilities:\n  files:\n    append: \"true\"\n", "field_invalid", "capabilities.files.append")]
+    [InlineData("capabilities:\n  files: {}\n", "field_invalid", "capabilities.files.append")]
+    [InlineData("capabilities:\n  files: [append]\n", "field_invalid", "capabilities.files")]
+    [InlineData("capabilities:\n  files:\n    append: true\n    directories: [logs]\n", "unknown_field", "capabilities.files.directories")]
+
     // Variables.
     [InlineData("capabilities:\n  env:\n    variables: [lower]\n", "variable_name_invalid", "capabilities.env.variables[0]")]
     // Critical: a reserved variable; a credential in a binding.
@@ -910,6 +917,7 @@ public class ManifestReaderTests : IDisposable
         "capabilities", "capabilities.exec", "capabilities.exec.executables",
         "capabilities.http", "capabilities.http.hosts", "capabilities.http.any_granted_host",
         "capabilities.env", "capabilities.env.variables",
+        "capabilities.files", "capabilities.files.append",
         "capabilities.api",
         "limits", "limits.timeout_ms", "limits.memory_mb",
         "binding", "binding.type", "binding.properties", "binding.required",
@@ -979,6 +987,7 @@ public class ManifestReaderTests : IDisposable
         .. new[] { "name", "description", "entry.function" }.Select(field => (field, "\"object\"")),
         .. ReadableFields.Select(field => (field, "~")),
         ("capabilities.http.hosts", "[object, \"null\"]"),
+        ("capabilities.files.append", "true"),
 
         // A binding of `type: object` — written either way round — is exactly what a binding is.
         ("binding", "{ type: object }"),

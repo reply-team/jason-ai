@@ -22,7 +22,9 @@ public sealed class SdkHarness : IDisposable
         TimeSpan? remaining = null,
         Func<Process, TimeSpan, bool>? endedWithin = null,
         Action<Process>? kill = null,
-        Action<TimeSpan, TimeSpan>? spending = null)
+        Action<TimeSpan, TimeSpan>? spending = null,
+        TimeSpan? sharingWait = null,
+        Action<FileStream, byte[]>? lineWrite = null)
     {
         Invocation = InvocationFactory.Create(packageRoot, "echo.run", configure: configure);
         Diagnostics = new HostDiagnostics(
@@ -33,7 +35,7 @@ public sealed class SdkHarness : IDisposable
             Invocation.InvocationId,
             TimeProvider.System);
 
-        Budget = new CallBudget(Invocation.Limits.Exec.MaxCalls, Invocation.Limits.Http.MaxCalls, Invocation.Door?.Limits.MaxCalls ?? 0);
+        Budget = new CallBudget(Invocation.Limits.Exec.MaxCalls, Invocation.Limits.Http.MaxCalls, Invocation.Door?.Limits.MaxCalls ?? 0, Invocation.Limits.Files.MaxCalls);
         var left = remaining ?? TimeSpan.FromMilliseconds(Invocation.Limits.TimeoutMs);
         Kills = new UnfinishedKills();
         Services = new HostServices(Invocation, Diagnostics, Budget, Kills, () => left, packageRoot, CancellationToken.None);
@@ -43,7 +45,9 @@ public sealed class SdkHarness : IDisposable
         Door = Invocation.Door is null ? null : new DoorService(Services, Invocation.Door);
         var defaults = new ExecService(Services);
         var exec = new ExecService(Services) { EndedWithin = endedWithin ?? defaults.EndedWithin, Kill = kill ?? defaults.Kill, Spending = spending };
-        Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new ConfigService(Services), new LogService(Services), Door));
+        var door = new FilesService(Services);
+        var files = new FilesService(Services) { SharingWait = sharingWait ?? door.SharingWait, LineWrite = lineWrite ?? door.LineWrite };
+        Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new ConfigService(Services), new LogService(Services), files, Door));
     }
 
     public Engine Engine { get; }

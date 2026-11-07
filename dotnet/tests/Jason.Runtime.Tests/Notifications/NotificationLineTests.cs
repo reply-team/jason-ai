@@ -101,6 +101,24 @@ public sealed class NotificationLineTests
         Assert.Equal(500, channels[1]!["detail"]!.GetValue<string>().Length);
     }
 
+    [Fact]
+    public void A_cut_that_would_split_a_surrogate_pair_steps_back_for_a_detail_and_a_receipt()
+    {
+        var pair = "\U0001F600";
+        var line = Sample() with
+        {
+            Channels =
+            [
+                ChannelOutcome.Delivered("ntfy", ChannelKinds.Plugin, receipt: new string('r', 255) + pair),
+                ChannelOutcome.NotAttempted("toast", ChannelKinds.Toast, NotAttemptedReasons.Unavailable, new string('d', 499) + pair),
+            ],
+        };
+
+        var channels = line.ToJson()["channels"]!.AsArray();
+        Assert.Equal(255, channels[0]!["receipt"]!.GetValue<string>().Length);
+        Assert.Equal(499, channels[1]!["detail"]!.GetValue<string>().Length);
+    }
+
     /// <summary>The words a line can carry are the published ones; the page prints these lists.</summary>
     [Fact]
     public void The_outcome_words_and_the_reasons_are_the_published_ones()

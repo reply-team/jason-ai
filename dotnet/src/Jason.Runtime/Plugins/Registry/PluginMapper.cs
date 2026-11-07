@@ -57,6 +57,7 @@ public static class PluginMapper
             {
                 Subscriptions = manifest.Subscriptions.Count == 0 ? null : new ListCapabilityDto(manifest.Subscriptions, plugin.Grants.Subscriptions),
                 AnyGrantedHost = manifest.Capabilities.Http?.AnyGrantedHost == true ? true : null,
+                Files = manifest.Capabilities.Files is null ? null : new FilesCapabilityDto(manifest.Capabilities.Files.Append, plugin.Grants.Files),
             },
             new PluginLimitsDto(plugin.Limits.TimeoutMs, plugin.Limits.MemoryMb),
 

@@ -1785,8 +1785,8 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The plugin packages a release publishes, read from the names the code publishes: every file named
     /// <c>jason-plugin-&lt;id&gt;.zip</c>, the name the manifest's writer requires of a package it lists under
-    /// <c>plugins</c>. Two, Reply's and the journal forwarder's, each a directory of the tree's <c>plugins/</c>; a third is
-    /// a decision of <see cref="ReleaseAssets"/>, and every test reading this follows it.
+    /// <c>plugins</c>. Five, each a directory of the tree's <c>plugins/</c>; a sixth is a decision of
+    /// <see cref="ReleaseAssets"/>, and every test reading this follows it.
     /// </summary>
     private static IReadOnlyList<(string Id, string Asset)> ReleasedPackages()
     {
@@ -1796,7 +1796,15 @@ public partial class ReleaseWorkflowTests
             .Where(name => name.StartsWith(Prefix, StringComparison.Ordinal) && name.EndsWith(Suffix, StringComparison.Ordinal))
             .Select(name => (Id: name[Prefix.Length..^Suffix.Length], Asset: name))
             .ToList();
-        Assert.Equal([(ReplyId, ReleaseAssets.ReplyPlugin), (ForwarderId, ReleaseAssets.JournalForwarderPlugin)], packages);
+        Assert.Equal(
+            [
+                (ReplyId, ReleaseAssets.ReplyPlugin),
+                (ForwarderId, ReleaseAssets.JournalForwarderPlugin),
+                (NtfyId, ReleaseAssets.NtfyPlugin),
+                (SlackId, ReleaseAssets.SlackPlugin),
+                (TelegramId, ReleaseAssets.TelegramPlugin),
+            ],
+            packages);
         Assert.All(packages, package => Assert.True(
             File.Exists(Path.Combine(RepositoryRoot(), "plugins", package.Id, "plugin.yaml")),
             $"{package.Asset} is published, and plugins/{package.Id} is not a package of the tree."));
@@ -3763,7 +3771,7 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The script knows no package by name: two lists name two packages, each under the id its list's file name gives, with
     /// its own asset, version, digest and record, in the order the lists were given, and the checksums carry both after
-    /// the archives. Reply's and the journal forwarder's are the two a release carries.
+    /// the archives.
     /// </summary>
     [Fact]
     public void Two_digest_lists_name_two_packages_each_under_its_own_id()
@@ -3878,7 +3886,7 @@ public partial class ReleaseWorkflowTests
             File.WriteAllText(Path.Combine(directory, $"jason-{rid}.fragment.json"), JsonSerializer.Serialize(fragment) + "\n");
         }
 
-        foreach (var carried in (string[])[ReleaseAssets.ReplyPlugin, ReleaseAssets.JournalForwarderPlugin, ReleaseAssets.Ui])
+        foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui])
         {
             File.WriteAllText(Path.Combine(directory, carried), $"not really {carried}");
         }
@@ -4102,10 +4110,16 @@ public partial class ReleaseWorkflowTests
         Assert.All(packages, package => Assert.True(File.Exists(Path.Combine(RepositoryRoot(), Digests(package.Id))), $"{Digests(package.Id)} is not in the repository."));
     }
 
-    /// <summary>The Reply plugin's id and the journal forwarder's.</summary>
+    /// <summary>The id of each package a release publishes.</summary>
     private const string ReplyId = "reply";
 
     private const string ForwarderId = "journal-forwarder";
+
+    private const string NtfyId = "ntfy";
+
+    private const string SlackId = "slack";
+
+    private const string TelegramId = "telegram";
 
     /// <summary>A package's digest list, beside the package and outside it.</summary>
     private static string Digests(string id) => $"plugins/{id}.digests";

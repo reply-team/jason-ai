@@ -56,7 +56,7 @@ to.
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One self-contained executable under your own account, with no admin rights and no Docker, Python or Node for Jason itself. Measured on a Mac: 16 seconds from nothing to `Ready`. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 19 guides, 24 operation contracts in Markdown and JSON with 778 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
-| **Maturity** | Alpha, and young. The runtime's source and the public history opened with 0.24.0 on 1 November 2026, so the community is still small. The repository carries 978 C# test files and a UI test suite, with CI on macOS, Linux and Windows. 13 of the 25 skills are `verified`, meaning an agent host was recorded reading that exact text; the other 12 are still `draft`. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
+| **Maturity** | Alpha, and young. The runtime's source and the public history opened with 0.24.0 on 1 November 2026, so the community is still small. The repository carries 985 C# test files and a UI test suite, with CI on macOS, Linux and Windows. 12 of the 25 skills are `verified`, meaning an agent host was recorded reading that exact text; the other 13 are still `draft`. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
 | **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [What leaves your machine](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
 
 ---
@@ -257,8 +257,8 @@ are three ways to connect one:
 | **Any provider, through a plugin** | Ask your agent to write a plugin, or write it yourself | Your own Gmail, Microsoft or SMTP sending, Instantly, HeyReach, a WhatsApp or Telegram tool, an in-house system. A plugin is a small JavaScript package, and it implements only the operations you need. Routes choose the plugin per campaign, or even per operation |
 | **Any tool, through your agent** | Connect it to your agent as an MCP server, CLI or API | Your agent acts with it and records what happened in Jason with `jason report submit`, so the history stays true. Jason's approval gate covers plugin operations only, so this path relies on your agent asking you first |
 
-**What ships ready today:** the Reply plugin and the journal forwarder, each one `jason plugin install` away; ntfy for
-phone pushes is in the repository, one copy away. A direct Gmail, Microsoft or SMTP connection
+**What ships ready today:** the Reply plugin, the journal forwarder, and ntfy, Slack and Telegram for notifications, each
+one `jason plugin install` away. A direct Gmail, Microsoft or SMTP connection
 without Reply is a plugin to write, not a switch to flip: the [author's guide](https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md) and the
 [contracts](https://github.com/reply-team/jason-ai/blob/main/docs/contracts/README.md) are public, one document per operation, and your agent can work from them.
 Channel names are open: a provider's campaign can run on any channel a person has an address on. One-off direct messages
@@ -374,7 +374,7 @@ a Jason plugin.</sub>
 
 </details>
 
-**Also works with:** desktop notifications and phone pushes through ntfy, one copy away · approvals in the chat or in Jason's browser
+**Also works with:** desktop notifications, and phone pushes, Slack and Telegram each one `jason plugin install` away · approvals in the chat or in Jason's browser
 UI · macOS (Apple silicon), Linux x64 and Windows x64.
 
 ---
