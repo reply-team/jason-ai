@@ -28,7 +28,8 @@ public sealed class PluginLoader(
     TimeProvider clock,
     ILogger<PluginLoader> logger,
     PatternTiming? timing = null,
-    HarnessHome? home = null)
+    HarnessHome? home = null,
+    HarnessFolders? harness = null)
 {
     /// <summary>How a manifest's binding patterns are probed: the runtime's one default, which a test replaces.</summary>
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
@@ -328,9 +329,15 @@ public sealed class PluginLoader(
     private List<ManifestProblem> RefusedFileGrants(ResolvedGrants grants)
     {
         var refused = new List<ManifestProblem>();
+        if (grants.Files.Count == 0)
+        {
+            return refused;
+        }
+
+        var root = harness?.Root ?? HarnessRoot.Of(new HarnessOptions(), _home);
         for (var index = 0; index < grants.Files.Count; index++)
         {
-            if (HarnessRoot.GrantRefusal(grants.Files[index], paths, _home) is { } sentence)
+            if (HarnessRoot.GrantRefusal(grants.Files[index], paths, _home, root) is { } sentence)
             {
                 refused.Add(new ManifestProblem(ProblemCodes.GrantPathRefused, string.Create(CultureInfo.InvariantCulture, $"grants.files[{index}]"), sentence));
             }

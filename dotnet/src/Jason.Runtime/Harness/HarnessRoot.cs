@@ -101,13 +101,16 @@ public static class HarnessRoot
     /// <summary>
     /// Why a directory a person grants a plugin to append lines in may not be one, as the sentence of the package problem,
     /// or null when it may: a directory is named whole, and the places no level of the harness may be are no plugin's
-    /// either. The home, a folder holding it and the top of a drive would open the account to a package's lines, and the
-    /// data directory is the runtime's own. The sentence never says the path back.
+    /// either. The home, a folder holding it and the top of a drive would open the account to a package's lines, the data
+    /// directory is the runtime's own, and the harness root holds the memory files the runtime promises never to write a
+    /// word of, which its door would then write for a plugin. Each is compared where it leads; the sentence never says the
+    /// path back.
     /// </summary>
-    public static string? GrantRefusal(string? directory, JasonPaths paths, string home)
+    public static string? GrantRefusal(string? directory, JasonPaths paths, string home, string root)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(home);
+        ArgumentNullException.ThrowIfNull(root);
         if (string.IsNullOrWhiteSpace(directory) || directory.Contains('\0', StringComparison.Ordinal) || !Path.IsPathFullyQualified(Undevice(directory)))
         {
             return "a file grant must be an absolute path, one that starts at a drive, a share or the file system's top, and neither a star nor a tilde is expanded.";
@@ -121,8 +124,19 @@ public static class HarnessRoot
             Place.Data => "a file grant must not be the data directory, which is the runtime's own.",
             Place.InsideData => "a file grant must not be inside the data directory, which is the runtime's own.",
             Place.HoldsData => "a file grant must not hold the data directory, which is the runtime's own.",
-            _ => null,
+            _ => ToHarnessRoot(directory, root),
         };
+    }
+
+    /// <summary>Why a directory may not be granted by where it stands to the harness root, or null when it stands apart from it.</summary>
+    private static string? ToHarnessRoot(string directory, string root)
+    {
+        var at = Real(directory);
+        var level = Real(root);
+        return Same(at, level) ? "a file grant must not be the harness root, whose folders hold the memory files the runtime never writes."
+            : Inside(at, level) ? "a file grant must not be inside the harness root, whose folders hold the memory files the runtime never writes."
+            : Inside(level, at) ? "a file grant must not hold the harness root, whose folders hold the memory files the runtime never writes."
+            : null;
     }
 
     /// <summary>

@@ -223,7 +223,8 @@ public class PluginLoaderTests
     /// <summary>Where a grant may not be, each named by what it is to this test's own home and data directory.</summary>
     public static TheoryData<string> RefusedPlaces() =>
     [
-        "home", "top", "holds-home", "data", "inside-data", "holds-data", "relative", "dotted", "tilde", "star", "blank",
+        "home", "top", "holds-home", "data", "inside-data", "holds-data",
+        "default-harness-root", "inside-default-harness-root", "relative", "dotted", "tilde", "star", "blank",
     ];
 
     private static string Place(string name, TempDataDir dir) => name switch
@@ -234,6 +235,8 @@ public class PluginLoaderTests
         "data" => dir.Paths.Root,
         "inside-data" => Path.Combine(dir.Paths.Root, "logs", "lines"),
         "holds-data" => Path.GetDirectoryName(dir.Paths.Root)!,
+        "default-harness-root" => Path.Combine(dir.Home, HarnessOptions.DefaultFolder),
+        "inside-default-harness-root" => Path.Combine(dir.Home, HarnessOptions.DefaultFolder, "projects", "acme"),
         "relative" => Path.Combine("logs", "lines"),
         "dotted" => "./lines",
         "tilde" => "~/lines",
@@ -271,6 +274,53 @@ public class PluginLoaderTests
         {
             Assert.DoesNotContain(written, problem.Message, StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// A project's and a campaign's folders hold the memory files the runtime promises never to write a word of, so its door
+    /// does not write there for a plugin either: the root the settings name, what stands in it and what holds it.
+    /// </summary>
+    [Theory]
+    [InlineData("root")]
+    [InlineData("inside")]
+    [InlineData("holds")]
+    public async Task A_file_grant_at_the_harness_root_the_settings_name_rejects_the_load(string place)
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        Directory.CreateDirectory(dir.Home);
+        InstallAppendingPackage(dir.Paths);
+        var root = Path.Combine(dir.Home, "clients", "acme");
+        var written = place switch
+        {
+            "root" => root,
+            "inside" => Path.Combine(root, "projects", "launch", "campaigns"),
+            _ => Path.GetDirectoryName(root)!,
+        };
+
+        var load = await NewLoader(dir.Paths, programs, options => options.Grants[AppendsId] = new PluginGrant { Files = [written] }, dir.Home, root)
+            .LoadAsync(SnapshotSource.Reload, Ct);
+
+        Assert.Null(load.Snapshot);
+        var problem = Assert.Single(Assert.Single(load.Report.Candidates).Problems);
+        Assert.Equal(ProblemCodes.GrantPathRefused, problem.Code);
+        Assert.DoesNotContain(written, problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>What is compared is the root in force and where it leads: the default one is free once the settings name another.</summary>
+    [Fact]
+    public async Task A_file_grant_beside_the_harness_root_is_taken()
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        Directory.CreateDirectory(dir.Home);
+        InstallAppendingPackage(dir.Paths);
+        var beside = Path.Combine(dir.Home, HarnessOptions.DefaultFolder);
+
+        var load = await NewLoader(dir.Paths, programs, options => options.Grants[AppendsId] = new PluginGrant { Files = [beside] }, dir.Home, Path.Combine(dir.Home, "clients", "acme"))
+            .LoadAsync(SnapshotSource.Reload, Ct);
+
+        Assert.NotNull(load.Snapshot);
     }
 
     [Fact]
@@ -488,10 +538,10 @@ public class PluginLoaderTests
             """),
         "export function invoke() { return { result: {} }; }");
 
-    private static PluginLoader NewLoader(JasonPaths paths, TestPrograms programs, Action<PluginsOptions>? configure = null, string? home = null) =>
-        NewLoader(paths, new TestSearchPath { Path = programs.Root }, configure, home);
+    private static PluginLoader NewLoader(JasonPaths paths, TestPrograms programs, Action<PluginsOptions>? configure = null, string? home = null, string? harnessRoot = null) =>
+        NewLoader(paths, new TestSearchPath { Path = programs.Root }, configure, home, harnessRoot);
 
-    private static PluginLoader NewLoader(JasonPaths paths, TestSearchPath search, Action<PluginsOptions>? configure = null, string? home = null)
+    private static PluginLoader NewLoader(JasonPaths paths, TestSearchPath search, Action<PluginsOptions>? configure = null, string? home = null, string? harnessRoot = null)
     {
         var options = new PluginsOptions();
         configure?.Invoke(options);
@@ -501,6 +551,15 @@ public class PluginLoaderTests
             new TestOptionsMonitor<PluginsOptions>(options),
             TimeProvider.System,
             NullLogger<PluginLoader>.Instance,
-            home: home is null ? null : new HarnessHome(home));
+            home: home is null ? null : new HarnessHome(home),
+            harness: harnessRoot is null ? null : Folders(harnessRoot, home!));
     }
+
+    private static HarnessFolders Folders(string root, string home) =>
+        new(
+            new LiveSettings<HarnessOptions>(
+                new TestOptionsMonitor<HarnessOptions>(new HarnessOptions { Root = root }),
+                NullLogger<LiveSettings<HarnessOptions>>.Instance,
+                HarnessOptions.Section),
+            new HarnessHome(home));
 }
