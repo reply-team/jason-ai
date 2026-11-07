@@ -1252,7 +1252,8 @@ reported as cancelled, whatever the exit.
   - A reply whose `In-Reply-To` and `References` are both empty is dropped.
   - A reply to a send older than 40 days is not matched unless a newer send to that address exists.
 
-  An answer sent from Reply's inbox therefore helps only when the contact's reply references it. A LinkedIn thread
+  So a later reply is detected when it answers a message this side sent from the inbox, its own headers referencing
+  that message; a second reply to the sequence email itself is not. A LinkedIn thread
   keeps later messages, so they are read. The first two statements were observed on an account. The others, the one
   about LinkedIn among them, are read from how Reply is built and have not been observed; an observation on one
   account confirms or corrects them.

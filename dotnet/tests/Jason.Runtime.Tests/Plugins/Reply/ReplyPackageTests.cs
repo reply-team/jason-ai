@@ -1395,7 +1395,7 @@ public class ReplyPackageTests
         Assert.Contains("No auto-reply or out-of-office is stored on a direct thread.", readme, StringComparison.Ordinal);
         Assert.Contains("`In-Reply-To` and `References` are both empty is dropped", readme, StringComparison.Ordinal);
         Assert.Contains("older than 40 days is not matched unless a newer send to that address exists", readme, StringComparison.Ordinal);
-        Assert.Contains("An answer sent from Reply's inbox therefore helps only when the contact's reply references it.", readme, StringComparison.Ordinal);
+        Assert.Contains("So a later reply is detected when it answers a message this side sent from the inbox, its own headers referencing that message; a second reply to the sequence email itself is not.", readme, StringComparison.Ordinal);
         Assert.Contains("A LinkedIn thread keeps later messages, so they are read.", readme, StringComparison.Ordinal);
         Assert.Contains("The first two statements were observed on an account. The others, the one about LinkedIn among them, are read from how Reply is built and have not been observed; an observation on one account confirms or corrects them.", readme, StringComparison.Ordinal);
     }
