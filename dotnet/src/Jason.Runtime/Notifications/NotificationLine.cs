@@ -183,7 +183,19 @@ public sealed record NotificationLine(
         }
     }
 
-    private static string? Cut(string? text, int length) => text is { Length: var count } && count > length ? text[..length] : text;
+    /// <summary>
+    /// The text cut to at most <paramref name="length"/> UTF-16 units. A cut never ends on the first half of a surrogate
+    /// pair: it steps back one unit, so the kept text is whole and no writer turns a half into U+FFFD.
+    /// </summary>
+    internal static string? Cut(string? text, int length)
+    {
+        if (text is not { Length: var count } || count <= length)
+        {
+            return text;
+        }
+
+        return text[..(length > 0 && char.IsHighSurrogate(text[length - 1]) ? length - 1 : length)];
+    }
 
     private static string? Text(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
