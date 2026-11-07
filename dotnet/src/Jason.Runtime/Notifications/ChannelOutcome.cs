@@ -38,7 +38,7 @@ public sealed record ChannelOutcome(
     public static ChannelOutcome Failed(string channel, string kind, string code, FailureClass @class, string? detail = null) =>
         @class == FailureClass.Blocked
             ? throw new ArgumentOutOfRangeException(nameof(@class), @class, "A channel's failure is never blocked; the delivery family declares no block.")
-            : new(channel, kind, ChannelResult.Failed, code, @class, Detail: detail);
+            : new(channel, kind, ChannelResult.Failed, code, @class, Detail: NotificationLine.Cut(detail, NotificationLine.MaxDetail));
 
     public static ChannelOutcome NotAttempted(string channel, string kind, string reason, string? detail = null) =>
         new(channel, kind, ChannelResult.NotAttempted, Reason: reason, Detail: detail, Attempts: 0);

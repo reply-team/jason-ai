@@ -38,8 +38,8 @@ internal sealed class FakeChannel(string name, string kind, params ChannelOutcom
     public static FakeChannel Skipped(string reason, string name = "toast", string kind = ChannelKinds.Toast) =>
         new(name, kind, ChannelOutcome.NotAttempted(name, kind, reason));
 
-    public static FakeChannel Failing(string code, Jason.Contracts.Plugins.FailureClass @class, string name = "ntfy") =>
-        new(name, ChannelKinds.Plugin, ChannelOutcome.Failed(name, ChannelKinds.Plugin, code, @class));
+    public static FakeChannel Failing(string code, Jason.Contracts.Plugins.FailureClass @class, string name = "ntfy", string? detail = null) =>
+        new(name, ChannelKinds.Plugin, ChannelOutcome.Failed(name, ChannelKinds.Plugin, code, @class, detail));
 
     public async Task<ChannelOutcome> DeliverAsync(NotificationMessage message, string notificationId, CancellationToken cancellationToken)
     {
