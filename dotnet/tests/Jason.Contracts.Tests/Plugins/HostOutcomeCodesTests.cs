@@ -26,21 +26,38 @@ public class HostOutcomeCodesTests
     [InlineData(HostOutcomeCodes.PluginException)]
     [InlineData(HostOutcomeCodes.CapabilityNotGranted)]
     [InlineData(HostOutcomeCodes.PluginTimeout)]
+    [InlineData(HostOutcomeCodes.FilePathNotAllowed)]
+    [InlineData(HostOutcomeCodes.FileLineTooLarge)]
+    [InlineData(HostOutcomeCodes.FileLineMultiline)]
+    [InlineData(HostOutcomeCodes.FileLimit)]
     public void Every_host_code_is_written_permanent(string code)
     {
         Assert.True(HostOutcomeCodes.Writes(FailureClass.Permanent, code), $"the host writes `{code}` permanent, and the list says it does not.");
     }
 
     /// <summary>
-    /// A timeout is the one host ending that can be ambiguous: once an external call was started, the provider may have
-    /// acted before the time ran out.
+    /// A timeout and a failed append are the host endings that can be ambiguous: once a call that reaches outside was
+    /// started, the provider may have acted before the time ran out or the disk refused the line.
     /// </summary>
     [Fact]
-    public void Only_a_timeout_is_also_written_ambiguous()
+    public void Only_a_timeout_and_a_failed_append_are_also_written_ambiguous()
     {
-        var ambiguous = HostOutcomeCodes.All.Where(code => HostOutcomeCodes.Writes(FailureClass.Ambiguous, code));
+        var ambiguous = HostOutcomeCodes.All.Where(code => HostOutcomeCodes.Writes(FailureClass.Ambiguous, code)).Order(StringComparer.Ordinal);
 
-        Assert.Equal([HostOutcomeCodes.PluginTimeout], ambiguous);
+        Assert.Equal([HostOutcomeCodes.FileWriteFailed, HostOutcomeCodes.PluginTimeout], ambiguous);
+    }
+
+    /// <summary>
+    /// An append the disk refused is the one host ending that is no rule: the same line may go through on a second try,
+    /// and a plugin that does not catch it, with nothing started before it, ends transient, which every operation's
+    /// check has to pass.
+    /// </summary>
+    [Fact]
+    public void Only_a_failed_append_is_also_written_transient()
+    {
+        var transient = HostOutcomeCodes.All.Where(code => HostOutcomeCodes.Writes(FailureClass.Transient, code));
+
+        Assert.Equal([HostOutcomeCodes.FileWriteFailed], transient);
     }
 
     /// <summary>

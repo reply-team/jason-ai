@@ -136,6 +136,8 @@ public sealed class SettingsAllowlist
         new("Plugins:Http:RequestBytes", Kind.Integer32),
         new("Plugins:Http:MaxCalls", Kind.Integer32),
         new("Plugins:Http:TimeoutMs", Kind.Integer32),
+        new("Plugins:Files:LineBytes", Kind.Integer32),
+        new("Plugins:Files:MaxCalls", Kind.Integer32),
         new("Plugins:Invoker:OutcomeBytes", Kind.Integer32),
         new("Plugins:Invoker:StderrBytes", Kind.Integer32),
         new("Plugins:Invoker:KillGraceMs", Kind.Integer32),

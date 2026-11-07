@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Globalization;
 using Jason.Contracts.Api;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins.Manifest;
 
@@ -32,6 +33,15 @@ public sealed record ResolvedGrants(
     /// capability is minted with, and the only one its door opens.
     /// </summary>
     public IReadOnlySet<string> ApiOperations { get; init; } = FrozenSet<string>.Empty;
+
+    /// <summary>The directories granted, as the person wrote them; a package that does not ask for files has none.</summary>
+    public IReadOnlyList<string> Files { get; init; } = [];
+
+    /// <summary>
+    /// Those directories as the load froze them, as written and as they lead. Empty until a load has refused or kept each,
+    /// which <see cref="GrantResolver"/>, being pure, cannot do.
+    /// </summary>
+    public IReadOnlyList<FileDirectoryGrant> FileDirectories { get; init; } = [];
 }
 
 public static class GrantResolver
@@ -67,7 +77,31 @@ public static class GrantResolver
             Api = api,
             ApiOperations = OperationFamilies.OperationsOf(api),
             Subscriptions = Match("subscriptions", grant.Subscriptions, manifest.Subscriptions, StringComparer.Ordinal, warnings),
+            Files = FileDirectories(manifest, grant, warnings),
         };
+    }
+
+    /// <summary>
+    /// The one list that is no intersection: a manifest names no path, so a package that asks for files takes the
+    /// directories as the person wrote them, and whether each may stand is the load's to say, by where it leads. One that
+    /// does not ask is given none, wherever they point.
+    /// </summary>
+    private static IReadOnlyList<string> FileDirectories(PluginManifest manifest, PluginGrant grant, List<ManifestProblem> warnings)
+    {
+        if (manifest.Capabilities.Files is not null)
+        {
+            return [.. grant.Files];
+        }
+
+        for (var index = 0; index < grant.Files.Count; index++)
+        {
+            warnings.Add(new ManifestProblem(
+                ProblemCodes.GrantUnrequested,
+                string.Create(CultureInfo.InvariantCulture, $"grants.files[{index}]"),
+                "the settings grant a directory to a plugin whose manifest does not ask for files; nothing was granted for it."));
+        }
+
+        return [];
     }
 
     /// <summary>

@@ -51,7 +51,8 @@ public static class InvocationFactory
         MaxRecursion: 64,
         new ExecLimits(4_194_304, 64),
         new HttpLimits(4_194_304, 1_048_576, 64, 5_000),
-        new LogLimits(16_384, 4_194_304));
+        new LogLimits(16_384, 4_194_304),
+        new FileLimits(1_048_576, 64));
 
     public static PluginInvocation Create(string root, string operation, JsonObject? input = null, Action<InvocationBuilder>? configure = null)
     {

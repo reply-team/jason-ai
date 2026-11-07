@@ -1,9 +1,9 @@
 manifest_version: 1
 id: journal-forwarder
-version: 1.1.0
+version: 1.2.0
 kind: subscriber
 name: Journal forwarder
-description: Pushes each journal line of a kind it was granted, as JSON, to one URL the person names - the smallest complete subscriber.
+description: Pushes each journal line of a kind it was granted, as JSON, to one URL the person names, a file in a directory they grant, or both - the smallest complete subscriber.
 homepage: https://github.com/reply-team/jason-ai/tree/main/plugins/journal-forwarder
 contracts:
   protocol: [1]
@@ -15,10 +15,14 @@ capabilities:
     any_granted_host: true
     hosts: [localhost:8787]
   env:
-    # Where to push, and an optional bearer token for a receiver that requires one, read with host.env where the keys url
-    # and token under Plugins:Config:journal-forwarder say nothing. Neither is part of the manifest, and neither is ever
-    # logged or returned. A secret never belongs in this file.
-    variables: [JOURNAL_FORWARDER_URL, JOURNAL_FORWARDER_TOKEN]
+    # Where to push, an optional bearer token for a receiver that requires one, and a file to add each line to, read with
+    # host.env where the keys url, token and file under Plugins:Config:journal-forwarder say nothing. None is part of the
+    # manifest, and none is ever logged or returned. A secret never belongs in this file.
+    variables: [JOURNAL_FORWARDER_URL, JOURNAL_FORWARDER_TOKEN, JOURNAL_FORWARDER_FILE]
+  files:
+    # A file beside the receiver, or instead of it. This names no place: the directories are the person's to grant under
+    # Plugins:Grants:journal-forwarder:Files (see README.md).
+    append: true
 # Every journal kind a plugin may subscribe to, as the catalog stands for this version of the package. A declaration has no
 # wildcard; the person narrows these by the grant (Plugins:Grants:journal-forwarder:Subscriptions). A kind the catalog
 # gains is added here with a new version of the package.

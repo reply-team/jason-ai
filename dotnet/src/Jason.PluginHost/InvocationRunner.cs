@@ -43,7 +43,7 @@ public sealed class InvocationRunner : IInvocationRunner
 
         var limits = invocation.Limits;
         var watch = Stopwatch.StartNew();
-        var budget = new CallBudget(limits.Exec.MaxCalls, limits.Http.MaxCalls, invocation.Door?.Limits.MaxCalls ?? 0);
+        var budget = new CallBudget(limits.Exec.MaxCalls, limits.Http.MaxCalls, invocation.Door?.Limits.MaxCalls ?? 0, limits.Files.MaxCalls);
         var engine = EngineFactory.Create(limits, new PackageModuleLoader(invocation.Plugin.Root), deadline);
         var services = new HostServices(
             invocation,
@@ -57,9 +57,10 @@ public sealed class InvocationRunner : IInvocationRunner
         using var http = new HttpService(services);
         using var door = invocation.Door is null ? null : new DoorService(services, invocation.Door);
         var exec = Kill is null ? new ExecService(services) : new ExecService(services) { Kill = Kill };
+        var files = new FilesService(services);
         engine.SetValue(
             HostObject.Name,
-            HostObject.Build(engine, services, exec, http, new EnvService(services), new ConfigService(services), new LogService(services), door));
+            HostObject.Build(engine, services, exec, http, new EnvService(services), new ConfigService(services), new LogService(services), files, door));
 
         var end = new Ending(invocation, diagnostics, watch, budget);
         try
@@ -89,11 +90,11 @@ public sealed class InvocationRunner : IInvocationRunner
         }
         catch (JavaScriptException ex) when (HostFailure.TryRead(engine, ex.Error, out var declared))
         {
-            return end.Failed(declared);
+            return end.Failed(AsItEnds(declared, ex.Error, files, budget));
         }
         catch (PromiseRejectedException ex) when (HostFailure.TryRead(engine, ex.RejectedValue, out var declared))
         {
-            return end.Failed(declared);
+            return end.Failed(AsItEnds(declared, ex.RejectedValue, files, budget));
         }
         catch (JavaScriptException ex) when (IsSyntaxError(ex))
         {
@@ -145,6 +146,17 @@ public sealed class InvocationRunner : IInvocationRunner
                 string.Create(CultureInfo.InvariantCulture, $"The plugin did not finish within {limits.TimeoutMs} ms."));
         }
     }
+
+    /// <summary>
+    /// A failure as it ends the invocation. Decision 12's rule again, for the disk: a plugin that never answered the door's
+    /// failure reads nothing of what it called before it, and the door's own word, transient, would repeat that call, so
+    /// the host answers for it. The append is left out of the count, since the disk refused it. A plugin that caught the
+    /// failure and wrote its own word has judged, and that word stands; one that only threw it on has not.
+    /// </summary>
+    private static OutcomeError AsItEnds(OutcomeError declared, JsValue thrown, FilesService files, CallBudget budget) =>
+        declared is { Class: FailureClass.Transient, Code: HostOutcomeCodes.FileWriteFailed } && files.Built(thrown) && budget.ActingCallsStarted > 0
+            ? declared with { Class = FailureClass.Ambiguous }
+            : declared;
 
     private static PluginOutcome Answer(Engine engine, Ending end, JsValue returned)
     {
@@ -276,7 +288,7 @@ public sealed class InvocationRunner : IInvocationRunner
         }
 
         private OutcomeDiagnostics Cost() =>
-            new(watch.ElapsedMilliseconds, budget.ExecCalls, budget.HttpCalls, diagnostics.LogLines, budget.ApiCalls);
+            new(watch.ElapsedMilliseconds, budget.ExecCalls, budget.HttpCalls, diagnostics.LogLines, budget.ApiCalls, budget.FileCalls);
 
         /// <summary>
         /// The details and the block are the plugin's own words and may quote a value the host knows to be a

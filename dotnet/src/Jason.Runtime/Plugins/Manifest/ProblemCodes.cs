@@ -113,6 +113,12 @@ public static class ProblemCodes
     public const string GrantUnrequested = "grant_unrequested";
 
     /// <summary>
+    /// A package problem, of the settings rather than the files: a directory granted to a package that asks for files is
+    /// not absolute, or leads to a place the runtime refuses, so the load that would freeze it is refused whole.
+    /// </summary>
+    public const string GrantPathRefused = "grant_path_refused";
+
+    /// <summary>
     /// The problems that are about the machine rather than the package. An autostarted runtime sees a different
     /// search path than a shell does, so one uninstalled vendor tool holds its own plugin back and nothing else.
     /// </summary>

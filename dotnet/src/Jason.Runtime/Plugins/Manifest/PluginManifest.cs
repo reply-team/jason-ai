@@ -23,8 +23,14 @@ public sealed record EnvRequestSpec(IReadOnlyList<string> Variables);
 /// <summary>The Runtime API families a handler of this plugin may be granted through its door (<c>host.call</c>).</summary>
 public sealed record ApiRequestSpec(IReadOnlyList<string> Families);
 
+/// <summary>
+/// That a handler of this plugin may be granted the host's one file door (<c>host.appendLine</c>). It names no path: the
+/// directories are a person's to name, in the grant.
+/// </summary>
+public sealed record FilesRequestSpec(bool Append);
+
 /// <summary>What the manifest asks for. Asking is not being given it: the grants decide that, at every reload.</summary>
-public sealed record CapabilityRequests(ExecRequestSpec? Exec, HttpRequestSpec? Http, EnvRequestSpec? Env, ApiRequestSpec? Api = null);
+public sealed record CapabilityRequests(ExecRequestSpec? Exec, HttpRequestSpec? Http, EnvRequestSpec? Env, ApiRequestSpec? Api = null, FilesRequestSpec? Files = null);
 
 /// <summary>
 /// The contract versions a plugin speaks: the plugin-host protocol, the canonical operations (for a notification plugin,

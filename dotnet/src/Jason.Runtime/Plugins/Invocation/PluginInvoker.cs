@@ -642,7 +642,8 @@ public sealed partial class PluginInvoker(
         return new InvocationGrants(
             capabilities.Exec is null || executables.Count == 0 ? null : new ExecGrants(executables),
             capabilities.Http is null || plugin.Grants.Http.Count == 0 ? null : new HttpGrants(plugin.Grants.Http),
-            capabilities.Env is null || plugin.Grants.Env.Count == 0 ? null : new EnvGrants(plugin.Grants.Env));
+            capabilities.Env is null || plugin.Grants.Env.Count == 0 ? null : new EnvGrants(plugin.Grants.Env),
+            capabilities.Files is null || plugin.Grants.FileDirectories.Count == 0 ? null : new FilesGrants(plugin.Grants.FileDirectories));
     }
 
     private static InvocationLimits Limits(PluginsOptions settings, LoadedPlugin plugin, int timeoutMs) =>
@@ -653,7 +654,8 @@ public sealed partial class PluginInvoker(
             settings.Limits.MaxRecursion,
             new ExecLimits(settings.Exec.OutputBytes, settings.Exec.MaxCalls),
             new HttpLimits(settings.Http.ResponseBytes, settings.Http.RequestBytes, settings.Http.MaxCalls, settings.Http.TimeoutMs),
-            new LogLimits(settings.Invoker.LogLineBytes, settings.Invoker.StderrBytes));
+            new LogLimits(settings.Invoker.LogLineBytes, settings.Invoker.StderrBytes),
+            new FileLimits(settings.Files.LineBytes, settings.Files.MaxCalls));
 
     /// <summary>One JSON object, then end of file: the child reads until the stream ends rather than guessing.</summary>
     /// <remarks>

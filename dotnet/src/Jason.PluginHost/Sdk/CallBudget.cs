@@ -9,7 +9,7 @@ namespace Jason.PluginHost.Sdk;
 /// asks: did anything leave this process before the clock ran out? If it did, a timeout is ambiguous, because
 /// the provider may already have acted.
 /// </summary>
-public sealed class CallBudget(int maxExec, int maxHttp, int maxApi = 0)
+public sealed class CallBudget(int maxExec, int maxHttp, int maxApi = 0, int maxFiles = 0)
 {
     public int ExecCalls { get; private set; }
 
@@ -18,8 +18,14 @@ public sealed class CallBudget(int maxExec, int maxHttp, int maxApi = 0)
     /// <summary>The Runtime API calls made through the door; an invocation without one has none to make.</summary>
     public int ApiCalls { get; private set; }
 
+    /// <summary>The appends started through the file door: a line may be on the disk whatever became of the call.</summary>
+    public int FileCalls { get; private set; }
+
+    /// <summary>The calls that reach past this machine's disk: a repeat of the invocation would make them again.</summary>
+    public int ActingCallsStarted => ExecCalls + HttpCalls + ApiCalls;
+
     /// <summary>Every call that was started, whatever came of it — the reason a timeout may be ambiguous.</summary>
-    public int ExternalCallsStarted => ExecCalls + HttpCalls + ApiCalls;
+    public int ExternalCallsStarted => ActingCallsStarted + FileCalls;
 
     public void Exec()
     {
@@ -58,5 +64,18 @@ public sealed class CallBudget(int maxExec, int maxHttp, int maxApi = 0)
         }
 
         ApiCalls++;
+    }
+
+    public void Files()
+    {
+        if (FileCalls >= maxFiles)
+        {
+            throw new HostRuleException(
+                HostOutcomeCodes.FileLimit,
+                string.Create(CultureInfo.InvariantCulture, $"An invocation may append at most {maxFiles} lines."),
+                new JsonObject { ["limit"] = "files.max_calls", ["max"] = maxFiles });
+        }
+
+        FileCalls++;
     }
 }

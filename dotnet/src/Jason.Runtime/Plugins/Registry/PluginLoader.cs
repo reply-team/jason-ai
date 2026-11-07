@@ -1,11 +1,14 @@
 using System.Collections;
 using System.Collections.Frozen;
+using System.Globalization;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Harness;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Harness;
 using Jason.Runtime.Plugins.Manifest;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -24,10 +27,15 @@ public sealed class PluginLoader(
     IOptionsMonitor<PluginsOptions> options,
     TimeProvider clock,
     ILogger<PluginLoader> logger,
-    PatternTiming? timing = null)
+    PatternTiming? timing = null,
+    HarnessHome? home = null,
+    HarnessFolders? harness = null)
 {
     /// <summary>How a manifest's binding patterns are probed: the runtime's one default, which a test replaces.</summary>
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
+    /// <summary>The home a file grant is held against: the one the runtime was given, as the harness root is, or the account's.</summary>
+    private readonly string _home = home?.Directory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     private static readonly Action<ILogger, string, bool, int, int, Exception?> Loaded = LoggerMessage.Define<string, bool, int, int>(
         LogLevel.Information,
@@ -238,6 +246,16 @@ public sealed class PluginLoader(
         GrantsResolved(logger, manifest.Id, grants.Exec.Count, grants.Http.Count, grants.Env.Count, null);
         SubscriptionsGranted(logger, manifest.Id, grants.Subscriptions.Count, null);
 
+        // A directory is frozen as written and as it leads, so the door can tell a path it was given from one that has
+        // moved since. Each that may not stand is named, and one that may does not save the load.
+        var refused = RefusedFileGrants(grants);
+        if (refused.Count > 0)
+        {
+            return (new CandidateReport(candidate.Name, manifest.Id, CandidateStatus.Invalid, refused), null);
+        }
+
+        grants = grants with { FileDirectories = [.. grants.Files.Select(directory => new FileDirectoryGrant(directory, FolderPaths.Real(directory)))] };
+
         var executables = await ResolveExecutablesAsync(manifest, grants, settings, environment, cancellationToken).ConfigureAwait(false);
         // A manifest read with problems is one the start's second load kept for its unfinished probes alone: those come
         // first, environmental, and hold the plugin back like any other.
@@ -306,6 +324,26 @@ public sealed class PluginLoader(
         }
 
         return resolved;
+    }
+
+    private List<ManifestProblem> RefusedFileGrants(ResolvedGrants grants)
+    {
+        var refused = new List<ManifestProblem>();
+        if (grants.Files.Count == 0)
+        {
+            return refused;
+        }
+
+        var root = harness?.Root ?? HarnessRoot.Of(new HarnessOptions(), _home);
+        for (var index = 0; index < grants.Files.Count; index++)
+        {
+            if (HarnessRoot.GrantRefusal(grants.Files[index], paths, _home, root) is { } sentence)
+            {
+                refused.Add(new ManifestProblem(ProblemCodes.GrantPathRefused, string.Create(CultureInfo.InvariantCulture, $"grants.files[{index}]"), sentence));
+            }
+        }
+
+        return refused;
     }
 
     private static CandidateReport Invalid(CandidateDirectory candidate, string? id, string code, string path, string message) =>
