@@ -48,6 +48,7 @@ public sealed class SecretInRequestPathTests : IDisposable
     /// The secret rides the path of a request to the loopback, once through configuration and once through a granted
     /// variable; the request is answered or refused at the connection. Then the plugin logs the path and fails quoting it.
     /// </summary>
+    [Critical(Family.S3, "a secret in a request path is masked in every line and in the failure")]
     [Theory]
     [InlineData("config", true)]
     [InlineData("config", false)]
