@@ -3,6 +3,20 @@
 This package versions independently of the Jason runtime, under SemVer. It declares every journal kind a plugin may
 subscribe to, so a version that adds a kind to its manifest is a new version of the package.
 
+## 1.2.0
+
+A line can go to a file, beside the receiver or instead of it. The manifest asks for `capabilities.files`, so this asks for
+more than 1.1.0 did, and names no place: a person grants the directories under `Plugins:Grants:journal-forwarder:Files`. The
+plugin reads the key `file` under `Plugins:Config:journal-forwarder` first and `JOURNAL_FORWARDER_FILE` where it says
+nothing; the line in the file is the POST's body, one JSON object per line. A file goes first, and a disk that refuses the
+line still leaves the POST, after which the handler ends with the disk's failure. Nothing changes for a package that names
+a URL and no file.
+
+`forwarder_url_missing` is now `forwarder_receiver_missing`, since a URL is no longer the only receiver: neither a URL nor a
+file is named.
+
+Jason 0.32.0 or newer: an earlier runtime rejects the reload, as every package problem does, over the manifest's new word.
+
 ## 1.1.0
 
 A receiver on another host no longer asks for an edit of the package. The manifest says `any_granted_host: true`, so a
