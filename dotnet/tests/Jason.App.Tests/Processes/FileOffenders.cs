@@ -1,3 +1,5 @@
+using System.IO.MemoryMappedFiles;
+using System.Runtime.Versioning;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
@@ -70,6 +72,45 @@ internal static class FileOffenders
     public static void DeletesADirectory() => Directory.Delete("x");
 
     public static void MovesADirectory() => Directory.Move("x", "y");
+
+    public static StreamWriter AppendsThroughAFileInfo() => new FileInfo("x").AppendText();
+
+    public static void DeletesThroughAFileInfo() => new FileInfo("x").Delete();
+
+    public static void MovesThroughAFileInfo() => new FileInfo("x").MoveTo("y");
+
+    public static FileInfo CopiesThroughAFileInfo() => new FileInfo("x").CopyTo("y");
+
+    public static FileInfo ReplacesThroughAFileInfo() => new FileInfo("x").Replace("y", null);
+
+    public static void CreatesThroughADirectoryInfo() => new DirectoryInfo("x").Create();
+
+    public static DirectoryInfo CreatesASubdirectory() => new DirectoryInfo("x").CreateSubdirectory("y");
+
+    public static void DeletesThroughADirectoryInfo() => new DirectoryInfo("x").Delete();
+
+    public static void DeletesATreeThroughADirectoryInfo() => new DirectoryInfo("x").Delete(recursive: true);
+
+    public static void MovesThroughADirectoryInfo() => new DirectoryInfo("x").MoveTo("y");
+
+    public static void LinksThroughADirectoryInfo() => new DirectoryInfo("x").CreateAsSymbolicLink("y");
+
+    public static void LinksThroughAFileInfo() => new FileInfo("x").CreateAsSymbolicLink("y");
+
+    public static ValueTask WritesAtAnOffsetLater(SafeFileHandle handle) => RandomAccess.WriteAsync(handle, new byte[] { 1 }.AsMemory(), 0);
+
+    public static void SetsALength(SafeFileHandle handle) => RandomAccess.SetLength(handle, 0);
+
+    public static FileSystemInfo LinksAFile() => File.CreateSymbolicLink("x", "y");
+
+    public static FileSystemInfo LinksADirectory() => Directory.CreateSymbolicLink("x", "y");
+
+    public static void SetsAttributes() => File.SetAttributes("x", FileAttributes.ReadOnly);
+
+    [UnsupportedOSPlatform("windows")]
+    public static void SetsAUnixMode() => File.SetUnixFileMode("x", UnixFileMode.UserRead);
+
+    public static MemoryMappedFile MapsAFile() => MemoryMappedFile.CreateFromFile("x");
 
     public static Action InALambda() => () => File.WriteAllText("x", "y");
 

@@ -1,5 +1,7 @@
+using System.IO.MemoryMappedFiles;
 using System.Reflection;
 using Jason.PluginHost.Sdk;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Processes;
 
@@ -14,6 +16,7 @@ public class OnlyTheFileDoorWritesTests
     private static readonly Assembly Host = typeof(FilesService).Assembly;
 
     [Fact]
+    [Critical(Family.B1, "the IL guard over the plugin host's writes")]
     public void No_method_of_the_plugin_host_writes_a_file_outside_the_door()
     {
         var offenders = IlReferences.Methods(Host)
@@ -30,6 +33,7 @@ public class OnlyTheFileDoorWritesTests
     /// method at all would pass the row above.
     /// </summary>
     [Fact]
+    [Critical(Family.B1, "the guard reads the door it holds apart")]
     public void The_scan_finds_the_door_itself_writing()
     {
         var found = IlReferences.Methods(Host)
@@ -71,6 +75,25 @@ public class OnlyTheFileDoorWritesTests
     [InlineData(nameof(FileOffenders.CreatesADirectory), "calls Directory.CreateDirectory")]
     [InlineData(nameof(FileOffenders.DeletesADirectory), "calls Directory.Delete")]
     [InlineData(nameof(FileOffenders.MovesADirectory), "calls Directory.Move")]
+    [InlineData(nameof(FileOffenders.AppendsThroughAFileInfo), "calls FileInfo.AppendText")]
+    [InlineData(nameof(FileOffenders.DeletesThroughAFileInfo), "calls FileSystemInfo.Delete")]
+    [InlineData(nameof(FileOffenders.MovesThroughAFileInfo), "calls FileInfo.MoveTo")]
+    [InlineData(nameof(FileOffenders.CopiesThroughAFileInfo), "calls FileInfo.CopyTo")]
+    [InlineData(nameof(FileOffenders.ReplacesThroughAFileInfo), "calls FileInfo.Replace")]
+    [InlineData(nameof(FileOffenders.CreatesThroughADirectoryInfo), "calls DirectoryInfo.Create")]
+    [InlineData(nameof(FileOffenders.CreatesASubdirectory), "calls DirectoryInfo.CreateSubdirectory")]
+    [InlineData(nameof(FileOffenders.DeletesThroughADirectoryInfo), "calls FileSystemInfo.Delete")]
+    [InlineData(nameof(FileOffenders.DeletesATreeThroughADirectoryInfo), "calls DirectoryInfo.Delete")]
+    [InlineData(nameof(FileOffenders.MovesThroughADirectoryInfo), "calls DirectoryInfo.MoveTo")]
+    [InlineData(nameof(FileOffenders.LinksThroughADirectoryInfo), "calls FileSystemInfo.CreateAsSymbolicLink")]
+    [InlineData(nameof(FileOffenders.LinksThroughAFileInfo), "calls FileSystemInfo.CreateAsSymbolicLink")]
+    [InlineData(nameof(FileOffenders.WritesAtAnOffsetLater), "calls RandomAccess.WriteAsync")]
+    [InlineData(nameof(FileOffenders.SetsALength), "calls RandomAccess.SetLength")]
+    [InlineData(nameof(FileOffenders.LinksAFile), "calls File.CreateSymbolicLink")]
+    [InlineData(nameof(FileOffenders.LinksADirectory), "calls Directory.CreateSymbolicLink")]
+    [InlineData(nameof(FileOffenders.SetsAttributes), "calls File.SetAttributes")]
+    [InlineData(nameof(FileOffenders.SetsAUnixMode), "calls File.SetUnixFileMode")]
+    [InlineData(nameof(FileOffenders.MapsAFile), "calls MemoryMappedFile.CreateFromFile")]
     [InlineData(nameof(FileOffenders.InALambda), "calls File.WriteAllText")]
     [InlineData(nameof(FileOffenders.InAnAsyncMethod), "calls File.Delete")]
     [InlineData(nameof(FileOffenders.InAnIterator), "makes a FileStream")]
@@ -130,9 +153,12 @@ public class OnlyTheFileDoorWritesTests
                 }
             }
             else if ((type == typeof(File) && WritesThroughFile(name))
-                || (type == typeof(FileInfo) && (name.StartsWith("Open", StringComparison.Ordinal) || name.StartsWith("Create", StringComparison.Ordinal)))
-                || (type == typeof(RandomAccess) && name == nameof(RandomAccess.Write))
-                || (type == typeof(Directory) && name is nameof(Directory.CreateDirectory) or nameof(Directory.Delete) or nameof(Directory.Move)))
+                || (type == typeof(FileInfo) && WritesThroughFileInfo(name))
+                || (type == typeof(DirectoryInfo) && name is nameof(DirectoryInfo.Create) or nameof(DirectoryInfo.CreateSubdirectory) or nameof(DirectoryInfo.Delete) or nameof(DirectoryInfo.MoveTo))
+                || (type == typeof(FileSystemInfo) && name is nameof(FileSystemInfo.Delete) or nameof(FileSystemInfo.CreateAsSymbolicLink))
+                || (type == typeof(RandomAccess) && name is nameof(RandomAccess.Write) or nameof(RandomAccess.WriteAsync) or nameof(RandomAccess.SetLength))
+                || (type == typeof(Directory) && name is nameof(Directory.CreateDirectory) or nameof(Directory.Delete) or nameof(Directory.Move) or nameof(Directory.CreateSymbolicLink))
+                || (type == typeof(MemoryMappedFile) && name == nameof(MemoryMappedFile.CreateFromFile)))
             {
                 yield return $"calls {type!.Name}.{name}";
             }
@@ -143,8 +169,15 @@ public class OnlyTheFileDoorWritesTests
         name is nameof(File.Open) or nameof(File.OpenWrite) or nameof(File.OpenHandle)
             or nameof(File.Create) or nameof(File.CreateText) or nameof(File.AppendText)
             or nameof(File.Move) or nameof(File.Delete) or nameof(File.Copy) or nameof(File.Replace)
+            or nameof(File.CreateSymbolicLink) or nameof(File.SetAttributes) or nameof(File.SetUnixFileMode)
         || name.StartsWith("AppendAll", StringComparison.Ordinal)
         || name.StartsWith("WriteAll", StringComparison.Ordinal);
+
+    /// <summary>A member a <see cref="FileInfo"/> and a <see cref="DirectoryInfo"/> share, <c>Delete</c> and the link, compiles to <see cref="FileSystemInfo"/>'s.</summary>
+    private static bool WritesThroughFileInfo(string name) =>
+        name.StartsWith("Open", StringComparison.Ordinal)
+        || name.StartsWith("Create", StringComparison.Ordinal)
+        || name is nameof(FileInfo.AppendText) or nameof(FileInfo.Delete) or nameof(FileInfo.MoveTo) or nameof(FileInfo.CopyTo) or nameof(FileInfo.Replace);
 
     private static string Name(MethodBase method) => $"{method.DeclaringType?.FullName}.{method.Name}";
 
