@@ -8,6 +8,7 @@ using Jason.Contracts.Harness;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
+using Jason.Runtime.Tests;
 using Jint;
 
 namespace Jason.PluginHost.Tests.Sdk;
@@ -264,6 +265,7 @@ public sealed class FilesServiceTests : IDisposable
     }
 
     [Fact]
+    [Critical(Family.X2, "no line leaves the granted directory by a link at the end of its path")]
     public void A_link_to_a_file_at_the_end_of_the_path_is_refused_and_nothing_lands_where_it_leads()
     {
         var target = Path.Combine(_package.Outside, "target.log");
