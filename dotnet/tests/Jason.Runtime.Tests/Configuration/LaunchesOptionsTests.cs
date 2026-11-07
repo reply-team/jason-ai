@@ -17,6 +17,8 @@ namespace Jason.Runtime.Tests.Configuration;
 /// </summary>
 public class LaunchesOptionsTests
 {
+    private const string PlantedValue = "731731731";
+
     private const string Retired = "Responder:MaxLaunchesPerDay was renamed to Launches:MaxPerDay:responder; "
         + "carry the value over by hand and take the old key out.";
 
@@ -214,21 +216,32 @@ public class LaunchesOptionsTests
             File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Launches":{"MaxPerDay":{"manager":6}}}""");
             Assert.True(await Dispatch.DispatchHarness.EventuallyAsync(() => launches.Current.MaxPerDay["manager"] == 6, Ct));
 
-            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Launches":{"MaxPerDay":{"manager":7}},"Responder":{"MaxLaunchesPerDay":731}}""");
+            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Launches":{"MaxPerDay":{"manager":7}},"Responder":{"MaxLaunchesPerDay":731731731}}""");
             Assert.True(await TestOptions.RefusedAsync(launches, Ct));
 
             Assert.Equal(6, launches.Current.MaxPerDay["manager"]);
             await fixture.Runtime.StopAsync();
 
             var log = string.Concat(Directory.GetFiles(fixture.Paths.LogsDirectory).Select(File.ReadAllText));
-            var refused = log
+            var lines = log
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries)
                 .Select(line => JsonNode.Parse(line)!)
+                .ToList();
+            var refused = lines
                 .Where(line => (string?)line["@l"] == "Error" && (string?)line["Section"] == LaunchesOptions.Section)
                 .Select(line => (string?)line["Failure"])
                 .ToList();
             Assert.Equal([Retired], refused);
-            Assert.DoesNotContain("731", log, StringComparison.Ordinal);
+
+            // The planted value is nine digits, a run of three repeated: no time fraction, process id, port, instance
+            // id or event id the log writes carries it by chance, so its presence in any field of any raw line, "@t"
+            // included, means the setting's value was written. A short value such as 731 is carried by a time stamp now and then.
+            foreach (var line in log.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                Assert.False(
+                    line.Contains(PlantedValue, StringComparison.Ordinal),
+                    $"The retired setting's value reached the log: {line}");
+            }
         }
     }
 
