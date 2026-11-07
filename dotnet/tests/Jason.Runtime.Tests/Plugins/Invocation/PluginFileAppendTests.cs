@@ -23,11 +23,14 @@ public sealed class PluginFileAppendTests
     /// <summary>About as long as a journal line: long enough that a line torn by another host cannot pass for a whole one.</summary>
     private const int LineLength = 300;
 
+    private static readonly TimeSpan ReaderPause = TimeSpan.FromMilliseconds(20);
+
     [Fact]
     [Critical(Family.R1, "several hosts appending to one file keep every line whole, on every platform")]
-    public async Task Four_plugin_hosts_appending_to_one_file_keep_every_line_whole_with_a_reader_open()
+    public async Task Four_plugin_hosts_appending_to_one_file_keep_every_line_whole_with_a_reader_polling()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "jason-file-append-tests", Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "jason-file-append-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(root, "lines");
         var file = Path.Combine(folder, "lines.jsonl");
         Directory.CreateDirectory(folder);
         try
@@ -39,18 +42,27 @@ public sealed class PluginFileAppendTests
                     Grant(paths, folder);
                 });
 
-            // A person's tail -f: it must neither stop the appends nor be stopped by them.
-            using var reader = new FileStream(file, FileMode.OpenOrCreate, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-
             var invocations = Enumerable.Range(0, Hosts)
                 .Select(host => PluginInvokerTests.InvokeAsync(
                     api,
                     PluginInvokerTests.Request("echo.run", new JsonObject { ["host"] = host }, plugin: "appender", timeout: TimeSpan.FromMinutes(4)),
                     TestContext.Current.CancellationToken))
                 .ToArray();
-            var outcomes = await Task.WhenAll(invocations);
+            var all = Task.WhenAll(invocations);
+
+            // A reader that must neither stop the appends nor be stopped by them, and that opens, reads and closes between
+            // its reads: on Linux and macOS a .NET program that keeps the file open holds a shared lock for as long as it does.
+            var read = new List<long>();
+            while (!all.IsCompleted)
+            {
+                read.Add(LengthRead(file));
+                await Task.WhenAny(all, Task.Delay(ReaderPause, TestContext.Current.CancellationToken));
+            }
+
+            var outcomes = await all;
 
             Assert.All(outcomes, outcome => Assert.IsType<InvocationOutcome.Succeeded>(outcome.Outcome));
+            Assert.Contains(read, length => length > 0 && length < Hosts * LinesPerHost * (LineLength + 1));
 
             var whole = File.ReadAllLines(file, new UTF8Encoding(false));
             Assert.Equal(Hosts * LinesPerHost, whole.Length);
@@ -69,11 +81,26 @@ public sealed class PluginFileAppendTests
         {
             try
             {
-                Directory.Delete(folder, recursive: true);
+                Directory.Delete(root, recursive: true);
             }
             catch (IOException)
             {
             }
+        }
+    }
+
+    /// <summary>What one read found, nothing when the file is not there yet or a writer has it for the length of a line.</summary>
+    private static long LengthRead(string file)
+    {
+        try
+        {
+            using var reader = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            reader.CopyTo(Stream.Null);
+            return reader.Position;
+        }
+        catch (IOException)
+        {
+            return 0;
         }
     }
 

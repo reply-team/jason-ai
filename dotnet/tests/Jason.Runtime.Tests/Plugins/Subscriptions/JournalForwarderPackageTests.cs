@@ -520,7 +520,9 @@ public sealed class JournalForwarderPackageTests
     /// <summary>A directory outside everything a test owns: a grant may not stand in a runtime's data directory or be its home.</summary>
     private sealed class Folder : IDisposable
     {
-        public string Directory { get; } = Path.Combine(Path.GetTempPath(), "jason-forwarder-file-tests", Guid.NewGuid().ToString("N"));
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-forwarder-file-" + Guid.NewGuid().ToString("N"));
+
+        public string Directory => Path.Combine(_root, "granted-directory");
 
         public string File => Path.Combine(Directory, "lines.jsonl");
 
@@ -529,6 +531,7 @@ public sealed class JournalForwarderPackageTests
         /// <summary>A file the disk will not add to, whoever asks: a failure of the disk, on every platform, without a full one.</summary>
         public void RefuseWrites()
         {
+            Assert.SkipWhen(Environment.UserName == "root", "root writes a read-only file all the same.");
             System.IO.Directory.CreateDirectory(Directory);
             System.IO.File.WriteAllText(File, string.Empty);
             System.IO.File.SetAttributes(File, FileAttributes.ReadOnly);
@@ -536,14 +539,14 @@ public sealed class JournalForwarderPackageTests
 
         public void Dispose()
         {
-            if (System.IO.Directory.Exists(Directory))
+            if (System.IO.Directory.Exists(_root))
             {
                 if (System.IO.File.Exists(File))
                 {
                     System.IO.File.SetAttributes(File, FileAttributes.Normal);
                 }
 
-                System.IO.Directory.Delete(Directory, recursive: true);
+                System.IO.Directory.Delete(_root, recursive: true);
             }
         }
     }
