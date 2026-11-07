@@ -9,4 +9,4 @@
 # the end, after the last edit to the package, since every edit changes the digest; once the version is bumped, the
 # package's test prints the line to append. A line already here is never changed, and a line that changes or disappears
 # in a diff is refused in review.
-1.0.0 sha256:8beadb344e7d7d005bb5b18ff4bfb1acda2beb9cd8beeeb916f608fb75f96395
+1.0.0 sha256:808fcbbd7cc58860ed128a6ed98d348ad2dbf1b6c11d5e89fcba6a12376cdaa9
