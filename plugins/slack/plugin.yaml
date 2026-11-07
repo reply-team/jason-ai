@@ -1,0 +1,30 @@
+manifest_version: 1
+id: slack
+version: 1.0.0
+kind: notification
+name: Slack
+description: Delivers Jason's notifications to a Slack channel - the pointer the runtime composes, and nothing else.
+homepage: https://github.com/reply-team/jason-ai/tree/main/plugins/slack
+contracts:
+  protocol: [1]
+  # The delivery contract this package performs, notification.send version 1. A notification plugin implements no
+  # canonical operation, so this manifest has no `operations` list.
+  operations: [1]
+capabilities:
+  http:
+    # Slack's Web API, one host for every workspace.
+    hosts: [slack.com]
+  env:
+    # The bot token, read with host.env where Plugins:Config:slack:token says nothing, and sent as a bearer header. It is
+    # never part of the binding.
+    variables: [SLACK_BOT_TOKEN]
+binding:
+  type: object
+  properties:
+    # A channel id (C, D, G or U followed by capitals and digits), the one spelling that survives a rename, or a channel
+    # name with or without the leading #. Sent as written.
+    channel:
+      type: string
+      pattern: "^(#?[a-z0-9._-]{1,80}|[CDGU][A-Z0-9]{8,})$"
+  required: [channel]
+  additionalProperties: false
