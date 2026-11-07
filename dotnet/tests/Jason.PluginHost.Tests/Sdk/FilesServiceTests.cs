@@ -38,7 +38,8 @@ public sealed class FilesServiceTests : IDisposable
         Action<InvocationBuilder>? configure = null,
         TimeSpan? sharingWait = null,
         TimeSpan? remaining = null,
-        IReadOnlyList<FileDirectoryGrant>? directories = null) =>
+        IReadOnlyList<FileDirectoryGrant>? directories = null,
+        Action<FileStream, byte[]>? lineWrite = null) =>
         new(
             _package.Root,
             builder =>
@@ -47,7 +48,8 @@ public sealed class FilesServiceTests : IDisposable
                 configure?.Invoke(builder);
             },
             remaining: remaining,
-            sharingWait: sharingWait);
+            sharingWait: sharingWait,
+            lineWrite: lineWrite);
 
     private static string Call(string path, string text) =>
         $"host.appendLine({JsonSerializer.Serialize(path)}, {JsonSerializer.Serialize(text)})";
@@ -466,6 +468,30 @@ public sealed class FilesServiceTests : IDisposable
         Assert.Equal("first\n", Text(File("a.log")));
         harness.Evaluate(Call(File("a.log"), "second"));
         Assert.Equal("first\nsecond\n", Text(File("a.log")));
+    }
+
+    /// <summary>
+    /// A file at its size limit takes part of the line and then refuses the rest, which .NET on Linux and macOS reports as
+    /// an <see cref="ArgumentOutOfRangeException"/>: the part comes off, and the plugin hears what the disk did.
+    /// </summary>
+    [Fact]
+    public void A_write_that_stops_part_of_the_way_comes_off_and_fails_as_the_disk_failing()
+    {
+        System.IO.File.WriteAllText(File("a.log"), "first\n");
+        var reached = 0L;
+        using var harness = Granted(lineWrite: (stream, line) =>
+        {
+            stream.Write(line, 0, line.Length / 2);
+            stream.Flush();
+            reached = stream.Length;
+            throw new ArgumentOutOfRangeException(nameof(line));
+        });
+
+        var failure = Caught(harness, File("a.log"));
+
+        Assert.True(reached > "first\n".Length, "the write took nothing, so nothing shows the part coming off.");
+        Assert.Equal(HostOutcomeCodes.FileWriteFailed, failure!["code"]!.GetValue<string>());
+        Assert.Equal("first\n", Text(File("a.log")));
     }
 
     [Fact]

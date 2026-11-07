@@ -57,6 +57,9 @@ public sealed class FilesService(HostServices services)
     /// <summary>How long a file another writer holds is waited for, inside what is left of the invocation.</summary>
     internal TimeSpan SharingWait { get; init; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>How a line goes to the open file: a write that stops part of the way is something no test can ask of a disk.</summary>
+    internal Action<FileStream, byte[]> LineWrite { get; init; } = static (stream, line) => stream.Write(line);
+
     /// <summary>Whether <paramref name="thrown"/> is a failure this door built, rather than one the plugin wrote in the same words.</summary>
     public bool Built(JsValue thrown) => _failures.Contains(thrown);
 
@@ -213,16 +216,16 @@ public sealed class FilesService(HostServices services)
             var end = stream.Seek(0, SeekOrigin.End);
             try
             {
-                stream.Write(line);
+                LineWrite(stream, line);
                 stream.Flush(flushToDisk: true);
             }
-            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            catch (Exception refused) when (IsTheDisk(refused))
             {
                 stream.SetLength(end);
                 throw;
             }
         }
-        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+        catch (Exception refused) when (IsTheDisk(refused))
         {
             services.Diagnostics.Host("warn", FailedMessage, record);
             var failure = HostFailure.Build(
@@ -237,6 +240,13 @@ public sealed class FilesService(HostServices services)
 
         services.Diagnostics.Host("info", AppendMessage, record);
     }
+
+    /// <summary>
+    /// What the disk's refusal arrives as. On Linux and macOS .NET reports a file at its size limit, <c>EFBIG</c>, as an
+    /// <see cref="ArgumentOutOfRangeException"/>, with part of the line already in the file.
+    /// </summary>
+    private static bool IsTheDisk(Exception refused) =>
+        refused is IOException or UnauthorizedAccessException or ArgumentOutOfRangeException;
 
     /// <summary>Whether the directory still leads where it did at the load: a place nobody granted is not reached through one somebody did.</summary>
     private static void RefuseAMove(FileDirectoryGrant directory)

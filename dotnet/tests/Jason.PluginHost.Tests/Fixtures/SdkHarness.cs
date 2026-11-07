@@ -23,7 +23,8 @@ public sealed class SdkHarness : IDisposable
         Func<Process, TimeSpan, bool>? endedWithin = null,
         Action<Process>? kill = null,
         Action<TimeSpan, TimeSpan>? spending = null,
-        TimeSpan? sharingWait = null)
+        TimeSpan? sharingWait = null,
+        Action<FileStream, byte[]>? lineWrite = null)
     {
         Invocation = InvocationFactory.Create(packageRoot, "echo.run", configure: configure);
         Diagnostics = new HostDiagnostics(
@@ -44,7 +45,8 @@ public sealed class SdkHarness : IDisposable
         Door = Invocation.Door is null ? null : new DoorService(Services, Invocation.Door);
         var defaults = new ExecService(Services);
         var exec = new ExecService(Services) { EndedWithin = endedWithin ?? defaults.EndedWithin, Kill = kill ?? defaults.Kill, Spending = spending };
-        var files = sharingWait is { } wait ? new FilesService(Services) { SharingWait = wait } : new FilesService(Services);
+        var door = new FilesService(Services);
+        var files = new FilesService(Services) { SharingWait = sharingWait ?? door.SharingWait, LineWrite = lineWrite ?? door.LineWrite };
         Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new ConfigService(Services), new LogService(Services), files, Door));
     }
 
