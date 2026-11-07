@@ -836,7 +836,8 @@ internal static class StatusChecks
     /// Whether each plugin package this runtime's release publishes is the one installed. Optional: a provider package is
     /// the person's to choose, so this never decides readiness. An earlier release's package fails it, and the fact names the
     /// command that installs this one's, <c>jason plugin install</c>, with what it replaces. One built or edited here
-    /// passes with a line that says so, and a development build compares against its own tree, named in the fact.
+    /// passes with a line that says so, a development build compares against its own tree, named in the fact, and the
+    /// packages not installed are one sentence.
     /// </summary>
     private static StatusCheck PluginPackage(SystemInfoResponse? info)
     {
@@ -859,7 +860,31 @@ internal static class StatusChecks
         var state = packages.Any(package => package.State == ReleasedPluginState.Behind) ? CheckState.Failed
             : packages.Any(package => package.State is ReleasedPluginState.Current or ReleasedPluginState.Differs) ? CheckState.Ok
             : CheckState.Absent;
-        return new StatusCheck(Name, false, state, string.Join(" ", packages.Select(package => PackageLine(info, package))), null);
+        return new StatusCheck(Name, false, state, string.Join(" ", PackageLines(info, packages)), null);
+    }
+
+    /// <summary>
+    /// A sentence per package, in the order the runtime says them, but for the packages not installed: two or more are one
+    /// sentence naming their ids, where the first of them stands, since a release publishes more packages than a person
+    /// installs and what there is to do is the same for each.
+    /// </summary>
+    private static IEnumerable<string> PackageLines(SystemInfoResponse info, IReadOnlyList<ReleasedPluginInfo> packages)
+    {
+        var missing = packages.Where(package => package.State == ReleasedPluginState.NotInstalled).Select(package => package.Id).ToList();
+        var said = false;
+        foreach (var package in packages)
+        {
+            if (package.State != ReleasedPluginState.NotInstalled || missing.Count == 1)
+            {
+                yield return PackageLine(info, package);
+            }
+            else if (!said)
+            {
+                said = true;
+                var ids = $"{string.Join(", ", missing[..^1])} and {missing[^1]}";
+                yield return $"{ids} are not installed; runtime {info.RuntimeVersion} carries each, the package its release publishes, and `jason plugin install <id>` installs one.";
+            }
+        }
     }
 
     private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package)
