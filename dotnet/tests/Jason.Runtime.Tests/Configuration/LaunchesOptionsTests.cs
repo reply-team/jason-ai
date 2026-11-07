@@ -17,6 +17,8 @@ namespace Jason.Runtime.Tests.Configuration;
 /// </summary>
 public class LaunchesOptionsTests
 {
+    private const string PlantedValue = "731731731";
+
     private const string Retired = "Responder:MaxLaunchesPerDay was renamed to Launches:MaxPerDay:responder; "
         + "carry the value over by hand and take the old key out.";
 
@@ -214,7 +216,7 @@ public class LaunchesOptionsTests
             File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Launches":{"MaxPerDay":{"manager":6}}}""");
             Assert.True(await Dispatch.DispatchHarness.EventuallyAsync(() => launches.Current.MaxPerDay["manager"] == 6, Ct));
 
-            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Launches":{"MaxPerDay":{"manager":7}},"Responder":{"MaxLaunchesPerDay":731}}""");
+            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Launches":{"MaxPerDay":{"manager":7}},"Responder":{"MaxLaunchesPerDay":731731731}}""");
             Assert.True(await TestOptions.RefusedAsync(launches, Ct));
 
             Assert.Equal(6, launches.Current.MaxPerDay["manager"]);
@@ -231,15 +233,14 @@ public class LaunchesOptionsTests
                 .ToList();
             Assert.Equal([Retired], refused);
 
-            // The value is looked for in every field of every line but "@t": seven digits of time fraction can carry
-            // it by chance, and a time is not a place the setting's value could have been written to.
-            foreach (var line in lines)
+            // The planted value is nine digits, a run of three repeated: no time fraction, process id, port, instance
+            // id or event id the log writes carries it by chance, so its presence in any field of any raw line, "@t"
+            // included, means the setting's value was written. A short value such as 731 is carried by a time stamp now and then.
+            foreach (var line in log.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
-                var timeless = (JsonObject)line.DeepClone();
-                timeless.Remove("@t");
                 Assert.False(
-                    timeless.ToJsonString().Contains("731", StringComparison.Ordinal),
-                    $"The retired setting's value reached the log: {timeless.ToJsonString()}");
+                    line.Contains(PlantedValue, StringComparison.Ordinal),
+                    $"The retired setting's value reached the log: {line}");
             }
         }
     }
