@@ -131,7 +131,7 @@ public sealed class PluginNotificationChannel(
                 "result_invalid",
                 FailureClass.Ambiguous,
                 "the answer is blocked, which the delivery contract does not declare"),
-            InvocationOutcome.Failed failed => ChannelOutcome.Failed(id, Kind, failed.Error.Code, failed.Error.Class),
+            InvocationOutcome.Failed failed => ChannelOutcome.Failed(id, Kind, failed.Error.Code, failed.Error.Class, failed.Error.Message),
             InvocationOutcome.ProtocolFailure protocol => ChannelOutcome.Failed(id, Kind, protocol.Code, OutcomeClassification.ClassOf(protocol.Code)),
             _ => ChannelOutcome.Failed(id, Kind, "result_invalid", FailureClass.Ambiguous),
         };

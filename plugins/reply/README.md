@@ -1241,14 +1241,22 @@ reported as cancelled, whatever the exit.
   a campaign sends on is read at Reply.
 - **`conversation.classify` does not say what the thread was filed under before.** Saying it would mean reading the
   whole thread before every filing; the reads report a thread's category.
-- **A contact's later replies by email can be lost.** For a sequence email Reply keeps
-  at most one reply to each email it sent, and drops a finished contact's later replies on that thread before it stores
-  them, so they reach none of `conversation.list`, `conversation.get` and the change feed `events.read` follows, and
-  Jason's inbound sync says nothing of them. After this side has answered on the thread through `conversation.reply`,
-  the contact's next replies on it are stored and read as usual. Answering a reply is therefore what keeps the
-  conversation visible to Jason, and a second reply that arrives before any answer may never be seen. A LinkedIn
-  thread keeps later messages, so they are read. Both statements are read from how Reply is built and are not yet
-  observed on an account; an observation on one account confirms or corrects them.
+- **A contact's later replies by email can be lost.** A reply that is lost reaches none of `conversation.list`,
+  `conversation.get` and the change feed `events.read` follows, and Jason's inbound sync says nothing of it. What
+  Reply detects, as a Jason user meets it:
+  - A direct email's replies are all detected, any number, a reply after an answer sent from Reply's inbox included.
+  - A second reply to a sequence email is not detected: Reply takes one reply to each email it sent, the first.
+  - After an answer sent from Reply's inbox on a sequence thread, a reply is detected only when the reply's own
+    headers reference that answer; a reply to the original sequence email is dropped.
+  - No auto-reply or out-of-office is stored on a direct thread.
+  - A reply whose `In-Reply-To` and `References` are both empty is dropped.
+  - A reply to a send older than 40 days is not matched unless a newer send to that address exists.
+
+  On a sequence thread, a reply after an answer sent from Reply's inbox is detected only when its own headers
+  reference that answer; a second reply to the sequence email itself is not. That a direct email's replies are all
+  detected, any number, was observed on an account. The others, the one about LinkedIn among them, are read from how
+  Reply is built and have not been observed; an observation on one account confirms or corrects them. A LinkedIn thread
+  keeps later messages, so they are read.
 - **The package asks for 256 MiB of memory.** The budget counts what an invocation allocates, every answer it reads
   included, and an answer can be as large as the exec capture (`Plugins:Exec:OutputBytes`, 4 MiB by default). It is
   under the installation's default ceiling of 512 MiB (`Plugins:Limits:MaxMemoryMb`). An installation that lowers

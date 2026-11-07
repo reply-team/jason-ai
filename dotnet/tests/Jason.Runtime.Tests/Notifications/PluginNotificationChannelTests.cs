@@ -344,6 +344,21 @@ public sealed class PluginNotificationChannelTests
         Assert.Equal((ChannelResult.Failed, "notification_unreachable", (FailureClass?)FailureClass.Transient), (outcome.Result, outcome.Code, outcome.Class));
     }
 
+    /// <summary>A failed answer's message is the diagnostic the line keeps, so a person reading the journal learns why.</summary>
+    [Fact]
+    public async Task A_failed_answer_s_message_is_the_channel_s_detail()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(
+            paths,
+            "carrier",
+            "export function invoke() { throw host.fail({ class: 'permanent', code: 'notification_refused', message: 'the service answered channel_not_found' }); }"));
+
+        var outcome = await Channel(api, "carrier", Topic()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Failed, "notification_refused", (FailureClass?)FailureClass.Permanent), (outcome.Result, outcome.Code, outcome.Class));
+        Assert.Equal("the service answered channel_not_found", outcome.Detail);
+    }
+
     /// <summary>The delivery family declares no block, so a channel that answers blocked has answered outside its contract.</summary>
     [Fact]
     public async Task A_channel_that_answers_blocked_is_an_answer_outside_the_contract()
