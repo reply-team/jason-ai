@@ -2,6 +2,15 @@
 
 This package versions independently of the Jason runtime, under SemVer.
 
+## 1.0.3
+
+A server of your own no longer needs an edit of the package: the manifest says `capabilities.http.any_granted_host: true`,
+so you grant your host under `Plugins:Grants:ntfy:Http` and name it in the binding's `server`, and the package stays the
+one a release published, which `jason update` moves on. `any_granted_host` needs Jason 0.31.0 or newer. An edited copy of
+an earlier version reads as behind this one, and `jason plugin install ntfy --replace` drops the edit; the grant and the
+binding it already has are all it needs. The README leads with `jason plugin install ntfy`, since releases publish the
+package from 0.32.0 on, and says that a failure's detail names an unreachable server by its address.
+
 ## 1.0.2
 
 The README says what a pointer may carry by pointing at the delivery contract, `notification.send`, and says in

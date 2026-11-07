@@ -1,10 +1,13 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Notifications.Plugins;
+using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Tests.Documentation;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.Tests.Plugins.Invocation;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,8 +16,8 @@ namespace Jason.Runtime.Tests.Notifications;
 
 /// <summary>
 /// The ntfy reference plugin, through the real plugin host, against an ntfy server on the loopback interface. The
-/// package is copied and its one host, <c>ntfy.sh</c>, replaced by the loopback server's — the self-hosted procedure
-/// its own README gives, which is an owner's edit of the manifest and so a package of a different identity.
+/// shipped package is copied whole and the loopback server's host granted — the self-hosted procedure its own README
+/// gives, which edits no file of the package, so what runs here is the package a release publishes.
 /// </summary>
 public sealed class NtfyPackageTests
 {
@@ -27,7 +30,7 @@ public sealed class NtfyPackageTests
 
     private static string Shipped => Path.Combine(AppContext.BaseDirectory, "Fixtures", "plugins", Id);
 
-    /// <summary>The package copied into a data directory, its host replaced by the one given, and granted that host and the token.</summary>
+    /// <summary>The shipped package copied into a data directory, and granted the host given and the token.</summary>
     private static void Install(JasonPaths paths, string? host)
     {
         var root = paths.PluginPackageDirectory(Id);
@@ -39,10 +42,6 @@ public sealed class NtfyPackageTests
 
         if (host is not null)
         {
-            var manifest = Path.Combine(root, "plugin.yaml");
-            var edited = File.ReadAllText(manifest).Replace("hosts: [ntfy.sh]", $"hosts: [{host}]", StringComparison.Ordinal);
-            Assert.NotEqual(File.ReadAllText(manifest), edited);
-            File.WriteAllText(manifest, edited);
             TestPlugins.Grant(paths, Id, http: [host], env: [TokenVariable]);
         }
     }
@@ -136,18 +135,30 @@ public sealed class NtfyPackageTests
         var outcome = await Channel(api, "http://" + host).DeliverAsync(Message, "ntf_01K0test", Ct);
 
         Assert.Equal((ChannelResult.Failed, "notification_unreachable", (FailureClass?)FailureClass.Transient), (outcome.Result, outcome.Code, outcome.Class));
+
+        // What the README says of it: the failure's message is the operating system's wording, and that names the binding's
+        // server by its address, on a line every subscriber of the kind reads.
+        Assert.Contains(host, outcome.Detail, StringComparison.Ordinal);
     }
 
-    /// <summary>A binding that names a server the package was not granted is the host's refusal, recorded, never a send.</summary>
-    [Fact]
-    public async Task A_server_whose_host_is_not_granted_is_a_recorded_failure()
+    /// <summary>
+    /// A binding that names a server the package was not granted is the host's refusal, recorded, never a send, though the
+    /// manifest leaves the host to the grant: a grant of another host does not reach it, neither does the star, which
+    /// means the declared host alone, and no grant at all is no capability to call with.
+    /// </summary>
+    [Theory]
+    [InlineData("another host", "http_host_not_allowed")]
+    [InlineData("the star", "http_host_not_allowed")]
+    [InlineData("no grant", "capability_not_granted")]
+    public async Task A_server_whose_host_is_not_granted_is_a_recorded_failure(string grant, string code)
     {
         using var ntfy = new LoopbackNtfy();
-        await using var api = await PluginInvokerTests.StartAsync(paths => Install(paths, ntfy.HostKey));
+        await using var api = await PluginInvokerTests.StartAsync(paths =>
+            Install(paths, grant switch { "another host" => $"127.0.0.1:{LoopbackNtfy.FreePort()}", "the star" => "*", _ => null }));
 
-        var outcome = await Channel(api, $"http://127.0.0.1:{LoopbackNtfy.FreePort()}").DeliverAsync(Message, "ntf_01K0test", Ct);
+        var outcome = await Channel(api, ntfy.Server).DeliverAsync(Message, "ntf_01K0test", Ct);
 
-        Assert.Equal((ChannelResult.Failed, "http_host_not_allowed", (FailureClass?)FailureClass.Permanent), (outcome.Result, outcome.Code, outcome.Class));
+        Assert.Equal((ChannelResult.Failed, code, (FailureClass?)FailureClass.Permanent), (outcome.Result, outcome.Code, outcome.Class));
         Assert.Empty(ntfy.Requests);
     }
 
@@ -179,20 +190,21 @@ public sealed class NtfyPackageTests
         Assert.DoesNotContain("jason-topic-7f3c", written, StringComparison.Ordinal);
     }
 
-    /// <summary>The self-hosted edit makes a package of another identity: the digest is the copy's, not the shipped one's.</summary>
+    /// <summary>
+    /// A server of the person's own takes a grant and a binding, and the package that reaches it is the one a release
+    /// publishes: no file of it changed, so its digest is the last line of its list, and an update moves it on.
+    /// </summary>
     [Fact]
-    public async Task Editing_the_manifest_changes_the_package_s_identity()
+    public async Task A_self_hosted_server_takes_a_grant_and_the_package_stays_the_published_one()
     {
-        string shipped;
-        await using (var api = await PluginInvokerTests.StartAsync(paths => Install(paths, host: null)))
-        {
-            shipped = api.Resolve<PluginRegistry>().Snapshot.Find(Id)!.Digest;
-        }
-
         using var ntfy = new LoopbackNtfy();
-        await using var edited = await PluginInvokerTests.StartAsync(paths => Install(paths, ntfy.HostKey));
+        await using var api = await PluginInvokerTests.StartAsync(paths => Install(paths, ntfy.HostKey));
 
-        Assert.NotEqual(shipped, edited.Resolve<PluginRegistry>().Snapshot.Find(Id)!.Digest);
+        var outcome = await Channel(api, ntfy.Server).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal(ChannelResult.Delivered, outcome.Result);
+        var listed = File.ReadAllLines(Path.Combine(RepositoryTree.Root(), DigestList)).Last(entry => entry.Length > 0 && !entry.StartsWith('#'));
+        Assert.Equal(listed, $"{PackageVersion} {api.Resolve<PluginRegistry>().Snapshot.Find(Id)!.Digest}");
     }
 
     [Fact]
@@ -207,8 +219,57 @@ public sealed class NtfyPackageTests
         Assert.Equal(PluginKind.Notification, plugin.Manifest.Kind);
 
         // The content digest covers every file in the package, its README included, so the version moves with it.
-        Assert.Equal("1.0.2", plugin.Manifest.Version);
+        Assert.Equal(PackageVersion, plugin.Manifest.Version);
         Assert.Contains(DeliveryContract.CurrentVersion, plugin.Manifest.Contracts.Operations);
         Assert.Equal(["ntfy.sh"], plugin.Manifest.Capabilities.Http!.Hosts);
+        Assert.True(plugin.Manifest.Capabilities.Http!.AnyGrantedHost);
+    }
+
+    /// <summary>The version of the package as this tree holds it.</summary>
+    private const string PackageVersion = "1.0.3";
+
+    /// <summary>The list beside the package that records the digest of each of its versions, as Reply's list does for Reply's.</summary>
+    private const string DigestList = "plugins/ntfy.digests";
+
+    /// <summary>
+    /// The digest of each version the package had before a release published it, computed from the tree of the tag that
+    /// first shipped it: v0.2.0, v0.5.0 and v0.7.0. A tag's tree never changes, so these lines never do: they are what lets
+    /// <c>jason update</c> read a copy a person made by hand from any of those releases as its version, and replace it.
+    /// </summary>
+    private static readonly string[] ShippedInTheTree =
+    [
+        "1.0.0 sha256:16394c9b2ff439c19a42a3bc069502bfd6b12c44b21e2a7be4448ac0eebefc12",
+        "1.0.1 sha256:b95b95345e0dd6cf2933f38a58f1c558c4db5f5d1517d095ec1ed7ae203bec32",
+        "1.0.2 sha256:bcd90d5dcdd558ac42a5d27b699bb1b9a3b129c8efb7fb887021192a9a0d8a34",
+    ];
+
+    /// <summary>
+    /// A package's version is its content: the digest of the shipped package has one line on the list beside it, for the
+    /// version its manifest names, and that line is the last, after the three versions the tags shipped in their trees.
+    /// </summary>
+    [Fact]
+    [Critical(Family.R1, "a package's version is its content")]
+    public void The_package_is_the_digest_its_version_has_on_the_list()
+    {
+        var root = RepositoryTree.Root();
+        var package = Path.Combine(root, "plugins", Id);
+        var version = YamlToJson.Convert(File.ReadAllText(Path.Combine(package, "plugin.yaml")))!["version"]!.GetValue<string>();
+        var line = $"{version} {PackageDigest.Compute(package).Digest}";
+
+        var path = Path.Combine(root, DigestList);
+        Assert.True(File.Exists(path), $"{DigestList} is missing. Create it with a header comment and this line:{Environment.NewLine}{line}");
+
+        var listed = File.ReadAllLines(path).Where(entry => entry.Length > 0 && !entry.StartsWith('#')).ToList();
+        foreach (var entry in listed)
+        {
+            Assert.Matches(new Regex("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*) sha256:[0-9a-f]{64}$"), entry);
+        }
+
+        Assert.Equal(ShippedInTheTree, listed.Take(ShippedInTheTree.Length));
+        Assert.Equal(listed.Count, listed.Select(entry => entry.Split(' ')[0]).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(listed.Count, listed.Select(entry => entry.Split(' ')[1]).Distinct(StringComparer.Ordinal).Count());
+        Assert.True(
+            listed[^1] == line,
+            $"The last line of {DigestList} is the shipped package's, version {version}. Append this line, after the last edit to the package:{Environment.NewLine}{line}");
     }
 }

@@ -371,6 +371,7 @@ public sealed class TelegramPackageTests
     /// version its manifest names, and that line is the last. The list starts at 1.0.0, the package's first version.
     /// </summary>
     [Fact]
+    [Critical(Family.R1, "a package's version is its content")]
     public void The_package_is_the_digest_its_version_has_on_the_list()
     {
         var root = RepositoryTree.Root();

@@ -183,7 +183,7 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/notifications.md", "The floor allows at most 48 a day at the defaults that reach somebody")]
     [InlineData("docs/notifications.md", "A Linux runtime with `notify-send` and a session bus but no notification daemon and no `gdbus` cannot ask whether a daemon is there, so its toast is recorded `failed`, `toast_failed`; `Notifications:Toast` set to `false` turns it off.")]
     [InlineData("docs/notifications.md", "a Linux runtime with no session bus, or with no notification daemon running and none the bus can start on demand, record the toast as `not_attempted`, `no_desktop`.")]
-    [InlineData("plugins/ntfy/plugin.yaml", "canonical operation, so this manifest has no `operations` list.")]
+    [InlineData("plugins/ntfy/plugin.yaml", "canonical operation: the `operations` list names versions of the delivery contract.")]
     [InlineData("docs/notifications.md", "At every toast the toast host ensures the key")]
     [InlineData("docs/notifications.md", "with `DisplayName` `Jason` — written the first time, only read after that — from an ordinary prompt.")]
     [InlineData("docs/notifications.md", "opens your UI on Windows: on the one approval or question when exactly one waits, on the list of what waits otherwise, paired as `jason ui open` pairs (§7). On macOS and Linux a click opens nothing of Jason's")]
