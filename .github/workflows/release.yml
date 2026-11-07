@@ -2,11 +2,11 @@
 # each packaging one platform through the same action ci.yml runs on every pull request, and smoke-testing what it
 # published, the Linux one first running the critical tier at the tag, the macOS one, in a job of its own that runs no
 # test, signing and notarizing its executable, and the Windows one, in a job of its own that runs no test either,
-# signing its executable through Artifact Signing, and one job that archives the plugins' packages, Reply's and the
-# journal forwarder's, from the tag's tree; then the release job — the only one that may write to this repository —
-# assembles the manifest and the checksums and publishes the release at once, with its notes and its assets, and a
-# last job asks the Homebrew tap to bump its formula. The release pull request into main, and its run on every
-# platform, come before the tag: the tag is that merge.
+# signing its executable through Artifact Signing, and one job that archives the plugins' packages from the tag's
+# tree; then the release job — the only one that may write to this repository — assembles the manifest and the
+# checksums and publishes the release at once, with its notes and its assets, and a last job asks the Homebrew tap to
+# bump its formula. The release pull request into main, and its run on every platform, come before the tag: the tag is
+# that merge.
 #
 # A release is published from reply-team/jason-ai alone. The same tag pushed anywhere else that holds this workflow —
 # a fork, a copy — builds what it can and publishes nothing: without the signing secrets its macOS and Windows jobs
@@ -610,6 +610,18 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/Write-PluginArchive.ps1 -Package plugins/journal-forwarder -Archive artifacts/release/jason-plugin-journal-forwarder.zip
 
+      - name: Archive plugins/ntfy
+        shell: pwsh
+        run: ./.github/scripts/Write-PluginArchive.ps1 -Package plugins/ntfy -Archive artifacts/release/jason-plugin-ntfy.zip
+
+      - name: Archive plugins/slack
+        shell: pwsh
+        run: ./.github/scripts/Write-PluginArchive.ps1 -Package plugins/slack -Archive artifacts/release/jason-plugin-slack.zip
+
+      - name: Archive plugins/telegram
+        shell: pwsh
+        run: ./.github/scripts/Write-PluginArchive.ps1 -Package plugins/telegram -Archive artifacts/release/jason-plugin-telegram.zip
+
       # Named so that the publishing job's download of jason-* brings each beside the archives, where the checksums are
       # written.
       - uses: actions/upload-artifact@v7
@@ -622,6 +634,24 @@ jobs:
         with:
           name: jason-plugin-journal-forwarder
           path: artifacts/release/jason-plugin-journal-forwarder.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-plugin-ntfy
+          path: artifacts/release/jason-plugin-ntfy.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-plugin-slack
+          path: artifacts/release/jason-plugin-slack.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-plugin-telegram
+          path: artifacts/release/jason-plugin-telegram.zip
           if-no-files-found: error
 
   ui:
@@ -720,7 +750,7 @@ jobs:
           # needs and hands over to the new executable, so an older build goes through it first. The floor moves only
           # when an applier change raises it. Each plugin's entry is the tag's digest list of that package, whose last
           # line is the package this release publishes, so nothing is built or hashed here to say which package that is.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-plugin-journal-forwarder.zip,jason-ui.zip -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests,plugins/journal-forwarder.digests
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-plugin-journal-forwarder.zip,jason-plugin-ntfy.zip,jason-plugin-slack.zip,jason-plugin-telegram.zip,jason-ui.zip -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests,plugins/journal-forwarder.digests,plugins/ntfy.digests,plugins/slack.digests,plugins/telegram.digests
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 
@@ -831,10 +861,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "gh release delete exited with $LASTEXITCODE" }
           }
 
-          # gh names an asset by its file name. The archives, the feed and the three packages, the two plugins' and
+          # gh names an asset by its file name. The archives, the feed and the six packages, the five plugins' and
           # the UI's, were assembled under artifacts/release; the install scripts are the tag's own, so a one-liner
           # pinned to this release runs the script it was published with.
-          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-ui.zip')
+          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-plugin-ntfy.zip', 'artifacts/release/jason-plugin-slack.zip', 'artifacts/release/jason-plugin-telegram.zip', 'artifacts/release/jason-ui.zip')
           gh release create "v$env:VERSION" -R $repository @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
           if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }

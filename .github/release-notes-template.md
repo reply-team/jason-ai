@@ -28,6 +28,9 @@ at this version and released only after its tests passed.
 | `install.ps1` | Windows: the install script this release was published with |
 | `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, which `jason plugin install reply` places in `~/.jason/plugins/reply` |
 | `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at `v{{version}}`, which `jason plugin install journal-forwarder` places in `~/.jason/plugins/journal-forwarder` |
+| `jason-plugin-ntfy.zip` | the ntfy plugin's package: the files of `plugins/ntfy` at `v{{version}}`, which `jason plugin install ntfy` places in `~/.jason/plugins/ntfy` |
+| `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at `v{{version}}`, which `jason plugin install slack` places in `~/.jason/plugins/slack` |
+| `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at `v{{version}}`, which `jason plugin install telegram` places in `~/.jason/plugins/telegram` |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |
 
 Each archive holds the executable, `LICENSE` (the MIT licence, which covers the whole repository, the runtime
@@ -36,7 +39,9 @@ included) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is
 `checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it. The journal forwarder's
 package is installed the same way, by `jason plugin install journal-forwarder`, into
 `~/.jason/plugins/journal-forwarder`; its README says how a receiver on another host takes a grant and a configuration
-and no edit of the package. The UI's package is placed by `jason ui install`, which the install guide runs and
+and no edit of the package. The packages of ntfy, Slack and Telegram are installed the same way, each by
+`jason plugin install <id>`, into `~/.jason/plugins/<id>`; each one's README says what it takes to name it as a
+notification channel. The UI's package is placed by `jason ui install`, which the install guide runs and
 `jason update apply` runs at its end.
 On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry and minimal
 images may not; the install script stops, with the runtime's own message, rather than install a program that does

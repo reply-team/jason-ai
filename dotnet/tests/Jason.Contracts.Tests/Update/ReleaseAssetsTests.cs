@@ -54,6 +54,16 @@ public class ReleaseAssetsTests
         Assert.Equal("jason-plugin-journal-forwarder.zip", ReleaseAssets.JournalForwarderPlugin);
 
     /// <summary>
+    /// The three packages that deliver Jason's notifications are named the same way, each by its id, which is the name
+    /// <c>jason plugin install</c> downloads.
+    /// </summary>
+    [Fact]
+    public void The_notification_packages_each_have_one_stable_asset_name() =>
+        Assert.Equal(
+            ["jason-plugin-ntfy.zip", "jason-plugin-slack.zip", "jason-plugin-telegram.zip"],
+            [ReleaseAssets.NtfyPlugin, ReleaseAssets.SlackPlugin, ReleaseAssets.TelegramPlugin]);
+
+    /// <summary>
     /// The UI's package, which <c>jason ui install</c> fetches beside the checksums: one name for every release, its
     /// version inside its own <c>manifest.json</c>.
     /// </summary>
@@ -63,14 +73,14 @@ public class ReleaseAssetsTests
 
     /// <summary>
     /// Every file a release carries, in the order the workflow attaches them: the three archives, the feed and its
-    /// checksums, the two install scripts, the two plugins' packages, Reply's and the journal forwarder's, and the UI's.
-    /// Ten, and an eleventh is a decision rather than a drift.
+    /// checksums, the two install scripts, the five plugins' packages, and the UI's. Thirteen, and a fourteenth is a
+    /// decision rather than a drift.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "the release's asset set")]
-    public void A_release_publishes_exactly_these_ten_files() =>
+    public void A_release_publishes_exactly_these_thirteen_files() =>
         Assert.Equal(
-            ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip", "jason-plugin-journal-forwarder.zip", "jason-ui.zip"],
+            ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip", "jason-plugin-journal-forwarder.zip", "jason-plugin-ntfy.zip", "jason-plugin-slack.zip", "jason-plugin-telegram.zip", "jason-ui.zip"],
             ReleaseAssets.Published);
 
     /// <summary>

@@ -55,6 +55,24 @@ public static class ReleaseAssets
     public const string JournalForwarderPlugin = "jason-plugin-journal-forwarder.zip";
 
     /// <summary>
+    /// The ntfy plugin's package: the files of <c>plugins/ntfy</c> at the release's tag, at the archive's root, published
+    /// and listed as <see cref="ReplyPlugin"/> is, and placed by <c>jason plugin install ntfy</c>.
+    /// </summary>
+    public const string NtfyPlugin = "jason-plugin-ntfy.zip";
+
+    /// <summary>
+    /// The Slack plugin's package: the files of <c>plugins/slack</c> at the release's tag, at the archive's root, published
+    /// and listed as <see cref="ReplyPlugin"/> is, and placed by <c>jason plugin install slack</c>.
+    /// </summary>
+    public const string SlackPlugin = "jason-plugin-slack.zip";
+
+    /// <summary>
+    /// The Telegram plugin's package: the files of <c>plugins/telegram</c> at the release's tag, at the archive's root,
+    /// published and listed as <see cref="ReplyPlugin"/> is, and placed by <c>jason plugin install telegram</c>.
+    /// </summary>
+    public const string TelegramPlugin = "jason-plugin-telegram.zip";
+
+    /// <summary>
     /// The UI's package: the build <c>npm run package</c> makes from <c>ui/</c> at the release's tag, with the release's
     /// version in its <c>manifest.json</c>. <c>jason ui install</c> places it as the default UI.
     /// </summary>
@@ -66,7 +84,7 @@ public static class ReleaseAssets
 
     /// <summary>Every file a release carries, in the order the release workflow attaches them.</summary>
     public static IReadOnlyList<string> Published { get; } =
-        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, JournalForwarderPlugin, Ui];
+        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, JournalForwarderPlugin, NtfyPlugin, SlackPlugin, TelegramPlugin, Ui];
 
     /// <summary>The archive a platform's release is published as.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The platform is not one this build publishes for.</exception>
