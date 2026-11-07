@@ -712,10 +712,14 @@ another place to report to can go on and report there, and end on a word of its 
 catch it, or throws it on as it came, ends as §8 says.
 
 **One open per line.** A subscription runs one chain per kind, so several hosts may write one file at the same moment.
-Each line takes its own open, which keeps every other writer out for as long as the line takes. A reader that takes no lock, as `tail -f` and a log shipper do, is not in the way, nor is one that closes between reads, as PowerShell's `Get-Content -Wait` does; on Linux and macOS a .NET program that keeps the file open holds a shared lock for as long as it does, and an append then waits up to ten seconds and fails `file_write_failed`. Measured with four processes: any wider sharing loses
-lines. A writer that holds the file is waited for, up to ten seconds and never past what is left of the invocation; past
-that the call is `file_write_failed`. Grant a directory on a local disk: a file system without `flock` locks nothing and
-says nothing.
+Each line takes its own open, which keeps every other writer out for as long as the line takes. A reader that takes no
+lock, as `tail -f` and a log shipper do, is not in the way, nor is one that closes between reads, as PowerShell's
+`Get-Content -Wait` does; on Linux and macOS a .NET program that keeps the file open holds a shared lock for as long as
+it does, and an append then waits up to ten seconds and fails `file_write_failed`. Measured with four processes: any
+wider sharing loses lines. A writer that holds the file is waited for, up to ten seconds and never past what is left of
+the invocation; past that the call is `file_write_failed`. Grant a directory on a local disk: a file system without
+`flock` locks nothing and says nothing. On Linux and macOS the exclusion holds against writers that take the lock: a
+shell's `>>` takes none and can interleave.
 
 **A refused line comes off.** Whatever of a line the disk took before it refused the rest is cut away while the open is held,
 so the next line starts where this one did. What a killed process left cannot be: after a kill a reader drops a line without

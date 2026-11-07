@@ -185,14 +185,14 @@ where it may write is yours to say, in two entries of `~/.jason/config/settings.
 }
 ```
 
-`Files` lists directories, as absolute paths, and the file stands directly in one of them; give the plugin a directory of
-its own, and never a folder another program runs from or reads its instructions from (a logon's startup folder,
-LaunchAgents, autostart, `.ssh`, an agent host's instruction folder). The directory and the file are made at the first line, and the file is only ever added to: nothing in Jason trims,
-renames or deletes it. `file` may instead be `JOURNAL_FORWARDER_FILE` in the runtime's environment, listed under `Env` in the
-grant, and the key comes first, as `url` does. With a file alone, the grant names no host and no URL is needed. Run
-`jason plugin reload` after changing either entry. Section 9 of the
-[plugin guide](../../docs/plugins.md) lists the directories that may not be granted, and section 6 the file names the
-plugin host refuses.
+`Files` lists directories, as absolute paths, and the file stands directly in one of them; give the plugin a directory
+of its own, and never a folder another program runs from or reads its instructions from (a logon's startup folder,
+LaunchAgents, autostart, `.ssh`, an agent host's instruction folder). The directory and the file are made at the first
+line, and the file is only ever added to: nothing in Jason trims, renames or deletes it. `file` may instead be
+`JOURNAL_FORWARDER_FILE` in the runtime's environment, listed under `Env` in the grant, and the key comes first, as
+`url` does. With a file alone, the grant names no host and no URL is needed. Run `jason plugin reload` after changing
+either entry. Section 9 of the [plugin guide](../../docs/plugins.md) lists the directories that may not be granted, and
+section 6 the file names the plugin host refuses.
 
 **What stays on the disk.** A line carries what the journal says, as it does for a receiver: campaign and contact names,
 fields and contexts as they changed, addresses put on the do-not-contact register, the reasons people typed. The file is
@@ -212,7 +212,9 @@ directory granted at all, or a line longer than the host allows ends the invocat
 receivers: nothing further is sent, the failure is permanent, and only a change to the settings repairs it. A URL that is
 not one (`forwarder_url_invalid`) is found first, so nothing has been added to the file by then.
 
-A reader that takes no lock, as `tail -f` and a log shipper do, is not in the way, nor is one that closes between reads, as PowerShell's `Get-Content -Wait` does; on Linux and macOS a .NET program that keeps the file open holds a shared lock for as long as it does, and an append then waits up to ten seconds and fails `file_write_failed`.
+A reader that takes no lock, as `tail -f` and a log shipper do, is not in the way, nor is one that closes between reads,
+as PowerShell's `Get-Content -Wait` does; on Linux and macOS a .NET program that keeps the file open holds a shared lock
+for as long as it does, and an append then waits up to ten seconds and fails `file_write_failed`.
 
 A line the disk refused part of the way comes off again; what a killed process left cannot, so after a kill a reader drops a
 line without a line feed, and one a later line has joined is not JSON.
