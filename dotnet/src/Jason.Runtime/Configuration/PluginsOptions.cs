@@ -1,10 +1,10 @@
 namespace Jason.Runtime.Configuration;
 
 /// <summary>
-/// What the user grants one plugin out of what its manifest requests: four lists naming executables, hosts,
-/// environment variables and Runtime API families. <c>*</c> grants everything that plugin requested for that capability; an absent list
-/// grants nothing, which is also the default for a plugin nobody has decided about. Declaration is not
-/// permission.
+/// What the user grants one plugin out of what its manifest requests: lists naming executables, hosts, environment
+/// variables, Runtime API families and journal kinds, where <c>*</c> grants everything that plugin requested for that
+/// capability, and the directories it may append lines in. An absent list grants nothing, which is also the default for a
+/// plugin nobody has decided about. Declaration is not permission.
 /// </summary>
 public sealed class PluginGrant
 {
@@ -22,6 +22,12 @@ public sealed class PluginGrant
     /// granted and not declared admits nothing.
     /// </summary>
     public List<string> Subscriptions { get; set; } = [];
+
+    /// <summary>
+    /// The absolute directories a handler may append lines in, for a package whose manifest asks for files: the one list a
+    /// manifest cannot name, so it has no star. A load refuses one that leads to a place the runtime keeps out of it.
+    /// </summary>
+    public List<string> Files { get; set; } = [];
 }
 
 /// <summary>

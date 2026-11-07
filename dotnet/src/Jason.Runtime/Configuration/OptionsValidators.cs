@@ -212,7 +212,7 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
         {
             if (grant is null)
             {
-                failures.Add($"{SettingKey.ShownPath($"Plugins:Grants:{pluginId}", installed.Value)} must be an object with Exec, Http, Env, Api and Subscriptions lists.");
+                failures.Add($"{SettingKey.ShownPath($"Plugins:Grants:{pluginId}", installed.Value)} must be an object with Exec, Http, Env, Api, Subscriptions and Files lists.");
                 continue;
             }
 

@@ -99,6 +99,33 @@ public static class HarnessRoot
     }
 
     /// <summary>
+    /// Why a directory a person grants a plugin to append lines in may not be one, as the sentence of the package problem,
+    /// or null when it may: a directory is named whole, and the places no level of the harness may be are no plugin's
+    /// either. The home, a folder holding it and the top of a drive would open the account to a package's lines, and the
+    /// data directory is the runtime's own. The sentence never says the path back.
+    /// </summary>
+    public static string? GrantRefusal(string? directory, JasonPaths paths, string home)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(home);
+        if (string.IsNullOrWhiteSpace(directory) || directory.Contains('\0', StringComparison.Ordinal) || !Path.IsPathFullyQualified(Undevice(directory)))
+        {
+            return "a file grant must be an absolute path, one that starts at a drive, a share or the file system's top, and neither a star nor a tilde is expanded.";
+        }
+
+        return Where(directory, paths, home) switch
+        {
+            Place.Home => "a file grant must not be the home directory; name a folder of its own.",
+            Place.Top => "a file grant must not be the top of a drive, a share or the file system; name a folder of its own.",
+            Place.HoldsHome => "a file grant must not hold the home directory; name a folder of its own.",
+            Place.Data => "a file grant must not be the data directory, which is the runtime's own.",
+            Place.InsideData => "a file grant must not be inside the data directory, which is the runtime's own.",
+            Place.HoldsData => "a file grant must not hold the data directory, which is the runtime's own.",
+            _ => null,
+        };
+    }
+
+    /// <summary>
     /// Why a folder a person names for a project may not be one by where it stands to the harness root, as the message of a
     /// refused field, or null when it may: the root is the client's level, a folder holding it would have its memory file
     /// read by every session started in any project or campaign, and the root's <c>projects/</c> holds every project's

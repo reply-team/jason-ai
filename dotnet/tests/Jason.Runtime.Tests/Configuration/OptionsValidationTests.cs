@@ -108,6 +108,35 @@ public class OptionsValidationTests
     }
 
     /// <summary>
+    /// A directory is no name a manifest requests, so the grammar of the other lists does not read it. Where it leads is
+    /// the load's to refuse, as a package problem, and an edit of the file never stops a runtime for it.
+    /// </summary>
+    [Fact]
+    public void A_file_grant_is_not_read_by_the_grammar_of_the_other_lists()
+    {
+        var result = new PluginsOptionsValidator(Installed("fake")).Validate(null, new PluginsOptions
+        {
+            Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fake"] = new PluginGrant { Files = ["/var/lines with a space", "relative", "*"] },
+            },
+        });
+
+        Assert.False(result.Failed, string.Join('\n', result.Failures ?? []));
+    }
+
+    [Fact]
+    public void A_grant_written_as_nothing_is_told_every_list_it_may_hold()
+    {
+        var result = new PluginsOptionsValidator(Installed("fake")).Validate(null, new PluginsOptions
+        {
+            Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase) { ["fake"] = null! },
+        });
+
+        Assert.Equal("Plugins:Grants:fake must be an object with Exec, Http, Env, Api, Subscriptions and Files lists.", Assert.Single(result.Failures!));
+    }
+
+    /// <summary>
     /// A grant entry that names an executable and then a newline names no executable at all: nothing a manifest
     /// requests can match it, so it would sit in the file looking like a permission and granting nothing. The
     /// settings file is a person's to edit, and what they need back is the line, not silence.

@@ -326,7 +326,9 @@ rejects the whole reload: the previous snapshot stays active, `plugin reload` an
 `plugin list` keeps showing the old snapshot with `"activated": false` on the root and the same
 problems under `last_reload`. A `settings.json` the reload cannot read rejects it as well, with a
 `settings_file_unreadable` detail in the 409 (§9), and so does a `Plugins` section of the settings file that fails
-its validator (`plugins_settings_invalid`).
+its validator (`plugins_settings_invalid`). A directory in a `Files` grant that may not stand (§9) rejects it the same
+way, `grant_path_refused` at `grants.files[i]`: the mistake is in the settings, and a load that froze it would open a
+place no plugin may write in.
 
 At the first load there is no previous snapshot to keep, so the same rule empties the registry: one
 bad package leaves every other package unloaded until it is fixed, and the startup report names it

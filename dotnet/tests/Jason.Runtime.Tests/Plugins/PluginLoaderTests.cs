@@ -1,6 +1,8 @@
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Harness;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Harness;
 using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -206,6 +208,164 @@ public class PluginLoaderTests
         Assert.Empty(plugin.Grants.Http);
     }
 
+    private const string AppendsId = "appends";
+
+    private static void InstallAppendingPackage(JasonPaths paths) => TestPlugins.Write(
+        paths,
+        AppendsId,
+        TestPlugins.Manifest(AppendsId, extra: """
+            capabilities:
+              files:
+                append: true
+            """),
+        "export function invoke() { return { result: {} }; }");
+
+    /// <summary>Where a grant may not be, each named by what it is to this test's own home and data directory.</summary>
+    public static TheoryData<string> RefusedPlaces() =>
+    [
+        "home", "top", "holds-home", "data", "inside-data", "holds-data", "relative", "dotted", "tilde", "star", "blank",
+    ];
+
+    private static string Place(string name, TempDataDir dir) => name switch
+    {
+        "home" => dir.Home,
+        "top" => Path.GetPathRoot(dir.Paths.Root)!,
+        "holds-home" => Path.GetDirectoryName(dir.Home)!,
+        "data" => dir.Paths.Root,
+        "inside-data" => Path.Combine(dir.Paths.Root, "logs", "lines"),
+        "holds-data" => Path.GetDirectoryName(dir.Paths.Root)!,
+        "relative" => Path.Combine("logs", "lines"),
+        "dotted" => "./lines",
+        "tilde" => "~/lines",
+        "star" => "*",
+        "blank" => " ",
+        _ => throw new ArgumentOutOfRangeException(nameof(name)),
+    };
+
+    /// <summary>
+    /// A file grant in a place the runtime keeps for itself, or one that says nowhere, is a package problem: the whole load
+    /// is refused, as any package problem refuses it, and a reload keeps the snapshot before it. The sentence describes
+    /// the grant and never says it back, since a path names the account it is in.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RefusedPlaces))]
+    public async Task A_file_grant_in_a_refused_place_rejects_the_load(string place)
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        Directory.CreateDirectory(dir.Home);
+        InstallAppendingPackage(dir.Paths);
+        var written = Place(place, dir);
+
+        var load = await NewLoader(dir.Paths, programs, options => options.Grants[AppendsId] = new PluginGrant { Files = [written] }, dir.Home)
+            .LoadAsync(SnapshotSource.Reload, Ct);
+
+        Assert.Null(load.Snapshot);
+        Assert.False(load.Report.Activated);
+        var candidate = Assert.Single(load.Report.Candidates);
+        Assert.Equal(CandidateStatus.Invalid, candidate.Status);
+        var problem = Assert.Single(candidate.Problems);
+        Assert.Equal(ProblemCodes.GrantPathRefused, problem.Code);
+        Assert.Equal("grants.files[0]", problem.Path);
+        if (!string.IsNullOrWhiteSpace(written))
+        {
+            Assert.DoesNotContain(written, problem.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Every_refused_file_grant_of_a_package_is_named_and_a_good_one_beside_them_does_not_save_the_load()
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        InstallAppendingPackage(dir.Paths);
+        var good = Path.Combine(dir.Home, "lines");
+
+        var load = await NewLoader(dir.Paths, programs, options => options.Grants[AppendsId] = new PluginGrant { Files = ["relative", good, dir.Paths.Root] }, dir.Home)
+            .LoadAsync(SnapshotSource.Reload, Ct);
+
+        Assert.Null(load.Snapshot);
+        Assert.Equal(["grants.files[0]", "grants.files[2]"], Assert.Single(load.Report.Candidates).Problems.Select(problem => problem.Path));
+    }
+
+    [Fact]
+    public async Task A_file_grant_to_a_package_that_does_not_ask_stays_a_warning_wherever_it_points()
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        TestPlugins.InstallFakeProvider(dir.Paths);
+
+        var load = await NewLoader(
+            dir.Paths,
+            programs,
+            options => options.Grants[TestPlugins.FakeProviderId] = new PluginGrant { Files = [dir.Paths.Root] },
+            dir.Home).LoadAsync(SnapshotSource.Reload, Ct);
+
+        var plugin = Assert.Single(load.Snapshot!.Plugins);
+        Assert.Equal(PluginStatus.Valid, plugin.Status);
+        Assert.Equal(ProblemCodes.GrantUnrequested, Assert.Single(plugin.Problems).Code);
+        Assert.Empty(plugin.Grants.FileDirectories);
+    }
+
+    [Fact]
+    public async Task A_file_grant_is_frozen_as_written_and_as_it_leads_though_the_directory_is_not_there_yet()
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        InstallAppendingPackage(dir.Paths);
+        var there = Path.Combine(dir.Home, "lines");
+        var notYet = Path.Combine(dir.Home, "made", "later");
+        Directory.CreateDirectory(there);
+
+        var load = await NewLoader(
+            dir.Paths,
+            programs,
+            options => options.Grants[AppendsId] = new PluginGrant { Files = [there + Path.DirectorySeparatorChar, notYet] },
+            dir.Home).LoadAsync(SnapshotSource.Reload, Ct);
+
+        var plugin = Assert.Single(load.Snapshot!.Plugins);
+        Assert.Equal(PluginStatus.Valid, plugin.Status);
+        Assert.Empty(plugin.Problems);
+        Assert.Equal(
+            [new FileDirectoryGrant(there + Path.DirectorySeparatorChar, FolderPaths.Real(there)), new FileDirectoryGrant(notYet, FolderPaths.Real(notYet))],
+            plugin.Grants.FileDirectories);
+        Assert.False(Directory.Exists(notYet), "a load makes no directory; the first write does.");
+    }
+
+    /// <summary>A link does not make the data directory another folder, and a path that ends in nothing is read at the nearest part that is there.</summary>
+    [Fact]
+    public async Task A_file_grant_is_refused_by_where_it_leads_through_a_link_in_an_ancestor()
+    {
+        using var dir = new TempDataDir();
+        using var programs = new TestPrograms();
+        InstallAppendingPackage(dir.Paths);
+        Directory.CreateDirectory(dir.Home);
+        var link = Path.Combine(dir.Home, "looks-like-mine");
+        MakeLink(link, dir.Paths.Root);
+
+        var load = await NewLoader(
+            dir.Paths,
+            programs,
+            options => options.Grants[AppendsId] = new PluginGrant { Files = [Path.Combine(link, "not", "there")] },
+            dir.Home).LoadAsync(SnapshotSource.Reload, Ct);
+
+        Assert.Null(load.Snapshot);
+        Assert.Equal(ProblemCodes.GrantPathRefused, Assert.Single(Assert.Single(load.Report.Candidates).Problems).Code);
+    }
+
+    /// <summary>A link to a folder: a junction on Windows, which an account without the link privilege may still make.</summary>
+    private static void MakeLink(string link, string target)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(ExecutableResolverTests.TryJunction(link, target), "a junction could not be made.");
+            return;
+        }
+
+        Directory.CreateSymbolicLink(link, target);
+    }
+
     /// <summary>
     /// A plugin's configuration is frozen as its grants are: what the settings said at this load, copied, so an edit
     /// reaches a plugin at the next load and never under a running one. A key written as nothing reads as unset.
@@ -328,10 +488,10 @@ public class PluginLoaderTests
             """),
         "export function invoke() { return { result: {} }; }");
 
-    private static PluginLoader NewLoader(JasonPaths paths, TestPrograms programs, Action<PluginsOptions>? configure = null) =>
-        NewLoader(paths, new TestSearchPath { Path = programs.Root }, configure);
+    private static PluginLoader NewLoader(JasonPaths paths, TestPrograms programs, Action<PluginsOptions>? configure = null, string? home = null) =>
+        NewLoader(paths, new TestSearchPath { Path = programs.Root }, configure, home);
 
-    private static PluginLoader NewLoader(JasonPaths paths, TestSearchPath search, Action<PluginsOptions>? configure = null)
+    private static PluginLoader NewLoader(JasonPaths paths, TestSearchPath search, Action<PluginsOptions>? configure = null, string? home = null)
     {
         var options = new PluginsOptions();
         configure?.Invoke(options);
@@ -340,6 +500,7 @@ public class PluginLoaderTests
             new ExecutableResolver(search),
             new TestOptionsMonitor<PluginsOptions>(options),
             TimeProvider.System,
-            NullLogger<PluginLoader>.Instance);
+            NullLogger<PluginLoader>.Instance,
+            home: home is null ? null : new HarnessHome(home));
     }
 }

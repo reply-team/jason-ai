@@ -49,6 +49,8 @@ public sealed record EnvGrants(IReadOnlyList<string> Variables);
 /// The resolved policy — what the user granted out of what the manifest requested. The child enforces exactly
 /// this and takes no policy from anywhere else; a capability absent here is a capability it cannot use.
 /// </summary>
+public sealed record FileDirectoryGrant(string Written, string Real);
+
 public sealed record InvocationGrants(ExecGrants? Exec, HttpGrants? Http, EnvGrants? Env);
 
 public sealed record ExecLimits(int OutputBytes, int MaxCalls);
