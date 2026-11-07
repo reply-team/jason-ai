@@ -1254,9 +1254,9 @@ reported as cancelled, whatever the exit.
 
   So a later reply is detected when it answers a message this side sent from the inbox, its own headers referencing
   that message; a second reply to the sequence email itself is not. A LinkedIn thread
-  keeps later messages, so they are read. The first two statements were observed on an account. The others, the one
-  about LinkedIn among them, are read from how Reply is built and have not been observed; an observation on one
-  account confirms or corrects them.
+  keeps later messages, so they are read. The first statement, on direct email, was observed on an account. The
+  others, the one about LinkedIn among them, are read from how Reply is built and have not been observed; an
+  observation on one account confirms or corrects them.
 - **The package asks for 256 MiB of memory.** The budget counts what an invocation allocates, every answer it reads
   included, and an answer can be as large as the exec capture (`Plugins:Exec:OutputBytes`, 4 MiB by default). It is
   under the installation's default ceiling of 512 MiB (`Plugins:Limits:MaxMemoryMb`). An installation that lowers
