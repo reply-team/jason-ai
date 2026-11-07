@@ -128,11 +128,12 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.31.0 took
   `jason update apply` replaces a copy installed as an earlier version, byte for byte as published, and leaves one you
   edited alone. Slack and Telegram are new: `jason plugin install slack` or `jason plugin install telegram` places one,
   and nothing places them for you. A release is thirteen files.
-- **ntfy:** an edited copy of an earlier ntfy reads as behind 1.0.3, and `jason status` advises `--replace`.
-  `jason plugin install ntfy --replace` drops the edit; then **grant the host by name** under `Plugins:Grants:ntfy:Http`
-  and keep the binding's `server` as it is, and run `jason plugin reload`. A grant of `*` means `ntfy.sh` alone. The
-  `--replace` loads the package at once, so where your grant is `*`, name the host before it, or the deliveries in
-  between fail `http_host_not_allowed`. `any_granted_host` needs Jason 0.31.0 or newer.
+- **ntfy:** an edited copy of an earlier ntfy reads as behind 1.0.3, and `jason status` advises `--replace`. First
+  **grant the host by name** under `Plugins:Grants:ntfy:Http`, since a grant of `*` means `ntfy.sh` alone; a copy
+  already granted by name needs nothing here. Keep the binding's `server` as it is. Then
+  `jason plugin install ntfy --replace` drops the edit and asks the runtime to reload, which reads the grant you wrote
+  and loads the package at once, so no delivery fails in between and no separate `jason plugin reload` is needed; with
+  no runtime running, the package loads at the next start. `any_granted_host` needs Jason 0.31.0 or newer.
 - **The journal forwarder** is 1.2.0 and asks for more than 1.1.0 did: its manifest asks for `capabilities.files` and
   names no place, so it writes no file until you grant a directory. A runtime older than 0.32.0 rejects the whole reload
   over that word, as every package problem rejects it, so an older runtime needs the forwarder its own release
