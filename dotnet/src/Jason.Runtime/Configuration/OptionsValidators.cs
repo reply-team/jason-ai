@@ -202,6 +202,9 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
         OptionRules.Range(failures, "Plugins:Http:MaxCalls", options.Http.MaxCalls, 1, 1000);
         OptionRules.Range(failures, "Plugins:Http:TimeoutMs", options.Http.TimeoutMs, 1_000, 300_000);
 
+        OptionRules.Range(failures, "Plugins:Files:LineBytes", options.Files.LineBytes, 1024, 16_777_216);
+        OptionRules.Range(failures, "Plugins:Files:MaxCalls", options.Files.MaxCalls, 1, 1000);
+
         OptionRules.Range(failures, "Plugins:Invoker:OutcomeBytes", options.Invoker.OutcomeBytes, 65_536, 16_777_216);
         OptionRules.Range(failures, "Plugins:Invoker:StderrBytes", options.Invoker.StderrBytes, 65_536, 67_108_864);
         OptionRules.Range(failures, "Plugins:Invoker:KillGraceMs", options.Invoker.KillGraceMs, 0, 60_000);
@@ -212,7 +215,7 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
         {
             if (grant is null)
             {
-                failures.Add($"{SettingKey.ShownPath($"Plugins:Grants:{pluginId}", installed.Value)} must be an object with Exec, Http, Env, Api and Subscriptions lists.");
+                failures.Add($"{SettingKey.ShownPath($"Plugins:Grants:{pluginId}", installed.Value)} must be an object with Exec, Http, Env, Api, Subscriptions and Files lists.");
                 continue;
             }
 

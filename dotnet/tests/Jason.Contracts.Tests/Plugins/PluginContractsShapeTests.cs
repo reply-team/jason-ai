@@ -26,7 +26,7 @@ public class PluginContractsShapeTests
             new ExecGrants([new ExecutableGrant("provider-cli", "/usr/local/bin/provider-cli")]),
             new HttpGrants(["api.example.test"]),
             new EnvGrants(["EXAMPLE_TOKEN"])),
-        new InvocationLimits(60_000, 67_108_864, 10_000_000, 64, new ExecLimits(4_194_304, 64), new HttpLimits(4_194_304, 1_048_576, 64, 30_000), new LogLimits(16_384, 4_194_304)));
+        new InvocationLimits(60_000, 67_108_864, 10_000_000, 64, new ExecLimits(4_194_304, 64), new HttpLimits(4_194_304, 1_048_576, 64, 30_000), new LogLimits(16_384, 4_194_304), new FileLimits(1_048_576, 64)));
 
     [Fact]
     public void The_registry_operations_are_named_and_routed_like_every_other()

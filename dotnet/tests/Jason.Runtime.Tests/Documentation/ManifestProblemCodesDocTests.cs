@@ -26,6 +26,7 @@ public sealed partial class ManifestProblemCodesDocTests
         ProblemCodes.PluginsSettingsInvalid,
         ProblemCodes.SettingsFileUnreadable,
         ProblemCodes.GrantUnrequested,
+        ProblemCodes.GrantPathRefused,
     ];
 
     [Fact]

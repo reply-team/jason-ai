@@ -103,6 +103,8 @@ capabilities:                    # every section optional; absent means "not req
   env:
     variables: [FAKE_TOKEN]      # 1..32; the variables host.env may read
   api: [read, journal.append]    # optional; the Runtime API families host.call may reach (§9)
+  files:
+    append: true                 # optional; host.appendLine. It names no place: the directories are a grant (§9)
 limits:                          # optional; asks, never raises
   timeout_ms: 20000
   memory_mb: 64
@@ -141,6 +143,7 @@ subscriptions: [workitem_failed] # optional; required for a subscriber: the jour
 | a variable named `JASON_…` | never; the prefix is reserved for the runtime | `variable_reserved` |
 | a variable that decides what a program loads | never; the same names `host.exec` refuses — `LD_*`, `DYLD_*`, `COMPlus_*`, `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `NODE_OPTIONS`, `PYTHONPATH`, `JAVA_TOOL_OPTIONS`, `PATH` and the rest listed under `host.exec` below. A granted variable is copied into every child the plugin starts, so being handed one and setting one end in the same place | `field_invalid` |
 | `capabilities.api` | optional; a list of 1..7 Runtime API families, each named once: `read`, `campaign`, `contact`, `workitem`, `suppression`, `report`, `journal.append`. They are what a handler's `host.call` may reach once granted (§9) | `field_invalid`, `api_family_unknown` |
+| `capabilities.files` | optional; a mapping of `append: true` and nothing else, so no key names a path: the directories are a person's grant (§9) | `field_invalid` |
 | `limits.timeout_ms` | 1000 .. `Plugins:Limits:MaxTimeoutMs` (3 600 000 by default) | `field_invalid` |
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
 | `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` — including a pattern that cannot finish matching the short probe or the 64 KiB one within the dialect's 100 ms on a warm engine, twice | `field_invalid` |
@@ -182,7 +185,7 @@ old to read the key rejects the reload, as every package problem does, rather th
 
 `capabilities.http.any_granted_host` is additive the same way: `manifest_version` stays `1`, and a runtime older than
 0.31.0 rejects the reload, as every package problem does, by the same unknown-key rule. §9 says what the word does and
-what it costs. No key of a
+what it costs. `capabilities.files` is additive in the same way from 0.32.0, and any kind of plugin may ask. No key of a
 manifest holds a secret: a secret belongs under `Plugins:Config` (§6, `host.config`) or in the environment (§6,
 `host.env`), never in `plugin.yaml`, which is the package and travels with it.
 
@@ -282,7 +285,8 @@ fake-provider  1.0.0    provider  valid   echo.run, exec.run ...  exec 1/1 | htt
 ```
 
 `GRANTS` is granted-over-requested per capability, the journal kinds a plugin subscribes to among them (§16), `-` where
-the manifest requested nothing; `DIGEST`
+the manifest requested nothing, and `files` and a count of the directories granted where it asks to write, since a
+manifest names no place to count them against; `DIGEST`
 is the first 12 hex characters. Without `--human` the verb prints the API body, which carries all of
 it in full:
 
@@ -315,7 +319,8 @@ message, so it is empty when the load activated. The routes a load froze are not
 names the snapshot they are in, and the activation journals them in `plugins_reloaded` (below).
 `last_reload.subscriptions` is the same for the order of each journal kind's subscribers (§16): each refusal is named by
 its setting, `Subscriptions:Order:<kind>[<index>]`, with its code and message. `capabilities.subscriptions` is the kinds
-a plugin declares against the kinds it is granted, `null` when it declares none.
+a plugin declares against the kinds it is granted, `null` when it declares none. `capabilities.files`, there only where
+the manifest asks to write, is `{ "append": true, "granted": ["<directory>"] }`, each directory as the person wrote it.
 
 ### Two kinds of problem
 
@@ -326,7 +331,9 @@ rejects the whole reload: the previous snapshot stays active, `plugin reload` an
 `plugin list` keeps showing the old snapshot with `"activated": false` on the root and the same
 problems under `last_reload`. A `settings.json` the reload cannot read rejects it as well, with a
 `settings_file_unreadable` detail in the 409 (§9), and so does a `Plugins` section of the settings file that fails
-its validator (`plugins_settings_invalid`).
+its validator (`plugins_settings_invalid`). A directory in a `Files` grant that may not stand (§9) rejects it the same
+way, `grant_path_refused` at `grants.files[i]`: the mistake is in the settings, and a load that froze it would open a
+place no plugin may write in.
 
 At the first load there is no previous snapshot to keep, so the same rule empties the registry: one
 bad package leaves every other package unloaded until it is fixed, and the startup report names it
@@ -452,14 +459,15 @@ that plugin's own word for a call that never became work, and a contract expecti
 among its `failure_codes` (§7).
 
 **Promises.** `async function invoke` works: the host drains the job queue and unwraps the promise
-within the budget. The seven `host.*` functions are synchronous — they block until the program or the
+within the budget. The eight `host.*` functions are synchronous — they block until the program or the
 request finishes — so there is nothing to `await` on them, nor on `host.call`.
 
 **Modules.** Only relative specifiers ending in `.js` or `.mjs`, only inside the package: `./x.js`,
 `../shared/y.mjs`. A bare specifier (`lodash`), an absolute path, a URL, a `.json` import or a path
 resolving outside the package root is refused with `module_not_allowed`; at most 256 modules per
 invocation, each at most 1 MiB. **There is no `console`, no `require`, no `fetch`, no filesystem and
-no CLR**; `eval` and `new Function` do not compile. Everything a plugin can reach is on `host`.
+no CLR**; `eval` and `new Function` do not compile. Everything a plugin can reach is on `host`, and the one thing it can
+do to a file is add a line, with `host.appendLine`, in a directory a person granted.
 
 **`context`** is the third argument:
 
@@ -482,11 +490,12 @@ and `null` alike. No secret is ever in `context`.
 
 ## 6. The Host SDK
 
-`host` is a plain JavaScript object with exactly seven read-only functions, closed to extension, and an eighth,
+`host` is a plain JavaScript object with exactly eight read-only functions, closed to extension, and a ninth,
 `host.call`, only where the invocation carries a door to the Runtime API. It is not a wrapped CLR instance, so there
-is no member surface beyond those functions and no type to walk back into the host program. Every function takes **one options object** and refuses an unknown key with a
-`TypeError` you can catch: `timeoutMs` next to `timeout_ms` would otherwise make a capped call look
-uncapped. A key whose value is `undefined` counts as absent.
+is no member surface beyond those functions and no type to walk back into the host program. `host.exec`, `host.http` and
+`host.fail` take **one options object** and refuse an unknown key with a `TypeError` you can catch: `timeoutMs` next to
+`timeout_ms` would otherwise make a capped call look uncapped. A key whose value is `undefined` counts as absent. The others
+take the arguments their sections show.
 
 Calling a capability the user did not grant is **not** a catchable error: the whole invocation fails
 `permanent` with `capability_not_granted` and `details: { capability, requested }`, because a plugin
@@ -668,6 +677,59 @@ never by a copy of the rule that could come to differ. The channel's name is rea
 bound is the stored value's, 500 characters after trimming: anything longer is `null`. Both arguments must be strings,
 or it is a `TypeError`. It is a pure function — no grant, no budget, nothing written to stderr — and a runtime older
 than 0.13.0 has no such function.
+
+### `host.appendLine`
+
+```js
+host.appendLine("/srv/lines/acme.jsonl", JSON.stringify(record));
+```
+
+Adds one line to a file directly in a directory a person granted (§9), and returns nothing. It is the only way a plugin
+writes a file. `path` is the granted directory, as the person wrote it or as it resolved at the load, and a file name;
+`text` is the line, written as UTF-8 with no byte order mark and a line feed added. Nothing in it is masked, because a
+line is data, as a request's body is. The file is made when it is not there, the granted directory with it if need be,
+and it is never truncated, renamed or deleted. The line is on the disk before the call returns. Both arguments must be
+strings, or it is a `TypeError`.
+
+A file name starts with a letter or a digit and goes on in letters, digits, `.`, `-` and `_`, at most 100 of them, with
+no dot last. `CON`, `NUL`, `PRN`, `AUX`, `COM1` to `COM9` and `LPT1` to `LPT9`, with or without an extension, are refused
+on every platform, although only Windows keeps them for its devices, so a package behaves the same everywhere.
+
+| What holds | Otherwise | How |
+|---|---|---|
+| the plugin was granted a directory | `capability_not_granted`, `details: { capability: "files" }` | ends the invocation |
+| the path names a granted directory and a well-formed name | `file_path_not_allowed` | ends the invocation |
+| the text holds no line break | `file_line_multiline` | ends the invocation |
+| the line, with its line feed, is at most `Plugins:Files:LineBytes` (1 MiB) in UTF-8 | `file_line_too_large`, `details: { limit: "files.line_bytes", max }` | ends the invocation |
+| at most `Plugins:Files:MaxCalls` (64) lines per invocation | `file_limit`, `details: { limit: "files.max_calls", max }` | ends the invocation |
+| the disk took the line | `file_write_failed`, `transient`, `details: { file }` | a failure you can catch |
+
+Whatever breaks a rule is `permanent` and ends the invocation like a capability that was not granted, because no plugin
+code can make it right. A directory, a named pipe or a link where the file should be is `file_path_not_allowed`, and so
+is a directory that a link moved since the load, until a reload freezes where it leads now. Only what the disk did is
+yours to catch: `file_write_failed` is the failure `host.fail` builds, with `name` `JasonFailure`, so a plugin with
+another place to report to can go on and report there, and end on a word of its own with `host.fail`. One that does not
+catch it, or throws it on as it came, ends as §8 says.
+
+**One open per line.** A subscription runs one chain per kind, so several hosts may write one file at the same moment.
+Each line takes its own open, which keeps every other writer out for as long as the line takes. A reader that takes no
+lock, as `tail -f` and a log shipper do, is not in the way, nor is one that closes between reads, as PowerShell's
+`Get-Content -Wait` does; on Linux and macOS a .NET program that keeps the file open holds a shared lock for as long as
+it does, and an append then waits up to ten seconds and fails `file_write_failed`. Measured with four processes: any
+wider sharing loses lines. A writer that holds the file is waited for, up to ten seconds and never past what is left of
+the invocation; past that the call is `file_write_failed`. Grant a directory on a local disk: a file system without
+`flock` locks nothing and says nothing. On Linux and macOS the exclusion holds against writers that take the lock: a
+shell's `>>` takes none and can interleave.
+
+**A refused line comes off.** Whatever of a line the disk took before it refused the rest is cut away while the open is held,
+so the next line starts where this one did. What a killed process left cannot be: after a kill a reader drops a line without
+a line feed, and one a later line has joined does not parse.
+
+A line that passed the rules counts as a call that may have acted, so a timeout after one is `ambiguous` (§8), and the
+outcome's diagnostics count them as `file_calls`. On stderr each line is an `append`
+record and each failure an `append_failed` one, with `file` and `bytes`. The name is all that is said of the path:
+neither these records nor any message or detail carries the directory, which is a person's, and which, set through
+`Plugins:Config`, would read as a mask. A runtime older than 0.32.0 has no such function.
 
 ### `host.fail`
 
@@ -1213,7 +1275,7 @@ have done something.
 
 **`plugin_timeout` has two shapes and one code.** When the engine's budget runs out inside
 JavaScript, the **child** ends the invocation and writes a normal `failed` outcome with that code,
-class `permanent` if no `host.exec` or `host.http` call had been started and `ambiguous` if one had —
+class `permanent` if no `host.exec`, `host.http` or `host.appendLine` call had been started and `ambiguous` if one had —
 the host knows, and the plugin never has to reason about it. When the child itself hangs past the
 budget and the grace period, the **runtime** kills the tree and reports the protocol failure
 `plugin_timeout`, which is always ambiguous. Reading what that child wrote is bounded by the same
@@ -1227,8 +1289,11 @@ are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missin
 `plugin_syntax_error`, `plugin_memory_exceeded`, `plugin_statement_limit`, `plugin_recursion_limit`,
 `capability_not_granted`, `executable_not_allowed`, `exec_limit`, `http_host_not_allowed`,
 `http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit`,
-`module_not_allowed` and `api_limit`. All of them are `permanent`, and every operation's check passes them but the events
-family's (§15).
+`module_not_allowed`, `api_limit`, `file_path_not_allowed`, `file_line_too_large`, `file_line_multiline`, `file_limit` and
+`file_write_failed`. All of them are `permanent` but `file_write_failed`, which is `transient` to a plugin that catches it.
+Nothing caught, it ends `ambiguous` once a `host.exec`, `host.http` or `host.call` was started in the invocation, since a
+repeat would make that call again, and `transient` otherwise; the append's own count is left out, since the disk refused it.
+Every operation's check passes them but the events family's (§15).
 
 ## 9. Capabilities and grants
 
@@ -1240,7 +1305,7 @@ what it gets, in `~/.jason/config/settings.json`:
   "Plugins": {
     "Grants": {
       "fake-provider": { "Exec": ["*"], "Http": ["api.example.com"], "Env": ["FAKE_TOKEN"] },
-      "forwarder": { "Api": ["read", "journal.append"] }
+      "forwarder": { "Api": ["read", "journal.append"], "Files": ["/srv/lines"] }
     }
   }
 }
@@ -1279,6 +1344,26 @@ invocation rather than empty, which is a different thing from one that is presen
 And the version check of a declared executable runs only for an executable the user **granted** — a
 reload must never start a program nobody consented to; an ungranted one is resolved for presence only
 and lists `"version": null`.
+
+### The `files` grant: where a plugin may write
+
+`Files` is the one list that does not name things out of the manifest. A manifest asks with `capabilities.files:
+{ append: true }` and names no place, because where a plugin may write is yours to say, so each entry is a directory: an
+absolute path, resolved at the load and frozen with the other grants. A directory that is not there yet is resolved by
+its nearest folder that is, made at the first write, and held then to what was frozen. A `Files` list for a plugin whose
+manifest does not ask grants nothing and is the usual `grant_unrequested` warning, at `grants.files[i]`. `plugin list`
+shows the directories, and a `jason doctor` bundle carries no grant, this one included.
+
+A directory may not be the home directory, the top of a drive, a folder holding the home directory, the data directory, a
+folder inside it or one holding it, the harness root, a folder inside it or one holding it. The harness root's folders hold
+memory files the runtime never writes a word of, and its door does not write there for a plugin either. What is compared is
+where a path leads, so a link does not reach any of them. A
+relative path and `~` are refused, and so is `*`, which has nothing to expand when no manifest names a path. A directory
+refused for any of these is a package problem, not a warning: `grant_path_refused` at `grants.files[i]` rejects the whole
+reload (§4), since a load that froze it would open a place no plugin may write in.
+
+Grant a directory of its own to a plugin rather than one that holds other things: it may add a file of any well-formed
+name there (§6, `host.appendLine`), and it can read none of them back.
 
 ### The `api` grant: what a handler may call
 
@@ -1353,11 +1438,13 @@ escape reads the same in any page.
   "config": { "url": "https://api.example.com/v2" },
   "grants": { "exec": { "executables": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "launch": null } ] },
               "http": { "hosts": ["api.example.com"] },
-              "env": { "variables": ["FAKE_TOKEN"] } },
+              "env": { "variables": ["FAKE_TOKEN"] },
+              "files": { "directories": [ { "written": "/srv/lines", "real": "/srv/lines" } ] } },
   "limits": { "timeout_ms": 20000, "memory_bytes": 67108864, "max_statements": 10000000, "max_recursion": 64,
               "exec": { "output_bytes": 4194304, "max_calls": 64 },
               "http": { "response_bytes": 4194304, "request_bytes": 1048576, "max_calls": 64, "timeout_ms": 30000 },
-              "log": { "line_bytes": 16384, "total_bytes": 4194304 } }
+              "log": { "line_bytes": 16384, "total_bytes": 4194304 },
+              "files": { "line_bytes": 1048576, "max_calls": 64 } }
 }
 ```
 
@@ -1456,8 +1543,8 @@ Isolation here is **process isolation plus interpreter isolation**, and that is 
 
 What is prevented: the plugin cannot reach the runtime's memory, its database, its API or its
 capability token, because it runs in a different process that was never told any of them; its engine
-has no CLR access, no `require`, no filesystem, no `eval` and no `new Function`; its modules cannot
-leave the package root; the programs it may start are a fixed list of names the runtime resolved, run
+has no CLR access, no `require`, no filesystem, no `eval` and no `new Function`; the one thing it can do to a file is add
+a line, in a directory you granted; its modules cannot leave the package root; the programs it may start are a fixed list of names the runtime resolved, run
 through an argument array and never a shell; its HTTP is two methods to an exact allowlist with no
 redirects and no injected credentials; its environment is built from nothing and holds no `JASON_*`
 name; and memory, statements, recursion and wall-clock time are all bounded, with the whole process
@@ -1471,13 +1558,15 @@ refused. Without that, granting one program would quietly grant everything the p
 What is **not** prevented: this is not a container, a virtual machine or a kernel-level isolation
 boundary — it is not a sandbox, and the documentation will not call it one. The plugin host runs
 under your own operating-system identity with your own permissions. A granted program can do whatever
-that program can do, and a granted host can be sent whatever the plugin wants to send it. Plugin
+that program can do, a granted host can be sent whatever the plugin wants to send it, and a granted directory can be
+given any file and any line the plugin wants to write there, so never grant a folder another program runs from or reads
+its instructions from (a logon's startup folder, LaunchAgents, autostart, `.ssh`, an agent host's instruction folder). Plugin
 packages are **executable local code that you installed**, and the grants are the real boundary —
 which is why the default is that nothing is granted.
 
 Signing, publisher identity, trust levels, install-time capability review and operating-system
 resource control are deliberately not in this version. Read a package before you install it, and
-grant it the narrowest set of executables, hosts and variables that lets it do its job.
+grant it the narrowest set of executables, hosts, variables and directories that lets it do its job.
 
 ## 12. Testing a plugin locally
 
@@ -1566,6 +1655,10 @@ are the operations' own examples; §7 says how to drive one through the host by 
 - **`host.http` is deliberately narrow**: `GET` and `POST`, exact hosts with no wildcards, text
   bodies only — no binary, no streaming — no automatic redirects, no cookies, no injected
   credentials.
+- **`host.appendLine` checks, then opens.** A symbolic link or a junction in the file's place is refused. A hard link is
+  not: it is a plain file to the check, and the line goes where it points. Between the last check and the open another
+  program running under the same account could put a link there, or swap the directory or one of its ancestors, and the
+  line would follow it. The host makes no link; a program granted to `host.exec` can.
 - **Invocation directories are kept.** `~/.jason/work/plugins/<invocation_id>/` holds `stderr.log`
   and nothing else, and nothing is cleaned up in this version.
 - **One installed version per id**, because the id is the directory name. Two plugins may implement
@@ -1795,7 +1888,8 @@ that returned it, as `subscription_envelope_too_large`; an answer of any other s
 
 **One line of a kind at a time, in the journal's order.** A kind's chain takes its next line only when the one before
 it has ended, and a kind is taken up to fifty lines at a turn before the next scan offers it again; different kinds run
-side by side. `Subscriptions:MaxParallel` — 2 unless set otherwise, at most 16 — is how many handlers, one child each,
+side by side, so two handlers may write one file at the same moment, and `host.appendLine` (§6) keeps each line whole.
+`Subscriptions:MaxParallel` — 2 unless set otherwise, at most 16 — is how many handlers, one child each,
 run at once across every kind. Each handler is given the contract's own timeout of an hour, lowered to the plugin's own
 `limits.timeout_ms`.
 
@@ -1845,8 +1939,8 @@ live; the order is read at a start and at each reload (§16).
 
 **The smallest complete subscriber.** [`plugins/journal-forwarder`](../plugins/journal-forwarder/README.md) is a
 `kind: subscriber` package of one `main.js`: for each line it is handed it POSTs the line, the envelope and the attempt
-as JSON to one URL the person names in the environment, under `host.http` and a granted host, and answers the envelope
-it was handed unchanged. It declares every kind the catalog lets a plugin subscribe to, the person narrows them by the
+as JSON to one URL the person names, under `host.http` and a granted host, adds the same JSON as one line to a file in a
+directory the person grants, under `host.appendLine`, or does both, and answers the envelope it was handed unchanged. It declares every kind the catalog lets a plugin subscribe to, the person narrows them by the
 grant, and it takes no Runtime API family and so no `host.call`. Its README is the operator's page, and its failure
-codes (`forwarder_unreachable`, `forwarder_unauthorized`, `forwarder_refused`, `forwarder_url_missing`,
+codes (`forwarder_unreachable`, `forwarder_unauthorized`, `forwarder_refused`, `forwarder_receiver_missing`,
 `forwarder_url_invalid`) show how a handler's own codes sit under the five classes.

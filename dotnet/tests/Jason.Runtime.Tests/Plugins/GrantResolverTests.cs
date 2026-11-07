@@ -75,6 +75,28 @@ public class GrantResolverTests
         Assert.Equal("grants.http[0]", warning.Path);
     }
 
+    private static readonly CapabilityRequests Appends = new(null, null, null, Files: new FilesRequestSpec(Append: true));
+
+    /// <summary>A manifest names no path, so a directory is the person's: it stays as written, and the load says where it leads.</summary>
+    [Fact]
+    public void A_directory_is_granted_as_written_to_a_package_that_asks_for_files()
+    {
+        var grants = GrantResolver.Resolve(Manifest(Appends), new PluginGrant { Files = ["/var/lines", "/srv/lines"] });
+
+        Assert.Equal(["/var/lines", "/srv/lines"], grants.Files);
+        Assert.Empty(grants.Warnings);
+    }
+
+    [Fact]
+    public void A_directory_granted_to_a_package_that_does_not_ask_grants_nothing_and_says_so()
+    {
+        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Files = ["/var/lines", "*"] });
+
+        Assert.Empty(grants.Files);
+        Assert.Equal(["grants.files[0]", "grants.files[1]"], grants.Warnings.Select(warning => warning.Path));
+        Assert.All(grants.Warnings, warning => Assert.Equal(ProblemCodes.GrantUnrequested, warning.Code));
+    }
+
     /// <summary>The word lets a person name a host the manifest could not know. It names no host itself, and the star stays the declared ones.</summary>
     private static readonly CapabilityRequests AnyHost = new(null, new HttpRequestSpec(["api.example.test"], AnyGrantedHost: true), null);
 

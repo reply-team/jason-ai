@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
@@ -100,6 +101,43 @@ public class PluginServiceTests
         Assert.Equal(["read", "journal.append"], plugin.Capabilities.Api!.Requested);
         Assert.Equal(["journal.append"], plugin.Capabilities.Api.Granted);
         Assert.Null(plugin.Capabilities.Env);
+        Assert.Null(plugin.Capabilities.Files);
+    }
+
+    [Fact]
+    public async Task The_directories_a_plugin_is_granted_are_listed_as_the_person_wrote_them()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "jason-file-grants", Guid.NewGuid().ToString("N"));
+        await using var api = await StartAsync(new TestSearchPath(), paths =>
+        {
+            TestPlugins.Write(
+                paths,
+                "acme-writer",
+                TestPlugins.Manifest("acme-writer", extra: "capabilities:\n  files:\n    append: true\n"),
+                "export function invoke() { return { result: {} }; }");
+            TestPlugins.Grant(paths, "acme-writer", files: [folder]);
+        });
+
+        var plugin = Assert.Single((await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { Reason = "after installing" }, Ct)).Plugins);
+
+        Assert.Equal(PluginStatus.Valid, plugin.Status);
+        Assert.True(plugin.Capabilities.Files!.Append);
+        Assert.Equal([folder], plugin.Capabilities.Files.Granted);
+    }
+
+    [Fact]
+    public async Task A_plugin_that_asks_to_write_and_was_granted_nowhere_says_so()
+    {
+        await using var api = await StartAsync(new TestSearchPath(), paths => TestPlugins.Write(
+            paths,
+            "acme-writer",
+            TestPlugins.Manifest("acme-writer", extra: "capabilities:\n  files:\n    append: true\n"),
+            "export function invoke() { return { result: {} }; }"));
+
+        var plugin = Assert.Single((await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { Reason = "after installing" }, Ct)).Plugins);
+
+        Assert.True(plugin.Capabilities.Files!.Append);
+        Assert.Empty(plugin.Capabilities.Files.Granted);
     }
 
     [Fact]
@@ -314,6 +352,29 @@ public class PluginServiceTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Operations);
         Assert.Empty(plugin.Contracts.Operations);
+    }
+
+    /// <summary>The root the running runtime reads is the one a grant is held apart from: a row on the composed runtime, since a loader left without it would compare the default.</summary>
+    [Fact]
+    public async Task A_file_grant_at_the_harness_root_the_runtime_reads_is_refused()
+    {
+        await using var api = await StartAsync(new TestSearchPath(), paths =>
+        {
+            var root = Path.Combine(TempDataDir.HomeOf(paths.Root), "clients");
+            Directory.CreateDirectory(paths.ConfigDirectory);
+            TestPlugins.Write(
+                paths,
+                "acme-writer",
+                TestPlugins.Manifest("acme-writer", extra: "capabilities:\n  files:\n    append: true\n"),
+                "export function invoke() { return { result: {} }; }");
+            File.WriteAllText(paths.UserSettingsFile, "{ \"Dispatcher\": { \"Enabled\": false }, \"Harness\": { \"Root\": " + JsonSerializer.Serialize(root) + " } }");
+            TestPlugins.Grant(paths, "acme-writer", files: [Path.Combine(root, "projects", "launch")]);
+        });
+
+        var error = await api.PostErrorAsync(Operations.PluginReload, null, HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("plugin_reload_rejected", error.Code);
+        Assert.Equal("grant_path_refused", Assert.Single(error.Details!).Code);
     }
 
     [Fact]

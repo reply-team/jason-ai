@@ -26,9 +26,16 @@ public sealed record ExecCapabilityDto(IReadOnlyList<ExecutableDto> Requested, I
 public sealed record ListCapabilityDto(IReadOnlyList<string> Requested, IReadOnlyList<string> Granted);
 
 /// <summary>
+/// The one capability with nothing to list on the request side: a manifest asks to append and names no place, and the
+/// directories are the person's.
+/// </summary>
+public sealed record FilesCapabilityDto(bool Append, IReadOnlyList<string> Granted);
+
+/// <summary>
 /// Requested against granted, for every capability: declaration is not permission, and it shows. <c>Subscriptions</c> is
 /// the journal kinds the manifest declares against the kinds the settings grant, null when it declares none.
 /// <c>AnyGrantedHost</c> is true where the manifest lets a person grant a host it does not declare, and absent otherwise.
+/// <c>Files</c> is absent where the manifest does not ask to write a file.
 /// </summary>
 public sealed record PluginCapabilitiesDto(ExecCapabilityDto? Exec, ListCapabilityDto? Http, ListCapabilityDto? Env, ListCapabilityDto? Api = null)
 {
@@ -36,6 +43,9 @@ public sealed record PluginCapabilitiesDto(ExecCapabilityDto? Exec, ListCapabili
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? AnyGrantedHost { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FilesCapabilityDto? Files { get; init; }
 }
 
 /// <summary>

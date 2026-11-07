@@ -65,6 +65,7 @@ public class OptionsValidationTests
             Limits = new PluginLimitsOptions { TimeoutMs = 999, MemoryMb = 8 },
             Exec = new PluginExecOptions { MaxCalls = 0 },
             Http = new PluginHttpOptions { TimeoutMs = 999 },
+            Files = new PluginFilesOptions { LineBytes = 1023, MaxCalls = 1001 },
             Invoker = new PluginInvokerOptions { KillGraceMs = 60_001 },
         });
 
@@ -73,6 +74,8 @@ public class OptionsValidationTests
         Assert.Contains("Plugins:Limits:MemoryMb must be between 16 and 1024; got 8.", result.Failures!);
         Assert.Contains("Plugins:Exec:MaxCalls must be between 1 and 1000; got 0.", result.Failures!);
         Assert.Contains("Plugins:Http:TimeoutMs must be between 1000 and 300000; got 999.", result.Failures!);
+        Assert.Contains("Plugins:Files:LineBytes must be between 1024 and 16777216; got 1023.", result.Failures!);
+        Assert.Contains("Plugins:Files:MaxCalls must be between 1 and 1000; got 1001.", result.Failures!);
         Assert.Contains("Plugins:Invoker:KillGraceMs must be between 0 and 60000; got 60001.", result.Failures!);
     }
 
@@ -105,6 +108,35 @@ public class OptionsValidationTests
             "Plugins:Grants:fake:Http[1] must be \"*\" or the name of an executable, a host, a variable or an api family the manifest requests; "
                 + "the value written is 1 character of white space.",
             Assert.Single(result.Failures!));
+    }
+
+    /// <summary>
+    /// A directory is no name a manifest requests, so the grammar of the other lists does not read it. Where it leads is
+    /// the load's to refuse, as a package problem, and an edit of the file never stops a runtime for it.
+    /// </summary>
+    [Fact]
+    public void A_file_grant_is_not_read_by_the_grammar_of_the_other_lists()
+    {
+        var result = new PluginsOptionsValidator(Installed("fake")).Validate(null, new PluginsOptions
+        {
+            Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fake"] = new PluginGrant { Files = ["/var/lines with a space", "relative", "*"] },
+            },
+        });
+
+        Assert.False(result.Failed, string.Join('\n', result.Failures ?? []));
+    }
+
+    [Fact]
+    public void A_grant_written_as_nothing_is_told_every_list_it_may_hold()
+    {
+        var result = new PluginsOptionsValidator(Installed("fake")).Validate(null, new PluginsOptions
+        {
+            Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase) { ["fake"] = null! },
+        });
+
+        Assert.Equal("Plugins:Grants:fake must be an object with Exec, Http, Env, Api, Subscriptions and Files lists.", Assert.Single(result.Failures!));
     }
 
     /// <summary>
