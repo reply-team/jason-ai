@@ -49,8 +49,14 @@ public sealed class FilesService(HostServices services)
 
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
+    /// <summary>Every failure this door built, each an object the plugin may hold on to: a plugin's own word is another object.</summary>
+    private readonly HashSet<object> _failures = new(ReferenceEqualityComparer.Instance);
+
     /// <summary>How long a file another writer holds is waited for, inside what is left of the invocation.</summary>
     internal TimeSpan SharingWait { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>Whether <paramref name="thrown"/> is a failure this door built, rather than one the plugin wrote in the same words.</summary>
+    public bool Built(JsValue thrown) => _failures.Contains(thrown);
 
     public JsValue Append(Engine engine, JsValue[] args)
     {
@@ -207,12 +213,14 @@ public sealed class FilesService(HostServices services)
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
         {
             services.Diagnostics.Host("warn", FailedMessage, record);
-            throw new JavaScriptException(HostFailure.Build(
+            var failure = HostFailure.Build(
                 engine,
                 "transient",
                 HostOutcomeCodes.FileWriteFailed,
                 $"The line could not be appended to {name}.",
-                new JsonObject { ["file"] = name }));
+                new JsonObject { ["file"] = name });
+            _failures.Add(failure);
+            throw new JavaScriptException(failure);
         }
 
         services.Diagnostics.Host("info", AppendMessage, record);

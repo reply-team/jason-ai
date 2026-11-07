@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
@@ -406,6 +407,144 @@ public sealed class InvocationRunnerTests
         Assert.Equal(HostOutcomeCodes.PluginTimeout, error.Code);
         Assert.Equal(FailureClass.Ambiguous, error.Class);
         Assert.Equal(1, outcome.Diagnostics.ApiCalls);
+    }
+
+    /// <summary>A directory granted to the plugin, holding a file the disk will not add to: a failure of the disk, on every platform, without a full one.</summary>
+    private sealed class RefusingFile : IDisposable
+    {
+        private readonly TempPackage _place = new();
+        private readonly string _directory;
+
+        public RefusingFile()
+        {
+            Assert.SkipWhen(Environment.UserName == "root", "root writes a read-only file all the same.");
+            _directory = Path.Combine(_place.Outside, "lines");
+            Directory.CreateDirectory(_directory);
+            Target = Path.Combine(_directory, "a.log");
+            File.WriteAllBytes(Target, []);
+            File.SetAttributes(Target, FileAttributes.ReadOnly);
+        }
+
+        public string Target { get; }
+
+        /// <summary>The call that fails, as a statement of a script.</summary>
+        public string Append => "host.appendLine(" + JsonSerializer.Serialize(Target) + ", \"a line\");";
+
+        public InvocationGrants Grants(HttpGrants? http = null) =>
+            new(null, http, null, new FilesGrants([new FileDirectoryGrant(_directory, _directory)]));
+
+        public void Dispose()
+        {
+            File.SetAttributes(Target, FileAttributes.Normal);
+            _place.Dispose();
+        }
+    }
+
+    private static string CallTheReceiver(LoopbackHttpServer server) =>
+        "host.http({ method: \"GET\", url: " + JsonSerializer.Serialize(server.Url("/ok")) + " });";
+
+    [Fact]
+    public void A_disk_failure_nothing_caught_after_an_http_call_may_have_acted()
+    {
+        using var file = new RefusingFile();
+        using var server = new LoopbackHttpServer();
+
+        var outcome = Run(
+            "export function invoke() { " + CallTheReceiver(server) + file.Append + " return { result: null }; }",
+            configure: builder => builder.Grants = file.Grants(new HttpGrants([server.HostKey])));
+
+        var error = Error(outcome);
+        Assert.Equal((HostOutcomeCodes.FileWriteFailed, FailureClass.Ambiguous), (error.Code, error.Class));
+        Assert.Equal(1, outcome.Diagnostics.HttpCalls);
+    }
+
+    [Fact]
+    public void A_disk_failure_nothing_caught_after_a_door_call_may_have_acted()
+    {
+        using var file = new RefusingFile();
+        using var api = DoorApi();
+
+        var outcome = Run(
+            "export function invoke() { host.call(\"campaign.list\"); " + file.Append + " return { result: null }; }",
+            configure: builder =>
+            {
+                WithDoor(api)(builder);
+                builder.Grants = file.Grants();
+            });
+
+        Assert.Equal((HostOutcomeCodes.FileWriteFailed, FailureClass.Ambiguous), (Error(outcome).Code, Error(outcome).Class));
+    }
+
+    /// <summary>A rejected promise is the same ending by another road.</summary>
+    [Fact]
+    public void A_disk_failure_that_rejects_the_promise_after_an_http_call_may_have_acted()
+    {
+        using var file = new RefusingFile();
+        using var server = new LoopbackHttpServer();
+
+        var outcome = Run(
+            "export async function invoke() { " + CallTheReceiver(server) + file.Append + " return { result: null }; }",
+            configure: builder => builder.Grants = file.Grants(new HttpGrants([server.HostKey])));
+
+        Assert.Equal((HostOutcomeCodes.FileWriteFailed, FailureClass.Ambiguous), (Error(outcome).Code, Error(outcome).Class));
+    }
+
+    /// <summary>The append is the one call here, and counted as one, but the disk refused it: nothing acted, so a repeat is safe.</summary>
+    [Fact]
+    public void A_disk_failure_nothing_caught_with_no_call_before_it_is_transient()
+    {
+        using var file = new RefusingFile();
+
+        var outcome = Run(
+            "export function invoke() { " + file.Append + " return { result: null }; }",
+            configure: builder => builder.Grants = file.Grants());
+
+        Assert.Equal((HostOutcomeCodes.FileWriteFailed, FailureClass.Transient), (Error(outcome).Code, Error(outcome).Class));
+        Assert.Equal(1, outcome.Diagnostics.FileCalls);
+    }
+
+    [Fact]
+    public void A_plugin_that_catches_a_disk_failure_reads_it_transient_whatever_was_called_before_it()
+    {
+        using var file = new RefusingFile();
+        using var server = new LoopbackHttpServer();
+
+        var outcome = Run(
+            "export function invoke() { " + CallTheReceiver(server) + " try { " + file.Append + " } catch (e) { return { result: { read: e.class } }; } }",
+            configure: builder => builder.Grants = file.Grants(new HttpGrants([server.HostKey])));
+
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.Equal("transient", outcome.Result!["read"]!.GetValue<string>());
+    }
+
+    /// <summary>A plugin that caught it knows what it did before and answers for what follows: the word it writes is the one that stands.</summary>
+    [Theory]
+    [InlineData("transient", "file_write_failed", FailureClass.Transient)]
+    [InlineData("permanent", "audit_unavailable", FailureClass.Permanent)]
+    public void A_plugin_that_catches_a_disk_failure_ends_on_its_own_word(string word, string code, FailureClass failureClass)
+    {
+        using var file = new RefusingFile();
+        using var server = new LoopbackHttpServer();
+
+        var outcome = Run(
+            "export function invoke() { " + CallTheReceiver(server) + " try { " + file.Append + " } catch (e) { throw host.fail({ class: \"" + word + "\", code: \"" + code + "\", message: e.message }); } }",
+            configure: builder => builder.Grants = file.Grants(new HttpGrants([server.HostKey])));
+
+        Assert.Equal((code, failureClass), (Error(outcome).Code, Error(outcome).Class));
+    }
+
+    /// <summary>A catch that only throws it on has said nothing of its own: it is the failure nothing caught.</summary>
+    [Fact]
+    public void A_disk_failure_thrown_on_as_it_came_is_one_nothing_caught()
+    {
+        using var file = new RefusingFile();
+        using var server = new LoopbackHttpServer();
+
+        var outcome = Run(
+            "export function invoke() { " + CallTheReceiver(server) + " try { " + file.Append + " } catch (e) { throw e; } }",
+            configure: builder => builder.Grants = file.Grants(new HttpGrants([server.HostKey])));
+
+        Assert.Equal((HostOutcomeCodes.FileWriteFailed, FailureClass.Ambiguous), (Error(outcome).Code, Error(outcome).Class));
     }
 
     [Fact]

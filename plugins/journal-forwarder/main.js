@@ -47,7 +47,8 @@ export function invoke(operation, input, context) {
   const body = JSON.stringify({ line: input.line, envelope: input.envelope, attempt: input.attempt });
   // The file goes first: a POST can take the invocation's whole time, and a kill after it would write nothing. Only what
   // the disk did can be caught here, so the receiver still has the line, and the disk's failure is what the handler ends
-  // with. A rule the file broke is a misconfiguration, which no plugin code sees: it ends the invocation where it stands.
+  // with, in this plugin's own word: the receiver drops a repeat, so a POST made since is no reason not to try again. A
+  // rule the file broke is a misconfiguration, which no plugin code sees: it ends the invocation where it stands.
   let failure = null;
   if (named(file)) {
     try {
@@ -56,7 +57,7 @@ export function invoke(operation, input, context) {
       if (!named(url) || refused.code !== "file_write_failed") {
         throw refused;
       }
-      failure = refused;
+      failure = host.fail({ class: "transient", code: refused.code, message: refused.message });
     }
   }
   if (named(url)) {

@@ -36,20 +36,21 @@ public class HostOutcomeCodesTests
     }
 
     /// <summary>
-    /// A timeout is the one host ending that can be ambiguous: once an external call was started, the provider may have
-    /// acted before the time ran out.
+    /// A timeout and a failed append are the host endings that can be ambiguous: once a call that reaches outside was
+    /// started, the provider may have acted before the time ran out or the disk refused the line.
     /// </summary>
     [Fact]
-    public void Only_a_timeout_is_also_written_ambiguous()
+    public void Only_a_timeout_and_a_failed_append_are_also_written_ambiguous()
     {
-        var ambiguous = HostOutcomeCodes.All.Where(code => HostOutcomeCodes.Writes(FailureClass.Ambiguous, code));
+        var ambiguous = HostOutcomeCodes.All.Where(code => HostOutcomeCodes.Writes(FailureClass.Ambiguous, code)).Order(StringComparer.Ordinal);
 
-        Assert.Equal([HostOutcomeCodes.PluginTimeout], ambiguous);
+        Assert.Equal([HostOutcomeCodes.FileWriteFailed, HostOutcomeCodes.PluginTimeout], ambiguous);
     }
 
     /// <summary>
     /// An append the disk refused is the one host ending that is no rule: the same line may go through on a second try,
-    /// and a plugin that does not catch it ends transient, which every operation's check has to pass.
+    /// and a plugin that does not catch it, with nothing started before it, ends transient, which every operation's
+    /// check has to pass.
     /// </summary>
     [Fact]
     public void Only_a_failed_append_is_also_written_transient()
