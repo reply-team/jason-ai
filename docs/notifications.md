@@ -178,8 +178,8 @@ such a unit exists only while the person is signed in.
   repeated in an error and never handed on to another program. A toast has no button for a session: the link is the
   UI's.
 
-A notification plugin reaches wherever its service does — a phone following an ntfy topic, say — whatever session the
-runtime runs in.
+A notification plugin reaches wherever its service does — a phone following an ntfy topic, a Slack channel, a Telegram
+chat — whatever session the runtime runs in.
 
 ## 5. What happened to each one
 
@@ -228,10 +228,10 @@ sent — and an answer it could not measure is failed `validation_timed_out`, `a
 `silenced` covers `disabled_for_application` (Jason switched off), `disabled_for_user` (every app switched off),
 `disabled_by_group_policy` and `disabled_by_manifest`.
 
-A delivery that failed with an answer carries that answer's message as the line's `detail`, cut to at most 500 characters,
-after the host has masked the values of the variables the plugin was granted and of its configuration, a value under 8
-characters excepted. An answer of class `blocked`, which the delivery family does not declare, is recorded as
-`result_invalid` with the runtime's own sentence in place of the plugin's message.
+A delivery that failed with an answer carries that answer's message as the line's `detail`, cut to at most 500
+characters, after the host has masked the values of the variables the plugin was granted and of its configuration, a
+value under 8 characters excepted. An answer of class `blocked`, which the delivery family does not declare, is recorded
+as `result_invalid` with the runtime's own sentence in place of the plugin's message.
 
 `attempts` is written for every outcome but `not_attempted` — `delivered`, `silenced` and `failed` each say how many
 times the channel was tried.
@@ -300,7 +300,7 @@ jason journal list --kind notification_sent
   **What stays**: the notifications already in the notification center, which are the person's to dismiss, and Windows'
   own database of them.
 
-## 8. ntfy and other plugins
+## 8. ntfy, Slack, Telegram and other plugins
 
 A notification plugin is a channel only when it is named, under `Notifications:Plugins:<id>`, with its `Binding` — or
 with `"Enabled": true` for a plugin that needs none, because the settings file drops an empty object. It is granted
@@ -308,7 +308,9 @@ like any plugin, under `Plugins:Grants:<id>`, and a credential it needs is read 
 for a runtime started at logon, is the account's logon environment rather than a shell's
 ([release-and-update.md](release-and-update.md) §8).
 
-The reference plugin is [ntfy](../plugins/ntfy/README.md). Writing one is
+Three are published with every release from 0.32.0 on, each placed by `jason plugin install <id>`:
+[ntfy](../plugins/ntfy/README.md), the reference plugin, [Slack](../plugins/slack/README.md) and
+[Telegram](../plugins/telegram/README.md). Writing one is
 [plugins.md](plugins.md) §14; what it is invoked for is the delivery contract
 [`notification.send`](contracts/notifications/notification.send.md).
 

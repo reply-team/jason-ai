@@ -611,8 +611,11 @@ public partial class PageClaimsTests
     [InlineData("docs/release-and-update.md", "ntfy, Slack and Telegram are published the same way from 0.32.0 on, as `jason-plugin-ntfy.zip`, `jason-plugin-slack.zip` and `jason-plugin-telegram.zip`, each placed by `jason plugin install <id>`.")]
     [InlineData(".github/release-notes-template.md", "The journal forwarder's package is installed the same way, by `jason plugin install journal-forwarder`, into `~/.jason/plugins/journal-forwarder`;")]
     [InlineData(".github/release-notes-template.md", "The packages of ntfy, Slack and Telegram are installed the same way, each by `jason plugin install <id>`, into `~/.jason/plugins/<id>`;")]
-    [InlineData("docs/plugins.md", "the journal forwarder from 0.30.0 on as `jason-plugin-journal-forwarder.zip`, each with its files at the archive's root,")]
-    [InlineData("README.md", "the Reply plugin and the journal forwarder, each one `jason plugin install` away")]
+    [InlineData("docs/plugins.md", "the journal forwarder from 0.30.0 on as `jason-plugin-journal-forwarder.zip`, and ntfy, Slack and Telegram from 0.32.0 on as `jason-plugin-ntfy.zip`, `jason-plugin-slack.zip` and `jason-plugin-telegram.zip`, each with its files at the archive's root,")]
+    [InlineData("docs/INSTALL.md", "today the Reply plugin's, the journal forwarder's, ntfy's, Slack's and Telegram's")]
+    [InlineData("plugins/README.md", "Each of these five is published with every release, Reply's from 0.11.0, the journal forwarder's from 0.30.0, and ntfy's, Slack's and Telegram's from 0.32.0, as `jason-plugin-<id>.zip`, and `jason plugin install <id>` places it.")]
+    [InlineData("README.md", "the Reply plugin, the journal forwarder, and ntfy, Slack and Telegram for notifications, each one `jason plugin install` away.")]
+    [InlineData("README.md", "desktop notifications, and phone pushes, Slack and Telegram each one `jason plugin install` away")]
     public void The_pages_say_how_the_plugin_s_package_is_published_and_installed(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
