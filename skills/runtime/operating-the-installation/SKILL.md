@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which journal kinds a subscribing plugin is handed and where each stands, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,8 +11,8 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.318. It covers what this build does and
-nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do. It covers what this build does and nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -266,12 +266,14 @@ change is not in force until the person has reloaded. Writing them is the person
 `docs/plugins.md` §16 and §17 say the rest, and `plugins/journal-forwarder` in the plugin marketplace is the smallest
 complete subscriber.
 
-A plugin may also ask to append lines to a file, and what it may write into is the person's to say, as well: the directories
-are `Plugins:Grants:<id>:Files` in the same settings file, each an absolute path, read at a start and at each
-`jason plugin reload`. A directory that is the home directory, the top of a drive, the data directory, the harness root,
-or a folder inside or holding any of these is refused, as are a relative path, `~` and `*`, and the refusal rejects the whole reload
-with `grant_path_refused`. Give the plugin a directory of its own; `docs/plugins.md` §9 says the rest, and
-`plugins/journal-forwarder` is the plugin that uses it.
+A plugin may also ask to append lines to a file, and what it may write into is the person's to say, as well: the
+directories are `Plugins:Grants:<id>:Files` in the same settings file, each an absolute path, read at a start and at
+each `jason plugin reload`. A directory is refused when it is the home directory or a folder holding it, the top of a
+drive, a share or the file system, the data directory or the harness root, or a folder inside or holding either of
+those two; a folder inside the home directory is where a person grants, and it is allowed. A relative path, `~` and
+`*` are refused too. Any refusal is `grant_path_refused` and rejects the whole reload, so the previous load stays.
+Give the plugin a directory of its own, never a folder another program runs from or reads its instructions from;
+`docs/plugins.md` §9 says the rest, and `plugins/journal-forwarder` is the plugin that uses it.
 
 `jason subscription list` answers where each subscribed kind stands: its chain, its cursor, its newest line and how many
 of its lines are due, the chain in flight if any, and `waiting_on`, which names the members of the chain the current load
@@ -405,8 +407,8 @@ old package for the release's and asks the runtime to load it; replacing a packa
 ask first. `jason update check` says it before the update: its `plugin_updates` names each package installed here that
 the newer release publishes a later version of, exactly the ones the apply replaces, with both versions, and is `[]`
 when nothing installed here that the record holds is behind. It never names a package the list does not know: built or
-edited on that machine, or a version before its package's list begins, which for the Reply package is 0.3.2 and for every other is 1.0.0; whether that one is behind is `jason status`'s
-to say, by its version.
+edited on that machine, or a version before its package's list begins, which for the Reply package is 0.3.2 and for every other is 1.0.0;
+whether that one is behind is `jason status`'s to say, by its version.
 
 ## Installing it in the first place
 
