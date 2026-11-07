@@ -221,14 +221,26 @@ public class LaunchesOptionsTests
             await fixture.Runtime.StopAsync();
 
             var log = string.Concat(Directory.GetFiles(fixture.Paths.LogsDirectory).Select(File.ReadAllText));
-            var refused = log
+            var lines = log
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries)
                 .Select(line => JsonNode.Parse(line)!)
+                .ToList();
+            var refused = lines
                 .Where(line => (string?)line["@l"] == "Error" && (string?)line["Section"] == LaunchesOptions.Section)
                 .Select(line => (string?)line["Failure"])
                 .ToList();
             Assert.Equal([Retired], refused);
-            Assert.DoesNotContain("731", log, StringComparison.Ordinal);
+
+            // The value is looked for in every field of every line but "@t": seven digits of time fraction can carry
+            // it by chance, and a time is not a place the setting's value could have been written to.
+            foreach (var line in lines)
+            {
+                var timeless = (JsonObject)line.DeepClone();
+                timeless.Remove("@t");
+                Assert.False(
+                    timeless.ToJsonString().Contains("731", StringComparison.Ordinal),
+                    $"The retired setting's value reached the log: {timeless.ToJsonString()}");
+            }
         }
     }
 
