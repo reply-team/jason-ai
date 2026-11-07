@@ -264,6 +264,8 @@ public sealed class TelegramPackageTests
     [InlineData("", false)]
     [InlineData("@abcd", false)]
     [InlineData("@Abcde", true)]
+    [InlineData("@1abcde", false)]
+    [InlineData("@_abcde", false)]
     [InlineData("jason_alerts", false)]
     [InlineData("@jason alerts", false)]
     [InlineData("12a", false)]

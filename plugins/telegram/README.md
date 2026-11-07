@@ -32,7 +32,8 @@ What leaves the machine is that text, the chat it goes to and the bot's token, t
 ## Finding the chat id
 
 1. Send your bot any message, in the chat you want the pointer in.
-2. Open `https://api.telegram.org/bot<your token>/getUpdates` in a browser, or fetch it with `curl`.
+2. Open `https://api.telegram.org/bot<your token>/getUpdates` in a browser, or fetch it with `curl`. It lists only the
+   updates of the last 24 hours, so send the message just before, and it fails while a webhook is set on the bot.
 3. Find `"chat":{"id":...}` in the answer. That number is the id. A group's id is negative; a supergroup's or a
    channel's begins `-100`.
 
@@ -44,8 +45,8 @@ one but Telegram.
 `chat` in the binding is one of:
 
 - **A number**, as the answer above gives it: `-1001234567890`. The Bot API documents an integer, and the plugin sends one.
-- **`@name`**, the public name of a channel or a supergroup: `@jason_alerts`, five to thirty-two letters, digits and
-  underscores. It cannot name a private chat or a group without a public name.
+- **`@name`**, the public name of a channel or a supergroup: `@jason_alerts`, five to thirty-two characters, a letter first
+  and then letters, digits and underscores. It cannot name a private chat or a group without a public name.
 
 Anything else fails the binding's schema, and nothing is sent.
 
@@ -122,7 +123,8 @@ Every outcome is a line in the journal (`jason journal list --kind notification_
 A wrong or revoked token is answered 401 by some paths and 404 by others: both are the Bot API's own behaviour, not
 something its documentation states, and both are read as a token that does not work. A 403 means the bot may not write
 there (it was blocked, removed or never started), and a 400 `chat not found` means the id is wrong or the bot never saw
-the chat. A 400 that carries `migrate_to_chat_id` means a group became a supergroup and has a new id: use that one.
+the chat. A 400 that carries `migrate_to_chat_id` means a group became a supergroup and has a new id. The plugin passes
+on only Telegram's `description`, which does not carry it, so look the id up again as in "Finding the chat id".
 Telegram's own words for a refusal are in the failure's message.
 
 A failure never fails the approval or the question the pointer was about: nothing waits on a notification.
