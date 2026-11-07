@@ -182,7 +182,9 @@ public sealed class FilesService(HostServices services)
     /// The line, on the disk before the call returns. Everything that touches the disk gets the one answer the disk may be
     /// given, a failure the plugin can catch; what is refused by rule before the call is counted spends none. The directory
     /// is checked again once it is there, since that is when a part of it missing at the load first has an answer. Between
-    /// the last check and the open a program under the same account could put a link there; a plugin cannot make one.
+    /// the last check and the open a program under the same account could put a link there; the host makes none, and a
+    /// program granted to <c>host.exec</c> can. What of a refused line reached the disk comes off again while the open is
+    /// held, and a refusal of that is answered as the same failure.
     /// </summary>
     private void Write(Engine engine, FileDirectoryGrant directory, string name, byte[] line)
     {
@@ -206,9 +208,17 @@ public sealed class FilesService(HostServices services)
                 throw PathRefused();
             }
 
-            stream.Seek(0, SeekOrigin.End);
-            stream.Write(line);
-            stream.Flush(flushToDisk: true);
+            var end = stream.Seek(0, SeekOrigin.End);
+            try
+            {
+                stream.Write(line);
+                stream.Flush(flushToDisk: true);
+            }
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            {
+                stream.SetLength(end);
+                throw;
+            }
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
         {
@@ -235,7 +245,11 @@ public sealed class FilesService(HostServices services)
         }
     }
 
-    /// <summary>The file to this writer alone, waiting for another that holds it for as long as a line takes, within the wait and what is left of the invocation.</summary>
+    /// <summary>
+    /// The file to this writer alone, waiting for another that holds it for as long as a line takes, within the wait and what
+    /// is left of the invocation; a deadline that has passed answers at once, so the pause is then a sleep and never a spin.
+    /// The open is no append on Windows either, since a stream opened to append cannot be cut back to where it began.
+    /// </summary>
     private FileStream Open(string file)
     {
         var wait = services.Remaining();
@@ -246,12 +260,15 @@ public sealed class FilesService(HostServices services)
             try
             {
                 return OperatingSystem.IsWindows()
-                    ? new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.Read, 1, FileOptions.WriteThrough)
+                    ? new FileStream(file, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 1, FileOptions.WriteThrough)
                     : new FileStream(file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.WriteThrough);
             }
             catch (IOException held) when (IsHeld(held) && Stopwatch.GetElapsedTime(started) < wait)
             {
-                services.Deadline.WaitHandle.WaitOne(SharingPause);
+                if (services.Deadline.WaitHandle.WaitOne(SharingPause))
+                {
+                    Thread.Sleep(SharingPause);
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -261,6 +262,18 @@ public sealed class FilesServiceTests : IDisposable
     }
 
     [Fact]
+    public void A_link_to_a_file_at_the_end_of_the_path_is_refused_and_nothing_lands_where_it_leads()
+    {
+        var target = Path.Combine(_package.Outside, "target.log");
+        System.IO.File.WriteAllText(target, "first\n");
+        LinkToAFile(File("link.log"), target);
+        using var harness = Granted();
+
+        Assert.Equal(HostOutcomeCodes.FilePathNotAllowed, Refused(harness, File("link.log")).Code);
+        Assert.Equal("first\n", Text(target));
+    }
+
+    [Fact]
     public void A_link_that_leads_nowhere_is_refused()
     {
         var target = Path.Combine(_package.Outside, "gone");
@@ -412,7 +425,7 @@ public sealed class FilesServiceTests : IDisposable
     [Fact]
     public void A_file_the_disk_refuses_is_a_failure_the_plugin_can_catch()
     {
-        Assert.SkipUnless(OperatingSystem.IsWindows(), "the root of a build machine writes a read-only file all the same.");
+        Assert.SkipWhen(Environment.UserName == "root", "root writes a read-only file all the same.");
         System.IO.File.WriteAllBytes(File("a.log"), []);
         System.IO.File.SetAttributes(File("a.log"), FileAttributes.ReadOnly);
         try
@@ -427,6 +440,32 @@ public sealed class FilesServiceTests : IDisposable
         {
             System.IO.File.SetAttributes(File("a.log"), FileAttributes.Normal);
         }
+    }
+
+    /// <summary>
+    /// How a write fails with no disk to fill: a range another handle keeps locked past the end, which stops a write on
+    /// Windows alone. The failure stands, what the file held stays, and the next line takes up where it was.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void A_write_the_disk_refuses_leaves_the_file_as_it_was()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "elsewhere a lock on a range is advisory and stops no write.");
+        System.IO.File.WriteAllText(File("a.log"), "first\n");
+        using var harness = Granted();
+
+        using (var holder = new FileStream(File("a.log"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            holder.Lock(holder.Length, 4096);
+
+            var failure = Caught(harness, File("a.log"));
+
+            Assert.Equal(HostOutcomeCodes.FileWriteFailed, failure!["code"]!.GetValue<string>());
+        }
+
+        Assert.Equal("first\n", Text(File("a.log")));
+        harness.Evaluate(Call(File("a.log"), "second"));
+        Assert.Equal("first\nsecond\n", Text(File("a.log")));
     }
 
     [Fact]
@@ -675,6 +714,19 @@ public sealed class FilesServiceTests : IDisposable
         catch (Win32Exception refused)
         {
             Assert.Skip($"this machine would not make a junction: {refused.Message}");
+        }
+    }
+
+    /// <summary>A link to a file, which on Windows only an account with the link privilege may make.</summary>
+    private static void LinkToAFile(string link, string target)
+    {
+        try
+        {
+            System.IO.File.CreateSymbolicLink(link, target);
+        }
+        catch (Exception refused) when (OperatingSystem.IsWindows() && refused is IOException or UnauthorizedAccessException)
+        {
+            Assert.Skip($"this machine would not make a link to a file: {refused.Message}");
         }
     }
 
