@@ -15,9 +15,10 @@ namespace Jason.Cli.Skills;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A source is a release feed when it is the address of a release's <c>manifest.json</c>, the one every other download of
-/// this product reads: <see cref="SkillsSource.DefaultSource"/>, or a mirror or a directory served the same way. The
-/// release is the one at the pinned ref, found by the same rule an update uses, so the ref has to be a release's tag.
+/// A source is a release feed when it is the address of a release's <c>manifest.json</c> that this program reads, as it
+/// reads every other release file: <see cref="SkillsSource.DefaultSource"/>, or a mirror or a directory served the same
+/// way. The release is the one at the pinned ref, found by the same rules an update uses, so the ref has to be a
+/// release's tag.
 /// </para>
 /// <para>
 /// It stages where a git fetch of the same ref stages, and each knows its own finished tree by its own mark: this one's
@@ -45,10 +46,13 @@ internal static class SkillsRelease
     /// <summary>A file that says three things is a few hundred bytes; one of 64 KB is not that file.</summary>
     private const int MaxSourceFileBytes = 64 * 1024;
 
-    /// <summary>Whether a source is a release feed: an absolute http or https address of a release's <c>manifest.json</c>.</summary>
+    /// <summary>
+    /// Whether a source is a release feed: the address of a release's <c>manifest.json</c> that
+    /// <see cref="UpdateFeed.IsAllowed"/> accepts. Any other address is a git one.
+    /// </summary>
     public static bool IsFeed(string source) =>
         Uri.TryCreate(source, UriKind.Absolute, out var address)
-        && (address.Scheme == Uri.UriSchemeHttps || address.Scheme == Uri.UriSchemeHttp)
+        && UpdateFeed.IsAllowed(address)
         && address.AbsolutePath.EndsWith("/" + ReleaseAssets.Manifest, StringComparison.Ordinal);
 
     /// <summary>Whether a release's package finished the tree at that path: its mark is at the root, and the tree is no clone.</summary>
@@ -58,8 +62,7 @@ internal static class SkillsRelease
     /// <summary>The packs of the release at <paramref name="pin"/>, staged, or nothing staged and a refusal that says why.</summary>
     public static async Task<StagedSource> StageAsync(CliEnvironment env, string feed, string pin, bool overridden, CancellationToken cancellationToken)
     {
-        var address = new Uri(feed);
-        if (!UpdateFeed.IsAllowed(address))
+        if (!Uri.TryCreate(feed, UriKind.Absolute, out var address) || !UpdateFeed.IsAllowed(address))
         {
             throw new SkillsSourceUnavailable($"'{feed}' is not a feed this program reads: an https address, or http on this machine.");
         }
@@ -69,7 +72,7 @@ internal static class SkillsRelease
         if (!pin.StartsWith('v') || !SemanticVersion.TryParse(pin[1..], out var version) || "v" + version.ToString() != pin)
         {
             throw new SkillsSourceUnavailable(
-                $"'{pin}' is not a release's tag, and a release feed publishes skills by tag: v and a version, such as v1.2.3. To take a branch or a commit, name a git repository with --source, such as {SkillsSource.EarlierDefaultSource}.");
+                $"'{pin}' is not a release's tag, and a release publishes its skills by tag: v and a version, such as v1.2.3. To take a branch or a commit, take it from a git repository: --source <git url> --ref <branch>, such as --source {SkillsSource.EarlierDefaultSource} --ref {pin}.");
         }
 
         var staged = env.Paths.SkillsStagedSourceDirectory(SkillsSource.DirectoryNameFor(pin));
@@ -158,7 +161,7 @@ internal static class SkillsRelease
         var expected = ReleaseChecksums.DigestOf(listed, ReleaseAssets.Skills, out var problem)
             ?? throw new SkillsSourceUnavailable(ReleaseChecksums.Lists(listed, ReleaseAssets.Skills)
                 ? $"{problem} ({sums}) Nothing was staged."
-                : NotPublished(pin, $"{sums} lists no {ReleaseAssets.Skills}.", overridden));
+                : NoPackage(pin, $"{sums} lists no {ReleaseAssets.Skills}."));
 
         var package = UpdateFeed.DownloadUrlFor(release, ReleaseAssets.Skills);
         var bytes = await Fetch(client, package, MaxDownloadBytes, "the skills' package", pin, overridden, cancellationToken, deadline.Token).ConfigureAwait(false);
@@ -182,6 +185,13 @@ internal static class SkillsRelease
             answered => new SkillsSourceUnavailable(NotPublished(pin, answered, overridden)),
             asked,
             deadline);
+
+    /// <summary>
+    /// The release at the pin is published and published no skills package, as no release before the packs were
+    /// published with them did. Its tag is in the repository, which a clone can take.
+    /// </summary>
+    private static string NoPackage(string pin, string answered) =>
+        $"The release at '{pin}' published no skills package: {answered} Take that tag from git instead: --source {SkillsSource.EarlierDefaultSource} --ref {pin}.";
 
     /// <summary>
     /// No release has published a package at the pin. The commonest case is the one this build creates: its pin is a

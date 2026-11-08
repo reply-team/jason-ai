@@ -13,8 +13,8 @@ namespace Jason.Runtime.Tests.Documentation;
 /// <item>(b) nothing fetches a release from GitHub by name, outside the exceptions named here with their reasons;</item>
 /// <item>(c) the detectors are run on lines before they are trusted with the tree, and must find the addresses the
 /// tree really writes;</item>
-/// <item>(d) what stays on GitHub stays there: a skills source named as a <c>git</c> repository is a clone, which a
-/// redirect does not serve; the skills' default is the release feed, through the address.</item>
+/// <item>(d) what stays on GitHub stays there: the skills, whose default is the release's package read from GitHub's
+/// release download address directly, and a <c>git</c> clone, which a redirect does not serve.</item>
 /// </list>
 /// What is read: every file the tree holds outside <c>dotnet/</c> — the pages, the skills, the plugins, the install
 /// scripts, the release notes and their template, the workflows — and the runtime's source; the runtime's tests, which
@@ -74,6 +74,10 @@ public sealed partial class ProductAddressTests : IDisposable
             "install/feeds/schema-1/manifest.json",
             1,
             "the feed fixture is the feed 0.1.0 published with its values taken out, compared with those bytes by a test; no install reads its release page"),
+        new(
+            "dotnet/src/Jason.Cli/Skills/SkillsSource.cs",
+            1,
+            "the skills' default is read from GitHub directly, as the responsible-use page says they are, so their download is never a request to the address operated for the product"),
     ];
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-tests", "product-address-" + Guid.NewGuid().ToString("N"));
@@ -274,14 +278,15 @@ public sealed partial class ProductAddressTests : IDisposable
     }
 
     /// <summary>
-    /// (d) The skills come from the release feed by default, the address every other download reads, and a <c>git</c>
-    /// clone of the public repository — which a redirect does not serve — only where one is named, or where a record from
-    /// before 0.33.0 names it.
+    /// (d) The skills come from GitHub directly: by default the package of the public repository's release, read from
+    /// GitHub's release download address and not through the address operated for the product, and from a <c>git</c>
+    /// clone of the public repository — which a redirect does not serve — where one is named, or where a record from
+    /// before 0.33.0 names it. The responsible-use page says they come from GitHub directly.
     /// </summary>
     [Fact]
-    public void The_skills_come_through_the_address_and_a_clone_goes_to_the_public_repository()
+    public void The_skills_source_stays_on_the_public_repository()
     {
-        Assert.Equal(SkillsSource.DefaultSource, UpdateFeed.Default.AbsoluteUri);
+        Assert.Equal("https://github.com/reply-team/jason-ai/releases/latest/download/manifest.json", SkillsSource.DefaultSource);
         Assert.Equal("https://github.com/reply-team/jason-ai.git", SkillsSource.EarlierDefaultSource);
     }
 

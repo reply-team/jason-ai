@@ -29,13 +29,15 @@ public sealed record StagedSource(string Directory, string Source, string Ref, b
 /// </summary>
 /// <remarks>
 /// <para>
-/// By default the packs are the <see cref="ReleaseAssets.Skills"/> of the release at the pinned ref, read from the
-/// release feed — the address every other download of this product reads — so an installation that reaches its updates
-/// reaches its skills, with no <c>git</c> on the machine. The package is its own file, never the executable's archive,
-/// and any release's may be taken with <c>--ref</c>: a person who installed in March can take a later release's
-/// practice without updating the runtime. A git repository named with <c>--source</c> is cloned at the ref, which is
-/// what a branch needs. And a build from source has a working tree of its own to take them from, so its skills never
-/// depend on a release existing at all: <c>--source</c> names that tree.
+/// By default the packs are the <see cref="ReleaseAssets.Skills"/> of the public repository's release at the pinned ref,
+/// read from GitHub's release download address directly, with no <c>git</c> on the machine. Directly, and not through
+/// the address operated for the product that every other download reads: the skills have always come from GitHub
+/// directly, and the responsible-use page says so. The package is its own file, never the executable's archive, and any
+/// release's may be taken with <c>--ref</c>: a person who installed in March can take a later release's practice
+/// without updating the runtime. Another feed — a mirror, or one served on this machine — is named with <c>--feed</c>,
+/// as for a plugin. A git repository named with <c>--source</c> is cloned at the ref, which is what a branch needs. And
+/// a build from source has a working tree of its own to take them from, so its skills never depend on a release
+/// existing at all: <c>--source</c> names that tree.
 /// </para>
 /// <para>
 /// From a pinned ref and never a moving branch, so that two people installing on the same day get the same
@@ -45,10 +47,11 @@ public sealed record StagedSource(string Directory, string Source, string Ref, b
 public static class SkillsSource
 {
     /// <summary>
-    /// Where this build's skills come from when nobody says otherwise: the release feed, whose release at the pinned ref
-    /// publishes the packs as <see cref="ReleaseAssets.Skills"/>. The same address the updater reads.
+    /// Where this build's skills come from when nobody says otherwise: the public repository's releases on GitHub, whose
+    /// release at the pinned ref publishes the packs as <see cref="ReleaseAssets.Skills"/>. Written as a release feed's
+    /// address, so the rules that find every release file find this one, and as GitHub's, so the request goes there.
     /// </summary>
-    public const string DefaultSource = ProductAddress.Releases + "/latest/download/" + ReleaseAssets.Manifest;
+    public const string DefaultSource = "https://github.com/reply-team/jason-ai/releases/latest/download/" + ReleaseAssets.Manifest;
 
     /// <summary>
     /// What builds before 0.33.0 took and recorded as the default: the public repository, cloned by <c>git</c>. Still a
@@ -147,12 +150,18 @@ public static class SkillsSource
     /// Whether the ref was chosen over this build's own pin, where a record already says so: an update hands back
     /// its record's flag beside its record's ref. Null for an install, where the answer is whether a ref was named.
     /// </param>
+    /// <param name="feed">
+    /// A release feed named with <c>--feed</c>, read in place of <paramref name="source"/>: the release at the ref is
+    /// fetched from it whatever the source says, and it is refused unless it is a feed this program reads. The staged
+    /// source names the feed; what is recorded is the caller's to say.
+    /// </param>
     public static async Task<StagedSource> StageAsync(
         CliEnvironment env,
         string? source,
         string? reference,
         bool? overriddenByRecord,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? feed = null)
     {
         ArgumentNullException.ThrowIfNull(env);
 
@@ -162,6 +171,11 @@ public static class SkillsSource
         var overridden = overriddenByRecord ?? !string.IsNullOrWhiteSpace(reference);
         var where = string.IsNullOrWhiteSpace(source) ? DefaultSource : source;
         var pin = string.IsNullOrWhiteSpace(reference) ? DefaultRef(BuildVersion(env)) : reference;
+
+        if (feed is not null)
+        {
+            return await SkillsRelease.StageAsync(env, feed, pin, overridden, cancellationToken).ConfigureAwait(false);
+        }
 
         if (Directory.Exists(where))
         {

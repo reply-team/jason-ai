@@ -9,8 +9,9 @@ using Jason.Runtime.Tests;
 namespace Jason.Cli.Tests.Skills;
 
 /// <summary>
-/// The default source: the release this build was published as, read from the release feed — its
-/// <c>checksums.txt</c>, then the <see cref="ReleaseAssets.Skills"/> it lists, held to its line there before it is opened.
+/// The default source: the release this build was published as, read from the public repository's releases on GitHub —
+/// its <c>checksums.txt</c>, then the <see cref="ReleaseAssets.Skills"/> it lists, held to its line there before it is
+/// opened.
 /// </summary>
 /// <remarks>
 /// The feed is a <see cref="FakeRelease"/> standing where the network would be, which answers only the addresses a
@@ -25,13 +26,23 @@ public class SkillsReleaseSourceTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>
-    /// The default source is the release feed's own address, the one every other download of this product reads: one
-    /// address operated for the product, which keeps the public repository's paths behind it.
+    /// The default source is the public repository's releases on GitHub, read directly and not through the address
+    /// operated for the product: the package of the release at the tag, found by the same two rules every release file
+    /// is found by.
     /// </summary>
     [Fact]
-    [Critical(Family.I1, "the default skills source is the release feed")]
-    public void The_default_source_is_the_release_feed() =>
-        Assert.Equal(SkillsSource.DefaultSource, UpdateFeed.Default.AbsoluteUri);
+    [Critical(Family.I1, "the default skills source is GitHub's release download address")]
+    public void The_default_source_is_the_public_repository_s_releases_on_github()
+    {
+        var release = UpdateFeed.PinnedFor(new Uri(SkillsSource.DefaultSource), SemanticVersion.Parse(Build));
+
+        Assert.Equal(
+            $"https://github.com/reply-team/jason-ai/releases/download/{Tag}/{ReleaseAssets.Skills}",
+            UpdateFeed.DownloadUrlFor(release, ReleaseAssets.Skills).AbsoluteUri);
+        Assert.Equal(
+            $"https://github.com/reply-team/jason-ai/releases/download/{Tag}/{ReleaseAssets.Checksums}",
+            UpdateFeed.DownloadUrlFor(release, ReleaseAssets.Checksums).AbsoluteUri);
+    }
 
     /// <summary>
     /// Given no source, the packs are the release's package at this build's tag: fetched beside the release's checksums,
@@ -54,8 +65,9 @@ public class SkillsReleaseSourceTests
         Assert.Contains(TaggedSource.Body(Tag), File.ReadAllText(Path.Combine(staged.Directory, "skills", "runtime", "operating", "SKILL.md")), StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(staged.Directory, "skills", "runtime", ".claude-plugin", "plugin.json")));
         Assert.Equal(
-            [$"/releases/download/{Tag}/{ReleaseAssets.Checksums}", $"/releases/download/{Tag}/{ReleaseAssets.Skills}"],
+            [$"/reply-team/jason-ai/releases/download/{Tag}/{ReleaseAssets.Checksums}", $"/reply-team/jason-ai/releases/download/{Tag}/{ReleaseAssets.Skills}"],
             release.Requested);
+        Assert.All(release.Hosts, host => Assert.Equal("github.com", host));
         Assert.All(release.UserAgents.Values, agent => Assert.StartsWith("jason/", agent, StringComparison.Ordinal));
     }
 
@@ -91,14 +103,15 @@ public class SkillsReleaseSourceTests
             () => SkillsSource.StageAsync(Machine(dir, release), null, reference, overriddenByRecord: null, Ct));
 
         Assert.Contains($"'{reference}'", refusal.Message, StringComparison.Ordinal);
-        Assert.Contains("--source", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("--source <git url> --ref <branch>", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(release.Requested);
         AssertNothingStaged(dir);
     }
 
     /// <summary>
-    /// A pin no release has published yet — the checksums are not there — and a release that publishes no skills package
-    /// are refused the same way: the pin named, and the directory source that works without a release.
+    /// A pin no release has published yet — the checksums are not there — and a release that published no skills
+    /// package, as no release before them did, are refused naming the pin and <c>--source</c>, which works without one;
+    /// the second says that release published none.
     /// </summary>
     [Theory]
     [InlineData(false)]
@@ -115,6 +128,9 @@ public class SkillsReleaseSourceTests
 
         Assert.Contains($"'{Tag}'", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("--source", refusal.Message, StringComparison.Ordinal);
+        Assert.True(
+            refusal.Message.Contains("published no skills package", StringComparison.Ordinal) == releasePublished,
+            refusal.Message);
         AssertNothingStaged(dir);
     }
 
@@ -242,7 +258,7 @@ public class SkillsReleaseSourceTests
 
         Assert.Equal(cloned.Directory, packaged.Directory);
         Assert.Equal(SkillsPackage.Commit, packaged.Commit);
-        Assert.Contains($"/releases/download/{Tag}/{ReleaseAssets.Skills}", release.Requested);
+        Assert.Contains($"/reply-team/jason-ai/releases/download/{Tag}/{ReleaseAssets.Skills}", release.Requested);
         Assert.NotEqual(SkillsPackage.Commit, clonedAgain.Commit);
         Assert.Equal(2, git.Requested.Count(arguments => arguments[0] == "clone"));
     }

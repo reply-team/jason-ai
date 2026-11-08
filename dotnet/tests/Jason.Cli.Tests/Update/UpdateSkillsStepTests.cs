@@ -546,6 +546,78 @@ public class UpdateSkillsStepTests
         Assert.All(skills, line => Assert.Contains($"at v{Before}, the ref its record says was chosen over this build's own.", line, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A deployment from the default source takes the new release's package from GitHub directly, as an install does: the
+    /// update is read through the address operated for the product, and the skills' download does not go through it.
+    /// </summary>
+    [Fact]
+    public async Task An_update_from_the_published_feed_takes_the_default_s_package_from_github()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        installation.Release.WithSkills(SkillsPackage.Zip(Tag(installation)));
+        await RecordedAtTheDefaultAsync(installation, dir);
+
+        var ledger = await Applier(installation).ApplyAsync(new UpdateRequest(UpdateFeed.Default, null, TimeSpan.Zero), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(["github.com"], HostsAsked(installation, ReleaseAssets.Skills));
+        Assert.Contains(TaggedSource.Body(Tag(installation)), await File.ReadAllTextAsync(Path.Combine(installation.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.All(Deployments(installation), deployment =>
+        {
+            Assert.Equal(SkillsSource.DefaultSource, deployment.Source);
+            Assert.Equal(Tag(installation), deployment.Ref);
+        });
+    }
+
+    /// <summary>
+    /// An update read from a feed somebody named — CI's, served on this machine — takes the default source's package from
+    /// that feed too, so the run asks nothing of the network, and the records keep the default as their source.
+    /// </summary>
+    [Fact]
+    [Critical(Family.I1, "an update's own feed serves the default skills and is never recorded")]
+    public async Task An_update_from_a_named_feed_takes_the_default_s_package_there_and_keeps_the_record_s_source()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        installation.Release.WithSkills(SkillsPackage.Zip(Tag(installation)));
+        await RecordedAtTheDefaultAsync(installation, dir);
+
+        var ledger = await Applier(installation).ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal([installation.Feed.Host], HostsAsked(installation, ReleaseAssets.Skills));
+        Assert.Contains(TaggedSource.Body(Tag(installation)), await File.ReadAllTextAsync(Path.Combine(Harness(installation), "operating", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.All(Deployments(installation), deployment =>
+        {
+            Assert.Equal(SkillsSource.DefaultSource, deployment.Source);
+            Assert.Equal(Tag(installation), deployment.Ref);
+        });
+    }
+
+    /// <summary>
+    /// The record an installation has when it took the skills from the default source at the build before: installed
+    /// from a repository of the test's own, then written as the default would have written it.
+    /// </summary>
+    private static async Task RecordedAtTheDefaultAsync(FakeInstallation installation, TempPaths dir)
+    {
+        var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}");
+        await InstallAsync(installation, ["skills", "install", "--source", origin]);
+        foreach (var root in (string[])[installation.Paths.RoleSkillsDirectory, Harness(installation)])
+        {
+            var record = SkillsRecord.Read(root)!;
+            SkillsRecord.Write(root, record with { Packs = [.. record.Packs.Select(pack => pack with { Source = SkillsSource.DefaultSource, Ref = $"v{Before}" })] });
+        }
+    }
+
+    /// <summary>The hosts the release was asked for a file of this name at.</summary>
+    private static List<string> HostsAsked(FakeInstallation installation, string file) =>
+        [.. installation.Release.Requested
+            .Zip(installation.Release.Hosts)
+            .Where(asked => asked.First.EndsWith("/" + file, StringComparison.Ordinal))
+            .Select(asked => asked.Second)
+            .Distinct(StringComparer.Ordinal)];
+
     /// <summary>The tag of the release the fake installation updates to.</summary>
     private static string Tag(FakeInstallation installation) => $"v{installation.To}";
 

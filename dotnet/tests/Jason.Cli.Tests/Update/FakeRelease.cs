@@ -123,6 +123,9 @@ public sealed class FakeRelease : HttpMessageHandler
     /// <summary>Every address this handler was asked for, so a test can assert what was fetched and from where.</summary>
     public List<string> Requested { get; } = [];
 
+    /// <summary>The host each request in <see cref="Requested"/> was sent to, in the same order.</summary>
+    public List<string> Hosts { get; } = [];
+
     /// <summary>The <c>User-Agent</c> each request carried, by the address it asked for, the last one kept.</summary>
     public Dictionary<string, string> UserAgents { get; } = new(StringComparer.Ordinal);
 
@@ -186,6 +189,7 @@ public sealed class FakeRelease : HttpMessageHandler
         ArgumentNullException.ThrowIfNull(request);
         var path = request.RequestUri!.AbsolutePath;
         Requested.Add(path);
+        Hosts.Add(request.RequestUri.Host);
         UserAgents[path] = request.Headers.UserAgent.ToString();
 
         if (FailWith is { } failure)
@@ -196,18 +200,23 @@ public sealed class FakeRelease : HttpMessageHandler
         // Only the two addresses a release really serves. Answering by file name whatever directory was asked
         // for is what let a composed-from-nothing path pass every test here and then 404 on a runner: a stub
         // that is more forgiving than the thing it stands in for proves the caller works against the stub.
+        // The release's own paths are GitHub's, which the address operated for the product keeps as they are, so the
+        // same release is served at both: under the repository's path, as GitHub serves it, and at the root, as the
+        // operated address does.
+        string[] released =
+        [
+            $"/releases/latest/download/{ReleaseAssets.Manifest}",
+            $"/releases/latest/download/{Asset}",
+            $"/releases/download/v{Version}/{ReleaseAssets.Manifest}",
+            $"/releases/download/v{Version}/{Asset}",
+            $"/releases/download/v{Version}/{ReleaseAssets.Checksums}",
+            $"/releases/download/v{Version}/{UiAssetLayout.AssetName}",
+            $"/releases/download/v{Version}/{ReleaseAssets.Skills}",
+            .. _plugins.Keys.Select(id => $"/releases/download/v{Version}/jason-plugin-{id}.zip"),
+        ];
+        var repository = new Uri(PublicRepository.Url).AbsolutePath;
         string[] served = Feed.AbsolutePath.StartsWith("/releases/", StringComparison.Ordinal)
-            ?
-            [
-                $"/releases/latest/download/{ReleaseAssets.Manifest}",
-                $"/releases/latest/download/{Asset}",
-                $"/releases/download/v{Version}/{ReleaseAssets.Manifest}",
-                $"/releases/download/v{Version}/{Asset}",
-                $"/releases/download/v{Version}/{ReleaseAssets.Checksums}",
-                $"/releases/download/v{Version}/{UiAssetLayout.AssetName}",
-                $"/releases/download/v{Version}/{ReleaseAssets.Skills}",
-                .. _plugins.Keys.Select(id => $"/releases/download/v{Version}/jason-plugin-{id}.zip"),
-            ]
+            ? [.. released, .. released.Select(release => repository + release)]
             : [$"/{ReleaseAssets.Manifest}", $"/{Asset}", $"/{ReleaseAssets.Checksums}", $"/{UiAssetLayout.AssetName}", $"/{ReleaseAssets.Skills}", .. _plugins.Keys.Select(id => $"/jason-plugin-{id}.zip")];
 
         var name = path[(path.LastIndexOf('/') + 1)..];

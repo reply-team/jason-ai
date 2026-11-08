@@ -20,7 +20,7 @@ public sealed record UiInstallResponse(string Version, string ApiVersion, string
 /// an address either file names, and it is held to the line there before it is opened.
 /// </summary>
 /// <remarks>
-/// The skills come from the release's own package of them too, by default, through the same feed; they can also be
+/// The skills come from a release's own package of them too, by default, read from GitHub directly; they can also be
 /// taken from a git repository at any ref because they are text with no build step. The UI is a build, so it comes from
 /// the release only: one command places it, the install guide runs it, an update runs it, and <c>jason status</c> names
 /// it.
