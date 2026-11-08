@@ -56,7 +56,7 @@ to.
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One self-contained executable under your own account, with no admin rights and no Docker, Python or Node for Jason itself. Measured on a Mac: 16 seconds from nothing to `Ready`. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 19 guides, 24 operation contracts in Markdown and JSON with 778 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
-| **Maturity** | Alpha, and young. The runtime's source and the public history opened with 0.24.0 on 1 November 2026, so the community is still small. The repository carries 989 C# test files and a UI test suite, with CI on macOS, Linux and Windows. 12 of the 25 skills are `verified`, meaning an agent host was recorded reading that exact text; the other 13 are still `draft`. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
+| **Maturity** | Alpha, and young. The runtime's source and the public history opened with 0.24.0 on 1 November 2026, so the community is still small. The repository carries 990 C# test files and a UI test suite, with CI on macOS, Linux and Windows. 12 of the 25 skills are `verified`, meaning an agent host was recorded reading that exact text; the other 13 are still `draft`. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
 | **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [What leaves your machine](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
 
 ---
@@ -474,8 +474,8 @@ means today.
 
 - **What you do:** paste one prompt into your agent. It guides you through the rest and asks only when it needs you.
 - **What it installs:** one self-contained executable, under your own account. The install script checks the download's
-  SHA-256 before unpacking it. No admin rights, and no Docker, Python or Node for Jason itself. It needs `git` to fetch its
-  skills.
+  SHA-256 before unpacking it, and ends by deploying the role skills from the same release. No admin rights, and no Docker,
+  Python or Node for Jason itself.
 - **How long it takes:** 16 seconds from nothing to `Ready` for the executable, the role skills, the browser UI and the
   start, measured on an Apple-silicon Mac with Jason 0.24.0. Your agent working through the guide takes longer, and so
   does connecting your provider.
@@ -528,7 +528,8 @@ brew install reply-team/tap/jason
 irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-Then teach it, start it and ask whether it can work:
+Then teach it, start it and ask whether it can work. The install script has already taught it its role skills, so the
+first line is for Homebrew, or for when the script said it could not:
 
 ```sh
 jason skills install --roles-only

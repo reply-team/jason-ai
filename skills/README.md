@@ -33,7 +33,7 @@ directory is not a silent act.
 `update` re-runs the deployment against the source its own record names, which is why it takes neither
 `--source` nor `--ref`: an update is the same act repeated, not a second decision about where things come
 from. A verb that accepted both would let you "update" a deployment into one from somewhere else and leave
-a record saying it had always been that way. From a git source it takes the ref this build carries, so a
+a record saying it had always been that way. From the default source or a git one it takes the ref this build carries, so a
 deployment made at an older build's pin moves to this one's — unless its record says the ref was chosen
 with `--ref`, which stays chosen. A directory is read where it stands, and a development build keeps the
 record's ref, since the release its own pin names is not published yet; the line `update` prints says
@@ -42,7 +42,10 @@ quietly installing.
 
 These are the rules both verbs keep:
 
-- **Skills are pulled from git, never from the release bundle.** A release archive is frozen at a
+- **Skills come in a package of their own, never inside the executable's archive.** Each release publishes
+  `jason-skills.zip`, this tree's `skills/` at its tag, and the default source reads it, held to its line in that
+  release's `checksums.txt`; `--source` takes a directory instead, or a git repository at a ref, which needs `git`.
+  An executable's archive is frozen at a
   version; the business pack is refreshed on its own cadence, and a person who installed Jason in
   March should be able to take this month's SDR knowledge without updating the runtime. And a build from
   source takes them from its own working tree with `--source`, so its skills never depend on a release
@@ -53,7 +56,7 @@ These are the rules both verbs keep:
   the same rule that puts a `-dev` build before the release of its number — so a development build points
   at the release it is on the way to and no literal goes stale. `--ref` overrides it, and a deployment made
   with an override says so in its record. **Until a release publishes that tag the default cannot
-  resolve**, and the verb says so in those words rather than passing on a git error: install from a
+  resolve**, and the verb says so in those words rather than passing on a download's error: install from a
   directory with `--source` until then.
 - **The installed version is recorded where it was installed, and `jason status` reports it.** Each
   target directory keeps a record naming the pack, the source and ref it came from, the commit, a
