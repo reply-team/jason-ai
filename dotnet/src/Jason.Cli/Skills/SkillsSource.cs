@@ -71,7 +71,7 @@ public static class SkillsSource
     /// Such a record is what an installation made before 0.33.0 wrote when it was given no source, and the update moves it
     /// to this build's tag anyway; this build's release publishes the packs, so it takes them from there, and the record it
     /// writes says the default it now has. A ref somebody chose stays where it was chosen, git included, since no release
-    /// may publish it. And a build that is not a release keeps the record as it is: its tag is not published yet, so the
+    /// may publish it. And a development build keeps the record as it is: its tag is not published yet, so the
     /// update keeps the record's ref, which a git clone can still take and the feed of a release before 0.33.0 never
     /// published. A source typed with <c>--source</c> is taken as typed: this is a reading of records, not of commands.
     /// </remarks>
@@ -102,17 +102,25 @@ public static class SkillsSource
     public static TimeSpan FetchTimeout => TimeSpan.FromMinutes(2);
 
     /// <summary>
-    /// The ref this build is pinned to: <c>v</c> and its own release version.
+    /// The pre-release a development build carries: the one kind of build no release publishes.
+    /// </summary>
+    private const string Development = "dev";
+
+    /// <summary>
+    /// The ref this build is pinned to: <c>v</c> and the version its release is published as — its own, pre-release
+    /// included, unless it is a development build, which points at the release it is on the way to.
     /// </summary>
     /// <remarks>
     /// Derived rather than written down, because a literal goes stale one release after somebody stops thinking
-    /// about it. Through <see cref="SemanticVersion"/>, which is the rule this reuses rather than restates: it
-    /// is what already puts a <c>-dev</c> build before the release of its number, and the pre-release it parses
-    /// off is the same suffix dropped here — so a development build points at the release it is on the way to.
+    /// about it. Through <see cref="SemanticVersion"/>, which is the rule this reuses rather than restates: it drops
+    /// the build metadata, which no tag carries, and it is what already puts a <c>-dev</c> build before the release of
+    /// its number. A candidate such as <c>1.0.0-rc.1</c> is published under its own tag, with its own skills package,
+    /// so its pin is that tag; a <c>-dev</c> build is never published, so its suffix is dropped here and it points at
+    /// the release it is on the way to.
     /// </remarks>
     public static string DefaultRef(string runtimeVersion) =>
         SemanticVersion.TryParse(runtimeVersion, out var version)
-            ? string.Create(CultureInfo.InvariantCulture, $"v{version.Major}.{version.Minor}.{version.Patch}")
+            ? string.Create(CultureInfo.InvariantCulture, $"v{(version.PreRelease == Development ? version with { PreRelease = null } : version)}")
             : throw new SkillsSourceUnavailable(
                 $"This build reports its version as '{runtimeVersion}', which is not a version, so it carries no pinned ref. Name one with --ref, or a directory with --source.");
 
@@ -126,12 +134,12 @@ public static class SkillsSource
     }
 
     /// <summary>
-    /// Whether a version is a release: one that parses, with no pre-release after it. A development build's pin names
-    /// the release it is on its way to, which is not published yet, so nothing moves a deployment to it or calls a
-    /// deployment stale against it.
+    /// Whether a version is a release: one that parses and is not a development build. A candidate is one, published
+    /// under its own tag. A development build's pin names the release it is on its way to, which is not published yet,
+    /// so nothing moves a deployment to it or calls a deployment stale against it.
     /// </summary>
     public static bool IsRelease(string version) =>
-        SemanticVersion.TryParse(version, out var parsed) && parsed.PreRelease is null;
+        SemanticVersion.TryParse(version, out var parsed) && parsed.PreRelease != Development;
 
     /// <summary>
     /// The source, resolved to a directory on this machine. A directory is read where it stands; a release feed's

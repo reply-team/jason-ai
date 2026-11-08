@@ -202,7 +202,7 @@ public static class SkillsCommands
     /// <para>
     /// The record's ref is kept in three cases only, and the line names the one that applies. A ref the record says
     /// was chosen stays chosen: an update is the same deployment repeated, not a second decision about where things
-    /// come from. A directory is read where it stands and has no ref to move to. And a build that is not a release
+    /// come from. A directory is read where it stands and has no ref to move to. And a development build
     /// carries the pin of a release that is not published yet, so moving to it would be a fetch that fails.
     /// </para>
     /// </remarks>
@@ -221,7 +221,7 @@ public static class SkillsCommands
         var build = SkillsSource.BuildVersion(env);
         if (!SkillsSource.IsRelease(build))
         {
-            return (reference, $" at {reference}, as its record names it: this build, {build}, is not a release, so the ref it carries is not published yet.");
+            return (reference, $" at {reference}, as its record names it: this build, {build}, is a development build, so the ref it carries is not published yet.");
         }
 
         var own = SkillsSource.DefaultRef(build);

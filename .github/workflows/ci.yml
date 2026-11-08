@@ -1232,7 +1232,8 @@ jobs:
 
       # Every archive this run packaged: all three when every check runs, the Linux one alone on the Linux set. And the
       # skills' package of this checkout, written as a release writes its own, so a feed served from here holds what the
-      # installer's skills step reads.
+      # installer's skills step reads; its ref drops the pre-release because the version CI builds is a -dev one, whose
+      # pin is the release it is on the way to.
       - name: Assemble the feed the way a release is assembled
         shell: pwsh
         run: |
@@ -1437,7 +1438,8 @@ jobs:
           path: feed
 
       # And the skills' package of this checkout, written as a release writes its own, so a feed served from here holds
-      # what the installer's skills step reads.
+      # what the installer's skills step reads; its ref drops the pre-release because the version CI builds is a -dev
+      # one, whose pin is the release it is on the way to.
       - name: Assemble the feed the way a release is assembled
         shell: pwsh
         run: |

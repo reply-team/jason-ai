@@ -52,6 +52,31 @@ public class SkillsFromTheReleaseTests
         });
     }
 
+    /// <summary>
+    /// A candidate's build takes the packs from its own release, which publishes them under the candidate's tag, and not
+    /// from the release it is on its way to, which nothing has published yet.
+    /// </summary>
+    [Fact]
+    public async Task An_install_on_a_candidate_takes_the_candidate_s_own_release()
+    {
+        using var dir = new TempPaths();
+        var release = Release("1.0.0-rc.1");
+
+        var install = await AtBuildAsync(dir, "1.0.0-rc.1", release, ["skills", "install", "--root", Harness(dir)]);
+
+        Assert.True(install.Exit == ExitCodes.Success, install.Error);
+        Assert.Contains($"/reply-team/jason-ai/releases/download/v1.0.0-rc.1/{ReleaseAssets.Skills}", release.Requested);
+        Assert.Contains(TaggedSource.Body("v1.0.0-rc.1"), await File.ReadAllTextAsync(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.NotEmpty(Deployments(dir));
+        Assert.All(Deployments(dir), deployment =>
+        {
+            Assert.Equal(SkillsSource.DefaultSource, deployment.Source);
+            Assert.Equal("v1.0.0-rc.1", deployment.Ref);
+            Assert.False(deployment.RefOverridden);
+            Assert.Equal(SkillsPackage.Commit, deployment.Commit);
+        });
+    }
+
     /// <summary>A deployment from the default follows the build that runs now, from that build's own release.</summary>
     [Fact]
     public async Task An_update_of_a_deployment_from_the_default_moves_to_the_release_this_build_carries()
@@ -204,7 +229,7 @@ public class SkillsFromTheReleaseTests
     }
 
     /// <summary>
-    /// A build that is not a release keeps a record of the earlier default as it is: its own tag is not published yet, so
+    /// A development build keeps a record of the earlier default as it is: its own tag is not published yet, so
     /// the update keeps the record's ref, which a release before 0.33.0 published no package for and a clone can take.
     /// </summary>
     [Fact]

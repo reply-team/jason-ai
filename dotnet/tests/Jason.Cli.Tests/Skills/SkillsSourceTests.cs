@@ -20,15 +20,32 @@ public class SkillsSourceTests
 
     /// <summary>
     /// The pin is derived from this build rather than written down, through the same type that decides a
-    /// development build is older than the release it is on the way to.
+    /// development build is older than the release it is on the way to. A candidate is published as a release of its
+    /// own, under its own tag, so it keeps its pre-release; a development build is the one kind no release publishes, so
+    /// it points at the release it is on the way to. Build metadata is never part of a tag.
     /// </summary>
     [Theory]
     [InlineData("0.1.0", "v0.1.0")]
     [InlineData("0.1.0-dev", "v0.1.0")]
     [InlineData("1.4.2", "v1.4.2")]
-    [InlineData("2.0.0-rc.1+build.7", "v2.0.0")]
+    [InlineData("2.0.0-rc.1+build.7", "v2.0.0-rc.1")]
+    [InlineData("2.0.0-dev+build.7", "v2.0.0")]
     public void The_default_ref_is_this_builds_own_release_version(string version, string expected) =>
         Assert.Equal(expected, SkillsSource.DefaultRef(version));
+
+    /// <summary>
+    /// Every build but a development one is a release: a candidate's tag is published with its package, so a deployment
+    /// moves to it and is compared with it; a development build's is not, and a version that does not parse is no build.
+    /// </summary>
+    [Theory]
+    [InlineData("1.2.3", true)]
+    [InlineData("1.2.3-rc.1", true)]
+    [InlineData("1.2.3-rc.1+build.7", true)]
+    [InlineData("1.2.3-dev", false)]
+    [InlineData("1.2.3-dev+build.7", false)]
+    [InlineData("not-a-version", false)]
+    public void Every_build_but_a_development_one_is_a_release(string version, bool release) =>
+        Assert.Equal(release, SkillsSource.IsRelease(version));
 
     /// <summary>
     /// The environment this program really runs with names no version of its own, so a release compares its skills
