@@ -72,15 +72,23 @@ public class ReleaseAssetsTests
         Assert.Equal("jason-ui.zip", ReleaseAssets.Ui);
 
     /// <summary>
+    /// The skills' package, which <c>jason skills install</c> fetches beside the checksums when it is given no source: the
+    /// two skill packs at the release's tag, under one name for every release.
+    /// </summary>
+    [Fact]
+    public void The_skills_package_has_one_stable_asset_name() =>
+        Assert.Equal("jason-skills.zip", ReleaseAssets.Skills);
+
+    /// <summary>
     /// Every file a release carries, in the order the workflow attaches them: the three archives, the feed and its
-    /// checksums, the two install scripts, the five plugins' packages, and the UI's. Thirteen, and a fourteenth is a
-    /// decision rather than a drift.
+    /// checksums, the two install scripts, the five plugins' packages, the UI's and the skills'. Fourteen, and a
+    /// fifteenth is a decision rather than a drift.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "the release's asset set")]
-    public void A_release_publishes_exactly_these_thirteen_files() =>
+    public void A_release_publishes_exactly_these_fourteen_files() =>
         Assert.Equal(
-            ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip", "jason-plugin-journal-forwarder.zip", "jason-plugin-ntfy.zip", "jason-plugin-slack.zip", "jason-plugin-telegram.zip", "jason-ui.zip"],
+            ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip", "jason-plugin-journal-forwarder.zip", "jason-plugin-ntfy.zip", "jason-plugin-slack.zip", "jason-plugin-telegram.zip", "jason-ui.zip", "jason-skills.zip"],
             ReleaseAssets.Published);
 
     /// <summary>

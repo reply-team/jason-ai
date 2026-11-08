@@ -58,6 +58,7 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at the tag, at the archive's root |
 | `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at the tag, at the archive's root |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
+| `jason-skills.zip` | the skills' package: `skills/` at the tag, under `skills/`, and a `source.json` naming the repository, the tag and its commit; `jason skills install` deploys from it when it is given no `--source` |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
