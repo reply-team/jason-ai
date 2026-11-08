@@ -6,8 +6,8 @@ namespace Jason.Cli.Tests.Documentation;
 /// What the install scripts say, in the same runs, about where Jason will keep what it learns about the person's business:
 /// two lines, the folder the harness root's default is on that machine and how to keep the files elsewhere, then where a
 /// campaign that names no project goes (<see cref="HarnessRootLines"/>). Said by every run that succeeds, after what was
-/// installed and before the PATH step, so that the PATH step, the licence and the command to run next stay the last three
-/// things said. An install makes no folder for the files: the runtime makes the root at the first project or campaign it
+/// installed and before the PATH step, so that the PATH step, the role skills, the licence and the command to run next stay
+/// the last four things said. An install makes no folder for the files: the runtime makes the root at the first project or campaign it
 /// creates.
 /// </summary>
 public sealed partial class InstallNoticesTests
@@ -102,8 +102,8 @@ public sealed partial class InstallNoticesTests
     }
 
     /// <summary>
-    /// Where the PATH step writes a profile, the two lines come before what it says: the PATH step, the licence and the
-    /// command to run next are the last three things said. On Windows that step writes the account's registry, so its half
+    /// Where the PATH step writes a profile, the two lines come before what it says: the PATH step, the role skills, the
+    /// licence and the command to run next are the last four things said. On Windows that step writes the account's registry, so its half
     /// is the order in the text below.
     /// </summary>
     [Fact]
@@ -115,9 +115,10 @@ public sealed partial class InstallNoticesTests
 
         Assert.True(run.Exit == 0, run.Stderr);
         var lines = Lines(run.Stdout);
-        Assert.Equal(HarnessRootLines.Where(installer.DefaultRoot), lines[^5]);
-        Assert.Equal(HarnessRootLines.DefaultProject, lines[^4]);
-        Assert.StartsWith($"Added {installer.InstallDir} to the PATH in ", lines[^3], StringComparison.Ordinal);
+        Assert.Equal(HarnessRootLines.Where(installer.DefaultRoot), lines[^6]);
+        Assert.Equal(HarnessRootLines.DefaultProject, lines[^5]);
+        Assert.StartsWith($"Added {installer.InstallDir} to the PATH in ", lines[^4], StringComparison.Ordinal);
+        Assert.Equal(DirectoryLine, lines[^3]);
     }
 
     [Fact]

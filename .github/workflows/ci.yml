@@ -1230,10 +1230,14 @@ jobs:
           merge-multiple: true
           path: feed
 
-      # Every archive this run packaged: all three when every check runs, the Linux one alone on the Linux set.
+      # Every archive this run packaged: all three when every check runs, the Linux one alone on the Linux set. And the
+      # skills' package of this checkout, written as a release writes its own, so a feed served from here holds what the
+      # installer's skills step reads.
       - name: Assemble the feed the way a release is assembled
         shell: pwsh
-        run: ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require ${{ needs.version.outputs.rids }}
+        run: |
+          ./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive feed/jason-skills.zip -Repository https://github.com/reply-team/jason-ai -Ref ("v" + ("${{ needs.version.outputs.version }}" -replace '-.*$', '')) -Commit "${{ github.sha }}"
+          ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require ${{ needs.version.outputs.rids }} -Plugins jason-skills.zip
 
       - name: Install, twice over, and once more without touching the PATH
         shell: bash
@@ -1250,6 +1254,10 @@ jobs:
           sh install/install.sh --no-modify-path | tee first.txt
           installed="$("$HOME/.local/bin/jason" --version)"
           [ "${installed%%+*}" = "$VERSION" ] || { echo "installed '$installed', expected $VERSION"; exit 1; }
+
+          # The feed is a directory, which the skills verb does not read: the verb is not run, and the line before the
+          # licence says what to run.
+          [ "$(tail -n 3 first.txt | head -n 1)" = 'The role skills were not deployed: the feed is a directory, which `jason skills install` does not read. Run `jason skills install --roles-only` now that Jason is installed, offline with `--source <checkout>`.' ] || { tail -n 3 first.txt; exit 1; }
 
           # The licence and the third-party notices are kept beside it, by the names it keeps them as: the archive's
           # LICENSE is this tree's LICENSE. And the run ends saying which licence that is, then what to run next.
@@ -1285,6 +1293,41 @@ jobs:
 
           # A login shell reads the line the script wrote and finds jason by name.
           sh -l -c 'jason --version'
+
+      # The same feed served from this machine and nowhere else, as the update's job serves its own: a feed at an address
+      # is one the skills verb reads, so the installer hands it the feed's manifest, and the role skills are deployed
+      # from this run's own package, with no other network.
+      - name: Install from a feed served on this machine, the role skills with it
+        shell: bash
+        env:
+          JASON_Update__CheckEnabled: 'false'
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          export HOME="$RUNNER_TEMP/home-served"
+          mkdir -p "$HOME"
+          export JASON_DATA_DIR="$RUNNER_TEMP/served-data"
+          export JASON_Harness__Root="$RUNNER_TEMP/served-harness"
+
+          python3 -m http.server 8099 --bind 127.0.0.1 --directory feed > served-feed.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          ready=""
+          for try in $(seq 1 50); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8099/manifest.json; then ready=1; break; fi
+            sleep 0.2
+          done
+          [ -n "$ready" ] || { echo "the feed on 127.0.0.1:8099 never answered within 10 s"; exit 1; }
+
+          sh install/install.sh --feed http://127.0.0.1:8099 --no-modify-path | tee served.txt
+          if grep -q 'The role skills were not deployed' served.txt; then echo "the installer did not deploy the role skills"; exit 1; fi
+
+          # The deployment's record, in the data directory, names the feed it came from; and a runtime started over it
+          # says its role skills are in place.
+          grep -q 'http://127.0.0.1:8099/manifest.json' "$JASON_DATA_DIR/skills/roles/.jason-skills.json" || { cat "$JASON_DATA_DIR/skills/roles/.jason-skills.json"; exit 1; }
+          "$HOME/.local/bin/jason" runtime start
+          "$HOME/.local/bin/jason" status > served-status.json || true
+          "$HOME/.local/bin/jason" runtime stop
+          grep -q '"name":"role_skills","required":true,"state":"ok"' served-status.json || { cat served-status.json; exit 1; }
 
       # The fixture names all three archives, which only a run that builds macOS packages.
       - name: Install from the schema-1 fixture, the feed layout 0.1.0 published
@@ -1393,9 +1436,13 @@ jobs:
           merge-multiple: true
           path: feed
 
+      # And the skills' package of this checkout, written as a release writes its own, so a feed served from here holds
+      # what the installer's skills step reads.
       - name: Assemble the feed the way a release is assembled
         shell: pwsh
-        run: ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require ${{ needs.version.outputs.rids }}
+        run: |
+          ./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive feed/jason-skills.zip -Repository https://github.com/reply-team/jason-ai -Ref ("v" + ("${{ needs.version.outputs.version }}" -replace '-.*$', '')) -Commit "${{ github.sha }}"
+          ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require ${{ needs.version.outputs.rids }} -Plugins jason-skills.zip
 
       # Windows PowerShell 5.1 rather than pwsh: it is what a fresh Windows has, and what the one-liner is typed into.
       - name: Install, twice over, and once more without touching the PATH
@@ -1410,9 +1457,15 @@ jobs:
           $exe = Join-Path $dir 'jason.exe'
           function UserPathEntries { @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_.TrimEnd('\') -ieq $dir }) }
 
-          ./install/install.ps1 -NoModifyPath
+          $first = ./install/install.ps1 -NoModifyPath 6>&1 | Out-String
+          Write-Host $first
           $installed = & $exe --version
           if (($installed -split '\+')[0] -ne $env:VERSION) { throw "installed '$installed', expected $env:VERSION" }
+
+          # The feed is a directory, which the skills verb does not read: the verb is not run, and a line says what to run.
+          # Read with its white space taken out, as the second run's words are below.
+          $directoryLine = 'The role skills were not deployed: the feed is a directory, which `jason skills install` does not read. Run `jason skills install --roles-only` now that Jason is installed, offline with `--source <checkout>`.'
+          if (-not ($first -replace '\s+', '').Contains(($directoryLine -replace '\s+', ''))) { throw "the first run did not say that a directory feed deploys no role skills" }
 
           # The licence and the third-party notices are kept beside it, by the names it keeps them as: the archive's
           # LICENSE is this tree's LICENSE.
@@ -1482,6 +1535,47 @@ jobs:
           # above cannot see that - a script run as a file gets a scope of its own.
           Invoke-Expression (Get-Content ./install/install.ps1 -Raw)
           if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { throw "install.ps1 left Install-Jason defined in the session that ran it" }
+
+      # The same feed served from this machine and nowhere else, as the update's job serves its own: a feed at an address
+      # is one the skills verb reads, so the installer hands it the feed's manifest, and the role skills are deployed
+      # from this run's own package, with no other network.
+      - name: Install from a feed served on this machine, the role skills with it
+        shell: powershell
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = Join-Path $env:RUNNER_TEMP 'served-bin'
+          $exe = Join-Path $dir 'jason.exe'
+          $env:JASON_DATA_DIR = Join-Path $env:RUNNER_TEMP 'served-data'
+          $env:JASON_Harness__Root = Join-Path $env:RUNNER_TEMP 'served-harness'
+
+          $server = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', 'feed' -PassThru
+          try {
+            $ready = $false
+            for ($try = 0; $try -lt 50; $try++) {
+              try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing | Out-Null; $ready = $true; break }
+              catch { Start-Sleep -Milliseconds 200 }
+            }
+            if (-not $ready) { throw "the feed on 127.0.0.1:8099 never answered within 10 s" }
+
+            $served = ./install/install.ps1 -Feed http://127.0.0.1:8099 -InstallDir $dir -NoModifyPath 6>&1 | Out-String
+            Write-Host $served
+            if (($served -replace '\s+', '').Contains('Theroleskillswerenotdeployed')) { throw "the installer did not deploy the role skills" }
+
+            # The deployment's record, in the data directory, names the feed it came from; and a runtime started over it
+            # says its role skills are in place.
+            $record = Get-Content -Raw (Join-Path $env:JASON_DATA_DIR 'skills\roles\.jason-skills.json')
+            if (-not $record.Contains('http://127.0.0.1:8099/manifest.json')) { throw "the role skills' record does not name the served feed: $record" }
+            & $exe runtime start | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "the installed jason could not start a runtime ($LASTEXITCODE)" }
+            $status = & $exe status
+            & $exe runtime stop | Out-Null
+            if (-not ($status -match '"name":"role_skills","required":true,"state":"ok"')) { throw "role_skills is not ok: $status" }
+          }
+          finally {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+          }
 
       # The fixture names all three archives, which only a run that builds macOS packages.
       - name: Install from the schema-1 fixture, the feed layout 0.1.0 published
