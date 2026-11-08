@@ -130,7 +130,7 @@ public static class SkillsCommands
                 }
 
                 var own = pack.MaxBy(deployment => deployment.InstalledAt)!;
-                var key = (own.Source, own.Ref, own.RefOverridden, own.Pack);
+                var key = (SkillsSource.SourceForUpdate(own.Source, own.RefOverridden, SkillsSource.BuildVersion(env)), own.Ref, own.RefOverridden, own.Pack);
                 if (!groups.TryGetValue(key, out var members))
                 {
                     groups[key] = members = [];
@@ -217,8 +217,8 @@ public static class SkillsCommands
     {
         var install = new Command("install", "Deploy the skill packs into this runtime and your agent harnesses.");
 
-        var source = new Option<string?>("--source") { Description = "Where the packs come from: a directory on this machine, or a git source. Defaults to the repository this build was published from." };
-        var reference = new Option<string?>("--ref") { Description = "Which ref to take. Defaults to the pin this build carries." };
+        var source = new Option<string?>("--source") { Description = "Where the packs come from: a directory on this machine, a git source, or the address of a release feed's manifest.json. Defaults to the release feed this build updates from, at the release this build was published as." };
+        var reference = new Option<string?>("--ref") { Description = "Which ref to take: from a release feed, a release's tag; from a git source, any ref. Defaults to the pin this build carries." };
         var root = new Option<string?>("--root") { Description = "Deploy into this directory as a harness root, instead of detection." };
         var host = new Option<string?>("--host") { Description = "Deploy only into this host's skills root: one of " + AgentHosts.Vocabulary + ". With --root, the host that directory is for." };
         var pack = new Option<string?>("--pack") { Description = "Deploy only this pack." };

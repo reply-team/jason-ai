@@ -41,6 +41,17 @@ public sealed class FakeRelease : HttpMessageHandler
         return ChecksumsSay($"{Digest}  {Asset}\n{digest ?? Convert.ToHexStringLower(SHA256.HashData(zip))}  {UiAssetLayout.AssetName}\n");
     }
 
+    /// <summary>
+    /// The release's skills package, and checksums.txt listing it after what is listed there already, as a release
+    /// publishes it after the UI's. <paramref name="digest"/> is what that line says, the package's own hash when not given.
+    /// </summary>
+    public FakeRelease WithSkills(byte[] zip, string? digest = null)
+    {
+        _files[ReleaseAssets.Skills] = zip;
+        var listed = Encoding.UTF8.GetString(_files[ReleaseAssets.Checksums]);
+        return ChecksumsSay($"{listed}{digest ?? Convert.ToHexStringLower(SHA256.HashData(zip))}  {ReleaseAssets.Skills}\n");
+    }
+
     /// <summary>A release from before the UI was published: no package, and checksums.txt lists the archive alone.</summary>
     public FakeRelease WithoutUi()
     {
@@ -194,9 +205,10 @@ public sealed class FakeRelease : HttpMessageHandler
                 $"/releases/download/v{Version}/{Asset}",
                 $"/releases/download/v{Version}/{ReleaseAssets.Checksums}",
                 $"/releases/download/v{Version}/{UiAssetLayout.AssetName}",
+                $"/releases/download/v{Version}/{ReleaseAssets.Skills}",
                 .. _plugins.Keys.Select(id => $"/releases/download/v{Version}/jason-plugin-{id}.zip"),
             ]
-            : [$"/{ReleaseAssets.Manifest}", $"/{Asset}", $"/{ReleaseAssets.Checksums}", $"/{UiAssetLayout.AssetName}", .. _plugins.Keys.Select(id => $"/jason-plugin-{id}.zip")];
+            : [$"/{ReleaseAssets.Manifest}", $"/{Asset}", $"/{ReleaseAssets.Checksums}", $"/{UiAssetLayout.AssetName}", $"/{ReleaseAssets.Skills}", .. _plugins.Keys.Select(id => $"/jason-plugin-{id}.zip")];
 
         var name = path[(path.LastIndexOf('/') + 1)..];
         if (!served.Contains(path, StringComparer.Ordinal) || !_files.TryGetValue(name, out var bytes))

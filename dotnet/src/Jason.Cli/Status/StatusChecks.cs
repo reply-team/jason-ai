@@ -124,7 +124,8 @@ internal static class StatusChecks
 
         /// <summary>
         /// <see cref="InstallRoles"/>, from the source a deployment came from wherever that is not this build's
-        /// default: the repair for role skills at neither the runtime's tag nor the one this build installs.
+        /// default, or the one builds before 0.33.0 had: the repair for role skills at neither the runtime's tag nor the one
+        /// this build installs.
         /// </summary>
         /// <remarks>
         /// Bare, it would move a deployment taught from a mirror, or from a repository on this machine, to the default
@@ -134,7 +135,7 @@ internal static class StatusChecks
         /// composes.
         /// </remarks>
         public static string InstallRolesFrom(string source) =>
-            string.Equals(source, SkillsSource.DefaultSource, StringComparison.Ordinal) ? InstallRoles : $"{InstallRoles} --source {source}";
+            SkillsSource.IsDefault(source) ? InstallRoles : $"{InstallRoles} --source {source}";
 
         /// <summary>
         /// Every deployment Jason made, carried to the ref this build carries: the repair for an agent's packs not at
@@ -163,7 +164,7 @@ internal static class StatusChecks
 
         /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
-        /// default: the line that moves a harness deployment its record pins to this build's tag.
+        /// default, or the one builds before 0.33.0 had: the line that moves a harness deployment its record pins to this build's tag.
         /// </summary>
         /// <remarks>
         /// Printed in a fact, not as a repair, because the check passes: the record pins its ref, made with --ref or
@@ -173,7 +174,7 @@ internal static class StatusChecks
         /// separates.
         /// </remarks>
         public static string InstallPackFrom(string pack, string source) =>
-            string.Equals(source, SkillsSource.DefaultSource, StringComparison.Ordinal) ? $"{Install} --pack {pack}" : $"{Install} --pack {pack} --source {source}";
+            SkillsSource.IsDefault(source) ? $"{Install} --pack {pack}" : $"{Install} --pack {pack} --source {source}";
 
         /// <summary>
         /// The repair that is not a <c>jason</c> command: the line putting this executable's directory on

@@ -20,9 +20,10 @@ public sealed record UiInstallResponse(string Version, string ApiVersion, string
 /// an address either file names, and it is held to the line there before it is opened.
 /// </summary>
 /// <remarks>
-/// The role skills come from git at the release's tag because they are text with no build step. The UI is a build, so
-/// it comes from the release, and only that differs: one command places it, the install guide runs it, an update runs
-/// it, and <c>jason status</c> names it.
+/// The skills come from the release's own package of them too, by default, through the same feed; they can also be
+/// taken from a git repository at any ref because they are text with no build step. The UI is a build, so it comes from
+/// the release only: one command places it, the install guide runs it, an update runs it, and <c>jason status</c> names
+/// it.
 /// </remarks>
 public static class UiInstaller
 {

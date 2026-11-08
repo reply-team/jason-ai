@@ -8,8 +8,8 @@ namespace Jason.Contracts.Update;
 /// <remarks>
 /// The paths are GitHub's, kept as they are, so the two URL rules in <see cref="UpdateFeed"/> work in front of it
 /// unchanged, and the store behind it can change without any of them changing. What stays on GitHub stays there by
-/// name: the licence page at a tag, links into the tree, and the skills source, which is a <c>git</c> clone that a
-/// redirect does not serve.
+/// name: the licence page at a tag, links into the tree, and a skills source named as a <c>git</c> repository, which
+/// is a clone that a redirect does not serve. The skills' default is the release feed, through this address.
 /// <para>
 /// It is a host of its own under the product's domain, so the domain's apex can be a site about Jason without any
 /// request the product makes passing through it. Releases from 0.7.0 to 0.23.x named the apex, which keeps

@@ -13,8 +13,8 @@ namespace Jason.Runtime.Tests.Documentation;
 /// <item>(b) nothing fetches a release from GitHub by name, outside the exceptions named here with their reasons;</item>
 /// <item>(c) the detectors are run on lines before they are trusted with the tree, and must find the addresses the
 /// tree really writes;</item>
-/// <item>(d) what stays on GitHub stays there: the skills come from a <c>git</c> clone, which a redirect does not
-/// serve.</item>
+/// <item>(d) what stays on GitHub stays there: a skills source named as a <c>git</c> repository is a clone, which a
+/// redirect does not serve; the skills' default is the release feed, through the address.</item>
 /// </list>
 /// What is read: every file the tree holds outside <c>dotnet/</c> — the pages, the skills, the plugins, the install
 /// scripts, the release notes and their template, the workflows — and the runtime's source; the runtime's tests, which
@@ -274,12 +274,16 @@ public sealed partial class ProductAddressTests : IDisposable
     }
 
     /// <summary>
-    /// (d) The skills come from a <c>git</c> clone of the public repository, which a redirect does not serve, and the
-    /// responsible-use page says they come from GitHub directly. Nothing else pinned this before the address existed.
+    /// (d) The skills come from the release feed by default, the address every other download reads, and a <c>git</c>
+    /// clone of the public repository — which a redirect does not serve — only where one is named, or where a record from
+    /// before 0.33.0 names it.
     /// </summary>
     [Fact]
-    public void The_skills_source_stays_a_clone_of_the_public_repository() =>
-        Assert.Equal("https://github.com/reply-team/jason-ai.git", SkillsSource.DefaultSource);
+    public void The_skills_come_through_the_address_and_a_clone_goes_to_the_public_repository()
+    {
+        Assert.Equal(SkillsSource.DefaultSource, UpdateFeed.Default.AbsoluteUri);
+        Assert.Equal("https://github.com/reply-team/jason-ai.git", SkillsSource.EarlierDefaultSource);
+    }
 
     /// <summary>Which shape an address has, or <c>null</c> when the redirect answers no such request.</summary>
     private static string? ShapeOf(string address, string file)

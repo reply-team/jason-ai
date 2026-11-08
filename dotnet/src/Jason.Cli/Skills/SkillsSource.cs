@@ -8,12 +8,12 @@ using Jason.Contracts.Skills;
 namespace Jason.Cli.Skills;
 
 /// <summary>
-/// The packs could not be got at: no release has published the pinned ref, the source is a remote one and this
-/// environment has no program runner, or <c>git</c> refused.
+/// The packs could not be got at: no release has published the pinned ref, the release's package is not the one its
+/// checksums list, the source is a git one and this environment has no program runner, or <c>git</c> refused.
 /// </summary>
 /// <remarks>
-/// Its message names what to do next. A git error on its own is not something an operator can act on, and the
-/// commonest case here is the most confusing one: the pin is a tag that does not exist yet.
+/// Its message names what to do next. A git error or an address's status on its own is not something an operator can act
+/// on, and the commonest case here is the most confusing one: the pin is a release that is not published yet.
 /// </remarks>
 public sealed class SkillsSourceUnavailable(string message) : Exception(message);
 
@@ -25,14 +25,17 @@ public sealed class SkillsSourceUnavailable(string message) : Exception(message)
 public sealed record StagedSource(string Directory, string Source, string Ref, bool RefOverridden, string? Commit);
 
 /// <summary>
-/// Where skills come from: git, never the release bundle.
+/// Where skills come from: a release's own package of them by default, a git repository or a directory when one is named.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A release archive is frozen at a version, and the business pack is refreshed on a cadence that has nothing
-/// to do with runtime releases — a person who installed in March should be able to take this month's practice
-/// without updating the runtime. And a build from source has a working tree of its own to take them from, so
-/// its skills never depend on a release existing at all: <c>--source</c> names that tree.
+/// By default the packs are the <see cref="ReleaseAssets.Skills"/> of the release at the pinned ref, read from the
+/// release feed — the address every other download of this product reads — so an installation that reaches its updates
+/// reaches its skills, with no <c>git</c> on the machine. The package is its own file, never the executable's archive,
+/// and any release's may be taken with <c>--ref</c>: a person who installed in March can take a later release's
+/// practice without updating the runtime. A git repository named with <c>--source</c> is cloned at the ref, which is
+/// what a branch needs. And a build from source has a working tree of its own to take them from, so its skills never
+/// depend on a release existing at all: <c>--source</c> names that tree.
 /// </para>
 /// <para>
 /// From a pinned ref and never a moving branch, so that two people installing on the same day get the same
@@ -41,8 +44,36 @@ public sealed record StagedSource(string Directory, string Source, string Ref, b
 /// </remarks>
 public static class SkillsSource
 {
-    /// <summary>The repository this build's skills come from when nobody says otherwise.</summary>
-    public const string DefaultSource = PublicRepository.Url + ".git";
+    /// <summary>
+    /// Where this build's skills come from when nobody says otherwise: the release feed, whose release at the pinned ref
+    /// publishes the packs as <see cref="ReleaseAssets.Skills"/>. The same address the updater reads.
+    /// </summary>
+    public const string DefaultSource = ProductAddress.Releases + "/latest/download/" + ReleaseAssets.Manifest;
+
+    /// <summary>
+    /// What builds before 0.33.0 took and recorded as the default: the public repository, cloned by <c>git</c>. Still a
+    /// source anybody may name.
+    /// </summary>
+    public const string EarlierDefaultSource = PublicRepository.Url + ".git";
+
+    /// <summary>Whether a source is this build's default or the one builds before 0.33.0 took and recorded as theirs.</summary>
+    public static bool IsDefault(string source) =>
+        string.Equals(source, DefaultSource, StringComparison.Ordinal) || string.Equals(source, EarlierDefaultSource, StringComparison.Ordinal);
+
+    /// <summary>
+    /// The source an update stages a recorded deployment from: the record's own, except a record of
+    /// <see cref="EarlierDefaultSource"/> whose ref nobody chose, which a release build reads as <see cref="DefaultSource"/>.
+    /// </summary>
+    /// <remarks>
+    /// Such a record is what an installation made before 0.33.0 wrote when it was given no source, and the update moves it
+    /// to this build's tag anyway; this build's release publishes the packs, so it takes them from there, and the record it
+    /// writes says the default it now has. A ref somebody chose stays where it was chosen, git included, since no release
+    /// may publish it. And a build that is not a release keeps the record as it is: its tag is not published yet, so the
+    /// update keeps the record's ref, which a git clone can still take and the feed of a release before 0.33.0 never
+    /// published. A source typed with <c>--source</c> is taken as typed: this is a reading of records, not of commands.
+    /// </remarks>
+    public static string SourceForUpdate(string recorded, bool overridden, string build) =>
+        !overridden && IsRelease(build) && string.Equals(recorded, EarlierDefaultSource, StringComparison.Ordinal) ? DefaultSource : recorded;
 
     /// <summary>
     /// What a record says in place of a ref for a directory read where it stands, unless a ref was asked for: a sentence of
@@ -62,7 +93,7 @@ public static class SkillsSource
     /// claim nobody holds is what a fetch that never finished left, and is removed; one whose claim is held is another
     /// run's fetch of the same ref, and is left alone.
     /// </summary>
-    private const string Claim = "claim";
+    internal const string Claim = "claim";
 
     /// <summary>How long a fetch is given before it is stopped.</summary>
     public static TimeSpan FetchTimeout => TimeSpan.FromMinutes(2);
@@ -100,9 +131,10 @@ public static class SkillsSource
         SemanticVersion.TryParse(version, out var parsed) && parsed.PreRelease is null;
 
     /// <summary>
-    /// The source, resolved to a directory on this machine. A directory is read where it stands; anything else
-    /// is cloned by <c>git</c> at the ref, into the data directory, through the program seam — so an
-    /// environment with no runner refuses rather than reaching for the network.
+    /// The source, resolved to a directory on this machine. A directory is read where it stands; a release feed's
+    /// package at the ref is fetched, checked and unpacked into the data directory; anything else is cloned by <c>git</c>
+    /// at the ref, into the data directory, through the program seam — so an environment with no runner refuses a git
+    /// source rather than reaching for the network.
     /// </summary>
     /// <remarks>
     /// The same for a dry run as for a real one. A dry run promises that nothing is deployed, and staging deploys
@@ -141,6 +173,11 @@ public static class SkillsSource
             return new StagedSource(local, local, overridden ? pin : DirectoryRef, overridden, null);
         }
 
+        if (SkillsRelease.IsFeed(where))
+        {
+            return await SkillsRelease.StageAsync(env, where, pin, overridden, cancellationToken).ConfigureAwait(false);
+        }
+
         if (env.Programs is not { } runner)
         {
             throw new SkillsSourceUnavailable(
@@ -168,7 +205,7 @@ public static class SkillsSource
         }
 
         Directory.CreateDirectory(env.Paths.SkillsStagedSourcesDirectory);
-        RemoveLeftovers(staged);
+        RemoveLeftovers(staged, Completed);
 
         var partial = $"{staged}.partial-{Guid.NewGuid():N}";
         var tree = Path.Combine(partial, "tree");
@@ -249,14 +286,16 @@ public static class SkillsSource
 
     /// <summary>
     /// What earlier fetches of this ref left: every directory beside it that a fetch made and nobody is fetching into any
-    /// more, and a tree at the ref itself that nothing marked complete, which an earlier build staged. Through the CLI's
+    /// more, and a tree at the ref itself that <paramref name="completed"/> does not take for a finished one of its own
+    /// kind: one an earlier build staged, or one the other kind of source finished, since a clone and a release's package
+    /// stage at the same path and each knows only its own mark. Through the CLI's
     /// one tree delete, since git leaves its pack files read-only and Windows deletes no read-only file.
     /// </summary>
     /// <remarks>
     /// A tree at the ref is in the way of this fetch, so failing to remove it fails the fetch. One beside it is not, so
     /// failing to remove that one leaves it for the next fetch.
     /// </remarks>
-    private static void RemoveLeftovers(string staged)
+    internal static void RemoveLeftovers(string staged, Func<string, bool> completed)
     {
         var parent = Path.GetDirectoryName(staged)!;
         foreach (var partial in Directory.EnumerateDirectories(parent, $"{Path.GetFileName(staged)}.partial-*"))
@@ -267,7 +306,7 @@ public static class SkillsSource
             }
         }
 
-        if (Directory.Exists(staged) && !Completed(staged))
+        if (Directory.Exists(staged) && !completed(staged))
         {
             DirectoryTrees.Delete(staged);
         }
@@ -291,7 +330,7 @@ public static class SkillsSource
         }
     }
 
-    private static void TryRemove(string partial)
+    internal static void TryRemove(string partial)
     {
         try
         {
@@ -308,7 +347,7 @@ public static class SkillsSource
     }
 
     /// <summary>Whether what was staged is a thing with packs in it, said before anything downstream looks.</summary>
-    private static void RequirePacks(string directory, string source)
+    internal static void RequirePacks(string directory, string source)
     {
         var skills = Path.Combine(directory, "skills");
         if (!Directory.Exists(skills) || Directory.GetDirectories(skills).Length == 0)
@@ -328,7 +367,7 @@ public static class SkillsSource
     /// refs that are fine; <see cref="JasonPaths.SkillsStagedSourceDirectory"/> refuses again on its own
     /// account, because that is where the path is made.
     /// </remarks>
-    private static string DirectoryNameFor(string reference)
+    internal static string DirectoryNameFor(string reference)
     {
         var name = new string([.. reference.Select(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '-')]);
 
