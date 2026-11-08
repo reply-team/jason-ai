@@ -359,7 +359,7 @@ deploy_role_skills() {
     if "$TARGET" skills install --roles-only "$@"; then
         :
     else
-        echo 'The role skills were not deployed; the line above says why. Run `jason skills install --roles-only` when the network is back; `jason status` names it too.'
+        echo 'The role skills were not deployed; the lines above say why. Run `jason skills install --roles-only` once that is dealt with; `jason status` names it as well.'
     fi
 }
 case "$FEED" in

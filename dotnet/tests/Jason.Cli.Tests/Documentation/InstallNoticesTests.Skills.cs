@@ -31,7 +31,7 @@ public sealed partial class InstallNoticesTests
         "The role skills were not deployed: the feed is a directory, which `jason skills install` does not read. Run `jason skills install --roles-only` now that Jason is installed, offline with `--source <checkout>`.";
 
     private const string FailedLine =
-        "The role skills were not deployed; the line above says why. Run `jason skills install --roles-only` when the network is back; `jason status` names it too.";
+        "The role skills were not deployed; the lines above say why. Run `jason skills install --roles-only` once that is dealt with; `jason status` names it as well.";
 
     /// <summary>A feed in a directory is never handed to the verb: the verb is not run, and the line says what to run.</summary>
     [Theory]

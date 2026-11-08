@@ -393,7 +393,7 @@ function Install-Jason {
         $PSNativeCommandUseErrorActionPreference = $false
         & $target @arguments | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) {
-            Write-Host 'The role skills were not deployed; the line above says why. Run `jason skills install --roles-only` when the network is back; `jason status` names it too.'
+            Write-Host 'The role skills were not deployed; the lines above say why. Run `jason skills install --roles-only` once that is dealt with; `jason status` names it as well.'
         }
     } else {
         Write-Host 'The role skills were not deployed: the feed is a directory, which `jason skills install` does not read. Run `jason skills install --roles-only` now that Jason is installed, offline with `--source <checkout>`.'
