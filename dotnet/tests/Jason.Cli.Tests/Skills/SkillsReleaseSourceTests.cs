@@ -342,7 +342,11 @@ public class SkillsReleaseSourceTests
         return directory.FullName;
     }
 
-    /// <summary>PowerShell run as a release step runs it, with no profile and no telemetry, and what it said.</summary>
+    /// <summary>
+    /// PowerShell run as a release step runs it, with no profile and no telemetry, to its end or to its bound, and what it
+    /// said. At the bound its whole tree is killed and the test fails with what it had printed, so a script that hangs
+    /// ends this row rather than the suite.
+    /// </summary>
     private static (int Exit, string Stdout, string Stderr) Pwsh(params string[] arguments)
     {
         var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
@@ -369,7 +373,18 @@ public class SkillsReleaseSourceTests
         using var process = System.Diagnostics.Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
+        var bound = TimeSpan.FromSeconds(120);
+        if (!process.WaitForExit(bound))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(TimeSpan.FromSeconds(10));
+            Task.WaitAny([Task.WhenAll(stdout, stderr)], TimeSpan.FromSeconds(10));
+            Assert.Fail(
+                $"pwsh did not finish in {bound.TotalSeconds:0} s and was killed, with everything it had started.{Environment.NewLine}"
+                + $"stdout so far: {(stdout.IsCompletedSuccessfully ? stdout.Result : "(not readable)")}{Environment.NewLine}"
+                + $"stderr so far: {(stderr.IsCompletedSuccessfully ? stderr.Result : "(not readable)")}");
+        }
+
         return (process.ExitCode, stdout.Result, stderr.Result);
     }
 
