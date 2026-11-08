@@ -908,7 +908,7 @@ Mac, and this page would rather say so than imply a check nobody ran.
 > either; nor when a plugin reload started that program again later. It **ended when the account signed out**,
 > without writing a line about stopping, and the next sign-in started a new one on the same data: no migration left
 > to apply, a campaign made before the sign-out still there, and again no console and no window. `status` named the
-> data directory, and `jason status` said the runtime is registered to start at logon. `disable` took the task
+> data directory, and `jason status` said "Registered at logon: the runtime starts by itself each time you sign in." `disable` took the task
 > away, a second `disable` still succeeded, and neither stopped the runtime; stopped and started again with
 > `jason runtime start`, the runtime logged `"Console":"freed_hidden"` and had no console afterwards.
 > `jason uninstall` put the logon registration first in its plan, took it away and left nothing behind: no task,
