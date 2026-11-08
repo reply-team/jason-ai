@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Net;
+using System.Text;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Process;
@@ -280,6 +282,95 @@ public class SkillsReleaseSourceTests
 
         Assert.Empty(release.Requested);
         Assert.Contains(git.Requested, request => request.Arguments.Contains(SkillsSource.EarlierDefaultSource));
+    }
+
+    /// <summary>
+    /// The package the release writes is the package this program reads: the release's own script run over this
+    /// repository's <c>skills/</c>, served as the release serves it and staged, leaves the tree's files with the tree's
+    /// bytes, the files under directories whose names start with a dot among them. The packages the other rows build by
+    /// hand hold a few names; this one holds every name the packs really have, so an entry rule or a character refused
+    /// that no hand-made name carries is found here.
+    /// </summary>
+    [Fact]
+    public async Task The_package_the_release_s_script_writes_of_this_tree_stages_as_the_tree()
+    {
+        using var dir = new TempPaths();
+        using var scratch = new TempTree();
+        var root = RepositoryRoot();
+        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        var archive = Path.Combine(scratch.NewDirectory("release"), ReleaseAssets.Skills);
+        var (exit, stdout, stderr) = Pwsh(
+            "-File", Path.Combine(root, ".github", "scripts", "Write-SkillsArchive.ps1"),
+            "-Tree", root,
+            "-Archive", archive,
+            "-Repository", "https://github.com/example/jason",
+            "-Ref", Tag,
+            "-Commit", commit);
+        Assert.True(exit == 0 && File.Exists(archive), $"Write-SkillsArchive.ps1 exited {exit} ({stdout.Trim()}): {stderr}");
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(File.ReadAllBytes(archive));
+
+        var staged = await SkillsRelease.StageAsync(Machine(dir, release), SkillsSource.DefaultSource, Tag, overridden: false, Ct);
+
+        Assert.Equal(commit, staged.Commit);
+        var tree = Files(Path.Combine(root, "skills"));
+        var unpacked = Files(Path.Combine(staged.Directory, "skills"));
+        Assert.Contains("runtime/.claude-plugin/plugin.json", tree);
+        Assert.True(
+            unpacked.SequenceEqual(tree),
+            $"Staged and not in the tree: [{string.Join(", ", unpacked.Except(tree))}]; in the tree and not staged: [{string.Join(", ", tree.Except(unpacked))}].");
+        Assert.All(tree, name => Assert.True(
+            File.ReadAllBytes(Path.Combine(root, "skills", name)).AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(staged.Directory, "skills", name))),
+            $"skills/{name} was staged with bytes other than the tree's."));
+    }
+
+    /// <summary>Every file under <paramref name="directory"/>, those whose names start with a dot included, by its path from it.</summary>
+    private static List<string> Files(string directory) =>
+        [.. Directory.EnumerateFiles(directory, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 })
+            .Select(path => Path.GetRelativePath(directory, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)];
+
+    /// <summary>The repository root, found by walking up from the test binaries to the directory holding <c>global.json</c>.</summary>
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "global.json")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        return directory.FullName;
+    }
+
+    /// <summary>PowerShell run as a release step runs it, with no profile and no telemetry, and what it said.</summary>
+    private static (int Exit, string Stdout, string Stderr) Pwsh(params string[] arguments)
+    {
+        var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .SelectMany(directory => new[] { Path.Combine(directory, "pwsh.exe"), Path.Combine(directory, "pwsh") })
+            .FirstOrDefault(File.Exists);
+        Assert.SkipWhen(pwsh is null, "pwsh is not on this machine's PATH; every CI runner has it, and the release is only ever built there.");
+
+        var start = new ProcessStartInfo(pwsh!)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
+        foreach (var argument in (string[])["-NoProfile", "-NonInteractive", .. arguments])
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var process = System.Diagnostics.Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        return (process.ExitCode, stdout.Result, stderr.Result);
     }
 
     /// <summary>An environment whose release reads, the build at <see cref="Build"/> and a runner that refuses every program.</summary>
