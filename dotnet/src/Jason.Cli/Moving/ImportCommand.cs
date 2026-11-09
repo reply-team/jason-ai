@@ -1176,6 +1176,13 @@ public static class ImportCommand
                 CultureInfo.InvariantCulture,
                 $"Imported the installation Jason {answer.JasonVersion} exported at {answer.ExportedAt:yyyy-MM-dd HH:mm:ss}Z: {answer.DataFiles} files into {answer.DataDirectory} and {answer.HarnessFiles} into the harness root {answer.HarnessRoot.Path}, with {answer.Projects} project and {answer.Campaigns} campaign folders. The runtime is running on it."),
         };
+        lines.Add(answer.Autostart switch
+        {
+            { Registered: true } => "Registered the runtime to start at logon here, as it did on the other machine.",
+            { Exported: true, Said: { } said } when said.StartsWith("The runtime started at logon", StringComparison.Ordinal) => said,
+            { Exported: true } => $"The runtime started at logon on the other machine, and is not registered here: {answer.Autostart.Said}",
+            _ => "The runtime did not start at logon on the other machine, so nothing was registered here; 'jason runtime autostart enable' registers it.",
+        });
         lines.AddRange(answer.MovedAside.Select(path => $"Moved aside, yours to remove: {path}"));
         lines.AddRange(answer.Rewritten.Select(rewrite => rewrite.From.Length == 0 ? $"Set {rewrite.Setting} to {rewrite.To}." : $"Rewrote {rewrite.Setting}: {rewrite.From} -> {rewrite.To}"));
         lines.AddRange(answer.Linked.Select(link => $"Linked the project {link.ProjectId} at {link.Path}."));

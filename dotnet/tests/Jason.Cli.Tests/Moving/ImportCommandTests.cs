@@ -993,6 +993,27 @@ public sealed class ImportCommandTests
         Assert.Contains("jason status", said, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(true, true, "Registered the runtime to start at logon here, as it did on the other machine.")]
+    [InlineData(true, false, "The runtime started at logon on the other machine, and is not registered here:")]
+    [InlineData(false, true, "The runtime did not start at logon on the other machine, so nothing was registered here; 'jason runtime autostart enable' registers it.")]
+    public async Task For_people_one_line_says_what_became_of_the_start_at_logon(bool exported, bool supported, string line)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        if (!supported)
+        {
+            to.Registrar = new RecordingRegistrar(AutostartPlatform.Unsupported);
+        }
+
+        var file = new MovingArchive(from) { Registered = exported }.Installation().Write();
+
+        var exit = await Import(to, Options(file) with { Human = true });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Single(to.Out.ToString().Split(Environment.NewLine), said => said.StartsWith(line, StringComparison.Ordinal));
+    }
+
     // ---- the harness root --------------------------------------------------------------------------------------------
 
     [Fact]
