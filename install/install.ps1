@@ -391,8 +391,16 @@ function Install-Jason {
         $arguments = @('skills', 'install', '--roles-only')
         if ($Feed) { $arguments += @('--feed', ($Feed.TrimEnd('/') + '/manifest.json')) }
         $PSNativeCommandUseErrorActionPreference = $false
-        & $target @arguments | ForEach-Object { Write-Host $_ }
-        if ($LASTEXITCODE -ne 0) {
+        $deployed = $false
+        try {
+            & $target @arguments | ForEach-Object { Write-Host $_ }
+            $deployed = $LASTEXITCODE -eq 0
+        } catch {
+            # The executable did not start at all - moved aside since it was installed, as a scanner moves one, say - so
+            # it said nothing; what PowerShell answered is said in its place, and Jason stays installed all the same.
+            Write-Host $_.Exception.Message
+        }
+        if (-not $deployed) {
             Write-Host 'The role skills were not deployed; the lines above say why. Run `jason skills install --roles-only` once that is dealt with; `jason status` names it as well.'
         }
     } else {

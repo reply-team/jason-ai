@@ -505,7 +505,8 @@ public sealed partial class InstallNoticesTests : IDisposable
         /// The executable a release of <paramref name="version"/> would hold, as far as the scripts can tell: it answers
         /// <c>--version</c> with the version, and every other call, which is the skills verb's, by writing the call and the
         /// data directory it was handed into the file <see cref="StandInLog"/> names, then refusing on stderr with the
-        /// code <see cref="StandInExit"/> names, or saying <see cref="StandInDeployed"/>.
+        /// code <see cref="StandInExit"/> names, or saying <see cref="StandInDeployed"/>. On Windows it moves its own file
+        /// aside after answering <c>--version</c> where <see cref="StandInVanish"/> is set.
         /// </summary>
         private byte[] StandIn(string version) => Windows
             ? StandIns.GetOrAdd(version, Compile)
@@ -530,7 +531,9 @@ public sealed partial class InstallNoticesTests : IDisposable
                 File.WriteAllText(
                     source,
                     "static class Program { static int Main(string[] a) {\n"
-                    + "if (a.Length > 0 && a[0] == \"--version\") { System.Console.WriteLine(\"" + version + "+standin\"); return 0; }\n"
+                    + "if (a.Length > 0 && a[0] == \"--version\") { System.Console.WriteLine(\"" + version + "+standin\");\n"
+                    + "if (!string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable(\"" + StandInVanish + "\"))) { var self = System.Reflection.Assembly.GetEntryAssembly().Location; System.IO.File.Move(self, self + \".vanished\"); }\n"
+                    + "return 0; }\n"
                     + "var log = System.Environment.GetEnvironmentVariable(\"" + StandInLog + "\");\n"
                     + "if (!string.IsNullOrEmpty(log)) { System.IO.File.AppendAllText(log, string.Join(\" \", a) + \"|\" + System.Environment.GetEnvironmentVariable(\"JASON_DATA_DIR\") + \"\\n\"); }\n"
                     + "var exit = System.Environment.GetEnvironmentVariable(\"" + StandInExit + "\");\n"

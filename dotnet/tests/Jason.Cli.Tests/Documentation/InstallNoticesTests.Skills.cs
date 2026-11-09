@@ -24,6 +24,12 @@ public sealed partial class InstallNoticesTests
     /// <summary>The variable that makes the stand-in refuse every call but <c>--version</c>, with that exit code.</summary>
     private const string StandInExit = "STANDIN_EXIT";
 
+    /// <summary>
+    /// The variable that makes the Windows stand-in, once it has answered <c>--version</c>, move its own file aside, as a
+    /// scanner that quarantines a program does, so the next call cannot start it.
+    /// </summary>
+    private const string StandInVanish = "STANDIN_VANISH";
+
     /// <summary>What the stand-in says on stdout for a call it does not refuse.</summary>
     private const string StandInDeployed = "The stand-in deployed the role skills.";
 
@@ -119,6 +125,33 @@ public sealed partial class InstallNoticesTests
         Assert.True(run.Exit == 0, run.Stderr);
         Assert.Contains("The stand-in refused.", run.Stderr, StringComparison.Ordinal);
         var lines = Lines(run.Stdout);
+        Assert.Equal(FailedLine, lines[^3]);
+        AssertEndsWith(MitLine("0.33.0"), lines);
+    }
+
+    /// <summary>
+    /// An executable that cannot be started when the verb is run — moved aside since the script asked its version, as a
+    /// scanner moves one — has no line of its own to show: what PowerShell answered is said in its place, then the line,
+    /// and the run still ends with the licence and exits 0.
+    /// </summary>
+    [Fact]
+    public void A_skills_verb_that_cannot_start_is_said_and_the_run_still_ends_with_the_licence()
+    {
+        var installer = Installer.For(Ps1, _tree);
+        using var address = new LoopbackReleases(installer.Feed("0.33.0"));
+        var feed = $"{address.Releases}/latest/download";
+        var first = installer.Run(feed);
+        Assert.True(first.Exit == 0, first.Stderr);
+        installer.Variables[StandInVanish] = "1";
+
+        var run = installer.Run(feed);
+
+        Assert.True(run.Exit == 0, run.Stderr);
+        Assert.False(File.Exists(installer.Target));
+        var lines = Lines(run.Stdout);
+        var installed = lines.FindIndex(line => line.StartsWith("Jason 0.33.0 is already installed at ", StringComparison.Ordinal));
+        Assert.True(installed >= 0, run.Stdout);
+        Assert.Contains(lines.Skip(installed + 1).SkipLast(3), line => line.Contains(installer.Target, StringComparison.OrdinalIgnoreCase));
         Assert.Equal(FailedLine, lines[^3]);
         AssertEndsWith(MitLine("0.33.0"), lines);
     }
