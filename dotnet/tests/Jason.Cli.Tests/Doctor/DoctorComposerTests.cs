@@ -2829,18 +2829,21 @@ public sealed class DoctorComposerTests
     /// <summary>
     /// The role check's details name the same deployment as fields, and meet the same rule: a source of the person's own and
     /// the ref it was taken at travel as <c>&lt;skill-source&gt;</c>, the public repository and a release tag as they are —
-    /// with the runtime answering, and without it, where the details come from the record this CLI deploys into.
+    /// with the runtime answering, and without it, where the details come from the record this CLI deploys into. A release
+    /// tag stays as it is whoever's source it was taken from.
     /// </summary>
     [Theory]
-    [InlineData(true, true)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    public async Task The_role_check_s_details_travel_by_the_skill_source_rule(bool own, bool answering)
+    [InlineData(true, "sentinel-branch", true)]
+    [InlineData(true, "v1.2.3", true)]
+    [InlineData(false, "v1.2.3", true)]
+    [InlineData(true, "sentinel-branch", false)]
+    [InlineData(true, "v1.2.3", false)]
+    [InlineData(false, "v1.2.3", false)]
+    public async Task The_role_check_s_details_travel_by_the_skill_source_rule(bool own, string reference, bool answering)
     {
         using var dir = new TempPaths();
         var source = own ? "https://example.com/sentinel-fork/jason.git" : SkillsSource.DefaultSource;
-        var reference = own ? "sentinel-branch" : "v1.2.3";
+        var tag = reference == "v1.2.3";
         var roles = dir.Paths.RoleSkillsDirectory;
         Directory.CreateDirectory(roles);
         File.WriteAllText(Path.Combine(roles, "SKILL.md"), "x");
@@ -2859,7 +2862,7 @@ public sealed class DoctorComposerTests
 
         var details = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "role_skills")!["details"]!;
         Assert.Equal(own ? "<skill-source>" : SkillsSource.DefaultSource, Text(details["source"]));
-        Assert.Equal(own ? "<skill-source>" : "v1.2.3", Text(details["ref"]));
+        Assert.Equal(tag ? reference : "<skill-source>", Text(details["ref"]));
         Assert.Equal("c0ffee", Text(details["commit"]));
         if (own)
         {
