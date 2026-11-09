@@ -320,7 +320,9 @@ public sealed class ImportCommandTests
         Assert.Equal("{\"Here\": true}", File.ReadAllText(Path.Combine(dataAside, "config", "settings.json")));
         Assert.Equal("a log here", File.ReadAllText(Path.Combine(dataAside, "logs", "jason-20261001.log")));
         Assert.Equal("prj_01OLD", HarnessMarker.In(Path.Combine(rootAside, "projects", "old"))!.Id);
-        Assert.Equal("a backup, not a carried part", File.ReadAllText(Path.Combine(to.Data, "state", "backups", "jason-20261001T000000Z.db")));
+        // state/ goes aside whole: its sidecars and its backups are the old database's, never the placed one's.
+        Assert.Equal("a backup, not a carried part", File.ReadAllText(Path.Combine(dataAside, "state", "backups", "jason-20261001T000000Z.db")));
+        Assert.False(Directory.Exists(Path.Combine(to.Data, "state", "backups")));
         Assert.Equal("a database, made up", File.ReadAllText(Path.Combine(to.Data, "state", "jason.db")));
         Assert.Equal("prj_01ACME", HarnessMarker.In(Path.Combine(to.Harness, "projects", "acme"))!.Id);
         using var answer = JsonDocument.Parse(to.Out.ToString());
@@ -358,6 +360,46 @@ public sealed class ImportCommandTests
         Assert.Equal("a log here", File.ReadAllText(Path.Combine(to.Data, "replaced-" + Stamp, "logs", "jason-20261001.log")));
         Assert.Equal("a note, no marker", File.ReadAllText(Path.Combine(to.Harness + ".replaced-" + Stamp, "notes.md")));
         Assert.Equal("{}", File.ReadAllText(Path.Combine(to.Data, "logs", "jason-20261108.log")));
+    }
+
+    [Fact]
+    public async Task With_replace_a_database_s_sidecars_go_aside_with_it_and_the_placed_one_has_the_archive_s_alone()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        to.PlantData("state/jason.db", "the database here");
+        to.PlantData("state/jason.db-wal", "its write-ahead log");
+        to.PlantData("state/jason.db-shm", "its shared memory");
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file) with { Replace = true });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var aside = Path.Combine(to.Data, "replaced-" + Stamp, "state");
+        Assert.Equal("its write-ahead log", File.ReadAllText(Path.Combine(aside, "jason.db-wal")));
+        Assert.Equal("its shared memory", File.ReadAllText(Path.Combine(aside, "jason.db-shm")));
+        Assert.Equal(["jason.db"], Directory.EnumerateFileSystemEntries(Path.Combine(to.Data, "state")).Select(Path.GetFileName));
+    }
+
+    [Theory]
+    [InlineData("jason.db-wal")]
+    [InlineData("jason.db-shm")]
+    public async Task A_stray_sidecar_on_an_empty_machine_is_moved_aside_and_named_and_the_placed_database_has_the_archive_s_alone(string sidecar)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        to.PlantData("state/" + sidecar, "a sidecar beside no database");
+        to.PlantData("state/backups/jason-20261001T000000Z.db", "a backup, which an empty machine keeps");
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var moved = Path.Combine(to.Data, "replaced-" + Stamp, "state", sidecar);
+        Assert.Equal("a sidecar beside no database", File.ReadAllText(moved));
+        Assert.Equal(["backups", "jason.db"], Directory.EnumerateFileSystemEntries(Path.Combine(to.Data, "state")).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        using var answer = JsonDocument.Parse(to.Out.ToString());
+        Assert.Contains(answer.RootElement.GetProperty("warnings").EnumerateArray(), warning => warning.GetString()!.Contains(moved, StringComparison.Ordinal));
     }
 
     // ---- the settings ------------------------------------------------------------------------------------------------
@@ -739,6 +781,8 @@ public sealed class ImportCommandTests
         using var to = new MovingMachine { Answers = Linked };
         var gone = Path.Combine(from.Root, "gone", "nowhere");
         from.PlantData("state/jason.db", "the database, made up, cold");
+        from.PlantData("state/jason.db-wal", "its write-ahead log, made up");
+        from.PlantData("state/jason.db-shm", "its shared memory, made up");
         from.PlantData("config/settings.json", SettingsText(from.Home, from.Data, from.Harness, gone));
         from.PlantData("plugins/reply/plugin.yaml", "id: reply");
         from.PlantData("plugins/reply/main.js", "export default {};");
@@ -766,6 +810,8 @@ public sealed class ImportCommandTests
         placedData.Remove(settings);
         var exportedData = Tree(from.Data);
         exportedData.Remove(settings);
+        Assert.Contains(Path.Combine("state", "jason.db-wal"), placedData.Keys);
+        Assert.Contains(Path.Combine("state", "jason.db-shm"), placedData.Keys);
         Assert.Equal(exportedData, placedData);
         Assert.Equal(Tree(from.Harness), placedHarness);
     }
@@ -785,6 +831,9 @@ public sealed class ImportCommandTests
         Assert.Contains("an archive a newer Jason wrote", help, StringComparison.Ordinal);
         Assert.Contains("Nothing is deleted", help, StringComparison.Ordinal);
         Assert.Contains("<data>/replaced-<stamp>/", help, StringComparison.Ordinal);
+        Assert.Contains("state/ whole, its sidecars and backups with it", help, StringComparison.Ordinal);
+        Assert.Contains("a jason.db-wal or jason.db-shm beside no database", help, StringComparison.Ordinal);
+        Assert.Contains("The harness root: --root, else JASON_Harness__Root, else the Harness:Root this machine's settings file names, else Jason in the home directory", help, StringComparison.Ordinal);
         Assert.Contains("Harness:Root first", help, StringComparison.Ordinal);
         Assert.Contains("Left to you: jason skills install", help, StringComparison.Ordinal);
         Assert.Contains("Exit codes: 0 placed and the runtime answered", help, StringComparison.Ordinal);

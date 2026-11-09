@@ -241,10 +241,11 @@ public static class ImportCommand
             // ---- aside, then in place ----
 
             var aside = new List<string>();
+            var strays = new List<string>();
             int dataFiles, harnessFiles;
             try
             {
-                MoveAside(env, root.Path, there, stamp, aside);
+                MoveAside(env, root.Path, there, stamp, aside, strays);
                 (dataFiles, harnessFiles) = archive.Place(env.Paths.Root, root.Path, settings);
             }
             catch (ImportRefusal refused)
@@ -254,6 +255,11 @@ public static class ImportCommand
             }
 
             var warnings = new List<string>();
+            foreach (var stray in strays)
+            {
+                warnings.Add($"A {Path.GetFileName(stray)} stood in {DataPath(env.Paths.Root, StateFolder)} beside no database, and SQLite would have read it as the placed database's; it was moved aside to {stray}, yours to remove.");
+            }
+
             foreach (var path in settings.NotHere)
             {
                 warnings.Add($"The setting {path.Setting} names {path.Path}, which is not on this machine; it was left as written.");
@@ -412,10 +418,14 @@ public static class ImportCommand
 
     private static Here What(CliEnvironment env, string root)
     {
-        var parts = ExportCommand.DatabaseFiles.Concat(ExportCommand.CarriedTrees)
+        // A database goes aside with its whole state/ folder, its sidecars and its backups with it; with no database, a
+        // sidecar standing there alone goes aside by itself. Either way the placed database is never beside a write-ahead
+        // log or a shared-memory file the archive did not carry, which SQLite would read as that database's.
+        var database = File.Exists(DataPath(env.Paths.Root, ExportCommand.DatabaseFiles[0]));
+        string[] state = database ? [StateFolder] : [.. ExportCommand.DatabaseFiles.Skip(1)];
+        var parts = state.Concat(ExportCommand.CarriedTrees)
             .Where(part => File.Exists(DataPath(env.Paths.Root, part)) || Directory.Exists(DataPath(env.Paths.Root, part)))
             .ToArray();
-        var database = File.Exists(DataPath(env.Paths.Root, ExportCommand.DatabaseFiles[0]));
         var folder = Directory.Exists(root);
         var entries = folder && Directory.EnumerateFileSystemEntries(root).Any();
         var markers = folder ? MarkerFolders(root).ToArray() : [];
@@ -458,7 +468,7 @@ public static class ImportCommand
     /// Every part of the data directory the archive's would land on, into one folder of the data directory, and the harness
     /// root beside itself, so what is placed lands on nothing. Moved, never deleted.
     /// </summary>
-    private static void MoveAside(CliEnvironment env, string root, Here there, string stamp, List<string> aside)
+    private static void MoveAside(CliEnvironment env, string root, Here there, string stamp, List<string> aside, List<string> strays)
     {
         try
         {
@@ -477,6 +487,10 @@ public static class ImportCommand
                     else
                     {
                         File.Move(from, to);
+                        if (ExportCommand.DatabaseFiles.Contains(part, StringComparer.Ordinal))
+                        {
+                            strays.Add(to);
+                        }
                     }
                 }
 
@@ -507,6 +521,9 @@ public static class ImportCommand
 
         return free;
     }
+
+    /// <summary>The data directory's folder the database and its sidecars are kept in.</summary>
+    private const string StateFolder = "state";
 
     private static string DataPath(string root, string relative) => Path.Combine([root, .. relative.Split('/')]);
 
@@ -968,8 +985,14 @@ public static class ImportCommand
             + "directory no export carries); a file whose size or SHA-256 is not the one export.json lists; an archive a newer "
             + "Jason wrote, naming the version to install first; and, without --replace, an installation already here — a "
             + "database, or a harness root with a marker in it — named with what it holds." + nl
-            + "Nothing is deleted: --replace moves the data directory's parts into <data>/replaced-<stamp>/ and the harness root "
-            + "to <root>.replaced-<stamp>, and names both as yours to remove." + nl
+            + "Nothing is deleted, and nothing is written over: --replace moves the data directory's parts the archive's land on "
+            + "into <data>/replaced-<stamp>/ — state/ whole, its sidecars and backups with it, config/, plugins/, skills/roles/, "
+            + "ui/custom/ and logs/ — and the harness root to <root>.replaced-<stamp>; on a machine with no installation the same "
+            + "parts that stand there, a jason.db-wal or jason.db-shm beside no database among them, and a harness root folder "
+            + "with no marker go aside the same way; each is named as yours to remove." + nl
+            + "The harness root: --root, else JASON_Harness__Root, else the Harness:Root this machine's settings file names, else "
+            + "Jason in the home directory; a --root the variable contradicts is refused. It is held to the runtime's rule for a "
+            + "root before anything is placed, and the placed settings file names it." + nl
             + "The settings file: every absolute path under the other machine's home directory, data directory or harness root "
             + "is rewritten to the same path here, each rewrite said, Harness:Root first; a path outside those three that is not "
             + "on this machine is said and left as written; every other value, a secret among them, is placed as it was." + nl
