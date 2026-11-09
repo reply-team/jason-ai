@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/preact';
+import { screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { FakeApi } from './test/fake-api';
 import { renderApp } from './test/render-app';

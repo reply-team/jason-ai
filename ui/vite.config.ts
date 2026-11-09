@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config';
-import preact from '@preact/preset-vite';
-import { buildManifest } from './scripts/package-lib.mjs';
+import babel from '@rolldown/plugin-babel';
+// @ts-expect-error The package's "types" entry names a file it does not ship.
+import signalsTransform from '@preact/signals-react-transform';
+import { buildManifest, buildNotices } from './scripts/package-lib.mjs';
 import { API_VERSION } from './src/api/version';
 
 // base: the runtime serves the build under /ui/. assetsInlineLimit 0: the page runs under
@@ -8,8 +10,12 @@ import { API_VERSION } from './src/api/version';
 export default defineConfig({
     base: '/ui/',
     plugins: [
-        preact(),
+        // A component re-renders when a signal it read changes. Preact's signals did that on their own; React needs each
+        // component wrapped, which this transform does at build time. Mode all wraps every component, not only those
+        // that read `.value` themselves, so one that reads a signal through a helper re-renders as it did under Preact.
+        babel({ plugins: [[signalsTransform, { mode: 'all' }]] }),
         buildManifest({ version: process.env.JASON_VERSION ?? '0.0.0-local', apiVersion: API_VERSION }),
+        buildNotices(),
     ],
     // The screen tests import the two published prompt texts under docs/prompts as raw text (`?raw`). That folder is
     // outside this project, and without this entry vitest refuses it ("Denied ID ... docs/prompts/approval.txt?raw"): the

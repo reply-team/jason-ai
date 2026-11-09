@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'react';
 import { useApi } from '../../api/context';
 import { FiltersBar } from '../../layout/filters-bar';
 import { PeriodSwitch } from '../../layout/period-switch';
@@ -154,8 +154,8 @@ export function CampaignsScreen() {
         numbers && 'sequence_linked' in numbers ? numbers : selected ? store.summary.value[selected] : undefined;
 
     return (
-        <div class={`main campaigns${selected ? '' : ' single'}`}>
-            <div class="list">
+        <div className={`main campaigns${selected ? '' : ' single'}`}>
+            <div className="list">
                 <Toolbar
                     title="Campaigns"
                     refresh={{
@@ -186,7 +186,7 @@ export function CampaignsScreen() {
                     {at.view === 'activity' && (
                         <PeriodSwitch value={at.period} onChange={(period) => reshape({ period })} />
                     )}
-                    <label class="check">
+                    <label className="check">
                         <input
                             type="checkbox"
                             checked={at.filters.archived === true}
@@ -207,7 +207,7 @@ export function CampaignsScreen() {
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.actionFailure.value && <Notice danger>{store.actionFailure.value}</Notice>}
                 {ready && campaigns.length === 0 ? (
-                    <div class="empty">{filtered ? 'No campaign matches.' : 'No campaigns yet.'}</div>
+                    <div className="empty">{filtered ? 'No campaign matches.' : 'No campaigns yet.'}</div>
                 ) : (
                     <CampaignTable
                         campaigns={campaigns}
@@ -266,7 +266,7 @@ export function CampaignsScreen() {
                 />
             )}
             {selected && !waiting && (
-                <div class="panel">
+                <div className="panel">
                     {store.panelFailure.value && <Notice danger>{store.panelFailure.value}</Notice>}
                     {campaign && campaign.id === selected && (
                         <>

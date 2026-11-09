@@ -171,7 +171,7 @@ plugin author needs is here:
 | `docs/` | What Jason is and who it is for, the install manual, the wiring check, the plugin author's guide, the browser UI, the operation contracts, and the Runtime API's recorded exchanges under `docs/api/` |
 | `examples/` | Cases of Jason applied to outbound work, one folder each, and the template a case is written from |
 | `install/` | The install scripts every release attaches, and the update feed's schema |
-| `ui/` | The browser UI the runtime serves: a Preact client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
+| `ui/` | The browser UI the runtime serves: a React client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
 | `VERSION` | The runtime version this tree describes |
 
 The runtime's source is here too, under `dotnet/`: the runtime, its CLI and its plugin host in C#, with their tests.

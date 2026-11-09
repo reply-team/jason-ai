@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect } from 'react';
 import { useApi } from '../../api/context';
 import { Toolbar } from '../../layout/toolbar';
 import { session } from '../../api/session';
@@ -19,8 +19,8 @@ export function SystemScreen() {
     const ui = info?.ui;
     const listening = info?.listening;
     return (
-        <div class="main single">
-            <div class="list" style="border-right:0">
+        <div className="main single">
+            <div className="list" style={{ borderRight: 0 }}>
                 <Toolbar
                     title="System"
                     refresh={{ busy: store.refreshing.value, onRefresh: () => void store.refresh(api) }}
@@ -41,12 +41,12 @@ export function SystemScreen() {
                     </Notice>
                 )}
                 {info && (
-                    <div class="sys">
-                        <section class="card">
+                    <div className="sys">
+                        <section className="card">
                             <h2>
-                                Runtime <span class="badge success">running</span>
+                                Runtime <span className="badge success">running</span>
                             </h2>
-                            <dl class="facts">
+                            <dl className="facts">
                                 <dt>Version</dt>
                                 <dd>
                                     {info.runtime_version} · API {info.api_version}
@@ -54,11 +54,11 @@ export function SystemScreen() {
                                 <dt>Started</dt>
                                 <dd>
                                     {relative(new Date(info.started_at), now)} · instance{' '}
-                                    <span class="mono">{info.instance_id}</span>
+                                    <span className="mono">{info.instance_id}</span>
                                 </dd>
                                 <dt>Address</dt>
                                 <dd>
-                                    <span class="mono">http://127.0.0.1:{listening?.port ?? '?'}</span>
+                                    <span className="mono">http://127.0.0.1:{listening?.port ?? '?'}</span>
                                     {listening &&
                                         listening.configured_port !== 0 &&
                                         listening.configured_port !== listening.port &&
@@ -67,21 +67,21 @@ export function SystemScreen() {
                                 </dd>
                                 <dt>Data directory</dt>
                                 <dd>
-                                    <span class="mono">{info.data_dir}</span>
+                                    <span className="mono">{info.data_dir}</span>
                                 </dd>
                                 <dt>Database</dt>
                                 <dd>{info.database.applied_migrations.length} migrations applied</dd>
                             </dl>
                         </section>
 
-                        <section class="card">
+                        <section className="card">
                             <h2>
                                 Dispatcher{' '}
-                                <span class={`badge ${info.dispatcher.state === 'running' ? 'success' : ''}`}>
+                                <span className={`badge ${info.dispatcher.state === 'running' ? 'success' : ''}`}>
                                     {info.dispatcher.state}
                                 </span>
                             </h2>
-                            <dl class="facts">
+                            <dl className="facts">
                                 <dt>Running now</dt>
                                 <dd>
                                     {info.dispatcher.running_attempts} attempts of {info.dispatcher.max_parallel}{' '}
@@ -100,19 +100,19 @@ export function SystemScreen() {
                             </dl>
                         </section>
 
-                        <section class="card wide">
+                        <section className="card wide">
                             <h2>
-                                Plugins <span class="badge">{info.plugins.active_count} active</span>
+                                Plugins <span className="badge">{info.plugins.active_count} active</span>
                             </h2>
                             {store.plugins.value.length > 0 ? (
-                                <table class="tbl">
+                                <table className="tbl">
                                     <thead>
                                         <tr>
                                             <th>Plugin</th>
                                             <th>Kind</th>
                                             <th>Operations</th>
                                             <th>Status</th>
-                                            <th class="r">Digest</th>
+                                            <th className="r">Digest</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -124,22 +124,22 @@ export function SystemScreen() {
                                                 <td>{p.kind}</td>
                                                 <td>{p.operations.join(', ')}</td>
                                                 <td>{p.status}</td>
-                                                <td class="r mono">{p.digest.slice(7, 19)}</td>
+                                                <td className="r mono">{p.digest.slice(7, 19)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
                             ) : (
-                                <p class="empty">
+                                <p className="empty">
                                     No plugin is installed; nothing reaches a provider until one is, and a route names
                                     it.
                                 </p>
                             )}
                         </section>
 
-                        <section class="card">
+                        <section className="card">
                             <h2>Routes</h2>
-                            <dl class="facts">
+                            <dl className="facts">
                                 <dt>Default provider</dt>
                                 <dd>{store.routes.value?.global.default?.plugin_id ?? 'none'}</dd>
                                 <dt>Overrides</dt>
@@ -150,18 +150,18 @@ export function SystemScreen() {
                                 <dt>Activated</dt>
                                 <dd>
                                     {relative(new Date(info.routes.activated_at), now)} · snapshot{' '}
-                                    <span class="mono">{info.routes.snapshot_id}</span>
+                                    <span className="mono">{info.routes.snapshot_id}</span>
                                 </dd>
                             </dl>
                         </section>
 
-                        <section class="card">
-                            <h2>This UI {ui && <span class="badge accent">{ui.source}</span>}</h2>
+                        <section className="card">
+                            <h2>This UI {ui && <span className="badge accent">{ui.source}</span>}</h2>
                             {ui ? (
-                                <dl class="facts">
+                                <dl className="facts">
                                     <dt>Served from</dt>
                                     <dd>
-                                        <span class="mono">{ui.directory}</span>
+                                        <span className="mono">{ui.directory}</span>
                                     </dd>
                                     <dt>Version</dt>
                                     <dd>
@@ -170,7 +170,7 @@ export function SystemScreen() {
                                     </dd>
                                     <dt>Digest</dt>
                                     <dd>
-                                        <span class="mono">{ui.digest ?? 'none'}</span>
+                                        <span className="mono">{ui.digest ?? 'none'}</span>
                                     </dd>
                                     {ui.problem && (
                                         <>
@@ -180,23 +180,23 @@ export function SystemScreen() {
                                     )}
                                 </dl>
                             ) : (
-                                <p class="empty">
+                                <p className="empty">
                                     The runtime reports no UI module (not reported); this page is served from somewhere
                                     it does not know.
                                 </p>
                             )}
                         </section>
 
-                        <section class="card wide">
+                        <section className="card wide">
                             <h2>
-                                Paired browsers <span class="badge">{store.tokens.value?.items.length ?? 0}</span>
-                                <span class="hint">
+                                Paired browsers <span className="badge">{store.tokens.value?.items.length ?? 0}</span>
+                                <span className="hint">
                                     {' '}
                                     · the same list as <code>jason ui tokens</code>; pair another with{' '}
                                     <code>jason ui open</code>
                                 </span>
                             </h2>
-                            <table class="tbl">
+                            <table className="tbl">
                                 <thead>
                                     <tr>
                                         <th>Paired</th>
@@ -210,7 +210,7 @@ export function SystemScreen() {
                                         const mine = t.id === session.tokenId.value;
                                         const stale = now.getTime() - lastSeen(t) > staleAfterMs;
                                         return (
-                                            <tr key={t.id} class={stale ? 'stale' : ''}>
+                                            <tr key={t.id} className={stale ? 'stale' : ''}>
                                                 <td>
                                                     {relative(new Date(t.issued_at), now)}
                                                     {mine && ' · this browser'}
@@ -220,9 +220,9 @@ export function SystemScreen() {
                                                     {t.last_used_at ? relative(new Date(t.last_used_at), now) : 'never'}
                                                     {stale && ' · not used for a month'}
                                                 </td>
-                                                <td class="r">
+                                                <td className="r">
                                                     <button
-                                                        class="btn"
+                                                        className="btn"
                                                         type="button"
                                                         disabled={mine}
                                                         onClick={() => void store.revoke(api, t.id)}
@@ -236,9 +236,9 @@ export function SystemScreen() {
                                 </tbody>
                             </table>
                             {(store.tokens.value?.items ?? []).some((t) => t.id !== session.tokenId.value) && (
-                                <div class="btn-row">
+                                <div className="btn-row">
                                     <button
-                                        class="btn"
+                                        className="btn"
                                         type="button"
                                         onClick={() => void store.revokeOthers(api, session.tokenId.value)}
                                     >

@@ -50,7 +50,7 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                 title={campaign.name}
                 sub={
                     <>
-                        <span class={`badge${campaign.status === 'active' ? ' success' : ' outline'}`}>
+                        <span className={`badge${campaign.status === 'active' ? ' success' : ' outline'}`}>
                             {campaign.status}
                         </span>{' '}
                         {sub(campaign, people)}
@@ -61,22 +61,22 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
             <ActionsRow>
                 {/* A draft is taken live by the planner or the command line; an archived campaign is over. */}
                 {campaign.status === 'active' && (
-                    <button class="btn" type="button" onClick={() => onAct('pause')}>
+                    <button className="btn" type="button" onClick={() => onAct('pause')}>
                         Pause
                     </button>
                 )}
                 {campaign.status === 'paused' && (
-                    <button class="btn" type="button" onClick={() => onAct('start')}>
+                    <button className="btn" type="button" onClick={() => onAct('start')}>
                         Start
                     </button>
                 )}
-                <button class="btn" type="button" onClick={() => onAct('add')}>
+                <button className="btn" type="button" onClick={() => onAct('add')}>
                     Add people
                 </button>
             </ActionsRow>
             {row && (
-                <div class="stats">
-                    {at.view === 'activity' && <span class="label">{periodLabels[at.period]}</span>}
+                <div className="stats">
+                    {at.view === 'activity' && <span className="label">{periodLabels[at.period]}</span>}
                     {columns
                         .filter((c) => linked || (c.key !== 'sequence' && c.key !== 'out'))
                         .map((c) => {

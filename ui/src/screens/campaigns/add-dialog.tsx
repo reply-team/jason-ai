@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState } from 'react';
 import { ApiError, Unpaired } from '../../api/client';
 import { useApi } from '../../api/context';
 import { session } from '../../api/session';
@@ -62,7 +62,7 @@ export function AddPeopleDialog({ campaign, onAdded, onClose }: Props) {
             buttons={
                 <>
                     <button
-                        class="btn primary"
+                        className="btn primary"
                         type="button"
                         disabled={people.length === 0 || busy}
                         onClick={() => void add()}
@@ -72,7 +72,7 @@ export function AddPeopleDialog({ campaign, onAdded, onClose }: Props) {
                 </>
             }
         >
-            <div class="field">
+            <div className="field">
                 <PersonPicker
                     label="Find a person"
                     none="Find a person"
@@ -81,12 +81,12 @@ export function AddPeopleDialog({ campaign, onAdded, onClose }: Props) {
                     }}
                 />
                 {people.length > 0 && (
-                    <div class="picked">
+                    <div className="picked">
                         {people.map((person) => (
-                            <span key={person.id} class="badge outline">
+                            <span key={person.id} className="badge outline">
                                 {person.name}{' '}
                                 <button
-                                    class="iconbtn"
+                                    className="iconbtn"
                                     type="button"
                                     aria-label={`Leave ${person.name} out`}
                                     onClick={() => setPeople(people.filter((p) => p.id !== person.id))}
@@ -98,19 +98,19 @@ export function AddPeopleDialog({ campaign, onAdded, onClose }: Props) {
                     </div>
                 )}
             </div>
-            <div class="field">
-                <label for="add-people-reason">Reason (optional, kept in the journal)</label>
+            <div className="field">
+                <label htmlFor="add-people-reason">Reason (optional, kept in the journal)</label>
                 <textarea
                     id="add-people-reason"
-                    class="textarea"
+                    className="textarea"
                     aria-label="Reason"
                     maxLength={2000}
                     value={reason}
-                    onInput={(e) => setReason((e.target as HTMLTextAreaElement).value)}
+                    onChange={(e) => setReason((e.target as HTMLTextAreaElement).value)}
                 />
             </div>
             {said && (
-                <p class="hint" role="status">
+                <p className="hint" role="status">
                     {outcome(said)}
                 </p>
             )}

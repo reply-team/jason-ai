@@ -21,12 +21,12 @@ export function SessionLink({ kind, itemId }: Props) {
     return (
         <>
             {onWindows() && (
-                <a class="btn" href={`jason://attention/${collection}/${itemId}/session`}>
+                <a className="btn" href={`jason://attention/${collection}/${itemId}/session`}>
                     Open an AI session
                 </a>
             )}
-            <span class="session-command">
-                <span>Run this in a terminal:</span> <code class="mono">{command}</code>
+            <span className="session-command">
+                <span>Run this in a terminal:</span> <code className="mono">{command}</code>
             </span>
         </>
     );
