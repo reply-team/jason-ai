@@ -263,6 +263,7 @@ public sealed class ExportCommandTests
     {
         using var machine = new MovingMachine();
         machine.PlantData("state/jason.db");
+        machine.PlantHarness("projects/acme/AGENTS.md", "# Acme");
 
         var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
 
@@ -645,6 +646,23 @@ public sealed class ExportCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal([DefaultName], Directory.EnumerateFileSystemEntries(machine.Here).Select(Path.GetFileName));
+    }
+
+    // ---- a root that is not there, names apart by case --------------------------------------------------------------
+
+    [Fact]
+    public async Task A_harness_root_that_is_not_there_still_gives_the_harness_entry_and_a_warning_naming_it()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("harness/", Names(Path.Combine(machine.Here, DefaultName)));
+        using var answer = JsonDocument.Parse(machine.Out.ToString());
+        Assert.Contains(answer.RootElement.GetProperty("warnings").EnumerateArray(), warning => warning.GetString()!.Contains(machine.Harness, StringComparison.Ordinal));
+        Assert.Contains(machine.Harness, machine.Error.ToString(), StringComparison.Ordinal);
     }
 
     private static bool CanTake(string lockFile)

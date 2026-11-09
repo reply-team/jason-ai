@@ -244,7 +244,7 @@ public static class ExportCommand
         Written written;
         try
         {
-            var items = Items(env, root.Path);
+            var items = Items(env, root.Path, warnings);
             var manifest = new ExportManifest(
                 ExportManifest.CurrentFormat,
                 SkillsSource.BuildVersion(env),
@@ -397,7 +397,7 @@ public static class ExportCommand
     }
 
     /// <summary>Everything carried, in the order it is written, each name checked.</summary>
-    private static List<Item> Items(CliEnvironment env, string harnessRoot)
+    private static List<Item> Items(CliEnvironment env, string harnessRoot, List<string> warnings)
     {
         var items = new List<Item>();
         var data = env.Paths.Root;
@@ -435,6 +435,11 @@ public static class ExportCommand
         if (Directory.Exists(harnessRoot))
         {
             Walk(harnessRoot, ExportManifest.HarnessPrefix.TrimEnd('/'), items);
+        }
+        else
+        {
+            items.Add(new Item(ExportManifest.HarnessPrefix, harnessRoot, Directory: true));
+            warnings.Add($"The harness root at {harnessRoot} is not there, so the archive carries it empty, and no memory file or folder of a project or campaign travels.");
         }
 
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
