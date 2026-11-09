@@ -808,7 +808,8 @@ public sealed class ImportCommandTests
         var settings = Path.Combine("config", "settings.json");
         Assert.Equal(SettingsText(to.Home, to.Data, to.Harness, gone), placedData[settings]);
         placedData.Remove(settings);
-        var exportedData = Tree(from.Data);
+        // The export held the runtime's lock in run/ for its read, which no export carries either.
+        var exportedData = Tree(from.Data).Where(file => !file.Key.StartsWith("run", StringComparison.Ordinal)).ToDictionary(StringComparer.Ordinal);
         exportedData.Remove(settings);
         Assert.Contains(Path.Combine("state", "jason.db-wal"), placedData.Keys);
         Assert.Contains(Path.Combine("state", "jason.db-shm"), placedData.Keys);

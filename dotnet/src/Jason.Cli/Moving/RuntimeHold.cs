@@ -19,6 +19,23 @@ internal static class RuntimeHold
         $"The runtime is running on {env.Paths.Root}, and 'jason {verb}' works on its files only while it is stopped. "
         + $"Stop it with 'jason runtime stop' and run this again, or give --stop and 'jason {verb}' stops it itself. Nothing was written.";
 
+    /// <summary>
+    /// The runtime's own instance lock, taken as the runtime takes it, so no runtime starts on this data directory while it
+    /// is held; null when it cannot be taken, which is read as a runtime that runs.
+    /// </summary>
+    public static FileStream? Lock(CliEnvironment env)
+    {
+        try
+        {
+            Directory.CreateDirectory(env.Paths.RunDirectory);
+            return new FileStream(env.Paths.LockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, bufferSize: 1, FileOptions.None);
+        }
+        catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Stops it; null when it stopped, otherwise what the stop said.</summary>
     public static async Task<string?> StopAsync(CliEnvironment env, TimeSpan? timeout, TimeSpan? poll, CancellationToken cancellationToken)
     {

@@ -554,6 +554,44 @@ public sealed class ExportCommandTests
     }
 
     [Fact]
+    public async Task A_held_instance_lock_is_a_running_runtime_and_is_refused_with_nothing_written()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        Directory.CreateDirectory(machine.Paths.RunDirectory);
+        using var held = new FileStream(machine.Paths.LockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(machine.Out.ToString());
+        Assert.Equal("runtime_running", error.Code);
+        Assert.Contains("'jason runtime stop'", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+    }
+
+    [Fact]
+    public async Task The_instance_lock_is_let_go_before_the_runtime_starts_again()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.StartRuntime();
+        bool? freeAtLaunch = null;
+        var launch = machine.Processes.OnLaunch!;
+        machine.Processes.OnLaunch = paths =>
+        {
+            freeAtLaunch = CanTake(machine.Paths.LockFile);
+            return launch(paths);
+        };
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain with { Stop = true }, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(freeAtLaunch);
+        Assert.True(CanTake(machine.Paths.LockFile));
+    }
+
+    [Fact]
     public async Task A_failure_in_the_middle_of_the_write_leaves_nothing_behind_names_the_file_and_starts_the_runtime_again()
     {
         using var machine = new MovingMachine();
@@ -607,6 +645,19 @@ public sealed class ExportCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal([DefaultName], Directory.EnumerateFileSystemEntries(machine.Here).Select(Path.GetFileName));
+    }
+
+    private static bool CanTake(string lockFile)
+    {
+        try
+        {
+            using var taken = new FileStream(lockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 
     private static List<string> Names(string archivePath)

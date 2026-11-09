@@ -220,6 +220,27 @@ public static class ExportCommand
             stopped = true;
         }
 
+        // The runtime's own instance lock, held for the whole read: a runtime this verb did not see by its descriptor still
+        // holds it, and none can start while the archive is read. It is let go before the runtime is started again.
+        var held = RuntimeHold.Lock(env);
+        if (held is null && options.Stop && !stopped)
+        {
+            if (await RuntimeHold.StopAsync(env, options.StopTimeout, options.Poll, cancellationToken).ConfigureAwait(false) is { } said)
+            {
+                return Refuse(env, options.Human, CliErrors.RuntimeStillRunning, $"The runtime did not stop, so nothing was written. Stop it with 'jason runtime stop' and run this again. It said: {said}");
+            }
+
+            stopped = true;
+            held = RuntimeHold.Lock(env);
+        }
+
+        if (held is null)
+        {
+            return !options.Stop
+                ? Refuse(env, options.Human, CliErrors.RuntimeRunning, RuntimeHold.RunningRefusal(env, "export"))
+                : Refuse(env, options.Human, CliErrors.RuntimeStillRunning, $"The runtime's lock at {env.Paths.LockFile} is held, so a runtime still runs on {env.Paths.Root}, and nothing was written. Stop it with 'jason runtime stop' and run this again.");
+        }
+
         Written written;
         try
         {
@@ -239,11 +260,16 @@ public static class ExportCommand
         }
         catch (ExportRefusal refused)
         {
+            held.Dispose();
             var restart = stopped ? await RuntimeHold.StartAsync(env, options.StartTimeout, options.Poll, cancellationToken).ConfigureAwait(false) : null;
             var tail = !stopped ? string.Empty
                 : restart is null ? " The runtime, stopped for it, was started again."
                 : $" The runtime, stopped for it, did not start again; start it with 'jason runtime start'. It said: {restart}";
             return Refuse(env, options.Human, refused.Code, refused.Message + tail);
+        }
+        finally
+        {
+            held.Dispose();
         }
 
         var started = false;
