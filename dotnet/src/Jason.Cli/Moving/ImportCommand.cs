@@ -279,12 +279,15 @@ public static class ImportCommand
             var held = RuntimeHold.Lock(env);
             if (held is null && options.Stop && !stopped)
             {
+                // Stopped only when a runtime was live by its descriptor as the stop was asked: a stop that found none stopped
+                // nothing, and a verb starts again only a runtime it stopped.
+                var live = RuntimeHold.Running(env);
                 if (await RuntimeHold.StopAsync(env, options.StopTimeout, options.Poll, cancellationToken).ConfigureAwait(false) is { } said)
                 {
                     return Refuse(env, options.Human, CliErrors.RuntimeStillRunning, $"The runtime did not stop, so nothing was written. Stop it with 'jason runtime stop' and run this again. It said: {said}");
                 }
 
-                stopped = true;
+                stopped = live;
                 held = RuntimeHold.Lock(env);
             }
 

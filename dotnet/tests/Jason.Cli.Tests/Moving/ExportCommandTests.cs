@@ -579,6 +579,43 @@ public sealed class ExportCommandTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
     }
 
+    /// <summary>
+    /// A lock held by something that is no runtime by its descriptor, let go once the stop was asked: the stop stopped
+    /// nothing, so the export starts nothing, and does not say it started one again.
+    /// </summary>
+    [Fact]
+    public async Task A_lock_let_go_after_a_stop_that_stopped_nothing_starts_no_runtime()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.LeaveStaleDescriptor();
+        var held = new FileStream(machine.Paths.LockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        machine.OnCall = operation =>
+        {
+            if (operation == "system.shutdown")
+            {
+                held.Dispose();
+            }
+        };
+        try
+        {
+            var exit = await ExportCommand.RunAsync(machine.Env(), Plain with { Stop = true }, new StoppedClock(Now), Ct);
+
+            Assert.Equal(ExitCodes.Success, exit);
+            Assert.Contains(machine.Calls, call => call.Operation == "system.shutdown");
+            Assert.Single(Directory.EnumerateFiles(machine.Here, "*.zip"));
+            Assert.Empty(machine.Processes.Launches);
+            Assert.False(machine.Running);
+            using var answer = JsonDocument.Parse(machine.Out.ToString());
+            Assert.False(answer.RootElement.GetProperty("stopped").GetBoolean());
+            Assert.DoesNotContain("started again", machine.Out.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            held.Dispose();
+        }
+    }
+
     [Fact]
     public async Task The_instance_lock_is_let_go_before_the_runtime_starts_again()
     {

@@ -73,6 +73,16 @@ internal sealed class MovingMachine : IDisposable
     /// <summary>Every operation the runtime was asked, with its body, in order.</summary>
     public List<(string Operation, string Body)> Calls { get; } = [];
 
+    /// <summary>Run as each operation is asked, before it is answered.</summary>
+    public Action<string>? OnCall { get; set; }
+
+    /// <summary>A descriptor a runtime left that has since gone: it names a process that is not running.</summary>
+    public void LeaveStaleDescriptor()
+    {
+        Directory.CreateDirectory(Paths.RunDirectory);
+        File.WriteAllText(Paths.DescriptorFile, JsonSerializer.Serialize(RuntimeVerbs.Descriptor("rt_MOVINGGONE", 6999), JasonJson.Options));
+    }
+
     public bool Running { get; private set; }
 
     public int Pid { get; private set; }
@@ -208,6 +218,7 @@ internal sealed class MovingMachine : IDisposable
             lock (machine._sync)
             {
                 machine.Calls.Add((operation, body));
+                machine.OnCall?.Invoke(operation);
                 if (!machine.Running)
                 {
                     throw new HttpRequestException("connection refused");

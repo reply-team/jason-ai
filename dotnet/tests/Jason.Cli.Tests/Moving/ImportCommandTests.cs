@@ -561,6 +561,90 @@ public sealed class ImportCommandTests
         Assert.Empty(to.Processes.Launches);
     }
 
+    /// <summary>
+    /// A lock held by something that is no runtime by its descriptor, let go once the stop was asked: the stop stopped
+    /// nothing, so the answer does not say a runtime was stopped for the import. The one start is the import's own, which
+    /// it makes whether or not it stopped one, to link the project folders.
+    /// </summary>
+    [Fact]
+    public async Task A_lock_let_go_after_a_stop_that_stopped_nothing_is_no_runtime_stopped_for_the_import()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine { Answers = Linked };
+        to.LeaveStaleDescriptor();
+        var held = new FileStream(to.Paths.LockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        to.OnCall = operation =>
+        {
+            if (operation == "system.shutdown")
+            {
+                held.Dispose();
+            }
+        };
+        var file = new MovingArchive(from).Installation().Write();
+        try
+        {
+            var exit = await Import(to, Options(file) with { Stop = true });
+
+            Assert.Equal(ExitCodes.Success, exit);
+            Assert.Contains(to.Calls, call => call.Operation == "system.shutdown");
+            Assert.Equal("prj_01ACME", HarnessMarker.In(Path.Combine(to.Harness, "projects", "acme"))!.Id);
+            Assert.Single(to.Processes.Launches);
+            using var answer = JsonDocument.Parse(to.Out.ToString());
+            Assert.False(answer.RootElement.GetProperty("stopped").GetBoolean());
+        }
+        finally
+        {
+            held.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The same lock, let go after a stop that stopped nothing, and then a part that cannot be moved aside: everything is put
+    /// back, and no runtime is started, because none was stopped for the import.
+    /// </summary>
+    [Fact]
+    public async Task A_put_back_after_a_stop_that_stopped_nothing_starts_no_runtime()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to move a folder that holds a file open without FileShare.Delete; elsewhere the move succeeds, so there is no failure to put back.");
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        to.PlantData("state/jason.db", "the database here");
+        var busy = to.PlantData("logs/jason-20261001.log", "a log another program holds");
+        to.Mark(string.Empty, HarnessMarker.Root, null);
+        to.Mark("projects/old", HarnessMarker.Project, "prj_01OLD");
+        to.LeaveStaleDescriptor();
+        var held = new FileStream(to.Paths.LockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        to.OnCall = operation =>
+        {
+            if (operation == "system.shutdown")
+            {
+                held.Dispose();
+            }
+        };
+        var file = new MovingArchive(from).Installation().Write();
+        int exit;
+        try
+        {
+            using (new FileStream(busy, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                exit = await Import(to, Options(file) with { Replace = true, Stop = true });
+            }
+        }
+        finally
+        {
+            held.Dispose();
+        }
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(to.Out.ToString());
+        Assert.Equal("import_unwritable", error.Code);
+        Assert.Contains("put back", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("started again", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("stopped for the import", error.Message, StringComparison.Ordinal);
+        Assert.Empty(to.Processes.Launches);
+        Assert.Equal("prj_01OLD", HarnessMarker.In(Path.Combine(to.Harness, "projects", "old"))!.Id);
+    }
+
     [Fact]
     public async Task The_runtime_lock_is_held_through_the_placing_and_let_go_before_the_runtime_starts()
     {
