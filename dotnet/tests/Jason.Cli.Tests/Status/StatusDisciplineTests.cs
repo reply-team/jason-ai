@@ -268,8 +268,13 @@ public partial class StatusDisciplineTests
     /// it: the same hole, with the same absence of consequence.
     /// </para>
     /// <para>
-    /// So this reads every <c>new StatusCheck</c> in the checks' own sources and takes the last argument of
-    /// each. A repair is <c>null</c> or it comes from <c>Repair</c>, and there is no third spelling.
+    /// So this reads every <c>new StatusCheck</c> in the checks' own sources and takes the fifth argument of
+    /// each, the repair. A repair is <c>null</c> or it comes from <c>Repair</c>, and there is no third spelling.
+    /// </para>
+    /// <para>
+    /// The record's sixth parameter, the details, is optional, so a call that passed one would push the repair
+    /// to the fifth place and leave a <c>null</c> last, which a reader of the last argument passes. A call with a
+    /// sixth argument is refused: details arrive through <c>with</c>, never through the constructor.
     /// </para>
     /// </remarks>
     [Fact]
@@ -347,7 +352,7 @@ public partial class StatusDisciplineTests
     [System.Text.RegularExpressions.GeneratedRegex("\"(jason [^\"]*)\"")]
     private static partial System.Text.RegularExpressions.Regex Repair();
 
-    /// <summary>Every <c>new StatusCheck(…)</c> in a file, as its line number and its last argument.</summary>
+    /// <summary>Every <c>new StatusCheck(…)</c> in a file, as its line number and its fifth argument, the repair.</summary>
     private static IEnumerable<(int Line, string Fix)> Constructed(string source)
     {
         const string call = "new StatusCheck(";
@@ -359,9 +364,13 @@ public partial class StatusDisciplineTests
             var (close, commas) = Arguments(source, open);
 
             Assert.True(close > open, $"A '{call}' at offset {at} never closes.");
-            Assert.NotEmpty(commas);
+            Assert.True(
+                commas.Count == 4,
+                $"The '{call}' at line {LineAt(source, at)} passes {commas.Count + 1} arguments. A check is built from "
+                + "five, the repair last, and its details are given through `with`, so that the repair is always the "
+                + "argument this guard reads.");
 
-            yield return (LineAt(source, at), source[(commas[^1] + 1)..close].Trim());
+            yield return (LineAt(source, at), source[(commas[3] + 1)..close].Trim());
             at = source.IndexOf(call, close, StringComparison.Ordinal);
         }
     }

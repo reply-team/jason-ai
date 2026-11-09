@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Jason.Cli.Status;
 
 /// <summary>What one check came to.</summary>
@@ -15,15 +17,26 @@ public enum CheckState
 }
 
 /// <summary>
-/// One check: what was asked, whether failing it means this installation cannot work, what was seen, and the
-/// one command that repairs it.
+/// One check: what was asked, whether failing it means this installation cannot work, what was seen, the one
+/// command that repairs it, and what was seen again as fields a program reads, where a check has any.
 /// </summary>
 /// <remarks>
-/// There is no fifth field on purpose. A check may report a fact and the command that repairs it. It may not
-/// read a log or explain a failure — that is a diagnostics verb, it is a story of its own, and the shape of
-/// this record is part of what keeps the two apart.
+/// A check may report a fact and the command that repairs it. It may not read a log or explain a failure — that
+/// is a diagnostics verb, it is a story of its own, and the shape of this record is part of what keeps the two
+/// apart. <see cref="Details"/> does not change that: it is the same fact, said as fields, so that a program
+/// reading a version does not parse a sentence written for a person, and it carries nothing the fact could not.
 /// </remarks>
-public sealed record StatusCheck(string Name, bool Required, CheckState State, string Fact, string? Fix);
+/// <param name="Details">
+/// Fields of the fact, by name, and null on every check that has none; omitted from the body when null. Only
+/// <c>role_skills</c> carries them: the deployment in the role root.
+/// </param>
+public sealed record StatusCheck(
+    string Name,
+    bool Required,
+    CheckState State,
+    string Fact,
+    string? Fix,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? Details = null);
 
 /// <summary>
 /// The answer to "can I start work?": one state per check, and the boolean an agent branches on.

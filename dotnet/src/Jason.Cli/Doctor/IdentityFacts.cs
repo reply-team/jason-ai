@@ -69,8 +69,9 @@ public sealed record IdentityFacts(string Home, string User, string Machine, str
 
     /// <summary>
     /// The refs those sources were taken at, written as the same mark only where a fact quotes a deployment — after
-    /// <c>at</c> or <c>from</c> — since a ref is often an ordinary word: a branch called <c>main</c> is not every
-    /// <c>main</c> in a bundle. Learned from the skills records, never read from the machine.
+    /// <c>at</c> or <c>from</c> — or where one is the whole value of a member named <c>ref</c>, as a check's details
+    /// carry it, since a ref is often an ordinary word: a branch called <c>main</c> is not every <c>main</c> in a
+    /// bundle. Learned from the skills records, never read from the machine.
     /// </summary>
     public IReadOnlyCollection<string> SkillRefs { get; init; } = [];
 

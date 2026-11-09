@@ -381,6 +381,204 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// The deployment the role check reads, as fields a program reads rather than a sentence it parses: the record's ref,
+    /// source and commit, and how many roles the runtime reports it teaches. On the role check in every state a recorded
+    /// deployment can leave it in, and on no other check at all, where the member is absent rather than null.
+    /// </summary>
+    [Theory]
+    [InlineData("v1.2.3", true, "1.2.4", CheckState.Ok)]
+    [InlineData("v1.2.5", false, "1.2.5", CheckState.Ok)]
+    [InlineData("v1.2.6", false, "1.2.5", CheckState.Failed)]
+    [InlineData("v1.2.4", false, "1.2.4", CheckState.Ok)]
+    public async Task The_role_check_carries_its_deployment_as_details_and_no_other_check_carries_any(string reference, bool overridden, string build, CheckState state)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        RoleRootAt(dir, reference, overridden);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, build: build), Ct);
+
+        var checks = System.Text.Json.Nodes.JsonNode.Parse(output.ToString())!["checks"]!.AsArray().Select(check => check!.AsObject()).ToList();
+        var role = Assert.Single(checks, check => check["name"]!.GetValue<string>() == "role_skills");
+        Assert.Equal(JsonNamingPolicy.SnakeCaseLower.ConvertName(state.ToString()), role["state"]!.GetValue<string>());
+        var expected = new System.Text.Json.Nodes.JsonObject
+        {
+            ["ref"] = reference,
+            ["source"] = SkillsSource.DefaultSource,
+            ["commit"] = Commit,
+            ["roles_taught"] = "1",
+        };
+        Assert.Equal(expected.ToJsonString(), role["details"]!.ToJsonString());
+        Assert.All(checks.Where(check => check != role), check => Assert.False(check.ContainsKey("details"), $"{check["name"]} carries details."));
+    }
+
+    /// <summary>A record that names no commit — a directory deployed where it stood — gives an empty commit, never a made-up one.</summary>
+    [Fact]
+    public async Task A_record_that_names_no_commit_gives_an_empty_commit()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, skills: new SkillsInfo(dir.Paths.RoleSkillsDirectory, 1048576, [Taught("researcher")]));
+        Deploy(dir.Paths.RoleSkillsDirectory, source: "/somewhere", reference: SkillsSource.DirectoryRef);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var details = Assert.Single(Read(output).Checks, check => check.Name == "role_skills").Details;
+        Assert.NotNull(details);
+        Assert.Equal(string.Empty, details["commit"]);
+        Assert.Equal(SkillsSource.DirectoryRef, details["ref"]);
+        Assert.Equal("/somewhere", details["source"]);
+    }
+
+    /// <summary>
+    /// No record, no details. And a runtime that did not answer has not said how many roles it teaches, so the record this
+    /// CLI deploys into is reported and the number is absent — never a guessed one.
+    /// </summary>
+    [Fact]
+    public async Task With_no_runtime_answering_the_details_carry_the_record_and_no_number_of_roles()
+    {
+        using var dir = new TempPaths();
+        var before = new StringWriter();
+        await CliApp.RunAsync(["status"], Machine(dir, before), Ct);
+        Assert.Null(Assert.Single(Read(before).Checks, check => check.Name == "role_skills").Details);
+
+        Deploy(dir.Paths.RoleSkillsDirectory, source: "/somewhere", reference: "v1.2.3", commit: Commit);
+        var output = new StringWriter();
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(CheckState.Unknown, check.State);
+        Assert.NotNull(check.Details);
+        Assert.Equal(
+            ["commit", "ref", "source"],
+            check.Details.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("v1.2.3", check.Details["ref"]);
+        Assert.Equal(Commit, check.Details["commit"]);
+    }
+
+    /// <summary>
+    /// And in the states that fail or cannot decide before a deployment is compared: the record is reported all the same,
+    /// with the roles the runtime reports it teaches — a refused skill is not taught — and with no number where the runtime
+    /// could not read the directory at all.
+    /// </summary>
+    [Theory]
+    [InlineData("refused", "1")]
+    [InlineData("untaught", "1")]
+    [InlineData("roster_unknown", "2")]
+    [InlineData("unreadable", null)]
+    public async Task Details_are_carried_in_the_states_before_a_deployment_is_compared(string shape, string? taught)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        var root = dir.Paths.RoleSkillsDirectory;
+        var refused = new DeployedRoleSkill("writer", 5000, "The skill is too large.", SkillProblemCodes.SkillTooLarge);
+        switch (shape)
+        {
+            case "refused":
+                Running(dir, roles: ["researcher", "writer"], skills: new SkillsInfo(root, 4096, [Taught("researcher"), refused]));
+                break;
+            case "untaught":
+                Running(dir, roles: ["researcher", "writer"], skills: new SkillsInfo(root, 4096, [Taught("researcher")]));
+                break;
+            case "roster_unknown":
+                Running(dir, skills: new SkillsInfo(root, 4096, [Taught("researcher"), Taught("writer")]), rosterFails: true);
+                break;
+            default:
+                Running(dir, skills: new SkillsInfo(root, 4096, [], "The role skills directory could not be read: denied", SkillProblemCodes.SkillsDirectoryUnreadable));
+                break;
+        }
+
+        Deploy(root, source: "/somewhere", reference: "v1.2.3", commit: Commit);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.NotEqual(CheckState.Ok, check.State);
+        Assert.NotNull(check.Details);
+        Assert.Equal("v1.2.3", check.Details["ref"]);
+        Assert.Equal(taught, check.Details.TryGetValue("roles_taught", out var number) ? number : null);
+    }
+
+    /// <summary>
+    /// A record in the role root that cannot be read gives no details and leaves the check where it stood without one,
+    /// whether the runtime answered or not: status reports, and never throws on a file somebody broke. Where the runtime
+    /// answered, the fact still says the record could not be read.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_record_that_cannot_be_read_gives_no_details_and_leaves_the_state(bool answering)
+    {
+        using var dir = new TempPaths();
+        var root = dir.Paths.RoleSkillsDirectory;
+        if (answering)
+        {
+            Running(dir, skills: new SkillsInfo(root, 1048576, [Taught("researcher")]));
+        }
+
+        var before = new StringWriter();
+        await CliApp.RunAsync(["status"], Machine(dir, before), Ct);
+        var without = Assert.Single(Read(before).Checks, check => check.Name == "role_skills");
+
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, SkillsRecord.FileName), "{ not json");
+        var output = new StringWriter();
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Null(check.Details);
+        Assert.Equal(without.State, check.State);
+        if (answering)
+        {
+            Assert.Contains("The record there could not be read", check.Fact, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The details are for a program. The table a person reads prints the facts, byte for byte as it did before a check
+    /// could carry details: what it prints for a report is what it prints for the same report with every details taken out.
+    /// </summary>
+    [Fact]
+    public async Task The_human_table_prints_the_facts_and_never_the_details()
+    {
+        using var dir = new TempPaths();
+        RoleRootAt(dir, "v1.2.3", overridden: true);
+        var json = new StringWriter();
+        var human = new StringWriter();
+
+        await CliApp.RunAsync(["status"], Machine(dir, json, build: "1.2.4"), Ct);
+        await CliApp.RunAsync(["status", "--human"], Machine(dir, human, build: "1.2.4"), Ct);
+
+        var report = Read(json);
+        Assert.NotNull(Assert.Single(report.Checks, check => check.Name == "role_skills").Details);
+        var without = new StringWriter();
+        StatusCommand.Render(without, report with { Checks = [.. report.Checks.Select(check => check with { Details = null })] });
+        Assert.Equal(without.ToString(), human.ToString());
+        Assert.DoesNotContain(Commit, human.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>The verb's own help says the field exists, which check carries it, and what it carries.</summary>
+    [Fact]
+    public async Task Help_publishes_the_details_the_role_check_carries()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["status", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), Ct);
+
+        var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains("the role_skills check alone carries details", text, StringComparison.Ordinal);
+        Assert.Contains("ref, source, commit", text, StringComparison.Ordinal);
+        Assert.Contains("roles_taught", text, StringComparison.Ordinal);
+        Assert.Contains(
+            "is left out where the runtime did not answer or reported that it could not read its role root",
+            text,
+            StringComparison.Ordinal);
+        Assert.Contains("With no record, or one that cannot be read, there are no details", text, StringComparison.Ordinal);
+        Assert.Contains("--human prints the facts alone", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Role skills a default install took from an older release fail the required check, with the repair. An
     /// installation upgraded with <c>jason update apply</c> otherwise went on teaching every role from the release
     /// before, and this check said ok, naming the old tag as though it were current.
@@ -535,6 +733,10 @@ public class StatusCommandTests
         Assert.Equal(CheckState.Failed, check.State);
         Assert.Equal("Role skills are from v1.2.3; this runtime is v1.2.4.", check.Fact);
         Assert.Equal("jason skills install --roles-only", check.Fix);
+
+        // The details name the pack the fact names, not the first one the record holds.
+        Assert.NotNull(check.Details);
+        Assert.Equal("v1.2.3", check.Details["ref"]);
     }
 
     /// <summary>
