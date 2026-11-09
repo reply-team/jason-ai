@@ -166,6 +166,22 @@ public sealed class UpdatePluginsStepTests
         Assert.False(Path.Exists(installation.Paths.PluginPackageDirectory("slack")));
     }
 
+    /// <summary>Two packages not installed are already two or more: one line names both, joined by "and" with no comma.</summary>
+    [Fact]
+    public async Task Two_packages_not_installed_are_one_line_naming_both()
+    {
+        using var installation = new FakeInstallation()
+            .PublishingPlugin(Plugin("slack", "1.0.0")).PublishingPlugin(Plugin("telegram", "1.0.0"));
+        var applier = installation.Applier();
+
+        var ledger = await applier.ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(
+            ["plugins: slack and telegram are not installed, so none was placed; `jason plugin install <id>` installs one"],
+            applier.Steps.Where(step => step.StartsWith("plugins:", StringComparison.Ordinal)));
+    }
+
     /// <summary>Where every package the release publishes is installed, no line says a package is not.</summary>
     [Fact]
     public async Task Every_package_installed_leaves_no_line_saying_one_is_not()
