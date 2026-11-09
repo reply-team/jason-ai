@@ -1073,6 +1073,30 @@ public sealed class ImportCommandTests
     // ---- the harness root --------------------------------------------------------------------------------------------
 
     [Fact]
+    public async Task A_relative_archive_name_where_the_folder_the_command_runs_in_cannot_be_named_is_refused()
+    {
+        using var to = new MovingMachine();
+
+        var exit = await ImportCommand.RunAsync(to.Env() with { WorkingDirectory = null }, Options("jason-export.zip"), new StoppedClock(Now), Ct);
+
+        var error = Refused(to, exit, "import_refused");
+        Assert.Equal("The folder this command runs in cannot be named, so 'jason-export.zip' cannot be read from it; name it by a full path. Nothing was written.", error.Message);
+    }
+
+    [Fact]
+    public async Task A_relative_root_where_the_folder_the_command_runs_in_cannot_be_named_is_refused()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await ImportCommand.RunAsync(to.Env() with { WorkingDirectory = null }, Options(file) with { Root = "Jason" }, new StoppedClock(Now), Ct);
+
+        var error = Refused(to, exit, "import_refused");
+        Assert.Equal("The folder this command runs in cannot be named, so the --root 'Jason' cannot be found from it; name it by a full path. Nothing was written.", error.Message);
+    }
+
+    [Fact]
     public async Task A_root_named_relative_is_the_folder_under_the_one_the_command_runs_in()
     {
         using var from = new MovingMachine();

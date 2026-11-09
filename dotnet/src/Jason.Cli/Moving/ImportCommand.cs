@@ -167,7 +167,15 @@ public static class ImportCommand
         ArgumentNullException.ThrowIfNull(clock);
 
         var stamp = ExportCommand.Stamp(clock.GetUtcNow());
-        var file = Full(options.File, env.WorkingDirectory, "The archive");
+        string file;
+        try
+        {
+            file = Full(options.File, env.WorkingDirectory, "The archive", $"'{options.File}' cannot be read from it");
+        }
+        catch (ImportRefusal refused)
+        {
+            return Refuse(env, options.Human, refused.Code, refused.Message);
+        }
 
         // ---- the refusals, every one before anything is written ----
 
@@ -450,7 +458,11 @@ public static class ImportCommand
 
     // ---- where -------------------------------------------------------------------------------------------------------
 
-    private static string Full(string given, string? workingDirectory, string what)
+    /// <summary>
+    /// A path given, made full against the folder the command runs in. An empty one is a usage error; a relative one where
+    /// that folder cannot be named is a refusal, exit 1, as export's is, because the command line was understood.
+    /// </summary>
+    private static string Full(string given, string? workingDirectory, string what, string fromIt)
     {
         if (string.IsNullOrWhiteSpace(given))
         {
@@ -464,7 +476,7 @@ public static class ImportCommand
 
         return workingDirectory is { } start
             ? FolderPaths.Normal(Path.GetFullPath(given, start))
-            : throw new UsageException($"The folder this command runs in cannot be named, so '{given}' cannot be read from it; name it by a full path.");
+            : throw new ImportRefusal(CliErrors.ImportRefused, $"The folder this command runs in cannot be named, so {fromIt}; name it by a full path. Nothing was written.");
     }
 
     /// <summary>
@@ -503,7 +515,7 @@ public static class ImportCommand
         var root = resolved;
         if (option is not null)
         {
-            var full = Full(option, env.WorkingDirectory, "--root");
+            var full = Full(option, env.WorkingDirectory, "--root", $"the --root '{option}' cannot be found from it");
             root = new HarnessRootPlace(full, InstallationPlaces.FromOption, full);
 
             // The runtime reads the variable over every setting, so a root it names is where the runtime will look.
