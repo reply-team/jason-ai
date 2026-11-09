@@ -1355,6 +1355,7 @@ public sealed class ImportCommandTests
         var help = to.Out.ToString().ReplaceLineEndings(" ");
         Assert.Contains("Refused before anything is written", help, StringComparison.Ordinal);
         Assert.Contains("an archive a newer Jason wrote", help, StringComparison.Ordinal);
+        Assert.Contains("a file entry named where an import places a folder, or a folder entry named as one of the database files", help, StringComparison.Ordinal);
         Assert.Contains("Nothing is deleted", help, StringComparison.Ordinal);
         Assert.Contains("<data>/replaced-<stamp>/", help, StringComparison.Ordinal);
         Assert.Contains("state/ whole, its sidecars and backups with it", help, StringComparison.Ordinal);

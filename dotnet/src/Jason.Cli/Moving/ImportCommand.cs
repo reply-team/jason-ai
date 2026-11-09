@@ -1284,8 +1284,9 @@ public static class ImportCommand
     {
         var nl = Environment.NewLine;
         return "Refused before anything is written: an archive that cannot be read; a name in it that escapes (a parent or empty "
-            + "segment, a rooted name, a backslash, a link, a name outside data/, harness/ and export.json, or a part of the data "
-            + "directory no export carries); a file whose size or SHA-256 is not the one export.json lists; an archive a newer "
+            + "segment, a rooted name, a backslash, a link, a name outside data/, harness/ and export.json, a part of the data "
+            + "directory no export carries, a file entry named where an import places a folder, or a folder entry named as one "
+            + "of the database files); a file whose size or SHA-256 is not the one export.json lists; an archive a newer "
             + "Jason wrote, naming the version to install first, or a jason_version no Jason writes; an update in flight, "
             + "naming 'jason update apply', or an update ledger that cannot be read, by its path; a harness root the runtime's "
             + "rule refuses, or a --root that JASON_Harness__Root contradicts, naming the variable; a settings file in the "
