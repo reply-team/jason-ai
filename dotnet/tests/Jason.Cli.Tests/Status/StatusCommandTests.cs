@@ -535,6 +535,11 @@ public class StatusCommandTests
         Assert.Contains("the role_skills check alone carries details", text, StringComparison.Ordinal);
         Assert.Contains("ref, source, commit", text, StringComparison.Ordinal);
         Assert.Contains("roles_taught", text, StringComparison.Ordinal);
+        Assert.Contains(
+            "is left out where the runtime did not answer or reported that it could not read its role root",
+            text,
+            StringComparison.Ordinal);
+        Assert.Contains("With no record, or one that cannot be read, there are no details", text, StringComparison.Ordinal);
         Assert.Contains("--human prints the facts alone", text, StringComparison.Ordinal);
     }
 

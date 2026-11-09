@@ -269,8 +269,9 @@ job is to answer when the runtime cannot be asked — so a runtime that is down 
 error envelope. The JSON body carries `ready` and a state per check, so an agent branches on the body rather
 than on the code. The `role_skills` check alone also carries `details`, the deployment the record in the role root
 names, as fields a program reads instead of the fact: `ref`, `source`, `commit` (empty where the record names none)
-and `roles_taught`, how many roles the runtime reports it teaches, left out where the runtime did not answer — the
-record is then the one in this installation's own role root. With no record there are no `details`, and `--human`
+and `roles_taught`. `roles_taught`, how many roles the runtime reports it teaches, is left out where the runtime did
+not answer or reported that it could not read its role root. Where the runtime did not answer, the record is the one
+in this installation's own role root. With no record, or one that cannot be read, there are no `details`. `--human`
 prints the facts alone. A check reports a fact and, where there is one, the command that repairs it; it never reads
 a log and never explains a failure, which is what keeps it from growing into a diagnostics verb.
 
