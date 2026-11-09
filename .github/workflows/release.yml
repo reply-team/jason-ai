@@ -701,9 +701,34 @@ jobs:
           if-no-files-found: error
 
 
+  skills:
+    name: The skills' package
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Once per release, like the plugins' packages: skills/ of the tag's own checkout, with a source.json naming the
+    # public repository, the tag and the commit, which is what `jason skills install` records for a deployment from it.
+    # The repository is written as a constant, as the notes address is: a run elsewhere names the repository the
+    # release is published from, not the one it ran in.
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Archive skills
+        shell: pwsh
+        run: ./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive artifacts/release/jason-skills.zip -Repository https://github.com/reply-team/jason-ai -Ref "v${{ needs.version.outputs.version }}" -Commit "${{ github.sha }}"
+
+      # Named so that the publishing job's download of jason-* brings it beside the archives, where the checksums are
+      # written.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-skills
+          path: artifacts/release/jason-skills.zip
+          if-no-files-found: error
+
   release:
     name: Assemble and publish
-    needs: [version, build, macos, windows, plugin, ui]
+    needs: [version, build, macos, windows, plugin, ui, skills]
     runs-on: ubuntu-latest
     # The only job that may write to this repository, and what it writes is the release. It builds and runs nothing
     # that was built, so a test on a matrix runner cannot publish anything, and nothing is published when a platform's
@@ -750,7 +775,7 @@ jobs:
           # needs and hands over to the new executable, so an older build goes through it first. The floor moves only
           # when an applier change raises it. Each plugin's entry is the tag's digest list of that package, whose last
           # line is the package this release publishes, so nothing is built or hashed here to say which package that is.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-plugin-journal-forwarder.zip,jason-plugin-ntfy.zip,jason-plugin-slack.zip,jason-plugin-telegram.zip,jason-ui.zip -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests,plugins/journal-forwarder.digests,plugins/ntfy.digests,plugins/slack.digests,plugins/telegram.digests
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-plugin-journal-forwarder.zip,jason-plugin-ntfy.zip,jason-plugin-slack.zip,jason-plugin-telegram.zip,jason-ui.zip,jason-skills.zip -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests,plugins/journal-forwarder.digests,plugins/ntfy.digests,plugins/slack.digests,plugins/telegram.digests
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 
@@ -862,9 +887,9 @@ jobs:
           }
 
           # gh names an asset by its file name. The archives, the feed, the packages of reply, journal-forwarder, ntfy,
-          # slack and telegram and the UI's were assembled under artifacts/release; the install scripts are the tag's
+          # slack and telegram, the UI's and the skills' were assembled under artifacts/release; the install scripts are the tag's
           # own, so a one-liner pinned to this release runs the script it was published with.
-          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-plugin-ntfy.zip', 'artifacts/release/jason-plugin-slack.zip', 'artifacts/release/jason-plugin-telegram.zip', 'artifacts/release/jason-ui.zip')
+          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-plugin-ntfy.zip', 'artifacts/release/jason-plugin-slack.zip', 'artifacts/release/jason-plugin-telegram.zip', 'artifacts/release/jason-ui.zip', 'artifacts/release/jason-skills.zip')
           gh release create "v$env:VERSION" -R $repository @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
           if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }

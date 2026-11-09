@@ -102,7 +102,11 @@ internal enum PluginPlanState
     /// <summary>The release's own.</summary>
     Current,
 
-    /// <summary>A later version the record holds, as after an apply of an older release by <c>--version</c>.</summary>
+    /// <summary>
+    /// A later version the record holds: only a record that assigns some digest a version later than the one its release
+    /// publishes gives it. A published release's record never does, since its list ends at that release's version and every
+    /// line before it is an earlier version; a feed of one's own could.
+    /// </summary>
     Later,
 }
 

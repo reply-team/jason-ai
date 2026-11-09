@@ -81,16 +81,44 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A release teaches itself with git, over the network, at its published tag: "a shell, and nothing else" was
-    /// true of installing it and not of teaching it.
+    /// A release teaches itself from the package of skills it published, over the network, at its published tag: "a
+    /// shell, and nothing else" was true of installing it and not of teaching it. <c>git</c> is named only beside
+    /// <c>--source</c>, the one source that needs it.
     /// </summary>
     [Fact]
     public void The_install_page_says_what_teaching_a_release_needs()
     {
         var install = Page("docs", "INSTALL.md");
+        var flat = Flat(install);
 
-        Assert.Contains("with `git`, over the\nnetwork, at the tag it was published as", install, StringComparison.Ordinal);
+        Assert.Contains(
+            "a release takes its skills from the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as.",
+            flat,
+            StringComparison.Ordinal);
+        Assert.Contains("with `--source`, which also takes a git repository at a ref; only that needs `git`.", flat, StringComparison.Ordinal);
+        Assert.DoesNotContain("with `git`", flat, StringComparison.Ordinal);
         Assert.Contains("asks for a\ntag that has not been published yet, and refuses", install, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §2's account of what a script does gains its last step, the role skills, with what it does when that fails and
+    /// when the feed is a directory; §4 opens by saying the script did its first half, and keeps the lines that do it
+    /// again.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_the_script_teaches_the_role_skills()
+    {
+        var release = Flat(Section(Page("docs", "INSTALL.md"), "## 2. "));
+        Assert.Contains(
+            "Then it teaches the executable it installed its role skills: it runs that executable's `jason skills install --roles-only` (§4)",
+            release,
+            StringComparison.Ordinal);
+        Assert.Contains("Jason is still installed and the run still succeeds: one line says the role skills were not deployed and what to run", release, StringComparison.Ordinal);
+        Assert.Contains("leaves this step out and says what to run instead, because the skills verb reads no directory.", release, StringComparison.Ordinal);
+
+        var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
+        Assert.Contains("The install script did the first half as its last step (§2)", teach, StringComparison.Ordinal);
+        Assert.Contains("jason skills install --roles-only --dry-run", teach, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -108,7 +136,7 @@ public partial class PageClaimsTests
         var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
 
         Assert.Contains(
-            "On a first install the dry run fetches the skills first, with `git`, into Jason's staging directory inside the data directory, so that there is something to show; it deploys nothing.",
+            "On a first install the dry run fetches the skills first, from the release's package of them, into Jason's staging directory inside the data directory, so that there is something to show; it deploys nothing.",
             teach,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -171,16 +199,17 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Nine names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
+    /// Eleven names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c>, <c>doctor</c>, <c>export</c> and <c>import</c>,
     /// the <c>skills</c> and <c>update</c> nouns, <c>ui install</c> and <c>plugin install</c>, verbs of nouns whose
     /// other verbs are operations, and <c>session open</c> — and no page says two, the four it said before the two verbs
     /// that read the installation's files arrived, the six it said before the UI was placed by a command, the seven it said
-    /// before a plugin package was, or the eight it said before a person's own agent host was started by one.
+    /// before a plugin package was, the eight it said before a person's own agent host was started by one, the nine it
+    /// said before an installation was written into one archive, or the ten it said before one was placed from it.
     /// </summary>
     [Theory]
-    [InlineData("docs/handbook.md", "It is one of nine names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
-    [InlineData("docs/INSTALL.md", "It is one of nine names in this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
-    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **nine declared exceptions**")]
+    [InlineData("docs/handbook.md", "It is one of eleven names in this CLI with no API operation behind it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
+    [InlineData("docs/INSTALL.md", "It is one of eleven names in this CLI with no API operation behind it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
+    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **eleven declared exceptions**")]
     public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
@@ -196,6 +225,10 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("seven declared exceptions", text, StringComparison.Ordinal);
         Assert.DoesNotContain("one of eight names", text, StringComparison.Ordinal);
         Assert.DoesNotContain("eight declared exceptions", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("one of nine names", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("nine declared exceptions", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("one of ten names", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("ten declared exceptions", text, StringComparison.Ordinal);
         Assert.Contains(said, text, StringComparison.Ordinal);
     }
 
@@ -488,10 +521,11 @@ public partial class PageClaimsTests
     /// <summary>
     /// The update check, the install scripts and <c>jason update</c> go to the product's own address, which redirects
     /// them to the public repository's releases. The pages that say what leaves a machine say where those requests go
-    /// and who operates the address, and that the skills still come from the repository directly.
+    /// and who operates the address, and that the skills still come from the repository's releases on GitHub directly.
     /// </summary>
     [Theory]
-    [InlineData("docs/handbook.md", "The check, the install scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository directly.")]
+    [InlineData("docs/handbook.md", "The check, the install scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository's releases on GitHub directly.")]
+    [InlineData("docs/INSTALL.md", "The skills are the exception: their package is read from this repository's releases on GitHub directly, by the install scripts' last step, by `jason update apply`'s skills step and by `jason skills`.")]
     [InlineData("docs/INSTALL.md", "That request, and the downloads the install scripts, `jason update apply` and `jason ui install` make, go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases on GitHub.")]
     [InlineData("docs/release-and-update.md", "**Where it goes.** The default feed is on `get.jasonharness.ai`, an address Reply.io operates, which redirects every request under `/releases/` to the same path in the public repository's releases on GitHub.")]
     [InlineData("docs/release-and-update.md", "An installation built before 0.7.0 asks GitHub directly; both answer with the same file.")]
@@ -505,7 +539,7 @@ public partial class PageClaimsTests
     /// that say where the requests go point there, right after saying it, rather than repeat it.
     /// </summary>
     [Theory]
-    [InlineData("docs/handbook.md", "the skills come from this repository directly. What that address keeps, and for how long, is in [docs/responsible-use.md](responsible-use.md#update-check-and-downloads).")]
+    [InlineData("docs/handbook.md", "the skills come from this repository's releases on GitHub directly. What that address keeps, and for how long, is in [docs/responsible-use.md](responsible-use.md#update-check-and-downloads).")]
     [InlineData("docs/INSTALL.md", "which redirects them to this repository's releases on GitHub. What that address keeps, and for how long, is in [responsible-use.md](responsible-use.md#update-check-and-downloads).")]
     public void The_pages_point_at_what_the_address_keeps_where_they_say_where_requests_go(string page, string said) =>
         Assert.Contains(said, Flat(Unquoted(Page(page.Split('/')))), StringComparison.Ordinal);
@@ -530,13 +564,21 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("used descriptively", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The licence is the install page's to say, in the section the agent performs first, so the prompt says nothing of a
+    /// licence and asks for no acceptance.
+    /// </summary>
     [Fact]
-    public void The_install_prompt_says_the_licence_at_main_and_asks_for_no_acceptance()
+    public void The_install_prompt_leaves_the_licence_to_the_install_page_and_asks_for_no_acceptance()
     {
         var prompt = Flat(Prompt());
 
-        Assert.Contains("Jason is released under the MIT licence: <https://github.com/reply-team/jason-ai/blob/main/LICENSE>.", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("licence", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("accept", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "Jason is released under the MIT licence: [LICENSE](../LICENSE).",
+            Flat(Section(Page("docs", "INSTALL.md"), "## 2. ")),
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1080,9 +1122,9 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A person who runs only a one-liner learns on the first screen that it is not the whole of it: between the licence
-    /// sentence and the prompt, one paragraph says a one-liner installs the executable, links the install page for the
-    /// rest, and names teaching it its skills, without which every role it launches runs untaught.
+    /// A person who runs only a one-liner learns on the first screen what it did and that it is not the whole of it:
+    /// between the licence sentence and the prompt, one paragraph says a one-liner installs the executable and teaches it
+    /// its role skills, without which every role it launches runs untaught, and links the install page for the rest.
     /// </summary>
     [Fact]
     public void The_readme_s_first_screen_says_the_install_page_holds_the_rest()
@@ -1094,33 +1136,54 @@ public partial class PageClaimsTests
 
         var pointer = readme[licence..prompt].Split("\n\n").Select(Flat).SingleOrDefault(paragraph => paragraph.Contains("[docs/INSTALL.md](INSTALL.md)", StringComparison.Ordinal));
         Assert.True(pointer is not null, "Between the licence sentence and the prompt, no paragraph links the install page.");
-        Assert.Contains("A one-liner installs the executable.", pointer, StringComparison.Ordinal);
-        Assert.Contains("teaching it its skills", pointer, StringComparison.Ordinal);
+        Assert.Contains("A one-liner installs the executable and ends by teaching it its role skills, without which every role it launches runs untaught.", pointer, StringComparison.Ordinal);
+        Assert.Contains("teaching it its skills again where that step said it could not", pointer, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Before anything runs, the agent asks the person one question: what it will install and from where, what it writes
-    /// and where, and each act the page marks, one by one — and offers the other way, a mode that asks before every
-    /// command. The person's answer is the consent the rest of the install acts on.
+    /// Before anything runs, the agent tells the person in a few words what it will install and where, and waits for
+    /// their yes; each act the page marks is asked again when it comes. The yes is the consent the rest of the install
+    /// acts on.
     /// </summary>
     [Fact]
     public void The_install_prompt_asks_one_question_before_anything_runs() =>
         Assert.Contains(
-            "Before you run anything, ask me one question in plain words: what you will install and from where, what it writes and where (the executable and its directory, the PATH entry, Jason's data directory, the role skills), and each act the instructions mark \"Ask first\", offered to me one by one as a choice. Offer me the other way too: switching this session to a mode that asks me before every command. Then do the steps yourself, in order from section 2, doing only what I said yes to.",
+            "Before you run anything, tell me in a few words what you will install and where, and wait for my yes",
             Flat(Prompt()),
             StringComparison.Ordinal);
 
     /// <summary>
-    /// The prompt names where Jason comes from, in the person's own words: the releases at the product's address, which
-    /// redirect to the public repository's, or the package the install page names for the platform. It names no package
-    /// and no package manager — those are the page's to name — so the guard against commands holds.
+    /// The prompt says where Jason comes from in the person's own words — a release, with nothing built — and leaves the
+    /// address to the install page, whose section 2 carries it. It names no package, no package manager and no address of
+    /// a download, so the guard against commands holds.
     /// </summary>
     [Fact]
-    public void The_install_prompt_names_the_release_source_in_the_person_s_voice() =>
+    public void The_install_prompt_names_the_release_source_in_the_person_s_voice()
+    {
+        Assert.Contains("installing from a release and building nothing", Flat(Prompt()), StringComparison.Ordinal);
         Assert.Contains(
-            "Jason is downloaded from its releases at <https://get.jasonharness.ai/releases/>, which redirect to <https://github.com/reply-team/jason-ai/releases>; install it from there, or with the package section 2 names for this platform.",
-            Flat(Prompt()),
+            "https://get.jasonharness.ai/releases/latest/download/install.sh",
+            Section(Page("docs", "INSTALL.md"), "## 2. "),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Jason is used from a release, and the first things a reader meets say so: the prompt has the agent build nothing,
+    /// and the README says under its opening, before Quick start, that nothing in the repository is built to use it.
+    /// </summary>
+    [Fact]
+    public void The_prompt_and_the_readme_s_opening_say_Jason_is_used_from_a_release()
+    {
+        Assert.Contains("building nothing", Flat(Prompt()), StringComparison.Ordinal);
+
+        var readme = Page("README.md");
+        var quickStart = readme.IndexOf("\n## Quick start\n", StringComparison.Ordinal);
+        Assert.True(quickStart > 0, "the README has no Quick start section.");
+        var sentence = readme[..quickStart].Split("\n\n").Select(Flat).SingleOrDefault(paragraph => paragraph.StartsWith("**You use Jason from a release.**", StringComparison.Ordinal));
+        Assert.True(sentence is not null, "Before Quick start, no paragraph of the README says Jason is used from a release.");
+        Assert.Contains("built", sentence, StringComparison.Ordinal);
+        Assert.Contains("release", sentence, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// The agent's report at the end names the next step, so an install never ends on whether it worked alone: after a
@@ -1130,7 +1193,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_install_prompt_asks_for_the_next_step() =>
         Assert.Contains(
-            "At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran and what it changed.",
+            "At the end, tell me whether Jason can start work and exactly what you ran and changed.",
             Flat(Prompt()),
             StringComparison.Ordinal);
 
@@ -1142,7 +1205,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_install_prompt_asks_once_what_comes_next_when_Jason_can_start_work() =>
         Assert.Contains(
-            "If it can, ask me once whether I want a synthetic walk to meet Jason first or my real work at once.",
+            "Then do what the guide's hand-over says: offer me the wiring check once, and bring me to my first campaign in my own words.",
             Flat(Prompt()),
             StringComparison.Ordinal);
 
@@ -2269,10 +2332,10 @@ public partial class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:7d325587da26b104f707b10d842557f68d0062edc1740dc390cdcf8e33e01396";
+    private const string PromptDigest = "sha256:c6ecdd106e93baad9633528ce2cfb7baad97d48242b048875446585f09890456";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:3e2b21971398ee3fa53a79a7d2c8599bb61fe2be8258c7f94afeec930b1e6edf";
+    private const string AgentSectionDigest = "sha256:f8d405aa9cc2ac6e6ab11efceacd0a831831c916dfc07a862190f4382916cc7c";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

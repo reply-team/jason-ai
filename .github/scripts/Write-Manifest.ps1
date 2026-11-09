@@ -24,10 +24,10 @@ the same either way a caller writes it). They lead the manifest in this order; a
 is kept after them.
 
 .PARAMETER Plugins
-The packages the release carries beside its archives (each plugin package, and the UI's), by file name, as a list or
-comma-separated. Each must be in the directory; it is hashed here and listed in checksums.txt after the archives, and
-never among the manifest's artifacts, which are platforms. A plugin's package is named in the manifest only through
--PluginDigests.
+The packages the release carries beside its archives (each plugin package, the UI's and the skills'), by file name,
+as a list or comma-separated. Each must be in the directory; it is hashed here and listed in checksums.txt after the
+archives, and never among the manifest's artifacts, which are platforms. A plugin's package is named in the manifest
+only through -PluginDigests.
 
 .PARAMETER ReleaseNotesUrl
 The page the release notes are on, or nothing: a release with no notes is a release.

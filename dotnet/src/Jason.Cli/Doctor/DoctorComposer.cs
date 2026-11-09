@@ -366,7 +366,7 @@ public static partial class DoctorComposer
         "the harness root, wherever it stands: it is written as " + IdentityRewriter.MarkWords["harness_root_written_as"],
         "a data directory other than ~/.jason, wherever it stands: it is written as " + IdentityRewriter.MarkWords["data_written_as"],
         "the directory the executable is in, outside the home directory and the package managers' prefixes: it is written as " + IdentityRewriter.MarkWords["install_dir_written_as"],
-        "a skill source given with --source other than the public repository's own address — a fork's address or a folder — wherever it stands, and the ref it was taken at, unless that is a release tag, where a fact quotes a deployment: each is written as " + IdentityRewriter.MarkWords["skill_source_written_as"],
+        "a skill source given with --source other than the public repository's own address — a fork's address or a folder — wherever it stands, and the ref it was taken at, unless that is a release tag, where a fact quotes a deployment or a check's details name it: each is written as " + IdentityRewriter.MarkWords["skill_source_written_as"],
         "any setting or JASON_* value off the list",
         "a plugin's configuration under Plugins:Config: the section is withheld whole, keys and values, in the settings file and in a JASON_* variable",
         "journal values unless --include-journal: " + JournalCarries,
@@ -488,7 +488,13 @@ public static partial class DoctorComposer
                 met.Read(section.Content);
             }
 
-            met.ReadPacks([.. env.Harnesses?.Detect().Select(root => root.Directory) ?? [], .. runtime.Info?.Skills?.RoleSkillsDirectory is { Length: > 0 } roles ? [roles] : Array.Empty<string>()]);
+            // The role root the status checks read too, which is this CLI's own where the runtime did not answer them: the
+            // role check's details name the deployment its record holds.
+            met.ReadPacks([
+                .. env.Harnesses?.Detect().Select(root => root.Directory) ?? [],
+                .. runtime.Info?.Skills?.RoleSkillsDirectory is { Length: > 0 } roles ? [roles] : Array.Empty<string>(),
+                StatusChecks.RoleSkillsRoot(env, projected.Skills),
+            ]);
 
             // Last, with every name the bundle has learned: this installation's, the data directory of a runtime that
             // keeps its data elsewhere, its harness root, and the aliases of the names that are the person's.

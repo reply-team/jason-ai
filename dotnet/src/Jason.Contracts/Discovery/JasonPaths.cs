@@ -68,7 +68,7 @@ public sealed class JasonPaths
     public string SkillsStagedSourcesDirectory => Path.Combine(Root, "skills", "staged");
 
     /// <summary>
-    /// Where a skills source fetched from git is unpacked, one directory per ref. Here rather than composed
+    /// Where a skills source fetched from git or a release is unpacked, one directory per ref. Here rather than composed
     /// wherever the fetching happens: this file is what knows the layout, and a second place that knows where
     /// Jason writes is a second place to change when the layout moves.
     /// </summary>

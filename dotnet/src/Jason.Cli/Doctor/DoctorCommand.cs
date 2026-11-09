@@ -796,8 +796,9 @@ public static class DoctorCommand
             is written. A skill source given with --source other than the public repository's own address — a fork's
             address or a folder — and the ref it was taken at, unless that is a release tag, are written as {marks["skill_source_written_as"]}
             wherever they stand: the source everywhere, the ref only where a fact quotes a deployment, after "at" or "from",
-            so a branch called main is not every main in the file. A folder deployed where it stands has no ref, and the
-            sentence its record holds instead, {SkillsSource.DirectoryRef}, travels. The header lists the mark as
+            or where a check's details name it as their ref, so a branch called main is not every main in the file. A
+            folder deployed where it stands has no ref, and the sentence its record holds instead, {SkillsSource.DirectoryRef},
+            travels. The header lists the mark as
             skill_source_written_as. A settings key this program does not know is written as {SettingKey.Hidden}. Then the exception
             text of every log event (@x) is capped: {ExceptionText.MaxLineCharacters} characters a line, {ExceptionText.MaxMessageCharacters} for its message, {ExceptionText.MaxFrames} frames.
             And the runtime's own report is carried in part — a closed set of the runtime's own words travels, free text

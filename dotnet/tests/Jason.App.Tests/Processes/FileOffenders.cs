@@ -110,6 +110,66 @@ internal static class FileOffenders
     [UnsupportedOSPlatform("windows")]
     public static void SetsAUnixMode() => File.SetUnixFileMode("x", UnixFileMode.UserRead);
 
+    public static void SetsCreationOfAFile() => File.SetCreationTime("x", DateTime.UnixEpoch);
+
+    public static void SetsCreationOfADirectory() => Directory.SetCreationTime("x", DateTime.UnixEpoch);
+
+    public static void SetsCreationOfAFileInfo() => new FileInfo("x").CreationTime = DateTime.UnixEpoch;
+
+    public static void SetsUtcCreationOfAFile() => File.SetCreationTimeUtc("x", DateTime.UnixEpoch);
+
+    public static void SetsUtcCreationOfADirectory() => Directory.SetCreationTimeUtc("x", DateTime.UnixEpoch);
+
+    public static void SetsUtcCreationOfAFileInfo() => new FileInfo("x").CreationTimeUtc = DateTime.UnixEpoch;
+
+    public static void SetsLastWriteOfAFile() => File.SetLastWriteTime("x", DateTime.UnixEpoch);
+
+    public static void SetsLastWriteOfADirectory() => Directory.SetLastWriteTime("x", DateTime.UnixEpoch);
+
+    public static void SetsLastWriteOfAFileInfo() => new FileInfo("x").LastWriteTime = DateTime.UnixEpoch;
+
+    public static void SetsUtcLastWriteOfAFile() => File.SetLastWriteTimeUtc("x", DateTime.UnixEpoch);
+
+    public static void SetsUtcLastWriteOfADirectory() => Directory.SetLastWriteTimeUtc("x", DateTime.UnixEpoch);
+
+    public static void SetsUtcLastWriteOfAFileInfo() => new FileInfo("x").LastWriteTimeUtc = DateTime.UnixEpoch;
+
+    public static void SetsLastAccessOfAFile() => File.SetLastAccessTime("x", DateTime.UnixEpoch);
+
+    public static void SetsLastAccessOfADirectory() => Directory.SetLastAccessTime("x", DateTime.UnixEpoch);
+
+    public static void SetsLastAccessOfAFileInfo() => new FileInfo("x").LastAccessTime = DateTime.UnixEpoch;
+
+    public static void SetsUtcLastAccessOfAFile() => File.SetLastAccessTimeUtc("x", DateTime.UnixEpoch);
+
+    public static void SetsUtcLastAccessOfADirectory() => Directory.SetLastAccessTimeUtc("x", DateTime.UnixEpoch);
+
+    public static void SetsUtcLastAccessOfAFileInfo() => new FileInfo("x").LastAccessTimeUtc = DateTime.UnixEpoch;
+
+    public static void SetsTheAttributesOfAFileInfo() => new FileInfo("x").Attributes = FileAttributes.ReadOnly;
+
+    public static void SetsTheAttributesOfADirectoryInfo() => new DirectoryInfo("x").Attributes = FileAttributes.Hidden;
+
+    [UnsupportedOSPlatform("windows")]
+    public static void SetsTheUnixModeOfAFileInfo() => new FileInfo("x").UnixFileMode = UnixFileMode.UserRead;
+
+    [UnsupportedOSPlatform("windows")]
+    public static void SetsTheUnixModeOfADirectoryInfo() => new DirectoryInfo("x").UnixFileMode = UnixFileMode.UserRead;
+
+    [SupportedOSPlatform("windows")]
+    public static void EncryptsAFile() => File.Encrypt("x");
+
+    [SupportedOSPlatform("windows")]
+    public static void DecryptsAFile() => File.Decrypt("x");
+
+    [SupportedOSPlatform("windows")]
+    public static void EncryptsThroughAFileInfo() => new FileInfo("x").Encrypt();
+
+    [SupportedOSPlatform("windows")]
+    public static void DecryptsThroughAFileInfo() => new FileInfo("x").Decrypt();
+
+    public static void MakesAFileInfoReadOnly() => new FileInfo("x").IsReadOnly = true;
+
     public static MemoryMappedFile MapsAFile() => MemoryMappedFile.CreateFromFile("x");
 
     public static string MakesATemporaryFile() => Path.GetTempFileName();

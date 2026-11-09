@@ -40,7 +40,7 @@ The reasoning behind this, and who Jason is for and who it is not for, is in [do
 > its build (`Update:CheckEnabled` set to `false` turns it off); and the requests you start yourself — the install
 > scripts, `jason update` and `jason ui install`, and `jason skills install` and `update`. The check, the install
 > scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which
-> redirects them to this repository's releases; the skills come from this repository directly. What that address keeps,
+> redirects them to this repository's releases; the skills come from this repository's releases on GitHub directly. What that address keeps,
 > and for how long, is in [docs/responsible-use.md](responsible-use.md#update-check-and-downloads). Nothing else,
 > and no telemetry: the file `jason doctor` writes stays on your machine unless you send it.
 
@@ -57,9 +57,9 @@ irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your
 responsibility when it reaches people, is in [docs/responsible-use.md](responsible-use.md).
 
-A one-liner installs the executable. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its
-skills, without which every role it launches runs untaught, asking whether it can work, and starting it — for a
-person or an agent.
+A one-liner installs the executable and ends by teaching it its role skills, without which every role it launches
+runs untaught. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its skills again where that step
+said it could not, asking whether it can work, and starting it — for a person or an agent.
 
 ### Ask an agent to do it
 
@@ -78,25 +78,12 @@ preamble, no repository tour:
 
 ```text
 Install Jason on this machine. The instructions are
-<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>. Read all of it
-first, the whole file word for word rather than a summary of it.
-
-Before you run anything, ask me one question in plain words: what you will install and from
-where, what it writes and where (the executable and its directory, the PATH entry, Jason's data
-directory, the role skills), and each act the instructions mark "Ask first", offered to me one by
-one as a choice. Offer me the other way too: switching this session to a mode that asks me before
-every command. Then do the steps yourself, in order from section 2, doing only what I said yes to.
-
-Jason is downloaded from its releases at <https://get.jasonharness.ai/releases/>, which redirect to
-<https://github.com/reply-team/jason-ai/releases>; install it from there, or with the package
-section 2 names for this platform.
-
-Jason is released under the MIT licence:
-<https://github.com/reply-team/jason-ai/blob/main/LICENSE>.
-
-At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran
-and what it changed. If it can, ask me once whether I want a synthetic walk to meet Jason first or
-my real work at once.
+<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>: read the whole file
+first, then follow it in order from section 2, installing from a release and building nothing. Before
+you run anything, tell me in a few words what you will install and where, and wait for my yes; ask me
+again before each act the guide marks "Ask first". At the end, tell me whether Jason can start work and
+exactly what you ran and changed. Then do what the guide's hand-over says: offer me the wiring check
+once, and bring me to my first campaign in my own words.
 ```
 
 Once it runs, [examples/](../examples/README.md) is where cases of Jason applied to outbound work are collected, with a
@@ -231,15 +218,17 @@ jason status --human
 ```
 
 `jason skills install --roles-only` puts the role skills where the runtime reads them at every launch — the
-half a runtime cannot work without — and writes nowhere else. `jason skills install` does that and puts the
+half a runtime cannot work without — and writes nowhere else; the install scripts run it as their last step. Both
+verbs take the skills from the release's own package of them, `jason-skills.zip`, unless `--source` names a checkout
+or a git repository. `jason skills install` does that and puts the
 interactive and business packs where your agent harness looks as well, which is its configuration and yours
 to allow. Both print the target roots before they write anything, and both refuse a deployment the runtime
 would later refuse to launch, rather than writing one.
 [`skills/README.md`](../skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
 browser UI, the page `jason ui open` opens; a runtime works without it.
 
-One question, answered check by check. It is one of nine names in this CLI with no API operation behind
-it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and
+One question, answered check by check. It is one of eleven names in this CLI with no API operation behind
+it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and
 `plugin install`, which change this installation's files as those two do, and `session open`, which starts your own
 agent host in a terminal — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
@@ -265,7 +254,12 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
 job is to answer when the runtime cannot be asked — so a runtime that is down is a failed check rather than an
 error envelope. The JSON body carries `ready` and a state per check, so an agent branches on the body rather
-than on the code. A check reports a fact and, where there is one, the command that repairs it; it never reads
+than on the code. The `role_skills` check alone also carries `details`, the deployment the record in the role root
+names, as fields a program reads instead of the fact: `ref`, `source`, `commit` (empty where the record names none)
+and `roles_taught`. `roles_taught`, how many roles the runtime reports it teaches, is left out where the runtime did
+not answer or reported that it could not read its role root. Where the runtime did not answer, the record is the one
+in this installation's own role root. With no record, or one that cannot be read, there are no `details`. `--human`
+prints the facts alone. A check reports a fact and, where there is one, the command that repairs it; it never reads
 a log and never explains a failure, which is what keeps it from growing into a diagnostics verb.
 
 The provider check runs only a program **you** name — `jason status --provider-cli <program>`, run as
@@ -360,6 +354,18 @@ your business in — `~/Jason` unless `Harness:Root` names another — is never 
 yours. Like `status`, this verb has no API
 operation behind it: removing Jason from a machine is not something the runtime performs or is asked about.
 [docs/INSTALL.md](INSTALL.md) §7 is the fuller account.
+
+### Moving it to another machine
+
+`jason export`, with the runtime stopped, writes the database, the settings, the plugins, the role skills, a custom
+UI, the logs and the harness root's tree into one archive, with `export.json` listing every file's size and SHA-256;
+`jason import <file>` on the other machine checks all of it before writing anything, moves an installation already
+there aside under `--replace` and deletes nothing, rewrites the settings file's paths under the old home, data
+directory and harness root to this machine's, registers at logon when the old machine did, then starts the runtime
+and asks it to record each project folder where it now stands. The archive carries the settings file with every
+secret in it, so keep it as you keep that file. Both verbs refuse while the runtime runs unless `--stop` is given,
+and neither has an API operation behind it: the files are copied cold, which no runtime can do to itself while it
+answers. [docs/INSTALL.md](INSTALL.md) §8 is the fuller account.
 
 ## Using it
 

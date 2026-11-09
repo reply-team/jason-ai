@@ -124,7 +124,8 @@ internal static class StatusChecks
 
         /// <summary>
         /// <see cref="InstallRoles"/>, from the source a deployment came from wherever that is not this build's
-        /// default: the repair for role skills at neither the runtime's tag nor the one this build installs.
+        /// default, or the one builds before 0.33.0 had: the repair for role skills at neither the runtime's tag nor the one
+        /// this build installs.
         /// </summary>
         /// <remarks>
         /// Bare, it would move a deployment taught from a mirror, or from a repository on this machine, to the default
@@ -134,7 +135,7 @@ internal static class StatusChecks
         /// composes.
         /// </remarks>
         public static string InstallRolesFrom(string source) =>
-            string.Equals(source, SkillsSource.DefaultSource, StringComparison.Ordinal) ? InstallRoles : $"{InstallRoles} --source {source}";
+            SkillsSource.IsDefault(source) ? InstallRoles : $"{InstallRoles} --source {source}";
 
         /// <summary>
         /// Every deployment Jason made, carried to the ref this build carries: the repair for an agent's packs not at
@@ -163,7 +164,7 @@ internal static class StatusChecks
 
         /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
-        /// default: the line that moves a harness deployment its record pins to this build's tag.
+        /// default, or the one builds before 0.33.0 had: the line that moves a harness deployment its record pins to this build's tag.
         /// </summary>
         /// <remarks>
         /// Printed in a fact, not as a repair, because the check passes: the record pins its ref, made with --ref or
@@ -173,7 +174,7 @@ internal static class StatusChecks
         /// separates.
         /// </remarks>
         public static string InstallPackFrom(string pack, string source) =>
-            string.Equals(source, SkillsSource.DefaultSource, StringComparison.Ordinal) ? $"{Install} --pack {pack}" : $"{Install} --pack {pack} --source {source}";
+            SkillsSource.IsDefault(source) ? $"{Install} --pack {pack}" : $"{Install} --pack {pack} --source {source}";
 
         /// <summary>
         /// The repair that is not a <c>jason</c> command: the line putting this executable's directory on
@@ -432,7 +433,8 @@ internal static class StatusChecks
     /// <summary>
     /// Which UI is served, or that none is. Optional: a runtime works without one, so this never decides readiness. The
     /// default build is the release's, so one from another release is named with the command that places this one's —
-    /// where both are releases: a development runtime has no published UI to compare with, and a custom build is the
+    /// where neither is a development build: a candidate is published with its own UI, a development runtime has no
+    /// published UI to compare with, and a custom build is the
     /// person's own. And only while the runtime is this CLI's build, which is the version <c>jason ui install</c> places:
     /// between a package manager's upgrade and the restart the two differ, the restart is the fix, and
     /// <c>runtime_version</c> names it.
@@ -466,8 +468,8 @@ internal static class StatusChecks
 
         if (released
             && string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal)
-            && SemanticVersion.TryParse(info.RuntimeVersion, out var runtime) && runtime.PreRelease is null
-            && SemanticVersion.TryParse(ui.Version, out var served) && served.PreRelease is null
+            && SemanticVersion.TryParse(info.RuntimeVersion, out var runtime) && !runtime.IsDevelopment
+            && SemanticVersion.TryParse(ui.Version, out var served) && !served.IsDevelopment
             && served != runtime)
         {
             return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving default {ui.Version} from {ui.Directory}; this runtime is {info.RuntimeVersion}.", Repair.InstallUi);
@@ -501,11 +503,82 @@ internal static class StatusChecks
             : $" '{role.Name}' is a role of your own, and no skill Jason ships teaches it: it launches untaught unless a skill named after it is in {directory}."));
 
     /// <summary>
-    /// The skills the roles are taught from, reported. A runtime that cannot teach its roles is not ready,
-    /// whatever else is true — and the check is not only presence: a deployment the launcher would refuse is
-    /// worse than none, because it refuses every launch of that role rather than running it untaught.
+    /// The skills the roles are taught from, reported, with the deployment their record names as fields a program reads.
     /// </summary>
-    private static async Task<StatusCheck> RoleSkillsAsync(CliEnvironment env, RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken)
+    /// <remarks>
+    /// The fields are added here, once, to whatever the check came to: the deployment is read from the record whatever
+    /// the state, so a program asking which ref the roles are taught from does not depend on why the check failed.
+    /// </remarks>
+    private static async Task<StatusCheck> RoleSkillsAsync(CliEnvironment env, RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken) =>
+        await RoleSkillsStateAsync(env, client, info, cancellationToken).ConfigureAwait(false) with { Details = RoleSkillsDetails(env, info) };
+
+    /// <summary>
+    /// The role root the check reads: the one the runtime reports, which is the directory it reads at every launch, and
+    /// where the runtime did not answer, the one this CLI deploys role skills into.
+    /// </summary>
+    internal static string RoleSkillsRoot(CliEnvironment env, SkillsInfo? skills) =>
+        string.IsNullOrWhiteSpace(skills?.RoleSkillsDirectory) ? env.Paths.RoleSkillsDirectory : skills.RoleSkillsDirectory;
+
+    /// <summary>
+    /// The deployment the record in the role root names, as <c>ref</c>, <c>source</c> and <c>commit</c> — empty where the
+    /// record names none, a directory read where it stood — and <c>roles_taught</c>, the number of roles the runtime
+    /// reports it teaches; null where there is no record or it cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pack is the one the fact names: where the record holds packs at different refs, the one <see cref="Away"/>
+    /// names, and otherwise the first. A role root holds the one pack the installer writes there.
+    /// </para>
+    /// <para>
+    /// <c>roles_taught</c> is a number the runtime said, or nothing. A runtime that did not answer, or that could not read
+    /// its own role root, has said none, and a guessed one would be read as a fact. A role whose skill the launcher would
+    /// refuse is reported and not taught, so it is not counted.
+    /// </para>
+    /// </remarks>
+    private static Dictionary<string, string>? RoleSkillsDetails(CliEnvironment env, SystemInfoResponse? info)
+    {
+        var root = RoleSkillsRoot(env, info?.Skills);
+        SkillsRecord? record;
+        try
+        {
+            record = SkillsRecord.Read(root);
+        }
+        catch (SkillsRecordUnreadable)
+        {
+            return null;
+        }
+
+        var away = info?.Skills is null ? null : Away(root, info.RuntimeVersion, SkillsSource.BuildVersion(env));
+        if ((away?.Deployment ?? record?.Packs.FirstOrDefault()) is not { } deployment)
+        {
+            return null;
+        }
+
+        var details = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["ref"] = deployment.Ref,
+            ["source"] = deployment.Source,
+            ["commit"] = deployment.Commit ?? string.Empty,
+        };
+        if (info?.Skills is { Problem: null } skills)
+        {
+            details["roles_taught"] = skills.Roles
+                .Where(role => role.Problem is null)
+                .Select(role => role.Role)
+                .Distinct(StringComparer.Ordinal)
+                .Count()
+                .ToString(CultureInfo.InvariantCulture);
+        }
+
+        return details;
+    }
+
+    /// <summary>
+    /// What the check came to. A runtime that cannot teach its roles is not ready, whatever else is true — and the check
+    /// is not only presence: a deployment the launcher would refuse is worse than none, because it refuses every launch
+    /// of that role rather than running it untaught.
+    /// </summary>
+    private static async Task<StatusCheck> RoleSkillsStateAsync(CliEnvironment env, RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken)
     {
         if (info?.Skills is not { } skills)
         {
@@ -623,9 +696,10 @@ internal static class StatusChecks
     /// is what the repair writes, and a deployment already there waits only for that restart.
     /// </para>
     /// <para>
-    /// Compared only where both sides have a tag. A runtime that is not a release carries the pin of a release not
-    /// published yet, which every development runtime would fail against; and so does a build that is not a release,
-    /// whose repair would write that pin and so never clear. A development build compares nothing here, as it moves
+    /// Compared only where both sides have a tag. A development runtime carries the pin of a release not published
+    /// yet, which every such runtime would fail against; and so does a development build of this CLI, whose repair
+    /// would write that pin and so never clear. A candidate is a release: its tag is published, with its packs. A
+    /// development build compares nothing here, as it moves
     /// nothing in <c>skills update</c> and compares nothing in the harness check. A directory read where it stood has
     /// no ref at all, and its record says so by naming no commit. A record that cannot be read compares nothing either;
     /// <see cref="Deployment"/> reports it. Where packs differ, the one to repair is named first, then one its record
@@ -1330,8 +1404,8 @@ internal static class StatusChecks
         // agent, which drives this CLI and works with no runtime at all, so they are held to this build's tag -- and
         // their repair, `jason skills update`, moves a deployment to exactly that tag, so it converges by
         // construction. A pack its record pins, made with --ref or marked so by an earlier `skills update`, passes
-        // with the line that moves it, since an update keeps a pinned ref. A build that is not a release, and a
-        // directory, whose record names no commit, compare nothing.
+        // with the line that moves it, since an update keeps a pinned ref. A development build, whose tag no release
+        // publishes, and a directory, whose record names no commit, compare nothing.
         var build = SkillsSource.BuildVersion(env);
         var own = SkillsSource.IsRelease(build) ? SkillsSource.DefaultRef(build) : null;
 
@@ -1600,8 +1674,8 @@ internal static class StatusChecks
         }
 
         return state.Registered
-            ? new StatusCheck("autostart", false, CheckState.Ok, "The runtime is registered to start at logon.", null)
-            : new StatusCheck("autostart", false, CheckState.Absent, "The runtime is not registered to start at logon.", Repair.EnableAutostart);
+            ? new StatusCheck("autostart", false, CheckState.Ok, "Registered at logon: the runtime starts by itself each time you sign in.", null)
+            : new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", Repair.EnableAutostart);
     }
 
     /// <summary>

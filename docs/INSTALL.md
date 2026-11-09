@@ -10,10 +10,12 @@ the machine.
 
 ## 1. What you need
 
-**From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime.
-Teaching it (§4) is a fetch of its own: a release takes its skills from this repository with `git`, over the
-network, at the tag it was published as. A machine without `git` or without the network teaches it from a
-checkout instead, with `--source`.
+Jason is used from a release: nothing in its repository is built, cloned or tested to use it, which is for changing
+Jason (§3). **From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
+script ends by teaching it its role skills (§4). Teaching it is a fetch of its own: a release takes its skills from
+the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as. A machine
+without the network teaches it from a checkout instead, with `--source`, which also takes a git repository at a ref;
+only that needs `git`.
 
 You also need a directory you can write to, and — if you want an agent harness taught — that
 harness installed, so §4 has somewhere to deploy.
@@ -78,7 +80,8 @@ ask.
 - A profile you append to is read by a login shell, not by your next non-interactive command (§2): carry the
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
-  exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work
+  exactly what you ran, and what it changed.
+- **The hand-over.** When `ready` is true, tell the person Jason is installed and can work
   and where it will keep their files — the two lines §2 shows, with the folder the `harness_root` check of
   `jason status` names, which is the one in force — and ask them once what comes next:
   [the wiring check](golden-path.md) first, in this session, or their real work at once. Name the wiring check for
@@ -112,6 +115,13 @@ installs the executable under your own account — with its licence and the thir
 `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES` — and puts that directory on your PATH. Run again over the version
 already installed, it downloads nothing and says so, unless a licence file is missing beside the executable: then
 it downloads the archive, checks it the same way, and writes the file, leaving the executable as it is.
+
+Then it teaches the executable it installed its role skills: it runs that executable's
+`jason skills install --roles-only` (§4), which takes the skills from the release's `jason-skills.zip` and writes them
+into Jason's data directory and nowhere else, and what it prints is shown. Where that fails — no network, say — Jason
+is still installed and the run still succeeds: one line says the role skills were not deployed and what to run, and
+`jason status` names the same line. A script pointed at a feed in a directory, with `--feed` or `-Feed`, leaves this
+step out and says what to run instead, because the skills verb reads no directory.
 
 On macOS and Linux the PATH line goes into the profile a login shell of yours reads, and for `bash` and `zsh` into
 `~/.bashrc` or `~/.zshrc` as well: the terminal a desktop opens — GNOME's, for one — is not a login shell, reads
@@ -211,7 +221,9 @@ the runtime's version, including its build. `Update:CheckEnabled` set to `false`
 `~/.jason/config/settings.json` turns that off. That request, and the downloads the install scripts,
 `jason update apply` and `jason ui install` make, go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this
 repository's releases on GitHub. What that address keeps, and for how long, is in
-[responsible-use.md](responsible-use.md#update-check-and-downloads).
+[responsible-use.md](responsible-use.md#update-check-and-downloads). The skills are the exception: their package is
+read from this repository's releases on GitHub directly, by the install scripts' last step, by `jason update apply`'s
+skills step and by `jason skills`.
 
 ### With a package manager
 
@@ -252,6 +264,8 @@ have done their work: you may delete those three — only those — with `Remove
 
 ## 3. Build from source
 
+This section is for people changing Jason; to use Jason, skip it: section 2 installs a release.
+
 A build of the executable from the runtime's repository, rather than a release (§2), needs two things from this page:
 
 - **The executable alone, in a directory of its own, on the PATH by hand** — as §2 says for `--install-dir` and
@@ -270,6 +284,10 @@ Jason's skills are what teach an agent the job — one directory per launched ro
 every launch, and two packs for your own agent: one for operating the installation, one for the SDR
 profession. **A runtime with no role skills launches every role untaught**, so the first half is not optional.
 
+The install script did the first half as its last step (§2), and what it printed says where the role skills went.
+Installed with a package manager or by hand, or where that step said it could not, do it now with the lines below;
+they are also how it is done again.
+
 Look first. Nothing is deployed, and the one target root is printed — the runtime's own, inside its data
 directory:
 
@@ -277,8 +295,8 @@ directory:
 jason skills install --roles-only --dry-run
 ```
 
-On a first install the dry run fetches the skills first, with `git`, into Jason's staging directory inside the
-data directory, so that there is something to show; it deploys nothing. The line below deploys them: it prints
+On a first install the dry run fetches the skills first, from the release's package of them, into Jason's staging
+directory inside the data directory, so that there is something to show; it deploys nothing. The line below deploys them: it prints
 its one root before it writes a skill there, and writes nowhere else.
 
 Then do it:
@@ -287,7 +305,9 @@ Then do it:
 jason skills install --roles-only
 ```
 
-Both fetch the skills with `git` from this repository, at the tag this build was published as (§1).
+Both take the skills from `jason-skills.zip`, the package of them the release this build was published as holds,
+checked against that release's `checksums.txt` (§1). `--source` takes them from somewhere else instead: a checkout,
+or a git repository at a ref, which needs `git`.
 
 Then place the browser UI, the page `jason ui open` opens:
 
@@ -368,8 +388,8 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of nine names in
-this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and
+One question — "can this installation start work?" — answered check by check. It is one of eleven names in
+this CLI with no API operation behind it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and
 `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and
 `session open`, which starts your own agent host in a terminal — and it cannot be
 otherwise: half of what it reports is not the runtime's to know.
@@ -574,7 +594,8 @@ jason uninstall --force
 **The data directory is kept.** It holds the database, the settings, the plugins, the logs and the work
 directories — the record of what you did — and the copies an update keeps — the executable it replaced and the
 copy of the program kept for finishing an interrupted update, under `update/` — so a copy of the program stays there after an uninstall until
-`--purge-data` removes it; and the verb says in one line that it kept it and where. To remove
+`--purge-data` removes it; and the verb says in one line that it kept it and where. To take it to another machine
+instead, `jason export` writes it and the harness root into one archive (§8). To remove
 that as well you have to say so: `--human` prints what will be deleted and asks before anything at all is
 removed — and a no removes nothing at all — and when nobody is there to be asked the word is said in advance:
 
@@ -598,3 +619,70 @@ when everything it set out to remove is gone, and 1 when it did not get there �
 not stop, a purge you did not confirm), something it set out to remove is still there (a record it could not
 read, a file it could not remove, a moved copy nothing will remove), or it stopped part-way. Every step that did
 happen is listed either way: in the report on stdout, or on stderr where the report itself could not be written.
+
+## 8. Moving the installation to another machine
+
+Install Jason on the new machine first (§2), the same version or a newer one: an archive a newer Jason wrote is
+refused, naming the version to install. Then stop the runtime on the old machine and write the archive:
+
+```sh
+jason runtime stop
+jason export
+```
+
+`jason export` writes `jason-export-<stamp>.zip` in the folder you run it in, or the file you name, and never
+over a file that is already there. `--stop` stops a running runtime for you and starts it again once the archive
+is written; without it the verb refuses while the runtime runs. A link at the top of a carried place, `ui/custom/`
+as a junction to a build of your own say, or a harness root that is one, is followed and carried as what it leads
+to, unless that is inside the data directory or the harness root, or holds either; a link inside a carried place, a
+name another system cannot hold, and two names apart only by the case of their letters are refused by their path.
+The archive is written to `<file>.partial` first and moved into place once whole; a `.partial` an export left
+behind is refused, as yours to remove. Copy the archive across, then on the new machine:
+
+```sh
+jason import jason-export-20261109T100005Z.zip
+jason skills install
+jason runtime autostart enable
+jason status
+```
+
+**What travels:** the database, the settings file, the plugins, the role skills with their record, a custom UI
+under `ui/custom/`, the logs, and the harness root's tree — your memory files and every project's and campaign's
+folder, each whole, a `.git` included — with `export.json` listing every file's size and SHA-256. Whether the runtime started at logon travels as
+a fact: the import registers it again on a machine that can, and on one that cannot says "No logon registration,
+and this machine has no way to register one." **What does not:** the backups under `state/backups/`, the run and
+work directories, staged skills, the shipped UI under `ui/default/`, the copies an update keeps, anything an
+earlier import moved aside, the skills deployed into agent hosts (`jason skills install` deploys them again), and
+anything outside the data directory and the harness root. **The archive carries the settings file with
+everything in it, a token under `Plugins:Config` included: keep the archive as you keep that file.**
+
+**Before anything is written**, the import refuses an archive it cannot read, a name in it that would land
+outside the data directory or the harness root, a file whose size or SHA-256 is not the one `export.json` lists,
+an archive a newer Jason wrote, and an installation already here — a database, or a harness root with a folder
+marker in it, which a Jason that has run once on the new machine has. The refusal names what is there. Give
+`--replace` to move it aside and place the archive instead: the data directory's parts go into
+`<data>/replaced-<stamp>/` — `state/` whole, the database's `-wal` and `-shm` files and its backups with it — and
+the harness root to `<root>.replaced-<stamp>`, nothing is deleted, and the answer names both as yours to remove.
+On a machine with no installation the import still writes over nothing: the same parts that stand there, a
+`jason.db-wal` or `jason.db-shm` beside no database among them, go aside the same way and are named, since SQLite
+would read such a file as the placed database's. The harness root is `--root` when given, else the one this
+machine's runtime would read (`JASON_Harness__Root`, else `Harness:Root` in this machine's settings file, else
+`~/Jason`); a `--root` the variable contradicts is refused, naming the variable, and the root is held to the runtime's own rule for one
+— an absolute path, not the home directory, a folder holding it or the top of a drive, nor the data directory, a
+folder inside it or one holding it — before anything is placed.
+
+**The settings file is made this machine's.** Every absolute path under the old machine's home directory, data
+directory or harness root is rewritten to the same place here, `Harness:Root` first, and each rewrite is said; a
+path elsewhere that is not on this machine is said and left as written, for you to correct. Every other value,
+the secrets among them, is placed as it was. A role skills pack the record says came from a folder that is not
+here is named, with `jason skills install` to deploy it again.
+
+**Then the runtime starts on it**, and the import asks it to record each project folder where it now stands, as
+`jason project link` does; a link the runtime refuses is named with its code, the folder stays, and the answer's
+`next` carries `jason project link <id> --path <folder>`. An import on the same machine, into a second data
+directory, needs the source harness root moved aside first: the records name its folders, and the runtime refuses
+to link a folder that is present elsewhere (`harness_folder_present`). The import
+exits 0 when everything was placed and the runtime answered, 1 when it refused (nothing written) or the runtime
+did not start (the files are in place; start it with `jason runtime start`), and 2 on a usage error. Three
+things are left to you, in this order: `jason skills install`, `jason runtime autostart enable` if the runtime
+should start at logon here and the import did not register it, and `jason status`.

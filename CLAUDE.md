@@ -4,7 +4,8 @@ Jason is a local-first, vendor-neutral SDR domain runtime: a .NET runtime proces
 campaign state and exposes a loopback Runtime API, a CLI that is a pure client of that API,
 JavaScript plugins that execute provider operations in a separate plugin-host process, and skills
 that teach AI agents the job. `docs/architecture.md` is the design authority for anything not
-covered here.
+covered here. Jason is used from a release; nothing here is built, cloned or tested to use it: this
+repository is for changing Jason.
 
 ## Layout
 
@@ -168,7 +169,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, or a local act the CLI refused to perform), 2 usage error, 3 runtime unreachable
-  or unauthorized. The verb map is one-to-one with API operations with **nine declared exceptions**:
+  or unauthorized. The verb map is one-to-one with API operations with **eleven declared exceptions**:
   `jason status` answers "can this installation start work?", half of which is not the runtime's to
   know, so no operation can stand behind it; `jason uninstall` takes this installation off the
   machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — which
@@ -184,8 +185,13 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   the campaign's folder with the item's brief as its first input, a terminal being no runtime's to start or know about,
   so the runtime is asked only what `approval get --prompt` and `decision get --prompt` ask and `preference.list`, and
   Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own
-  permission settings' to decide (the verb-map tests hold the `session` noun to `open` alone); and
-  `jason doctor` collects one installation into one file, half of which is not the
+  permission settings' to decide (the verb-map tests hold the `session` noun to `open` alone); `jason export`
+  writes this installation's files — the database, the settings, the plugins, the role skills, the custom UI, the logs and
+  the harness root's tree — into one archive, which is a true copy only while the runtime is stopped and so no operation of the
+  runtime's can stand behind it: of the runtime it asks only to stop and to start, and only under `--stop`;
+  `jason import` places such an archive on this machine cold, the database among them, which no runtime can take
+  while it runs on them: of the runtime it asks to stop, only under `--stop`, to start, and `project.link` once for each
+  project folder it placed; and `jason doctor` collects one installation into one file, half of which is not the
   runtime's to know — of the runtime it asks only what the runtime says about itself, its roles,
   profiles, routes and subscriptions, and the journal and work-item pages it counts, keeping their metadata and
   dropping their values. `status`, `logs` and
@@ -214,9 +220,15 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   plugin id, role name and skill pack name Jason did not ship an alias per distinct name (`<plugin-N>`,
   `<role-N>`, `<skill-pack-N>`), and a skill source other than the public repository, with its ref unless
   that is a release tag, `<skill-source>`.
-  `CliApp` states all nine where the rule is written, each verb's `--help`
+  `CliApp` states all eleven where the rule is written, each verb's `--help`
   publishes its own contract — which checks are required, what is removed, what is never touched and
-  what a bundle never carries — and guards hold the list to these nine.
+  what a bundle never carries — and guards hold the list to these eleven. `export` refuses while the runtime runs unless `--stop`
+  is given, never writes over a file, carries the settings file with every secret in it and says so, and refuses a
+  link inside a carried place, following one at its top and judging it where it leads, or a name another system cannot
+  hold before anything is written. `import` refuses, before anything is written, an
+  archive that cannot be read, a name that escapes, a digest that is not the listed one, an archive a newer Jason wrote
+  and, without `--replace`, an installation already here; it deletes nothing, moving what is here aside, and rewrites
+  in the settings file only the paths under the other machine's home, data directory and harness root.
 - Persistence: EF Core over SQLite in WAL mode, snake_case tables and columns, integer primary keys
   plus a unique public ULID. The `journal` table is append-only, enforced three times over: no API
   path that changes an entry, an EF interceptor, and database triggers. Schema-less JSON — campaign

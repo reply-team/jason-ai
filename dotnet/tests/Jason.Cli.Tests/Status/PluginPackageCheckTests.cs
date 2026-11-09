@@ -262,6 +262,34 @@ public class PluginPackageCheckTests
         Assert.Contains("Packages:   reply 0.6.1, behind this release's 0.7.0; mailer not installed, this release's is 1.0.0", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The line is a table's row, one entry per package: packages not installed are each named with the version this release
+    /// publishes, however many there are, where the check's fact says them in one sentence.
+    /// </summary>
+    [Fact]
+    public async Task Human_runtime_status_names_each_package_not_installed()
+    {
+        const string Info = """
+            {"runtime_version":"0.7.1","api_version":"v1","instance_id":"rt_LIVE","pid":77,"started_at":"2026-10-16T07:02:00.000Z","data_dir":"/home/ada/.jason",
+             "database":{"applied_migrations":["a"],"newly_applied":[],"backup_file":null},
+             "dispatcher":{"state":"running","tick_seconds":10,"max_parallel":8,"running_attempts":0,"last_scan_at":null,"scans":1,"summons":0},
+             "plugins":{"active_count":1,"snapshot_id":"snp_1","loaded_at":"2026-10-16T07:02:00.000Z","last_reload_activated":null},
+             "routes":{"snapshot_id":"rts_1","activated_at":"2026-10-16T07:02:00.000Z","global_default_plugin":null,"global_override_count":0,"campaign_route_count":0},
+             "released_plugins":[
+               {"id":"mailer","state":"not_installed","released":{"version":"1.0.0","digest":"sha256:c"},"installed":null},
+               {"id":"reply","state":"current","released":{"version":"0.7.0","digest":"sha256:b"},"installed":{"version":"0.7.0","digest":"sha256:b"}},
+               {"id":"slack","state":"not_installed","released":{"version":"1.0.0","digest":"sha256:d"},"installed":null},
+               {"id":"telegram","state":"not_installed","released":{"version":"1.0.1","digest":"sha256:e"},"installed":null}]}
+            """;
+        using var cli = new CliRun(Info);
+        await cli.RunAsync("runtime", "status", "--human");
+        Assert.Contains(
+            "Packages:   mailer not installed, this release's is 1.0.0; reply 0.7.0, this release's; slack not installed, this release's is 1.0.0; telegram not installed, this release's is 1.0.1"
+            + Environment.NewLine,
+            cli.Text,
+            StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(null, "Packages:   unknown")]
     [InlineData("[]", "Packages:   none carried")]

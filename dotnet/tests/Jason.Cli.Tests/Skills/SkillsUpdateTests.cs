@@ -353,7 +353,7 @@ public class SkillsUpdateTests
         var update = await AtBuildAsync(dir, "1.2.4-dev", ["skills", "update", "--root", Harness(dir)]);
 
         Assert.True(update.Exit == ExitCodes.Success, update.Error);
-        Assert.Contains("at v1.2.3, as its record names it: this build, 1.2.4-dev, is not a release, so the ref it carries is not published yet.", update.Output, StringComparison.Ordinal);
+        Assert.Contains("at v1.2.3, as its record names it: this build, 1.2.4-dev, is a development build, so the ref it carries is not published yet.", update.Output, StringComparison.Ordinal);
         Assert.Contains(TaggedSource.Body("v1.2.3"), await File.ReadAllTextAsync(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
         Assert.All(Deployments(dir), deployment =>
         {

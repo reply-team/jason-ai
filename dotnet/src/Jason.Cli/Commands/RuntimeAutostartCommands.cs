@@ -193,7 +193,7 @@ public static class RuntimeAutostartCommands
     }
 
     /// <summary>The data directory a registered command line names, which need not be this session's.</summary>
-    private static string? DataDirectoryIn(IReadOnlyList<string> run)
+    internal static string? DataDirectoryIn(IReadOnlyList<string> run)
     {
         for (var word = 0; word < run.Count - 1; word++)
         {
@@ -206,7 +206,7 @@ public static class RuntimeAutostartCommands
         return null;
     }
 
-    private static string Name(AutostartPlatform platform) => platform switch
+    internal static string Name(AutostartPlatform platform) => platform switch
     {
         AutostartPlatform.Windows => "windows",
         AutostartPlatform.MacOs => "macos",
@@ -214,13 +214,16 @@ public static class RuntimeAutostartCommands
         _ => "unsupported",
     };
 
+    /// <summary>What <c>status</c> says on a machine with no way to register, and <c>jason import</c> says the same way.</summary>
+    internal const string CannotRegister = "No logon registration, and this machine has no way to register one.";
+
     private static string Sentence(AutostartStatusResponse answer)
     {
         if (!answer.Registered)
         {
             return answer.Platform == "unsupported"
-                ? "Nothing is registered to start at logon, and this machine has no way to register anything."
-                : "Nothing is registered to start at logon.";
+                ? CannotRegister
+                : "No logon registration.";
         }
 
         var missing = answer.ExecutableExists == false

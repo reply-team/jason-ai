@@ -23,9 +23,9 @@ build, because every skill's do.
 6. Mirror the verdict into the provider's own category, where it holds one of the same name.
 7. Complete in the shape your item asks for.
 
-**Act or park at once.** A provider may hold a contact's later replies only once this side has answered, so you either
-answer or park the draft at once, never leave a classified thread without an action, and the person's approval lag is
-the window in which a follow-up can be lost.
+**Act or park at once.** A provider may not detect a contact's later reply unless it answers a message this side sent,
+so you either answer or park the draft at once, never leave a classified thread without an action, and the person's
+approval lag is the window in which a follow-up can be lost.
 
 **What your brief gives you.** Your brief's `inbound_reply` is what the runtime wrote when the thread moved: the
 `plugin` the thread was read at, the provider's `thread` identifier, its `channel`, the `contact_id` of the person the

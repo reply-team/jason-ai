@@ -19,136 +19,154 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.32.0
+# Jason 0.33.0
 
-## What is new since 0.31.0
+## What is new since 0.32.0
 
-Jason's notifications reach Slack and Telegram, every notification package is published with the release and placed by
-one command, and the journal forwarder can write its lines to a file in a directory you grant.
+An installation is taught its role skills as it is installed, from a package of them the release publishes, so a
+machine needs no `git` to receive its skills; `jason status` says what a logon registration means and gives the role
+skills' deployment as fields; and two new verbs move an installation to another machine.
 
-- **Slack delivers Jason's notifications.** The `slack` plugin, 1.0.0, posts the pointer the runtime composes as plain
-  text to one Slack channel with `chat.postMessage`, and nothing else about the work. The binding names the channel, by
-  its id (`C0123ABCDEF`), which survives a rename, or by its name; the grant names `slack.com`; the bot token is read
-  from `Plugins:Config:slack:token` and, where that says nothing, from a granted `SLACK_BOT_TOKEN`. A delivery Slack
-  answered with `ok: false` carries Slack's own error word in the `notification_sent` line's `detail`. Its
-  [README](https://github.com/reply-team/jason-ai/blob/v0.32.0/plugins/slack/README.md) says how to make the app and
-  every outcome it reports.
-- **Telegram delivers Jason's notifications.** The `telegram` plugin, 1.0.0, sends the pointer as plain text to one chat
-  with the Bot API's `sendMessage`, by a bot you make. The binding's `chat` is the chat's id, a number such as
-  `-1001234567890`, or the public `@name` of a channel or a supergroup; the grant names `api.telegram.org`; the token is
-  read from `Plugins:Config:telegram:token` and otherwise from a granted `TELEGRAM_BOT_TOKEN`, and the setting wins when
-  both are there. The Bot API takes the token in the path of every request, so the plugin host masks it wherever it
-  would write it: the line it writes about the call, a log line and a failure show `[redacted]` in its place. A failure
-  carries Telegram's own description, cut at 200 characters. Its
-  [README](https://github.com/reply-team/jason-ai/blob/v0.32.0/plugins/telegram/README.md) says how to find a chat's id.
-- **The three notification packages are release assets.** `jason-plugin-ntfy.zip`, `jason-plugin-slack.zip` and
-  `jason-plugin-telegram.zip` are published beside the Reply plugin's and the journal forwarder's, each the files of its
-  directory at the tag, listed in `checksums.txt` and in the manifest with its content digest.
-  `jason plugin install <id>` places each in `~/.jason/plugins/<id>` once it matches both, and `jason status` and
-  `jason update` read them as they read the other two: `jason update apply` replaces a copy installed as an earlier
-  version and places none you did not install. `jason status` names the packages that are not installed in one sentence.
+- **The skills are a release asset.** `jason-skills.zip` holds `skills/` at the tag, both packs, and at its root a
+  `source.json` that names the public repository, the tag and its commit. It is listed in `checksums.txt` after the UI's
+  package, and a release is now fourteen files. With no `--source`, `jason skills install` and `jason skills update`
+  take the package of the release this build was published as, from this repository's releases on GitHub, and check it
+  against that release's `checksums.txt` before anything is written, so the machine needs no `git`. `--ref` takes the
+  package of another release's tag; a ref that is not a release's tag is refused before any request, naming
+  `--source <git url> --ref <branch>` instead. `--source <git url>` still clones with `git`, `--source <dir>` reads a
+  checkout where it stands, and `--feed` names "a different release feed: the https address of its manifest.json, or
+  http on this machine". See
+  [Teach it](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/INSTALL.md#4-teach-it).
+- **The install scripts teach the role skills as their last act.** After the PATH step and before the licence lines,
+  `install.sh` and `install.ps1` run the installed executable's `jason skills install --roles-only`, which takes the
+  skills from the release's `jason-skills.zip` and writes them into Jason's data directory and nowhere else, and they
+  show what it prints. The scripts never start the runtime and never register it at logon: both stay yours, and
+  `jason status` names each. When the step fails, with no network say, Jason stays installed and the script still
+  succeeds, ending with one line: "The role skills were not deployed; the lines above say why. Run
+  `jason skills install --roles-only` once that is dealt with; `jason status` names it as well." A script pointed at a
+  feed in a directory, with `--feed` or `-Feed`, leaves the step out and says what to run instead, because the skills
+  verb reads no directory.
+- **`jason status` says what a logon registration does at the next sign-in.** The `autostart` row says "Registered at
+  logon: the runtime starts by itself each time you sign in." or "No logon registration: the next time you sign in, the
+  runtime stays off until it is started by hand.", with the same repair as before; whether the runtime runs now is the
+  `runtime` row's to say. `jason runtime autostart status` opens with the same words: "No logon registration." and, on a
+  machine that cannot register one, "No logon registration, and this machine has no way to register one."
+- **`jason status` gives the role skills' deployment as fields.** In the JSON, the `role_skills` check carries
+  `details`: `ref`, `source`, `commit` (empty where the record names none) and `roles_taught`, how many roles the runtime
+  reports it teaches, which is left out where the runtime did not answer or reported that it could not read its role
+  root. With no record, or one that cannot be read, there are no `details`, and no other check carries any. `--human`
+  prints the facts alone, as before. A `jason doctor` bundle writes a skill source other than the public repository as
+  `<skill-source>` in `details` as it does in the fact, and its ref too unless that is a release tag.
+- **`jason export` and `jason import` move an installation to another machine.** They are the CLI's tenth and eleventh
+  declared exceptions: each changes this installation's files rather than asking the runtime anything, apart from the
+  stop, the start and a link per project folder, and neither reaches a network beyond the runtime's own loopback.
+  - **What travels.** `jason export [<file>]` writes `jason-export-<UTC stamp>.zip` in the folder it runs in, or the
+    file you name, and never over a file that is already there. It carries the database with its `-wal` and `-shm`
+    when they are there; `config/`, `plugins/`, `skills/roles/`, `ui/custom/` and `logs/`, each whole, the role skills'
+    record included; the harness root's tree as it stands, every folder in it whole, a `.git` included; and
+    `export.json`, which names "the Jason version, the moment, the operating system, the data directory, the harness
+    root, the home directory, whether the runtime starts at logon, and every file with its size and SHA-256". Of links,
+    "a link at the top of a carried place, or a harness root that is one, is followed and judged where it leads", and
+    "a link inside is refused by its path". And "A name another system cannot hold, and two names apart only by the
+    case of their letters, are refused by their path, before anything is written", a Windows device name, such as CON
+    or NUL, among them.
+  - **What does not.** The backups under `state/backups/`, `run/`, `work/`, the skills' staging folders, the shipped UI
+    under `ui/default/`, a `replaced-<stamp>/` directory an import moved aside, "and anything outside the data directory
+    and the harness root": the skills deployed into agent hosts among them, which `jason skills install` deploys again.
+  - **Secrets travel whole.** "The archive carries the settings file with everything in it, a token under
+    Plugins:Config included: keep the archive as you keep that file."
+  - **`--stop`.** Without it, both verbs refuse while the runtime runs, naming `jason runtime stop`. With it,
+    `jason export` stops the runtime "and starts it again once the archive is written, and starts none that was not
+    running"; `jason import` stops it and, as every import does, starts the runtime on what it placed.
+  - **`--replace` moves aside and deletes nothing.** Among what `jason import <file>` refuses before anything is
+    written are "an archive that cannot be read", "a name in it that escapes", "a file whose size or SHA-256 is not the
+    one export.json lists" and "an archive a newer Jason wrote, naming the version to install first";
+    `jason import --help` has the whole list. An installation already here, "a database, or a harness root with a
+    marker in it", is refused without `--replace`, naming what it holds. With it, the data directory's parts go into
+    `<data>/replaced-<stamp>/` and the harness root to `<root>.replaced-<stamp>`, each named as yours to remove.
+    Without the flag nothing is written over either: "on a machine with no installation the same parts that stand
+    there, a jason.db-wal or jason.db-shm beside no database among them, and a harness root folder with no marker go
+    aside the same way, with no --replace; each is named as yours to remove."
+  - **The harness root here** is "--root, else JASON_Harness__Root, else the Harness:Root this machine's settings
+    file names, else Jason in the home directory". "The root is held to the runtime's rule for a root before anything
+    is placed, and the placed settings file names it."
+  - **Paths are made this machine's.** In the settings file, "every absolute path under the other machine's home
+    directory, data directory or harness root is rewritten to the same path here, each rewrite said, Harness:Root
+    first; a path outside those three that is not on this machine is said and left as written". Then the runtime
+    starts, and the import asks it to `project.link` each project folder by its marker, with this machine's path; a
+    refused link is said, the folder stays, and the answer's `next` carries
+    `jason project link <id> --path <folder>`. "A project folder outside the harness root does not travel: each project
+    whose recorded folder is not here is said, and listed as folders_not_here."
+  - **The logon registration travels as a fact.** The import "registers at logon when the other machine did, or says
+    this machine cannot". The registration itself is never a file in the archive.
+  - **Left to you**, in this order: `jason skills install`, for this machine's agent hosts;
+    `jason runtime autostart enable`, if the runtime should start at logon here and the import did not register it;
+    `jason status`.
+
   See
-  [the notifications page](https://github.com/reply-team/jason-ai/blob/v0.32.0/docs/notifications.md#8-ntfy-slack-telegram-and-other-plugins).
-- **ntfy reaches a server of your own by a grant, with no edit.** ntfy 1.0.3's manifest says
-  `capabilities.http.any_granted_host: true`, so a server of your own is granted by name under
-  `Plugins:Grants:ntfy:Http` and named in the binding's `server`, and the package stays the one the release published,
-  which `jason update` moves on. A grant of `*` means `ntfy.sh` alone. A server that did not answer is named by its
-  address in the line's `detail`. See
-  [its README](https://github.com/reply-team/jason-ai/blob/v0.32.0/plugins/ntfy/README.md#your-own-server).
-- **The journal forwarder writes to a file.** The forwarder, 1.2.0, adds each line to a file in a directory you grant,
-  beside its POST or instead of it: the directory goes under `Plugins:Grants:journal-forwarder:Files` and the file under
-  the key `file` of `Plugins:Config:journal-forwarder`, or in a granted `JOURNAL_FORWARDER_FILE` where that says
-  nothing. What it adds is the POST's body, one JSON object per line. With both, the file goes first; a disk that
-  refuses the line still leaves the POST, and the handler then ends with the disk's failure, so the line is offered
-  again. The file is only ever added to, and it holds what the journal says, names and reasons included, so it is a
-  place you trust with that. Its
-  [README](https://github.com/reply-team/jason-ai/blob/v0.32.0/plugins/journal-forwarder/README.md#a-file-instead-of-a-receiver-or-beside-one)
-  shows both entries.
-- **`jason plugin list` says where a plugin may write.** A plugin whose manifest asks to write a file shows the
-  directories it was granted, and its `--human` line counts them as `files <n>`. A `jason doctor` bundle carries no
-  grant, this one included.
-- **The Reply plugin's page says what is detected of a contact's later replies.** Reply 0.14.6 changes its README alone:
-  what Reply detects of later replies by email, and which of it was observed on an account, as the known issue below
-  says.
-- **`operating-the-installation` says where a plugin may write, and is `draft` again.** It says that the directories
-  a plugin may append lines to are `Plugins:Grants:<id>:Files`, each an absolute path, read at a start and at each
-  `jason plugin reload`, and what is refused as `grant_path_refused`, which rejects the whole reload: the home directory
-  or a folder holding it, the top of a drive, a share or the file system, the data directory or the harness root, a
-  folder inside or holding either of those two, a relative path, `~` and `*`. It also says that `jason update check`
-  names no package installed as a version before its package's list of published digests begins, which for the Reply
-  package is 0.3.2 and for every other is 1.0.0. No agent host has read that text, so its status went back from
-  `verified` to `draft`. The skills marked `draft` are `operating-the-installation`, `researcher-in-session`,
-  `roles/responder`, `troubleshooting-jason` and the nine skills of the business pack.
-- **For a plugin author: a file to append to.** `host.appendLine(path, text)` adds one line to a file directly in a
-  directory a person granted, and is the only way a plugin writes a file. A manifest asks with
-  `capabilities.files: { append: true }` and names no place; any kind of plugin may ask, and `manifest_version` stays
-  `1`. The line is written as UTF-8 with a line feed added and is on the disk before the call returns; the file is made
-  when it is not there and is never truncated, renamed or deleted. A file name starts with a letter or a digit and goes
-  on in letters, digits, `.`, `-` and `_`, at most 100 of them, with no dot last, and `CON`, `NUL`, `PRN`, `AUX`, `COM1`
-  to `COM9` and `LPT1` to `LPT9` are refused on every platform. The refusals end the invocation, `permanent`:
-  `capability_not_granted` with no directory granted, `file_path_not_allowed` for a path outside the grant or a name the
-  host refuses, `file_line_multiline`, `file_line_too_large` past `Plugins:Files:LineBytes` (1 MiB, the line feed
-  counted) and `file_limit` past `Plugins:Files:MaxCalls` (64 lines per invocation). Only `file_write_failed`,
-  `transient`, is yours to catch, and a line that passed the rules counts as a call that may have acted, so a timeout
-  after one is `ambiguous`. A directory is an absolute path, resolved at the load; the home directory, the top of a
-  drive, a folder holding the home directory, the data directory or the harness root, a folder inside either or one
-  holding either, and a path that leads to one of them through a link are refused as `grant_path_refused`, a package
-  problem that rejects the whole reload. Nothing in a line is masked, and neither the host's records nor a failure name
-  the directory. See
-  [`host.appendLine`](https://github.com/reply-team/jason-ai/blob/v0.32.0/docs/plugins.md#hostappendline) and
-  [the `files` grant](https://github.com/reply-team/jason-ai/blob/v0.32.0/docs/plugins.md#the-files-grant-where-a-plugin-may-write).
-- **For a plugin author: what a failure's message carries.** A notification plugin's failure message is now recorded on
-  the `notification_sent` line, where people and subscribers read it, so the delivery contract asks that it be a
-  diagnostic, never the notification's title or message, nor a credential. The plugin host masks the value of every
-  variable the plugin was granted and of its configuration, a value under 8 characters excepted, in a failure's message
-  and details before the outcome leaves it, so the runtime records only the masked text. A test now holds this for a
-  secret that rides a request's path, as a bot token does: the host's own line about the call, a log line, the failure's
-  message and its details all show `[redacted]`, whether the secret came from the configuration or from a granted
-  variable. A successful result is still not masked. See
-  [`notification.send`](https://github.com/reply-team/jason-ai/blob/v0.32.0/docs/contracts/notifications/notification.send.md).
+  [Moving the installation to another machine](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/INSTALL.md#8-moving-the-installation-to-another-machine).
+  `operating-the-installation` teaches the same move.
 
-## Fixed since 0.31.0
+## Fixed since 0.32.0
 
-- **A failed delivery says why.** A notification plugin that answered with a failure was recorded with its code and
-  class alone; the failure's message is now the `notification_sent` line's `detail`, cut to at most 500 characters,
-  after the plugin host has masked it as the plugin-author note says. A cut that would fall inside a character written
-  as two UTF-16 units steps back one, so the kept text is whole.
-- **The Reply plugin's page no longer says that answering keeps a conversation visible.** That holds for a direct email;
-  on a sequence thread the known issue below says what is detected.
+- **A plugin that cuts text inside a character keeps its outcome.** A plugin may cut a provider's text at a count of
+  UTF-16 units, as `slice(0, 200)` does, and leave half of a surrogate pair at the end; the plugin host could not read
+  what the plugin handed it, and the work item ended `plugin_no_outcome` instead of the failure or the result the plugin
+  declared. The host now writes such a lone half as U+FFFD, the replacement character, in any string a plugin hands
+  it: a result, an identifier, a failure's message, details or block, a log line's data, a host function's options, a
+  key. A whole pair is written as it is. No package changed. See
+  [the plugins page](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/plugins.md).
+- **`jason update apply` names the packages that are not installed on one line.** Two or more are said on the line
+  where the first of them stands, as `jason status` says them, such as
+  ``plugins: slack and telegram are not installed, so none was placed; `jason plugin install <id>` installs one``; one
+  package keeps a line of its own.
+- **A release candidate's build reads its own release.** A build such as `1.0.0-rc.1` takes its skills from its own
+  tag, which its release publishes, and `jason status` compares its default UI with it, so a stale one is called stale.
+  Only a development build points at the release it is on the way to.
 
-## Upgrading from 0.31.0
+## Upgrading from 0.32.0
 
-Nothing stops: no setting is renamed, and no start refuses a setting 0.31.0 took.
+Nothing stops: no setting is renamed, and no start refuses a setting 0.32.0 took.
 
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
   lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
-  install line and Homebrew place the executable alone, so after either, `jason skills update` and `jason ui install`
-  follow, and `jason plugin install <id> --replace` for each package you installed and did not edit.
-- **The packages:** reply 0.14.6, journal-forwarder 1.2.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0.
-  `jason update apply` replaces a copy installed as an earlier version, byte for byte as published, and leaves one you
-  edited alone. Slack and Telegram are new: `jason plugin install slack` or `jason plugin install telegram` places one,
-  and nothing places them for you. A release is thirteen files.
-- **ntfy:** an edited copy of an earlier ntfy reads as behind 1.0.3, and `jason status` advises `--replace`. First
-  **grant the host by name** under `Plugins:Grants:ntfy:Http`, since a grant of `*` means `ntfy.sh` alone; a copy
-  already granted by name needs nothing here. Keep the binding's `server` as it is. Then
-  `jason plugin install ntfy --replace` drops the edit and asks the runtime to reload, which reads the grant you wrote
-  and loads the package at once, so no delivery fails in between and no separate `jason plugin reload` is needed; with
-  no runtime running, the package loads at the next start. `any_granted_host` needs Jason 0.31.0 or newer.
-- **The journal forwarder** is 1.2.0 and asks for more than 1.1.0 did: its manifest asks for `capabilities.files` and
-  names no place, so it writes no file until you grant a directory. A runtime older than 0.32.0 rejects the whole reload
-  over that word, as every package problem rejects it, so an older runtime needs the forwarder its own release
-  published. Its failure code `forwarder_url_missing` is now `forwarder_receiver_missing`, said when neither a URL nor a
-  file is named: a filter of your own on `subscription_failed` lines that names the old code needs the new one.
-- **Skills:** the update redeploys them wherever a deployment was recorded; after the install line or
-  `brew upgrade jason`, run `jason skills update`. One skill changed its status line, `operating-the-installation`, from
-  `verified` to `draft`.
+  install line now ends by deploying the role skills; after it or Homebrew, `jason skills update` and
+  `jason ui install` follow, and `jason plugin install <id> --replace` for each package you installed and did not edit.
+- **Where the skills come from:** the default skills download goes to this repository's releases on GitHub directly,
+  as `git` did before, and not through the address ReplyApp Inc. operates for the runtime's own downloads, so
+  [what the responsible-use page says of it](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/responsible-use.md#update-check-and-downloads)
+  holds word for word and the page is unchanged.
+- **No `git` any more:** an installation whose record names this repository's git address, which every default
+  deployment before 0.33.0 names, is read as the default: from the next `jason update apply` on, or the next
+  `jason skills update`, it takes `jason-skills.zip` and its record names the new default. A deployment made at a tag
+  chosen with `--ref` stays at its ref, a record of any other source keeps it, and a git repository named with
+  `--source` still needs `git`.
+- **The packages:** reply 0.14.6, journal-forwarder 1.2.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0, as in 0.32.0;
+  no package changed in this release. A release is fourteen files, `jason-skills.zip` the new one.
+- **Skills:** the update redeploys them wherever a deployment was recorded. Two skills changed their text and keep
+  `draft`: `operating-the-installation`, which now says what the install script deploys and how to move an
+  installation, and which no agent host has read against 0.33.0; and the `responder` role, whose reason for acting or
+  parking at once now reads "A provider may not detect a contact's later reply unless it answers a message this side
+  sent". The skills marked `draft` are `operating-the-installation`, `researcher-in-session`, `roles/responder`,
+  `troubleshooting-jason` and the nine skills of the business pack.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle
   stay as they were.
-- **From 0.30.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
+- **Going back:** what `jason update apply --version` to an older release does to a newer plugin package, and how to
+  load one again, is in
+  [Applying an older release](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/release-and-update.md#applying-an-older-release).
+- **From 0.31.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
 
 ## Known issues
+
+An import on the same machine, into a second data directory, "needs the source harness root moved aside first: the
+records name its folders, and project.link refuses a folder present elsewhere (harness_folder_present)". The import
+names each refused link, and its `next` carries `jason project link <id> --path <folder>` for each.
+
+`jason status` calls autostart `ok` from the registration alone: a registration whose executable is not there any more
+reads as registered. `jason runtime autostart status` reads the executable it names, and says "The executable it runs
+is not there any more" with its path.
 
 On Windows, a campaign's move to another project can be refused for the instant the background import-file sweep writes
 inside that folder, soon after a start; ask again and it succeeds.

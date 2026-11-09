@@ -58,6 +58,7 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at the tag, at the archive's root |
 | `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at the tag, at the archive's root |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
+| `jason-skills.zip` | the skills' package: `skills/` at the tag, under `skills/`, and a `source.json` naming the repository, the tag and its commit; `jason skills install` deploys from it when it is given no `--source` |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
@@ -345,6 +346,12 @@ installs the executable with its licence and the third-party notices beside it, 
 `jason-THIRD-PARTY-NOTICES`, and adds its directory to your PATH behind a marker line it will recognise next time.
 Pass `--no-modify-path` to leave your PATH alone, and `--version X.Y.Z` to install a particular release.
 
+Its last step, before the licence it installed under, is the role skills: it runs the installed executable's
+`jason skills install --roles-only`, which deploys them from the release's `jason-skills.zip`. Where that fails, the
+executable is still installed and the run still succeeds, one line says the role skills were not deployed and what
+to run, and `jason status` names the same line. A script pointed at a feed in a directory leaves the step out and
+says what to run instead, because the skills verb reads no directory.
+
 The default install directories are `~/.local/bin/jason` on macOS and Linux, and
 `%LOCALAPPDATA%\Programs\jason\jason.exe` on Windows. Both are per-user: nothing here needs administrator
 rights, and nothing is installed for other people on the machine.
@@ -541,8 +548,11 @@ a kill anywhere in the step is finished by the next `jason update apply`. A pack
 edited on that machine, or, for Reply's package, a version before its list's first line, 0.3.2 — is left byte for
 byte, and so is one that is current, later than the release's, or cannot be read; a plugin that is not installed is not
 placed. The apply prints one `plugins:` line for each package the release publishes: `plugins: reply 0.8.0 -> 0.9.0`,
-`plugins: reply 0.9.0 is current`, or why it was left as it is. A step resumed after a kill prints lines only for the
-packages its ledger names. A release the step cannot read again — the network gone after the swap — gives one line,
+`plugins: reply 0.9.0 is current`, or why it was left as it is, except for packages that are not installed, which are
+said as in `jason status`: one on a line of its own, `plugins: slack is not installed, so none was placed; …`, and two
+or more on one line naming each, `plugins: slack and telegram are not installed, so none was placed; …`, which ends
+with the command that installs one. A step resumed after a kill prints lines only for the packages its ledger names. A
+release the step cannot read again — the network gone after the swap — gives one line,
 `plugins: not checked — …; run: jason status`, and every package stays as it was. A package that cannot be fetched,
 checked or moved — a download that breaks off, a digest that does not match, a file held open past the wait — is left
 as it was, and the update still stands:
@@ -556,12 +566,15 @@ package, as step 3 of [the wiring check](golden-path.md) does.
 Its last step, after `complete`, is the skills: exactly what `jason skills update` does, at the new release's tag.
 The runtime's own role skills, and each agent harness this machine detects, are redeployed wherever a deployment
 there was recorded, from the source its record names; a deployment made with `--root` into a directory detection
-does not find is not, and `jason skills update --root <dir>` moves it. A deployment made at a tag
+does not find is not, and `jason skills update --root <dir>` moves it. A record naming this repository's git address,
+which every default deployment before 0.33.0 names, is read as the default, so it moves to the new release's
+`jason-skills.zip`; an apply given `--feed` reads that package from the feed it names as well. A deployment made at a tag
 chosen with `--ref` stays at its ref, and nothing is written into an agent's harness that has no record. The apply
 prints one `skills:` line for each pack group it carried — one pack from one source at one ref, in the roots that
 hold it — with what it wrote. A file you edited is kept and the rest of its group moves; the group's line names
-the file. If a group cannot be redeployed — no `git`, no network, a skill held open by a role that was
-launching, an interrupt while they are fetched — the update still stands: the new executable
+the file. If a group cannot be redeployed — no network, a release that published no skills package, no `git` for a
+group taken from a git repository with `--source`, a skill held open by a role that was launching, an interrupt while
+they are fetched — the update still stands: the new executable
 is in place and its runtime is running, that group's `skills:` line says why and ends
 `run: jason skills update`, and whatever could not move is still recorded at the tag before, so `jason status`
 fails it and prints the same repair it always has. An update applied by a build before 0.12.0 has no such step, so
@@ -662,6 +675,56 @@ written over — but it is also why the replaced executable may still be sitting
 afterwards: a running program cannot delete itself. Nothing removes it later either; each is named for the
 version and the moment it was set aside, and deleting them is safe as soon as that version is no longer
 running.
+
+### Applying an older release
+
+```sh
+jason update apply --version 0.30.0
+```
+
+`--version` names any release the feed publishes, an older one included, and `jason update apply` takes the installation
+there by the same nine steps. What it does not do is move a plugin package back. The `plugins` step replaces a package
+that is behind the release's, and leaves one that is not any package the release published byte for byte. A newer package
+is such a one: the release's record holds the digests of what it published, and a later version is not among them. So the
+apply prints a line such as `plugins: journal-forwarder differs from every package a release published, so it was left as it is`
+and the newer package stays in `~/.jason/plugins/<id>/`. A release before 0.32.0 names no `ntfy` at all, so the apply says
+nothing about it and the package simply stays. The older runtime then loads a package written for a newer one.
+
+Two packages make that matter. A runtime older than 0.31.0 does not know the manifest key
+`capabilities.http.any_granted_host`, which `ntfy` 1.0.3 and the journal forwarder 1.1.0 carry, and it refuses a manifest
+with a key it does not know. A package problem rejects the whole load, and at a start there is no earlier set to keep
+([plugins](plugins.md), "Two kinds of problem"), so the runtime starts with **no plugin loaded at all**, Reply's included.
+What you see is a runtime that answers, work that fails because no plugin is there to perform it, and `jason plugin list`
+naming the package and the manifest key it refused. The same holds for a copy of the forwarder 1.2.0 on a runtime older
+than 0.32.0, which refuses `capabilities.files` in the same way.
+
+To go back cleanly, put the package the older release published in its place, which depends on whether that release
+published it. `jason plugin install` places the package of the release the running executable is, so it only works for a
+package that release publishes.
+
+Where the older release publishes the package, which for the journal forwarder is 0.30.0 and later, run this just after
+the apply, for each such package you had installed:
+
+```sh
+jason plugin install journal-forwarder --replace
+```
+
+Where it does not, which for `ntfy` is anything older than 0.32.0, `jason plugin install` refuses, saying the release
+publishes no such package. Move `~/.jason/plugins/ntfy/` out of the plugins directory, anywhere you like, and run:
+
+```sh
+jason plugin reload
+```
+
+The same holds for the forwarder on a release older than 0.30.0. Either way, `jason plugin list` then shows the plugins
+loaded. Settings you wrote for the newer package, a grant of a host by name, say, stay in `settings.json` and are read
+again if you update forward later.
+
+None of this touches the database, and an apply of an older release migrates nothing: the older executable opens the
+database as the newer one left it, and may refuse to open one the newer one migrated, as `jason update rollback` itself
+warns. A rollback after such an apply puts the newer executable back and leaves the database as it is. "Going back"
+above says when a rollback restores a backup and why the write-ahead log beside a restored file is deleted; read it
+before you rely on an older executable with the data directory you have.
 
 ### Restoring a database by hand
 
@@ -908,7 +971,7 @@ Mac, and this page would rather say so than imply a check nobody ran.
 > either; nor when a plugin reload started that program again later. It **ended when the account signed out**,
 > without writing a line about stopping, and the next sign-in started a new one on the same data: no migration left
 > to apply, a campaign made before the sign-out still there, and again no console and no window. `status` named the
-> data directory, and `jason status` said the runtime is registered to start at logon. `disable` took the task
+> data directory, and `jason status` said the runtime had a logon registration. `disable` took the task
 > away, a second `disable` still succeeded, and neither stopped the runtime; stopped and started again with
 > `jason runtime start`, the runtime logged `"Console":"freed_hidden"` and had no console afterwards.
 > `jason uninstall` put the logon registration first in its plan, took it away and left nothing behind: no task,

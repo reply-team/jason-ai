@@ -100,6 +100,12 @@ public sealed class IdentityRewriter
     private const string SkillSourceMark = "<skill-source>";
     private const string InstallGroup = "installdir";
 
+    /// <summary>
+    /// The member whose whole value is a deployment's ref, where a check's details name one: a ref of the person's own there
+    /// is written as its mark, as it is after <see cref="BeforeRef"/> in a fact.
+    /// </summary>
+    private const string RefMember = "ref";
+
     /// <summary>Where a fact quotes a deployment's ref: right after <c>at</c> or <c>from</c> and a space, each a word of its own.</summary>
     private const string BeforeRef = @"(?<=(?<![\p{L}\p{N}_\-])(?:at|from) )";
 
@@ -196,6 +202,12 @@ public sealed class IdentityRewriter
 
     private readonly Regex _names;
 
+    /// <summary>
+    /// The refs of the person's own skill sources, for the one place a ref is a whole value rather than a word of a fact:
+    /// a member named <see cref="RefMember"/>, as the role check's details carry one.
+    /// </summary>
+    private readonly HashSet<string> _refs;
+
     /// <summary>The names this rewriter writes as aliases, and the alias of each.</summary>
     private readonly IReadOnlyDictionary<string, string> _aliases;
 
@@ -221,6 +233,7 @@ public sealed class IdentityRewriter
         ArgumentNullException.ThrowIfNull(shortForm);
 
         _aliases = facts.Aliases.Map;
+        _refs = new HashSet<string>(facts.SkillRefs.Where(reference => !string.IsNullOrWhiteSpace(reference)), StringComparer.OrdinalIgnoreCase);
         _names = new Regex(Pattern(facts, shortForm, AfterName, AfterPath, withSid: true), RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture);
         _beforeEscapes = new Regex(Pattern(facts, shortForm, BeforeEscapedPair, BeforeEscapedPair, withSid: false), RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture);
     }
@@ -262,7 +275,7 @@ public sealed class IdentityRewriter
         var copy = new JsonObject(members.Options);
         foreach (var (key, value) in members)
         {
-            copy.Add(Unused(copy, RewriteText(key)), Copy(value));
+            copy.Add(Unused(copy, RewriteText(key)), IsOwnRef(key, value) ? JsonValue.Create(SkillSourceMark, members.Options) : Copy(value));
         }
 
         return copy;
@@ -289,6 +302,14 @@ public sealed class IdentityRewriter
         var text = value.TryGetValue(out string? held) ? held : value.ToString();
         return JsonValue.Create(RewriteText(text), value.Options)!;
     }
+
+    /// <summary>A member named <see cref="RefMember"/> whose whole value is a ref of the person's own.</summary>
+    private bool IsOwnRef(string key, JsonNode? value) =>
+        _refs.Count > 0
+        && string.Equals(key, RefMember, StringComparison.Ordinal)
+        && value is JsonValue text
+        && text.GetValueKind() == JsonValueKind.String
+        && _refs.Contains(text.GetValue<string>());
 
     /// <summary>The key, or the key with a number after it when an earlier key was already rewritten to it.</summary>
     private static string Unused(JsonObject members, string key)
@@ -385,6 +406,7 @@ public sealed class IdentityRewriter
         // First, a skill source of the person's own, whole and the longest first, wherever it stands: a folder's source starts
         // with the home directory, and is one mark rather than ~ and the rest of its path. Its ref only where a fact quotes
         // a deployment, after "at" or "from": a ref is often an ordinary word, and a branch called main is not every main.
+        // The other place a ref stands, the whole value of a member named ref, is read where the members are (IsOwnRef).
         if (withSid)
         {
             var sources = facts.SkillSources.Where(source => !string.IsNullOrWhiteSpace(source)).OrderByDescending(source => source.Length).ToList();

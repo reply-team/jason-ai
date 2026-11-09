@@ -142,7 +142,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             }
         }
 
-        await RedeploySkillsAsync(ledger, cancellationToken).ConfigureAwait(false);
+        await RedeploySkillsAsync(ledger, request, cancellationToken).ConfigureAwait(false);
         await PlaceUiAsync(ledger, request, cancellationToken).ConfigureAwait(false);
         return ledger;
     }
@@ -207,7 +207,10 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// <c>jason skills update</c>'s own body, run as the new build would run it: its version is the one that names the
     /// tag, and nothing else differs — the same source each record names, the same pin rule, planner, deployer and
     /// record. The skills come from that source and never from this executable, so the build being replaced can
-    /// deploy what the new one carries.
+    /// deploy what the new one carries. One thing is the update's: a feed somebody named for it, which the default
+    /// source's release is read from as well, as <c>jason skills update --feed</c> reads it, so an update from CI's
+    /// feed on this machine asks nothing of the network. The published feed is not handed on: the default source is
+    /// read from GitHub, as an install reads it. Either way the records keep the source they name.
     /// </para>
     /// <para>
     /// After <c>complete</c>, and never a step of the ledger. By now the executable is replaced and the new runtime is
@@ -221,7 +224,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// the step's lines; when it failed, everything it said goes to stderr beside the line, as the stop's does.
     /// </para>
     /// </remarks>
-    private async Task RedeploySkillsAsync(UpdateLedger ledger, CancellationToken cancellationToken)
+    private async Task RedeploySkillsAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
     {
         using var said = new StringWriter(CultureInfo.InvariantCulture);
         using var complained = new StringWriter(CultureInfo.InvariantCulture);
@@ -235,7 +238,11 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         try
         {
             outcome = await SkillsCommands
-                .UpdateRecordedAsync(env with { BuildVersion = ledger.ToVersion.ToString(), Out = said, Error = complained }, progress, cancellationToken)
+                .UpdateRecordedAsync(
+                    env with { BuildVersion = ledger.ToVersion.ToString(), Out = said, Error = complained },
+                    progress,
+                    cancellationToken,
+                    request.Feed == UpdateFeed.Default ? null : request.Feed)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -752,7 +759,8 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// Each plugin package installed as an earlier version the release records is replaced by the release's own, and the
     /// one it replaced is kept under <c>update/previous/plugins/</c> for a rollback. A package the record does not know —
     /// built or edited here — is left as it is, and so is one that is current, later, unreadable or not installed; each
-    /// says so on a line of its own.
+    /// says so on a line of its own, but for the packages not installed: two or more are one line naming each, where the
+    /// first of them stands, as the status says them.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -845,9 +853,19 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             }
         }
 
+        var missing = plan.Where(plugin => plugin.State == PluginPlanState.NotInstalled).Select(plugin => plugin.Id).ToList();
+        var missingSaid = false;
         foreach (var plugin in plan)
         {
-            if (plugin.State != PluginPlanState.Behind)
+            if (plugin.State == PluginPlanState.NotInstalled && missing.Count > 1)
+            {
+                if (!missingSaid)
+                {
+                    missingSaid = true;
+                    Say(UpdateStep.Plugins, $"{string.Join(", ", missing[..^1])} and {missing[^1]} are not installed, so none was placed; `jason plugin install <id>` installs one");
+                }
+            }
+            else if (plugin.State != PluginPlanState.Behind)
             {
                 Say(UpdateStep.Plugins, Left(plugin));
             }
