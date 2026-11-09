@@ -234,54 +234,74 @@ public static class SkillsSource
         string? commit;
         bool placed;
         Directory.CreateDirectory(partial);
-        using (new FileStream(Path.Combine(partial, Claim), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+        try
         {
-            var clone = await runner.RunAsync(
-                "git",
-                ["clone", "--depth", "1", "--branch", pin, "--", where, tree],
-                null,
-                FetchTimeout,
-                cancellationToken).ConfigureAwait(false);
-
-            if (clone.TimedOut)
+            using (new FileStream(Path.Combine(partial, Claim), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
             {
-                throw new SkillsSourceUnavailable($"Fetching '{where}' at '{pin}' did not finish in {FetchTimeout.TotalMinutes.ToString(CultureInfo.InvariantCulture)} minutes.");
-            }
+                var clone = await runner.RunAsync(
+                    "git",
+                    ["clone", "--depth", "1", "--branch", pin, "--", where, tree],
+                    null,
+                    FetchTimeout,
+                    cancellationToken).ConfigureAwait(false);
 
-            if (clone.ExitCode != 0)
-            {
-                // Its own words, because "git failed" is not something anybody can act on -- and the commonest
-                // case is the one this build creates: the pin is a release tag that has not been published yet.
-                throw new SkillsSourceUnavailable(
-                    $"'{where}' could not be fetched at '{pin}'. git said: {clone.StandardError.Trim()}"
-                    + (overridden ? string.Empty : $" This build's pinned ref is '{pin}'; if no release has published it yet, install from a directory with --source."));
-            }
+                if (clone.TimedOut)
+                {
+                    throw new SkillsSourceUnavailable($"Fetching '{where}' at '{pin}' did not finish in {FetchTimeout.TotalMinutes.ToString(CultureInfo.InvariantCulture)} minutes.");
+                }
 
-            RequirePacks(tree, where);
+                if (clone.ExitCode != 0)
+                {
+                    // Its own words, because "git failed" is not something anybody can act on -- and the commonest
+                    // case is the one this build creates: the pin is a release tag that has not been published yet.
+                    throw new SkillsSourceUnavailable(
+                        $"'{where}' could not be fetched at '{pin}'. git said: {clone.StandardError.Trim()}"
+                        + (overridden ? string.Empty : $" This build's pinned ref is '{pin}'; if no release has published it yet, install from a directory with --source."));
+                }
 
-            var head = await runner.RunAsync("git", ["rev-parse", "HEAD"], tree, FetchTimeout, cancellationToken).ConfigureAwait(false);
-            commit = head.ExitCode == 0 ? head.StandardOutput.Trim() : null;
+                RequirePacks(tree, where);
 
-            // The last thing written before the move, so a fetch that ends any earlier is never taken for a finished one.
-            var git = Directory.CreateDirectory(Path.Combine(tree, ".git")).FullName;
-            await File.WriteAllTextAsync(Path.Combine(git, CompletionMark), commit ?? string.Empty, cancellationToken).ConfigureAwait(false);
+                var head = await runner.RunAsync("git", ["rev-parse", "HEAD"], tree, FetchTimeout, cancellationToken).ConfigureAwait(false);
+                commit = head.ExitCode == 0 ? head.StandardOutput.Trim() : null;
 
-            try
-            {
-                Directory.Move(tree, staged);
-                placed = true;
-            }
-            catch (IOException) when (Completed(staged))
-            {
-                // Another run fetching the same ref finished first and put its tree in place. A pinned ref is one commit,
-                // so that tree is this one, and it is the one used.
-                placed = false;
+                // The last thing written before the move, so a fetch that ends any earlier is never taken for a finished one.
+                var git = Directory.CreateDirectory(Path.Combine(tree, ".git")).FullName;
+                await File.WriteAllTextAsync(Path.Combine(git, CompletionMark), commit ?? string.Empty, cancellationToken).ConfigureAwait(false);
+
+                try
+                {
+                    Directory.Move(tree, staged);
+                    placed = true;
+                }
+                catch (IOException) when (Completed(staged))
+                {
+                    // Another run fetching the same ref finished first and put its tree in place. A pinned ref is one commit,
+                    // so that tree is this one, and it is the one used.
+                    placed = false;
+                }
+                catch (IOException moved) when (Directory.Exists(staged))
+                {
+                    // Another run put a tree no clone finished there after this one cleared the way, a release's package
+                    // of the same tag say. It is not this clone, and a run that finds it removes it before it fetches.
+                    throw new SkillsSourceUnavailable(
+                        $"The clone of '{where}' at '{pin}' finished, but another run put a tree at {staged} meanwhile, so it could not be moved there: {moved.Message} Run the command again: it replaces that tree.");
+                }
+                catch (Exception failed) when (failed is IOException or UnauthorizedAccessException)
+                {
+                    // No tree is in the way, so nothing here knows why: a scanner holding a file just written answers a
+                    // rename with access denied on Windows, say. The file system's words are the cause this can name.
+                    throw new SkillsSourceUnavailable(
+                        $"The clone of '{where}' at '{pin}' finished, but its tree could not be moved to {staged}: {failed.Message} Nothing was staged; run the command again.");
+                }
             }
         }
-
-        // What is left here is the claim, and the tree that lost the race beside it. Removed if it can be, and otherwise
-        // by the next fetch of this ref, since nobody holds its claim any more.
-        TryRemove(partial);
+        finally
+        {
+            // After the claim is let go: whatever ended the fetch, what is left here is the claim and the tree that did not
+            // reach the ref. Removed if it can be, and otherwise by the next fetch of this ref, since nobody holds its claim
+            // any more.
+            TryRemove(partial);
+        }
 
         return placed
             ? new StagedSource(staged, where, pin, overridden, commit)

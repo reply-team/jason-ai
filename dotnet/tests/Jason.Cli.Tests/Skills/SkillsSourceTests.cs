@@ -512,6 +512,97 @@ public class SkillsSourceTests
         Assert.True(left.Count == 0, $"The second fetch left {string.Join(", ", left)} in staging.");
     }
 
+    /// <summary>
+    /// A tree another run puts at the ref after this clone finished, and which no clone finished — a release's package of
+    /// the same tag, say — is in the way of the move: the refusal says so and that running again replaces it, nothing of
+    /// this fetch is left beside the ref, and the run again does replace it.
+    /// </summary>
+    [Fact]
+    public async Task A_tree_put_at_the_ref_after_the_clone_is_refused_naming_a_rerun_and_the_rerun_stages()
+    {
+        using var dir = new TempPaths();
+        var final = dir.Paths.SkillsStagedSourceDirectory("v0.1.0");
+        var raced = new FakeProgramRunner(request =>
+        {
+            if (request.Arguments[0] == "clone")
+            {
+                WritePack(request.Arguments[^1], "this run's tree");
+                Directory.CreateDirectory(Path.Combine(request.Arguments[^1], ".git"));
+            }
+            else
+            {
+                // While this run reads its commit, the other run's tree arrives at the ref: a package's, marked as one.
+                WritePack(final, "the other run's tree");
+                File.WriteAllText(Path.Combine(final, "jason-staged"), "c0ffee");
+            }
+
+            return new ProgramResult(0, "abc123", string.Empty, false);
+        });
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, raced), "https://example.test/x.git", "v0.1.0", overriddenByRecord: null, Ct));
+
+        Assert.StartsWith(
+            $"The clone of 'https://example.test/x.git' at 'v0.1.0' finished, but another run put a tree at {final} meanwhile, so it could not be moved there: ",
+            refusal.Message,
+            StringComparison.Ordinal);
+        Assert.EndsWith(" Run the command again: it replaces that tree.", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateDirectories(dir.Paths.SkillsStagedSourcesDirectory, "*.partial-*"));
+
+        var whole = new FakeProgramRunner(request =>
+        {
+            if (request.Arguments[0] == "clone")
+            {
+                WritePack(request.Arguments[^1], "the run again's tree");
+                Directory.CreateDirectory(Path.Combine(request.Arguments[^1], ".git"));
+            }
+
+            return new ProgramResult(0, "abc123", string.Empty, false);
+        });
+
+        var again = await SkillsSource.StageAsync(Machine(dir, whole), "https://example.test/x.git", "v0.1.0", overriddenByRecord: null, Ct);
+
+        Assert.Equal(final, again.Directory);
+        var text = await File.ReadAllTextAsync(Path.Combine(final, "skills", "runtime", "operating", "SKILL.md"), Ct);
+        Assert.True(text == "the run again's tree", $"The ref's path holds '{text}' after the run again.");
+    }
+
+    /// <summary>
+    /// A move that fails with no tree in the way — here a file stands at the ref, which no run of Jason's puts there — is
+    /// refused saying what is known and no cause, and nothing of this fetch is left beside the ref.
+    /// </summary>
+    [Fact]
+    public async Task A_clone_whose_move_fails_with_no_tree_in_the_way_is_refused_naming_no_cause()
+    {
+        using var dir = new TempPaths();
+        var final = dir.Paths.SkillsStagedSourceDirectory("v0.1.0");
+        var blocked = new FakeProgramRunner(request =>
+        {
+            if (request.Arguments[0] == "clone")
+            {
+                WritePack(request.Arguments[^1], "this run's tree");
+                Directory.CreateDirectory(Path.Combine(request.Arguments[^1], ".git"));
+            }
+            else
+            {
+                File.WriteAllText(final, "a file, not a tree");
+            }
+
+            return new ProgramResult(0, "abc123", string.Empty, false);
+        });
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, blocked), "https://example.test/x.git", "v0.1.0", overriddenByRecord: null, Ct));
+
+        Assert.StartsWith(
+            $"The clone of 'https://example.test/x.git' at 'v0.1.0' finished, but its tree could not be moved to {final}: ",
+            refusal.Message,
+            StringComparison.Ordinal);
+        Assert.EndsWith(" Nothing was staged; run the command again.", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("another run", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateDirectories(dir.Paths.SkillsStagedSourcesDirectory, "*.partial-*"));
+    }
+
     /// <summary>Nothing at the ref's path, and no mark anywhere in staging.</summary>
     private static void AssertNothingCompleted(TempPaths dir, string reference)
     {
