@@ -49,7 +49,7 @@ skills' deployment as fields; and two new verbs move an installation to another 
 - **`jason status` says what a logon registration does at the next sign-in.** The `autostart` row says "Registered at
   logon: the runtime starts by itself each time you sign in." or "No logon registration: the next time you sign in, the
   runtime stays off until it is started by hand.", with the same repair as before; whether the runtime runs now is the
-  `runtime` row's to say. `jason runtime autostart status` takes the same words: "No logon registration." and, on a
+  `runtime` row's to say. `jason runtime autostart status` opens with the same words: "No logon registration." and, on a
   machine that cannot register one, "No logon registration, and this machine has no way to register one."
 - **`jason status` gives the role skills' deployment as fields.** In the JSON, the `role_skills` check carries
   `details`: `ref`, `source`, `commit` (empty where the record names none) and `roles_taught`, how many roles the runtime
@@ -65,7 +65,11 @@ skills' deployment as fields; and two new verbs move an installation to another 
     when they are there; `config/`, `plugins/`, `skills/roles/`, `ui/custom/` and `logs/`, each whole, the role skills'
     record included; the harness root's tree as it stands, every folder in it whole, a `.git` included; and
     `export.json`, which names "the Jason version, the moment, the operating system, the data directory, the harness
-    root, the home directory, whether the runtime starts at logon, and every file with its size and SHA-256".
+    root, the home directory, whether the runtime starts at logon, and every file with its size and SHA-256". Of links,
+    "a link at the top of a carried place, or a harness root that is one, is followed and judged where it leads", and
+    "a link inside is refused by its path". And "A name another system cannot hold, and two names apart only by the
+    case of their letters, are refused by their path, before anything is written", a Windows device name among the
+    first.
   - **What does not.** The backups under `state/backups/`, `run/`, `work/`, the skills' staging folders, the shipped UI
     under `ui/default/`, a `replaced-<stamp>/` directory an import moved aside, "and anything outside the data directory
     and the harness root": the skills deployed into agent hosts among them, which `jason skills install` deploys again.
@@ -74,18 +78,25 @@ skills' deployment as fields; and two new verbs move an installation to another 
   - **`--stop`.** Without it, both verbs refuse while the runtime runs, naming `jason runtime stop`. With it,
     `jason export` stops the runtime "and starts it again once the archive is written, and starts none that was not
     running"; `jason import` stops it and, as every import does, starts the runtime on what it placed.
-  - **`--replace` moves aside and deletes nothing.** Before anything is written, `jason import <file>` refuses an
-    archive it cannot read, a name in it that escapes, a file whose size or SHA-256 is not the one `export.json` lists,
-    and an archive a newer Jason wrote, naming the version to install first. An installation already here, "a database,
-    or a harness root with a marker in it", is refused without `--replace`, naming what it holds. With it, the data
-    directory's parts go into `<data>/replaced-<stamp>/` and the harness root to `<root>.replaced-<stamp>`, each named
-    as yours to remove.
+  - **`--replace` moves aside and deletes nothing.** Among what `jason import <file>` refuses before anything is
+    written are "an archive that cannot be read", "a name in it that escapes", "a file whose size or SHA-256 is not the
+    one export.json lists" and "an archive a newer Jason wrote, naming the version to install first"; the install
+    guide's section linked below has the whole list. An installation already here, "a database, or a harness root with
+    a marker in it", is refused without `--replace`, naming what it holds. With it, the data directory's parts go into
+    `<data>/replaced-<stamp>/` and the harness root to `<root>.replaced-<stamp>`, each named as yours to remove.
+    Without the flag nothing is written over either: "on a machine with no installation the same parts that stand
+    there, a jason.db-wal or jason.db-shm beside no database among them, and a harness root folder with no marker go
+    aside the same way, with no --replace; each is named as yours to remove."
+  - **The harness root here** is "--root, else JASON_Harness__Root, else the Harness:Root this machine's settings
+    file names, else Jason in the home directory". "The root is held to the runtime's rule for a root before anything
+    is placed."
   - **Paths are made this machine's.** In the settings file, "every absolute path under the other machine's home
     directory, data directory or harness root is rewritten to the same path here, each rewrite said, Harness:Root
     first; a path outside those three that is not on this machine is said and left as written". Then the runtime
     starts, and the import asks it to `project.link` each project folder by its marker, with this machine's path; a
     refused link is said, the folder stays, and the answer's `next` carries
-    `jason project link <id> --path <folder>`.
+    `jason project link <id> --path <folder>`. "A project folder outside the harness root does not travel: each project
+    whose recorded folder is not here is said, and listed as folders_not_here."
   - **The logon registration travels as a fact.** The import "registers at logon when the other machine did, or says
     this machine cannot". The registration itself is never a file in the archive.
   - **Left to you**, in this order: `jason skills install`, for this machine's agent hosts;
