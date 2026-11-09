@@ -698,6 +698,10 @@ public class StatusCommandTests
         Assert.Equal(CheckState.Failed, check.State);
         Assert.Equal("Role skills are from v1.2.3; this runtime is v1.2.4.", check.Fact);
         Assert.Equal("jason skills install --roles-only", check.Fix);
+
+        // The details name the pack the fact names, not the first one the record holds.
+        Assert.NotNull(check.Details);
+        Assert.Equal("v1.2.3", check.Details["ref"]);
     }
 
     /// <summary>
