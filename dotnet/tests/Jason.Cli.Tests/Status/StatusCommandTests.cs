@@ -500,6 +500,41 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// A record in the role root that cannot be read gives no details and leaves the check where it stood without one,
+    /// whether the runtime answered or not: status reports, and never throws on a file somebody broke. Where the runtime
+    /// answered, the fact still says the record could not be read.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_record_that_cannot_be_read_gives_no_details_and_leaves_the_state(bool answering)
+    {
+        using var dir = new TempPaths();
+        var root = dir.Paths.RoleSkillsDirectory;
+        if (answering)
+        {
+            Running(dir, skills: new SkillsInfo(root, 1048576, [Taught("researcher")]));
+        }
+
+        var before = new StringWriter();
+        await CliApp.RunAsync(["status"], Machine(dir, before), Ct);
+        var without = Assert.Single(Read(before).Checks, check => check.Name == "role_skills");
+
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, SkillsRecord.FileName), "{ not json");
+        var output = new StringWriter();
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Null(check.Details);
+        Assert.Equal(without.State, check.State);
+        if (answering)
+        {
+            Assert.Contains("The record there could not be read", check.Fact, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// The details are for a program. The table a person reads prints the facts, byte for byte as it did before a check
     /// could carry details: what it prints for a report is what it prints for the same report with every details taken out.
     /// </summary>
