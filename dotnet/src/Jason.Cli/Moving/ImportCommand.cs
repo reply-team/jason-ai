@@ -355,13 +355,32 @@ public static class ImportCommand
 
     /// <summary>
     /// The harness root the archive's tree goes into: <c>--root</c>, else the <c>JASON_Harness__Root</c> variable when this
-    /// machine's environment sets it, else <c>Jason</c> in the home directory — held to the rule the runtime holds a root to
+    /// machine's environment sets it, else the root this machine's settings file names, read before anything is moved
+    /// aside, else <c>Jason</c> in the home directory — held to the rule the runtime holds a root to
     /// (<see cref="HarnessRootRule"/>), each place compared where it leads, before anything is placed.
     /// </summary>
     private static HarnessRootPlace Root(CliEnvironment env, string? option)
     {
-        // Not this machine's settings file: the archive's replaces it, and its root is set to the one chosen here.
-        var resolved = InstallationPlaces.HarnessRoot(env, settings: null);
+        string? settings;
+        try
+        {
+            settings = File.Exists(env.Paths.UserSettingsFile) ? File.ReadAllText(env.Paths.UserSettingsFile) : null;
+        }
+        catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or SecurityException)
+        {
+            settings = null;
+        }
+
+        HarnessRootPlace resolved;
+        try
+        {
+            resolved = InstallationPlaces.HarnessRoot(env, settings);
+        }
+        catch (JsonException)
+        {
+            resolved = InstallationPlaces.HarnessRoot(env, null);
+        }
+
         var root = resolved;
         if (option is not null)
         {
@@ -373,7 +392,7 @@ public static class ImportCommand
             {
                 throw new ImportRefusal(
                     CliErrors.ImportRefused,
-                    $"{InstallationPlaces.RootVariable} names {resolved.Path}, which the runtime reads over any setting, and --root names {root.Path}: the runtime would not look where the folders were placed. Leave --root out, or change the variable. Nothing was written.");
+                    $"{InstallationPlaces.RootVariable} names {resolved.Path}, which the runtime reads over any setting, and --root names {root.Path}: the runtime would not look where the folders were placed. Unset the variable, or give --root the root it names. Nothing was written.");
             }
         }
 
@@ -504,8 +523,9 @@ public static class ImportCommand
             new(manifest.HarnessRoot, root.Path),
         };
 
-        // The settings file names the root chosen here in every case, the default and a root the variable names included, so
-        // the file says where its installation's folders are whatever the environment the runtime is started in.
+        // The settings file names the root chosen here in every case, the default and a root the variable or this machine's
+        // old settings file named included: the archive's file replaces the old one, and says where its installation's
+        // folders are whatever the environment the runtime is started in.
         return SettingsRewrite.Rewrite(text, manifest.OperatingSystem, places, root.Path, nameRoot: true, path => File.Exists(path) || Directory.Exists(path));
     }
 

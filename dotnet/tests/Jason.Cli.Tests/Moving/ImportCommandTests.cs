@@ -652,7 +652,7 @@ public sealed class ImportCommandTests
     }
 
     [Fact]
-    public async Task This_machine_s_settings_file_does_not_choose_the_root_and_with_no_variable_it_is_Jason_in_the_home()
+    public async Task The_root_is_the_one_this_machine_s_settings_file_names_when_no_variable_does_read_before_it_is_moved_aside()
     {
         using var from = new MovingMachine();
         using var to = new MovingMachine { RootVariable = false };
@@ -663,12 +663,29 @@ public sealed class ImportCommandTests
         var exit = await Import(to, Options(file));
 
         Assert.Equal(ExitCodes.Success, exit);
-        var home = Path.Combine(to.Home, "Jason");
-        Assert.Equal("prj_01ACME", HarnessMarker.In(Path.Combine(home, "projects", "acme"))!.Id);
-        Assert.False(Directory.Exists(named));
-        Assert.Equal(home, InstallationPlaces.SettingsRoot(File.ReadAllText(to.Paths.UserSettingsFile)));
+        Assert.Equal("prj_01ACME", HarnessMarker.In(Path.Combine(named, "projects", "acme"))!.Id);
+        Assert.Equal(named, InstallationPlaces.SettingsRoot(File.ReadAllText(to.Paths.UserSettingsFile)));
         using var answer = JsonDocument.Parse(to.Out.ToString());
-        Assert.Equal("default", answer.RootElement.GetProperty("harness_root").GetProperty("from").GetString());
+        Assert.Equal(InstallationPlaces.FromSettings, answer.RootElement.GetProperty("harness_root").GetProperty("from").GetString());
+    }
+
+    [Fact]
+    public async Task A_root_this_machine_s_settings_file_writes_with_a_tilde_is_refused_by_the_runtime_s_rule_and_nothing_is_written()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine { RootVariable = false };
+        to.PlantData("config/settings.json", "{\"Harness\": {\"Root\": \"~/Jason\"}}");
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(to.Out.ToString());
+        Assert.Equal("import_refused", error.Code);
+        Assert.Contains("named by the settings file", error.Message, StringComparison.Ordinal);
+        Assert.Contains(HarnessRootRule.Refusal("~/Jason", to.Data, to.Home)!, error.Message, StringComparison.Ordinal);
+        Assert.Equal("{\"Harness\": {\"Root\": \"~/Jason\"}}", File.ReadAllText(to.Paths.UserSettingsFile));
+        Assert.False(Directory.Exists(Path.Combine(to.Data, "state")));
     }
 
     [Fact]
