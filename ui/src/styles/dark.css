@@ -1,0 +1,28 @@
+/* The dark theme is the token set with its greys turned over; tokens.css stays the light design source. */
+:root[data-theme='dark'] {
+    color-scheme: dark;
+    --zinc-50: #1f1f23;
+    --zinc-100: #27272a;
+    --zinc-200: #33333a;
+    --zinc-300: #3f3f46;
+    --zinc-400: #7c7c86;
+    --zinc-500: #a1a1aa;
+    --zinc-600: #b4b4bc;
+    --zinc-700: #d4d4d8;
+    --zinc-800: #e4e4e7;
+    --zinc-900: #f4f4f5;
+    --bg: #18181b;
+    --text-inverse: #18181b;
+    --accent: #7b97f0;
+    --accent-hover: #93abf5;
+    --accent-bg: #1f2a4d;
+    --accent-text: #a5b8f5;
+    --success: #4ade80;
+    --success-bg: #12291b;
+    --danger: #f87171;
+    --danger-bg: #2c1416;
+    --warning: #fbbf24;
+    --warning-bg: #2b2110;
+    --primary-text: #18181b;
+    --shadow-dialog: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
