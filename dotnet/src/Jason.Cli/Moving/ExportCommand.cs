@@ -102,7 +102,10 @@ public static class ExportCommand
 
     /// <summary>What no archive carries, as the help names it.</summary>
     internal static readonly string[] NeverCarried =
-        ["state/backups/", "run/", "work/", "skills/.staging/", "skills/staged/", "ui/default/", "a replaced-<stamp>/ directory an import moved aside"];
+        [
+            "data/state/backups/", "data/run/", "data/work/", "data/skills/.staging/", "data/skills/staged/", "data/ui/default/",
+            "a replaced-<stamp>/ directory at the data directory's top, which an import moved aside",
+        ];
 
     /// <summary>
     /// The moment as every name these verbs write carries it: UTC to the second, digits and two letters, which every file
@@ -705,16 +708,24 @@ public static class ExportCommand
         var nl = Environment.NewLine;
         return "Carried: " + string.Join(", ", DatabaseFiles.Select(file => "data/" + file)) + " (each when it is there); "
             + string.Join(", ", CarriedTrees.Select(tree => "data/" + tree + "/")) + ", each whole, the role skills' record "
-            + "included; harness/, the harness root's tree as it stands; and export.json at the root, naming the Jason version, "
+            + "included; harness/, the harness root's tree as it stands, every folder in it whole, a .git included, and empty "
+            + "with a warning when the root is not there; and export.json at the root, naming the Jason version, "
             + "the moment, the operating system, the data directory, the harness root, the home directory, whether the runtime "
             + "starts at logon, and every file with its size and SHA-256." + nl
             + "Never carried: " + string.Join(", ", NeverCarried) + ", and anything outside the data directory and the harness root." + nl
+            + "The harness root: " + InstallationPlaces.RootVariable + ", else the Harness:Root the settings file names, else "
+            + InstallationPlaces.DefaultFolder + " in the home directory, held to the runtime's rule for a root." + nl
             + "Secrets travel whole. " + SecretsLine + nl
-            + "The runtime: the files are read only while it is stopped. While it runs this refuses, naming 'jason runtime stop', "
-            + "unless --stop is given; then it stops the runtime and starts it again once the archive is written, and starts none "
-            + "that was not running." + nl
-            + "Never over anything: a file that is already there is refused, and a link or a name another system cannot hold is "
-            + "refused by its path, before anything is written. It reaches no network." + nl
+            + "The runtime: the files are read only while it is stopped, its lock on data/run/runtime.lock held for the read. "
+            + "While it runs this refuses, naming 'jason runtime stop', unless --stop is given; then it stops the runtime and "
+            + "starts it again once the archive is written, and starts none that was not running." + nl
+            + "Links: a link at the top of a carried place, or a harness root that is one, is followed and judged where it leads, "
+            + "and refused when that is inside the data directory or the harness root, or holds either; a link inside is refused "
+            + "by its path." + nl
+            + "Never over anything: a file that is already there is refused; the archive is written to <file>" + PartialSuffix
+            + " and moved into place once whole, and a " + PartialSuffix + " already there is refused as yours to remove. A name "
+            + "another system cannot hold, and two names apart only by the case of their letters, are refused by their path, "
+            + "before anything is written. It reaches no network." + nl
             + "Exit codes: 0 written; 1 refused, with nothing written, or written and the runtime stopped for it did not start "
             + "again, which the answer says; 2 usage.";
     }

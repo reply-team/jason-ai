@@ -118,7 +118,15 @@ public sealed class ExportCommandTests
         var help = machine.Out.ToString().ReplaceLineEndings(" ");
         Assert.Contains("Carried: data/state/jason.db", help, StringComparison.Ordinal);
         Assert.Contains("data/logs/", help, StringComparison.Ordinal);
-        Assert.Contains("Never carried: state/backups/", help, StringComparison.Ordinal);
+        Assert.Contains("Never carried: data/state/backups/", help, StringComparison.Ordinal);
+        Assert.Contains("a replaced-<stamp>/ directory at the data directory's top, which an import moved aside", help, StringComparison.Ordinal);
+        Assert.Contains("every folder in it whole, a .git included", help, StringComparison.Ordinal);
+        Assert.Contains("The harness root: JASON_Harness__Root, else the Harness:Root the settings file names, else Jason in the home directory", help, StringComparison.Ordinal);
+        Assert.Contains("a link at the top of a carried place, or a harness root that is one, is followed and judged where it leads", help, StringComparison.Ordinal);
+        Assert.Contains("a link inside is refused", help, StringComparison.Ordinal);
+        Assert.Contains("two names apart only by the case of their letters", help, StringComparison.Ordinal);
+        Assert.Contains(".partial already there is refused as yours to remove", help, StringComparison.Ordinal);
+        Assert.Contains("'jason import'", help, StringComparison.Ordinal);
         Assert.Contains("Secrets travel whole.", help, StringComparison.Ordinal);
         Assert.Contains("Exit codes: 0 written", help, StringComparison.Ordinal);
     }

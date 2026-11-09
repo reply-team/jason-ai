@@ -628,7 +628,12 @@ jason export
 
 `jason export` writes `jason-export-<stamp>.zip` in the folder you run it in, or the file you name, and never
 over a file that is already there. `--stop` stops a running runtime for you and starts it again once the archive
-is written; without it the verb refuses while the runtime runs. Copy the archive across, then on the new machine:
+is written; without it the verb refuses while the runtime runs. A link at the top of a carried place, `ui/custom/`
+as a junction to a build of your own say, or a harness root that is one, is followed and carried as what it leads
+to, unless that is inside the data directory or the harness root, or holds either; a link inside a carried place, a
+name another system cannot hold, and two names apart only by the case of their letters are refused by their path.
+The archive is written to `<file>.partial` first and moved into place once whole; a `.partial` an export left
+behind is refused, as yours to remove. Copy the archive across, then on the new machine:
 
 ```sh
 jason import jason-export-20261109T100005Z.zip
@@ -639,7 +644,7 @@ jason status
 
 **What travels:** the database, the settings file, the plugins, the role skills with their record, a custom UI
 under `ui/custom/`, the logs, and the harness root's tree — your memory files and every project's and campaign's
-folder — with `export.json` listing every file's size and SHA-256. Whether the runtime started at logon travels as
+folder, each whole, a `.git` included — with `export.json` listing every file's size and SHA-256. Whether the runtime started at logon travels as
 a fact: the import registers it again on a machine that can, and on one that cannot says "No logon registration,
 and this machine has no way to register one." **What does not:** the backups under `state/backups/`, the run and
 work directories, staged skills, the shipped UI under `ui/default/`, the copies an update keeps, anything an

@@ -185,8 +185,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   so the runtime is asked only what `approval get --prompt` and `decision get --prompt` ask and `preference.list`, and
   Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own
   permission settings' to decide (the verb-map tests hold the `session` noun to `open` alone); `jason export`
-  writes this installation's files — the database, the settings, the plugins, the role skills, the logs and the harness
-  root's tree — into one archive, which is a true copy only while the runtime is stopped and so no operation of the
+  writes this installation's files — the database, the settings, the plugins, the role skills, the custom UI, the logs and
+  the harness root's tree — into one archive, which is a true copy only while the runtime is stopped and so no operation of the
   runtime's can stand behind it: of the runtime it asks only to stop and to start, and only under `--stop`;
   `jason import` places such an archive on this machine cold, the database among them, which no runtime can take
   while it runs on them: of the runtime it asks to stop, only under `--stop`, to start, and `project.link` once for each
