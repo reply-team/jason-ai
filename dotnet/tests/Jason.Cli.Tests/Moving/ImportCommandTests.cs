@@ -110,6 +110,41 @@ public sealed class ImportCommandTests
         Assert.True(error.Message.Contains(name, StringComparison.Ordinal), $"{why}: the refusal does not name '{name}': {error.Message}");
     }
 
+    [Theory]
+    [InlineData("harness", false)]
+    [InlineData("data", false)]
+    [InlineData("data/state", false)]
+    [InlineData("data/config", false)]
+    [InlineData("data/plugins", false)]
+    [InlineData("data/skills", false)]
+    [InlineData("data/skills/roles", false)]
+    [InlineData("data/ui", false)]
+    [InlineData("data/ui/custom", false)]
+    [InlineData("data/logs", false)]
+    [InlineData("data/state/jason.db/", true)]
+    [InlineData("data/state/jason.db-wal/", true)]
+    [InlineData("data/state/jason.db-shm/", true)]
+    public async Task A_file_named_as_a_place_or_a_folder_named_as_a_database_file_is_refused_and_nothing_is_written(string name, bool directory)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var archive = new MovingArchive(from).Installation();
+        if (directory)
+        {
+            archive.Directories.Add(name);
+        }
+        else
+        {
+            archive.With(name);
+        }
+
+        var exit = await Import(to, Options(archive.Write()));
+
+        var error = Refused(to, exit, "import_refused");
+        Assert.Contains($"'{name}'", error.Message, StringComparison.Ordinal);
+        Assert.Contains(directory ? "as a folder, where an import places a file" : "as a file, where an import places a folder", error.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_name_export_json_lists_that_escapes_is_refused_and_nothing_is_written()
     {

@@ -848,6 +848,16 @@ public static class ImportCommand
         private static void Escapes(string file, string name, bool directory)
         {
             var plain = directory ? name.TrimEnd('/') : name;
+            if (!directory && Places.Contains(plain))
+            {
+                throw new ImportRefusal(CliErrors.ImportRefused, $"The archive {file} names '{name}' as a file, where an import places a folder, so one would stand where the other belongs. Nothing was written.");
+            }
+
+            if (directory && ExportCommand.DatabaseFiles.Any(database => plain == ExportManifest.DataPrefix + database))
+            {
+                throw new ImportRefusal(CliErrors.ImportRefused, $"The archive {file} names '{name}' as a folder, where an import places a file of the database, so one would stand where the other belongs. Nothing was written.");
+            }
+
             var refused = name.Length == 0
                 || (directory && !name.EndsWith('/'))
                 || !ArchiveNames.Plain(plain)
@@ -857,6 +867,15 @@ public static class ImportCommand
                 throw new ImportRefusal(CliErrors.ImportRefused, $"The archive {file} names '{name}', which an import never writes: it escapes the data directory and the harness root, or is no part an export carries. Nothing was written.");
             }
         }
+
+        /// <summary>
+        /// The folders an import places, and every folder on the way to one: <c>harness</c>, <c>data</c>,
+        /// <c>data/state</c>, and each carried tree of the data directory with the folders that hold it.
+        /// </summary>
+        private static readonly HashSet<string> Places = new(
+            new[] { "harness", ExportManifest.DataPrefix.TrimEnd('/'), ExportManifest.DataPrefix + StateFolder }
+                .Concat(ExportCommand.CarriedTrees.SelectMany(tree => tree.Split('/').Select((_, at) => ExportManifest.DataPrefix + string.Join('/', tree.Split('/')[..(at + 1)])))),
+            StringComparer.Ordinal);
 
         private static bool Carried(string name, bool directory)
         {
