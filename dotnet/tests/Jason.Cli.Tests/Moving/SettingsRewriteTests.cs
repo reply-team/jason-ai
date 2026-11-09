@@ -123,6 +123,31 @@ public sealed class SettingsRewriteTests
         Assert.Empty(result.NotHere);
     }
 
+    [Theory]
+    [InlineData("{\"Harness\": {\"Root\": null}}", "null")]
+    [InlineData("{\"Harness\": {\"Root\": 42}}", "42")]
+    [InlineData("{\"Harness\": {\"Root\": true}, \"Dispatcher\": {}}", "true")]
+    [InlineData("{\"Harness:Root\": false}", "false")]
+    public void A_root_setting_whose_value_is_a_scalar_and_no_string_is_replaced_like_a_string(string text, string was)
+    {
+        var result = SettingsRewrite.Rewrite(text, "linux", FromLinux, HereRoot, nameRoot: true, Nothing);
+
+        Assert.Equal(HereRoot, InstallationPlaces.SettingsRoot(result.Text));
+        Assert.Equal(new SettingRewritten("Harness:Root", was, HereRoot), Assert.Single(result.Rewritten));
+        Assert.Equal(text.Replace(was, JsonSerializer.Serialize(HereRoot), StringComparison.Ordinal), result.Text);
+    }
+
+    [Theory]
+    [InlineData("{\"Harness\": {\"Root\": {\"Path\": \"/home/pat/Jason\"}}}")]
+    [InlineData("{\"Harness\": {\"Root\": [\"/home/pat/Jason\"]}}")]
+    [InlineData("{\"harness:root\": {}}")]
+    public void A_root_setting_whose_value_is_an_object_or_an_array_is_refused_naming_the_setting(string text)
+    {
+        var refused = Assert.Throws<SettingsRefused>(() => SettingsRewrite.Rewrite(text, "linux", FromLinux, HereRoot, nameRoot: true, Nothing));
+
+        Assert.Contains("Harness:Root", refused.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_root_the_file_must_name_and_does_not_is_put_first_and_a_Harness_section_is_left_alone()
     {

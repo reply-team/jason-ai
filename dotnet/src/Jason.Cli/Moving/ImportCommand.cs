@@ -224,6 +224,10 @@ public static class ImportCommand
                     CliErrors.ImportRefused,
                     $"The settings file in the archive is not JSON the configuration reads ({unreadable.Message}), so its paths cannot be made this machine's. Nothing was written.");
             }
+            catch (SettingsRefused refused)
+            {
+                return Refuse(env, options.Human, CliErrors.ImportRefused, refused.Message + " Nothing was written.");
+            }
 
             // ---- the runtime, stopped ----
 

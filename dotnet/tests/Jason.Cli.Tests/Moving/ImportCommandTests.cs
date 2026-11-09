@@ -452,6 +452,44 @@ public sealed class ImportCommandTests
     }
 
     [Fact]
+    public async Task A_settings_file_whose_root_setting_is_an_object_is_refused_naming_it_and_nothing_is_written()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from).Installation().With("data/config/settings.json", "{\"Harness\": {\"Root\": {\"Path\": \"made up\"}}}").Write();
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "import_refused");
+        Assert.Contains("Harness:Root", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"a string\"")]
+    [InlineData("{ not json")]
+    public async Task A_settings_file_that_is_not_a_JSON_object_is_refused_and_nothing_is_written(string text)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        to.StartRuntime();
+        var file = new MovingArchive(from).Installation().With("data/config/settings.json", text).Write();
+        var before = Tree(to.Root);
+
+        var exit = await Import(to, Options(file) with { Stop = true });
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(to.Out.ToString());
+        Assert.Equal("import_refused", error.Code);
+        Assert.Contains("settings file", error.Message, StringComparison.Ordinal);
+        // Refused before the stop: the runtime runs on, and nothing here moved.
+        Assert.True(to.Running);
+        Assert.DoesNotContain(to.Calls, call => call.Operation == "system.shutdown");
+        Assert.Equal(before, Tree(to.Root));
+    }
+
+    [Fact]
     public async Task A_role_skills_pack_from_a_directory_not_here_is_listed_with_skills_install()
     {
         using var from = new MovingMachine();

@@ -20,6 +20,9 @@ public sealed record SettingNotHere(string Setting, string Path);
 /// <param name="NotHere">Every absolute path left as written that names nothing on this machine.</param>
 public sealed record SettingsRewritten(string Text, IReadOnlyList<SettingRewritten> Rewritten, IReadOnlyList<SettingNotHere> NotHere);
 
+/// <summary>A settings file whose root setting holds what no path can be, so the root placed here cannot be written into it.</summary>
+public sealed class SettingsRefused(string message) : Exception(message);
+
 /// <summary>A place on the other machine and where it is on this one.</summary>
 /// <param name="From">The folder as the other machine spelt it, without a trailing separator.</param>
 /// <param name="To">The folder here.</param>
@@ -112,7 +115,16 @@ internal static class SettingsRewrite
                         break;
                     }
 
-                    frames.Push(new Frame(Element(frames, name), reader.TokenType == JsonTokenType.StartArray));
+                    var section = Element(frames, name);
+                    if (string.Equals(section, InstallationPlaces.RootSetting, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // The configuration reads a section where a path belongs as no root at all, so the root placed
+                        // here could be named neither beside it nor in its place without guessing what the person meant.
+                        throw new SettingsRefused(
+                            $"{InstallationPlaces.RootSetting} in the settings file is {(reader.TokenType == JsonTokenType.StartArray ? "an array" : "an object")}, where the configuration reads a path, so the harness root placed here cannot be named in it. Make it a path, or remove it, in the file on the other machine, and export again.");
+                    }
+
+                    frames.Push(new Frame(section, reader.TokenType == JsonTokenType.StartArray));
                     break;
 
                 case JsonTokenType.EndObject:
@@ -159,8 +171,19 @@ internal static class SettingsRewrite
                 }
 
                 default:
+                {
+                    // A root written as null, a number or a boolean is no path, and is the root placed here all the same.
+                    var setting = Element(frames, name);
+                    if (string.Equals(setting, InstallationPlaces.RootSetting, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var start = (int)reader.TokenStartIndex;
+                        rootRewrite = new SettingRewritten(setting, Encoding.UTF8.GetString(reader.ValueSpan), root);
+                        Replace(output, bytes, ref copied, start, start + reader.ValueSpan.Length, root);
+                    }
+
                     Next(frames);
                     break;
+                }
             }
         }
 
