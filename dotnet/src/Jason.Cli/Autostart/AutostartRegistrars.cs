@@ -387,7 +387,11 @@ internal sealed class LaunchAgentRegistrar : IAutostartRegistrar
         var held = AutostartRegistrars.Held(path);
         return held is null
             ? new AutostartState(false, [], null)
-            : new AutostartState(true, AutostartArtifacts.Read(AutostartPlatform.MacOs, held), path);
+            : new AutostartState(
+                true,
+                AutostartArtifacts.Read(AutostartPlatform.MacOs, held),
+                path,
+                AutostartArtifacts.SearchPathIn(AutostartPlatform.MacOs, held));
     }
 
     public void Apply(AutostartRegistration registration)

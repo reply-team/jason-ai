@@ -310,13 +310,92 @@ public class AutostartCommandTests
         Assert.Equal("No logon registration, and this machine has no way to register one.", Assert.Single(machine.Lines()));
     }
 
+    /// <summary>
+    /// On macOS the registration carries the search path of the process that made it, since launchd's own holds no program
+    /// a package manager installed; the body says which it carries, and the human line says it too.
+    /// </summary>
+    [Fact]
+    public async Task On_macos_the_registration_carries_the_search_path_it_was_made_with()
+    {
+        const string Searched = "/opt/homebrew/bin:/Users/ada/.local/bin:/usr/bin:/bin";
+        using var machine = new Machine(new RecordingRegistrar(AutostartPlatform.MacOs), Searched);
+
+        await machine.RunAsync(["runtime", "autostart", "enable"], Ct);
+
+        Assert.Equal(Searched, Assert.Single(machine.Registrar.Applied).SearchPath);
+        Assert.Equal(Searched, machine.Answer().Path);
+
+        machine.Clear();
+        await machine.RunAsync(["runtime", "autostart", "status", "--human"], Ct);
+
+        // The executable named here is not on this machine, so the line goes on to say so after the search path.
+        Assert.StartsWith(
+            $"The runtime starts at logon from {Installed}, on the data directory {machine.Paths.Root}, with the search path {Searched}. ",
+            Assert.Single(machine.Lines()),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A LaunchAgent that carries no search path, one an earlier version registered, starts the runtime on launchd's own,
+    /// and the human line names it, which is what tells the person to register again.
+    /// </summary>
+    [Fact]
+    public async Task A_launch_agent_with_no_search_path_is_said_to_start_on_launchd_s_own()
+    {
+        using var machine = new Machine(new RecordingRegistrar(AutostartPlatform.MacOs));
+        machine.Registrar.State = new AutostartState(true, [Installed, "runtime", "run", "--detached", "--data-dir", machine.Paths.Root], null);
+
+        await machine.RunAsync(["runtime", "autostart", "status"], Ct);
+        Assert.Null(machine.Answer().Path);
+
+        machine.Clear();
+        await machine.RunAsync(["runtime", "autostart", "status", "--human"], Ct);
+
+        Assert.Contains(
+            $", on the data directory {machine.Paths.Root}, with launchd's default search path, /usr/bin:/bin:/usr/sbin:/sbin.",
+            Assert.Single(machine.Lines()),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>Elsewhere nothing carries a search path, and the body says so with a null rather than leaving the field out.</summary>
+    [Theory]
+    [InlineData(AutostartPlatform.Windows)]
+    [InlineData(AutostartPlatform.Linux)]
+    public async Task Elsewhere_the_body_s_path_is_null(AutostartPlatform platform)
+    {
+        using var machine = new Machine(new RecordingRegistrar(platform), "/opt/homebrew/bin:/usr/bin");
+
+        await machine.RunAsync(["runtime", "autostart", "enable"], Ct);
+
+        Assert.Null(Assert.Single(machine.Registrar.Applied).SearchPath);
+        using var body = JsonDocument.Parse(Assert.Single(machine.Lines()));
+        Assert.Equal(JsonValueKind.Null, body.RootElement.GetProperty("path").ValueKind);
+
+        machine.Clear();
+        await machine.RunAsync(["runtime", "autostart", "status", "--human"], Ct);
+        Assert.DoesNotContain("search path", Assert.Single(machine.Lines()), StringComparison.Ordinal);
+    }
+
+    /// <summary>The help of the two verbs that print a registration says what the macOS one carries.</summary>
+    [Theory]
+    [InlineData("enable", "and on macOS the search path (PATH) this command runs with, since launchd's own is /usr/bin:/bin:/usr/sbin:/sbin.")]
+    [InlineData("status", "and on macOS the search path it carries, under path.")]
+    public async Task The_help_says_what_a_macos_registration_carries(string verb, string said)
+    {
+        using var machine = new Machine();
+
+        await machine.RunAsync(["runtime", "autostart", verb, "--help"], Ct);
+
+        Assert.Contains(said, System.Text.RegularExpressions.Regex.Replace(string.Join(" ", machine.Lines()), @"\s+", " "), StringComparison.Ordinal);
+    }
+
     /// <summary>An installation with a recording machine behind it, and its own temporary data directory.</summary>
     private sealed class Machine : IDisposable
     {
         private readonly TempPaths _directory = new();
         private readonly StringWriter _out = new();
 
-        public Machine(RecordingRegistrar? registrar = null)
+        public Machine(RecordingRegistrar? registrar = null, string? searchPath = null)
         {
             Registrar = registrar ?? new RecordingRegistrar();
             Environment = new CliEnvironment(
@@ -324,7 +403,8 @@ public class AutostartCommandTests
                 new StringWriter(),
                 _directory.Paths,
                 InstallPath: Installed,
-                Autostart: Registrar);
+                Autostart: Registrar,
+                SearchPath: searchPath);
         }
 
         public RecordingRegistrar Registrar { get; }
