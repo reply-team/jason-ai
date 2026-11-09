@@ -103,7 +103,9 @@ so in one line on stderr, naming the variable and never its value.
 ## The request form
 
 - **Every operation is `POST /v1/{noun}.{verb}`**, reads included, with a JSON body; an operation that needs nothing
-  takes `{}`. A name the runtime does not know is answered `404` with the code `not_found`.
+  takes `{}`. A name the runtime does not know is answered `404` with the code `not_found`. One route beside the
+  operations is a `GET`: the journal's stream, `GET /v1/journal.stream`, because a WebSocket opens with a `GET` by its
+  protocol ([below](#following-the-journal-as-it-is-written)).
 - **JSON is snake_case**, in both directions: members, enum values and the keys of a map. A property written twice in
   one body is refused.
 - **A member is matched by its exact spelling**, compared ordinally, at every depth of a request: `Name` is not `name`.
@@ -329,6 +331,9 @@ that is not that attempt does not call them.
 - `journal.list`
 - `journal.kinds`: every kind the runtime reserves for its own lines, in kind order, each as its document says it.
 
+Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: the lines as they are written
+([below](#following-the-journal-as-it-is-written)); `jason journal watch` on the command line.
+
 ### `plugin`
 
 - `plugin.list`: each plugin's status, granted over requested, and digest.
@@ -400,6 +405,35 @@ that is not that attempt does not call them.
   sentence of what a line records, whether a plugin may subscribe to it, the entities a line names and where, each place
   a list of JSON pointers into the line as `journal.list` answers it, the release each later field arrived in, and the
   schema of the line's `key`, `old` and `new`. A kind a person or an agent appends is not among them.
+
+## Following the journal as it is written
+
+`journal.list` answers what has been written. A program that wants each line as it is written opens the journal's
+stream instead, `GET /v1/journal.stream`: the one route that is not a `POST`, because a WebSocket is opened by a `GET`
+that asks to upgrade, and that is the protocol's, not a choice. `jason journal watch` is the stream on the command line,
+one to one: it prints each line as it arrives, compact JSON or rendered under `--human`, until it is interrupted.
+
+- **The upgrade** offers the subprotocol `jason.journal.v1`, which names the form of the frames, and the runtime answers
+  with that one and no other. A request that is not an upgrade, or that does not offer `jason.journal.v1`, is answered
+  `400` with the code `websocket_required`, in the API's error shape.
+- **The token** goes in the `Authorization: Bearer` header, as on every operation. A browser's WebSocket cannot set a
+  header, so on this route, and on no other, the token may instead come as one more subprotocol the upgrade offers,
+  `jason.bearer.<token>`; the runtime never answers with it, and never writes it to a log. Either the capability token
+  or a paired browser's UI token opens the stream. An upgrade without one is answered `401` before it becomes a
+  WebSocket, and a `jason.bearer.` subprotocol sent to any other route counts for nothing: without the header, that
+  request is answered `401` too.
+- **Where it starts**: without `since`, after the last line written when the stream opens. With
+  `since=<cursor>`, a `next_cursor` that `journal.list` answered, verbatim, it starts after the line the cursor names
+  and sends every line written after it, oldest first, the lines of the page that cursor ended included. A `since` that
+  is no such cursor is answered `400` with the code `validation_failed`, before the upgrade, naming the field `since`.
+- **Each line is one text frame**, the line exactly as `journal.list` answers it, and the lines come oldest first. The
+  stream sends nothing else, and reads nothing from the program but its close.
+- **How soon**: the runtime looks for new lines every second, up to 200 at a time, and looks again at once when a look
+  finds that many. The stream only reads: each look is a read of its own, and nothing stays open between two of them.
+- **How it ends**: the program closes it, and the runtime answers `1000`. The runtime closes it with `1008` when the UI
+  token that opened it is revoked, and with `1001` when the runtime stops. The capability token changes at every start,
+  so a program that follows the journal across a restart reads the descriptor again, reads with `journal.list` what it
+  missed, and opens the stream again.
 
 ## What a program can write so its result comes back as a fact
 
