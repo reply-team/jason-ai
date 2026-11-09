@@ -14,7 +14,7 @@ repository is for changing Jason.
   `tests/` (one xUnit project per source project).
 - `plugins/` — plugin marketplace. `skills/runtime/`, `skills/business/` — skill packs. `docs/` —
   maintained documentation only.
-- `ui/` — the browser UI: a Preact client of the Runtime API, built into the release asset `jason-ui.zip`;
+- `ui/` — the browser UI: a React client of the Runtime API, built into the release asset `jason-ui.zip`;
   `ui/README.md` says how it is built and tested.
 - `LICENSE` — MIT, for everything in the repository, the runtime included; every archive carries it as `LICENSE`, beside
   the executable and `THIRD-PARTY-NOTICES`.
@@ -61,7 +61,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   machine's user. The UI is tested in three layers (`ui/README.md`, "Testing"): unit tests of dense logic in Node, screen tests against the exchanges the runtime's own tests recorded under
   `docs/api/fixtures/` (`ApiFixtures`, held one-to-one with the files and rewritten only under
   `JASON_UPDATE_FIXTURES=1`), and a browser smoke of the seams alone. Six guards hold the layers: the unit project runs
-  without a DOM and may not import Preact; no `.json` under `ui/` but the configuration; a dependency allowlist; the
+  without a DOM and may not import React; no `.json` under `ui/` but the configuration; a dependency allowlist; the
   fixture catalog; only the smoke's harness starts processes; one CI job runs all of it.
 
 ## Conventions

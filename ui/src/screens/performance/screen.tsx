@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useState } from 'react';
 import type { ActivityBucket } from '../../api/types';
 import { useApi } from '../../api/context';
 import { session } from '../../api/session';
@@ -107,8 +107,8 @@ export function PerformanceScreen() {
     const chosen = store.campaigns.value.filter((campaign) => at.campaigns.includes(campaign.id));
 
     return (
-        <div class={`main${at.id ? '' : ' single'}`}>
-            <div class="list">
+        <div className={`main${at.id ? '' : ' single'}`}>
+            <div className="list">
                 <Toolbar
                     title="Performance"
                     refresh={{
@@ -133,7 +133,7 @@ export function PerformanceScreen() {
                     />
                 </FiltersBar>
                 {store.notice.value && <Notice status>{store.notice.value}</Notice>}
-                <div class="perf">
+                <div className="perf">
                     {store.seriesFailure.value && <Notice danger>{store.seriesFailure.value}</Notice>}
                     {(series || !ready) && (
                         <Charts
@@ -171,7 +171,7 @@ export function PerformanceScreen() {
                 </div>
             </div>
             {at.id && (
-                <div class="panel">
+                <div className="panel">
                     {person.personFailure.value && <Notice danger>{person.personFailure.value}</Notice>}
                     {open && open.id === at.id && (
                         <>

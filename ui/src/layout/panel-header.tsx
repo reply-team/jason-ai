@@ -1,4 +1,4 @@
-import type { ComponentChildren } from 'preact';
+import type { ReactNode } from 'react';
 
 /**
  * The top of a panel: what it shows, the line under it, and the close. A person's card puts their avatar before the
@@ -11,30 +11,30 @@ export function PanelHeader({
     under,
     onClose,
 }: {
-    title: ComponentChildren;
-    sub: ComponentChildren;
-    lead?: ComponentChildren;
-    under?: ComponentChildren;
+    title: ReactNode;
+    sub: ReactNode;
+    lead?: ReactNode;
+    under?: ReactNode;
     onClose: () => void;
 }) {
     const heading = (
         <>
             <h2>{title}</h2>
-            <div class="sub">{sub}</div>
+            <div className="sub">{sub}</div>
             {under}
         </>
     );
     return (
-        <div class="panel-header">
+        <div className="panel-header">
             {lead ? (
-                <div class="heading person-head">
+                <div className="heading person-head">
                     {lead}
                     <div>{heading}</div>
                 </div>
             ) : (
-                <div class="heading">{heading}</div>
+                <div className="heading">{heading}</div>
             )}
-            <button class="iconbtn close" type="button" title="Close" aria-label="Close" onClick={onClose}>
+            <button className="iconbtn close" type="button" title="Close" aria-label="Close" onClick={onClose}>
                 ×
             </button>
         </div>

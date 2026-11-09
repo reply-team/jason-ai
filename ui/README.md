@@ -5,8 +5,11 @@ The browser UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/`. One mo
 
 ## Build
 
-Node 24. `npm ci`, then `npm run build` writes `dist/`. `npm run package` wraps it as `artifacts/jason-ui.zip`: `index.html`,
-`manifest.json`, `favicon.svg`, `assets/*`, `THIRD-PARTY-NOTICES` at the root.
+Node 24. `npm ci`, then `npm run build` writes `dist/`, with the `THIRD-PARTY-NOTICES` of exactly the packages the
+bundle carries. `npm run package` wraps it as `artifacts/jason-ui.zip`: `index.html`,
+`manifest.json`, `favicon.svg`, `assets/*`, `THIRD-PARTY-NOTICES` at the root. The build refuses a package it carries
+that has no licence file, and the package step refuses notices that leave out a package `package.json` names as a
+dependency.
 
 ## Where it lands
 
@@ -30,10 +33,16 @@ screen has moved past, and its tests. What every screen draws the same way is wr
 (the campaign and person pickers), `src/lists/` and `src/time/`. A screen gives them words, nodes and callbacks, never
 its data.
 
-## Preact, not React
+## React
 
-The model is React's; the differences an agent should know: `class` not `className`; events are native DOM events;
-`@preact/signals` replaces most effects (`signal`, `computed`, `effect`); import from `preact` and `preact/hooks`.
+The UI is written in React 18, with `@preact/signals-react` for its state, because React 18 is the framework the UI
+and what is built on it are written against. The move from Preact changed the framework, the toolchain that compiles
+it, the guards that hold the layers, and how the notices are written: the build writes them from its bundle, where the
+package step once did. It changed three screen tests, where React's renderer runs an effect or an update before the
+test ends; the other screen tests changed only the testing library they import. What the screens do, their stores,
+the API client and the recorded exchanges the screen tests run against are what they were. Signals still replace most
+effects (`signal`, `computed`, `effect`); a build-time transform in `vite.config.ts` makes each component re-render
+when a signal it read changes, which Preact did on its own.
 
 ## Testing
 
@@ -64,7 +73,7 @@ the file under `docs/api/fixtures/<operation>/<case>.json`. Import it in `src/te
 holds this project's types to it. A fixture that goes stale fails `dotnet test`; a type that disagrees with a fixture
 fails `npm run check`.
 
-**What holds the rules.** The unit project runs in Node (a DOM use fails) and its tests may not import Preact or a
+**What holds the rules.** The unit project runs in Node (a DOM use fails) and its tests may not import React or a
 test renderer; no `.json` lives under `ui/` but the three configuration files; `package.json`'s dependencies are an
 allowlist a test holds; the fixture catalog is one-to-one with the files on disk; the fake client answers a request
 only with a recording whose request equals the one sent, and a request a test recorded no answer for fails the test,

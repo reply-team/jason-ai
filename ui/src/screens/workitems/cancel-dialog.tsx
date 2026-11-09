@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState } from 'react';
 import { Dialog } from '../../layout/dialog';
 
 /** Where the work stands: an attempt running now, none ever made, or earlier attempts that ended. */
@@ -28,21 +28,21 @@ export function CancelDialog({ what, ran, onConfirm, onCancel }: Props) {
             dismiss="Keep it"
             buttons={
                 <>
-                    <button class="btn danger" type="button" onClick={() => onConfirm(reason.trim() || undefined)}>
+                    <button className="btn danger" type="button" onClick={() => onConfirm(reason.trim() || undefined)}>
                         Cancel it
                     </button>
                 </>
             }
         >
             <p>{said[ran]}</p>
-            <div class="field">
-                <label for="cancel-reason">Reason (optional, kept in the journal)</label>
+            <div className="field">
+                <label htmlFor="cancel-reason">Reason (optional, kept in the journal)</label>
                 <textarea
                     id="cancel-reason"
-                    class="textarea"
+                    className="textarea"
                     maxLength={2000}
                     value={reason}
-                    onInput={(e) => setReason((e.target as HTMLTextAreaElement).value)}
+                    onChange={(e) => setReason((e.target as HTMLTextAreaElement).value)}
                 />
             </div>
         </Dialog>

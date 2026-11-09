@@ -1,5 +1,5 @@
 import type { LoadMore } from '../../lists/use-cursor-list';
-import { useState } from 'preact/hooks';
+import { useState } from 'react';
 import type { Attempt, JournalEntry, WorkItem } from '../../api/types';
 import { More } from '../../lists/more';
 import { href } from '../../router';
@@ -40,12 +40,12 @@ export function WorkItemPanel(props: Props) {
     const m = mark(item.status);
 
     return (
-        <div class="panel">
+        <div className="panel">
             <PanelHeader
                 title={heading}
                 sub={
                     <>
-                        in {item.campaign_name} · <span class={`mark ${m.kind}`}>{m.glyph}</span>{' '}
+                        in {item.campaign_name} · <span className={`mark ${m.kind}`}>{m.glyph}</span>{' '}
                         {item.status.replace('_', ' ')}
                     </>
                 }
@@ -53,28 +53,33 @@ export function WorkItemPanel(props: Props) {
             />
             <ActionsRow>
                 {open && (
-                    <button class="btn danger" type="button" disabled={busy} onClick={() => setCancelling(true)}>
+                    <button className="btn danger" type="button" disabled={busy} onClick={() => setCancelling(true)}>
                         Cancel work
                     </button>
                 )}
             </ActionsRow>
-            <div class="panel-body">
+            <div className="panel-body">
                 {notice && <Notice>{notice}</Notice>}
                 {item.status === 'awaiting_approval' && approvalId && (
-                    <div class="section waiting">
-                        <a class="notice" href={href({ screen: 'attention', kind: 'approvals', id: approvalId })}>
+                    <div className="section waiting">
+                        <a className="notice" href={href({ screen: 'attention', kind: 'approvals', id: approvalId })}>
                             Waiting for your approval ›
                         </a>
                         <ActionsRow>
                             <button
-                                class="btn primary"
+                                className="btn primary"
                                 type="button"
                                 disabled={busy}
                                 onClick={() => props.onApprove(approvalId)}
                             >
                                 Approve
                             </button>
-                            <button class="btn danger" type="button" disabled={busy} onClick={() => setRejecting(true)}>
+                            <button
+                                className="btn danger"
+                                type="button"
+                                disabled={busy}
+                                onClick={() => setRejecting(true)}
+                            >
                                 Reject
                             </button>
                         </ActionsRow>
@@ -84,19 +89,19 @@ export function WorkItemPanel(props: Props) {
                 <Facts item={item} now={now} zone={zone} />
                 {open && <Edit key={`${item.id} ${item.updated_at}`} item={item} busy={busy} onSave={onSave} />}
                 {(item.attempts?.length ?? 0) > 0 && (
-                    <div class="section">
+                    <div className="section">
                         <h3>Attempts</h3>
                         {item.attempts!.map((attempt) => (
                             <AttemptRow key={attempt.id} attempt={attempt} zone={zone} />
                         ))}
                     </div>
                 )}
-                <details class="fold">
+                <details className="fold">
                     <summary>Input</summary>
                     <pre>{JSON.stringify(item.context, null, 2)}</pre>
                 </details>
                 {(item.external_reports?.length ?? 0) > 0 && (
-                    <details class="fold">
+                    <details className="fold">
                         <summary>Reported effects</summary>
                         {item.external_reports!.map((report) => (
                             <p key={report.id}>
@@ -107,12 +112,12 @@ export function WorkItemPanel(props: Props) {
                     </details>
                 )}
                 {history.length > 0 && (
-                    <div class="section history">
+                    <div className="section history">
                         <h3>History</h3>
                         {history.map((entry) => (
-                            <div key={entry.id} class="entry">
+                            <div key={entry.id} className="entry">
                                 <span>{entryText(entry, zone)}</span>
-                                <span class="by">
+                                <span className="by">
                                     {entry.actor.id ?? entry.actor.type} ·{' '}
                                     {dayLabel(dayKey(new Date(entry.ts), zone), dayKey(now, zone))}{' '}
                                     {clock(new Date(entry.ts), zone)}
@@ -159,9 +164,9 @@ function ranOf(item: WorkItem): Ran {
 function Failed({ item, now, zone }: { item: WorkItem; now: Date; zone: string }) {
     const error = item.last_error;
     return (
-        <div class="section failed">
+        <div className="section failed">
             <h3>Failed</h3>
-            <dl class="facts">
+            <dl className="facts">
                 {item.finished_at && (
                     <>
                         <dt>When</dt>
@@ -198,7 +203,7 @@ function Facts({ item, now, zone }: { item: WorkItem; now: Date; zone: string })
     const failed = item.attempt_count;
     const running = item.status === 'processing' ? item.attempts?.find((a) => a.status === 'running') : undefined;
     return (
-        <dl class="facts">
+        <dl className="facts">
             {item.contact_name && (
                 <>
                     <dt>Person</dt>
@@ -258,47 +263,47 @@ function Edit({ item, busy, onSave }: { item: WorkItem; busy: boolean; onSave: (
     const running = item.status === 'scheduled' || item.status === 'processing';
 
     return (
-        <div class="section">
+        <div className="section">
             <h3>When it runs</h3>
-            <div class="fields">
-                <div class="field">
-                    <label for="wi-priority">Priority</label>
+            <div className="fields">
+                <div className="field">
+                    <label htmlFor="wi-priority">Priority</label>
                     <input
                         id="wi-priority"
-                        class="input"
+                        className="input"
                         type="number"
                         value={priority}
-                        onInput={(e) => setPriority((e.target as HTMLInputElement).value)}
+                        onChange={(e) => setPriority((e.target as HTMLInputElement).value)}
                     />
-                    <span class="hint">Higher runs first.</span>
+                    <span className="hint">Higher runs first.</span>
                 </div>
-                <div class="field">
-                    <label for="wi-not-before">Not before</label>
+                <div className="field">
+                    <label htmlFor="wi-not-before">Not before</label>
                     <input
                         id="wi-not-before"
-                        class="input"
+                        className="input"
                         type="datetime-local"
                         value={notBefore}
-                        onInput={(e) => setNotBefore((e.target as HTMLInputElement).value)}
+                        onChange={(e) => setNotBefore((e.target as HTMLInputElement).value)}
                     />
-                    <span class="hint">It does not start earlier.</span>
+                    <span className="hint">It does not start earlier.</span>
                 </div>
-                <div class="field">
-                    <label for="wi-due">Due</label>
+                <div className="field">
+                    <label htmlFor="wi-due">Due</label>
                     <input
                         id="wi-due"
-                        class="input"
+                        className="input"
                         type="datetime-local"
                         value={due}
-                        onInput={(e) => setDue((e.target as HTMLInputElement).value)}
+                        onChange={(e) => setDue((e.target as HTMLInputElement).value)}
                     />
-                    <span class="hint">Not started by then, it expires.</span>
+                    <span className="hint">Not started by then, it expires.</span>
                 </div>
             </div>
-            {item.status === 'expired' && <p class="hint">A future due date puts this back in the queue.</p>}
-            {running && <p class="hint">Takes effect at the next scan.</p>}
-            <div class="btn-row">
-                <button class="btn primary" type="button" disabled={busy || !changed} onClick={() => onSave(patch)}>
+            {item.status === 'expired' && <p className="hint">A future due date puts this back in the queue.</p>}
+            {running && <p className="hint">Takes effect at the next scan.</p>}
+            <div className="btn-row">
+                <button className="btn primary" type="button" disabled={busy || !changed} onClick={() => onSave(patch)}>
                     Save
                 </button>
             </div>
@@ -317,27 +322,27 @@ function AttemptRow({ attempt, zone }: { attempt: Attempt; zone: string }) {
         ? `${attempt.provenance.plugin_id} ${attempt.provenance.plugin_version ?? ''}`.trim()
         : null;
     return (
-        <div class="attempt">
-            <div class="line">
-                <span class={`mark ${m.kind}`}>{m.glyph}</span>
+        <div className="attempt">
+            <div className="line">
+                <span className={`mark ${m.kind}`}>{m.glyph}</span>
                 <span>Attempt {attempt.number}</span>
-                <span class="when">
+                <span className="when">
                     {started ? clock(started, zone) : 'claimed'}
                     {finished ? `–${clock(finished, zone)}` : ''}
                     {took ? ` · ${took}` : ''}
                 </span>
                 {attempt.launch?.exit_code !== undefined && attempt.launch?.exit_code !== null && (
-                    <span class="when">exit code {attempt.launch.exit_code}</span>
+                    <span className="when">exit code {attempt.launch.exit_code}</span>
                 )}
             </div>
             {attempt.error && (
-                <div class="error">
+                <div className="error">
                     <code>{attempt.error.code}</code>
                     <span>{attempt.error.message}</span>
                 </div>
             )}
             {(plugin || attempt.execution_profile) && (
-                <div class="hint">
+                <div className="hint">
                     {plugin ? `${plugin} plugin` : `profile ${attempt.execution_profile}`}
                     {attempt.provenance?.operation ? ` · ${attempt.provenance.operation}` : ''}
                 </div>

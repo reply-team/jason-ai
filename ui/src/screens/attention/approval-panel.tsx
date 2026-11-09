@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState } from 'react';
 import type { Approval } from '../../api/types';
 import { clock, relative } from '../../time/format';
 import { DecideDialog } from './decide-dialog';
@@ -41,7 +41,7 @@ export function ApprovalPanel({
     const pending = approval.status === 'pending';
     const heading = title(approval.operation, approval.contact_name);
     return (
-        <div class="panel">
+        <div className="panel">
             <PanelHeader
                 title={heading}
                 sub={
@@ -55,10 +55,10 @@ export function ApprovalPanel({
             <ActionsRow>
                 {pending && (
                     <>
-                        <button class="btn primary" type="button" disabled={busy} onClick={() => onApprove()}>
+                        <button className="btn primary" type="button" disabled={busy} onClick={() => onApprove()}>
                             Approve
                         </button>
-                        <button class="btn danger" type="button" disabled={busy} onClick={() => setRejecting(true)}>
+                        <button className="btn danger" type="button" disabled={busy} onClick={() => setRejecting(true)}>
                             Reject
                         </button>
                         <CopyPromptButton
@@ -71,16 +71,16 @@ export function ApprovalPanel({
                     </>
                 )}
             </ActionsRow>
-            <div class="panel-body">
+            <div className="panel-body">
                 {intent && (
-                    <div class="section">
+                    <div className="section">
                         <h3>What will happen</h3>
-                        <div class="preview">
+                        <div className="preview">
                             <p>{intent}</p>
                         </div>
                     </div>
                 )}
-                <dl class="facts">
+                <dl className="facts">
                     <dt>Why it's here</dt>
                     <dd>{reasonLabel(approval.reason)}</dd>
                     {person && (
@@ -106,16 +106,16 @@ export function ApprovalPanel({
                         </>
                     )}
                 </dl>
-                <details class="fold">
+                <details className="fold">
                     <summary>Raw request</summary>
                     <pre>{JSON.stringify(approval.subject, null, 2)}</pre>
                 </details>
             </div>
             {pending && (
-                <div class="panel-footer">
-                    <span class="next">{remaining}</span>
-                    <span class="spacer" />
-                    <button class="btn ghost" type="button" onClick={onSkip}>
+                <div className="panel-footer">
+                    <span className="next">{remaining}</span>
+                    <span className="spacer" />
+                    <button className="btn ghost" type="button" onClick={onSkip}>
                         {skipLabel}
                     </button>
                 </div>

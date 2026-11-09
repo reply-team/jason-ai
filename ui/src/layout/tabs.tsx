@@ -11,13 +11,13 @@ export function Tabs<T extends string>({
     to: (key: T) => Route;
 }) {
     return (
-        <div class="tabs" role="tablist">
+        <div className="tabs" role="tablist">
             {tabs.map((each) => (
                 <a
                     key={each.key}
                     role="tab"
                     aria-selected={active === each.key}
-                    class={active === each.key ? 'active' : ''}
+                    className={active === each.key ? 'active' : ''}
                     href={href(to(each.key))}
                     onClick={(event) => {
                         // A click that asks for another browser tab or window is the browser's to follow.

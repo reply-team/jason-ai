@@ -65,7 +65,7 @@ export function Filters({ tab, filters }: Props) {
             {tab === 'done' && (
                 <button
                     type="button"
-                    class={`chipbtn${filters.failed ? ' on' : ''}`}
+                    className={`chipbtn${filters.failed ? ' on' : ''}`}
                     aria-pressed={!!filters.failed}
                     onClick={() => set({ ...filters, failed: !filters.failed || undefined })}
                 >
@@ -98,24 +98,24 @@ function Day({
         onChange(dayOf(at));
     };
     return (
-        <div class="day">
-            <span class="label">{label}</span>
-            <button class="iconbtn" type="button" aria-label="Previous day" onClick={() => step(-1)}>
+        <div className="day">
+            <span className="label">{label}</span>
+            <button className="iconbtn" type="button" aria-label="Previous day" onClick={() => step(-1)}>
                 ‹
             </button>
             <input
-                class="input"
+                className="input"
                 type="date"
                 aria-label={label}
                 value={value ?? ''}
-                onInput={(e) => onChange((e.target as HTMLInputElement).value || undefined)}
+                onChange={(e) => onChange((e.target as HTMLInputElement).value || undefined)}
             />
-            <button class="iconbtn" type="button" aria-label="Next day" onClick={() => step(1)}>
+            <button className="iconbtn" type="button" aria-label="Next day" onClick={() => step(1)}>
                 ›
             </button>
             {value && (
                 <button
-                    class="iconbtn"
+                    className="iconbtn"
                     type="button"
                     aria-label="Any day"
                     title="Any day"

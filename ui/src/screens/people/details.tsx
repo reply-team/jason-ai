@@ -14,10 +14,10 @@ export function Details({ person, now, zone }: Props) {
     const pins = person.external_ids ?? [];
     const custom = Object.entries(person.custom ?? {});
     return (
-        <div class="panel-body">
-            <div class="section">
+        <div className="panel-body">
+            <div className="section">
                 <h3>Channels</h3>
-                <dl class="facts">
+                <dl className="facts">
                     {person.channels.map((c) => (
                         <>
                             <dt key={`${c.channel}-${c.value}-k`}>{channelName(c.channel)}</dt>
@@ -26,7 +26,7 @@ export function Details({ person, now, zone }: Props) {
                                 {c.primary && (
                                     <>
                                         {' '}
-                                        <span class="muted">primary</span>
+                                        <span className="muted">primary</span>
                                     </>
                                 )}
                             </dd>
@@ -34,7 +34,7 @@ export function Details({ person, now, zone }: Props) {
                     ))}
                 </dl>
             </div>
-            <dl class="facts">
+            <dl className="facts">
                 <dt>Company</dt>
                 <dd>{person.company ?? '—'}</dd>
                 <dt>Title</dt>
@@ -49,9 +49,9 @@ export function Details({ person, now, zone }: Props) {
                 )}
             </dl>
             {custom.length > 0 && (
-                <div class="section">
+                <div className="section">
                     <h3>Custom fields</h3>
-                    <dl class="facts">
+                    <dl className="facts">
                         {custom.map(([k, v]) => (
                             <>
                                 <dt key={`${k}-k`}>{k}</dt>
@@ -62,19 +62,19 @@ export function Details({ person, now, zone }: Props) {
                 </div>
             )}
             {pins.length > 0 && (
-                <div class="section">
+                <div className="section">
                     <h3>Provider ids</h3>
-                    <dl class="facts">
+                    <dl className="facts">
                         {pins.map((pin) => (
                             <>
                                 <dt key={`${pin.plugin_id}-${pin.kind}-k`}>
                                     {pin.plugin_id} {pin.kind}
                                 </dt>
                                 <dd key={`${pin.plugin_id}-${pin.kind}-v`}>
-                                    <span class="mono">{pin.value}</span> · pinned{' '}
+                                    <span className="mono">{pin.value}</span> · pinned{' '}
                                     {shortDate(new Date(pin.recorded_at), zone, now)}
                                     {pin.diverged_value && pin.diverged_at && (
-                                        <span class="muted">
+                                        <span className="muted">
                                             {' '}
                                             · later answered {pin.diverged_value} on{' '}
                                             {shortDate(new Date(pin.diverged_at), zone, now)}
@@ -86,7 +86,7 @@ export function Details({ person, now, zone }: Props) {
                     </dl>
                 </div>
             )}
-            <details class="fold">
+            <details className="fold">
                 <summary>Raw contact record</summary>
                 <pre>{JSON.stringify(person, null, 2)}</pre>
             </details>

@@ -47,18 +47,18 @@ export function Listing({
     const today = dayKey(now, zone);
     const dated = people.filter((person) => person.why?.at);
     return (
-        <div class="listing">
-            <div class="head">
+        <div className="listing">
+            <div className="head">
                 <h2>{label}</h2>
                 {n !== null && (
-                    <span class="hint">
+                    <span className="hint">
                         {number.format(n)} {n === 1 ? 'person' : 'people'} {when}, {byTheDay[count]}
                     </span>
                 )}
                 {bucket && (
                     <button
                         type="button"
-                        class="iconbtn"
+                        className="iconbtn"
                         aria-label="Back to the whole period"
                         title="Back to the whole period"
                         onClick={onBack}
@@ -67,11 +67,11 @@ export function Listing({
                     </button>
                 )}
             </div>
-            {loaded && people.length === 0 && <div class="empty">Nobody in this count for the period.</div>}
-            <div class="rows">
+            {loaded && people.length === 0 && <div className="empty">Nobody in this count for the period.</div>}
+            <div className="rows">
                 {groupByDay(dated, (person) => new Date(person.why!.at!), zone).map((group, index) => (
                     <div key={group.day}>
-                        <div class={`group${index === 0 ? ' first' : ''}`}>{dayLabel(group.day, today)}</div>
+                        <div className={`group${index === 0 ? ' first' : ''}`}>{dayLabel(group.day, today)}</div>
                         {group.items.map((person) => {
                             const contact = person.contact;
                             const names = person.counted.map(
@@ -84,19 +84,21 @@ export function Listing({
                             return (
                                 <a
                                     key={contact.id}
-                                    class={`row${at.id === contact.id ? ' selected' : ''}`}
+                                    className={`row${at.id === contact.id ? ' selected' : ''}`}
                                     href={href({ ...at, id: contact.id })}
                                     onClick={(event) => {
                                         event.preventDefault();
                                         onOpen(contact.id);
                                     }}
                                 >
-                                    <span class={`mark ${replied ? 'reply' : 'off'}`}>{replied ? '↩' : '·'}</span>
-                                    <span class="what">
-                                        <span class="name">{displayName(contact).name}</span>
-                                        <span class="in">{[names.join(', '), what].filter(Boolean).join(' · ')}</span>
+                                    <span className={`mark ${replied ? 'reply' : 'off'}`}>{replied ? '↩' : '·'}</span>
+                                    <span className="what">
+                                        <span className="name">{displayName(contact).name}</span>
+                                        <span className="in">
+                                            {[names.join(', '), what].filter(Boolean).join(' · ')}
+                                        </span>
                                     </span>
-                                    <span class="meta">
+                                    <span className="meta">
                                         <time>{clock(new Date(person.why!.at!), zone)}</time>
                                     </span>
                                 </a>

@@ -25,7 +25,7 @@ public sealed class UiAssetInstallerTests : IDisposable
     [Fact]
     public void A_good_asset_is_placed_as_the_default_ui_with_its_manifest_and_digest()
     {
-        var zip = Zip(("index.html", "<title>x</title>"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}"), ("favicon.svg", "<svg/>"), ("assets/app-1.js", "1"), ("THIRD-PARTY-NOTICES", "preact: MIT"));
+        var zip = Zip(("index.html", "<title>x</title>"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}"), ("favicon.svg", "<svg/>"), ("assets/app-1.js", "1"), ("THIRD-PARTY-NOTICES", "react: MIT"));
 
         var installed = Install(zip);
 

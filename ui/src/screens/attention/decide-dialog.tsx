@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState } from 'react';
 import { Dialog } from '../../layout/dialog';
 
 type Props = {
@@ -22,20 +22,20 @@ export function DecideDialog({ verb, what, onConfirm, onCancel }: Props) {
             onClose={onCancel}
             buttons={
                 <>
-                    <button class="btn danger" type="button" onClick={() => onConfirm(reason.trim() || undefined)}>
+                    <button className="btn danger" type="button" onClick={() => onConfirm(reason.trim() || undefined)}>
                         {verb}
                     </button>
                 </>
             }
         >
-            <div class="field">
-                <label for="decide-reason">Reason (optional, kept in the journal)</label>
+            <div className="field">
+                <label htmlFor="decide-reason">Reason (optional, kept in the journal)</label>
                 <textarea
                     id="decide-reason"
-                    class="textarea"
+                    className="textarea"
                     maxLength={2000}
                     value={reason}
-                    onInput={(e) => setReason((e.target as HTMLTextAreaElement).value)}
+                    onChange={(e) => setReason((e.target as HTMLTextAreaElement).value)}
                 />
             </div>
         </Dialog>
