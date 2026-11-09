@@ -93,6 +93,30 @@ public class OnlyTheFileDoorWritesTests
     [InlineData(nameof(FileOffenders.LinksADirectory), "calls Directory.CreateSymbolicLink")]
     [InlineData(nameof(FileOffenders.SetsAttributes), "calls File.SetAttributes")]
     [InlineData(nameof(FileOffenders.SetsAUnixMode), "calls File.SetUnixFileMode")]
+    [InlineData(nameof(FileOffenders.SetsCreationOfAFile), "calls File.SetCreationTime")]
+    [InlineData(nameof(FileOffenders.SetsCreationOfADirectory), "calls Directory.SetCreationTime")]
+    [InlineData(nameof(FileOffenders.SetsCreationOfAFileInfo), "calls FileSystemInfo.set_CreationTime")]
+    [InlineData(nameof(FileOffenders.SetsUtcCreationOfAFile), "calls File.SetCreationTimeUtc")]
+    [InlineData(nameof(FileOffenders.SetsUtcCreationOfADirectory), "calls Directory.SetCreationTimeUtc")]
+    [InlineData(nameof(FileOffenders.SetsUtcCreationOfAFileInfo), "calls FileSystemInfo.set_CreationTimeUtc")]
+    [InlineData(nameof(FileOffenders.SetsLastWriteOfAFile), "calls File.SetLastWriteTime")]
+    [InlineData(nameof(FileOffenders.SetsLastWriteOfADirectory), "calls Directory.SetLastWriteTime")]
+    [InlineData(nameof(FileOffenders.SetsLastWriteOfAFileInfo), "calls FileSystemInfo.set_LastWriteTime")]
+    [InlineData(nameof(FileOffenders.SetsUtcLastWriteOfAFile), "calls File.SetLastWriteTimeUtc")]
+    [InlineData(nameof(FileOffenders.SetsUtcLastWriteOfADirectory), "calls Directory.SetLastWriteTimeUtc")]
+    [InlineData(nameof(FileOffenders.SetsUtcLastWriteOfAFileInfo), "calls FileSystemInfo.set_LastWriteTimeUtc")]
+    [InlineData(nameof(FileOffenders.SetsLastAccessOfAFile), "calls File.SetLastAccessTime")]
+    [InlineData(nameof(FileOffenders.SetsLastAccessOfADirectory), "calls Directory.SetLastAccessTime")]
+    [InlineData(nameof(FileOffenders.SetsLastAccessOfAFileInfo), "calls FileSystemInfo.set_LastAccessTime")]
+    [InlineData(nameof(FileOffenders.SetsUtcLastAccessOfAFile), "calls File.SetLastAccessTimeUtc")]
+    [InlineData(nameof(FileOffenders.SetsUtcLastAccessOfADirectory), "calls Directory.SetLastAccessTimeUtc")]
+    [InlineData(nameof(FileOffenders.SetsUtcLastAccessOfAFileInfo), "calls FileSystemInfo.set_LastAccessTimeUtc")]
+    [InlineData(nameof(FileOffenders.SetsTheAttributesOfAFileInfo), "calls FileSystemInfo.set_Attributes")]
+    [InlineData(nameof(FileOffenders.SetsTheAttributesOfADirectoryInfo), "calls FileSystemInfo.set_Attributes")]
+    [InlineData(nameof(FileOffenders.SetsTheUnixModeOfAFileInfo), "calls FileSystemInfo.set_UnixFileMode")]
+    [InlineData(nameof(FileOffenders.SetsTheUnixModeOfADirectoryInfo), "calls FileSystemInfo.set_UnixFileMode")]
+    [InlineData(nameof(FileOffenders.EncryptsAFile), "calls File.Encrypt")]
+    [InlineData(nameof(FileOffenders.DecryptsAFile), "calls File.Decrypt")]
     [InlineData(nameof(FileOffenders.MapsAFile), "calls MemoryMappedFile.CreateFromFile")]
     [InlineData(nameof(FileOffenders.MakesATemporaryFile), "calls Path.GetTempFileName")]
     [InlineData(nameof(FileOffenders.MakesATemporaryDirectory), "calls Directory.CreateTempSubdirectory")]
@@ -157,9 +181,9 @@ public class OnlyTheFileDoorWritesTests
             else if ((type == typeof(File) && WritesThroughFile(name))
                 || (type == typeof(FileInfo) && WritesThroughFileInfo(name))
                 || (type == typeof(DirectoryInfo) && name is nameof(DirectoryInfo.Create) or nameof(DirectoryInfo.CreateSubdirectory) or nameof(DirectoryInfo.Delete) or nameof(DirectoryInfo.MoveTo))
-                || (type == typeof(FileSystemInfo) && name is nameof(FileSystemInfo.Delete) or nameof(FileSystemInfo.CreateAsSymbolicLink))
+                || (type == typeof(FileSystemInfo) && (name is nameof(FileSystemInfo.Delete) or nameof(FileSystemInfo.CreateAsSymbolicLink) || SetsMetadata(name)))
                 || (type == typeof(RandomAccess) && name is nameof(RandomAccess.Write) or nameof(RandomAccess.WriteAsync) or nameof(RandomAccess.SetLength))
-                || (type == typeof(Directory) && name is nameof(Directory.CreateDirectory) or nameof(Directory.Delete) or nameof(Directory.Move) or nameof(Directory.CreateSymbolicLink) or nameof(Directory.CreateTempSubdirectory))
+                || (type == typeof(Directory) && name is nameof(Directory.CreateDirectory) or nameof(Directory.Delete) or nameof(Directory.Move) or nameof(Directory.CreateSymbolicLink) or nameof(Directory.CreateTempSubdirectory) || SetsATime(name))
                 || (type == typeof(MemoryMappedFile) && name == nameof(MemoryMappedFile.CreateFromFile))
                 || (type == typeof(Path) && name == nameof(Path.GetTempFileName)))
             {
@@ -173,8 +197,30 @@ public class OnlyTheFileDoorWritesTests
             or nameof(File.Create) or nameof(File.CreateText) or nameof(File.AppendText)
             or nameof(File.Move) or nameof(File.Delete) or nameof(File.Copy) or nameof(File.Replace)
             or nameof(File.CreateSymbolicLink) or nameof(File.SetAttributes) or nameof(File.SetUnixFileMode)
+            or nameof(File.Encrypt) or nameof(File.Decrypt)
+        || SetsATime(name)
         || name.StartsWith("AppendAll", StringComparison.Ordinal)
         || name.StartsWith("WriteAll", StringComparison.Ordinal);
+
+    /// <summary>
+    /// <c>File.SetCreationTime</c>, <c>SetLastWriteTime</c> and <c>SetLastAccessTime</c> and the same three in UTC, which
+    /// <see cref="File"/> and <see cref="Directory"/> both have: they change a file's metadata, and the door is the one
+    /// place that may.
+    /// </summary>
+    private static bool SetsATime(string name) =>
+        name is nameof(File.SetCreationTime) or nameof(File.SetCreationTimeUtc)
+            or nameof(File.SetLastWriteTime) or nameof(File.SetLastWriteTimeUtc)
+            or nameof(File.SetLastAccessTime) or nameof(File.SetLastAccessTimeUtc);
+
+    /// <summary>
+    /// The setters a <see cref="FileInfo"/> and a <see cref="DirectoryInfo"/> share, which compile to
+    /// <see cref="FileSystemInfo"/>'s: the attributes, the Unix mode and the six timestamps.
+    /// </summary>
+    private static bool SetsMetadata(string name) =>
+        name is "set_" + nameof(FileSystemInfo.Attributes) or "set_" + nameof(FileSystemInfo.UnixFileMode)
+            or "set_" + nameof(FileSystemInfo.CreationTime) or "set_" + nameof(FileSystemInfo.CreationTimeUtc)
+            or "set_" + nameof(FileSystemInfo.LastWriteTime) or "set_" + nameof(FileSystemInfo.LastWriteTimeUtc)
+            or "set_" + nameof(FileSystemInfo.LastAccessTime) or "set_" + nameof(FileSystemInfo.LastAccessTimeUtc);
 
     /// <summary>A member a <see cref="FileInfo"/> and a <see cref="DirectoryInfo"/> share, <c>Delete</c> and the link, compiles to <see cref="FileSystemInfo"/>'s.</summary>
     private static bool WritesThroughFileInfo(string name) =>
