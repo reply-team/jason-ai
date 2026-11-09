@@ -106,7 +106,8 @@ internal sealed class MovingMachine : IDisposable
             Identity: new IdentityFacts(Home, "pat", "BENCH-3", null, null),
             Variables: Variables,
             BuildVersion: Version,
-            WorkingDirectory: Here);
+            WorkingDirectory: Here,
+            AccountName: "pat");
     }
 
     /// <summary>A runtime running on this data directory now.</summary>

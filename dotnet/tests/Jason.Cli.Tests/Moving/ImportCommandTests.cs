@@ -918,6 +918,8 @@ public sealed class ImportCommandTests
         Assert.Equal(2, answer.RootElement.GetProperty("projects").GetInt32());
         Assert.Equal(1, answer.RootElement.GetProperty("campaigns").GetInt32());
         Assert.True(answer.RootElement.GetProperty("started").GetBoolean());
+        // The actor set as every verb sets it: the account's person, when none is given.
+        Assert.All(links, link => Assert.Equal("{\"type\":\"human\",\"id\":\"pat\"}", link.GetProperty("actor").GetRawText()));
     }
 
     [Fact]
