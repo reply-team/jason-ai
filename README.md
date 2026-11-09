@@ -47,13 +47,13 @@ means today.
 
 - **What you do:** paste one prompt into your agent. It guides you through the rest and asks only when it needs you.
 - **What it installs:** one self-contained executable, under your own account. The install script checks the download's
-  SHA-256 before unpacking it, and ends by deploying the role skills from the same release. No admin rights, and no Docker,
-  Python or Node for Jason itself.
+  SHA-256 before unpacking it, and ends by deploying the role skills from the release's `jason-skills.zip`. No admin
+  rights, and no Docker, Python or Node for Jason itself.
 - **How long it takes:** 16 seconds from nothing to `Ready` for the executable, the role skills, the browser UI and the
   start, measured on an Apple-silicon Mac with Jason 0.24.0. Your agent working through the guide takes longer, and so
   does connecting your provider.
 - **How you know it worked:** `jason status --human` checks everything, and each failed check names the command that fixes it.
-- **What you don't need:** a server, a mock provider, a hosted account or an onboarding call.
+- **What you don't need:** `git`, a build, a server, a mock provider, a hosted account or an onboarding call.
 - **How you take it off:** `jason uninstall`. It removes only the skills it recorded installing, so anything you copied in
   by hand stays. Your data stays too unless you add `--purge-data`, and your `~/Jason` folder is never touched.
 
