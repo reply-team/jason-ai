@@ -534,6 +534,25 @@ public sealed class ExportCommandTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
     }
 
+    // ---- the runtime, held ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_runtime_that_does_not_stop_is_runtime_still_running_with_nothing_written_and_no_launch()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.StartRuntime();
+        machine.StopsOnShutdown = false;
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain with { Stop = true, StopTimeout = RuntimeVerbs.ShortTimeout }, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal("runtime_still_running", RuntimeVerbs.Envelope(machine.Out.ToString()).Code);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+        Assert.Empty(machine.Processes.Launches);
+        Assert.True(machine.Running);
+    }
+
     [Fact]
     public async Task A_failure_in_the_middle_of_the_write_leaves_nothing_behind_names_the_file_and_starts_the_runtime_again()
     {

@@ -64,6 +64,9 @@ internal sealed class MovingMachine : IDisposable
     /// <summary>Whether a launch brings a runtime up; one that does not exits at once.</summary>
     public bool StartsOnLaunch { get; set; } = true;
 
+    /// <summary>Whether a shutdown it is asked for brings the runtime down; one that does not answers and keeps running.</summary>
+    public bool StopsOnShutdown { get; set; } = true;
+
     /// <summary>What the runtime answers an operation other than <c>system.info</c> and <c>system.shutdown</c>; null is a 404.</summary>
     public Func<string, string, HttpResponseMessage?>? Answers { get; set; }
 
@@ -213,6 +216,8 @@ internal sealed class MovingMachine : IDisposable
                 {
                     case "system.info":
                         return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson(machine.InstanceId, machine.Pid));
+                    case "system.shutdown" when !machine.StopsOnShutdown:
+                        return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson(machine.InstanceId, machine.Pid));
                     case "system.shutdown":
                         machine.Running = false;
                         machine.Processes.RunningPids.Remove(machine.Pid);
