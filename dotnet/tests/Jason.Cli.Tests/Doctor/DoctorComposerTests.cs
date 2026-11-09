@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Cli.Autostart;
 using Jason.Cli.Doctor;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
@@ -1723,6 +1724,27 @@ public sealed class DoctorComposerTests
         Assert.Empty(Strings(other["subscriptions"]));
         Assert.False(other["subscriptions_truncated"]!.GetValue<bool>());
         AssertAbsent(bundle, "SENTINEL kind");
+    }
+
+    /// <summary>
+    /// The search path a macOS logon registration carries names the account's tool folders, and the bundle's projection
+    /// has no rule for one, so no section carries it: the status section's autostart check says only that it is
+    /// registered.
+    /// </summary>
+    [Fact]
+    public async Task No_section_carries_the_search_path_a_logon_registration_carries()
+    {
+        using var dir = new TempPaths();
+        var registrar = new RecordingRegistrar(AutostartPlatform.MacOs)
+        {
+            State = new AutostartState(true, ["jason", "runtime", "run"], null, "/SENTINEL_TOOL_FOLDER/bin:/usr/bin"),
+        };
+
+        var bundle = await DoctorComposer.ComposeAsync(Machine(dir, Running(dir)) with { Autostart = registrar }, false, new FixedClock(Now), Ct);
+
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "autostart")!;
+        Assert.Equal("ok", Text(check["state"]));
+        AssertAbsent(bundle, "SENTINEL_TOOL_FOLDER");
     }
 
     /// <summary>
