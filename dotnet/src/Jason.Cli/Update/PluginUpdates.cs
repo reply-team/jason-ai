@@ -102,7 +102,11 @@ internal enum PluginPlanState
     /// <summary>The release's own.</summary>
     Current,
 
-    /// <summary>A later version the record holds, as after an apply of an older release by <c>--version</c>.</summary>
+    /// <summary>
+    /// A later version the record holds. Only a record that names a digest later than its own release gives it: a
+    /// published release's record never does, since its list holds the package's version in that release and earlier
+    /// ones; a feed of one's own could.
+    /// </summary>
     Later,
 }
 
