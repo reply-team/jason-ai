@@ -125,7 +125,7 @@ internal static class SkillsRelease
                         }
                         catch (InvalidDataException corrupt)
                         {
-                            throw new SkillsSourceUnavailable($"'{entry.FullName}' could not be read out of the skills package for '{pin}': {corrupt.Message}");
+                            throw new SkillsSourceUnavailable($"'{entry.FullName}' could not be read out of the skills package for '{pin}': {corrupt.Message} Nothing was staged.");
                         }
                     }
 

@@ -282,6 +282,41 @@ public class SkillsReleaseSourceTests
     }
 
     /// <summary>
+    /// An entry whose compressed bytes do not inflate is refused naming it, and ends as every other refusal of the
+    /// package ends: nothing was staged, and nothing is.
+    /// </summary>
+    [Fact]
+    public async Task A_package_with_an_entry_that_cannot_be_read_is_refused_and_nothing_is_staged()
+    {
+        using var dir = new TempPaths();
+        const string name = "skills/runtime/operating/SKILL.md";
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(Corrupted(SkillsPackage.Zip(Tag), name));
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+
+        Assert.StartsWith($"'{name}' could not be read out of the skills package for '{Tag}': ", refusal.Message, StringComparison.Ordinal);
+        Assert.EndsWith(" Nothing was staged.", refusal.Message, StringComparison.Ordinal);
+        AssertNothingStaged(dir);
+    }
+
+    /// <summary>
+    /// The archive with the first bytes of one entry's compressed data overwritten, where its local header says they
+    /// start: a block of the reserved type, which no inflater reads. The archive's own structure is untouched.
+    /// </summary>
+    private static byte[] Corrupted(byte[] zip, string name)
+    {
+        var bytes = (byte[])zip.Clone();
+        var at = bytes.AsSpan().IndexOf(Encoding.UTF8.GetBytes(name));
+        Assert.True(at >= 30, $"No local header names '{name}'.");
+        var header = at - 30;
+        var data = at + BitConverter.ToUInt16(bytes, header + 26) + BitConverter.ToUInt16(bytes, header + 28);
+        bytes[data] = 0xFF;
+        bytes[data + 1] = 0xFF;
+        return bytes;
+    }
+
+    /// <summary>
     /// A file the checks let through and the file system still refuses — here a name longer than any file system holds —
     /// is refused like every other, saying what could not be written, and leaves nothing behind it.
     /// </summary>
