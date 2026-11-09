@@ -673,6 +673,38 @@ afterwards: a running program cannot delete itself. Nothing removes it later eit
 version and the moment it was set aside, and deleting them is safe as soon as that version is no longer
 running.
 
+### Applying an older release
+
+```sh
+jason update apply --version 0.30.0
+```
+
+`--version` names any release the feed publishes, an older one included, and `jason update apply` takes the installation
+there by the same nine steps. What it does not do is move a plugin package back. The `plugins` step replaces a package
+that is behind the release's, and one that is later than the release's is left byte for byte, so the apply prints a line
+such as `plugins: ntfy 1.0.3 is later than the 1.0.2 this release publishes, so it was left as it is` and the newer
+package stays in `~/.jason/plugins/<id>/`. The older runtime then loads a package written for a newer one.
+
+Two packages make that matter. A runtime older than 0.31.0 does not know the manifest key
+`capabilities.http.any_granted_host`, which `ntfy` 1.0.3 and the journal forwarder 1.1.0 carry, and it refuses a manifest
+with a key it does not know. A package problem rejects the whole load, and at a start there is no earlier set to keep
+([plugins](plugins.md), "Two kinds of problem"), so the runtime starts with **no plugin loaded at all**, Reply's included.
+What you see is a runtime that answers, work that fails because no plugin is there to perform it, and `jason plugin list`
+naming the package and the manifest key it refused. The same holds for a copy of the forwarder 1.2.0 on a runtime older
+than 0.32.0, which refuses `capabilities.files` in the same way.
+
+To go back cleanly, replace the package with the one the older release published, before or just after the apply:
+
+```sh
+jason plugin install ntfy --replace
+jason plugin install journal-forwarder --replace
+```
+
+`jason plugin install` takes the package from the release the running executable is, so after the apply it places the
+older one; run it for each package you had installed, and `jason plugin list` then shows the plugins loaded. Settings
+you wrote for the newer package, a grant of a host by name, say, stay in `settings.json` and are read again if you update
+forward later.
+
 ### Restoring a database by hand
 
 Every start that migrates writes a backup under `~/.jason/state/backups/` first, named
