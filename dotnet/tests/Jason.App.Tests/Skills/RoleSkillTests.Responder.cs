@@ -490,7 +490,7 @@ public partial class RoleSkillTests
 
         // The principle only: how a given provider holds a follow-up is that provider's to document, not this skill's.
         Assert.Contains(
-            "**Act or park at once.** A provider may hold a contact's later replies only once this side has answered, so you either answer or park the draft at once, never leave a classified thread without an action, and the person's approval lag is the window in which a follow-up can be lost.",
+            "**Act or park at once.** A provider may not detect a contact's later reply unless it answers a message this side sent, so you either answer or park the draft at once, never leave a classified thread without an action, and the person's approval lag is the window in which a follow-up can be lost.",
             skill,
             StringComparison.Ordinal);
         Assert.DoesNotContain("ingest", skill, StringComparison.OrdinalIgnoreCase);

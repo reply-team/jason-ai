@@ -367,6 +367,12 @@ public sealed class TelegramPackageTests
     private const string DigestList = "plugins/telegram.digests";
 
     /// <summary>
+    /// The package as v0.32.0 shipped it, version 1.0.0, computed from that tag's tree. A tag's tree never changes, so this
+    /// line never does: it is what lets <c>jason update</c> read a copy of that release as version 1.0.0 and replace it.
+    /// </summary>
+    private const string FirstShipped = "1.0.0 sha256:808fcbbd7cc58860ed128a6ed98d348ad2dbf1b6c11d5e89fcba6a12376cdaa9";
+
+    /// <summary>
     /// A package's version is its content: the digest of the shipped package has one line on the list beside it, for the
     /// version its manifest names, and that line is the last. The list starts at 1.0.0, the package's first version.
     /// </summary>
@@ -389,7 +395,7 @@ public sealed class TelegramPackageTests
         }
 
         Assert.True(listed.Count > 0, $"{DigestList} has no line. Append this line, after the last edit to the package:{Environment.NewLine}{line}");
-        Assert.StartsWith("1.0.0 ", listed[0], StringComparison.Ordinal);
+        Assert.True(listed[0] == FirstShipped, $"The first line of {DigestList} is the package 0.32.0 shipped, and it is: {FirstShipped}");
         Assert.Equal(listed.Count, listed.Select(entry => entry.Split(' ')[0]).Distinct(StringComparer.Ordinal).Count());
         Assert.True(
             listed[^1] == line,

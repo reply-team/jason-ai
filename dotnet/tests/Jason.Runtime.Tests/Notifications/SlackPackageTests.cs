@@ -383,6 +383,12 @@ public sealed class SlackPackageTests
     private const string DigestList = "plugins/slack.digests";
 
     /// <summary>
+    /// The package as v0.32.0 shipped it, version 1.0.0, computed from that tag's tree. A tag's tree never changes, so this
+    /// line never does: it is what lets <c>jason update</c> read a copy of that release as version 1.0.0 and replace it.
+    /// </summary>
+    private const string FirstShipped = "1.0.0 sha256:cba4bc14aa70fd27feceb24ebdb608149fe4648ff35fde4940927c2133e448c9";
+
+    /// <summary>
     /// A package's version is its content: the digest of the shipped directory has one line on the list beside it for the
     /// version the manifest names, and that line is the last.
     /// </summary>
@@ -403,6 +409,8 @@ public sealed class SlackPackageTests
         {
             Assert.True(IsListLine(entry), $"Not a line of {DigestList}: '{entry}'. A line is a bare X.Y.Z, a space and the package's sha256:digest.");
         }
+
+        Assert.True(listed.Count > 0 && listed[0] == FirstShipped, $"The first line of {DigestList} is the package 0.32.0 shipped, and it is: {FirstShipped}");
 
         var versions = listed.Select(entry => entry.Split(' ')[0]).ToList();
         Assert.True(versions.Distinct(StringComparer.Ordinal).Count() == versions.Count, $"{DigestList} names a version twice; a version has one line and a line is never changed.");
