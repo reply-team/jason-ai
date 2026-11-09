@@ -87,6 +87,9 @@ public static class ExportCommand
 
     public const string Extension = ".zip";
 
+    /// <summary>Beside the archive, the file it is written to first and moved from once it is whole.</summary>
+    internal const string PartialSuffix = ".partial";
+
     /// <summary>The line every export says, on stderr and in its answer.</summary>
     public const string SecretsLine =
         "The archive carries the settings file with everything in it, a token under Plugins:Config included: keep the archive as you keep that file.";
@@ -165,6 +168,12 @@ public static class ExportCommand
             return Refuse(env, options.Human, CliErrors.ExportOutputExists, $"There is already something at {target}, and an archive is never written over anything. Name a file that is not there yet. Nothing was written.");
         }
 
+        var partial = target + PartialSuffix;
+        if (File.Exists(partial) || Directory.Exists(partial))
+        {
+            return Refuse(env, options.Human, CliErrors.ExportOutputExists, $"There is already something at {partial}, where an archive is written before it is moved into place, perhaps the part of an export that did not finish; it is yours to remove, and an export never writes over it. Remove it, or name another file. Nothing was written.");
+        }
+
         var running = RuntimeHold.Running(env);
         if (running && !options.Stop)
         {
@@ -226,7 +235,7 @@ public static class ExportCommand
                 autostart,
                 [],
                 [.. items.Where(item => item.Directory).Select(item => item.Name)]);
-            written = Write(target, items, manifest);
+            written = Write(target, partial, items, manifest);
         }
         catch (ExportRefusal refused)
         {
@@ -497,18 +506,22 @@ public static class ExportCommand
 
     private sealed record Written(long Bytes, int DataFiles, int HarnessFiles, int Projects, int Campaigns);
 
-    private static Written Write(string target, List<Item> items, ExportManifest manifest)
+    /// <summary>
+    /// The archive, written to <paramref name="partial"/> and moved to <paramref name="target"/> once it is whole, neither
+    /// ever over a file; whatever goes wrong, the part written is taken away again.
+    /// </summary>
+    private static Written Write(string target, string partial, List<Item> items, ExportManifest manifest)
     {
         FileStream file;
         try
         {
-            file = new FileStream(target, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+            file = new FileStream(partial, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
         }
         catch (Exception failure) when (Unwritable(failure))
         {
             throw AlreadyThere(failure)
-                ? new ExportRefusal(CliErrors.ExportOutputExists, $"Something was put at {target} in the meantime, and an archive is never written over anything. Nothing was written.")
-                : new ExportRefusal(CliErrors.ExportUnwritable, $"{target} cannot be written: {failure.Message} Nothing was written.");
+                ? new ExportRefusal(CliErrors.ExportOutputExists, $"Something was put at {partial} in the meantime, and an export never writes over anything; it is yours to remove. Nothing was written.")
+                : new ExportRefusal(CliErrors.ExportUnwritable, $"{partial} cannot be written: {failure.Message} Nothing was written.");
         }
 
         var entries = new List<ExportEntry>();
@@ -530,11 +543,36 @@ public static class ExportCommand
                     var entry = archive.CreateEntry(item.Name, CompressionLevel.Optimal);
                     using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
                     long length = 0;
-                    using (var source = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    FileStream source;
+                    try
+                    {
+                        source = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    }
+                    catch (Exception failure) when (Unwritable(failure))
+                    {
+                        throw Unreadable(item.Path, failure);
+                    }
+
+                    using (source)
                     using (var destination = entry.Open())
                     {
-                        for (int read; (read = source.Read(buffer, 0, buffer.Length)) > 0;)
+                        while (true)
                         {
+                            int read;
+                            try
+                            {
+                                read = source.Read(buffer, 0, buffer.Length);
+                            }
+                            catch (Exception failure) when (Unwritable(failure))
+                            {
+                                throw Unreadable(item.Path, failure);
+                            }
+
+                            if (read == 0)
+                            {
+                                break;
+                            }
+
                             hash.AppendData(buffer, 0, read);
                             destination.Write(buffer, 0, read);
                             length += read;
@@ -556,24 +594,44 @@ public static class ExportCommand
                 written.Write((manifest with { Entries = entries }).Serialize());
             }
         }
+        catch (Exception failure) when (failure is ExportRefusal || Unwritable(failure))
+        {
+            throw TakenAway(partial, failure is ExportRefusal refused ? refused : new ExportRefusal(CliErrors.ExportUnwritable, $"{partial} could not be written: {failure.Message}"));
+        }
+
+        try
+        {
+            File.Move(partial, target, overwrite: false);
+        }
         catch (Exception failure) when (Unwritable(failure))
         {
-            var reason = $"{target} could not be written: {failure.Message}";
-            try
-            {
-                File.Delete(target);
-                reason += " Nothing was left behind.";
-            }
-            catch (Exception leftover) when (Unwritable(leftover))
-            {
-                reason += $" The part written could not be taken away again: {target}.";
-            }
-
-            throw new ExportRefusal(CliErrors.ExportUnwritable, reason);
+            throw TakenAway(
+                partial,
+                AlreadyThere(failure)
+                    ? new ExportRefusal(CliErrors.ExportOutputExists, $"Something was put at {target} in the meantime, and an archive is never written over anything. Nothing was written.")
+                    : new ExportRefusal(CliErrors.ExportUnwritable, $"{partial} could not be moved to {target}: {failure.Message}"));
         }
 
         var data = entries.Count(entry => entry.Path.StartsWith(ExportManifest.DataPrefix, StringComparison.Ordinal));
         return new Written(new FileInfo(target).Length, data, entries.Count - data, projects, campaigns);
+    }
+
+    /// <summary>A source that cannot be read: it cannot travel, which is the person's to mend, not the target's.</summary>
+    private static ExportRefusal Unreadable(string path, Exception failure) =>
+        new(CliErrors.ExportRefused, $"{path} cannot be read ({failure.Message}), so it cannot travel. Close what holds it, or mend it, and run this again. Nothing was written.");
+
+    /// <summary>The part written taken away again, and the refusal saying whether it went.</summary>
+    private static ExportRefusal TakenAway(string partial, ExportRefusal refused)
+    {
+        try
+        {
+            File.Delete(partial);
+            return new ExportRefusal(refused.Code, refused.Message.EndsWith("Nothing was written.", StringComparison.Ordinal) ? refused.Message : refused.Message + " Nothing was left behind.");
+        }
+        catch (Exception leftover) when (Unwritable(leftover))
+        {
+            return new ExportRefusal(refused.Code, refused.Message + $" The part written could not be taken away again: {partial}.");
+        }
     }
 
     private static bool Unwritable(Exception failure) =>

@@ -534,6 +534,62 @@ public sealed class ExportCommandTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
     }
 
+    [Fact]
+    public async Task A_failure_in_the_middle_of_the_write_leaves_nothing_behind_names_the_file_and_starts_the_runtime_again()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        var busy = Path.GetFullPath(machine.PlantData("logs/jason-20261108.log", "a log another program holds"));
+        machine.StartRuntime();
+        using var held = new FileStream(busy, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain with { Stop = true }, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(machine.Out.ToString());
+        Assert.Equal("export_refused", error.Code);
+        Assert.Contains(busy, error.Message, StringComparison.Ordinal);
+        Assert.Contains("started again", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+        Assert.Single(machine.Processes.Launches);
+        Assert.True(machine.Running);
+    }
+
+    // ---- the partial file ----------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_partial_file_already_there_is_refused_by_name_as_the_person_s_to_remove()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        var partial = MovingMachine.Plant(machine.Here, DefaultName + ".partial", "an export that did not finish");
+        machine.StartRuntime();
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain with { Stop = true }, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(machine.Out.ToString());
+        Assert.Equal("export_output_exists", error.Code);
+        Assert.Contains(partial, error.Message, StringComparison.Ordinal);
+        Assert.Contains("yours to remove", error.Message, StringComparison.Ordinal);
+        Assert.Equal("an export that did not finish", File.ReadAllText(partial));
+        Assert.False(File.Exists(Path.Combine(machine.Here, DefaultName)));
+        Assert.True(machine.Running);
+        Assert.Empty(machine.Processes.Launches);
+    }
+
+    [Fact]
+    public async Task No_partial_file_remains_after_a_success()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal([DefaultName], Directory.EnumerateFileSystemEntries(machine.Here).Select(Path.GetFileName));
+    }
+
     private static List<string> Names(string archivePath)
     {
         using var archive = ZipFile.OpenRead(archivePath);
