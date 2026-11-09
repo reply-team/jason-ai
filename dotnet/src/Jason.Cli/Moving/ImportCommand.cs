@@ -9,6 +9,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Autostart;
 using Jason.Cli.Commands;
 using Jason.Cli.Files;
+using Jason.Cli.Human;
 using Jason.Cli.Logs;
 using Jason.Cli.Skills;
 using Jason.Contracts.Api;
@@ -54,6 +55,11 @@ public sealed record ImportLinkRefused(string ProjectId, string Path, string Cod
 /// <param name="Source">The directory the record names.</param>
 public sealed record ImportSkillsSource(string Pack, string Source);
 
+/// <summary>A project the runtime records a folder for that is not on this machine, and was not one the import linked.</summary>
+/// <param name="ProjectId">The project.</param>
+/// <param name="FolderPath">The folder the runtime records for it.</param>
+public sealed record ImportFolderNotHere(string ProjectId, string FolderPath);
+
 /// <summary>The logon registration as the import left it.</summary>
 /// <param name="Exported">Whether the other machine started the runtime at logon.</param>
 /// <param name="Registered">Whether the import registered it here.</param>
@@ -80,6 +86,7 @@ public sealed record ImportPlaced(
     bool Started,
     IReadOnlyList<ImportLinked> Linked,
     IReadOnlyList<ImportLinkRefused> LinkRefused,
+    IReadOnlyList<ImportFolderNotHere> FoldersNotHere,
     IReadOnlyList<string> Warnings,
     IReadOnlyList<string> Next);
 
@@ -406,6 +413,8 @@ public static class ImportCommand
                 warnings.Add($"The runtime did not record the project folder {refusal.Path} ({refusal.Code}): {refusal.Message}");
             }
 
+            var notHere = await FoldersNotHere(env, linked, warnings, cancellationToken).ConfigureAwait(false);
+
             var answer = new ImportPlaced(
                 file,
                 manifest.JasonVersion,
@@ -425,8 +434,9 @@ public static class ImportCommand
                 Started: true,
                 linked,
                 refusedLinks,
+                notHere,
                 warnings,
-                LeftToYou);
+                [.. LeftToYou, .. refusedLinks.Select(refusal => $"jason project link {refusal.ProjectId} --path {refusal.Path}")]);
 
             env.Out.WriteLine(options.Human ? Sentences(answer) : AsciiJson.Serialize(answer));
             foreach (var warning in warnings)
@@ -858,6 +868,46 @@ public static class ImportCommand
 
         refused.Add(new ImportLinkRefused(projectId, folder, code, message));
     }
+
+    /// <summary>
+    /// Every project the runtime records a folder for that is neither one the import linked nor a folder here: a project
+    /// folder that stood outside the harness root on the other machine, which no archive carries. Read from every page of
+    /// <c>project.list</c>; a page that cannot be read is said, and ends the reading.
+    /// </summary>
+    private static async Task<List<ImportFolderNotHere>> FoldersNotHere(CliEnvironment env, List<ImportLinked> linked, List<string> warnings, CancellationToken cancellationToken)
+    {
+        var notHere = new List<ImportFolderNotHere>();
+        string? cursor = null;
+        do
+        {
+            var body = RequestBody.Empty().Set("limit", ProjectsPage).Set("cursor", cursor);
+            var (_, response) = await OperationRunner.SendAsync(env with { Out = TextWriter.Null }, Operations.ProjectList, body, cancellationToken).ConfigureAwait(false);
+            if (response is not { IsSuccess: true } || RenderText.Read<Page<ProjectDto>>(response.Body) is not { Items: { } items } page)
+            {
+                warnings.Add("The runtime's projects could not be listed, so a project whose folder is not on this machine is not said here; 'jason project list' lists them, with each folder.");
+                break;
+            }
+
+            foreach (var project in items)
+            {
+                if (project.FolderPath is { } folder
+                    && !linked.Any(link => FolderPaths.Same(FolderPaths.Normal(link.Path), FolderPaths.Normal(folder)))
+                    && !Directory.Exists(folder))
+                {
+                    notHere.Add(new ImportFolderNotHere(project.Id, folder));
+                    warnings.Add($"The project {project.Id} has its folder recorded at {folder}, which is not on this machine: a project folder outside the harness root does not travel. Once the folder is here, 'jason project link --path <folder>' records where it stands.");
+                }
+            }
+
+            cursor = page.NextCursor;
+        }
+        while (cursor is not null);
+
+        return notHere;
+    }
+
+    /// <summary>How many projects one page of the list asks for.</summary>
+    private const int ProjectsPage = 100;
 
     // ---- the archive -------------------------------------------------------------------------------------------------
 

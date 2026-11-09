@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Cli.Autostart;
 using Jason.Cli.Commands;
 using Jason.Cli.Moving;
@@ -940,6 +941,59 @@ public sealed class ImportCommandTests
         Assert.Equal("project_folder_mismatch", refused.GetProperty("code").GetString());
         Assert.Contains("project_folder_mismatch", to.Error.ToString(), StringComparison.Ordinal);
         Assert.True(Directory.Exists(Path.Combine(to.Harness, "projects", "acme")));
+        // The repair is in next, where an agent reading only that list finds it.
+        Assert.Contains(
+            $"jason project link prj_01ACME --path {Path.Combine(to.Harness, "projects", "acme")}",
+            answer.RootElement.GetProperty("next").EnumerateArray().Select(next => next.GetString()));
+    }
+
+    [Fact]
+    public async Task A_project_whose_folder_is_not_here_is_listed_with_its_folder_from_every_page()
+    {
+        using var from = new MovingMachine();
+        var gone = Path.Combine(Path.GetTempPath(), "jason-cli-tests", "made-up-elsewhere", "projects", "gone");
+        var lists = new List<string>();
+        using var to = new MovingMachine();
+        var linked = Path.Combine(to.Harness, "projects", "acme");
+        var present = Path.Combine(to.Root, "outside", "present");
+        Directory.CreateDirectory(present);
+        to.Answers = (operation, body) =>
+        {
+            if (operation == "project.link")
+            {
+                return RuntimeVerbs.Response(HttpStatusCode.OK, "{\"id\":\"prj_made_up\"}");
+            }
+
+            if (operation != "project.list")
+            {
+                return null;
+            }
+
+            lists.Add(body);
+            return JsonNode.Parse(body)!["cursor"] is null
+                ? RuntimeVerbs.Response(HttpStatusCode.OK, "{\"items\":[" + Project("prj_01ACME", linked) + "," + Project("prj_01NONE", null) + "],\"next_cursor\":\"made-up-cursor\"}")
+                : RuntimeVerbs.Response(HttpStatusCode.OK, "{\"items\":[" + Project("prj_01GONE", gone) + "," + Project("prj_01HERE", present) + "],\"next_cursor\":null}");
+        };
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(2, lists.Count);
+        Assert.Equal("made-up-cursor", JsonNode.Parse(lists[1])!["cursor"]!.GetValue<string>());
+        using var answer = JsonDocument.Parse(to.Out.ToString());
+        var notHere = Assert.Single(answer.RootElement.GetProperty("folders_not_here").EnumerateArray());
+        Assert.Equal("prj_01GONE", notHere.GetProperty("project_id").GetString());
+        Assert.Equal(gone, notHere.GetProperty("folder_path").GetString());
+        var warning = Assert.Single(
+            answer.RootElement.GetProperty("warnings").EnumerateArray().Select(item => item.GetString()!),
+            item => item.Contains(gone, StringComparison.Ordinal));
+        Assert.Contains("prj_01GONE", warning, StringComparison.Ordinal);
+        Assert.Contains("jason project link --path", warning, StringComparison.Ordinal);
+
+        static string Project(string id, string? folder) =>
+            "{\"id\":\"" + id + "\",\"name\":\"Made up\",\"slug\":\"" + id.ToLowerInvariant() + "\",\"default\":false,\"created_at\":\"2026-11-01T00:00:00Z\",\"updated_at\":\"2026-11-01T00:00:00Z\",\"folder_path\":"
+            + (folder is null ? "null" : JsonSerializer.Serialize(folder)) + "}";
     }
 
     [Fact]
@@ -963,7 +1017,7 @@ public sealed class ImportCommandTests
     public async Task The_answer_leaves_skills_install_autostart_enable_and_status_to_the_person()
     {
         using var from = new MovingMachine();
-        using var to = new MovingMachine();
+        using var to = new MovingMachine { Answers = Linked };
         var file = new MovingArchive(from).Installation().Write();
 
         var exit = await Import(to, Options(file));
