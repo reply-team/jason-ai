@@ -189,6 +189,13 @@ public static class ImportCommand
                     $"The archive was written by Jason {manifest.JasonVersion}, and this is Jason {here}, which cannot know what a newer one keeps. Install Jason {manifest.JasonVersion} or later first, then import it. Nothing was written.");
             }
 
+            // An update stopped part-way is finished or rolled back first: the start at the end would refuse it after the
+            // placement, with the installation already replaced around a build the ledger cannot vouch for.
+            if (UnfinishedUpdate.Read(env.Paths) is { } unfinished)
+            {
+                return Refuse(env, options.Human, CliErrors.ImportRefused, unfinished.Refusal("Nothing was written.").Message);
+            }
+
             HarnessRootPlace root;
             try
             {

@@ -8,9 +8,11 @@ using Jason.Cli.Moving;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Commands;
+using Jason.Cli.Update;
 using Jason.Contracts.Harness;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
+using Jason.Contracts.Update;
 
 namespace Jason.Cli.Tests.Moving;
 
@@ -345,6 +347,54 @@ public sealed class ImportCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal("a database, made up", File.ReadAllText(Path.Combine(to.Data, "state", "jason.db")));
+    }
+
+    // ---- an update in flight -----------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(UpdateStep.Staged)]
+    [InlineData(UpdateStep.Kept)]
+    public async Task An_update_in_flight_is_refused_with_the_start_s_words_and_nothing_is_written(UpdateStep step)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var update = new UpdatePaths(to.Paths);
+        var version = SemanticVersion.Parse("0.34.0");
+        new UpdateLedger(SemanticVersion.Parse("0.33.0"), version, step, MovingArchive.ExportedAt, Path.Combine(to.Root, "install", "jason"), update.StagedExecutable(version), update.PreviousExecutable)
+            .Write(update.Ledger);
+        var file = new MovingArchive(from).Installation().Write();
+        var before = Tree(to.Root);
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(to.Out.ToString());
+        Assert.Equal("import_refused", error.Code);
+        Assert.Contains("`jason update apply` finishes it", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
+        Assert.Equal(before, Tree(to.Root));
+        Assert.Empty(to.Processes.Launches);
+    }
+
+    [Fact]
+    public async Task An_update_ledger_that_cannot_be_read_is_refused_naming_the_file_and_nothing_is_written()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var ledger = new UpdatePaths(to.Paths).Ledger;
+        Directory.CreateDirectory(Path.GetDirectoryName(ledger)!);
+        File.WriteAllText(ledger, "{ not json");
+        var file = new MovingArchive(from).Installation().Write();
+        var before = Tree(to.Root);
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(to.Out.ToString());
+        Assert.Equal("import_refused", error.Code);
+        Assert.Contains(ledger, error.Message, StringComparison.Ordinal);
+        Assert.Equal(before, Tree(to.Root));
+        Assert.Empty(to.Processes.Launches);
     }
 
     // ---- an installation that is here --------------------------------------------------------------------------------
