@@ -515,6 +515,15 @@ public static class ImportCommand
         var root = resolved;
         if (option is not null)
         {
+            // Judged as written, as a setting is: made full against the folder the command runs in, a ~ would name a
+            // folder of that name there rather than the home the person meant.
+            if (option == "~" || option.StartsWith("~/", StringComparison.Ordinal) || option.StartsWith("~" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                throw new ImportRefusal(
+                    CliErrors.ImportRefused,
+                    $"The harness root {option}, named by {ExportCommand.Named(InstallationPlaces.FromOption)}, cannot be the root here: {HarnessRootRule.Refusal(option, env.Paths.Root, InstallationPlaces.Home(env))} For --root as for the setting, ~ is not expanded; name the folder in full. Nothing was written.");
+            }
+
             var full = Full(option, env.WorkingDirectory, "--root", $"the --root '{option}' cannot be found from it");
             root = new HarnessRootPlace(full, InstallationPlaces.FromOption, full);
 

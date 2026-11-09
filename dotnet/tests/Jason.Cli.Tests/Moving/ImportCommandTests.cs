@@ -1147,6 +1147,28 @@ public sealed class ImportCommandTests
         Assert.False(Directory.Exists(Path.Combine(to.Data, "state")));
     }
 
+    /// <summary>A <c>--root</c> that starts at <c>~</c> is judged as written: made full against the folder the command runs
+    /// in, it would name a folder literally called <c>~</c> there, which is not the home the person meant.</summary>
+    [Theory]
+    [InlineData("~")]
+    [InlineData("~/Jason")]
+    public async Task A_root_option_that_starts_with_a_tilde_is_refused_by_the_runtime_s_rule_and_nothing_is_written(string option)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine { RootVariable = false };
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file) with { Root = option });
+
+        var error = Refused(to, exit, "import_refused");
+        Assert.Contains("named by --root", error.Message, StringComparison.Ordinal);
+        Assert.Contains(HarnessRootRule.Refusal(option, to.Data, to.Home)!, error.Message, StringComparison.Ordinal);
+        Assert.Contains("~ is not expanded; name the folder in full", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(to.Here, "~")));
+        Assert.False(Directory.Exists(Path.Combine(to.Data, "state")));
+    }
+
     [Fact]
     public async Task A_root_option_the_variable_contradicts_is_refused_and_nothing_is_written()
     {
