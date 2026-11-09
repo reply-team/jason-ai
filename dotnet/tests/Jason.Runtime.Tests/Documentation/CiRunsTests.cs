@@ -1311,6 +1311,24 @@ public class CiRunsTests
     }
 
     /// <summary>
+    /// One job runs all of the UI's checks, in the order ui/README.md gives them: the install, the static checks, the unit
+    /// and screen layers, the build and its package, and the browser smoke against the runtime the job built. None of
+    /// them may fail without failing the job.
+    /// </summary>
+    [Fact]
+    public void The_ui_job_runs_every_layer_of_the_ui_s_tests_in_order()
+    {
+        var steps = Steps(Mapping(Jobs(), "ui"));
+        var runs = steps.Select(step => Scalar(step, "run")).OfType<string>().SelectMany(run => run.Split('\n')).Select(line => line.Trim()).ToList();
+
+        var order = new[] { "npm ci", "npm run check", "npm test", "npm run build", "npm run package", "npm run e2e" }.Select(command => runs.IndexOf(command)).ToList();
+
+        Assert.DoesNotContain(-1, order);
+        Assert.Equal(order.Order(), order);
+        Assert.All(steps.Where(step => Scalar(step, "run") is not null), step => Assert.Null(Node(step, "continue-on-error")));
+    }
+
+    /// <summary>
     /// Every plugin package's JavaScript is parsed by node, on the one runner that has it, before the runtime is built and
     /// anything of the UI is installed, so a syntax error is reported in seconds rather than after a full build: the files
     /// are found under <c>plugins/*/</c>, so a package joins by being there, and the step names none. Pinned by its text:
