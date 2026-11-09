@@ -80,16 +80,16 @@ skills' deployment as fields; and two new verbs move an installation to another 
     running"; `jason import` stops it and, as every import does, starts the runtime on what it placed.
   - **`--replace` moves aside and deletes nothing.** Among what `jason import <file>` refuses before anything is
     written are "an archive that cannot be read", "a name in it that escapes", "a file whose size or SHA-256 is not the
-    one export.json lists" and "an archive a newer Jason wrote, naming the version to install first"; the install
-    guide's section linked below has the whole list. An installation already here, "a database, or a harness root with
-    a marker in it", is refused without `--replace`, naming what it holds. With it, the data directory's parts go into
+    one export.json lists" and "an archive a newer Jason wrote, naming the version to install first";
+    `jason import --help` has the whole list. An installation already here, "a database, or a harness root with a
+    marker in it", is refused without `--replace`, naming what it holds. With it, the data directory's parts go into
     `<data>/replaced-<stamp>/` and the harness root to `<root>.replaced-<stamp>`, each named as yours to remove.
     Without the flag nothing is written over either: "on a machine with no installation the same parts that stand
     there, a jason.db-wal or jason.db-shm beside no database among them, and a harness root folder with no marker go
     aside the same way, with no --replace; each is named as yours to remove."
   - **The harness root here** is "--root, else JASON_Harness__Root, else the Harness:Root this machine's settings
     file names, else Jason in the home directory". "The root is held to the runtime's rule for a root before anything
-    is placed."
+    is placed, and the placed settings file names it."
   - **Paths are made this machine's.** In the settings file, "every absolute path under the other machine's home
     directory, data directory or harness root is rewritten to the same path here, each rewrite said, Harness:Root
     first; a path outside those three that is not on this machine is said and left as written". Then the runtime
