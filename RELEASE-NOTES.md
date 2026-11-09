@@ -68,8 +68,8 @@ skills' deployment as fields; and two new verbs move an installation to another 
     root, the home directory, whether the runtime starts at logon, and every file with its size and SHA-256". Of links,
     "a link at the top of a carried place, or a harness root that is one, is followed and judged where it leads", and
     "a link inside is refused by its path". And "A name another system cannot hold, and two names apart only by the
-    case of their letters, are refused by their path, before anything is written", a Windows device name among the
-    first.
+    case of their letters, are refused by their path, before anything is written", a Windows device name, such as CON
+    or NUL, among them.
   - **What does not.** The backups under `state/backups/`, `run/`, `work/`, the skills' staging folders, the shipped UI
     under `ui/default/`, a `replaced-<stamp>/` directory an import moved aside, "and anything outside the data directory
     and the harness root": the skills deployed into agent hosts among them, which `jason skills install` deploys again.
