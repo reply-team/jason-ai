@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState } from 'react';
 import type { Decision } from '../../api/types';
 import { relative } from '../../time/format';
 import { ActionsRow } from '../../layout/actions-row';
@@ -34,7 +34,7 @@ export function QuestionPanel({
     const pending = decision.status === 'pending';
     const canAnswer = pending && !busy && (option !== null || text.trim().length > 0);
     return (
-        <div class="panel">
+        <div className="panel">
             <PanelHeader
                 title={decision.question}
                 sub={
@@ -44,40 +44,40 @@ export function QuestionPanel({
                 }
                 onClose={onClose}
             />
-            <div class="panel-body">
+            <div className="panel-body">
                 {decision.options && decision.options.length > 0 && (
-                    <div class="section">
+                    <div className="section">
                         <h3>Options</h3>
                         {pending ? (
-                            <div class="options" role="radiogroup">
+                            <div className="options" role="radiogroup">
                                 {decision.options.map((o) => (
                                     <button
                                         key={o.label}
                                         type="button"
                                         role="radio"
                                         aria-checked={option === o.label}
-                                        class={`option${option === o.label ? ' chosen' : ''}`}
+                                        className={`option${option === o.label ? ' chosen' : ''}`}
                                         onClick={() => setOption(o.label)}
                                     >
-                                        <span class="radio" />
+                                        <span className="radio" />
                                         <span>
-                                            <div class="label">{o.label}</div>
-                                            {o.detail && <div class="detail">{o.detail}</div>}
+                                            <div className="label">{o.label}</div>
+                                            {o.detail && <div className="detail">{o.detail}</div>}
                                         </span>
                                     </button>
                                 ))}
                             </div>
                         ) : (
-                            <div class="options">
+                            <div className="options">
                                 {decision.options.map((o) => (
                                     <div
                                         key={o.label}
-                                        class={`option still${o.label === decision.chosen_option ? ' chosen' : ''}`}
+                                        className={`option still${o.label === decision.chosen_option ? ' chosen' : ''}`}
                                     >
-                                        <span class="radio" />
+                                        <span className="radio" />
                                         <span>
-                                            <div class="label">{o.label}</div>
-                                            {o.detail && <div class="detail">{o.detail}</div>}
+                                            <div className="label">{o.label}</div>
+                                            {o.detail && <div className="detail">{o.detail}</div>}
                                         </span>
                                     </div>
                                 ))}
@@ -86,15 +86,15 @@ export function QuestionPanel({
                     </div>
                 )}
                 {pending && (
-                    <div class="field">
-                        <label for="free-answer">
+                    <div className="field">
+                        <label htmlFor="free-answer">
                             {decision.options?.length ? 'Or write an answer' : 'Your answer'}
                         </label>
                         <textarea
                             id="free-answer"
-                            class="textarea"
+                            className="textarea"
                             value={text}
-                            onInput={(e) => {
+                            onChange={(e) => {
                                 setText((e.target as HTMLTextAreaElement).value);
                                 setOption(null);
                             }}
@@ -102,13 +102,13 @@ export function QuestionPanel({
                     </div>
                 )}
                 {pending && (
-                    <div class="field">
-                        <label for="answer-reason">Why (optional, kept in the journal)</label>
+                    <div className="field">
+                        <label htmlFor="answer-reason">Why (optional, kept in the journal)</label>
                         <input
                             id="answer-reason"
-                            class="input"
+                            className="input"
                             value={reason}
-                            onInput={(e) => setReason((e.target as HTMLInputElement).value)}
+                            onChange={(e) => setReason((e.target as HTMLInputElement).value)}
                         />
                     </div>
                 )}
@@ -116,7 +116,7 @@ export function QuestionPanel({
                     {pending && (
                         <>
                             <button
-                                class="btn primary"
+                                className="btn primary"
                                 type="button"
                                 disabled={!canAnswer}
                                 onClick={() =>
@@ -136,11 +136,11 @@ export function QuestionPanel({
                     )}
                 </ActionsRow>
                 {decision.references && decision.references.length > 0 && (
-                    <div class="section">
+                    <div className="section">
                         <h3>Read before deciding</h3>
-                        <div class="refs">
+                        <div className="refs">
                             {decision.references.map((r) => (
-                                <span key={r.id} class="mono">
+                                <span key={r.id} className="mono">
                                     {r.kind} {r.id}
                                 </span>
                             ))}
@@ -148,7 +148,7 @@ export function QuestionPanel({
                     </div>
                 )}
                 {!pending && (
-                    <dl class="facts">
+                    <dl className="facts">
                         <dt>Answered</dt>
                         <dd>
                             {decision.chosen_option ?? decision.answer} by {decision.answered_by?.id}
@@ -157,10 +157,10 @@ export function QuestionPanel({
                 )}
             </div>
             {pending && (
-                <div class="panel-footer">
-                    <span class="next">{remaining}</span>
-                    <span class="spacer" />
-                    <button class="btn ghost" type="button" onClick={onSkip}>
+                <div className="panel-footer">
+                    <span className="next">{remaining}</span>
+                    <span className="spacer" />
+                    <button className="btn ghost" type="button" onClick={onSkip}>
                         {skipLabel}
                     </button>
                 </div>

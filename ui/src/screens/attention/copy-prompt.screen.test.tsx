@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/preact';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { renderApp } from '../../test/render-app';
@@ -161,12 +161,13 @@ describe('Copy prompt', () => {
         await waitFor(() => screen.getByRole('button', { name: 'Approve' }));
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
+        // React renders a state set after an await on its scheduler, which a fake-timer advance does not run; act does.
         fireEvent.click(screen.getByRole('button', { name: 'Copy prompt' }));
-        await vi.advanceTimersByTimeAsync(10);
+        await act(() => vi.advanceTimersByTimeAsync(10));
         expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy();
-        await vi.advanceTimersByTimeAsync(2000);
+        await act(() => vi.advanceTimersByTimeAsync(2000));
         fireEvent.click(screen.getByRole('button', { name: 'Copied' }));
-        await vi.advanceTimersByTimeAsync(1010);
+        await act(() => vi.advanceTimersByTimeAsync(1010));
 
         // 3020 ms after the first click: its own timer would have reset the label at 2510 ms.
         expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy();

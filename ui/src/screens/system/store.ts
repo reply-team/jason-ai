@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals';
+import { signal } from '@preact/signals-react';
 import { ApiError, Unpaired, type Api } from '../../api/client';
 import { session } from '../../api/session';
 import type { Plugin, Routes, SystemInfo, UiTokens } from '../../api/types';

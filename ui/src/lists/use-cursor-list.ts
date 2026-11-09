@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef } from 'react';
 
 /** The next page: what a list calls when its end comes into view, and the answer it waits for before looking again. */
 export type LoadMore = () => void | Promise<void>;

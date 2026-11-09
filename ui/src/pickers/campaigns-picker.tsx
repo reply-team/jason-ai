@@ -1,4 +1,4 @@
-import { useRef } from 'preact/hooks';
+import { useRef } from 'react';
 import { useApi } from '../api/context';
 import { campaignIdsLimit } from '../api/types';
 import { MultiSearchPicker } from './pickers';
@@ -51,9 +51,9 @@ export function CampaignsPicker({
                 }
             />
             {chosen.map((campaign) => (
-                <span key={campaign.id} class="chip">
+                <span key={campaign.id} className="chip">
                     {campaign.name}
-                    {campaign.status !== 'active' && <span class="hint"> {campaign.status}</span>}
+                    {campaign.status !== 'active' && <span className="hint"> {campaign.status}</span>}
                     <button
                         type="button"
                         aria-label={`Drop ${campaign.name}`}
@@ -65,7 +65,7 @@ export function CampaignsPicker({
                 </span>
             ))}
             {chosen.length > 0 && (
-                <button type="button" class="btn ghost" onClick={() => change([])}>
+                <button type="button" className="btn ghost" onClick={() => change([])}>
                     Clear
                 </button>
             )}

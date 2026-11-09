@@ -48,28 +48,28 @@ export function PersonCard({ person, tab, to, now, zone, onAdd, onClose }: Props
         <>
             <PanelHeader
                 lead={
-                    <span class="avatar" aria-hidden="true">
+                    <span className="avatar" aria-hidden="true">
                         {initials(person)}
                     </span>
                 }
                 title={
                     <>
                         {name}
-                        {noFirstName && <span class="muted"> · no first name</span>}
+                        {noFirstName && <span className="muted"> · no first name</span>}
                     </>
                 }
                 sub={sub(person, now)}
                 under={
-                    <div class="onc">
-                        {person.archived_at && <span class="badge warning">archived</span>}
+                    <div className="onc">
+                        {person.archived_at && <span className="badge warning">archived</span>}
                         {campaigns.map((campaign) =>
                             campaign.state === 'excluded' ? (
-                                <span key={campaign.campaign_id} class="badge outline">
+                                <span key={campaign.campaign_id} className="badge outline">
                                     {campaign.campaign_name} · excluded{' '}
                                     {shortDate(new Date(campaign.updated_at), zone, now)}
                                 </span>
                             ) : (
-                                <span key={campaign.campaign_id} class="badge accent">
+                                <span key={campaign.campaign_id} className="badge accent">
                                     {campaign.campaign_name} · since {shortDate(new Date(campaign.added_at), zone, now)}
                                 </span>
                             ),
@@ -79,7 +79,7 @@ export function PersonCard({ person, tab, to, now, zone, onAdd, onClose }: Props
                 onClose={onClose}
             />
             <ActionsRow>
-                <button class="btn" type="button" onClick={onAdd}>
+                <button className="btn" type="button" onClick={onAdd}>
                     Add to campaign
                 </button>
             </ActionsRow>

@@ -1,8 +1,8 @@
 export function PairAgain() {
     return (
-        <main class="pair-again">
-            <div class="wordmark">
-                <span class="glyph" />
+        <main className="pair-again">
+            <div className="wordmark">
+                <span className="glyph" />
                 Jason
             </div>
             <h1>This browser isn't paired</h1>

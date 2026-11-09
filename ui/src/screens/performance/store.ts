@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals';
+import { signal } from '@preact/signals-react';
 import { ApiError, type Api } from '../../api/client';
 import type {
     ActivityBucket,

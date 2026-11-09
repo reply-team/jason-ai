@@ -44,28 +44,28 @@ function about(person: Contact): string {
 export function PeopleList(props: Props) {
     const { filters, tab, selected, more, me, zone } = props;
     return (
-        <div class="rows">
+        <div className="rows">
             {groups(props).map((group, index) => (
                 <div key={group.title}>
-                    <div class={`group${index === 0 ? ' first' : ''}`}>{group.title}</div>
+                    <div className={`group${index === 0 ? ' first' : ''}`}>{group.title}</div>
                     {group.people.map((person) => {
                         const last = person.last_activity ? entryLabel(person.last_activity, me) : null;
                         return (
                             <a
                                 key={person.id}
-                                class={`row${selected === person.id ? ' selected' : ''}${person.archived_at ? ' quiet' : ''}`}
+                                className={`row${selected === person.id ? ' selected' : ''}${person.archived_at ? ' quiet' : ''}`}
                                 href="#"
                                 onClick={(event) => {
                                     event.preventDefault();
                                     navigate({ screen: 'people', id: person.id, tab, filters });
                                 }}
                             >
-                                <span class={`mark ${last?.mark.kind ?? 'off'}`}>{last?.mark.glyph ?? '·'}</span>
-                                <span class="what">
-                                    <span class="name">{displayName(person).name}</span>
-                                    <span class="in">{about(person)}</span>
+                                <span className={`mark ${last?.mark.kind ?? 'off'}`}>{last?.mark.glyph ?? '·'}</span>
+                                <span className="what">
+                                    <span className="name">{displayName(person).name}</span>
+                                    <span className="in">{about(person)}</span>
                                 </span>
-                                <span class="meta">
+                                <span className="meta">
                                     {last && <span>{last.short}</span>}
                                     {person.last_activity && (
                                         <time>{clock(new Date(person.last_activity.ts), zone)}</time>
