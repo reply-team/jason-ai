@@ -95,9 +95,6 @@ public sealed class ImportCommandTests
     [InlineData("harness/dotted./notes.md", "a segment ending in a dot")]
     [InlineData("outside/notes.md", "a name outside data and harness")]
     [InlineData("notes.md", "a name at the top that is not export.json")]
-    [InlineData("data/run/runtime.lock", "a part of the data directory no export carries")]
-    [InlineData("data/state/backups/jason-20261101T000000Z.db", "a backup no export carries")]
-    [InlineData("data/ui/default/index.html", "the shipped UI no export carries")]
     public async Task An_entry_that_escapes_is_refused_by_its_name_and_nothing_is_written(string name, string why)
     {
         using var from = new MovingMachine();
@@ -143,6 +140,23 @@ public sealed class ImportCommandTests
         var error = Refused(to, exit, "import_refused");
         Assert.Contains($"'{name}'", error.Message, StringComparison.Ordinal);
         Assert.Contains(directory ? "as a folder, where an import places a file" : "as a file, where an import places a folder", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("data/run/runtime.lock", "a part of the data directory no export carries")]
+    [InlineData("data/state/backups/jason-20261101T000000Z.db", "a backup no export carries")]
+    [InlineData("data/ui/default/index.html", "the shipped UI no export carries")]
+    public async Task A_listed_part_of_the_data_directory_no_export_carries_is_refused_by_the_place_rule_and_nothing_is_written(string name, string why)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        // Listed in export.json with its digest, so the rule for where an import writes is the one that refuses it.
+        var file = new MovingArchive(from).Installation().With(name).Write();
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "import_refused");
+        Assert.True(error.Message.Contains($"'{name}', which an import never writes", StringComparison.Ordinal), $"{why}: the place rule did not refuse '{name}': {error.Message}");
     }
 
     [Fact]
