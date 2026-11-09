@@ -31,6 +31,14 @@ public sealed class ArchiveNamesTests
     [InlineData("data/con|fig", nameof(NameRefusal.VerticalBar))]
     [InlineData("data/config.", nameof(NameRefusal.TrailingDot))]
     [InlineData("data/config ", nameof(NameRefusal.TrailingSpace))]
+    [InlineData("harness/CON", nameof(NameRefusal.DeviceName))]
+    [InlineData("harness/prn.md", nameof(NameRefusal.DeviceName))]
+    [InlineData("harness/Aux", nameof(NameRefusal.DeviceName))]
+    [InlineData("harness/nul.tar.gz", nameof(NameRefusal.DeviceName))]
+    [InlineData("harness/COM1", nameof(NameRefusal.DeviceName))]
+    [InlineData("harness/com9.log", nameof(NameRefusal.DeviceName))]
+    [InlineData("harness/LPT1", nameof(NameRefusal.DeviceName))]
+    [InlineData("harness/lpt9.txt/notes.md", nameof(NameRefusal.DeviceName))]
     public void A_name_that_escapes_or_is_written_as_another_is_refused_by_its_own_rule(string name, string rule)
     {
         Assert.Equal(rule, ArchiveNames.Refusal(name)?.ToString());
@@ -43,6 +51,11 @@ public sealed class ArchiveNamesTests
     [InlineData("data/skills/roles/.jason-skills.json")]
     [InlineData("harness/acme/.jason/marker.json")]
     [InlineData("harness/acme/notes about q4.md")]
+    [InlineData("harness/console.md")]
+    [InlineData("harness/COM0")]
+    [InlineData("harness/LPT10")]
+    [InlineData("harness/nul-and-void.md")]
+    [InlineData("harness/acme.con")]
     public void A_plain_name_is_taken(string name)
     {
         Assert.Null(ArchiveNames.Refusal(name));

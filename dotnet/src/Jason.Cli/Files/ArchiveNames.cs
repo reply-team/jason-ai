@@ -26,6 +26,9 @@ internal enum NameRefusal
     /// <summary>A segment is <c>..</c>.</summary>
     ParentSegment,
 
+    /// <summary>A segment is a name Windows keeps for a device, with or without an extension: CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9.</summary>
+    DeviceName,
+
     /// <summary>A segment holds a control character.</summary>
     ControlCharacter,
 
@@ -122,7 +125,7 @@ internal static class ArchiveNames
 
     /// <summary>
     /// The first rule that refuses one segment of a name; null when it is plain. Past the empty, <c>.</c> and <c>..</c>
-    /// segments, a segment is refused for a control character or a character a file name on some system cannot hold, or
+    /// segments, a segment is refused for a name Windows keeps for a device, for a control character or a character a file name on some system cannot hold, or
     /// for ending in a dot or a space, which Windows drops from a name, so it would be written as another.
     /// </summary>
     private static NameRefusal? SegmentRefusal(string segment)
@@ -140,6 +143,11 @@ internal static class ArchiveNames
         if (segment == "..")
         {
             return NameRefusal.ParentSegment;
+        }
+
+        if (Device(segment))
+        {
+            return NameRefusal.DeviceName;
         }
 
         foreach (var character in segment)
@@ -196,6 +204,23 @@ internal static class ArchiveNames
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Whether a segment is a name Windows keeps for a device: what comes before its first dot, in any case, is CON, PRN,
+    /// AUX, NUL, COM1 to COM9 or LPT1 to LPT9. Windows opens the device for such a name, so a file another system wrote
+    /// under it cannot be placed there.
+    /// </summary>
+    private static bool Device(string segment)
+    {
+        var dot = segment.IndexOf('.', StringComparison.Ordinal);
+        var stem = dot < 0 ? segment : segment[..dot];
+        return stem.ToUpperInvariant() switch
+        {
+            "CON" or "PRN" or "AUX" or "NUL" => true,
+            [ 'C', 'O', 'M', >= '1' and <= '9' ] or [ 'L', 'P', 'T', >= '1' and <= '9' ] => true,
+            _ => false,
+        };
     }
 
     /// <summary>What Unix zip tools write for a link: the entry's mode says it is one.</summary>
