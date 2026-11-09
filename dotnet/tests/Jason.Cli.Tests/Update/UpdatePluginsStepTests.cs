@@ -141,6 +141,63 @@ public sealed class UpdatePluginsStepTests
         Assert.Contains("plugins: reply is not installed, so none was placed; `jason plugin install reply` installs it", applier.Steps);
     }
 
+    /// <summary>
+    /// A release publishes more packages than a person installs, and what there is to do is the same for each: three not
+    /// installed are one line naming each, where the first of them stands, and a package installed among them keeps its own.
+    /// </summary>
+    [Fact]
+    public async Task Three_packages_not_installed_are_one_line_naming_each()
+    {
+        var mailer = Plugin("mailer", "1.0.0");
+        using var installation = new FakeInstallation()
+            .WithInstalledPlugin(mailer)
+            .PublishingPlugin(Latest, Earlier).PublishingPlugin(ForwarderLatest, ForwarderEarlier).PublishingPlugin(mailer).PublishingPlugin(Plugin("slack", "1.0.0"));
+        var applier = installation.Applier();
+
+        var ledger = await applier.ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(
+            [
+                "plugins: journal-forwarder, reply and slack are not installed, so none was placed; `jason plugin install <id>` installs one",
+                "plugins: mailer 1.0.0 is current",
+            ],
+            applier.Steps.Where(step => step.StartsWith("plugins:", StringComparison.Ordinal)));
+        Assert.False(Path.Exists(installation.Paths.PluginPackageDirectory("slack")));
+    }
+
+    /// <summary>Two packages not installed are already two or more: one line names both, joined by "and" with no comma.</summary>
+    [Fact]
+    public async Task Two_packages_not_installed_are_one_line_naming_both()
+    {
+        using var installation = new FakeInstallation()
+            .PublishingPlugin(Plugin("slack", "1.0.0")).PublishingPlugin(Plugin("telegram", "1.0.0"));
+        var applier = installation.Applier();
+
+        var ledger = await applier.ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(
+            ["plugins: slack and telegram are not installed, so none was placed; `jason plugin install <id>` installs one"],
+            applier.Steps.Where(step => step.StartsWith("plugins:", StringComparison.Ordinal)));
+    }
+
+    /// <summary>Where every package the release publishes is installed, no line says a package is not.</summary>
+    [Fact]
+    public async Task Every_package_installed_leaves_no_line_saying_one_is_not()
+    {
+        using var installation = new FakeInstallation()
+            .WithInstalledPlugin(Latest).WithInstalledPlugin(ForwarderLatest)
+            .PublishingPlugin(Latest, Earlier).PublishingPlugin(ForwarderLatest, ForwarderEarlier);
+        var applier = installation.Applier();
+
+        await applier.ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(
+            ["plugins: journal-forwarder 1.0.1 is current", "plugins: reply 0.9.0 is current"],
+            applier.Steps.Where(step => step.StartsWith("plugins:", StringComparison.Ordinal)));
+    }
+
     /// <summary>The journal forwarder's package as the release before this one published it, and as this one publishes it.</summary>
     private static PluginPackage ForwarderEarlier { get; } = Plugin("journal-forwarder", "1.0.0");
 

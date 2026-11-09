@@ -873,4 +873,112 @@ public sealed class PluginHostModeTests : IDisposable
         Assert.Equal("hello", seen.Input["value"]!.GetValue<string>());
         Assert.Equal(_root, seen.Plugin.Root);
     }
+
+    /// <summary>
+    /// Half of a surrogate pair is not text, and JSON cannot carry it as a string: a plugin that cut a provider's message
+    /// at a count of UTF-16 units can leave one. The host writes the replacement character in its place, so the plugin's
+    /// own failure arrives with its class and its code rather than as no outcome at all.
+    /// </summary>
+    [Theory]
+    [InlineData("cut \\uD83D", "cut \uFFFD")]
+    [InlineData("\\uDE00 cut", "\uFFFD cut")]
+    [InlineData("\\uDE00\\uD83D", "\uFFFD\uFFFD")]
+    public async Task A_failure_message_holding_half_a_surrogate_pair_arrives_as_the_plugin_declared_it(string spelled, string expected)
+    {
+        InvocationFactory.WritePackage(
+            _root,
+            $$"""
+            export function invoke() {
+              throw host.fail({
+                class: "blocked",
+                code: "provider_blocked",
+                message: "{{spelled}}",
+                details: { said: ["{{spelled}}"] },
+                block: { scope: "account", reason: "billing", link: "https://provider.example/{{spelled}}" },
+              });
+            }
+            """);
+
+        var (exit, stdout, _) = await RunAsync(Argv(), InvocationFactory.Create(_root, "echo.run"));
+
+        Assert.Equal(HostExitCodes.Completed, exit);
+        var outcome = JsonSerializer.Deserialize<PluginOutcome>(stdout, JasonJson.Options)!;
+        Assert.Equal(OutcomeStatus.Failed, outcome.Status);
+        Assert.Equal(FailureClass.Blocked, outcome.Error!.Class);
+        Assert.Equal("provider_blocked", outcome.Error.Code);
+        Assert.Equal(expected, outcome.Error.Message);
+        Assert.Equal(expected, outcome.Error.Details!["said"]![0]!.GetValue<string>());
+        Assert.Equal("https://provider.example/" + expected, outcome.Error.Block!["link"]!.GetValue<string>());
+    }
+
+    /// <summary>
+    /// The same for a success: a string nested in an object, one in an array, a key, and an identifier the provider gave,
+    /// each written with the replacement character in place of the half, and the invocation succeeds as the plugin said. A log
+    /// line's data crosses from the engine the same way and is written the same way.
+    /// </summary>
+    [Fact]
+    public async Task A_result_holding_half_a_surrogate_pair_in_an_object_an_array_or_a_key_arrives_as_a_success()
+    {
+        InvocationFactory.WritePackage(
+            _root,
+            """
+            export function invoke() {
+              host.log("info", "said", { said: ["x\uD83D"] });
+              return {
+                result: { said: { text: "a\uD83D" }, lines: ["b", ["\uDE00c"]], keyed: { "k\uD83D": 1 } },
+                external_ids: { thread: "t\uDE00" },
+              };
+            }
+            """);
+
+        var (exit, stdout, stderr) = await RunAsync(Argv(), InvocationFactory.Create(_root, "echo.run"));
+
+        Assert.Equal(HostExitCodes.Completed, exit);
+        var outcome = JsonSerializer.Deserialize<PluginOutcome>(stdout, JasonJson.Options)!;
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.Null(outcome.Error);
+        var result = outcome.Result!;
+        Assert.Equal("a\uFFFD", result["said"]!["text"]!.GetValue<string>());
+        Assert.Equal("b", result["lines"]![0]!.GetValue<string>());
+        Assert.Equal("\uFFFDc", result["lines"]![1]![0]!.GetValue<string>());
+        Assert.Equal(1, result["keyed"]!["k\uFFFD"]!.GetValue<int>());
+        Assert.Equal("t\uFFFD", outcome.ExternalIds!["thread"]!.GetValue<string>());
+        var line = Assert.Single(ModeRun.Records(ModeRun.Lines(stderr)), record => record["message"]?.GetValue<string>() == "said");
+        Assert.Equal("x\uFFFD", line["data"]!["said"]![0]!.GetValue<string>());
+    }
+
+    /// <summary>
+    /// A whole pair is text and is written exactly as before, in a failure message and in a result alike; so is a backslash
+    /// the plugin wrote before a <c>u</c>, which spells no escape.
+    /// </summary>
+    [Fact]
+    public async Task A_whole_surrogate_pair_is_kept_exactly_as_the_plugin_wrote_it()
+    {
+        InvocationFactory.WritePackage(
+            _root,
+            """
+            export function invoke(operation, input) {
+              if (input.fail) {
+                throw host.fail({ class: "transient", code: "provider_busy", message: "busy \uD83D\uDE00" });
+              }
+              return { result: { text: "ok \uD83D\uDE00", lines: ["\uD83D\uDE00"], spelled: "\\uD83D" } };
+            }
+            """);
+
+        var (failedExit, failed, _) = await RunAsync(Argv(), InvocationFactory.Create(_root, "echo.run", new JsonObject { ["fail"] = true }));
+        var (succeededExit, succeeded, _) = await RunAsync(Argv(), InvocationFactory.Create(_root, "echo.run", new JsonObject { ["fail"] = false }));
+
+        Assert.Equal(HostExitCodes.Completed, failedExit);
+        Assert.Equal(HostExitCodes.Completed, succeededExit);
+        var error = JsonSerializer.Deserialize<PluginOutcome>(failed, JasonJson.Options)!.Error!;
+        Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.Equal("provider_busy", error.Code);
+        Assert.Equal("busy \uD83D\uDE00", error.Message);
+        Assert.Contains("\"busy \\uD83D\\uDE00\"", failed, StringComparison.Ordinal);
+        var result = JsonSerializer.Deserialize<PluginOutcome>(succeeded, JasonJson.Options)!.Result!;
+        Assert.Equal("ok \uD83D\uDE00", result["text"]!.GetValue<string>());
+        Assert.Equal("\uD83D\uDE00", result["lines"]![0]!.GetValue<string>());
+        Assert.Equal(@"\uD83D", result["spelled"]!.GetValue<string>());
+        Assert.Contains("\"text\":\"ok \\uD83D\\uDE00\"", succeeded, StringComparison.Ordinal);
+    }
 }

@@ -1423,7 +1423,10 @@ the outcome are JSON with each character outside ASCII written as an escape, so 
 crosses in either. That is a second defence beside the encoding: a child started without a window of
 its own is given a fresh console on the system's legacy code page, and a byte above 127 would be read
 through that page by a program that did not choose an encoding, whatever encoding it was written in. An
-escape reads the same in any page.
+escape reads the same in any page. A UTF-16 unit that is half of a surrogate pair and stands alone, in
+any string a plugin hands the host — a result, an identifier, a failure's message, details or block, a
+log line's data, a host function's options, a key — is written as U+FFFD, the replacement character; a
+whole pair is written as it is.
 
 ### The envelope: stdin, one JSON object, then end of file
 

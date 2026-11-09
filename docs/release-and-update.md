@@ -548,8 +548,11 @@ a kill anywhere in the step is finished by the next `jason update apply`. A pack
 edited on that machine, or, for Reply's package, a version before its list's first line, 0.3.2 — is left byte for
 byte, and so is one that is current, later than the release's, or cannot be read; a plugin that is not installed is not
 placed. The apply prints one `plugins:` line for each package the release publishes: `plugins: reply 0.8.0 -> 0.9.0`,
-`plugins: reply 0.9.0 is current`, or why it was left as it is. A step resumed after a kill prints lines only for the
-packages its ledger names. A release the step cannot read again — the network gone after the swap — gives one line,
+`plugins: reply 0.9.0 is current`, or why it was left as it is, except for packages that are not installed, which are
+said as in `jason status`: one on a line of its own, `plugins: slack is not installed, so none was placed; …`, and two
+or more on one line naming each, `plugins: slack and telegram are not installed, so none was placed; …`, which ends
+with the command that installs one. A step resumed after a kill prints lines only for the packages its ledger names. A
+release the step cannot read again — the network gone after the swap — gives one line,
 `plugins: not checked — …; run: jason status`, and every package stays as it was. A package that cannot be fetched,
 checked or moved — a download that breaks off, a digest that does not match, a file held open past the wait — is left
 as it was, and the update still stands:
