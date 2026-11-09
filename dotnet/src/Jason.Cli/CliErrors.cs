@@ -41,6 +41,18 @@ public static class CliErrors
     /// <summary>The path <c>jason doctor</c> would write its bundle to cannot be written, so nothing was.</summary>
     public const string DoctorOutputUnwritable = "doctor_output_unwritable";
 
+    /// <summary>The runtime runs, and a verb that works on its files cold was not told to stop it, so nothing was written.</summary>
+    public const string RuntimeRunning = "runtime_running";
+
+    /// <summary>Something is already at the path <c>jason export</c> would write, and an archive is never written over anything.</summary>
+    public const string ExportOutputExists = "export_output_exists";
+
+    /// <summary>The path <c>jason export</c> would write its archive to cannot be written, so nothing was.</summary>
+    public const string ExportUnwritable = "export_unwritable";
+
+    /// <summary>What <c>jason export</c> would carry holds something an archive cannot, so nothing was written.</summary>
+    public const string ExportRefused = "export_refused";
+
     public static string Serialize(string code, string message, bool retryable) =>
         JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(code, message, retryable)), JasonJson.Options);
 }

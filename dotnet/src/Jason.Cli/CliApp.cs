@@ -3,6 +3,7 @@ using System.CommandLine.Parsing;
 using Jason.Cli.Commands;
 using Jason.Cli.Doctor;
 using Jason.Cli.Logs;
+using Jason.Cli.Moving;
 using Jason.Cli.Skills;
 using Jason.Cli.Status;
 using Jason.Cli.Uninstall;
@@ -15,7 +16,7 @@ namespace Jason.Cli;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Nine names are not one-to-one with anything, and they are named here because this is where the rule is
+/// <b>Ten names are not one-to-one with anything, and they are named here because this is where the rule is
 /// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
 /// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
 /// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
@@ -70,9 +71,16 @@ namespace Jason.Cli;
 /// to approve, reject or answer; what it may run is the host's own permission settings' to decide.
 /// </para>
 /// <para>
-/// Guards hold the list to these: the verb-map tests to the four verbs, the three nouns, the <c>ui</c> group's three
+/// <c>export</c> is the tenth, a verb like <c>doctor</c>. It writes this installation's files — the database, the
+/// settings, the plugins, the role skills, the logs and the harness root's tree — into one archive another machine's
+/// <c>jason import</c> places. A copy of the database is a true one only while the runtime is stopped, which the runtime
+/// cannot be of itself while it answers, so no operation can stand behind it: of the runtime it asks only to stop and to
+/// start, as <c>runtime stop</c> and <c>runtime start</c> ask it, and only when <c>--stop</c> says so.
+/// </para>
+/// <para>
+/// Guards hold the list to these: the verb-map tests to the five verbs, the three nouns, the <c>ui</c> group's three
 /// operations and <c>install</c>, the <c>plugin</c> group's two operations and <c>install</c>, and the <c>session</c>
-/// noun's one verb, <c>open</c>. A tenth has to be added in the open rather than arriving as one more verb somebody
+/// noun's one verb, <c>open</c>. An eleventh has to be added in the open rather than arriving as one more verb somebody
 /// thought was obviously fine.
 /// </para>
 /// </remarks>
@@ -223,6 +231,7 @@ public static class CliApp
         root.Subcommands.Add(LogsCommand.Build(env));
         root.Subcommands.Add(DoctorCommand.Build(env));
         root.Subcommands.Add(UninstallCommand.Build(env));
+        root.Subcommands.Add(ExportCommand.Build(env));
 
         return root;
     }

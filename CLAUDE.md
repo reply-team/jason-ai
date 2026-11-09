@@ -168,7 +168,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, or a local act the CLI refused to perform), 2 usage error, 3 runtime unreachable
-  or unauthorized. The verb map is one-to-one with API operations with **nine declared exceptions**:
+  or unauthorized. The verb map is one-to-one with API operations with **ten declared exceptions**:
   `jason status` answers "can this installation start work?", half of which is not the runtime's to
   know, so no operation can stand behind it; `jason uninstall` takes this installation off the
   machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — which
@@ -184,7 +184,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   the campaign's folder with the item's brief as its first input, a terminal being no runtime's to start or know about,
   so the runtime is asked only what `approval get --prompt` and `decision get --prompt` ask and `preference.list`, and
   Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own
-  permission settings' to decide (the verb-map tests hold the `session` noun to `open` alone); and
+  permission settings' to decide (the verb-map tests hold the `session` noun to `open` alone); `jason export`
+  writes this installation's files — the database, the settings, the plugins, the role skills, the logs and the harness
+  root's tree — into one archive, which is a true copy only while the runtime is stopped and so no operation of the
+  runtime's can stand behind it: of the runtime it asks only to stop and to start, and only under `--stop`; and
   `jason doctor` collects one installation into one file, half of which is not the
   runtime's to know — of the runtime it asks only what the runtime says about itself, its roles,
   profiles, routes and subscriptions, and the journal and work-item pages it counts, keeping their metadata and
@@ -214,9 +217,11 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   plugin id, role name and skill pack name Jason did not ship an alias per distinct name (`<plugin-N>`,
   `<role-N>`, `<skill-pack-N>`), and a skill source other than the public repository, with its ref unless
   that is a release tag, `<skill-source>`.
-  `CliApp` states all nine where the rule is written, each verb's `--help`
+  `CliApp` states all ten where the rule is written, each verb's `--help`
   publishes its own contract — which checks are required, what is removed, what is never touched and
-  what a bundle never carries — and guards hold the list to these nine.
+  what a bundle never carries — and guards hold the list to these ten. `export` refuses while the runtime runs unless `--stop`
+  is given, never writes over a file, carries the settings file with every secret in it and says so, and refuses a
+  link or a name another system cannot hold before anything is written.
 - Persistence: EF Core over SQLite in WAL mode, snake_case tables and columns, integer primary keys
   plus a unique public ULID. The `journal` table is append-only, enforced three times over: no API
   path that changes an entry, an EF interceptor, and database triggers. Schema-less JSON — campaign

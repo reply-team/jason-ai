@@ -193,7 +193,7 @@ public static class RuntimeAutostartCommands
     }
 
     /// <summary>The data directory a registered command line names, which need not be this session's.</summary>
-    private static string? DataDirectoryIn(IReadOnlyList<string> run)
+    internal static string? DataDirectoryIn(IReadOnlyList<string> run)
     {
         for (var word = 0; word < run.Count - 1; word++)
         {
@@ -206,7 +206,7 @@ public static class RuntimeAutostartCommands
         return null;
     }
 
-    private static string Name(AutostartPlatform platform) => platform switch
+    internal static string Name(AutostartPlatform platform) => platform switch
     {
         AutostartPlatform.Windows => "windows",
         AutostartPlatform.MacOs => "macos",

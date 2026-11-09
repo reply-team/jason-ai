@@ -24,9 +24,11 @@ public class VerbMapTests
     /// about one installation rather than about anything the API owns, <c>uninstall</c> takes this
     /// installation off the machine, which is an act with no noun behind it and no operation either,
     /// <c>logs</c> reads the files the runtime writes, which the runtime is never asked about, and
-    /// <c>doctor</c> collects one installation into one file, half of which is not the runtime's to know.
+    /// <c>doctor</c> collects one installation into one file, half of which is not the runtime's to know, and
+    /// <c>export</c> writes this installation's files into one archive while the runtime is stopped, which the runtime
+    /// cannot do of itself while it runs.
     /// </summary>
-    private static readonly string[] DeclaredExceptions = ["status", "uninstall", "logs", "doctor"];
+    private static readonly string[] DeclaredExceptions = ["status", "uninstall", "logs", "doctor", "export"];
 
     /// <summary>
     /// The nouns with no API operation behind them. Two change this installation rather than asking the
@@ -103,7 +105,7 @@ public class VerbMapTests
     /// without one is the map drifting from the rule its own doc comment states.
     /// </summary>
     [Fact]
-    [Critical(Family.R2, "the nine declared exceptions")]
+    [Critical(Family.R2, "the ten declared exceptions")]
     public void Exactly_the_declared_names_have_no_api_operation_behind_them()
     {
         var operations = typeof(Contracts.Api.Operations)
@@ -118,8 +120,8 @@ public class VerbMapTests
         Assert.Equal(WithoutAnOperation.Order(StringComparer.Ordinal), strangers);
 
         // And the verbs stand for none either. Each says it never will, and nothing held that: an
-        // `uninstall.*`, `status.*`, `logs.*` or `doctor.*` operation arriving in the contracts would have kept
-        // this test green while the nine declared exceptions quietly became eight.
+        // `uninstall.*`, `status.*`, `logs.*`, `doctor.*` or `export.*` operation arriving in the contracts would have kept
+        // this test green while the ten declared exceptions quietly became nine.
         Assert.All(DeclaredExceptions, exception => Assert.DoesNotContain(exception, operations));
     }
 
