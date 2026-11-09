@@ -1274,23 +1274,39 @@ public static class ImportCommand
         return "Refused before anything is written: an archive that cannot be read; a name in it that escapes (a parent or empty "
             + "segment, a rooted name, a backslash, a link, a name outside data/, harness/ and export.json, or a part of the data "
             + "directory no export carries); a file whose size or SHA-256 is not the one export.json lists; an archive a newer "
-            + "Jason wrote, naming the version to install first; and, without --replace, an installation already here — a "
+            + "Jason wrote, naming the version to install first, or a jason_version no Jason writes; an update in flight, "
+            + "naming 'jason update apply', or an update ledger that cannot be read, by its path; a harness root the runtime's "
+            + "rule refuses, or a --root that JASON_Harness__Root contradicts, naming the variable; a settings file in the "
+            + "archive that is not a JSON object, or whose Harness:Root is an object or an array; a command run from the "
+            + "harness root, a folder in it or a part of the data directory that would go aside; a runtime that runs, by its "
+            + "descriptor or by the lock it holds, without --stop; and, without --replace, an installation already here — a "
             + "database, or a harness root with a marker in it — named with what it holds." + nl
             + "Nothing is deleted, and nothing is written over: --replace moves the data directory's parts the archive's land on "
             + "into <data>/replaced-<stamp>/ — state/ whole, its sidecars and backups with it, config/, plugins/, skills/roles/, "
             + "ui/custom/ and logs/ — and the harness root to <root>.replaced-<stamp>; on a machine with no installation the same "
             + "parts that stand there, a jason.db-wal or jason.db-shm beside no database among them, and a harness root folder "
-            + "with no marker go aside the same way; each is named as yours to remove." + nl
+            + "with no marker go aside the same way, with no --replace; each is named as yours to remove. The harness root "
+            + "moves first, then the data parts; a move that fails takes back every one made before it, the last first, and "
+            + "the runtime stopped for the import is started again. When something cannot be taken back, or the placing fails "
+            + "after the moves, the answer names the folders that hold this machine's own installation, the runtime is left "
+            + "stopped, and it must not be started until what was moved aside is put back. The runtime's lock, run/runtime.lock, "
+            + "is held from the check that nothing runs until just before the start, so no runtime starts on a half-placed "
+            + "directory." + nl
             + "The harness root: --root, else JASON_Harness__Root, else the Harness:Root this machine's settings file names, else "
-            + "Jason in the home directory; a --root the variable contradicts is refused. It is held to the runtime's rule for a "
-            + "root before anything is placed, and the placed settings file names it." + nl
+            + "Jason in the home directory; a --root the variable contradicts is refused, naming the variable. A settings file "
+            + "here that cannot be read is passed over, and the answer says the root was resolved without it. The root is held "
+            + "to the runtime's rule for a root before anything is placed, and the placed settings file names it. A project "
+            + "folder outside the harness root does not travel: each project whose recorded folder is not here is said, and "
+            + "listed as folders_not_here." + nl
             + "The settings file: every absolute path under the other machine's home directory, data directory or harness root "
             + "is rewritten to the same path here, each rewrite said, Harness:Root first; a path outside those three that is not "
             + "on this machine is said and left as written; every other value, a secret among them, is placed as it was." + nl
             + "The runtime: while it runs this refuses, naming 'jason runtime stop', unless --stop is given. It registers at "
             + "logon when the other machine did, or says this machine cannot; starts the runtime and waits for it; and asks it "
-            + "to link each project folder by its marker. A refused link is said, and the folder stays. It reaches no network "
-            + "but the runtime's own loopback." + nl
+            + "to link each project folder by its marker. A refused link is said, the folder stays, and next carries "
+            + "'jason project link <id> --path <folder>'. An import on the same machine, into a second data directory, needs the "
+            + "source harness root moved aside first: the records name its folders, and project.link refuses a folder present "
+            + "elsewhere (harness_folder_present). It reaches no network but the runtime's own loopback." + nl
             + "Left to you: " + string.Join("; ", LeftToYou) + "." + nl
             + "Exit codes: 0 placed and the runtime answered; 1 refused, with nothing written, or placed and the runtime did not "
             + "start, which the answer says; 2 usage.";

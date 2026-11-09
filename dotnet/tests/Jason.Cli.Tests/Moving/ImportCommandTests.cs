@@ -1255,6 +1255,16 @@ public sealed class ImportCommandTests
         Assert.Contains("Harness:Root first", help, StringComparison.Ordinal);
         Assert.Contains("Left to you: jason skills install", help, StringComparison.Ordinal);
         Assert.Contains("Exit codes: 0 placed and the runtime answered", help, StringComparison.Ordinal);
+        Assert.Contains("an update in flight, naming 'jason update apply'", help, StringComparison.Ordinal);
+        Assert.Contains("a --root that JASON_Harness__Root contradicts, naming the variable", help, StringComparison.Ordinal);
+        Assert.Contains("a settings file in the archive that is not a JSON object", help, StringComparison.Ordinal);
+        Assert.Contains("the answer says the root was resolved without it", help, StringComparison.Ordinal);
+        Assert.Contains("with no --replace", help, StringComparison.Ordinal);
+        Assert.Contains("The harness root moves first, then the data parts", help, StringComparison.Ordinal);
+        Assert.Contains("run/runtime.lock", help, StringComparison.Ordinal);
+        Assert.Contains("A project folder outside the harness root does not travel", help, StringComparison.Ordinal);
+        Assert.Contains("needs the source harness root moved aside first", help, StringComparison.Ordinal);
+        Assert.Contains("'jason project link <id> --path <folder>'", help, StringComparison.Ordinal);
     }
 
     // ---- helpers -----------------------------------------------------------------------------------------------------

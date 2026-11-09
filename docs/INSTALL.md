@@ -663,7 +663,7 @@ On a machine with no installation the import still writes over nothing: the same
 `jason.db-wal` or `jason.db-shm` beside no database among them, go aside the same way and are named, since SQLite
 would read such a file as the placed database's. The harness root is `--root` when given, else the one this
 machine's runtime would read (`JASON_Harness__Root`, else `Harness:Root` in this machine's settings file, else
-`~/Jason`); a `--root` the variable contradicts is refused, and the root is held to the runtime's own rule for one
+`~/Jason`); a `--root` the variable contradicts is refused, naming the variable, and the root is held to the runtime's own rule for one
 — an absolute path, not the home directory, a folder holding it or the top of a drive, nor the data directory, a
 folder inside it or one holding it — before anything is placed.
 
@@ -674,7 +674,10 @@ the secrets among them, is placed as it was. A role skills pack the record says 
 here is named, with `jason skills install` to deploy it again.
 
 **Then the runtime starts on it**, and the import asks it to record each project folder where it now stands, as
-`jason project link` does; a link the runtime refuses is named with its code, and the folder stays. The import
+`jason project link` does; a link the runtime refuses is named with its code, the folder stays, and the answer's
+`next` carries `jason project link <id> --path <folder>`. An import on the same machine, into a second data
+directory, needs the source harness root moved aside first: the records name its folders, and the runtime refuses
+to link a folder that is present elsewhere (`harness_folder_present`). The import
 exits 0 when everything was placed and the runtime answered, 1 when it refused (nothing written) or the runtime
 did not start (the files are in place; start it with `jason runtime start`), and 2 on a usage error. Three
 things are left to you, in this order: `jason skills install`, `jason runtime autostart enable` if the runtime
