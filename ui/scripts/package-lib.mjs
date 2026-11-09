@@ -1,5 +1,5 @@
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yazl from 'yazl';
 
@@ -33,25 +33,43 @@ function buildFiles(dist) {
     return files.sort();
 }
 
-/** The production dependencies, walked transitively, each with its licence text. */
-function thirdPartyNotices() {
-    const seen = new Map();
-    const visit = (name) => {
-        if (seen.has(name)) return;
-        const dir = join(root, 'node_modules', name);
+/**
+ * The package directory a file of the build came from, or null for the project's own files and the bundler's virtual
+ * modules: the folder after the last node_modules of its path, two segments for a scoped name.
+ */
+function packageDirOf(id) {
+    const path = resolve(root, id.replace(/^\0/, '').replace(/\?.*$/, '')).split('\\').join('/');
+    const parts = path.split('/');
+    const at = parts.lastIndexOf('node_modules');
+    if (at < 0 || at + 1 >= parts.length) return null;
+    const length = parts[at + 1].startsWith('@') ? 2 : 1;
+    return parts.slice(0, at + 1 + length).join('/');
+}
+
+/** The packages the bundle carries, each with its licence text read from its own package. */
+function thirdPartyNotices(bundle) {
+    const dirs = new Set();
+    for (const output of Object.values(bundle)) {
+        const ids = output.type === 'chunk' ? output.moduleIds : (output.originalFileNames ?? []);
+        for (const id of ids) {
+            const dir = packageDirOf(id);
+            if (dir) dirs.add(dir);
+        }
+    }
+    const packages = [...dirs].map((dir) => {
         const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
         const licenseFile = readdirSync(dir).find((f) => /^(LICENSE|LICENCE)(\..*)?$/i.test(f));
-        seen.set(name, {
+        return {
+            name: pkg.name,
             version: pkg.version,
             license: pkg.license ?? 'see text',
             text: licenseFile ? readFileSync(join(dir, licenseFile), 'utf8') : '',
-        });
-        for (const dep of Object.keys(pkg.dependencies ?? {})) visit(dep);
-    };
-    const own = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-    for (const dep of Object.keys(own.dependencies ?? {})) visit(dep);
+        };
+    });
     const lines = ['Third-party notices for the Jason UI build.', ''];
-    for (const [name, { version, license, text }] of [...seen.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    for (const { name, version, license, text } of packages.sort(
+        (a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version),
+    )) {
         lines.push(`## ${name} ${version} — ${license}`, '', text.trim(), '');
     }
     return lines.join('\n');
@@ -76,11 +94,29 @@ export function buildManifest({ version, apiVersion }) {
     };
 }
 
+/**
+ * The build writes the notices of exactly the packages its bundle carries, read from the modules each chunk was made
+ * of and the files each asset came from; a package that is a dependency but is not in the bundle is not named.
+ */
+export function buildNotices() {
+    return {
+        name: 'jason-ui-notices',
+        apply: 'build',
+        enforce: 'post',
+        generateBundle(_options, bundle) {
+            this.emitFile({ type: 'asset', fileName: 'THIRD-PARTY-NOTICES', source: thirdPartyNotices(bundle) });
+        },
+    };
+}
+
 export function packageUi(dist, out, { version, apiVersion }) {
     return new Promise((resolve, reject) => {
         let files;
         try {
             files = buildFiles(dist);
+            if (!files.includes('THIRD-PARTY-NOTICES')) {
+                throw new Error(`${dist} holds no THIRD-PARTY-NOTICES, which the build writes beside index.html`);
+            }
         } catch (error) {
             reject(error);
             return;
@@ -89,7 +125,6 @@ export function packageUi(dist, out, { version, apiVersion }) {
         const zip = new yazl.ZipFile();
         for (const file of files) zip.addFile(join(dist, file), file);
         zip.addBuffer(Buffer.from(manifestOf(version, apiVersion)), 'manifest.json');
-        zip.addBuffer(Buffer.from(thirdPartyNotices()), 'THIRD-PARTY-NOTICES');
         zip.outputStream
             .pipe(createWriteStream(out))
             .on('close', () => resolve(out))
