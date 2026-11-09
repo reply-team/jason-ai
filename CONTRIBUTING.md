@@ -2,7 +2,8 @@
 
 This repository is Jason, whole: the runtime and its CLI, the skills that teach an agent the job, the plugins that
 carry operations to providers, the operation contracts, the install scripts, and every release. All of it is developed
-here, in the open.
+here, in the open. To use Jason, install a release ([docs/INSTALL.md](docs/INSTALL.md)): nothing here is built, cloned
+or tested for that, only for changing Jason.
 
 Where to write:
 

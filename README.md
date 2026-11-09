@@ -29,11 +29,93 @@ plans each person's line of contact, writes, sends through your provider, reads 
 while you're in meetings. Your agent does the thinking, Jason keeps the memory, and every message waits for your
 approval.
 
+**You use Jason from a release.** Nothing in this repository is built, cloned or tested to use it; the source is here
+for changing Jason.
+
 > **Plugins are plain JavaScript.** A plugin is a small JavaScript package the runtime runs in its own embedded engine,
 > with no Node and no build step, so one package runs the same on macOS, Linux and Windows. The runtime is C#, chosen
 > for cross-platform builds, stability and speed; its code is fully open. [Why](#plugins-are-javascript).
 
 <!-- Demo GIF: describe the idea → contacts found → approve → send through Reply → handle a reply -->
+
+---
+
+## Quick start
+
+**Installing Jason should be the easy part: one prompt, one program, nothing to configure by hand.** Here is what that
+means today.
+
+- **What you do:** paste one prompt into your agent. It guides you through the rest and asks only when it needs you.
+- **What it installs:** one self-contained executable, under your own account. The install script checks the download's
+  SHA-256 before unpacking it, and ends by deploying the role skills from the release's `jason-skills.zip`. No admin
+  rights, and no Docker, Python or Node for Jason itself.
+- **How long it takes:** 16 seconds from nothing to `Ready` for the executable, the role skills, the browser UI and the
+  start, measured on an Apple-silicon Mac with Jason 0.24.0. Your agent working through the guide takes longer, and so
+  does connecting your provider.
+- **How you know it worked:** `jason status --human` checks everything, and each failed check names the command that fixes it.
+- **What you don't need:** `git`, a build, a server, a mock provider, a hosted account or an onboarding call.
+- **How you take it off:** `jason uninstall`. It removes only the skills it recorded installing, so anything you copied in
+  by hand stays. Your data stays too unless you add `--purge-data`, and your `~/Jason` folder is never touched.
+
+**1. Paste this into your agent.** It installs Jason, checks it's ready and guides you to your first campaign.
+
+```text
+Install Jason on this machine. The instructions are
+<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>: read the whole file
+first, then follow it in order from section 2, installing from a release and building nothing. Before
+you run anything, tell me in a few words what you will install and where, and wait for my yes; ask me
+again before each act the guide marks "Ask first". At the end, tell me whether Jason can start work and
+exactly what you ran and changed. Then do what the guide's hand-over says: offer me the wiring check
+once, and bring me to my first campaign in my own words.
+```
+
+If your agent runs in auto mode, it may ask before the download, or refuse where nothing can ask you. Both are right: say
+yes, or run the line below yourself.
+
+<details>
+<summary>Or install it yourself</summary>
+
+```sh
+# macOS (Apple silicon) and Linux
+curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
+
+# Homebrew
+brew install reply-team/tap/jason
+```
+
+```powershell
+# Windows
+irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
+```
+
+Then teach it, start it and ask whether it can work. The install script has already taught it its role skills, so the
+first line is for Homebrew, or for when the script said it could not:
+
+```sh
+jason skills install --roles-only
+jason ui install
+jason runtime start
+jason status --human
+```
+
+No administrator rights needed.
+
+Jason is released under the MIT licence: [LICENSE](LICENSE). What it sends off your machine, and what stays your
+responsibility when it reaches people, is in [docs/responsible-use.md](docs/responsible-use.md).
+
+</details>
+
+**2. Connect your provider.** With Reply, it's one sign-in that only you do: `reply auth login`, so your key never passes
+through the chat. Your agent does the rest: the Reply CLI (it needs Node 20 or newer), the plugin, its grant and its route.
+You open Reply's web app only to sign in, create your first API key, or connect a LinkedIn account or a mailbox by single
+sign-on. Using another provider? Its plugin goes into `~/.jason/plugins/`, a grant names what it may run and reach, and a route points your campaigns at it.
+
+**3. Tell your agent about your first campaign.** In your own words. Want to see the whole path first? Your agent offers
+a [wiring check](https://github.com/reply-team/jason-ai/blob/main/docs/golden-path.md) once: one draft campaign in your account, with your own address as the only
+contact, and nothing sent.
+
+> **Alpha.** Jason is early software and changes from release to release. Approve real sends only in a provider account
+> you keep for testing, not the one your company sells from.
 
 ---
 
@@ -63,6 +145,7 @@ to.
 
 ## Contents
 
+- [Quick start](#quick-start)
 - [At a glance](#at-a-glance)
 - [Runs on the plan you already pay for](#runs-on-the-plan-you-already-pay-for)
 - [What you get](#what-you-get)
@@ -76,7 +159,6 @@ to.
 - [What it costs](#what-it-costs)
 - [How it compares](#how-it-compares)
 - [Who it's for](#who-its-for)
-- [Quick start](#quick-start)
 - [Under the hood](#under-the-hood)
 - [Documentation](#documentation)
 - [FAQ](#faq)
@@ -464,98 +546,6 @@ Reply.io.
 - Anyone looking for a hosted platform where outreach is designed on screens.
 - A team that needs one shared system today: each person runs their own Jason.
 - Anyone who needs a promise of meetings or revenue. Jason improves how the work is done, not the offer behind it.
-
----
-
-## Quick start
-
-**Installing Jason should be the easy part: one prompt, one program, nothing to configure by hand.** Here is what that
-means today.
-
-- **What you do:** paste one prompt into your agent. It guides you through the rest and asks only when it needs you.
-- **What it installs:** one self-contained executable, under your own account. The install script checks the download's
-  SHA-256 before unpacking it, and ends by deploying the role skills from the same release. No admin rights, and no Docker,
-  Python or Node for Jason itself.
-- **How long it takes:** 16 seconds from nothing to `Ready` for the executable, the role skills, the browser UI and the
-  start, measured on an Apple-silicon Mac with Jason 0.24.0. Your agent working through the guide takes longer, and so
-  does connecting your provider.
-- **How you know it worked:** `jason status --human` checks everything, and each failed check names the command that fixes it.
-- **What you don't need:** a server, a mock provider, a hosted account or an onboarding call.
-- **How you take it off:** `jason uninstall`. It removes only the skills it recorded installing, so anything you copied in
-  by hand stays. Your data stays too unless you add `--purge-data`, and your `~/Jason` folder is never touched.
-
-**1. Paste this into your agent.** It installs Jason, checks it's ready and guides you to your first campaign.
-
-```text
-Install Jason on this machine. The instructions are
-<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>. Read all of it
-first, the whole file word for word rather than a summary of it.
-
-Before you run anything, ask me one question in plain words: what you will install and from
-where, what it writes and where (the executable and its directory, the PATH entry, Jason's data
-directory, the role skills), and each act the instructions mark "Ask first", offered to me one by
-one as a choice. Offer me the other way too: switching this session to a mode that asks me before
-every command. Then do the steps yourself, in order from section 2, doing only what I said yes to.
-
-Jason is downloaded from its releases at <https://get.jasonharness.ai/releases/>, which redirect to
-<https://github.com/reply-team/jason-ai/releases>; install it from there, or with the package
-section 2 names for this platform.
-
-Jason is released under the MIT licence:
-<https://github.com/reply-team/jason-ai/blob/main/LICENSE>.
-
-At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran
-and what it changed. If it can, ask me once whether I want a synthetic walk to meet Jason first or
-my real work at once.
-```
-
-If your agent runs in auto mode, it may ask before the download, or refuse where nothing can ask you. Both are right: say
-yes, or run the line below yourself.
-
-<details>
-<summary>Or install it yourself</summary>
-
-```sh
-# macOS (Apple silicon) and Linux
-curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
-
-# Homebrew
-brew install reply-team/tap/jason
-```
-
-```powershell
-# Windows
-irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
-```
-
-Then teach it, start it and ask whether it can work. The install script has already taught it its role skills, so the
-first line is for Homebrew, or for when the script said it could not:
-
-```sh
-jason skills install --roles-only
-jason ui install
-jason runtime start
-jason status --human
-```
-
-No administrator rights needed.
-
-Jason is released under the MIT licence: [LICENSE](LICENSE). What it sends off your machine, and what stays your
-responsibility when it reaches people, is in [docs/responsible-use.md](docs/responsible-use.md).
-
-</details>
-
-**2. Connect your provider.** With Reply, it's one sign-in that only you do: `reply auth login`, so your key never passes
-through the chat. Your agent does the rest: the Reply CLI (it needs Node 20 or newer), the plugin, its grant and its route.
-You open Reply's web app only to sign in, create your first API key, or connect a LinkedIn account or a mailbox by single
-sign-on. Using another provider? Its plugin goes into `~/.jason/plugins/`, a grant names what it may run and reach, and a route points your campaigns at it.
-
-**3. Tell your agent about your first campaign.** In your own words. Want to see the whole path first? Your agent offers
-a [wiring check](https://github.com/reply-team/jason-ai/blob/main/docs/golden-path.md) once: one draft campaign in your account, with your own address as the only
-contact, and nothing sent.
-
-> **Alpha.** Jason is early software and changes from release to release. Approve real sends only in a provider account
-> you keep for testing, not the one your company sells from.
 
 ---
 

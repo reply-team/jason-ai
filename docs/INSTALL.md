@@ -10,7 +10,8 @@ the machine.
 
 ## 1. What you need
 
-**From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
+Jason is used from a release: nothing in its repository is built, cloned or tested to use it, which is for changing
+Jason (§3). **From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
 script ends by teaching it its role skills (§4). Teaching it is a fetch of its own: a release takes its skills from
 the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as. A machine
 without the network teaches it from a checkout instead, with `--source`, which also takes a git repository at a ref;
@@ -79,7 +80,8 @@ ask.
 - A profile you append to is read by a login shell, not by your next non-interactive command (§2): carry the
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
-  exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work
+  exactly what you ran, and what it changed.
+- **The hand-over.** When `ready` is true, tell the person Jason is installed and can work
   and where it will keep their files — the two lines §2 shows, with the folder the `harness_root` check of
   `jason status` names, which is the one in force — and ask them once what comes next:
   [the wiring check](golden-path.md) first, in this session, or their real work at once. Name the wiring check for
@@ -261,6 +263,8 @@ have done their work: you may delete those three — only those — with `Remove
 ---
 
 ## 3. Build from source
+
+This section is for people changing Jason; to use Jason, skip it: section 2 installs a release.
 
 A build of the executable from the runtime's repository, rather than a release (§2), needs two things from this page:
 
