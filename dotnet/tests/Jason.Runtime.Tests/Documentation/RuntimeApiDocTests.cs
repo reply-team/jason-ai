@@ -100,7 +100,9 @@ public partial class RuntimeApiDocTests
         Assert.Contains($"`GET {Streams.JournalRoute}`", section, StringComparison.Ordinal);
         Assert.Contains($"`{Streams.JournalSubProtocol}`", section, StringComparison.Ordinal);
         Assert.Contains($"`{Streams.BearerSubProtocolPrefix}<token>`", section, StringComparison.Ordinal);
-        Assert.Contains($"`{Streams.SinceParameter}=<cursor>`", section, StringComparison.Ordinal);
+        Assert.Contains($"`{Streams.SinceParameter}=<id>`", section, StringComparison.Ordinal);
+        Assert.Contains("drops a line whose `id` it already has", section, StringComparison.Ordinal);
+        Assert.Contains("never takes `journal.list`'s cursor", section, StringComparison.Ordinal);
         Assert.Contains("`jason journal watch`", section, StringComparison.Ordinal);
         Assert.Contains("`websocket_required`", section, StringComparison.Ordinal);
         Assert.Contains("`validation_failed`", section, StringComparison.Ordinal);
@@ -110,7 +112,7 @@ public partial class RuntimeApiDocTests
         Assert.Contains($"up to {Jason.Runtime.Journal.JournalStream.BatchSize.ToString(CultureInfo.InvariantCulture)} at a time", section, StringComparison.Ordinal);
 
         Assert.Contains($"answers `{(int)System.Net.WebSockets.WebSocketCloseStatus.NormalClosure}`", section, StringComparison.Ordinal);
-        Assert.Contains($"`{(int)System.Net.WebSockets.WebSocketCloseStatus.PolicyViolation}` when the UI token", section, StringComparison.Ordinal);
+        Assert.Contains($"`{(int)System.Net.WebSockets.WebSocketCloseStatus.PolicyViolation}` and the reason `{Jason.Runtime.Journal.JournalStream.RevokedReason}` when the UI token", section, StringComparison.Ordinal);
         Assert.Contains($"`{(int)System.Net.WebSockets.WebSocketCloseStatus.EndpointUnavailable}` when the runtime stops", section, StringComparison.Ordinal);
         Assert.DoesNotContain("journal.stream", Named(page));
     }

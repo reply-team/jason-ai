@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Runtime.Api;
 using Jason.Runtime.Domain;
@@ -24,7 +25,9 @@ namespace Jason.Runtime.Journal;
 /// waits for the database, so two lines can become readable in another order than their ids say, and a stream that
 /// followed ids could pass a line over. The table's own key grows in the order the writes are committed, because
 /// SQLite takes them one at a time. With no <see cref="Streams.SinceParameter"/> the stream starts at the last line
-/// written when it opens; with one, a cursor of <c>journal.list</c>'s, it starts after the line the cursor names.
+/// written when it opens; with one, a line's public id, it starts after that line in the order of the table. So a program
+/// that resumes from the newest id <c>journal.list</c> showed it may be sent a line it already has once more, one
+/// committed after that line under an older id, and is never short of one: it drops a repeat by its id.
 /// </remarks>
 public static class JournalStream
 {
@@ -36,6 +39,12 @@ public static class JournalStream
 
     /// <summary>The most lines one read takes; a read that fills it is followed at once by the next.</summary>
     public const int BatchSize = 200;
+
+    /// <summary>The prefix of a journal line's public id, the form <see cref="Streams.SinceParameter"/> takes.</summary>
+    private const string JournalIdPrefix = "jrn";
+
+    /// <summary>The one word a stream closed for a revoked UI token gives as its reason.</summary>
+    public const string RevokedReason = "revoked";
 
     /// <summary>How long the runtime waits for the other side to answer its close before it lets the connection go.</summary>
     private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(2);
@@ -98,28 +107,26 @@ public static class JournalStream
         }
     }
 
-    /// <summary>The key of the last line the stream does not send: the one a cursor names, or the newest line now.</summary>
+    /// <summary>
+    /// The key of the last line the stream does not send: the line <see cref="Streams.SinceParameter"/> names by its
+    /// public id, or the newest line now. The one place the parameter is read.
+    /// </summary>
     private static async Task<long> StartAsync(IServiceScopeFactory scopes, string since, CancellationToken cancellationToken)
     {
-        string? named;
-        try
-        {
-            named = Paging.DecodeCursor(since);
-        }
-        catch (ValidationException)
-        {
-            throw new ValidationException([new ErrorDetail(Streams.SinceParameter, "invalid", $"{Streams.SinceParameter} must be a next_cursor journal.list returned.")]);
-        }
-
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
-        var lines = db.Journal.AsNoTracking();
-        if (named is not null)
+        if (string.IsNullOrEmpty(since))
         {
-            lines = lines.Where(e => string.Compare(e.PublicId, named) <= 0);
+            return await db.Journal.AsNoTracking().MaxAsync(e => (long?)e.Id, cancellationToken).ConfigureAwait(false) ?? 0;
         }
 
-        return await lines.MaxAsync(e => (long?)e.Id, cancellationToken).ConfigureAwait(false) ?? 0;
+        if (!PublicId.IsWellFormed(JournalIdPrefix, since))
+        {
+            throw new ValidationException([new ErrorDetail(Streams.SinceParameter, "invalid", $"{Streams.SinceParameter} must be the id of a journal line, {JournalIdPrefix}_ and 26 characters.")]);
+        }
+
+        return await db.Journal.AsNoTracking().Where(e => e.PublicId == since).Select(e => (long?)e.Id).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new ValidationException([new ErrorDetail(Streams.SinceParameter, "unknown", $"{Streams.SinceParameter} names no journal line.")]);
     }
 
     /// <summary>Sends every line after <paramref name="after"/> until the stream has to end, and answers how it ends.</summary>
@@ -150,7 +157,7 @@ public static class JournalStream
 
             if (bearer is not null && (tokens is null || !tokens.IsLive(bearer.Hash)))
             {
-                return (WebSocketCloseStatus.PolicyViolation, "The UI token this stream was opened with has been revoked.");
+                return (WebSocketCloseStatus.PolicyViolation, RevokedReason);
             }
 
             IReadOnlyList<JournalEntryDto> lines;

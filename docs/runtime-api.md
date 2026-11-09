@@ -422,18 +422,22 @@ one to one: it prints each line as it arrives, compact JSON or rendered under `-
   or a paired browser's UI token opens the stream. An upgrade without one is answered `401` before it becomes a
   WebSocket, and a `jason.bearer.` subprotocol sent to any other route counts for nothing: without the header, that
   request is answered `401` too.
-- **Where it starts**: without `since`, after the last line written when the stream opens. With
-  `since=<cursor>`, a `next_cursor` that `journal.list` answered, verbatim, it starts after the line the cursor names
-  and sends every line written after it, oldest first, the lines of the page that cursor ended included. A `since` that
-  is no such cursor is answered `400` with the code `validation_failed`, before the upgrade, naming the field `since`.
+- **Where it starts**: without `since`, with the next line committed after the stream opens. With `since=<id>`, the id
+  of the last line you have — the `id` every frame and every `journal.list` line carries, `jrn_` and its ULID — it
+  sends every line committed after that one, in the order they were committed. A line's id is made before its write
+  waits for the database, so a line can be committed after one whose id is newer: a program that resumes from the
+  newest id `journal.list` showed it may be sent a line it already has once more, and never misses one, so it drops a
+  line whose `id` it already has. A `since` that is not a line's id, or names no line, is answered `400` with the code
+  `validation_failed` before the upgrade, naming the field `since`. The stream never takes `journal.list`'s cursor.
 - **Each line is one text frame**, the line exactly as `journal.list` answers it, and the lines come oldest first. The
   stream sends nothing else, and reads nothing from the program but its close.
 - **How soon**: the runtime looks for new lines every second, up to 200 at a time, and looks again at once when a look
   finds that many. The stream only reads: each look is a read of its own, and nothing stays open between two of them.
-- **How it ends**: the program closes it, and the runtime answers `1000`. The runtime closes it with `1008` when the UI
-  token that opened it is revoked, and with `1001` when the runtime stops. The capability token changes at every start,
-  so a program that follows the journal across a restart reads the descriptor again, reads with `journal.list` what it
-  missed, and opens the stream again.
+- **How it ends**: the program closes it, and the runtime answers `1000`. The runtime closes it with `1008` and the reason
+  `revoked` when the UI token that opened it is revoked, at its next look, and with `1001` when the runtime stops,
+  before the stop completes, so an open stream never holds a stop. A revoked or unknown token is refused `401` at the
+  upgrade and never opens one. The capability token changes at every start, so a program that follows the journal
+  across a restart reads the descriptor again and opens the stream with `since` set to the last line it has.
 
 ## What a program can write so its result comes back as a fact
 

@@ -24,8 +24,8 @@ public static class Streams
     public const string BearerSubProtocolPrefix = "jason.bearer.";
 
     /// <summary>
-    /// The query parameter that names where the stream starts: a cursor in the form <c>journal.list</c> pages by, and
-    /// the stream sends the lines after the line it names.
+    /// The query parameter that names where the stream starts: a journal line's id, <c>jrn_</c> and its ULID, the
+    /// <c>id</c> every frame and every <c>journal.list</c> line carries; the stream sends the lines committed after it.
     /// </summary>
     public const string SinceParameter = "since";
 

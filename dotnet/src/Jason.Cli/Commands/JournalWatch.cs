@@ -28,7 +28,7 @@ public static class JournalWatch
             "Print each chronicle entry as it is written, oldest first, until interrupted. Exit 0 on an interrupt, 3 when the runtime cannot be reached, refuses the token or ends the stream.");
         var since = new Option<string?>(Options.Since)
         {
-            Description = "Start after the entry this names: a next_cursor of journal list, verbatim. Without it, the entries written from now on.",
+            Description = "The id of the last line you have (jrn_...): the watch starts after it, and may print a line you already have once more, never miss one. Without it, the entries written from now on.",
         };
         var human = VerbOptions.Human();
         command.Options.Add(since);

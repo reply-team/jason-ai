@@ -5,16 +5,20 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.Ui;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Journal;
 
 /// <summary>
 /// <c>GET /v1/journal.stream</c>, opened the way a program and a page open it: every line written after it opens arrives,
-/// oldest first, one text frame each in the shape <c>journal.list</c> answers a line; a cursor of <c>journal.list</c>'s
-/// starts it after the line the cursor names; the bearer comes in the header, or as a subprotocol on this route alone;
-/// and the stream ends when the UI token it was opened with is revoked and when the runtime stops.
+/// oldest first, one text frame each in the shape <c>journal.list</c> answers a line; a line's id starts it after that
+/// line, in the order the lines were committed; the bearer comes in the header, or as a subprotocol on this route alone,
+/// and a token that is revoked or unknown is refused at the upgrade; and the stream ends when the UI token it was opened
+/// with is revoked and when the runtime stops.
 /// </summary>
 public class JournalStreamTests
 {
@@ -44,7 +48,7 @@ public class JournalStreamTests
     }
 
     [Fact]
-    public async Task The_stream_starts_after_the_line_a_journal_list_cursor_names()
+    public async Task The_stream_starts_after_the_line_since_names()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var campaign = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Resumed" }, Ct);
@@ -52,29 +56,55 @@ public class JournalStreamTests
         var named = await AppendAsync(api, campaign, "named");
         var after = await AppendAsync(api, campaign, "after");
 
-        // Newest first, two to a page: the page is the two newest lines, and its cursor names the older of them.
-        var page = await api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Limit = 2 }, Ct);
-        Assert.Equal([after.Id, named.Id], page.Items.Select(line => line.Id));
-        Assert.NotNull(page.NextCursor);
-
-        using var socket = await OpenAsync(api, header: api.Runtime.Token, since: page.NextCursor);
+        using var socket = await OpenAsync(api, header: api.Runtime.Token, since: named.Id);
         Assert.Equal(after.Id, (string?)(await ReadAsync(socket))["id"]);
 
-        // Neither the line the cursor names nor one before it comes after it: the next frame is the next line written.
+        // Neither the line since names nor one before it comes after it: the next frame is the next line written.
         var later = await AppendAsync(api, campaign, "later");
         Assert.Equal(later.Id, (string?)(await ReadAsync(socket))["id"]);
         Assert.NotEqual(older.Id, later.Id);
     }
 
+    /// <summary>
+    /// A line's id is made before its write waits for the database, so a line can be committed after one whose id is
+    /// newer. A program that resumes from the newest id <c>journal.list</c> showed it is sent the line committed after
+    /// that one again, which it already has and drops by its id, and is sent everything written after: nothing is lost.
+    /// </summary>
     [Fact]
-    public async Task A_since_that_is_no_cursor_is_refused_before_the_socket_opens()
+    public async Task A_resume_from_a_line_committed_before_one_with_an_older_id_sends_that_one_again_and_loses_nothing()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
-        using var socket = Client(header: api.Runtime.Token);
-        socket.Options.CollectHttpResponseDetails = true;
+        var campaign = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Raced" }, Ct);
+        var olderLooking = PublicId.New("jrn");
+        var newerLooking = PublicId.New("jrn");
+        await CommitAsync(api, newerLooking, "committed_first");
+        await CommitAsync(api, olderLooking, "committed_second");
 
-        await Assert.ThrowsAsync<WebSocketException>(() => socket.ConnectAsync(Address(api, since: "not a cursor!"), Ct));
-        Assert.Equal(HttpStatusCode.BadRequest, socket.HttpStatusCode);
+        var listed = await api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Limit = 2 }, Ct);
+        Assert.Equal([newerLooking, olderLooking], listed.Items.Select(line => line.Id));
+
+        using var socket = await OpenAsync(api, header: api.Runtime.Token, since: listed.Items[0].Id);
+        Assert.Equal(olderLooking, (string?)(await ReadAsync(socket))["id"]);
+        var later = await AppendAsync(api, campaign, "later");
+        Assert.Equal(later.Id, (string?)(await ReadAsync(socket))["id"]);
+    }
+
+    [Theory]
+    [InlineData("not an id!", "invalid")]
+    [InlineData("jrn_01K7QN00000000000000000000", "unknown")]
+    [InlineData("anJuXzAxSzdRTjAwMDAwMDAwMDAwMDAwMDAwMDAw", "invalid")]
+    public async Task A_since_that_names_no_line_is_refused_before_the_socket_opens_in_the_api_s_error_shape(string since, string code)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var (status, body) = await UpgradeAsync(api, since);
+
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(body, JasonJson.Options)!.Error;
+        Assert.Equal("validation_failed", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(Streams.SinceParameter, detail.Field);
+        Assert.Equal(code, detail.Code);
     }
 
     [Fact]
@@ -87,6 +117,28 @@ public class JournalStreamTests
 
         await Assert.ThrowsAsync<WebSocketException>(() => socket.ConnectAsync(Address(api), Ct));
         Assert.Equal(HttpStatusCode.Unauthorized, socket.HttpStatusCode);
+    }
+
+    [Fact]
+    [Critical(Family.S5, "a revoked or unknown token is refused at the upgrade")]
+    public async Task A_revoked_or_unknown_token_is_refused_at_the_upgrade_and_never_opened()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var (revoked, issued) = await api.Resolve<UiTokenStore>().IssueAsync("a page", Ct);
+        await api.PostOkAsync<UiRevokeResponse>(Operations.UiRevoke, new { TokenId = issued.Id }, Ct);
+
+        foreach (var token in new[] { revoked, "not-a-token-this-runtime-made" })
+        {
+            foreach (var socket in new[] { Client(header: token), Client(subprotocolBearer: token) })
+            {
+                using (socket)
+                {
+                    socket.Options.CollectHttpResponseDetails = true;
+                    await Assert.ThrowsAsync<WebSocketException>(() => socket.ConnectAsync(Address(api), Ct));
+                    Assert.Equal(HttpStatusCode.Unauthorized, socket.HttpStatusCode);
+                }
+            }
+        }
     }
 
     [Fact]
@@ -169,8 +221,9 @@ public class JournalStreamTests
 
         await api.PostOkAsync<UiRevokeResponse>(Operations.UiRevoke, new { TokenId = issued.Id }, Ct);
 
-        var (status, _) = await ClosedAsync(socket);
+        var (status, description) = await ClosedAsync(socket);
         Assert.Equal(WebSocketCloseStatus.PolicyViolation, status);
+        Assert.Equal("revoked", description);
     }
 
     [Fact]
@@ -226,6 +279,40 @@ public class JournalStreamTests
             Operations.JournalAppend,
             new { CampaignId = campaign.Id, Kind = "plan_revision", Key = key, New = "x", Actor = new { Type = "role", Id = "planner" } },
             Ct);
+
+    /// <summary>A journal line committed as it stands, under an id the test chose, the way the journal's writer stores one.</summary>
+    private static async Task CommitAsync(RuntimeApiFixture api, string id, string key)
+    {
+        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        db.Journal.Add(new JournalEntry { PublicId = id, Ts = DateTime.UtcNow, ActorType = ActorType.Role, ActorId = "planner", Kind = "plan_revision", Key = key });
+        await db.SaveChangesAsync(Ct);
+    }
+
+    /// <summary>An upgrade made by hand, so a refusal's status and body are both read.</summary>
+    private static async Task<(HttpStatusCode Status, string Body)> UpgradeAsync(RuntimeApiFixture api, string since)
+    {
+        using var http = new HttpClient { BaseAddress = api.Runtime.BaseUrl };
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{Streams.JournalRoute}?{Streams.SinceParameter}={Uri.EscapeDataString(since)}")
+        {
+            Version = HttpVersion.Version11,
+            VersionPolicy = HttpVersionPolicy.RequestVersionExact,
+        };
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {api.Runtime.Token}");
+        request.Headers.TryAddWithoutValidation("Connection", "Upgrade");
+        request.Headers.TryAddWithoutValidation("Upgrade", "websocket");
+        request.Headers.TryAddWithoutValidation("Sec-WebSocket-Version", "13");
+        request.Headers.TryAddWithoutValidation("Sec-WebSocket-Key", Convert.ToBase64String(new byte[16]));
+        request.Headers.TryAddWithoutValidation("Sec-WebSocket-Protocol", Streams.JournalSubProtocol);
+        using var within = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        within.CancelAfter(Arrival);
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, within.Token);
+
+        // An upgrade the runtime accepted has no body to read to its end: its status is the whole answer.
+        return response.StatusCode == HttpStatusCode.SwitchingProtocols
+            ? (response.StatusCode, string.Empty)
+            : (response.StatusCode, await response.Content.ReadAsStringAsync(within.Token));
+    }
 
     /// <summary>The next frame, whole, as JSON; a close or a wait that runs out fails the test saying which.</summary>
     internal static async Task<JsonObject> ReadAsync(WebSocket socket)
