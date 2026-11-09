@@ -219,8 +219,8 @@ public static class RuntimeAutostartCommands
         if (!answer.Registered)
         {
             return answer.Platform == "unsupported"
-                ? "Nothing is registered to start at logon, and this machine has no way to register anything."
-                : "Nothing is registered to start at logon.";
+                ? "No logon registration, and this machine has no way to register one."
+                : "No logon registration.";
         }
 
         var missing = answer.ExecutableExists == false

@@ -288,6 +288,28 @@ public class AutostartCommandTests
         Assert.Contains("logon", printed, StringComparison.Ordinal);
     }
 
+    /// <summary>With nothing registered, `status` says "No logon registration." in the same words `jason status` uses.</summary>
+    [Fact]
+    public async Task Status_with_nothing_registered_says_no_logon_registration()
+    {
+        using var machine = new Machine();
+
+        await machine.RunAsync(["runtime", "autostart", "status", "--human"], Ct);
+
+        Assert.Equal("No logon registration.", Assert.Single(machine.Lines()));
+    }
+
+    /// <summary>A machine that cannot register anything says that too, in the same vocabulary.</summary>
+    [Fact]
+    public async Task Status_on_a_machine_that_cannot_register_says_so()
+    {
+        using var machine = new Machine(new RecordingRegistrar(AutostartPlatform.Unsupported));
+
+        await machine.RunAsync(["runtime", "autostart", "status", "--human"], Ct);
+
+        Assert.Equal("No logon registration, and this machine has no way to register one.", Assert.Single(machine.Lines()));
+    }
+
     /// <summary>An installation with a recording machine behind it, and its own temporary data directory.</summary>
     private sealed class Machine : IDisposable
     {
