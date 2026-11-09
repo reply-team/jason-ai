@@ -1277,6 +1277,7 @@ public sealed class ImportCommandTests
         Assert.Contains("Harness:Root first", help, StringComparison.Ordinal);
         Assert.Contains("Left to you: jason skills install", help, StringComparison.Ordinal);
         Assert.Contains("Exit codes: 0 placed and the runtime answered", help, StringComparison.Ordinal);
+        Assert.Contains("Exit codes: 0 placed and the runtime answered; 1 refused, with nothing written; placed and the runtime did not start; or stopped part-way, which the answer names; 2 usage.", help, StringComparison.Ordinal);
         Assert.Contains("an update in flight, naming 'jason update apply'", help, StringComparison.Ordinal);
         Assert.Contains("a --root that JASON_Harness__Root contradicts, naming the variable", help, StringComparison.Ordinal);
         Assert.Contains("a settings file in the archive that is not a JSON object", help, StringComparison.Ordinal);

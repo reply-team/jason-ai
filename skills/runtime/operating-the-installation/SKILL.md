@@ -478,7 +478,7 @@ jason status
 
 `jason export --stop` and `jason import --stop` stop a running runtime themselves; without the flag both refuse
 while it runs and name `jason runtime stop`. **Ask first** before you run `jason runtime stop`, `jason export --stop`,
-`jason import --stop` or `jason import --replace`: say in words that the runtime is stopped, and for `--replace`
+`jason import --stop` or `jason import --replace`: say in words what is stopped, and for `--replace`
 that the installation already here is moved aside into `<data>/replaced-<stamp>/` and `<root>.replaced-<stamp>`,
 and run it only on the person's yes, as "Starting and stopping it" says. The export starts the runtime again when it
 was running; the import ends with it running, because it asks it to record each project folder where it now

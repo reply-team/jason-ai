@@ -1317,7 +1317,7 @@ public static class ImportCommand
             + "source harness root moved aside first: the records name its folders, and project.link refuses a folder present "
             + "elsewhere (harness_folder_present). It reaches no network but the runtime's own loopback." + nl
             + "Left to you: " + string.Join("; ", LeftToYou) + "." + nl
-            + "Exit codes: 0 placed and the runtime answered; 1 refused, with nothing written, or placed and the runtime did not "
-            + "start, which the answer says; 2 usage.";
+            + "Exit codes: 0 placed and the runtime answered; 1 refused, with nothing written; placed and the runtime did not start; "
+            + "or stopped part-way, which the answer names; 2 usage.";
     }
 }
