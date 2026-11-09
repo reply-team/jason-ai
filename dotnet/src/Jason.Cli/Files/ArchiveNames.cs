@@ -69,8 +69,8 @@ internal enum NameRefusal
 /// A plain name is a relative path of <c>/</c>-separated segments: never rooted, never with a drive or a backslash, never
 /// with an empty, <c>.</c> or <c>..</c> segment, and never with a segment a file name on some system cannot hold. Names
 /// that start with a dot are plain: a pack's <c>.claude-plugin</c>, a harness folder's <c>.jason</c> marker and the role
-/// skills' record are all such names. The plugin and UI installers hold their packages to rules of their own, stricter in
-/// other ways, and do not use this.
+/// skills' record are all such names. The plugin and UI installers hold their packages to these rules too, and to rules of
+/// their own besides, stricter in other ways: no name that starts with a dot, and a layout each package has.
 /// </remarks>
 internal static class ArchiveNames
 {

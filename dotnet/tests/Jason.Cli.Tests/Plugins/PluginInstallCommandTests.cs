@@ -153,6 +153,7 @@ public sealed class PluginInstallCommandTests : IDisposable
     [InlineData("a NUL")]
     [InlineData("a trailing dot")]
     [InlineData("a trailing space")]
+    [InlineData("modules/aux.js")]
     [InlineData("a name twice in another case")]
     [InlineData("more files than a package holds")]
     [InlineData("more bytes than a package holds")]
