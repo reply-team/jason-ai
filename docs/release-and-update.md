@@ -717,10 +717,11 @@ The same holds for the forwarder on a release older than 0.30.0. Either way, `ja
 loaded. Settings you wrote for the newer package, a grant of a host by name, say, stay in `settings.json` and are read
 again if you update forward later.
 
-None of this touches the database. An older executable that meets a database the newer one migrated is the corruption
-case "Going back" describes above, and `jason update rollback` is the verb that section is about: it puts the executable
-back and, where the update migrated the database, the backup with it. Read that section before you rely on an older
-executable with the data directory you have.
+None of this touches the database, and an apply of an older release migrates nothing: the older executable opens the
+database as the newer one left it, and may refuse to open one the newer one migrated, as `jason update rollback` itself
+warns. A rollback after such an apply puts the newer executable back and leaves the database as it is. "Going back"
+above says when a rollback restores a backup and why the write-ahead log beside a restored file is deleted; read it
+before you rely on an older executable with the data directory you have.
 
 ### Restoring a database by hand
 
