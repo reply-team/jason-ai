@@ -746,6 +746,27 @@ public sealed class ImportCommandTests
     }
 
     [Fact]
+    public async Task This_machine_s_settings_that_are_not_JSON_are_warned_of_as_resolved_without_and_gone_aside_with_config()
+    {
+        using var from = new MovingMachine();
+        // Without the variable, which the runtime reads over any setting, the root is the settings file's to name.
+        using var to = new MovingMachine { RootVariable = false };
+        to.PlantData("config/settings.json", "{ not json");
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        using var answer = JsonDocument.Parse(to.Out.ToString());
+        var warning = Assert.Single(
+            answer.RootElement.GetProperty("warnings").EnumerateArray().Select(item => item.GetString()!),
+            item => item.Contains(to.Paths.UserSettingsFile, StringComparison.Ordinal));
+        Assert.Contains("resolved without it", warning, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine(to.Data, "replaced-" + Stamp, "config"), warning, StringComparison.Ordinal);
+        Assert.Equal("{ not json", File.ReadAllText(Path.Combine(to.Data, "replaced-" + Stamp, "config", "settings.json")));
+    }
+
+    [Fact]
     public async Task A_role_skills_pack_from_a_directory_not_here_is_listed_with_skills_install()
     {
         using var from = new MovingMachine();

@@ -197,9 +197,10 @@ public static class ImportCommand
             }
 
             HarnessRootPlace root;
+            string? unread;
             try
             {
-                root = Root(env, options.Root);
+                root = Root(env, options.Root, out unread);
             }
             catch (ImportRefusal refused)
             {
@@ -341,6 +342,12 @@ public static class ImportCommand
                     return Refuse(env, options.Human, refused.Code, refused.Message + partial + leftStopped);
                 }
 
+                if (unread is not null)
+                {
+                    var config = aside.DataFolder is { } folder ? DataPath(folder, "config") : DataPath(env.Paths.Root, "config");
+                    warnings.Add($"This machine's settings file {env.Paths.UserSettingsFile} could not be read ({unread}), so the harness root was resolved without it; it went aside with config/ to {config}.");
+                }
+
                 foreach (var stray in aside.Strays)
                 {
                     warnings.Add($"A {Path.GetFileName(stray)} stood in {DataPath(env.Paths.Root, StateFolder)} beside no database, and SQLite would have read it as the placed database's; it was moved aside to {stray}, yours to remove.");
@@ -456,8 +463,11 @@ public static class ImportCommand
     /// aside, else <c>Jason</c> in the home directory — held to the rule the runtime holds a root to
     /// (<see cref="HarnessRootRule"/>), each place compared where it leads, before anything is placed.
     /// </summary>
-    private static HarnessRootPlace Root(CliEnvironment env, string? option)
+    /// <param name="unread">Why this machine's settings file could not be read, when it is there and could not; it goes
+    /// aside with <c>config/</c> all the same, and the answer says the root was resolved without it.</param>
+    private static HarnessRootPlace Root(CliEnvironment env, string? option, out string? unread)
     {
+        unread = null;
         string? settings;
         try
         {
@@ -466,6 +476,7 @@ public static class ImportCommand
         catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or SecurityException)
         {
             settings = null;
+            unread = unreadable.Message;
         }
 
         HarnessRootPlace resolved;
@@ -473,9 +484,10 @@ public static class ImportCommand
         {
             resolved = InstallationPlaces.HarnessRoot(env, settings);
         }
-        catch (JsonException)
+        catch (JsonException notJson)
         {
             resolved = InstallationPlaces.HarnessRoot(env, null);
+            unread = $"it is not JSON the configuration reads: {notJson.Message}";
         }
 
         var root = resolved;
@@ -594,6 +606,9 @@ public static class ImportCommand
 
         /// <summary>The sidecars that stood beside no database, where each went.</summary>
         public List<string> Strays { get; } = [];
+
+        /// <summary>The folder the data parts went into; null when none went.</summary>
+        public string? DataFolder => _dataFolder;
 
         /// <summary>Every move made, in order.</summary>
         public IReadOnlyList<(string From, string To)> Moves => _moves;
