@@ -22,7 +22,7 @@ internal sealed partial class NamesMet
 
     private readonly HashSet<string> _refs = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The skill sources of the person's own the records name: every source but the public repository's own address.</summary>
+    /// <summary>The skill sources of the person's own the records name: every source but the public repository's own address and the default release feed.</summary>
     public IReadOnlyCollection<string> SkillSources => _sources;
 
     /// <summary>
@@ -170,9 +170,17 @@ internal sealed partial class NamesMet
         }
     }
 
-    /// <summary>The public repository's own address, with or without <c>.git</c> and a trailing slash, in any case.</summary>
+    /// <summary>
+    /// The public repository's own address, with or without <c>.git</c> and a trailing slash, in any case; or the release
+    /// feed that is this build's default source, which serves the public repository's releases.
+    /// </summary>
     private static bool IsPublicRepository(string source)
     {
+        if (string.Equals(source.Trim(), SkillsSource.DefaultSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         var address = source.Trim().TrimEnd('/');
         address = address.EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? address[..^4] : address;
         return string.Equals(address, PublicRepository.Url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);

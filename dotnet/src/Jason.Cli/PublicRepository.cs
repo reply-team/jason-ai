@@ -2,8 +2,8 @@ namespace Jason.Cli;
 
 /// <summary>
 /// Where Jason is developed in the open, and where a person writes when something is wrong: the one place this program
-/// names either. The skills are cloned from the repository, a problem is reported as an issue in it, and a file that
-/// carries what people typed goes to the support address its README gives under "Getting help" instead.
+/// names either. The skills come from its releases or a clone of it, a problem is reported as an issue in it, and a
+/// file that carries what people typed goes to the support address its README gives under "Getting help" instead.
 /// </summary>
 public static class PublicRepository
 {

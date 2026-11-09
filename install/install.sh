@@ -347,6 +347,27 @@ if [ "$MODIFY_PATH" -eq 1 ]; then
     esac
 fi
 
+# --- the role skills ----------------------------------------------------------------------------------------
+
+# The installed jason deploys the role skills, the half of the skills a runtime cannot work without, from the
+# release it is: by default from the public repository's releases, from a feed this script was pointed at when that
+# feed is an address. A feed in a directory is not one the skills verb reads, so nothing is sent anywhere this script
+# did not read itself, and the one line says what to run. What the verb prints is shown; a deployment that fails
+# leaves Jason installed, says so in one line after the verb's own, and `jason status` names it as well. JASON_DATA_DIR
+# reaches the verb as it reached this script.
+deploy_role_skills() {
+    if "$TARGET" skills install --roles-only "$@"; then
+        :
+    else
+        echo 'The role skills were not deployed; the lines above say why. Run `jason skills install --roles-only` once that is dealt with; `jason status` names it as well.'
+    fi
+}
+case "$FEED" in
+    '') deploy_role_skills ;;
+    http://*|https://*) deploy_role_skills --feed "${FEED%/}/manifest.json" ;;
+    *) echo 'The role skills were not deployed: the feed is a directory, which `jason skills install` does not read. Run `jason skills install --roles-only` now that Jason is installed, offline with `--source <checkout>`.' ;;
+esac
+
 # --- the licence, and what to run next -----------------------------------------------------------------------
 
 # The last two lines of a successful run, and never a question: what is installed and the terms it is installed

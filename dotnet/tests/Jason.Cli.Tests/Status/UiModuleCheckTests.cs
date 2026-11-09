@@ -30,6 +30,7 @@ public class UiModuleCheckTests
         { Served("default", "0.13.0"), "0.13.0+1a2b3c4", "0.13.0+1a2b3c4", CheckState.Ok, "default 0.13.0", null },
         { Served("custom", "0.12.0"), "0.13.0", "0.13.0", CheckState.Ok, "custom 0.12.0", null },
         { Served("default", "0.12.0"), "0.13.0-dev", "0.13.0-dev", CheckState.Ok, "default 0.12.0", null },
+        { Served("default", "0.12.0"), "0.13.0-rc.1", "0.13.0-rc.1", CheckState.Failed, "Serving default 0.12.0 from /home/ada/.jason/ui/default; this runtime is 0.13.0-rc.1.", "jason ui install" },
         { Served("default", "0.12.0"), "0.13.0", "0.14.0", CheckState.Ok, "default 0.12.0", null },
     };
 

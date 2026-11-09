@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Globalization;
 using System.Text.Json;
+using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
 using Jason.Contracts.Api;
@@ -46,7 +47,8 @@ public static class SkillsCommands
     /// It takes no <c>--source</c> and no <c>--ref</c>, on purpose. An update is the same deployment repeated
     /// rather than a second decision about where things come from: a verb that accepted both would let
     /// somebody "update" a deployment into one from somewhere else, leaving a record saying it had always
-    /// been that way.
+    /// been that way. <c>--feed</c> is no such decision: it says where the default source's release is read for this
+    /// run — CI's feed, or a mirror — and the records keep the source they name.
     /// </remarks>
     private static Command Update(CliEnvironment env)
     {
@@ -57,15 +59,16 @@ public static class SkillsCommands
         var pack = new Option<string?>("--pack") { Description = "Update only this pack." };
         var dryRun = new Option<bool>("--dry-run") { Description = DryRunHelp };
         var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written." };
+        var feed = new Option<string?>("--feed") { Description = "Read the release of every deployment from the default source from a different feed, for this run: the https address of its manifest.json, or http on this machine. The records keep their source. Default: the public repository's releases on GitHub." };
 
-        foreach (var option in new Option[] { root, host, pack, dryRun, force })
+        foreach (var option in new Option[] { root, host, pack, dryRun, force, feed })
         {
             update.Options.Add(option);
         }
 
         update.SetAction(async (parse, cancellationToken) => (await UpdateAsync(
             env,
-            new InstallOptions(null, null, parse.GetValue(root), parse.GetValue(host), parse.GetValue(pack), parse.GetValue(dryRun), parse.GetValue(force), RolesOnly: false),
+            new InstallOptions(null, null, parse.GetValue(root), parse.GetValue(host), parse.GetValue(pack), parse.GetValue(dryRun), parse.GetValue(force), RolesOnly: false, Feed: Feed(parse.GetValue(feed))),
             null,
             cancellationToken).ConfigureAwait(false)).Exit);
 
@@ -82,8 +85,16 @@ public static class SkillsCommands
     /// call throws part way still holds the groups that had been deployed before it did, and the one it stopped in. Null
     /// where the caller only wants the outcome.
     /// </param>
-    internal static Task<SkillsUpdateOutcome> UpdateRecordedAsync(CliEnvironment env, SkillsUpdateProgress? progress, CancellationToken cancellationToken) =>
-        UpdateAsync(env, new InstallOptions(null, null, null, null, null, DryRun: false, Force: false, RolesOnly: false), progress, cancellationToken);
+    /// <param name="feed">
+    /// The feed the update was read from, where somebody named one: the default source's release is read there too, as
+    /// <c>--feed</c> reads it, so an update from CI's feed asks nothing of the network. Null for the published feed, where
+    /// the default source is read from GitHub as an install reads it.
+    /// </param>
+    internal static Task<SkillsUpdateOutcome> UpdateRecordedAsync(CliEnvironment env, SkillsUpdateProgress? progress, CancellationToken cancellationToken, Uri? feed = null) =>
+        UpdateAsync(env, new InstallOptions(null, null, null, null, null, DryRun: false, Force: false, RolesOnly: false, Feed: feed?.AbsoluteUri), progress, cancellationToken);
+
+    /// <summary>A feed as <c>--feed</c> names one, parsed as <c>jason plugin install</c> parses it; null where none was named.</summary>
+    private static string? Feed(string? named) => named is null ? null : UpdateCommands.Address(named).AbsoluteUri;
 
     private static async Task<SkillsUpdateOutcome> UpdateAsync(CliEnvironment env, InstallOptions options, SkillsUpdateProgress? progress, CancellationToken cancellationToken)
     {
@@ -130,7 +141,7 @@ public static class SkillsCommands
                 }
 
                 var own = pack.MaxBy(deployment => deployment.InstalledAt)!;
-                var key = (own.Source, own.Ref, own.RefOverridden, own.Pack);
+                var key = (SkillsSource.SourceForUpdate(own.Source, own.RefOverridden, SkillsSource.BuildVersion(env)), own.Ref, own.RefOverridden, own.Pack);
                 if (!groups.TryGetValue(key, out var members))
                 {
                     groups[key] = members = [];
@@ -152,7 +163,11 @@ public static class SkillsCommands
         foreach (var ((source, reference, overridden, pack), members) in groups)
         {
             var (pin, why) = UpdatePin(env, source, reference, overridden);
-            var updating = $"{pack} in {string.Join(", ", members)} from {source}{why}";
+
+            // Only the default source is read through a feed named for the run. A deployment from a feed of its own reads
+            // that one, and a record never takes the run's feed: the next update without it reads where the record says.
+            var through = options.Feed is { } named && string.Equals(source, SkillsSource.DefaultSource, StringComparison.Ordinal) ? named : null;
+            var updating = $"{pack} in {string.Join(", ", members)} from {source}{(through is null ? string.Empty : $" through {through}")}{why}";
             env.Out.WriteLine($"Updating {updating}");
             progress.Entered = (pack, members);
 
@@ -161,7 +176,7 @@ public static class SkillsCommands
             // install the line said "at v0.1.0, as the record names it" and the plan underneath it described v0.2.0.
             var (deployed, said, refused) = await DeployAsync(
                     env,
-                    options with { Source = source, Ref = pin, RecordedOverride = overridden, Pack = pack },
+                    options with { Source = source, Ref = pin, RecordedOverride = overridden, Pack = pack, Feed = through },
                     [.. harnesses.Where(harness => members.Contains(harness.Directory, StringComparer.OrdinalIgnoreCase))],
                     cancellationToken,
                     members.Contains(roleRoot, StringComparer.OrdinalIgnoreCase))
@@ -187,7 +202,7 @@ public static class SkillsCommands
     /// <para>
     /// The record's ref is kept in three cases only, and the line names the one that applies. A ref the record says
     /// was chosen stays chosen: an update is the same deployment repeated, not a second decision about where things
-    /// come from. A directory is read where it stands and has no ref to move to. And a build that is not a release
+    /// come from. A directory is read where it stands and has no ref to move to. And a development build
     /// carries the pin of a release that is not published yet, so moving to it would be a fetch that fails.
     /// </para>
     /// </remarks>
@@ -206,7 +221,7 @@ public static class SkillsCommands
         var build = SkillsSource.BuildVersion(env);
         if (!SkillsSource.IsRelease(build))
         {
-            return (reference, $" at {reference}, as its record names it: this build, {build}, is not a release, so the ref it carries is not published yet.");
+            return (reference, $" at {reference}, as its record names it: this build, {build}, is a development build, so the ref it carries is not published yet.");
         }
 
         var own = SkillsSource.DefaultRef(build);
@@ -217,8 +232,9 @@ public static class SkillsCommands
     {
         var install = new Command("install", "Deploy the skill packs into this runtime and your agent harnesses.");
 
-        var source = new Option<string?>("--source") { Description = "Where the packs come from: a directory on this machine, or a git source. Defaults to the repository this build was published from." };
-        var reference = new Option<string?>("--ref") { Description = "Which ref to take. Defaults to the pin this build carries." };
+        var source = new Option<string?>("--source") { Description = "Where the packs come from instead of a release: a directory on this machine, read where it stands, or a git repository, cloned at --ref. Default: the release this build was published as, from the public repository's releases on GitHub." };
+        var reference = new Option<string?>("--ref") { Description = "Which ref to take: from a release, its tag, such as v1.2.3; from a git repository, any ref. Defaults to the tag this build carries." };
+        var feed = new Option<string?>("--feed") { Description = "Read a different release feed: the https address of its manifest.json, or http on this machine. Recorded, so `jason skills update` reads it again. Default: the public repository's releases on GitHub." };
         var root = new Option<string?>("--root") { Description = "Deploy into this directory as a harness root, instead of detection." };
         var host = new Option<string?>("--host") { Description = "Deploy only into this host's skills root: one of " + AgentHosts.Vocabulary + ". With --root, the host that directory is for." };
         var pack = new Option<string?>("--pack") { Description = "Deploy only this pack." };
@@ -226,23 +242,36 @@ public static class SkillsCommands
         var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written." };
         var rolesOnly = new Option<bool>("--roles-only") { Description = "Deploy only the role skills, into this runtime's own directory, and nothing into any agent harness. The role half is the one a runtime cannot work without; the harness half is yours to choose." };
 
-        foreach (var option in new Option[] { source, reference, root, host, pack, dryRun, force, rolesOnly })
+        foreach (var option in new Option[] { source, reference, root, host, pack, dryRun, force, rolesOnly, feed })
         {
             install.Options.Add(option);
         }
 
-        install.SetAction((parse, cancellationToken) => RunAsync(
-            env,
-            new InstallOptions(
-                parse.GetValue(source),
-                parse.GetValue(reference),
-                parse.GetValue(root),
-                parse.GetValue(host),
-                parse.GetValue(pack),
-                parse.GetValue(dryRun),
-                parse.GetValue(force),
-                parse.GetValue(rolesOnly)),
-            cancellationToken));
+        install.SetAction((parse, cancellationToken) =>
+        {
+            // Two answers to one question. Taking either quietly would deploy from somewhere the person did not say.
+            if (parse.GetValue(feed) is not null && parse.GetValue(source) is not null)
+            {
+                env.Error.WriteLine("--feed and --source each say where the packs come from; name one of them.");
+                return Task.FromResult(ExitCodes.Usage);
+            }
+
+            // A feed named here is the source the deployment records, so an update reads it again.
+            var named = Feed(parse.GetValue(feed));
+            return RunAsync(
+                env,
+                new InstallOptions(
+                    named ?? parse.GetValue(source),
+                    parse.GetValue(reference),
+                    parse.GetValue(root),
+                    parse.GetValue(host),
+                    parse.GetValue(pack),
+                    parse.GetValue(dryRun),
+                    parse.GetValue(force),
+                    parse.GetValue(rolesOnly),
+                    Feed: named),
+                cancellationToken);
+        });
 
         return install;
     }
@@ -259,7 +288,11 @@ public static class SkillsCommands
     /// What the record being updated says about its ref, carried to staging beside it. Null for an install, where
     /// whether the ref was chosen is whether <c>--ref</c> was typed.
     /// </param>
-    private sealed record InstallOptions(string? Source, string? Ref, string? Root, string? Host, string? Pack, bool DryRun, bool Force, bool RolesOnly, bool? RecordedOverride = null);
+    /// <param name="Feed">
+    /// The release feed the packs are read from, whatever <paramref name="Source"/> is, which is what the deployment
+    /// records: the feed itself for an install given <c>--feed</c>, the default source for an update read through one.
+    /// </param>
+    private sealed record InstallOptions(string? Source, string? Ref, string? Root, string? Host, string? Pack, bool DryRun, bool Force, bool RolesOnly, bool? RecordedOverride = null, string? Feed = null);
 
     private static async Task<int> RunAsync(CliEnvironment env, InstallOptions options, CancellationToken cancellationToken)
     {
@@ -320,7 +353,11 @@ public static class SkillsCommands
         StagedSource staged;
         try
         {
-            staged = await SkillsSource.StageAsync(env, options.Source, options.Ref, options.RecordedOverride, cancellationToken).ConfigureAwait(false);
+            staged = await SkillsSource.StageAsync(env, options.Source, options.Ref, options.RecordedOverride, cancellationToken, options.Feed).ConfigureAwait(false);
+            if (options.Feed is not null && options.Source is { } recorded)
+            {
+                staged = staged with { Source = recorded };
+            }
         }
         catch (SkillsSourceUnavailable unavailable)
         {

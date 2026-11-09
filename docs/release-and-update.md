@@ -58,6 +58,7 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at the tag, at the archive's root |
 | `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at the tag, at the archive's root |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
+| `jason-skills.zip` | the skills' package: `skills/` at the tag, under `skills/`, and a `source.json` naming the repository, the tag and its commit; `jason skills install` deploys from it when it is given no `--source` |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
@@ -345,6 +346,12 @@ installs the executable with its licence and the third-party notices beside it, 
 `jason-THIRD-PARTY-NOTICES`, and adds its directory to your PATH behind a marker line it will recognise next time.
 Pass `--no-modify-path` to leave your PATH alone, and `--version X.Y.Z` to install a particular release.
 
+Its last step, before the licence it installed under, is the role skills: it runs the installed executable's
+`jason skills install --roles-only`, which deploys them from the release's `jason-skills.zip`. Where that fails, the
+executable is still installed and the run still succeeds, one line says the role skills were not deployed and what
+to run, and `jason status` names the same line. A script pointed at a feed in a directory leaves the step out and
+says what to run instead, because the skills verb reads no directory.
+
 The default install directories are `~/.local/bin/jason` on macOS and Linux, and
 `%LOCALAPPDATA%\Programs\jason\jason.exe` on Windows. Both are per-user: nothing here needs administrator
 rights, and nothing is installed for other people on the machine.
@@ -556,12 +563,15 @@ package, as step 3 of [the wiring check](golden-path.md) does.
 Its last step, after `complete`, is the skills: exactly what `jason skills update` does, at the new release's tag.
 The runtime's own role skills, and each agent harness this machine detects, are redeployed wherever a deployment
 there was recorded, from the source its record names; a deployment made with `--root` into a directory detection
-does not find is not, and `jason skills update --root <dir>` moves it. A deployment made at a tag
+does not find is not, and `jason skills update --root <dir>` moves it. A record naming this repository's git address,
+which every default deployment before 0.33.0 names, is read as the default, so it moves to the new release's
+`jason-skills.zip`; an apply given `--feed` reads that package from the feed it names as well. A deployment made at a tag
 chosen with `--ref` stays at its ref, and nothing is written into an agent's harness that has no record. The apply
 prints one `skills:` line for each pack group it carried — one pack from one source at one ref, in the roots that
 hold it — with what it wrote. A file you edited is kept and the rest of its group moves; the group's line names
-the file. If a group cannot be redeployed — no `git`, no network, a skill held open by a role that was
-launching, an interrupt while they are fetched — the update still stands: the new executable
+the file. If a group cannot be redeployed — no network, a release that published no skills package, no `git` for a
+group taken from a git repository with `--source`, a skill held open by a role that was launching, an interrupt while
+they are fetched — the update still stands: the new executable
 is in place and its runtime is running, that group's `skills:` line says why and ends
 `run: jason skills update`, and whatever could not move is still recorded at the tag before, so `jason status`
 fails it and prints the same repair it always has. An update applied by a build before 0.12.0 has no such step, so

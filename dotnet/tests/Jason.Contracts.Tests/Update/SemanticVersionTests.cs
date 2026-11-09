@@ -44,6 +44,20 @@ public class SemanticVersionTests
         Assert.False(SemanticVersion.Parse("1.2.3+a") > SemanticVersion.Parse("1.2.3+b"));
     }
 
+    /// <summary>
+    /// A development build is one whose pre-release is exactly <c>dev</c>, the suffix every build of this repository is
+    /// stamped with unless it is given another: build metadata takes no part, and a candidate, a release or any other
+    /// pre-release is not one.
+    /// </summary>
+    [Theory]
+    [InlineData("0.33.0-dev", true)]
+    [InlineData("0.33.0-dev+build.7", true)]
+    [InlineData("1.0.0-rc.1", false)]
+    [InlineData("1.0.0", false)]
+    [InlineData("0.33.0-dev.1", false)]
+    public void Only_the_dev_suffix_makes_a_development_build(string text, bool development) =>
+        Assert.Equal(development, SemanticVersion.Parse(text).IsDevelopment);
+
     /// <summary>The version this very build reports has to be one the comparison can read, or nothing else here matters.</summary>
     [Fact]
     public void This_builds_own_version_parses()

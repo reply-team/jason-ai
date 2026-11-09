@@ -378,6 +378,35 @@ function Install-Jason {
         Write-Host "$directory is on your PATH; open a new terminal to run jason from anywhere."
     }
 
+    # --- the role skills --------------------------------------------------------------------------------------
+
+    # The installed jason deploys the role skills, the half of the skills a runtime cannot work without, from the
+    # release it is: by default from the public repository's releases, from a feed this script was pointed at when that
+    # feed is an address. A feed in a directory is not one the skills verb reads, so nothing is sent anywhere this
+    # script did not read itself, and the one line says what to run. What the verb prints is shown, each line as this
+    # script says its own; what it says on stderr goes straight through, never through PowerShell's error stream, where
+    # Windows PowerShell would stop on it. A deployment that fails leaves Jason installed, says so in one line after the
+    # verb's own, and `jason status` names it as well. JASON_DATA_DIR reaches the verb as it reached this script.
+    if ($fromWeb -or -not $Feed) {
+        $arguments = @('skills', 'install', '--roles-only')
+        if ($Feed) { $arguments += @('--feed', ($Feed.TrimEnd('/') + '/manifest.json')) }
+        $PSNativeCommandUseErrorActionPreference = $false
+        $deployed = $false
+        try {
+            & $target @arguments | ForEach-Object { Write-Host $_ }
+            $deployed = $LASTEXITCODE -eq 0
+        } catch {
+            # The executable did not start at all - moved aside since it was installed, as a scanner moves one, say - so
+            # it said nothing; what PowerShell answered is said in its place, and Jason stays installed all the same.
+            Write-Host $_.Exception.Message
+        }
+        if (-not $deployed) {
+            Write-Host 'The role skills were not deployed; the lines above say why. Run `jason skills install --roles-only` once that is dealt with; `jason status` names it as well.'
+        }
+    } else {
+        Write-Host 'The role skills were not deployed: the feed is a directory, which `jason skills install` does not read. Run `jason skills install --roles-only` now that Jason is installed, offline with `--source <checkout>`.'
+    }
+
     # --- the licence, and what to run next ---------------------------------------------------------------------
 
     # The last two lines of a successful run, and never a question: what is installed and the terms it is installed

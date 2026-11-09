@@ -1874,6 +1874,47 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// The skills' package is written once per release, like the plugins': by one job of its own, from the tag's
+    /// checkout, after the version was decided and holding no token. Its <c>source.json</c> names the public repository,
+    /// as a constant like the notes address, the release's tag and the commit the checkout is, so an installation that deploys from it records the tag it was
+    /// published at. It is uploaded under a name the publishing job's download takes, and the publishing job waits for it.
+    /// What the script writes is <see cref="SkillsAssetTests"/>' subject.
+    /// </summary>
+    [Fact]
+    public void The_skills_package_is_written_at_the_tag_by_a_job_of_its_own_and_reaches_the_release()
+    {
+        var jobs = Mapping(Parse(Read(Release)), "jobs");
+        var (name, job) = Assert.Single(
+            jobs.Children.Select(found => (Name: found.Key.ToString(), Job: (YamlMappingNode)found.Value)),
+            found => JobSteps(found.Job).Any(step => Scalar(step, "run")?.Contains("Write-SkillsArchive.ps1", StringComparison.Ordinal) == true));
+
+        Assert.Null(Node(job, "strategy"));
+        Assert.Equal("version", Scalar(job, "needs"));
+        Assert.Equal(["contents=read"], Mapping(job, "permissions").Children.Select(pair => $"{pair.Key}={pair.Value}"));
+        var steps = JobSteps(job).ToList();
+        Assert.StartsWith("actions/checkout@", Scalar(steps[0], "uses"), StringComparison.Ordinal);
+        var writing = Assert.Single(steps, one => Scalar(one, "run")?.Contains("Write-SkillsArchive.ps1", StringComparison.Ordinal) == true);
+        Assert.Equal("pwsh", Scalar(writing, "shell"));
+        Assert.Null(Node(writing, "continue-on-error"));
+        Assert.Equal(
+            $"./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive artifacts/release/{ReleaseAssets.Skills} -Repository {Jason.Cli.PublicRepository.Url} -Ref \"v${{{{ needs.version.outputs.version }}}}\" -Commit \"${{{{ github.sha }}}}\"",
+            Scalar(writing, "run")!.Trim());
+
+        var upload = Mapping(Assert.Single(steps, one => Scalar(one, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true), "with");
+        Assert.True(steps.IndexOf(writing) < steps.FindIndex(one => Scalar(one, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true), "The skills' package is uploaded before it is written.");
+        Assert.Equal($"artifacts/release/{ReleaseAssets.Skills}", Scalar(upload, "path"));
+        Assert.Equal("error", Scalar(upload, "if-no-files-found"));
+
+        var download = Mapping(Assert.Single(PublishingSteps(), one => Scalar(one, "uses")?.StartsWith("actions/download-artifact@", StringComparison.Ordinal) == true), "with");
+        var pattern = Scalar(download, "pattern")!;
+        var artifact = Scalar(upload, "name")!;
+        Assert.True(
+            Regex.IsMatch(artifact, "^" + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal) + "$"),
+            $"The skills' package is uploaded as '{artifact}', which the publishing job's download of '{pattern}' does not take.");
+        Assert.Contains(name, Assert.IsType<YamlSequenceNode>(Node(PublishingJob(), "needs")).Children.Select(need => need.ToString()));
+    }
+
+    /// <summary>
     /// The step that decides the version, run as the workflow would run it, with the same environment GitHub
     /// gives it. A tag is <c>v</c> and a version; the button gives the version itself; anything else stops the
     /// workflow before a runner has built anything. The accepted rows are the ones <see cref="SemanticVersion"/>
@@ -3886,7 +3927,7 @@ public partial class ReleaseWorkflowTests
             File.WriteAllText(Path.Combine(directory, $"jason-{rid}.fragment.json"), JsonSerializer.Serialize(fragment) + "\n");
         }
 
-        foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui])
+        foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills])
         {
             File.WriteAllText(Path.Combine(directory, carried), $"not really {carried}");
         }
@@ -4054,7 +4095,7 @@ public partial class ReleaseWorkflowTests
             Assert.Equal(SemanticVersion.Parse("0.19.0"), manifest.MinUpgradeFrom);
 
             var checksums = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Checksums));
-            foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui])
+            foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills])
             {
                 var package = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, carried))));
                 Assert.True(
@@ -4106,7 +4147,7 @@ public partial class ReleaseWorkflowTests
         var packages = ReleasedPackages();
 
         Assert.Contains($"-PluginDigests {string.Join(',', packages.Select(package => Digests(package.Id)))} ", line + " ", StringComparison.Ordinal);
-        Assert.Contains($"-Plugins {string.Join(',', [.. packages.Select(package => package.Asset), ReleaseAssets.Ui])} ", line, StringComparison.Ordinal);
+        Assert.Contains($"-Plugins {string.Join(',', [.. packages.Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills])} ", line, StringComparison.Ordinal);
         Assert.All(packages, package => Assert.True(File.Exists(Path.Combine(RepositoryRoot(), Digests(package.Id))), $"{Digests(package.Id)} is not in the repository."));
     }
 
