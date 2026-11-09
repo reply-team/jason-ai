@@ -399,6 +399,7 @@ public sealed class ImportCommandTests
         Assert.Equal("a sidecar beside no database", File.ReadAllText(moved));
         Assert.Equal(["backups", "jason.db"], Directory.EnumerateFileSystemEntries(Path.Combine(to.Data, "state")).Select(Path.GetFileName).Order(StringComparer.Ordinal));
         using var answer = JsonDocument.Parse(to.Out.ToString());
+        Assert.Equal([Path.Combine(to.Data, "replaced-" + Stamp)], answer.RootElement.GetProperty("moved_aside").EnumerateArray().Select(path => path.GetString()));
         Assert.Contains(answer.RootElement.GetProperty("warnings").EnumerateArray(), warning => warning.GetString()!.Contains(moved, StringComparison.Ordinal));
     }
 
