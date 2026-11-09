@@ -354,35 +354,19 @@ public static class ImportCommand
     }
 
     /// <summary>
-    /// The harness root the archive's tree goes into: <c>--root</c>, else what this machine's runtime would resolve — the
-    /// variable, the settings file here, <c>Jason</c> in the home directory — held to the rules the runtime holds a root to.
+    /// The harness root the archive's tree goes into: <c>--root</c>, else the <c>JASON_Harness__Root</c> variable when this
+    /// machine's environment sets it, else <c>Jason</c> in the home directory — held to the rule the runtime holds a root to
+    /// (<see cref="HarnessRootRule"/>), each place compared where it leads, before anything is placed.
     /// </summary>
     private static HarnessRootPlace Root(CliEnvironment env, string? option)
     {
-        string? settings;
-        try
-        {
-            settings = File.Exists(env.Paths.UserSettingsFile) ? File.ReadAllText(env.Paths.UserSettingsFile) : null;
-        }
-        catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or SecurityException)
-        {
-            settings = null;
-        }
-
-        HarnessRootPlace resolved;
-        try
-        {
-            resolved = InstallationPlaces.HarnessRoot(env, settings);
-        }
-        catch (JsonException)
-        {
-            resolved = InstallationPlaces.HarnessRoot(env, null);
-        }
-
+        // Not this machine's settings file: the archive's replaces it, and its root is set to the one chosen here.
+        var resolved = InstallationPlaces.HarnessRoot(env, settings: null);
         var root = resolved;
         if (option is not null)
         {
-            root = new HarnessRootPlace(Full(option, env.WorkingDirectory, "--root"), InstallationPlaces.FromOption);
+            var full = Full(option, env.WorkingDirectory, "--root");
+            root = new HarnessRootPlace(full, InstallationPlaces.FromOption, full);
 
             // The runtime reads the variable over every setting, so a root it names is where the runtime will look.
             if (resolved.From == InstallationPlaces.FromVariable && !FolderPaths.Same(resolved.Path, root.Path))
@@ -393,19 +377,9 @@ public static class ImportCommand
             }
         }
 
-        var home = FolderPaths.Real(InstallationPlaces.Home(env));
-        var data = FolderPaths.Real(env.Paths.Root);
-        var at = FolderPaths.Real(root.Path);
-        var why = FolderPaths.Same(at, home) ? "is the home directory: every agent session started anywhere in it would read the memory files kept at the root"
-            : FolderPaths.Same(at, FolderPaths.Normal(Path.GetPathRoot(at) ?? at)) ? "is the top of a drive, a share or the file system: every agent session started below it would read the memory files kept at the root"
-            : FolderPaths.Inside(home, at) ? "holds the home directory: every agent session started anywhere in the home would read the memory files kept at the root"
-            : FolderPaths.Same(at, data) ? "is the data directory, which is the runtime's own"
-            : FolderPaths.Inside(at, data) ? "is inside the data directory, which is the runtime's own"
-            : FolderPaths.Inside(data, at) ? "holds the data directory, which is the runtime's own"
-            : null;
-        return why is null
-            ? root
-            : throw new ImportRefusal(CliErrors.ImportRefused, $"The harness root {root.Path} {why}. Name another with --root. Nothing was written.");
+        return root.Refusal(env) is { } why
+            ? throw new ImportRefusal(CliErrors.ImportRefused, $"The harness root {root.Path}, named by {ExportCommand.Named(root.From)}, cannot be the root here: {why} Name another with --root. Nothing was written.")
+            : root;
     }
 
     // ---- what is here ------------------------------------------------------------------------------------------------
@@ -530,10 +504,9 @@ public static class ImportCommand
             new(manifest.HarnessRoot, root.Path),
         };
 
-        // The settings file must name the root whenever the runtime would not find it without: when no variable names it
-        // and it is not the default.
-        var nameRoot = InstallationPlaces.Variable(env) is not { Length: > 0 } && !FolderPaths.Same(root.Path, InstallationPlaces.Default(env).Path);
-        return SettingsRewrite.Rewrite(text, manifest.OperatingSystem, places, root.Path, nameRoot, path => File.Exists(path) || Directory.Exists(path));
+        // The settings file names the root chosen here in every case, the default and a root the variable names included, so
+        // the file says where its installation's folders are whatever the environment the runtime is started in.
+        return SettingsRewrite.Rewrite(text, manifest.OperatingSystem, places, root.Path, nameRoot: true, path => File.Exists(path) || Directory.Exists(path));
     }
 
     // ---- what is left to say -----------------------------------------------------------------------------------------

@@ -652,7 +652,7 @@ public sealed class ImportCommandTests
     }
 
     [Fact]
-    public async Task The_root_is_the_one_this_machine_s_settings_file_names_when_no_variable_does()
+    public async Task This_machine_s_settings_file_does_not_choose_the_root_and_with_no_variable_it_is_Jason_in_the_home()
     {
         using var from = new MovingMachine();
         using var to = new MovingMachine { RootVariable = false };
@@ -663,8 +663,12 @@ public sealed class ImportCommandTests
         var exit = await Import(to, Options(file));
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Equal("prj_01ACME", HarnessMarker.In(Path.Combine(named, "projects", "acme"))!.Id);
-        Assert.Equal(named, InstallationPlaces.SettingsRoot(File.ReadAllText(to.Paths.UserSettingsFile)));
+        var home = Path.Combine(to.Home, "Jason");
+        Assert.Equal("prj_01ACME", HarnessMarker.In(Path.Combine(home, "projects", "acme"))!.Id);
+        Assert.False(Directory.Exists(named));
+        Assert.Equal(home, InstallationPlaces.SettingsRoot(File.ReadAllText(to.Paths.UserSettingsFile)));
+        using var answer = JsonDocument.Parse(to.Out.ToString());
+        Assert.Equal("default", answer.RootElement.GetProperty("harness_root").GetProperty("from").GetString());
     }
 
     [Fact]
@@ -681,21 +685,25 @@ public sealed class ImportCommandTests
     }
 
     [Theory]
-    [InlineData("home", "is the home directory")]
-    [InlineData("data", "is the data directory")]
-    [InlineData("inside-data", "is inside the data directory")]
-    [InlineData("above-data", "holds the home directory")]
-    public async Task A_root_the_runtime_would_refuse_is_refused_and_nothing_is_written(string which, string said)
+    [InlineData("home", "must not be the home directory itself")]
+    [InlineData("above-home", "must not hold the home directory")]
+    [InlineData("top", "must not be the top of a drive")]
+    [InlineData("data", "must not be the data directory")]
+    [InlineData("inside-data", "must not be inside the data directory")]
+    [InlineData("above-data", "must not hold the data directory")]
+    public async Task A_root_the_runtime_would_refuse_is_refused_by_the_runtime_s_rule_and_nothing_is_written(string which, string said)
     {
         using var from = new MovingMachine();
-        using var to = new MovingMachine();
+        using var to = new MovingMachine(dataFolder: "box/data");
         to.Variables[InstallationPlaces.RootVariable] = string.Empty;
         var root = which switch
         {
             "home" => to.Home,
+            "above-home" => to.Root,
+            "top" => Path.GetPathRoot(to.Root)!,
             "data" => to.Data,
             "inside-data" => Path.Combine(to.Data, "harness"),
-            _ => to.Root,
+            _ => Path.GetDirectoryName(to.Data)!,
         };
         var file = new MovingArchive(from).Installation().Write();
 

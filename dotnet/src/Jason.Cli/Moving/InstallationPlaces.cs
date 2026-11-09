@@ -8,7 +8,15 @@ namespace Jason.Cli.Moving;
 /// <param name="Path">The folder, full and without a trailing separator.</param>
 /// <param name="From">What named it: <see cref="InstallationPlaces.FromOption"/>, <see cref="InstallationPlaces.FromVariable"/>,
 /// <see cref="InstallationPlaces.FromSettings"/> or <see cref="InstallationPlaces.FromDefault"/>.</param>
-public sealed record HarnessRootPlace(string Path, string From);
+/// <param name="Written">The value as it was written, which the root's rule is held to; null for the default.</param>
+public sealed record HarnessRootPlace(string Path, string From, [property: System.Text.Json.Serialization.JsonIgnore] string? Written = null)
+{
+    /// <summary>
+    /// Why this root may not be one, by the rule the runtime holds it to (<see cref="HarnessRootRule"/>), each place
+    /// compared where it leads; null when it may.
+    /// </summary>
+    public string? Refusal(CliEnvironment env) => HarnessRootRule.Refusal(Written, env.Paths.Root, InstallationPlaces.Home(env));
+}
 
 /// <summary>
 /// The places an installation keeps its files on this machine, read without the runtime: the two verbs that move an
@@ -22,10 +30,10 @@ internal static class InstallationPlaces
     public const string RootVariable = "JASON_Harness__Root";
 
     /// <summary>The setting that names the harness root.</summary>
-    public const string RootSetting = "Harness:Root";
+    public const string RootSetting = HarnessRootRule.Setting;
 
     /// <summary>The folder in the home directory the harness root is when nothing names another.</summary>
-    public const string DefaultFolder = "Jason";
+    public const string DefaultFolder = HarnessRootRule.DefaultFolder;
 
     public const string FromOption = "root_option";
 
@@ -69,12 +77,25 @@ internal static class InstallationPlaces
     {
         if (Variable(env) is { } variable)
         {
-            return string.IsNullOrWhiteSpace(variable) ? Default(env) : new HarnessRootPlace(FolderPaths.Normal(variable), FromVariable);
+            return string.IsNullOrWhiteSpace(variable) ? Default(env) : new HarnessRootPlace(Spelt(variable), FromVariable, variable);
         }
 
         return SettingsRoot(settings) is { } written && !string.IsNullOrWhiteSpace(written)
-            ? new HarnessRootPlace(FolderPaths.Normal(written), FromSettings)
+            ? new HarnessRootPlace(Spelt(written), FromSettings, written)
             : Default(env);
+    }
+
+    /// <summary>A value as a full path, or as it was written when it is not one the platform reads, which the rule then refuses.</summary>
+    private static string Spelt(string written)
+    {
+        try
+        {
+            return FolderPaths.Normal(written);
+        }
+        catch (Exception unreadable) when (unreadable is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return written;
+        }
     }
 
     /// <summary>The root nothing names: <see cref="DefaultFolder"/> in the home directory.</summary>

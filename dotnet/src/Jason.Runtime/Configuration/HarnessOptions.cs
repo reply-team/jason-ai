@@ -1,3 +1,5 @@
+using Jason.Contracts.Harness;
+
 namespace Jason.Runtime.Configuration;
 
 /// <summary>
@@ -10,7 +12,7 @@ public sealed class HarnessOptions
     public const string Section = "Harness";
 
     /// <summary>The root's name when the settings name none: a folder of this name in the home directory, beside <c>~/.jason</c>.</summary>
-    public const string DefaultFolder = "Jason";
+    public const string DefaultFolder = HarnessRootRule.DefaultFolder;
 
     /// <summary>
     /// The root as an absolute path. Left out, written as nothing or as white space, it is <see cref="DefaultFolder"/> in

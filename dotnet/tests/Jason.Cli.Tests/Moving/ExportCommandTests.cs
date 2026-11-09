@@ -305,6 +305,44 @@ public sealed class ExportCommandTests
         Assert.Equal(Path.Combine(machine.Home, "Jason"), manifest.RootElement.GetProperty("harness_root").GetString());
     }
 
+    [Fact]
+    public async Task A_harness_root_that_holds_the_data_directory_is_refused_by_the_runtime_s_rule_and_nothing_is_written()
+    {
+        using var machine = new MovingMachine(dataFolder: "box/data");
+        machine.PlantData("state/jason.db");
+        var box = Path.GetDirectoryName(machine.Data)!;
+        MovingMachine.Plant(box, "projects/acme/AGENTS.md", "# Acme");
+        var env = machine.Env();
+        machine.Variables["JASON_Harness__Root"] = box;
+
+        var exit = await ExportCommand.RunAsync(env, Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(machine.Out.ToString());
+        Assert.Equal("export_refused", error.Code);
+        Assert.Contains(HarnessRootRule.Refusal(box, machine.Data, machine.Home)!, error.Message, StringComparison.Ordinal);
+        Assert.Contains("must not hold the data directory", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+    }
+
+    [Fact]
+    public async Task A_harness_root_the_settings_file_writes_with_a_tilde_is_refused_and_nothing_is_written()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.PlantData("config/settings.json", "{ \"Harness\": { \"Root\": \"~/Jason\" } }");
+        var env = machine.Env();
+        machine.Variables.Remove("JASON_Harness__Root");
+
+        var exit = await ExportCommand.RunAsync(env, Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(machine.Out.ToString());
+        Assert.Equal("export_refused", error.Code);
+        Assert.Contains("must be an absolute path", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+    }
+
     // ---- where it is written -----------------------------------------------------------------------------------------
 
     [Fact]

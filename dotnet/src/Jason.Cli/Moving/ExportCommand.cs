@@ -186,6 +186,13 @@ public static class ExportCommand
                 $"The settings file at {env.Paths.UserSettingsFile} cannot be read ({unreadable.Message}), so the harness root it may name is not known. Mend it, or name the root in {InstallationPlaces.RootVariable}. Nothing was written.");
         }
 
+        // The runtime's own rule for a root, held to the root as it was named and where it leads: a root that holds the data
+        // directory would carry the parts no archive carries, and one that is the home would carry the home.
+        if (root.Refusal(env) is { } why)
+        {
+            return Refuse(env, options.Human, CliErrors.ExportRefused, $"The harness root, named by {Named(root.From)}, cannot be carried: {why} Nothing was written.");
+        }
+
         var warnings = new List<string>();
         var autostart = Registration(env, warnings);
         if (File.Exists(env.Paths.UserSettingsFile))
@@ -276,6 +283,15 @@ public static class ExportCommand
     }
 
     // ---- where -------------------------------------------------------------------------------------------------------
+
+    /// <summary>What named the harness root, in the words a refusal says it in.</summary>
+    internal static string Named(string from) => from switch
+    {
+        InstallationPlaces.FromVariable => "the " + InstallationPlaces.RootVariable + " variable",
+        InstallationPlaces.FromSettings => "the settings file",
+        InstallationPlaces.FromOption => "--root",
+        _ => "nothing, so it is " + InstallationPlaces.DefaultFolder + " in the home directory",
+    };
 
     private static string? Target(CliEnvironment env, string? file, DateTimeOffset now, out string? refusal)
     {

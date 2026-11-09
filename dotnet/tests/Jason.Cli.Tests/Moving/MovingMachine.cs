@@ -23,10 +23,12 @@ internal sealed class MovingMachine : IDisposable
     private readonly Lock _sync = new();
     private int _instances;
 
-    public MovingMachine()
+    /// <param name="dataFolder">Where the data directory is under the machine's folder: <c>box/data</c> gives a folder,
+    /// <c>box</c>, that holds the data directory and not the home.</param>
+    public MovingMachine(string dataFolder = "data")
     {
         Root = Path.Combine(Path.GetTempPath(), "jason-cli-tests", Guid.NewGuid().ToString("N"));
-        Data = Path.Combine(Root, "data");
+        Data = Path.Combine([Root, .. dataFolder.Split('/')]);
         Harness = Path.Combine(Root, "harness");
         Home = Path.Combine(Root, "home");
         Here = Path.Combine(Root, "here");
