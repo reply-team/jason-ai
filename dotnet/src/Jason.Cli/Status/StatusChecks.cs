@@ -1674,8 +1674,8 @@ internal static class StatusChecks
         }
 
         return state.Registered
-            ? new StatusCheck("autostart", false, CheckState.Ok, "The runtime is registered to start at logon.", null)
-            : new StatusCheck("autostart", false, CheckState.Absent, "The runtime is not registered to start at logon.", Repair.EnableAutostart);
+            ? new StatusCheck("autostart", false, CheckState.Ok, "Registered at logon: the runtime starts by itself each time you sign in.", null)
+            : new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", Repair.EnableAutostart);
     }
 
     /// <summary>

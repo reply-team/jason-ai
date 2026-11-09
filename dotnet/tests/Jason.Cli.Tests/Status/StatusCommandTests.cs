@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Text.Json;
 using Jason.Cli;
+using Jason.Cli.Autostart;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Contracts.Skills;
@@ -49,6 +50,43 @@ public class StatusCommandTests
         var runtime = Assert.Single(report.Checks, check => check.Name == "runtime");
         Assert.Equal(CheckState.Failed, runtime.State);
         Assert.Equal("jason runtime start", runtime.Fix);
+    }
+
+    // The autostart check says what a logon registration does at the next sign-in, and nothing of whether the runtime runs now.
+
+    private static async Task<StatusCheck> AutostartCheckAsync(bool registered)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var registrar = new RecordingRegistrar { State = new AutostartState(registered, registered ? ["jason", "runtime", "run"] : [], null) };
+        var environment = Machine(dir, output) with { Autostart = registrar };
+
+        await CliApp.RunAsync(["status"], environment, Ct);
+
+        return Assert.Single(Read(output).Checks, check => check.Name == "autostart");
+    }
+
+    /// <summary>No registration is told as what happens at the next sign-in, and the repair stays the same.</summary>
+    [Fact]
+    public async Task No_registration_says_the_runtime_stays_off_at_the_next_sign_in()
+    {
+        var check = await AutostartCheckAsync(registered: false);
+
+        Assert.Equal(CheckState.Absent, check.State);
+        Assert.Equal("No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", check.Fact);
+        Assert.Equal("jason runtime autostart enable", check.Fix);
+    }
+
+    /// <summary>A registration is told as what it does at each sign-in, not as a claim about the runtime now.</summary>
+    [Fact]
+    public async Task A_registration_says_the_runtime_starts_by_itself_at_each_sign_in()
+    {
+        var check = await AutostartCheckAsync(registered: true);
+
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Equal("Registered at logon: the runtime starts by itself each time you sign in.", check.Fact);
+        Assert.Null(check.Fix);
     }
 
     /// <summary>A ready installation exits 0, and says so in the body as well as in the code.</summary>
