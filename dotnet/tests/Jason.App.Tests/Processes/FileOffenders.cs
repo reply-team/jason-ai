@@ -162,6 +162,14 @@ internal static class FileOffenders
     [SupportedOSPlatform("windows")]
     public static void DecryptsAFile() => File.Decrypt("x");
 
+    [SupportedOSPlatform("windows")]
+    public static void EncryptsThroughAFileInfo() => new FileInfo("x").Encrypt();
+
+    [SupportedOSPlatform("windows")]
+    public static void DecryptsThroughAFileInfo() => new FileInfo("x").Decrypt();
+
+    public static void MakesAFileInfoReadOnly() => new FileInfo("x").IsReadOnly = true;
+
     public static MemoryMappedFile MapsAFile() => MemoryMappedFile.CreateFromFile("x");
 
     public static string MakesATemporaryFile() => Path.GetTempFileName();

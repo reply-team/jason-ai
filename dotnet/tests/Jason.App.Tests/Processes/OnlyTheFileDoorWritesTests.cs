@@ -117,6 +117,9 @@ public class OnlyTheFileDoorWritesTests
     [InlineData(nameof(FileOffenders.SetsTheUnixModeOfADirectoryInfo), "calls FileSystemInfo.set_UnixFileMode")]
     [InlineData(nameof(FileOffenders.EncryptsAFile), "calls File.Encrypt")]
     [InlineData(nameof(FileOffenders.DecryptsAFile), "calls File.Decrypt")]
+    [InlineData(nameof(FileOffenders.EncryptsThroughAFileInfo), "calls FileInfo.Encrypt")]
+    [InlineData(nameof(FileOffenders.DecryptsThroughAFileInfo), "calls FileInfo.Decrypt")]
+    [InlineData(nameof(FileOffenders.MakesAFileInfoReadOnly), "calls FileInfo.set_IsReadOnly")]
     [InlineData(nameof(FileOffenders.MapsAFile), "calls MemoryMappedFile.CreateFromFile")]
     [InlineData(nameof(FileOffenders.MakesATemporaryFile), "calls Path.GetTempFileName")]
     [InlineData(nameof(FileOffenders.MakesATemporaryDirectory), "calls Directory.CreateTempSubdirectory")]
@@ -222,11 +225,12 @@ public class OnlyTheFileDoorWritesTests
             or "set_" + nameof(FileSystemInfo.LastWriteTime) or "set_" + nameof(FileSystemInfo.LastWriteTimeUtc)
             or "set_" + nameof(FileSystemInfo.LastAccessTime) or "set_" + nameof(FileSystemInfo.LastAccessTimeUtc);
 
-    /// <summary>A member a <see cref="FileInfo"/> and a <see cref="DirectoryInfo"/> share, <c>Delete</c> and the link, compiles to <see cref="FileSystemInfo"/>'s.</summary>
+    /// <summary>What only a <see cref="FileInfo"/> writes through: opening and creating, moving and copying, <c>Encrypt</c> and <c>Decrypt</c>, and the <c>IsReadOnly</c> setter, which rewrites the attributes.</summary>
     private static bool WritesThroughFileInfo(string name) =>
         name.StartsWith("Open", StringComparison.Ordinal)
         || name.StartsWith("Create", StringComparison.Ordinal)
-        || name is nameof(FileInfo.AppendText) or nameof(FileInfo.Delete) or nameof(FileInfo.MoveTo) or nameof(FileInfo.CopyTo) or nameof(FileInfo.Replace);
+        || name is nameof(FileInfo.AppendText) or nameof(FileInfo.Delete) or nameof(FileInfo.MoveTo) or nameof(FileInfo.CopyTo) or nameof(FileInfo.Replace)
+            or nameof(FileInfo.Encrypt) or nameof(FileInfo.Decrypt) or "set_" + nameof(FileInfo.IsReadOnly);
 
     private static string Name(MethodBase method) => $"{method.DeclaringType?.FullName}.{method.Name}";
 
