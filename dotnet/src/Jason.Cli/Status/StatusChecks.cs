@@ -503,11 +503,82 @@ internal static class StatusChecks
             : $" '{role.Name}' is a role of your own, and no skill Jason ships teaches it: it launches untaught unless a skill named after it is in {directory}."));
 
     /// <summary>
-    /// The skills the roles are taught from, reported. A runtime that cannot teach its roles is not ready,
-    /// whatever else is true — and the check is not only presence: a deployment the launcher would refuse is
-    /// worse than none, because it refuses every launch of that role rather than running it untaught.
+    /// The skills the roles are taught from, reported, with the deployment their record names as fields a program reads.
     /// </summary>
-    private static async Task<StatusCheck> RoleSkillsAsync(CliEnvironment env, RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken)
+    /// <remarks>
+    /// The fields are added here, once, to whatever the check came to: the deployment is read from the record whatever
+    /// the state, so a program asking which ref the roles are taught from does not depend on why the check failed.
+    /// </remarks>
+    private static async Task<StatusCheck> RoleSkillsAsync(CliEnvironment env, RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken) =>
+        await RoleSkillsStateAsync(env, client, info, cancellationToken).ConfigureAwait(false) with { Details = RoleSkillsDetails(env, info) };
+
+    /// <summary>
+    /// The role root the check reads: the one the runtime reports, which is the directory it reads at every launch, and
+    /// where the runtime did not answer, the one this CLI deploys role skills into.
+    /// </summary>
+    internal static string RoleSkillsRoot(CliEnvironment env, SkillsInfo? skills) =>
+        string.IsNullOrWhiteSpace(skills?.RoleSkillsDirectory) ? env.Paths.RoleSkillsDirectory : skills.RoleSkillsDirectory;
+
+    /// <summary>
+    /// The deployment the record in the role root names, as <c>ref</c>, <c>source</c> and <c>commit</c> — empty where the
+    /// record names none, a directory read where it stood — and <c>roles_taught</c>, the number of roles the runtime
+    /// reports it teaches; null where there is no record or it cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pack is the one the fact names: where the record holds packs at different refs, the one <see cref="Away"/>
+    /// names, and otherwise the first. A role root holds the one pack the installer writes there.
+    /// </para>
+    /// <para>
+    /// <c>roles_taught</c> is a number the runtime said, or nothing. A runtime that did not answer, or that could not read
+    /// its own role root, has said none, and a guessed one would be read as a fact. A role whose skill the launcher would
+    /// refuse is reported and not taught, so it is not counted.
+    /// </para>
+    /// </remarks>
+    private static Dictionary<string, string>? RoleSkillsDetails(CliEnvironment env, SystemInfoResponse? info)
+    {
+        var root = RoleSkillsRoot(env, info?.Skills);
+        SkillsRecord? record;
+        try
+        {
+            record = SkillsRecord.Read(root);
+        }
+        catch (SkillsRecordUnreadable)
+        {
+            return null;
+        }
+
+        var away = info?.Skills is null ? null : Away(root, info.RuntimeVersion, SkillsSource.BuildVersion(env));
+        if ((away?.Deployment ?? record?.Packs.FirstOrDefault()) is not { } deployment)
+        {
+            return null;
+        }
+
+        var details = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["ref"] = deployment.Ref,
+            ["source"] = deployment.Source,
+            ["commit"] = deployment.Commit ?? string.Empty,
+        };
+        if (info?.Skills is { Problem: null } skills)
+        {
+            details["roles_taught"] = skills.Roles
+                .Where(role => role.Problem is null)
+                .Select(role => role.Role)
+                .Distinct(StringComparer.Ordinal)
+                .Count()
+                .ToString(CultureInfo.InvariantCulture);
+        }
+
+        return details;
+    }
+
+    /// <summary>
+    /// What the check came to. A runtime that cannot teach its roles is not ready, whatever else is true — and the check
+    /// is not only presence: a deployment the launcher would refuse is worse than none, because it refuses every launch
+    /// of that role rather than running it untaught.
+    /// </summary>
+    private static async Task<StatusCheck> RoleSkillsStateAsync(CliEnvironment env, RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken)
     {
         if (info?.Skills is not { } skills)
         {

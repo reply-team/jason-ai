@@ -2827,6 +2827,47 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
+    /// The role check's details name the same deployment as fields, and meet the same rule: a source of the person's own and
+    /// the ref it was taken at travel as <c>&lt;skill-source&gt;</c>, the public repository and a release tag as they are —
+    /// with the runtime answering, and without it, where the details come from the record this CLI deploys into.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public async Task The_role_check_s_details_travel_by_the_skill_source_rule(bool own, bool answering)
+    {
+        using var dir = new TempPaths();
+        var source = own ? "https://example.com/sentinel-fork/jason.git" : SkillsSource.DefaultSource;
+        var reference = own ? "sentinel-branch" : "v1.2.3";
+        var roles = dir.Paths.RoleSkillsDirectory;
+        Directory.CreateDirectory(roles);
+        File.WriteAllText(Path.Combine(roles, "SKILL.md"), "x");
+        var record = new Jason.Contracts.Skills.SkillsRecord(
+            Jason.Contracts.Skills.SkillsRecord.CurrentVersion,
+            [new(SkillPacks.Runtime, source, reference, true, "c0ffee", Now, [new("SKILL.md", "sha256:x")])]);
+        File.WriteAllText(Path.Combine(roles, Jason.Contracts.Skills.SkillsRecord.FileName), JsonSerializer.Serialize(record, JasonJson.Options));
+        var runtime = Running(dir);
+        runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with { RuntimeVersion = "1.2.4", Skills = new SkillsInfo(roles, 4096, [], null) };
+        if (!answering)
+        {
+            runtime.Fails = (_, _) => throw new HttpRequestException("connection refused");
+        }
+
+        var bundle = await ComposeAsync(dir, runtime, build: "1.2.4");
+
+        var details = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "role_skills")!["details"]!;
+        Assert.Equal(own ? "<skill-source>" : SkillsSource.DefaultSource, Text(details["source"]));
+        Assert.Equal(own ? "<skill-source>" : "v1.2.3", Text(details["ref"]));
+        Assert.Equal("c0ffee", Text(details["commit"]));
+        if (own)
+        {
+            AssertAbsent(bundle, "sentinel-fork", "sentinel-branch");
+        }
+    }
+
+    /// <summary>
     /// A folder under <c>plugins/</c> whose name is not a well-formed id is never loaded, so neither the registry nor the
     /// settings name it — but the loader's line about it does, by the folder's name, which the person chose. It is written as
     /// its alias, whether the folder is still there or the line is all that is left of it.

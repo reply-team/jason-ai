@@ -109,6 +109,12 @@ public static class StatusCommand
         may differ, see the install page. Which provider you use is yours, so this build knows no vendor's
         command by heart.
 
+        In the JSON, the role_skills check alone carries details: the deployment its record names, as fields
+        a program reads instead of the fact — ref, source, commit (empty where the record names none, a
+        directory read where it stood) and roles_taught, how many roles the runtime reports it teaches,
+        left out where the runtime did not answer or could not read its role root. With no record there
+        are no details, and no other check carries any. --human prints the facts alone.
+
         Exit codes: 0 when every required check passed, 1 when one did not. Never 3: "the runtime did not
         answer" is this command's answer rather than a reason it has none.
         """;
@@ -152,7 +158,7 @@ public static class StatusCommand
         return report.Ready ? ExitCodes.Success : ExitCodes.ApiError;
     }
 
-    private static void Render(TextWriter output, StatusReport report)
+    internal static void Render(TextWriter output, StatusReport report)
     {
         output.WriteLine(report.Ready ? "Ready." : "Not ready.");
         output.WriteLine();
