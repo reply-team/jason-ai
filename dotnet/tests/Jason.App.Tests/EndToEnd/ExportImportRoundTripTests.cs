@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Contracts.Json;
@@ -50,8 +51,18 @@ public class ExportImportRoundTripTests
         var file = from.Root + "-archive.zip";
         try
         {
+            // The database as the stopped runtime left it: whichever of its files are there, never one planted.
+            var left = Directory.GetFiles(Path.Combine(from.Root, "state"), "jason.db*")
+                .Select(path => "data/state/" + Path.GetFileName(path))
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            Assert.Contains("data/state/jason.db", left);
             var exported = await GoldenPath.JasonAsync(from, "export", file);
             Assert.True(exported.ExitCode == ExitCodes.Success, $"export: {exported.Output} {exported.Error}");
+            using (var archive = ZipFile.OpenRead(file))
+            {
+                Assert.Equal(left, archive.Entries.Select(entry => entry.FullName).Where(name => name.StartsWith("data/state/", StringComparison.Ordinal) && !name.EndsWith('/')).Order(StringComparer.Ordinal).ToArray());
+            }
 
             // Another machine holds no folder of the one exported. Here the first root is moved aside within its own home, so
             // a link finds no marker at the recorded place and the folder is removed with its installation.
@@ -103,6 +114,7 @@ public class ExportImportRoundTripTests
 
                 Assert.True(was.StartsWith(fromRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase), $"{id} was at '{was}', outside '{fromRoot}'.");
                 Assert.NotNull(folder);
+                Assert.True(folder.StartsWith(toRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase), $"{id} is recorded at '{folder}', outside this machine's root '{toRoot}'.");
                 Assert.True(Directory.Exists(folder), $"{id} is recorded at '{folder}', which is not there.");
             }
 
