@@ -80,7 +80,8 @@ ask.
 - A profile you append to is read by a login shell, not by your next non-interactive command (§2): carry the
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
-  exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work
+  exactly what you ran, and what it changed.
+- **The hand-over.** When `ready` is true, tell the person Jason is installed and can work
   and where it will keep their files — the two lines §2 shows, with the folder the `harness_root` check of
   `jason status` names, which is the one in force — and ask them once what comes next:
   [the wiring check](golden-path.md) first, in this session, or their real work at once. Name the wiring check for

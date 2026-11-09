@@ -564,13 +564,21 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("used descriptively", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The licence is the install page's to say, in the section the agent performs first, so the prompt says nothing of a
+    /// licence and asks for no acceptance.
+    /// </summary>
     [Fact]
-    public void The_install_prompt_says_the_licence_at_main_and_asks_for_no_acceptance()
+    public void The_install_prompt_leaves_the_licence_to_the_install_page_and_asks_for_no_acceptance()
     {
         var prompt = Flat(Prompt());
 
-        Assert.Contains("Jason is released under the MIT licence: <https://github.com/reply-team/jason-ai/blob/main/LICENSE>.", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("licence", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("accept", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "Jason is released under the MIT licence: [LICENSE](../LICENSE).",
+            Flat(Section(Page("docs", "INSTALL.md"), "## 2. ")),
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1133,28 +1141,49 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Before anything runs, the agent asks the person one question: what it will install and from where, what it writes
-    /// and where, and each act the page marks, one by one — and offers the other way, a mode that asks before every
-    /// command. The person's answer is the consent the rest of the install acts on.
+    /// Before anything runs, the agent tells the person in a few words what it will install and where, and waits for
+    /// their yes; each act the page marks is asked again when it comes. The yes is the consent the rest of the install
+    /// acts on.
     /// </summary>
     [Fact]
     public void The_install_prompt_asks_one_question_before_anything_runs() =>
         Assert.Contains(
-            "Before you run anything, ask me one question in plain words: what you will install and from where, what it writes and where (the executable and its directory, the PATH entry, Jason's data directory, the role skills), and each act the instructions mark \"Ask first\", offered to me one by one as a choice. Offer me the other way too: switching this session to a mode that asks me before every command. Then do the steps yourself, in order from section 2, doing only what I said yes to.",
+            "Before you run anything, tell me in a few words what you will install and where, and wait for my yes",
             Flat(Prompt()),
             StringComparison.Ordinal);
 
     /// <summary>
-    /// The prompt names where Jason comes from, in the person's own words: the releases at the product's address, which
-    /// redirect to the public repository's, or the package the install page names for the platform. It names no package
-    /// and no package manager — those are the page's to name — so the guard against commands holds.
+    /// The prompt says where Jason comes from in the person's own words — a release, with nothing built — and leaves the
+    /// address to the install page, whose section 2 carries it. It names no package, no package manager and no address of
+    /// a download, so the guard against commands holds.
     /// </summary>
     [Fact]
-    public void The_install_prompt_names_the_release_source_in_the_person_s_voice() =>
+    public void The_install_prompt_names_the_release_source_in_the_person_s_voice()
+    {
+        Assert.Contains("installing from a release and building nothing", Flat(Prompt()), StringComparison.Ordinal);
         Assert.Contains(
-            "Jason is downloaded from its releases at <https://get.jasonharness.ai/releases/>, which redirect to <https://github.com/reply-team/jason-ai/releases>; install it from there, or with the package section 2 names for this platform.",
-            Flat(Prompt()),
+            "https://get.jasonharness.ai/releases/latest/download/install.sh",
+            Section(Page("docs", "INSTALL.md"), "## 2. "),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Jason is used from a release, and the first things a reader meets say so: the prompt has the agent build nothing,
+    /// and the README says under its opening, before Quick start, that nothing in the repository is built to use it.
+    /// </summary>
+    [Fact]
+    public void The_prompt_and_the_readme_s_opening_say_Jason_is_used_from_a_release()
+    {
+        Assert.Contains("building nothing", Flat(Prompt()), StringComparison.Ordinal);
+
+        var readme = Page("README.md");
+        var quickStart = readme.IndexOf("\n## Quick start\n", StringComparison.Ordinal);
+        Assert.True(quickStart > 0, "the README has no Quick start section.");
+        var sentence = readme[..quickStart].Split("\n\n").Select(Flat).SingleOrDefault(paragraph => paragraph.StartsWith("**You use Jason from a release.**", StringComparison.Ordinal));
+        Assert.True(sentence is not null, "Before Quick start, no paragraph of the README says Jason is used from a release.");
+        Assert.Contains("built", sentence, StringComparison.Ordinal);
+        Assert.Contains("release", sentence, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// The agent's report at the end names the next step, so an install never ends on whether it worked alone: after a
@@ -1164,7 +1193,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_install_prompt_asks_for_the_next_step() =>
         Assert.Contains(
-            "At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran and what it changed.",
+            "At the end, tell me whether Jason can start work and exactly what you ran and changed.",
             Flat(Prompt()),
             StringComparison.Ordinal);
 
@@ -1176,7 +1205,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_install_prompt_asks_once_what_comes_next_when_Jason_can_start_work() =>
         Assert.Contains(
-            "If it can, ask me once whether I want a synthetic walk to meet Jason first or my real work at once.",
+            "Then do what the guide's hand-over says: offer me the wiring check once, and bring me to my first campaign in my own words.",
             Flat(Prompt()),
             StringComparison.Ordinal);
 
@@ -2303,10 +2332,10 @@ public partial class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:7d325587da26b104f707b10d842557f68d0062edc1740dc390cdcf8e33e01396";
+    private const string PromptDigest = "sha256:c6ecdd106e93baad9633528ce2cfb7baad97d48242b048875446585f09890456";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:3e2b21971398ee3fa53a79a7d2c8599bb61fe2be8258c7f94afeec930b1e6edf";
+    private const string AgentSectionDigest = "sha256:f8d405aa9cc2ac6e6ab11efceacd0a831831c916dfc07a862190f4382916cc7c";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

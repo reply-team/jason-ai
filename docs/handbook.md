@@ -78,25 +78,12 @@ preamble, no repository tour:
 
 ```text
 Install Jason on this machine. The instructions are
-<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>. Read all of it
-first, the whole file word for word rather than a summary of it.
-
-Before you run anything, ask me one question in plain words: what you will install and from
-where, what it writes and where (the executable and its directory, the PATH entry, Jason's data
-directory, the role skills), and each act the instructions mark "Ask first", offered to me one by
-one as a choice. Offer me the other way too: switching this session to a mode that asks me before
-every command. Then do the steps yourself, in order from section 2, doing only what I said yes to.
-
-Jason is downloaded from its releases at <https://get.jasonharness.ai/releases/>, which redirect to
-<https://github.com/reply-team/jason-ai/releases>; install it from there, or with the package
-section 2 names for this platform.
-
-Jason is released under the MIT licence:
-<https://github.com/reply-team/jason-ai/blob/main/LICENSE>.
-
-At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran
-and what it changed. If it can, ask me once whether I want a synthetic walk to meet Jason first or
-my real work at once.
+<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>: read the whole file
+first, then follow it in order from section 2, installing from a release and building nothing. Before
+you run anything, tell me in a few words what you will install and where, and wait for my yes; ask me
+again before each act the guide marks "Ask first". At the end, tell me whether Jason can start work and
+exactly what you ran and changed. Then do what the guide's hand-over says: offer me the wiring check
+once, and bring me to my first campaign in my own words.
 ```
 
 Once it runs, [examples/](../examples/README.md) is where cases of Jason applied to outbound work are collected, with a
