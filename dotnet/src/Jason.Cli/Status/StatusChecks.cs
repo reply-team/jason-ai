@@ -433,7 +433,8 @@ internal static class StatusChecks
     /// <summary>
     /// Which UI is served, or that none is. Optional: a runtime works without one, so this never decides readiness. The
     /// default build is the release's, so one from another release is named with the command that places this one's —
-    /// where both are releases: a development runtime has no published UI to compare with, and a custom build is the
+    /// where neither is a development build: a candidate is published with its own UI, a development runtime has no
+    /// published UI to compare with, and a custom build is the
     /// person's own. And only while the runtime is this CLI's build, which is the version <c>jason ui install</c> places:
     /// between a package manager's upgrade and the restart the two differ, the restart is the fix, and
     /// <c>runtime_version</c> names it.
@@ -467,8 +468,8 @@ internal static class StatusChecks
 
         if (released
             && string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal)
-            && SemanticVersion.TryParse(info.RuntimeVersion, out var runtime) && runtime.PreRelease is null
-            && SemanticVersion.TryParse(ui.Version, out var served) && served.PreRelease is null
+            && SemanticVersion.TryParse(info.RuntimeVersion, out var runtime) && !runtime.IsDevelopment
+            && SemanticVersion.TryParse(ui.Version, out var served) && !served.IsDevelopment
             && served != runtime)
         {
             return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving default {ui.Version} from {ui.Directory}; this runtime is {info.RuntimeVersion}.", Repair.InstallUi);

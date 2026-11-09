@@ -26,6 +26,17 @@ public readonly record struct SemanticVersion(int Major, int Minor, int Patch, s
     public static SemanticVersion Current { get; } =
         TryParse(JasonVersion.Current, out var current) ? current : new SemanticVersion(0, 0, 0, null);
 
+    /// <summary>
+    /// Whether this is a development build: its pre-release is exactly <c>dev</c>, the suffix <c>Directory.Build.props</c>
+    /// stamps on every build that is given no other, and the one kind of build no release publishes.
+    /// </summary>
+    /// <remarks>
+    /// Exact, as the plugin and UI verbs have always read it: a candidate such as <c>1.0.0-rc.1</c> is published under
+    /// its own tag, and no pre-release but <c>dev</c> itself is taken for a development build, <c>dev.1</c> included.
+    /// Written once, here, so that every reader of the rule reads the same one.
+    /// </remarks>
+    public bool IsDevelopment => PreRelease == "dev";
+
     public static bool TryParse(string? text, out SemanticVersion version)
     {
         version = default;

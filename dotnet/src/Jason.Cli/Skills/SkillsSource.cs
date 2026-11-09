@@ -102,11 +102,6 @@ public static class SkillsSource
     public static TimeSpan FetchTimeout => TimeSpan.FromMinutes(2);
 
     /// <summary>
-    /// The pre-release a development build carries: the one kind of build no release publishes.
-    /// </summary>
-    private const string Development = "dev";
-
-    /// <summary>
     /// The ref this build is pinned to: <c>v</c> and the version its release is published as — its own, pre-release
     /// included, unless it is a development build, which points at the release it is on the way to.
     /// </summary>
@@ -120,7 +115,7 @@ public static class SkillsSource
     /// </remarks>
     public static string DefaultRef(string runtimeVersion) =>
         SemanticVersion.TryParse(runtimeVersion, out var version)
-            ? string.Create(CultureInfo.InvariantCulture, $"v{(version.PreRelease == Development ? version with { PreRelease = null } : version)}")
+            ? string.Create(CultureInfo.InvariantCulture, $"v{(version.IsDevelopment ? version with { PreRelease = null } : version)}")
             : throw new SkillsSourceUnavailable(
                 $"This build reports its version as '{runtimeVersion}', which is not a version, so it carries no pinned ref. Name one with --ref, or a directory with --source.");
 
@@ -139,7 +134,7 @@ public static class SkillsSource
     /// so nothing moves a deployment to it or calls a deployment stale against it.
     /// </summary>
     public static bool IsRelease(string version) =>
-        SemanticVersion.TryParse(version, out var parsed) && parsed.PreRelease != Development;
+        SemanticVersion.TryParse(version, out var parsed) && !parsed.IsDevelopment;
 
     /// <summary>
     /// The source, resolved to a directory on this machine. A directory is read where it stands; a release feed's
