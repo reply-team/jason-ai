@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { ActivityBucket, ActivityPeriod } from '../../api/types';
 import { bucketLabel, dayRange, labelEvery, labelled } from '../../time/buckets';
 import { number } from '../../time/format';
@@ -37,11 +38,11 @@ function Chart({
     const every = labelEvery(period, buckets.length);
     const busy = buckets.length === 0;
     return (
-        <div class="card chart" role="group" aria-label={range ? `${name}, ${range}` : name} aria-busy={busy}>
+        <div className="card chart" role="group" aria-label={range ? `${name}, ${range}` : name} aria-busy={busy}>
             <h2 title={barsAddUp}>
-                {name} <span class="hint">{range}</span>
+                {name} <span className="hint">{range}</span>
             </h2>
-            <div class="bars">
+            <div className="bars">
                 {buckets.map((bucket, i) => {
                     const label = bucketLabel(bucket, period, zone, now, buckets.length);
                     const on = chosen.count === count && chosen.from === bucket.start && chosen.to === bucket.end;
@@ -50,23 +51,23 @@ function Chart({
                         <button
                             key={bucket.start}
                             type="button"
-                            class={`bar${label.current ? ' today' : ''}${on ? ' on' : ''}${
+                            className={`bar${label.current ? ' today' : ''}${on ? ' on' : ''}${
                                 labelled(i, buckets.length, every.wide) ? '' : ' unlabelled'
                             }${labelled(i, buckets.length, every.narrow) ? '' : ' unlabelled-narrow'}`}
-                            style={`--v: ${max > 0 ? (bucket.value / max).toFixed(3) : 0}`}
+                            style={{ '--v': max > 0 ? (bucket.value / max).toFixed(3) : 0 } as CSSProperties}
                             title={`${label.long} · ${number.format(bucket.value)}`}
                             aria-label={`${label.long}, ${number.format(bucket.value)}`}
                             aria-pressed={on}
                             onClick={() => onBar(count, bucket)}
                         >
                             <i />
-                            {written && <span class="v">{number.format(bucket.value)}</span>}
-                            <span class="d">{label.short}</span>
+                            {written && <span className="v">{number.format(bucket.value)}</span>}
+                            <span className="d">{label.short}</span>
                         </button>
                     );
                 })}
                 {max === 0 && !busy && (
-                    <div class="none">
+                    <div className="none">
                         <span>Nobody yet</span>
                     </div>
                 )}
@@ -86,7 +87,7 @@ export function Charts(props: {
 }) {
     const { series, ...rest } = props;
     return (
-        <div class="charts">
+        <div className="charts">
             <Chart count="contacted" title="Contacted" buckets={series?.contacted ?? []} {...rest} />
             <Chart count="replied" title="Replied" buckets={series?.replied ?? []} {...rest} />
         </div>

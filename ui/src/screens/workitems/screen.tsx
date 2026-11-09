@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect } from 'react';
 import { useApi } from '../../api/context';
 import { Segmented } from '../../layout/segmented';
 import { Toolbar } from '../../layout/toolbar';
@@ -75,8 +75,8 @@ export function WorkItemsScreen() {
     const items = store.items.value;
 
     return (
-        <div class={`main${selected ? '' : ' single'}`}>
-            <div class="list">
+        <div className={`main${selected ? '' : ' single'}`}>
+            <div className="list">
                 <Toolbar
                     title="Work items"
                     refresh={{ busy: store.refreshing.value, onRefresh: () => void store.refresh(api, view) }}
@@ -96,7 +96,7 @@ export function WorkItemsScreen() {
                 {store.notice.value && <Notice>{store.notice.value}</Notice>}
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.loaded.value && items.length === 0 ? (
-                    <div class="empty">{filtered ? 'Nothing matches these filters.' : empty[view.tab]}</div>
+                    <div className="empty">{filtered ? 'Nothing matches these filters.' : empty[view.tab]}</div>
                 ) : (
                     <WorkItemList
                         tab={view.tab}

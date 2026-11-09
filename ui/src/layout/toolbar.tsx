@@ -1,4 +1,4 @@
-import type { ComponentChildren } from 'preact';
+import type { ReactNode } from 'react';
 
 /**
  * The top of every screen: its title, what sits beside it (a switch), and at the far right the refresh, turning and held
@@ -10,23 +10,23 @@ export function Toolbar({
     refresh,
 }: {
     title: string;
-    children?: ComponentChildren;
+    children?: ReactNode;
     refresh?: { busy: boolean; onRefresh: () => void };
 }) {
     return (
-        <div class="toolbar">
+        <div className="toolbar">
             <h1>{title}</h1>
             {children}
-            <span class="spacer" />
+            <span className="spacer" />
             {refresh && (
                 <button
-                    class={`iconbtn${refresh.busy ? ' spin' : ''}`}
+                    className={`iconbtn${refresh.busy ? ' spin' : ''}`}
                     type="button"
                     title="Refresh"
                     disabled={refresh.busy}
                     onClick={refresh.onRefresh}
                 >
-                    <span class="glyph">⟳</span>
+                    <span className="glyph">⟳</span>
                 </button>
             )}
         </div>

@@ -1,4 +1,4 @@
-import { signal, type Signal } from '@preact/signals';
+import { signal, type Signal } from '@preact/signals-react';
 import { ApiError, Unpaired, type Api } from '../../api/client';
 import { session } from '../../api/session';
 import type { ContactThread, ContactThreads, Message, Thread } from '../../api/types';

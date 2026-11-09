@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useState } from 'react';
 import { useApi } from '../../api/context';
 import { FiltersBar } from '../../layout/filters-bar';
 import { Toolbar } from '../../layout/toolbar';
@@ -70,8 +70,8 @@ export function PeopleScreen() {
         : 'All campaigns';
 
     return (
-        <div class={`main${selected ? '' : ' single'}`}>
-            <div class="list">
+        <div className={`main${selected ? '' : ' single'}`}>
+            <div className="list">
                 <Toolbar
                     title="People"
                     refresh={{ busy: store.refreshing.value, onRefresh: () => void store.refresh(api, filters) }}
@@ -91,7 +91,7 @@ export function PeopleScreen() {
                             narrow(withValue(filters, 'campaign', picked?.id));
                         }}
                     />
-                    <label class="check">
+                    <label className="check">
                         <input
                             type="checkbox"
                             checked={filters.archived === true}
@@ -106,7 +106,7 @@ export function PeopleScreen() {
                 </FiltersBar>
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.loaded.value && people.length === 0 ? (
-                    <div class="empty">{filtered ? 'Nobody matches.' : 'Nobody yet.'}</div>
+                    <div className="empty">{filtered ? 'Nobody matches.' : 'Nobody yet.'}</div>
                 ) : (
                     <PeopleList
                         people={people}
@@ -121,7 +121,7 @@ export function PeopleScreen() {
                 )}
             </div>
             {selected && (
-                <div class="panel">
+                <div className="panel">
                     {store.personFailure.value && <Notice danger>{store.personFailure.value}</Notice>}
                     {person && person.id === selected && (
                         <>

@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState } from 'react';
 import { ApiError, Unpaired } from '../../api/client';
 import { useApi } from '../../api/context';
 import { session } from '../../api/session';
@@ -61,22 +61,22 @@ export function TransitionDialog({ campaign, kind, onDone, onClose }: Props) {
             onClose={onClose}
             buttons={
                 <>
-                    <button class="btn primary" type="button" disabled={busy} onClick={() => void act()}>
+                    <button className="btn primary" type="button" disabled={busy} onClick={() => void act()}>
                         {verb}
                     </button>
                 </>
             }
         >
             <p>{says(campaign, kind)}</p>
-            <div class="field">
-                <label for="transition-reason">Reason (optional, kept in the journal)</label>
+            <div className="field">
+                <label htmlFor="transition-reason">Reason (optional, kept in the journal)</label>
                 <textarea
                     id="transition-reason"
-                    class="textarea"
+                    className="textarea"
                     aria-label="Reason"
                     maxLength={2000}
                     value={reason}
-                    onInput={(e) => setReason((e.target as HTMLTextAreaElement).value)}
+                    onChange={(e) => setReason((e.target as HTMLTextAreaElement).value)}
                 />
             </div>
             {refused && <Notice danger>{refused}</Notice>}

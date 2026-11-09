@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from 'preact/hooks';
-import { signal } from '@preact/signals';
+import { useEffect, useMemo } from 'react';
+import { signal } from '@preact/signals-react';
 import { HttpApi, type Api } from './api/client';
 import { ApiProvider } from './api/context';
 import { session } from './api/session';
@@ -34,11 +34,11 @@ export function App({ api, uiApiVersion = API_VERSION }: { api?: Api; uiApiVersi
     const runtimeApi = shell.info.value?.api_version;
     return (
         <ApiProvider api={client}>
-            <div class="app">
+            <div className="app">
                 <Sidebar />
-                <div class="content">
+                <div className="content">
                     {runtimeApi && runtimeApi !== uiApiVersion && (
-                        <div class="notice danger">
+                        <div className="notice danger">
                             This UI was built for API {uiApiVersion}; the runtime speaks {runtimeApi}. Reinstall the UI
                             from a release that matches.
                         </div>

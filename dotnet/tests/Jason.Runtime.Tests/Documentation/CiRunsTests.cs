@@ -1311,6 +1311,30 @@ public class CiRunsTests
     }
 
     /// <summary>
+    /// One job runs all of the UI's checks, in the order ui/README.md gives them: the install, the static checks, the unit
+    /// and screen layers, the build and its package, and the browser smoke against the runtime the job built. None of
+    /// them may fail without failing the job, and none may be skipped: the steps that run them carry no condition of
+    /// their own, and the job carries no <c>continue-on-error</c>.
+    /// </summary>
+    [Fact]
+    public void The_ui_job_runs_every_layer_of_the_ui_s_tests_in_order()
+    {
+        var job = Mapping(Jobs(), "ui");
+        var steps = Steps(job);
+        var commands = new[] { "npm ci", "npm run check", "npm test", "npm run build", "npm run package", "npm run e2e" };
+        static List<string> Lines(YamlMappingNode step) => [.. (Scalar(step, "run") ?? "").Split('\n').Select(line => line.Trim())];
+        var runs = steps.SelectMany(Lines).ToList();
+
+        var order = commands.Select(command => runs.IndexOf(command)).ToList();
+
+        Assert.DoesNotContain(-1, order);
+        Assert.Equal(order.Order(), order);
+        Assert.All(steps.Where(step => Scalar(step, "run") is not null), step => Assert.Null(Node(step, "continue-on-error")));
+        Assert.All(steps.Where(step => Lines(step).Intersect(commands, StringComparer.Ordinal).Any()), step => Assert.Null(Node(step, "if")));
+        Assert.Null(Node(job, "continue-on-error"));
+    }
+
+    /// <summary>
     /// Every plugin package's JavaScript is parsed by node, on the one runner that has it, before the runtime is built and
     /// anything of the UI is installed, so a syntax error is reported in seconds rather than after a full build: the files
     /// are found under <c>plugins/*/</c>, so a package joins by being there, and the step names none. Pinned by its text:

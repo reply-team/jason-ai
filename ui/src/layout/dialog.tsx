@@ -1,5 +1,4 @@
-import type { ComponentChildren } from 'preact';
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 /** What a dialog focuses as it opens: its first field or picker, so Escape and typing reach it at once. */
 const firstControl = 'button.select, input, textarea';
@@ -16,28 +15,28 @@ export function Dialog({
     buttons,
     children,
 }: {
-    title: ComponentChildren;
+    title: ReactNode;
     label: string;
     onClose: () => void;
     dismiss?: string;
-    buttons: ComponentChildren;
-    children: ComponentChildren;
+    buttons: ReactNode;
+    children: ReactNode;
 }) {
     const box = useRef<HTMLDivElement>(null);
     useEffect(() => box.current?.querySelector<HTMLElement>(firstControl)?.focus(), []);
     return (
         <div
-            class="overlay"
+            className="overlay"
             onKeyDown={(e) => {
                 // A list open inside the dialog takes Escape first; the next Escape is the dialog's.
                 if (e.key === 'Escape' && !e.defaultPrevented) onClose();
             }}
         >
-            <div class="dialog" role="dialog" aria-label={label} ref={box}>
+            <div className="dialog" role="dialog" aria-label={label} ref={box}>
                 <h2>{title}</h2>
                 {children}
-                <div class="btn-row">
-                    <button class="btn ghost" type="button" onClick={onClose}>
+                <div className="btn-row">
+                    <button className="btn ghost" type="button" onClick={onClose}>
                         {dismiss}
                     </button>
                     {buttons}

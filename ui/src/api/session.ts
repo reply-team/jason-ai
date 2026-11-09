@@ -1,4 +1,4 @@
-import { computed, signal } from '@preact/signals';
+import { computed, signal } from '@preact/signals-react';
 import type { UiSession } from './types';
 
 const key = 'jason.ui.session';

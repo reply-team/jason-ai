@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/preact';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
@@ -45,7 +45,10 @@ describe('Attention', () => {
     });
 
     it('approves with the recorded request, reloads, and moves to the next pending item', async () => {
-        const fake = pendingFake().answer('approval.approve', 'approval.approve/approved');
+        // The screen reads the next pending item once it moves there; React runs that read before the test ends.
+        const fake = pendingFake()
+            .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
+            .answer('approval.approve', 'approval.approve/approved');
         renderApp(fake);
         await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
         fireEvent.click(screen.getByText('Enroll Ada Lovelace'));
@@ -93,6 +96,9 @@ describe('Attention', () => {
 
     it('answers a question with an option and a reason, as recorded', async () => {
         const fake = pendingFake().answer('decision.answer', 'decision.answer/answered');
+        // The screen reads the next pending question once it moves there, and React runs that read before the test
+        // ends; nothing recorded it, so it is left waiting, as it was when this test ended before the read was made.
+        fake.hold('decision.get', (body) => (body as { decision_id?: string }).decision_id === 'dec_2');
         renderApp(fake);
         await waitFor(() => screen.getByText('Pause outreach to Vireo Labs until their funding news?'));
         fireEvent.click(screen.getByText('Pause outreach to Vireo Labs until their funding news?'));
