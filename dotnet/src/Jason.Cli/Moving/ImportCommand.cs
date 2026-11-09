@@ -722,7 +722,7 @@ public static class ImportCommand
                 {
                     try
                     {
-                        Directory.Delete(folder, recursive: true);
+                        DirectoryTrees.Delete(folder);
                     }
                     catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or SecurityException)
                     {
