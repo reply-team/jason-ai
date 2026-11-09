@@ -759,7 +759,8 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// Each plugin package installed as an earlier version the release records is replaced by the release's own, and the
     /// one it replaced is kept under <c>update/previous/plugins/</c> for a rollback. A package the record does not know —
     /// built or edited here — is left as it is, and so is one that is current, later, unreadable or not installed; each
-    /// says so on a line of its own.
+    /// says so on a line of its own, but for the packages not installed: two or more are one line naming each, where the
+    /// first of them stands, as the status says them.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -852,9 +853,19 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             }
         }
 
+        var missing = plan.Where(plugin => plugin.State == PluginPlanState.NotInstalled).Select(plugin => plugin.Id).ToList();
+        var missingSaid = false;
         foreach (var plugin in plan)
         {
-            if (plugin.State != PluginPlanState.Behind)
+            if (plugin.State == PluginPlanState.NotInstalled && missing.Count > 1)
+            {
+                if (!missingSaid)
+                {
+                    missingSaid = true;
+                    Say(UpdateStep.Plugins, $"{string.Join(", ", missing[..^1])} and {missing[^1]} are not installed, so none was placed; `jason plugin install <id>` installs one");
+                }
+            }
+            else if (plugin.State != PluginPlanState.Behind)
             {
                 Say(UpdateStep.Plugins, Left(plugin));
             }
