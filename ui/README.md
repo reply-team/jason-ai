@@ -7,7 +7,9 @@ The browser UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/`. One mo
 
 Node 24. `npm ci`, then `npm run build` writes `dist/`, with the `THIRD-PARTY-NOTICES` of exactly the packages the
 bundle carries. `npm run package` wraps it as `artifacts/jason-ui.zip`: `index.html`,
-`manifest.json`, `favicon.svg`, `assets/*`, `THIRD-PARTY-NOTICES` at the root.
+`manifest.json`, `favicon.svg`, `assets/*`, `THIRD-PARTY-NOTICES` at the root. The build refuses a package it carries
+that has no licence file, and the package step refuses notices that leave out a package `package.json` names as a
+dependency.
 
 ## Where it lands
 
@@ -33,12 +35,14 @@ its data.
 
 ## React
 
-The UI is written in React 18, with `@preact/signals-react` for its state: the console and the desktop surface that
-follow are written against React, and the dock layout the console uses is a React library. The move from Preact
-changed the framework and nothing else: the screens, their stores, the API client, the three test layers and the
-recorded exchanges the screen tests run against are what they were. Signals still replace most effects (`signal`,
-`computed`, `effect`); a build-time transform in `vite.config.ts` makes each component re-render when a signal it read
-changes, which Preact did on its own.
+The UI is written in React 18, with `@preact/signals-react` for its state, because React 18 is the framework the UI
+and what is built on it are written against. The move from Preact changed the framework, the toolchain that compiles
+it, the guards that hold the layers, and how the notices are written: the build writes them from its bundle, where the
+package step once did. It changed three screen tests, where React's renderer runs an effect or an update before the
+test ends; the other screen tests changed only the testing library they import. What the screens do, their stores,
+the API client and the recorded exchanges the screen tests run against are what they were. Signals still replace most
+effects (`signal`, `computed`, `effect`); a build-time transform in `vite.config.ts` makes each component re-render
+when a signal it read changes, which Preact did on its own.
 
 ## Testing
 

@@ -59,11 +59,17 @@ function thirdPartyNotices(bundle) {
     const packages = [...dirs].map((dir) => {
         const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
         const licenseFile = readdirSync(dir).find((f) => /^(LICENSE|LICENCE)(\..*)?$/i.test(f));
+        // The licence travels with the code: a notice without its text would leave out the copyright line it requires.
+        if (!licenseFile) {
+            throw new Error(
+                `${pkg.name} is in the bundle, but ${dir} holds no LICENSE or LICENCE file to carry with it`,
+            );
+        }
         return {
             name: pkg.name,
             version: pkg.version,
             license: pkg.license ?? 'see text',
-            text: licenseFile ? readFileSync(join(dir, licenseFile), 'utf8') : '',
+            text: readFileSync(join(dir, licenseFile), 'utf8'),
         };
     });
     const lines = ['Third-party notices for the Jason UI build.', ''];
@@ -116,6 +122,16 @@ export function packageUi(dist, out, { version, apiVersion }) {
             files = buildFiles(dist);
             if (!files.includes('THIRD-PARTY-NOTICES')) {
                 throw new Error(`${dist} holds no THIRD-PARTY-NOTICES, which the build writes beside index.html`);
+            }
+            // Every package the UI declares as a dependency is carried by the build, so its notices name each one, and
+            // notices that leave one out are refused here rather than shipped.
+            const headings = readFileSync(join(dist, 'THIRD-PARTY-NOTICES'), 'utf8').split('\n');
+            const { dependencies = {} } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+            const missing = Object.keys(dependencies).filter(
+                (name) => !headings.some((line) => line.startsWith(`## ${name} `)),
+            );
+            if (missing.length > 0) {
+                throw new Error(`${dist}/THIRD-PARTY-NOTICES names no ${missing.join(', ')}, which the UI depends on`);
             }
         } catch (error) {
             reject(error);

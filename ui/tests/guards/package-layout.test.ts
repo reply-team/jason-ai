@@ -9,6 +9,16 @@ import config from '../../vite.config';
 
 const ui = join(import.meta.dirname, '..', '..');
 
+/** The packages the UI declares as its dependencies, which the notices of every build must name. */
+const dependencies = Object.keys(
+    (JSON.parse(readFileSync(join(ui, 'package.json'), 'utf8')) as { dependencies: Record<string, string> })
+        .dependencies,
+);
+
+/** Notices as the build writes them, a section for each of these packages. */
+const notices = (named: string[] = dependencies) =>
+    named.map((name) => `## ${name} 1.0.0 — MIT\n\nThe licence of ${name}.\n`).join('\n');
+
 function entries(zip: string): Promise<Map<string, string>> {
     return new Promise((resolve, reject) => {
         const found = new Map<string, string>();
@@ -54,7 +64,7 @@ describe('the asset', () => {
         writeFileSync(join(dist, 'index.html'), '<title>x</title>');
         writeFileSync(join(dist, 'favicon.svg'), '<svg/>');
         writeFileSync(join(dist, 'assets', 'index-abc.js'), '1');
-        writeFileSync(join(dist, 'THIRD-PARTY-NOTICES'), '## react 18.3.1 — MIT\n');
+        writeFileSync(join(dist, 'THIRD-PARTY-NOTICES'), notices());
         const out = join(dir, 'jason-ui.zip');
 
         await packageUi(dist, out, { version: '0.10.0', apiVersion: API_VERSION });
@@ -68,7 +78,7 @@ describe('the asset', () => {
             'manifest.json',
         ]);
         expect(JSON.parse(found.get('manifest.json')!)).toEqual({ version: '0.10.0', api_version: 'v1' });
-        expect(found.get('THIRD-PARTY-NOTICES')).toBe('## react 18.3.1 — MIT\n');
+        expect(found.get('THIRD-PARTY-NOTICES')).toBe(notices());
     });
 
     it('carries the manifest it writes, not the one a build left in dist', async () => {
@@ -77,7 +87,7 @@ describe('the asset', () => {
         mkdirSync(join(dist, 'assets'), { recursive: true });
         writeFileSync(join(dist, 'index.html'), '<title>x</title>');
         writeFileSync(join(dist, 'manifest.json'), '{"version":"0.0.0-local","api_version":"v1"}\n');
-        writeFileSync(join(dist, 'THIRD-PARTY-NOTICES'), 'x');
+        writeFileSync(join(dist, 'THIRD-PARTY-NOTICES'), notices());
         const out = join(dir, 'jason-ui.zip');
 
         await packageUi(dist, out, { version: '0.13.0', apiVersion: API_VERSION });
@@ -110,6 +120,21 @@ describe('the asset', () => {
         writeFileSync(join(dist, 'index.html'), 'x');
         await expect(packageUi(dist, join(dir, 'out.zip'), { version: '1', apiVersion: 'v1' })).rejects.toThrow(
             /THIRD-PARTY-NOTICES/,
+        );
+    });
+
+    it('refuses notices that leave out a package the UI declares as a dependency, naming it', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'jason-ui-pack-'));
+        const dist = join(dir, 'dist');
+        mkdirSync(dist, { recursive: true });
+        writeFileSync(join(dist, 'index.html'), 'x');
+        expect(dependencies).toContain('@fontsource-variable/inter');
+        writeFileSync(
+            join(dist, 'THIRD-PARTY-NOTICES'),
+            notices(dependencies.filter((name) => name !== '@fontsource-variable/inter')),
+        );
+        await expect(packageUi(dist, join(dir, 'out.zip'), { version: '1', apiVersion: 'v1' })).rejects.toThrow(
+            '@fontsource-variable/inter',
         );
     });
 });
@@ -186,6 +211,27 @@ describe('the build', () => {
         }
         // React names loose-envify, a build-time transform, as a dependency of its own; the bundle does not carry it.
         expect(notices).not.toMatch(/loose-envify|js-tokens/);
+    });
+
+    it('refuses a carried package that has no licence file, naming the package and its directory', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'jason-ui-notices-'));
+        const pkg = join(dir, 'node_modules', 'unlicensed');
+        mkdirSync(pkg, { recursive: true });
+        writeFileSync(
+            join(pkg, 'package.json'),
+            JSON.stringify({ name: 'unlicensed', version: '1.0.0', license: 'MIT' }),
+        );
+        writeFileSync(join(pkg, 'index.js'), 'export default 1;');
+        const bundle = { 'assets/index-abc.js': { type: 'chunk', moduleIds: [join(pkg, 'index.js')] } };
+        const plugin = buildNotices();
+
+        const generate = () =>
+            (
+                plugin.generateBundle as (this: { emitFile: (file: unknown) => void }, o: unknown, b: unknown) => void
+            ).call({ emitFile: () => undefined }, {}, bundle);
+
+        expect(generate).toThrow('unlicensed');
+        expect(generate).toThrow(pkg.replaceAll('\\', '/'));
     });
 
     it('is a step of the build the Vite configuration runs', () => {
