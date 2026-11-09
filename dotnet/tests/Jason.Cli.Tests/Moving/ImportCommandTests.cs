@@ -1236,6 +1236,8 @@ public sealed class ImportCommandTests
     [Theory]
     [InlineData("~")]
     [InlineData("~/Jason")]
+    [InlineData("~bob/Jason")]
+    [InlineData(@"~\Jason")]
     public async Task A_root_option_that_starts_with_a_tilde_is_refused_by_the_runtime_s_rule_and_nothing_is_written(string option)
     {
         using var from = new MovingMachine();

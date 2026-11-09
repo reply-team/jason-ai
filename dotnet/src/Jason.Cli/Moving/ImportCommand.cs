@@ -518,9 +518,9 @@ public static class ImportCommand
         var root = resolved;
         if (option is not null)
         {
-            // Judged as written, as a setting is: made full against the folder the command runs in, a ~ would name a
-            // folder of that name there rather than the home the person meant.
-            if (option == "~" || option.StartsWith("~/", StringComparison.Ordinal) || option.StartsWith("~" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            // Judged as written, as a setting is: made full against the folder the command runs in, a root that starts with
+            // ~, ~/Jason or ~bob/Jason alike, would name a folder of that name there rather than a home the person meant.
+            if (option.StartsWith('~'))
             {
                 throw new ImportRefusal(
                     CliErrors.ImportRefused,
