@@ -468,7 +468,121 @@ public sealed class ImportCommandTests
         Assert.Equal("a database, made up", File.ReadAllText(Path.Combine(to.Data, "state", "jason.db")));
         Assert.Equal("prj_01ACME", HarnessMarker.In(Path.Combine(to.Harness, "projects", "acme"))!.Id);
         using var answer = JsonDocument.Parse(to.Out.ToString());
-        Assert.Equal([dataAside, rootAside], answer.RootElement.GetProperty("moved_aside").EnumerateArray().Select(path => path.GetString()));
+        Assert.Equal([rootAside, dataAside], answer.RootElement.GetProperty("moved_aside").EnumerateArray().Select(path => path.GetString()));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("projects/old")]
+    [InlineData("<data>/logs")]
+    public async Task A_command_run_from_a_folder_that_would_be_moved_aside_is_refused_and_nothing_is_written(string inside)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        to.PlantData("state/jason.db", "the database here");
+        to.PlantData("logs/jason-20261001.log", "a log here");
+        to.Mark(string.Empty, HarnessMarker.Root, null);
+        to.Mark("projects/old", HarnessMarker.Project, "prj_01OLD");
+        var folder = inside.StartsWith("<data>/", StringComparison.Ordinal)
+            ? Path.Combine(to.Data, inside["<data>/".Length..])
+            : inside.Length == 0 ? to.Harness : Path.Combine(to.Harness, inside);
+        var file = new MovingArchive(from).Installation().Write();
+        var before = Tree(to.Root);
+
+        var exit = await ImportCommand.RunAsync(to.Env() with { WorkingDirectory = folder }, Options(file) with { Replace = true }, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(to.Out.ToString());
+        Assert.Equal("import_refused", error.Code);
+        Assert.Contains(folder, error.Message, StringComparison.Ordinal);
+        Assert.Contains("from another folder", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
+        Assert.Equal(before, Tree(to.Root));
+    }
+
+    [Fact]
+    public async Task A_part_that_cannot_be_moved_after_the_root_has_moved_puts_everything_back_and_starts_the_runtime_again()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to move a folder that holds a file open without FileShare.Delete; elsewhere the move succeeds, so there is no failure to put back.");
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        to.PlantData("state/jason.db", "the database here");
+        to.PlantData("config/settings.json", "{\"Here\": true}");
+        var busy = to.PlantData("logs/jason-20261001.log", "a log another program holds");
+        to.Mark(string.Empty, HarnessMarker.Root, null);
+        to.Mark("projects/old", HarnessMarker.Project, "prj_01OLD");
+        to.StartRuntime();
+        var file = new MovingArchive(from).Installation().Write();
+        var before = Tree(to.Root);
+        Dictionary<string, string> tree;
+        int exit;
+        using (new FileStream(busy, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            exit = await Import(to, Options(file) with { Replace = true, Stop = true });
+            tree = Tree(to.Root);
+        }
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(to.Out.ToString());
+        Assert.Equal("import_unwritable", error.Code);
+        Assert.Contains("put back", error.Message, StringComparison.Ordinal);
+        Assert.Contains(to.Harness + ".replaced-" + Stamp, error.Message, StringComparison.Ordinal);
+        Assert.Contains("started again", error.Message, StringComparison.Ordinal);
+        // Everything stands where it stood, the root first moved and first back, and the runtime runs on it again.
+        Assert.Equal(before.Keys.Where(key => !key.StartsWith("data" + Path.DirectorySeparatorChar + "run", StringComparison.Ordinal)).Order(), tree.Keys.Where(key => !key.StartsWith("data" + Path.DirectorySeparatorChar + "run", StringComparison.Ordinal)).Order());
+        Assert.Equal("prj_01OLD", HarnessMarker.In(Path.Combine(to.Harness, "projects", "old"))!.Id);
+        Assert.Equal("the database here", File.ReadAllText(Path.Combine(to.Data, "state", "jason.db")));
+        Assert.False(Directory.Exists(to.Harness + ".replaced-" + Stamp));
+        Assert.False(Directory.Exists(Path.Combine(to.Data, "replaced-" + Stamp)));
+        Assert.Single(to.Processes.Launches);
+        Assert.True(to.Running);
+    }
+
+    [Fact]
+    public async Task A_runtime_lock_held_by_a_runtime_this_command_did_not_see_is_refused_and_nothing_is_written()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        Directory.CreateDirectory(to.Paths.RunDirectory);
+        using var held = new FileStream(to.Paths.LockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(to.Out.ToString());
+        Assert.Equal("runtime_running", error.Code);
+        Assert.Contains("'jason runtime stop'", error.Message, StringComparison.Ordinal);
+        // Nothing but the lock that was already there: the lock file cannot be read while it is held.
+        Assert.Equal(["run"], Directory.EnumerateFileSystemEntries(to.Data).Select(Path.GetFileName));
+        Assert.Equal([to.Paths.LockFile], Directory.EnumerateFileSystemEntries(to.Paths.RunDirectory));
+        Assert.False(Directory.Exists(to.Harness), "The harness root was made.");
+        Assert.Empty(to.Processes.Launches);
+    }
+
+    [Fact]
+    public async Task The_runtime_lock_is_held_through_the_placing_and_let_go_before_the_runtime_starts()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        to.StartRuntime();
+        bool? heldAtRegister = null;
+        bool? freeAtLaunch = null;
+        to.Registrar.OnApply = () => heldAtRegister = !CanTake(to.Paths.LockFile);
+        var launch = to.Processes.OnLaunch!;
+        to.Processes.OnLaunch = paths =>
+        {
+            freeAtLaunch = CanTake(to.Paths.LockFile);
+            return launch(paths);
+        };
+        var file = new MovingArchive(from) { Registered = true }.Installation().Write();
+
+        var exit = await Import(to, Options(file) with { Stop = true });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(heldAtRegister);
+        Assert.True(freeAtLaunch);
+        Assert.True(CanTake(to.Paths.LockFile));
     }
 
     [Fact]
@@ -1061,6 +1175,19 @@ public sealed class ImportCommandTests
     }
 
     /// <summary>The import was refused with the code, and nothing was written: the data directory is empty, no root exists.</summary>
+    private static bool CanTake(string lockFile)
+    {
+        try
+        {
+            using var taken = new FileStream(lockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
     private static Jason.Contracts.Api.ErrorBody Refused(MovingMachine to, int exit, string code)
     {
         Assert.Equal(ExitCodes.ApiError, exit);

@@ -218,6 +218,15 @@ public static class ImportCommand
                 return Refuse(env, options.Human, CliErrors.ImportNotEmpty, NotEmpty(env, root.Path, there));
             }
 
+            if (Standing(env, root.Path, there) is { } standing)
+            {
+                return Refuse(
+                    env,
+                    options.Human,
+                    CliErrors.ImportRefused,
+                    $"This command runs in {env.WorkingDirectory}, which is {standing}, and the import moves that aside before it places the archive: Windows cannot move a folder a shell stands in, and elsewhere the shell would be left standing in the moved folder. Run the import from another folder. Nothing was written.");
+            }
+
             SettingsRewritten settings;
             try
             {
@@ -236,7 +245,7 @@ public static class ImportCommand
                 return Refuse(env, options.Human, CliErrors.ImportRefused, refused.Message + " Nothing was written.");
             }
 
-            // ---- the runtime, stopped ----
+            // ---- the runtime, stopped, and its lock held ----
 
             var stopped = false;
             if (runtimeRunning)
@@ -249,46 +258,117 @@ public static class ImportCommand
                 stopped = true;
             }
 
+            // The runtime's own instance lock, held from here to just before the start: a runtime this verb did not see by
+            // its descriptor still holds it, and none, a start at logon included, can come up on a half-placed directory.
+            var held = RuntimeHold.Lock(env);
+            if (held is null && options.Stop && !stopped)
+            {
+                if (await RuntimeHold.StopAsync(env, options.StopTimeout, options.Poll, cancellationToken).ConfigureAwait(false) is { } said)
+                {
+                    return Refuse(env, options.Human, CliErrors.RuntimeStillRunning, $"The runtime did not stop, so nothing was written. Stop it with 'jason runtime stop' and run this again. It said: {said}");
+                }
+
+                stopped = true;
+                held = RuntimeHold.Lock(env);
+            }
+
+            if (held is null)
+            {
+                return !options.Stop
+                    ? Refuse(env, options.Human, CliErrors.RuntimeRunning, RuntimeHold.RunningRefusal(env, "import"))
+                    : Refuse(env, options.Human, CliErrors.RuntimeStillRunning, $"The runtime's lock at {env.Paths.LockFile} is held, so a runtime still runs on {env.Paths.Root}, and nothing was written. Stop it with 'jason runtime stop' and run this again.");
+            }
+
             // ---- aside, then in place ----
 
-            var aside = new List<string>();
-            var strays = new List<string>();
+            var aside = new Aside(env.Paths.Root, root.Path, there, stamp);
+            var leftStopped = stopped
+                ? " The runtime, stopped for the import, is left stopped; start it with 'jason runtime start' once what is here is as it should be."
+                : string.Empty;
             int dataFiles, harnessFiles;
+            var warnings = new List<string>();
+            List<ImportSkillsSource> sources;
+            ImportAutostart autostart;
+            List<(string ProjectId, string Folder)> projects;
+            int campaigns;
             try
             {
-                MoveAside(env, root.Path, there, stamp, aside, strays);
-                (dataFiles, harnessFiles) = archive.Place(env.Paths.Root, root.Path, settings);
-            }
-            catch (ImportRefusal refused)
-            {
-                var asideText = aside.Count == 0 ? string.Empty : " Moved aside before it stopped, and left there: " + string.Join(", ", aside) + ".";
-                return Refuse(env, options.Human, refused.Code, refused.Message + asideText);
-            }
+                try
+                {
+                    aside.Move();
+                }
+                catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or SecurityException)
+                {
+                    var message = $"What is here could not be moved aside ({failure.Message}), so nothing was placed.";
+                    var (notBack, why) = aside.PutBack();
+                    if (notBack.Count > 0)
+                    {
+                        // Some of this machine's installation is where it stood and some is aside: a start would read half.
+                        return Refuse(
+                            env,
+                            options.Human,
+                            CliErrors.ImportUnwritable,
+                            message
+                            + $" What had been moved could not all be put back ({why}): {string.Join("; ", notBack)}."
+                            + $" This machine's own installation is split between where it stood and {string.Join(" and ", aside.Folders)}, so the places hold only part of it, and the runtime must not be started on them until what was moved aside is put back by hand."
+                            + leftStopped);
+                    }
 
-            var warnings = new List<string>();
-            foreach (var stray in strays)
-            {
-                warnings.Add($"A {Path.GetFileName(stray)} stood in {DataPath(env.Paths.Root, StateFolder)} beside no database, and SQLite would have read it as the placed database's; it was moved aside to {stray}, yours to remove.");
-            }
+                    message += aside.Moves.Count == 0
+                        ? " Nothing had been moved yet."
+                        : " What had been moved was put back: " + string.Join(", ", aside.Moves.Reverse().Select(move => $"{move.To} to {move.From}")) + ".";
+                    held.Dispose();
+                    if (stopped)
+                    {
+                        var restart = await RuntimeHold.StartAsync(env, options.StartTimeout, options.Poll, cancellationToken).ConfigureAwait(false);
+                        message += restart is null
+                            ? " The runtime, stopped for the import, was started again."
+                            : $" The runtime, stopped for the import, did not start again; start it with 'jason runtime start'. It said: {restart}";
+                    }
 
-            foreach (var path in settings.NotHere)
-            {
-                warnings.Add($"The setting {path.Setting} names {path.Path}, which is not on this machine; it was left as written.");
-            }
+                    return Refuse(env, options.Human, CliErrors.ImportUnwritable, message);
+                }
 
-            var sources = SkillsSourcesNotHere(env, warnings);
-            foreach (var source in sources)
-            {
-                warnings.Add($"The role skills pack {source.Pack} came from the directory {source.Source}, which is not on this machine; run 'jason skills install' to deploy it from where it is here.");
-            }
+                try
+                {
+                    (dataFiles, harnessFiles) = archive.Place(env.Paths.Root, root.Path, settings);
+                }
+                catch (ImportRefusal refused)
+                {
+                    var partial = aside.Folders.Count == 0
+                        ? " The places hold a partial copy of the archive's installation, and the runtime must not be started on it."
+                        : $" This machine's own installation was moved aside to {string.Join(" and ", aside.Folders)} before the placing; the places hold a partial copy of the archive's, and the runtime must not be started on it until the import is run again or what was moved aside is put back by hand.";
+                    return Refuse(env, options.Human, refused.Code, refused.Message + partial + leftStopped);
+                }
 
-            var autostart = Register(env, manifest.Autostart.Registered);
-            if (autostart.Said is { } sentence)
-            {
-                warnings.Add(sentence);
-            }
+                foreach (var stray in aside.Strays)
+                {
+                    warnings.Add($"A {Path.GetFileName(stray)} stood in {DataPath(env.Paths.Root, StateFolder)} beside no database, and SQLite would have read it as the placed database's; it was moved aside to {stray}, yours to remove.");
+                }
 
-            var (projects, campaigns) = Markers(root.Path);
+                foreach (var path in settings.NotHere)
+                {
+                    warnings.Add($"The setting {path.Setting} names {path.Path}, which is not on this machine; it was left as written.");
+                }
+
+                sources = SkillsSourcesNotHere(env, warnings);
+                foreach (var source in sources)
+                {
+                    warnings.Add($"The role skills pack {source.Pack} came from the directory {source.Source}, which is not on this machine; run 'jason skills install' to deploy it from where it is here.");
+                }
+
+                autostart = Register(env, manifest.Autostart.Registered);
+                if (autostart.Said is { } sentence)
+                {
+                    warnings.Add(sentence);
+                }
+
+                (projects, campaigns) = Markers(root.Path);
+            }
+            finally
+            {
+                held.Dispose();
+            }
 
             // ---- the runtime, started, and each project folder recorded where it stands ----
 
@@ -299,7 +379,7 @@ public static class ImportCommand
                     env.Error.WriteLine(warning);
                 }
 
-                var asideText = aside.Count == 0 ? string.Empty : " Moved aside, yours to remove: " + string.Join(", ", aside) + ".";
+                var asideText = aside.Folders.Count == 0 ? string.Empty : " Moved aside, yours to remove: " + string.Join(", ", aside.Folders) + ".";
                 return Refuse(
                     env,
                     options.Human,
@@ -329,7 +409,7 @@ public static class ImportCommand
                 harnessFiles,
                 projects.Count,
                 campaigns,
-                aside,
+                aside.Folders,
                 settings.Rewritten,
                 settings.NotHere,
                 sources,
@@ -476,20 +556,70 @@ public static class ImportCommand
     // ---- aside -------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Every part of the data directory the archive's would land on, into one folder of the data directory, and the harness
-    /// root beside itself, so what is placed lands on nothing. Moved, never deleted.
+    /// The folder the command runs in, when it is one an import moves aside: the harness root or a folder in it, or a folder
+    /// in a part of the data directory that goes aside; said as what it is, or null when it is none of them.
     /// </summary>
-    private static void MoveAside(CliEnvironment env, string root, Here there, string stamp, List<string> aside, List<string> strays)
+    private static string? Standing(CliEnvironment env, string root, Here there)
     {
-        try
+        if (env.WorkingDirectory is not { } working)
         {
+            return null;
+        }
+
+        var here = FolderPaths.Real(working);
+        bool Within(string folder) => FolderPaths.Same(here, FolderPaths.Real(folder)) || FolderPaths.Inside(here, FolderPaths.Real(folder));
+        if (there.RootHasEntries && Within(root))
+        {
+            return FolderPaths.Same(here, FolderPaths.Real(root)) ? $"the harness root {root}" : $"inside the harness root {root}";
+        }
+
+        return there.DataParts.Select(part => DataPath(env.Paths.Root, part)).FirstOrDefault(part => Directory.Exists(part) && Within(part)) is { } inside
+            ? $"inside {inside}"
+            : null;
+    }
+
+    /// <summary>
+    /// What is here that the archive's would land on, moved out of the way: the harness root beside itself first, then every
+    /// part of the data directory into one folder of the data directory, so what is placed lands on nothing. Moved, never
+    /// deleted, and each move recorded, so a move that fails takes the ones before it back.
+    /// </summary>
+    private sealed class Aside(string dataDirectory, string root, Here there, string stamp)
+    {
+        private readonly List<(string From, string To)> _moves = [];
+
+        private string? _dataFolder;
+
+        /// <summary>The folders this machine's installation went into, in the order they were made.</summary>
+        public List<string> Folders { get; } = [];
+
+        /// <summary>The sidecars that stood beside no database, where each went.</summary>
+        public List<string> Strays { get; } = [];
+
+        /// <summary>Every move made, in order.</summary>
+        public IReadOnlyList<(string From, string To)> Moves => _moves;
+
+        /// <summary>
+        /// The root first: a root that cannot move then leaves nothing moved, where the data parts are many moves and the
+        /// root one.
+        /// </summary>
+        public void Move()
+        {
+            if (there.RootHasEntries)
+            {
+                var moved = Free(root + "." + AsideName + stamp);
+                Directory.Move(root, moved);
+                _moves.Add((root, moved));
+                Folders.Add(moved);
+            }
+
             if (there.DataParts.Count > 0)
             {
-                var folder = Free(Path.Join(env.Paths.Root, AsideName + stamp));
+                _dataFolder = Free(Path.Join(dataDirectory, AsideName + stamp));
+                Folders.Add(_dataFolder);
                 foreach (var part in there.DataParts)
                 {
-                    var from = DataPath(env.Paths.Root, part);
-                    var to = DataPath(folder, part);
+                    var from = DataPath(dataDirectory, part);
+                    var to = DataPath(_dataFolder, part);
                     Directory.CreateDirectory(Path.GetDirectoryName(to)!);
                     if (Directory.Exists(from))
                     {
@@ -500,24 +630,62 @@ public static class ImportCommand
                         File.Move(from, to);
                         if (ExportCommand.DatabaseFiles.Contains(part, StringComparer.Ordinal))
                         {
-                            strays.Add(to);
+                            Strays.Add(to);
                         }
                     }
+
+                    _moves.Add((from, to));
                 }
-
-                aside.Add(folder);
-            }
-
-            if (there.RootHasEntries)
-            {
-                var moved = Free(root + "." + AsideName + stamp);
-                Directory.Move(root, moved);
-                aside.Add(moved);
             }
         }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or SecurityException)
+
+        /// <summary>
+        /// Each move made, taken back, the last first. What could not be taken back, as where it stands now, with the first
+        /// reason; none when everything is where it stood, and then the folder made for the data parts goes too, when it
+        /// holds no file.
+        /// </summary>
+        public (List<string> Standing, string? Why) PutBack()
         {
-            throw new ImportRefusal(CliErrors.ImportUnwritable, $"What is here could not be moved aside ({failure.Message}), so nothing was placed.");
+            var standing = new List<string>();
+            string? why = null;
+            for (var index = _moves.Count - 1; index >= 0; index--)
+            {
+                var (from, to) = _moves[index];
+                try
+                {
+                    if (Directory.Exists(to))
+                    {
+                        Directory.Move(to, from);
+                    }
+                    else
+                    {
+                        File.Move(to, from);
+                    }
+                }
+                catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or SecurityException)
+                {
+                    standing.Add($"{from} stands at {to}");
+                    why ??= failure.Message;
+                }
+            }
+
+            if (standing.Count == 0)
+            {
+                Strays.Clear();
+                if (_dataFolder is { } folder && Directory.Exists(folder) && !Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Any())
+                {
+                    try
+                    {
+                        Directory.Delete(folder, recursive: true);
+                    }
+                    catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or SecurityException)
+                    {
+                        // An empty folder of its own making, left behind, is no harm, and not what the refusal is about.
+                    }
+                }
+            }
+
+            return (standing, why);
         }
     }
 
