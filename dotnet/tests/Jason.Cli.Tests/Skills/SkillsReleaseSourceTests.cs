@@ -326,6 +326,7 @@ public class SkillsReleaseSourceTests
             SkillsRelease.BeforeMove.Value = null;
         }
 
+        Assert.Contains($"another run put a tree at {dir.Paths.SkillsStagedSourceDirectory(Tag)} meanwhile", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("Run the command again", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(Directory.EnumerateDirectories(dir.Paths.SkillsStagedSourcesDirectory, "*.partial-*"));
 
@@ -333,6 +334,35 @@ public class SkillsReleaseSourceTests
 
         Assert.Equal(SkillsPackage.Commit, again.Commit);
         Assert.False(Directory.Exists(Path.Combine(again.Directory, ".git")));
+    }
+
+    /// <summary>
+    /// A move that fails with no tree in the way — here a file stands at the tag, which no run of Jason's puts there — is
+    /// refused saying what is known and no cause: the tree could not be moved, the file system's own words, nothing staged.
+    /// </summary>
+    [Fact]
+    public async Task A_move_that_fails_with_no_tree_in_the_way_is_refused_naming_no_cause()
+    {
+        using var dir = new TempPaths();
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(SkillsPackage.Zip(Tag));
+        var at = dir.Paths.SkillsStagedSourceDirectory(Tag);
+        SkillsRelease.BeforeMove.Value = staged => File.WriteAllText(staged, "a file, not a tree");
+
+        SkillsSourceUnavailable refusal;
+        try
+        {
+            refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+                () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+        }
+        finally
+        {
+            SkillsRelease.BeforeMove.Value = null;
+        }
+
+        Assert.StartsWith($"The skills package for '{Tag}' was unpacked, but its tree could not be moved to {at}: ", refusal.Message, StringComparison.Ordinal);
+        Assert.EndsWith(" Nothing was staged; run the command again.", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("another run", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateDirectories(dir.Paths.SkillsStagedSourcesDirectory, "*.partial-*"));
     }
 
     /// <summary>

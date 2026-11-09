@@ -151,12 +151,19 @@ internal static class SkillsRelease
                     // Another run unpacking the same tag finished first. A tag is one commit, so that tree is this one.
                     placed = false;
                 }
-                catch (IOException moved)
+                catch (IOException moved) when (Directory.Exists(staged))
                 {
                     // Another run put a tree of its own there after this one cleared the way, a git fetch of the same tag
                     // say. It is not this package, and a run that finds it removes it before it unpacks.
                     throw new SkillsSourceUnavailable(
                         $"The skills package for '{pin}' was unpacked, but another run put a tree at {staged} meanwhile, so it could not be moved there: {moved.Message} Run the command again: it replaces that tree.");
+                }
+                catch (Exception failed) when (failed is IOException or UnauthorizedAccessException)
+                {
+                    // No tree is in the way, so nothing here knows why: a scanner holding a file just written answers a
+                    // rename with access denied on Windows, say. The file system's words are the cause this can name.
+                    throw new SkillsSourceUnavailable(
+                        $"The skills package for '{pin}' was unpacked, but its tree could not be moved to {staged}: {failed.Message} Nothing was staged; run the command again.");
                 }
             }
         }
