@@ -149,6 +149,8 @@ internal sealed class MovingMachine : IDisposable
     {
         try
         {
+            // A link first, by itself, so the delete never reaches through it into what it leads to.
+            Unlink(Root);
             Directory.Delete(Root, recursive: true);
         }
         catch (IOException)
@@ -156,6 +158,27 @@ internal sealed class MovingMachine : IDisposable
         }
         catch (UnauthorizedAccessException)
         {
+        }
+    }
+
+    /// <summary>Removes every link to a directory below <paramref name="folder"/>, the link alone, never going through one.</summary>
+    private static void Unlink(string folder)
+    {
+        if (!Directory.Exists(folder))
+        {
+            return;
+        }
+
+        foreach (var directory in new DirectoryInfo(folder).EnumerateDirectories())
+        {
+            if (directory.LinkTarget is not null)
+            {
+                directory.Delete();
+            }
+            else
+            {
+                Unlink(directory.FullName);
+            }
         }
     }
 

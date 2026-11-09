@@ -223,7 +223,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   publishes its own contract — which checks are required, what is removed, what is never touched and
   what a bundle never carries — and guards hold the list to these eleven. `export` refuses while the runtime runs unless `--stop`
   is given, never writes over a file, carries the settings file with every secret in it and says so, and refuses a
-  link or a name another system cannot hold before anything is written. `import` refuses, before anything is written, an
+  link inside a carried place, following one at its top and judging it where it leads, or a name another system cannot
+  hold before anything is written. `import` refuses, before anything is written, an
   archive that cannot be read, a name that escapes, a digest that is not the listed one, an archive a newer Jason wrote
   and, without `--replace`, an installation already here; it deletes nothing, moving what is here aside, and rewrites
   in the settings file only the paths under the other machine's home, data directory and harness root.

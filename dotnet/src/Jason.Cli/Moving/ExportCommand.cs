@@ -366,6 +366,8 @@ public static class ExportCommand
     {
         var items = new List<Item>();
         var data = env.Paths.Root;
+        var dataReal = FolderPaths.Real(data);
+        var harnessReal = FolderPaths.Real(harnessRoot);
         if (DatabaseFiles.Any(file => File.Exists(Path.Combine(data, file))))
         {
             items.Add(new Item(ExportManifest.DataPrefix + "state/", Path.Combine(data, "state"), Directory: true));
@@ -385,10 +387,16 @@ public static class ExportCommand
             var path = Path.Combine([data, .. tree.Split('/')]);
             if (Directory.Exists(path))
             {
+                if (new DirectoryInfo(path).LinkTarget is not null)
+                {
+                    Judge(path, dataReal, harnessReal);
+                }
+
                 Walk(path, ExportManifest.DataPrefix + tree, items);
             }
         }
 
+        // A harness root that is a link is followed, and the runtime's rule for a root has judged where it leads already.
         if (Directory.Exists(harnessRoot))
         {
             Walk(harnessRoot, ExportManifest.HarnessPrefix.TrimEnd('/'), items);
@@ -408,10 +416,33 @@ public static class ExportCommand
         return items;
     }
 
-    /// <summary>A directory and everything in it, each name checked, links refused.</summary>
+    /// <summary>
+    /// A carried place's top that is a link, judged where it leads: into the data directory or the harness root, or to a
+    /// folder holding either, it would carry a part twice or carry what is never carried.
+    /// </summary>
+    private static void Judge(string link, string dataReal, string harnessReal)
+    {
+        var leads = FolderPaths.Real(link);
+        if ((Clash(leads, dataReal, "the data directory") ?? Clash(leads, harnessReal, "the harness root")) is { } where)
+        {
+            throw new ExportRefusal(
+                CliErrors.ExportRefused,
+                $"{link} is a link to {leads}, which {where}. A link at the top of a carried place is followed and carried as what it leads to, and this one would carry a part twice or carry what is never carried. Point it at a folder outside both, or put what it leads to in its place. Nothing was written.");
+        }
+    }
+
+    private static string? Clash(string leads, string place, string named) =>
+        FolderPaths.Same(leads, place) ? "is " + named
+        : FolderPaths.Inside(leads, place) ? "is inside " + named
+        : FolderPaths.Inside(place, leads) ? "holds " + named
+        : null;
+
+    /// <summary>
+    /// A directory and everything in it, each name checked, every link inside refused: the top is the caller's to judge, a
+    /// link there followed.
+    /// </summary>
     private static void Walk(string directory, string name, List<Item> items)
     {
-        Refuse(directory);
         items.Add(new Item(name + "/", directory, Directory: true));
 
         IEnumerable<FileSystemInfo> entries;
@@ -434,27 +465,31 @@ public static class ExportCommand
                     $"{entry.FullName} has a name another system cannot hold, so it cannot travel. Rename or move it. Nothing was written.");
             }
 
+            Refuse(entry);
             if (entry is DirectoryInfo)
             {
                 Walk(entry.FullName, below, items);
             }
             else
             {
-                Refuse(entry.FullName);
                 items.Add(new Item(below, entry.FullName, Directory: false));
             }
         }
     }
 
-    /// <summary>A link is refused: what it leads to is not this installation's to carry, and an archive holds no link.</summary>
-    private static void Refuse(string path)
+    /// <summary>
+    /// A link is refused: what it leads to is not this installation's to carry, and an archive holds no link. A link is what
+    /// names a target; a file the system keeps elsewhere for itself, a cloud placeholder say, is read as the file it is.
+    /// </summary>
+    private static void Refuse(string path) => Refuse(Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path));
+
+    private static void Refuse(FileSystemInfo info)
     {
-        FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
-        if (info.LinkTarget is not null || info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+        if (info.LinkTarget is not null)
         {
             throw new ExportRefusal(
                 CliErrors.ExportRefused,
-                $"{path} is a link, and an archive carries no link. Put what it leads to in its place, or move it away. Nothing was written.");
+                $"{info.FullName} is a link, and an archive carries no link. Put what it leads to in its place, or move it away. Nothing was written.");
         }
     }
 

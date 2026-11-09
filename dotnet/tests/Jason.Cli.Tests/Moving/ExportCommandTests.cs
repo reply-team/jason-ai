@@ -6,6 +6,7 @@ using Jason.Cli.Moving;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Installation;
+using Jason.Cli.Tests.Uninstall;
 using Jason.Contracts.Harness;
 
 namespace Jason.Cli.Tests.Moving;
@@ -426,6 +427,124 @@ public sealed class ExportCommandTests
         Assert.Equal("export_refused", error.Code);
         Assert.Contains("notes:1.md", error.Message, StringComparison.Ordinal);
         Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+    }
+
+    // ---- links at the top of a carried place -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_ui_custom_that_is_a_junction_to_a_folder_outside_both_places_is_carried_as_the_tree_it_leads_to()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        var built = Path.Combine(machine.Root, "checkout", "ui", "dist");
+        MovingMachine.Plant(built, "index.html", "<html>a build of the person's own</html>");
+        Directory.CreateDirectory(Path.Combine(machine.Data, "ui"));
+        DataDirectoryBeltTests.Link(Path.Combine(machine.Data, "ui", "custom"), built);
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("<html>a build of the person's own</html>", Read(Path.Combine(machine.Here, DefaultName), "data/ui/custom/index.html"));
+        Assert.Contains("data/ui/custom/", Names(Path.Combine(machine.Here, DefaultName)));
+    }
+
+    [Fact]
+    public async Task A_harness_root_that_is_a_junction_is_carried_as_the_tree_it_leads_to_under_the_root_s_own_name()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        var real = Path.Combine(machine.Root, "synced", "Jason");
+        MovingMachine.Plant(real, "projects/acme/AGENTS.md", "# Acme");
+        DataDirectoryBeltTests.Link(machine.Harness, real);
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("# Acme", Read(Path.Combine(machine.Here, DefaultName), "harness/projects/acme/AGENTS.md"));
+        using var answer = JsonDocument.Parse(machine.Out.ToString());
+        Assert.Equal(machine.Harness, answer.RootElement.GetProperty("harness_root").GetString());
+    }
+
+    [Fact]
+    public async Task A_junction_inside_the_harness_is_refused_by_its_name_and_nothing_is_written()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.PlantHarness("projects/acme/AGENTS.md", "# Acme");
+        var elsewhere = MovingMachine.Plant(machine.Root, "elsewhere/notes.md", "outside both");
+        var link = Path.Combine(machine.Harness, "projects", "acme", "linked");
+        DataDirectoryBeltTests.Link(link, Path.GetDirectoryName(elsewhere)!);
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(machine.Out.ToString());
+        Assert.Equal("export_refused", error.Code);
+        Assert.Contains(link, error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+    }
+
+    [Fact]
+    public async Task A_harness_root_that_is_a_junction_into_the_data_directory_is_refused_where_it_leads_and_nothing_is_written()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        DataDirectoryBeltTests.Link(machine.Harness, machine.Data);
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(machine.Out.ToString());
+        Assert.Equal("export_refused", error.Code);
+        Assert.Contains("must not be the data directory", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+    }
+
+    [Theory]
+    [InlineData("state")]
+    [InlineData("plugins")]
+    [InlineData("data")]
+    [InlineData("harness")]
+    [InlineData("root")]
+    public async Task A_ui_custom_that_leads_into_another_place_of_the_data_directory_or_the_harness_is_refused_naming_the_link_and_where_it_leads(string into)
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.PlantData("plugins/reply/plugin.yaml", "id: reply");
+        machine.PlantHarness("projects/acme/AGENTS.md", "# Acme");
+        var target = into switch
+        {
+            "state" => Path.Combine(machine.Data, "state"),
+            "plugins" => Path.Combine(machine.Data, "plugins"),
+            "data" => machine.Data,
+            "harness" => Path.Combine(machine.Harness, "projects"),
+            _ => machine.Root,
+        };
+        Directory.CreateDirectory(Path.Combine(machine.Data, "ui"));
+        var link = Path.Combine(machine.Data, "ui", "custom");
+        DataDirectoryBeltTests.Link(link, target);
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(machine.Out.ToString());
+        Assert.Equal("export_refused", error.Code);
+        Assert.Contains(link, error.Message, StringComparison.Ordinal);
+        Assert.Contains(target, error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+    }
+
+    private static List<string> Names(string archivePath)
+    {
+        using var archive = ZipFile.OpenRead(archivePath);
+        return [.. archive.Entries.Select(entry => entry.FullName)];
+    }
+
+    private static string Read(string archivePath, string name)
+    {
+        using var archive = ZipFile.OpenRead(archivePath);
+        using var reader = new StreamReader(archive.GetEntry(name)!.Open());
+        return reader.ReadToEnd();
     }
 
     private static JsonDocument Manifest(string archivePath)
