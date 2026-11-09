@@ -520,7 +520,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Theory]
     [InlineData("docs/handbook.md", "The check, the install scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository's releases on GitHub directly.")]
-    [InlineData("docs/INSTALL.md", "The skills are the exception: their package is read from this repository's releases on GitHub directly, by the install scripts' last step and by `jason skills`.")]
+    [InlineData("docs/INSTALL.md", "The skills are the exception: their package is read from this repository's releases on GitHub directly, by the install scripts' last step, by `jason update apply`'s skills step and by `jason skills`.")]
     [InlineData("docs/INSTALL.md", "That request, and the downloads the install scripts, `jason update apply` and `jason ui install` make, go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases on GitHub.")]
     [InlineData("docs/release-and-update.md", "**Where it goes.** The default feed is on `get.jasonharness.ai`, an address Reply.io operates, which redirects every request under `/releases/` to the same path in the public repository's releases on GitHub.")]
     [InlineData("docs/release-and-update.md", "An installation built before 0.7.0 asks GitHub directly; both answer with the same file.")]

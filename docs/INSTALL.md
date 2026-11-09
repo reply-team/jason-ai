@@ -220,7 +220,8 @@ the runtime's version, including its build. `Update:CheckEnabled` set to `false`
 `jason update apply` and `jason ui install` make, go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this
 repository's releases on GitHub. What that address keeps, and for how long, is in
 [responsible-use.md](responsible-use.md#update-check-and-downloads). The skills are the exception: their package is
-read from this repository's releases on GitHub directly, by the install scripts' last step and by `jason skills`.
+read from this repository's releases on GitHub directly, by the install scripts' last step, by `jason update apply`'s
+skills step and by `jason skills`.
 
 ### With a package manager
 
