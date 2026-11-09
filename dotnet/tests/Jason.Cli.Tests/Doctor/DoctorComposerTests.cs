@@ -2830,9 +2830,11 @@ public sealed class DoctorComposerTests
     /// The role check's details name the same deployment as fields, and meet the same rule: a source of the person's own and
     /// the ref it was taken at travel as <c>&lt;skill-source&gt;</c>, the public repository and a release tag as they are —
     /// with the runtime answering, and without it, where the details come from the record this CLI deploys into. A release
-    /// tag stays as it is whoever's source it was taken from.
+    /// tag stays as it is whoever's source it was taken from. A folder deployed where it stood is its mark, and the sentence
+    /// its record holds in place of a ref travels, with no commit.
     /// </summary>
     [Theory]
+    [InlineData(true, SkillsSource.DirectoryRef, true)]
     [InlineData(true, "sentinel-branch", true)]
     [InlineData(true, "v1.2.3", true)]
     [InlineData(false, "v1.2.3", true)]
@@ -2842,14 +2844,18 @@ public sealed class DoctorComposerTests
     public async Task The_role_check_s_details_travel_by_the_skill_source_rule(bool own, string reference, bool answering)
     {
         using var dir = new TempPaths();
-        var source = own ? "https://example.com/sentinel-fork/jason.git" : SkillsSource.DefaultSource;
-        var tag = reference == "v1.2.3";
+        var folder = reference == SkillsSource.DirectoryRef;
+        var source = folder
+            ? Path.Combine(MadeUp.Home, "sentinel-wombat-skills")
+            : own ? "https://example.com/sentinel-fork/jason.git" : SkillsSource.DefaultSource;
+        var commit = folder ? null : "c0ffee";
+        var kept = folder || reference == "v1.2.3";
         var roles = dir.Paths.RoleSkillsDirectory;
         Directory.CreateDirectory(roles);
         File.WriteAllText(Path.Combine(roles, "SKILL.md"), "x");
         var record = new Jason.Contracts.Skills.SkillsRecord(
             Jason.Contracts.Skills.SkillsRecord.CurrentVersion,
-            [new(SkillPacks.Runtime, source, reference, true, "c0ffee", Now, [new("SKILL.md", "sha256:x")])]);
+            [new(SkillPacks.Runtime, source, reference, !folder, commit, Now, [new("SKILL.md", "sha256:x")])]);
         File.WriteAllText(Path.Combine(roles, Jason.Contracts.Skills.SkillsRecord.FileName), JsonSerializer.Serialize(record, JasonJson.Options));
         var runtime = Running(dir);
         runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with { RuntimeVersion = "1.2.4", Skills = new SkillsInfo(roles, 4096, [], null) };
@@ -2862,11 +2868,11 @@ public sealed class DoctorComposerTests
 
         var details = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "role_skills")!["details"]!;
         Assert.Equal(own ? "<skill-source>" : SkillsSource.DefaultSource, Text(details["source"]));
-        Assert.Equal(tag ? reference : "<skill-source>", Text(details["ref"]));
-        Assert.Equal("c0ffee", Text(details["commit"]));
+        Assert.Equal(kept ? reference : "<skill-source>", Text(details["ref"]));
+        Assert.Equal(commit ?? string.Empty, Text(details["commit"]));
         if (own)
         {
-            AssertAbsent(bundle, "sentinel-fork", "sentinel-branch");
+            AssertAbsent(bundle, "sentinel-fork", "sentinel-branch", "sentinel-wombat");
         }
     }
 
