@@ -40,7 +40,7 @@ The reasoning behind this, and who Jason is for and who it is not for, is in [do
 > its build (`Update:CheckEnabled` set to `false` turns it off); and the requests you start yourself — the install
 > scripts, `jason update` and `jason ui install`, and `jason skills install` and `update`. The check, the install
 > scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which
-> redirects them to this repository's releases; the skills come from this repository directly. What that address keeps,
+> redirects them to this repository's releases; the skills come from this repository's releases on GitHub directly. What that address keeps,
 > and for how long, is in [docs/responsible-use.md](responsible-use.md#update-check-and-downloads). Nothing else,
 > and no telemetry: the file `jason doctor` writes stays on your machine unless you send it.
 
@@ -57,9 +57,9 @@ irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your
 responsibility when it reaches people, is in [docs/responsible-use.md](responsible-use.md).
 
-A one-liner installs the executable. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its
-skills, without which every role it launches runs untaught, asking whether it can work, and starting it — for a
-person or an agent.
+A one-liner installs the executable and ends by teaching it its role skills, without which every role it launches
+runs untaught. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its skills again where that step
+said it could not, asking whether it can work, and starting it — for a person or an agent.
 
 ### Ask an agent to do it
 
@@ -231,7 +231,9 @@ jason status --human
 ```
 
 `jason skills install --roles-only` puts the role skills where the runtime reads them at every launch — the
-half a runtime cannot work without — and writes nowhere else. `jason skills install` does that and puts the
+half a runtime cannot work without — and writes nowhere else; the install scripts run it as their last step. Both
+verbs take the skills from the release's own package of them, `jason-skills.zip`, unless `--source` names a checkout
+or a git repository. `jason skills install` does that and puts the
 interactive and business packs where your agent harness looks as well, which is its configuration and yours
 to allow. Both print the target roots before they write anything, and both refuse a deployment the runtime
 would later refuse to launch, rather than writing one.

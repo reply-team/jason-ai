@@ -95,7 +95,7 @@ public static class PluginCommands
 
         // No development build is ever published, so the public feed is not asked for one; a feed named here can carry
         // one, which is how a local build is tried and how the tests run.
-        if (request.Feed is null && version.PreRelease == "dev")
+        if (request.Feed is null && version.IsDevelopment)
         {
             env.Error.WriteLine(
                 $"This build, {built}, is not a release, so no plugin package is published for it. Copy a package's directory into {env.Paths.PluginsDirectory} and run `jason plugin reload`, or name a release that carries one with --feed.");

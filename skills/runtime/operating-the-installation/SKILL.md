@@ -417,8 +417,9 @@ for every other is 1.0.0; whether that one is behind is `jason status`'s to say,
 ## Installing it in the first place
 
 Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>),
-followed in order, its §4 included: that section teaches the installation its role skills, and without them every
-role it launches runs untaught. A person installs it with the two lines below. If they ask you to install it, follow
+followed in order, its §4 included: that section teaches the installation its role skills, which the install script
+has already done as its last step unless it said it could not, and without them every role it launches runs
+untaught. A person installs it with the two lines below. If they ask you to install it, follow
 that page yourself, by its section for an agent: a package where the page names one for this platform and its
 package manager is already there, otherwise the steps it gives by hand. Never pipe a download into a shell, and
 ask them before every act it marks "Ask first". The two lines are the person's: where neither route is open to
@@ -434,7 +435,10 @@ irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 
 Each script works out the platform, verifies the download's SHA-256 before unpacking it, installs the executable
 under the person's own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on Windows —
-and puts that directory on the `PATH` unless `--no-modify-path` is passed. Nothing needs administrator rights.
+and puts that directory on the `PATH` unless `--no-modify-path` is passed. Then the executable it installed deploys
+the role skills from the release's package of them; where that fails, Jason is still installed, one line says so,
+and `jason status` names the line to run. Nothing needs
+administrator rights.
 
 Both lines install the latest release. If either answers 404, the release could not be reached: say that, as it
 stands, and that there is nothing to build instead. Do not paste a line again in the hope of a different answer.

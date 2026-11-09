@@ -147,7 +147,7 @@ public sealed partial class InstallNoticesTests : IDisposable
     }
 
     /// <summary>
-    /// The line follows what the PATH step says, and only the command to run next follows it. Run where the step writes into a profile of the
+    /// The line follows what the PATH step and then the role skills step say, and only the command to run next follows it. Run where the step writes into a profile of the
     /// test's own; on Windows it writes the account's registry, so the Windows half of this row is the order in the
     /// script's text below.
     /// </summary>
@@ -160,7 +160,8 @@ public sealed partial class InstallNoticesTests : IDisposable
 
         Assert.True(run.Exit == 0, run.Stderr);
         var lines = Lines(run.Stdout);
-        Assert.StartsWith($"Added {installer.InstallDir} to the PATH in ", lines[^3], StringComparison.Ordinal);
+        Assert.StartsWith($"Added {installer.InstallDir} to the PATH in ", lines[^4], StringComparison.Ordinal);
+        Assert.Equal(DirectoryLine, lines[^3]);
         AssertEndsWith(LicenceLine("0.6.0"), lines);
     }
 
@@ -348,6 +349,9 @@ public sealed partial class InstallNoticesTests : IDisposable
         /// <summary>What <c>install.sh</c> is told the account's shell is; this process's own where a row says nothing.</summary>
         public string? Shell { get; set; }
 
+        /// <summary>Variables a row hands the script beside the ones every run is given, and through it the stand-in.</summary>
+        public Dictionary<string, string> Variables { get; } = new(StringComparer.Ordinal);
+
         /// <summary>
         /// The harness root's default as the runtime makes it, <c>Jason</c> in the home: the test's own home for
         /// <c>install.sh</c>, and for <c>install.ps1</c> the account's, which Windows reads from the account's profile rather
@@ -462,12 +466,12 @@ public sealed partial class InstallNoticesTests : IDisposable
                 var translated = arguments.Select(argument => argument == "--version" ? "-Version" : argument);
                 return RunToEnd(
                     Pwsh(),
-                    new Dictionary<string, string> { ["LOCALAPPDATA"] = _tree.Root, ["POWERSHELL_TELEMETRY_OPTOUT"] = "1" },
+                    new Dictionary<string, string>(Variables) { ["LOCALAPPDATA"] = _tree.Root, ["POWERSHELL_TELEMETRY_OPTOUT"] = "1" },
                     ["-NoProfile", "-NonInteractive", "-File", script, "-InstallDir", InstallDir, "-NoModifyPath", "-Feed", feed, .. translated]);
             }
 
             string[] path = modifyPath ? [] : ["--no-modify-path"];
-            var environment = new Dictionary<string, string> { ["HOME"] = HomeVariable.Length > 0 ? HomeVariable : Home };
+            var environment = new Dictionary<string, string>(Variables) { ["HOME"] = HomeVariable.Length > 0 ? HomeVariable : Home };
             if (Shell is not null)
             {
                 environment["SHELL"] = Shell;
@@ -488,7 +492,7 @@ public sealed partial class InstallNoticesTests : IDisposable
             // started under it finds no Expand-Archive of its own. One started from Windows has the machine's.
             return RunToEnd(
                 Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
-                new Dictionary<string, string>
+                new Dictionary<string, string>(Variables)
                 {
                     ["LOCALAPPDATA"] = _tree.Root,
                     ["POWERSHELL_TELEMETRY_OPTOUT"] = "1",
@@ -497,10 +501,21 @@ public sealed partial class InstallNoticesTests : IDisposable
                 ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(RepositoryRoot(), "install", Script), "-InstallDir", InstallDir, "-NoModifyPath", "-Feed", feed]);
         }
 
-        /// <summary>The executable a release of <paramref name="version"/> would hold, as far as the scripts can tell.</summary>
+        /// <summary>
+        /// The executable a release of <paramref name="version"/> would hold, as far as the scripts can tell: it answers
+        /// <c>--version</c> with the version, and every other call, which is the skills verb's, by writing the call and the
+        /// data directory it was handed into the file <see cref="StandInLog"/> names, then refusing on stderr with the
+        /// code <see cref="StandInExit"/> names, or saying <see cref="StandInDeployed"/>. On Windows it moves its own file
+        /// aside after answering <c>--version</c> where <see cref="StandInVanish"/> is set.
+        /// </summary>
         private byte[] StandIn(string version) => Windows
             ? StandIns.GetOrAdd(version, Compile)
-            : Encoding.UTF8.GetBytes($"#!/bin/sh\necho '{version}+standin'\n");
+            : Encoding.UTF8.GetBytes(
+                "#!/bin/sh\n"
+                + $"if [ \"${{1:-}}\" = --version ]; then echo '{version}+standin'; exit 0; fi\n"
+                + $"if [ -n \"${{{StandInLog}:-}}\" ]; then printf '%s|%s\\n' \"$*\" \"${{JASON_DATA_DIR:-}}\" >> \"${StandInLog}\"; fi\n"
+                + $"if [ \"${{{StandInExit}:-0}}\" != 0 ]; then echo 'The stand-in refused.' >&2; exit \"${StandInExit}\"; fi\n"
+                + $"echo '{StandInDeployed}'\n");
 
         private static byte[] Compile(string version)
         {
@@ -513,7 +528,17 @@ public sealed partial class InstallNoticesTests : IDisposable
             {
                 var source = Path.Combine(directory, "standin.cs");
                 var output = Path.Combine(directory, "jason.exe");
-                File.WriteAllText(source, "static class Program { static void Main() { System.Console.WriteLine(\"" + version + "+standin\"); } }\n");
+                File.WriteAllText(
+                    source,
+                    "static class Program { static int Main(string[] a) {\n"
+                    + "if (a.Length > 0 && a[0] == \"--version\") { System.Console.WriteLine(\"" + version + "+standin\");\n"
+                    + "if (!string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable(\"" + StandInVanish + "\"))) { var self = System.Reflection.Assembly.GetEntryAssembly().Location; System.IO.File.Move(self, self + \".vanished\"); }\n"
+                    + "return 0; }\n"
+                    + "var log = System.Environment.GetEnvironmentVariable(\"" + StandInLog + "\");\n"
+                    + "if (!string.IsNullOrEmpty(log)) { System.IO.File.AppendAllText(log, string.Join(\" \", a) + \"|\" + System.Environment.GetEnvironmentVariable(\"JASON_DATA_DIR\") + \"\\n\"); }\n"
+                    + "var exit = System.Environment.GetEnvironmentVariable(\"" + StandInExit + "\");\n"
+                    + "if (!string.IsNullOrEmpty(exit) && exit != \"0\") { System.Console.Error.WriteLine(\"The stand-in refused.\"); return int.Parse(exit); }\n"
+                    + "System.Console.WriteLine(\"" + StandInDeployed + "\"); return 0; } }\n");
                 var (exit, stdout, stderr) = RunToEnd(csc, new Dictionary<string, string>(), ["/nologo", "/target:exe", "/out:" + output, source]);
                 Assert.True(exit == 0, stdout + stderr);
                 return File.ReadAllBytes(output);

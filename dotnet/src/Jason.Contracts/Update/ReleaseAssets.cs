@@ -82,9 +82,20 @@ public static class ReleaseAssets
     /// </remarks>
     public const string Ui = UiAssetLayout.AssetName;
 
+    /// <summary>
+    /// The skills' package: <c>skills/</c> of the tree at the release's tag, under <c>skills/</c> in the archive, with a
+    /// <c>source.json</c> at its root naming the repository, the tag and the commit. <c>jason skills install</c> with no
+    /// source fetches it beside the checksums and deploys from it.
+    /// </summary>
+    /// <remarks>
+    /// Listed in <see cref="Checksums"/> and never in the <see cref="Manifest"/>, which names platforms and plugins. The
+    /// files whose names start with a dot are in it: each pack's <c>.claude-plugin/plugin.json</c> is one.
+    /// </remarks>
+    public const string Skills = "jason-skills.zip";
+
     /// <summary>Every file a release carries, in the order the release workflow attaches them.</summary>
     public static IReadOnlyList<string> Published { get; } =
-        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, JournalForwarderPlugin, NtfyPlugin, SlackPlugin, TelegramPlugin, Ui];
+        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, JournalForwarderPlugin, NtfyPlugin, SlackPlugin, TelegramPlugin, Ui, Skills];
 
     /// <summary>The archive a platform's release is published as.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The platform is not one this build publishes for.</exception>

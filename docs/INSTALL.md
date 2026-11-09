@@ -10,10 +10,11 @@ the machine.
 
 ## 1. What you need
 
-**From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime.
-Teaching it (§4) is a fetch of its own: a release takes its skills from this repository with `git`, over the
-network, at the tag it was published as. A machine without `git` or without the network teaches it from a
-checkout instead, with `--source`.
+**From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
+script ends by teaching it its role skills (§4). Teaching it is a fetch of its own: a release takes its skills from
+the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as. A machine
+without the network teaches it from a checkout instead, with `--source`, which also takes a git repository at a ref;
+only that needs `git`.
 
 You also need a directory you can write to, and — if you want an agent harness taught — that
 harness installed, so §4 has somewhere to deploy.
@@ -113,6 +114,13 @@ installs the executable under your own account — with its licence and the thir
 already installed, it downloads nothing and says so, unless a licence file is missing beside the executable: then
 it downloads the archive, checks it the same way, and writes the file, leaving the executable as it is.
 
+Then it teaches the executable it installed its role skills: it runs that executable's
+`jason skills install --roles-only` (§4), which takes the skills from the release's `jason-skills.zip` and writes them
+into Jason's data directory and nowhere else, and what it prints is shown. Where that fails — no network, say — Jason
+is still installed and the run still succeeds: one line says the role skills were not deployed and what to run, and
+`jason status` names the same line. A script pointed at a feed in a directory, with `--feed` or `-Feed`, leaves this
+step out and says what to run instead, because the skills verb reads no directory.
+
 On macOS and Linux the PATH line goes into the profile a login shell of yours reads, and for `bash` and `zsh` into
 `~/.bashrc` or `~/.zshrc` as well: the terminal a desktop opens — GNOME's, for one — is not a login shell, reads
 that file and not the login profile, and so finds `jason` without your signing out. For any other shell the script
@@ -211,7 +219,9 @@ the runtime's version, including its build. `Update:CheckEnabled` set to `false`
 `~/.jason/config/settings.json` turns that off. That request, and the downloads the install scripts,
 `jason update apply` and `jason ui install` make, go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this
 repository's releases on GitHub. What that address keeps, and for how long, is in
-[responsible-use.md](responsible-use.md#update-check-and-downloads).
+[responsible-use.md](responsible-use.md#update-check-and-downloads). The skills are the exception: their package is
+read from this repository's releases on GitHub directly, by the install scripts' last step, by `jason update apply`'s
+skills step and by `jason skills`.
 
 ### With a package manager
 
@@ -270,6 +280,10 @@ Jason's skills are what teach an agent the job — one directory per launched ro
 every launch, and two packs for your own agent: one for operating the installation, one for the SDR
 profession. **A runtime with no role skills launches every role untaught**, so the first half is not optional.
 
+The install script did the first half as its last step (§2), and what it printed says where the role skills went.
+Installed with a package manager or by hand, or where that step said it could not, do it now with the lines below;
+they are also how it is done again.
+
 Look first. Nothing is deployed, and the one target root is printed — the runtime's own, inside its data
 directory:
 
@@ -277,8 +291,8 @@ directory:
 jason skills install --roles-only --dry-run
 ```
 
-On a first install the dry run fetches the skills first, with `git`, into Jason's staging directory inside the
-data directory, so that there is something to show; it deploys nothing. The line below deploys them: it prints
+On a first install the dry run fetches the skills first, from the release's package of them, into Jason's staging
+directory inside the data directory, so that there is something to show; it deploys nothing. The line below deploys them: it prints
 its one root before it writes a skill there, and writes nowhere else.
 
 Then do it:
@@ -287,7 +301,9 @@ Then do it:
 jason skills install --roles-only
 ```
 
-Both fetch the skills with `git` from this repository, at the tag this build was published as (§1).
+Both take the skills from `jason-skills.zip`, the package of them the release this build was published as holds,
+checked against that release's `checksums.txt` (§1). `--source` takes them from somewhere else instead: a checkout,
+or a git repository at a ref, which needs `git`.
 
 Then place the browser UI, the page `jason ui open` opens:
 

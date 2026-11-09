@@ -374,19 +374,21 @@ public class StatusCommandTests
     }
 
     /// <summary>
-    /// The repair keeps the source the deployment came from: the bare line for the default repository, and the line
-    /// with <c>--source</c> and that source for any other. Typed bare, it would move a deployment taught from a
-    /// mirror, or from a repository on this machine, to the default repository — or fail there, where the tag it asks
-    /// for may not exist yet.
+    /// The repair keeps the source the deployment came from: the bare line for the default — this build's, or the git
+    /// clone builds before 0.33.0 took, which the bare line moves to this build's — and the line with <c>--source</c> and
+    /// that source for any other. Typed bare, it would move a deployment taught from a mirror, or from a repository on
+    /// this machine, to the default — or fail there, where the tag it asks for may not exist yet.
     /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task The_repair_for_role_skills_keeps_the_source_the_deployment_came_from(bool fromTheDefault)
+    [InlineData(SkillsSource.DefaultSource)]
+    [InlineData(SkillsSource.EarlierDefaultSource)]
+    [InlineData(null)]
+    public async Task The_repair_for_role_skills_keeps_the_source_the_deployment_came_from(string? defaultSource)
     {
         using var dir = new TempPaths();
         var output = new StringWriter();
-        var source = fromTheDefault ? SkillsSource.DefaultSource : new Uri(Path.Combine(dir.Paths.Root, "origin")).AbsoluteUri;
+        var fromTheDefault = defaultSource is not null;
+        var source = defaultSource ?? new Uri(Path.Combine(dir.Paths.Root, "origin")).AbsoluteUri;
         RoleRootAt(dir, "v1.2.3", source: source);
 
         await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.4"), Ct);
@@ -659,15 +661,17 @@ public class StatusCommandTests
     /// which nobody chose; <c>update</c> keeps a pinned ref, so it is not the line.
     /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Harness_skills_their_record_pins_at_another_tag_pass_and_name_the_line_that_moves_them(bool fromTheDefault)
+    [InlineData(SkillsSource.DefaultSource)]
+    [InlineData(SkillsSource.EarlierDefaultSource)]
+    [InlineData(null)]
+    public async Task Harness_skills_their_record_pins_at_another_tag_pass_and_name_the_line_that_moves_them(string? defaultSource)
     {
         using var dir = new TempPaths();
         var output = new StringWriter();
         Running(dir, version: "1.2.4");
         var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
-        var source = fromTheDefault ? SkillsSource.DefaultSource : new Uri(Path.Combine(dir.Paths.Root, "origin")).AbsoluteUri;
+        var fromTheDefault = defaultSource is not null;
+        var source = defaultSource ?? new Uri(Path.Combine(dir.Paths.Root, "origin")).AbsoluteUri;
         Deploy(harness, source, "v1.2.3", overridden: true, Commit);
 
         var exit = await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness), build: "1.2.4"), Ct);

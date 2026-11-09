@@ -243,17 +243,17 @@ public class UpdateSkillsStepTests
     }
 
     /// <summary>
-    /// An update to a pre-release moves no skill: the tag its version names is not published as a release, which is what
-    /// the verb says of any build that is not one, and the records stay where they are.
+    /// An update to a development build moves no skill: the tag it carries names the release it is on its way to, which
+    /// is not published yet, which is what the verb says of such a build, and the records stay where they are.
     /// </summary>
     [Fact]
-    public async Task An_update_to_a_pre_release_moves_no_skill()
+    public async Task An_update_to_a_development_build_moves_no_skill()
     {
-        using var installation = new FakeInstallation(to: SemanticVersion.Parse("9.9.10-rc.1"));
+        using var installation = new FakeInstallation(to: SemanticVersion.Parse("9.9.10-dev"));
         using var dir = new TempPaths();
 
-        // The release the pre-release is on its way to is tagged here, so a step that dropped the pre-release and asked
-        // for it would find it, and move every record.
+        // The release the development build is on its way to is tagged here, so a step that moved to the tag the build
+        // carries would find it, and move every record.
         var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}", "v9.9.10");
         await InstallAsync(installation, ["skills", "install", "--source", origin]);
 
@@ -261,11 +261,41 @@ public class UpdateSkillsStepTests
         var ledger = await applier.ApplyAsync(Request(installation), Ct);
 
         Assert.Equal(UpdateStep.Complete, ledger.Step);
-        Assert.All(Deployments(installation), deployment => Assert.True(deployment.Ref == $"v{Before}", $"{deployment.Pack} moved to {deployment.Ref} on an update to a pre-release."));
+        Assert.All(Deployments(installation), deployment => Assert.True(deployment.Ref == $"v{Before}", $"{deployment.Pack} moved to {deployment.Ref} on an update to a development build."));
         Assert.Contains(TaggedSource.Body($"v{Before}"), await File.ReadAllTextAsync(Path.Combine(installation.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
         var skills = SkillsLines(applier);
         Assert.True(skills.Count == 2, $"The skills step said: {string.Join(" | ", skills)}");
-        Assert.All(skills, line => Assert.Contains("this build, 9.9.10-rc.1, is not a release", line, StringComparison.Ordinal));
+        Assert.All(skills, line => Assert.Contains("this build, 9.9.10-dev, is a development build, so the ref it carries is not published yet.", line, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An update to a candidate moves every record to the candidate's own tag: its release publishes the skills under
+    /// that tag, so it is where the update takes them from, and never the release the candidate is on its way to.
+    /// </summary>
+    [Fact]
+    public async Task An_update_to_a_candidate_moves_every_record_to_the_candidate_s_tag()
+    {
+        using var installation = new FakeInstallation(to: SemanticVersion.Parse("9.9.10-rc.1"));
+        using var dir = new TempPaths();
+
+        // The release the candidate is on its way to is tagged too, so a step that dropped the pre-release would find it.
+        var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}", "v9.9.10", "v9.9.10-rc.1");
+        await InstallAsync(installation, ["skills", "install", "--source", origin]);
+
+        var applier = Applier(installation);
+        var ledger = await applier.ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.All(Deployments(installation), deployment =>
+        {
+            Assert.True(deployment.Ref == "v9.9.10-rc.1", $"{deployment.Pack} is recorded at {deployment.Ref} after an update to a candidate.");
+            Assert.False(deployment.RefOverridden);
+        });
+        Assert.Contains(TaggedSource.Body("v9.9.10-rc.1"), await File.ReadAllTextAsync(Path.Combine(installation.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.Contains(TaggedSource.Body("v9.9.10-rc.1"), await File.ReadAllTextAsync(Path.Combine(Harness(installation), "operating", "SKILL.md"), Ct), StringComparison.Ordinal);
+        var skills = SkillsLines(applier);
+        Assert.True(skills.Count == 2, $"The skills step said: {string.Join(" | ", skills)}");
+        Assert.All(skills, line => Assert.Contains($"at v9.9.10-rc.1, the ref this build carries; its record named v{Before}.", line, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -545,6 +575,78 @@ public class UpdateSkillsStepTests
         Assert.True(skills.Count == 2, $"The skills step said: {string.Join(" | ", skills)}");
         Assert.All(skills, line => Assert.Contains($"at v{Before}, the ref its record says was chosen over this build's own.", line, StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// A deployment from the default source takes the new release's package from GitHub directly, as an install does: the
+    /// update is read through the address operated for the product, and the skills' download does not go through it.
+    /// </summary>
+    [Fact]
+    public async Task An_update_from_the_published_feed_takes_the_default_s_package_from_github()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        installation.Release.WithSkills(SkillsPackage.Zip(Tag(installation)));
+        await RecordedAtTheDefaultAsync(installation, dir);
+
+        var ledger = await Applier(installation).ApplyAsync(new UpdateRequest(UpdateFeed.Default, null, TimeSpan.Zero), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(["github.com"], HostsAsked(installation, ReleaseAssets.Skills));
+        Assert.Contains(TaggedSource.Body(Tag(installation)), await File.ReadAllTextAsync(Path.Combine(installation.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.All(Deployments(installation), deployment =>
+        {
+            Assert.Equal(SkillsSource.DefaultSource, deployment.Source);
+            Assert.Equal(Tag(installation), deployment.Ref);
+        });
+    }
+
+    /// <summary>
+    /// An update read from a feed somebody named — CI's, served on this machine — takes the default source's package from
+    /// that feed too, so the run asks nothing of the network, and the records keep the default as their source.
+    /// </summary>
+    [Fact]
+    [Critical(Family.I1, "an update's own feed serves the default skills and is never recorded")]
+    public async Task An_update_from_a_named_feed_takes_the_default_s_package_there_and_keeps_the_record_s_source()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        installation.Release.WithSkills(SkillsPackage.Zip(Tag(installation)));
+        await RecordedAtTheDefaultAsync(installation, dir);
+
+        var ledger = await Applier(installation).ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal([installation.Feed.Host], HostsAsked(installation, ReleaseAssets.Skills));
+        Assert.Contains(TaggedSource.Body(Tag(installation)), await File.ReadAllTextAsync(Path.Combine(Harness(installation), "operating", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.All(Deployments(installation), deployment =>
+        {
+            Assert.Equal(SkillsSource.DefaultSource, deployment.Source);
+            Assert.Equal(Tag(installation), deployment.Ref);
+        });
+    }
+
+    /// <summary>
+    /// The record an installation has when it took the skills from the default source at the build before: installed
+    /// from a repository of the test's own, then written as the default would have written it.
+    /// </summary>
+    private static async Task RecordedAtTheDefaultAsync(FakeInstallation installation, TempPaths dir)
+    {
+        var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}");
+        await InstallAsync(installation, ["skills", "install", "--source", origin]);
+        foreach (var root in (string[])[installation.Paths.RoleSkillsDirectory, Harness(installation)])
+        {
+            var record = SkillsRecord.Read(root)!;
+            SkillsRecord.Write(root, record with { Packs = [.. record.Packs.Select(pack => pack with { Source = SkillsSource.DefaultSource, Ref = $"v{Before}" })] });
+        }
+    }
+
+    /// <summary>The hosts the release was asked for a file of this name at.</summary>
+    private static List<string> HostsAsked(FakeInstallation installation, string file) =>
+        [.. installation.Release.Requested
+            .Zip(installation.Release.Hosts)
+            .Where(asked => asked.First.EndsWith("/" + file, StringComparison.Ordinal))
+            .Select(asked => asked.Second)
+            .Distinct(StringComparer.Ordinal)];
 
     /// <summary>The tag of the release the fake installation updates to.</summary>
     private static string Tag(FakeInstallation installation) => $"v{installation.To}";

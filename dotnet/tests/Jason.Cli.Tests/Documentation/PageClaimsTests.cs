@@ -81,16 +81,44 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A release teaches itself with git, over the network, at its published tag: "a shell, and nothing else" was
-    /// true of installing it and not of teaching it.
+    /// A release teaches itself from the package of skills it published, over the network, at its published tag: "a
+    /// shell, and nothing else" was true of installing it and not of teaching it. <c>git</c> is named only beside
+    /// <c>--source</c>, the one source that needs it.
     /// </summary>
     [Fact]
     public void The_install_page_says_what_teaching_a_release_needs()
     {
         var install = Page("docs", "INSTALL.md");
+        var flat = Flat(install);
 
-        Assert.Contains("with `git`, over the\nnetwork, at the tag it was published as", install, StringComparison.Ordinal);
+        Assert.Contains(
+            "a release takes its skills from the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as.",
+            flat,
+            StringComparison.Ordinal);
+        Assert.Contains("with `--source`, which also takes a git repository at a ref; only that needs `git`.", flat, StringComparison.Ordinal);
+        Assert.DoesNotContain("with `git`", flat, StringComparison.Ordinal);
         Assert.Contains("asks for a\ntag that has not been published yet, and refuses", install, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §2's account of what a script does gains its last step, the role skills, with what it does when that fails and
+    /// when the feed is a directory; §4 opens by saying the script did its first half, and keeps the lines that do it
+    /// again.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_the_script_teaches_the_role_skills()
+    {
+        var release = Flat(Section(Page("docs", "INSTALL.md"), "## 2. "));
+        Assert.Contains(
+            "Then it teaches the executable it installed its role skills: it runs that executable's `jason skills install --roles-only` (§4)",
+            release,
+            StringComparison.Ordinal);
+        Assert.Contains("Jason is still installed and the run still succeeds: one line says the role skills were not deployed and what to run", release, StringComparison.Ordinal);
+        Assert.Contains("leaves this step out and says what to run instead, because the skills verb reads no directory.", release, StringComparison.Ordinal);
+
+        var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
+        Assert.Contains("The install script did the first half as its last step (§2)", teach, StringComparison.Ordinal);
+        Assert.Contains("jason skills install --roles-only --dry-run", teach, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -108,7 +136,7 @@ public partial class PageClaimsTests
         var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
 
         Assert.Contains(
-            "On a first install the dry run fetches the skills first, with `git`, into Jason's staging directory inside the data directory, so that there is something to show; it deploys nothing.",
+            "On a first install the dry run fetches the skills first, from the release's package of them, into Jason's staging directory inside the data directory, so that there is something to show; it deploys nothing.",
             teach,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -488,10 +516,11 @@ public partial class PageClaimsTests
     /// <summary>
     /// The update check, the install scripts and <c>jason update</c> go to the product's own address, which redirects
     /// them to the public repository's releases. The pages that say what leaves a machine say where those requests go
-    /// and who operates the address, and that the skills still come from the repository directly.
+    /// and who operates the address, and that the skills still come from the repository's releases on GitHub directly.
     /// </summary>
     [Theory]
-    [InlineData("docs/handbook.md", "The check, the install scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository directly.")]
+    [InlineData("docs/handbook.md", "The check, the install scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository's releases on GitHub directly.")]
+    [InlineData("docs/INSTALL.md", "The skills are the exception: their package is read from this repository's releases on GitHub directly, by the install scripts' last step, by `jason update apply`'s skills step and by `jason skills`.")]
     [InlineData("docs/INSTALL.md", "That request, and the downloads the install scripts, `jason update apply` and `jason ui install` make, go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases on GitHub.")]
     [InlineData("docs/release-and-update.md", "**Where it goes.** The default feed is on `get.jasonharness.ai`, an address Reply.io operates, which redirects every request under `/releases/` to the same path in the public repository's releases on GitHub.")]
     [InlineData("docs/release-and-update.md", "An installation built before 0.7.0 asks GitHub directly; both answer with the same file.")]
@@ -505,7 +534,7 @@ public partial class PageClaimsTests
     /// that say where the requests go point there, right after saying it, rather than repeat it.
     /// </summary>
     [Theory]
-    [InlineData("docs/handbook.md", "the skills come from this repository directly. What that address keeps, and for how long, is in [docs/responsible-use.md](responsible-use.md#update-check-and-downloads).")]
+    [InlineData("docs/handbook.md", "the skills come from this repository's releases on GitHub directly. What that address keeps, and for how long, is in [docs/responsible-use.md](responsible-use.md#update-check-and-downloads).")]
     [InlineData("docs/INSTALL.md", "which redirects them to this repository's releases on GitHub. What that address keeps, and for how long, is in [responsible-use.md](responsible-use.md#update-check-and-downloads).")]
     public void The_pages_point_at_what_the_address_keeps_where_they_say_where_requests_go(string page, string said) =>
         Assert.Contains(said, Flat(Unquoted(Page(page.Split('/')))), StringComparison.Ordinal);
@@ -1080,9 +1109,9 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A person who runs only a one-liner learns on the first screen that it is not the whole of it: between the licence
-    /// sentence and the prompt, one paragraph says a one-liner installs the executable, links the install page for the
-    /// rest, and names teaching it its skills, without which every role it launches runs untaught.
+    /// A person who runs only a one-liner learns on the first screen what it did and that it is not the whole of it:
+    /// between the licence sentence and the prompt, one paragraph says a one-liner installs the executable and teaches it
+    /// its role skills, without which every role it launches runs untaught, and links the install page for the rest.
     /// </summary>
     [Fact]
     public void The_readme_s_first_screen_says_the_install_page_holds_the_rest()
@@ -1094,8 +1123,8 @@ public partial class PageClaimsTests
 
         var pointer = readme[licence..prompt].Split("\n\n").Select(Flat).SingleOrDefault(paragraph => paragraph.Contains("[docs/INSTALL.md](INSTALL.md)", StringComparison.Ordinal));
         Assert.True(pointer is not null, "Between the licence sentence and the prompt, no paragraph links the install page.");
-        Assert.Contains("A one-liner installs the executable.", pointer, StringComparison.Ordinal);
-        Assert.Contains("teaching it its skills", pointer, StringComparison.Ordinal);
+        Assert.Contains("A one-liner installs the executable and ends by teaching it its role skills, without which every role it launches runs untaught.", pointer, StringComparison.Ordinal);
+        Assert.Contains("teaching it its skills again where that step said it could not", pointer, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -67,7 +67,7 @@ public static class UiCommands
 
         // No development build is ever published, so the public feed is not asked for one; a feed named here can carry
         // one, which is how a local build is tried and how the tests run.
-        if (feed is null && version.PreRelease == "dev")
+        if (feed is null && version.IsDevelopment)
         {
             env.Error.WriteLine(
                 $"This build, {built}, is not a release, so no UI is published for it. Unzip a build of the UI ({UiAssetLayout.AssetName}, which `npm run package` in ui/ makes and every CI run uploads) into {env.Paths.UiCustomDirectory}, or name a release that carries one with --feed.");
