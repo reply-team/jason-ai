@@ -681,9 +681,11 @@ jason update apply --version 0.30.0
 
 `--version` names any release the feed publishes, an older one included, and `jason update apply` takes the installation
 there by the same nine steps. What it does not do is move a plugin package back. The `plugins` step replaces a package
-that is behind the release's, and one that is later than the release's is left byte for byte, so the apply prints a line
-such as `plugins: ntfy 1.0.3 is later than the 1.0.2 this release publishes, so it was left as it is` and the newer
-package stays in `~/.jason/plugins/<id>/`. The older runtime then loads a package written for a newer one.
+that is behind the release's, and leaves one that is not any package the release published byte for byte. A newer package
+is such a one: the release's record holds the digests of what it published, and a later version is not among them. So the
+apply prints a line such as `plugins: journal-forwarder differs from every package a release published, so it was left as it is`
+and the newer package stays in `~/.jason/plugins/<id>/`. A release before 0.32.0 names no `ntfy` at all, so the apply says
+nothing about it and the package simply stays. The older runtime then loads a package written for a newer one.
 
 Two packages make that matter. A runtime older than 0.31.0 does not know the manifest key
 `capabilities.http.any_granted_host`, which `ntfy` 1.0.3 and the journal forwarder 1.1.0 carry, and it refuses a manifest
@@ -693,17 +695,32 @@ What you see is a runtime that answers, work that fails because no plugin is the
 naming the package and the manifest key it refused. The same holds for a copy of the forwarder 1.2.0 on a runtime older
 than 0.32.0, which refuses `capabilities.files` in the same way.
 
-To go back cleanly, replace the package with the one the older release published, before or just after the apply:
+To go back cleanly, put the package the older release published in its place, which depends on whether that release
+published it. `jason plugin install` places the package of the release the running executable is, so it only works for a
+package that release publishes.
+
+Where the older release publishes the package, which for the journal forwarder is 0.30.0 and later, run this just after
+the apply, for each such package you had installed:
 
 ```sh
-jason plugin install ntfy --replace
 jason plugin install journal-forwarder --replace
 ```
 
-`jason plugin install` takes the package from the release the running executable is, so after the apply it places the
-older one; run it for each package you had installed, and `jason plugin list` then shows the plugins loaded. Settings
-you wrote for the newer package, a grant of a host by name, say, stay in `settings.json` and are read again if you update
-forward later.
+Where it does not, which for `ntfy` is anything older than 0.32.0, `jason plugin install` refuses, saying the release
+publishes no such package. Move `~/.jason/plugins/ntfy/` out of the plugins directory, anywhere you like, and run:
+
+```sh
+jason plugin reload
+```
+
+The same holds for the forwarder on a release older than 0.30.0. Either way, `jason plugin list` then shows the plugins
+loaded. Settings you wrote for the newer package, a grant of a host by name, say, stay in `settings.json` and are read
+again if you update forward later.
+
+None of this touches the database. An older executable that meets a database the newer one migrated is the corruption
+case "Going back" describes above, and `jason update rollback` is the verb that section is about: it puts the executable
+back and, where the update migrated the database, the backup with it. Read that section before you rely on an older
+executable with the data directory you have.
 
 ### Restoring a database by hand
 
