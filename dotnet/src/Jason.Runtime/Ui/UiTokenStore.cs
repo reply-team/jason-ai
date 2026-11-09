@@ -81,6 +81,13 @@ public sealed class UiTokenStore(IServiceScopeFactory scopes, TimeProvider clock
         return true;
     }
 
+    /// <summary>
+    /// Whether the token a request was let in by is still accepted, by the hash <see cref="Hash"/> made of it: what a
+    /// connection that outlives its request reads, without stamping a use. Only memory is read, and a revoke removes
+    /// the hash from memory once the table has lost it.
+    /// </summary>
+    public bool IsLive(string hash) => _known.ContainsKey(hash);
+
     public async Task<IReadOnlyList<UiTokenDto>> ListAsync(CancellationToken cancellationToken)
     {
         using var scope = scopes.CreateScope();

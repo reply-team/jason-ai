@@ -68,6 +68,29 @@ public class RequestLineTests
     }
 
     /// <summary>
+    /// The journal's stream is the one route a GET is answered on, so its line says GET; and the bearer a page offers
+    /// as a subprotocol is a header of the upgrade, which the line never carries.
+    /// </summary>
+    [Fact]
+    public async Task An_upgrade_to_the_journal_stream_is_logged_as_a_get_of_its_route_and_its_subprotocols_reach_no_line()
+    {
+        var (logs, lines) = await LoggedAsync(async (http, token) =>
+        {
+            using var socket = new System.Net.WebSockets.ClientWebSocket();
+            socket.Options.AddSubProtocol(Streams.JournalSubProtocol);
+            socket.Options.AddSubProtocol(Streams.BearerSubProtocolPrefix + token);
+            await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{http.BaseAddress!.Port}{Streams.JournalRoute}"), Ct);
+            await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, Ct);
+        });
+
+        var line = Assert.Single(lines, line => (string?)line["RequestPath"] == Streams.JournalRoute);
+        Assert.Equal("GET", (string?)line["RequestMethod"]);
+        Assert.Equal(StatusCodes.Status101SwitchingProtocols, (int?)line["StatusCode"]);
+        Assert.DoesNotContain(Streams.BearerSubProtocolPrefix, logs, StringComparison.Ordinal);
+        Assert.DoesNotContain(Streams.JournalSubProtocol, logs, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A caller that goes away halfway through its body is answered by nobody, and its line says what happened: 499, the
     /// status of a request its caller closed, and not the 200 that a response never written would otherwise keep. Nothing
     /// of the half of the body that arrived reaches the log.
