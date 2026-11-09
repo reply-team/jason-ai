@@ -4,7 +4,7 @@ using Jason.Contracts.Plugins;
 namespace Jason.Cli.Tests.Status;
 
 /// <summary>
-/// jason status names each loaded plugin that asks for a capability and is granted nothing of it, by its id and the
+/// jason status names each plugin that asks for a capability and is granted nothing of it, by its id and the
 /// capability's key under Plugins:Grants, from the same plugin.list answer the availability check reads. Optional, and
 /// never deciding readiness: such a plugin runs without what it is not granted, and nothing else stops.
 /// </summary>
@@ -63,16 +63,17 @@ public class PluginGrantsCheckTests
     }
 
     /// <summary>
-    /// A plugin the machine holds back is the availability check's to name, with its problems; only a loaded plugin is
-    /// named here.
+    /// A plugin the machine holds back is granted what the settings say all the same, since the grants are resolved before
+    /// its status is decided: the fresh installation whose program is not found yet and that is granted nothing is named
+    /// here too, beside the availability check that names its problems, so one report says both.
     /// </summary>
     [Fact]
-    public async Task An_unavailable_plugin_is_left_to_the_availability_check()
+    public async Task An_unavailable_plugin_granted_nothing_is_named_too()
     {
         var check = await CheckAsync(Registry(Plugin("reply", exec: ["reply"], status: PluginStatus.Unavailable)));
 
-        Assert.Equal(CheckState.Ok, check.State);
-        Assert.Equal("Every plugin loaded is granted something of each capability it asks for.", check.Fact);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal("reply is granted nothing it asks for under Exec." + Tail, check.Fact);
     }
 
     [Fact]
@@ -81,7 +82,7 @@ public class PluginGrantsCheckTests
         var check = await CheckAsync(Registry(Plugin("reply", exec: ["reply"], execGranted: ["reply"]), Plugin("quiet")));
 
         Assert.Equal(CheckState.Ok, check.State);
-        Assert.Equal("Every plugin loaded is granted something of each capability it asks for.", check.Fact);
+        Assert.Equal("Every plugin is granted something of each capability it asks for.", check.Fact);
     }
 
     [Fact]
@@ -164,9 +165,9 @@ public class PluginGrantsCheckTests
         var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
         var optional = text.IndexOf("Optional — absent never fails:", StringComparison.Ordinal);
         Assert.True(optional >= 0, text);
-        Assert.True(text.IndexOf("every plugin loaded is granted something of each capability it asks for", StringComparison.Ordinal) > optional, text);
+        Assert.True(text.IndexOf("every plugin is granted something of each capability it asks for", StringComparison.Ordinal) > optional, text);
         Assert.Contains(
-            "The grants check names each loaded plugin that asks for a capability and is granted nothing of it, by its id and the capability's key under Plugins:Grants",
+            "The grants check names each plugin that asks for a capability and is granted nothing of it, by its id and the capability's key under Plugins:Grants",
             text,
             StringComparison.Ordinal);
     }

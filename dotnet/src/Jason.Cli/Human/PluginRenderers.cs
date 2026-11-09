@@ -104,17 +104,19 @@ public static class PluginRenderers
     }
 
     /// <summary>
-    /// One line per plugin that cannot do its work yet, in the snapshot's order: for a plugin the machine cannot run, its
-    /// problems (<see cref="Problems"/>); for one that loaded <c>valid</c>, the capabilities it asks for and is granted
-    /// nothing of (<see cref="Ungranted"/>). A plugin granted what it asks for has no line.
+    /// What each plugin that cannot do its work yet still needs, in the snapshot's order: for a plugin the machine cannot
+    /// run, its problems (<see cref="Problems"/>); then, for it and for one that loaded <c>valid</c>, the capabilities it
+    /// asks for and is granted nothing of (<see cref="Ungranted"/>), as <c>jason plugin install</c> says them. The runtime
+    /// resolves a plugin's grants before its status, so they are as true of a plugin it holds back. A plugin granted what
+    /// it asks for, and able to run, has no line.
     /// </summary>
     private static IEnumerable<string> Needs(IEnumerable<PluginDto> plugins, string settingsFile) =>
         plugins
-            .Select(plugin => plugin.Status switch
+            .SelectMany(plugin => plugin.Status switch
             {
-                PluginStatus.Unavailable => Problems(plugin),
-                PluginStatus.Valid => Ungranted(plugin.Id, plugin.Capabilities, settingsFile),
-                _ => null,
+                PluginStatus.Unavailable => new[] { Problems(plugin), Ungranted(plugin.Id, plugin.Capabilities, settingsFile) },
+                PluginStatus.Valid => new[] { Ungranted(plugin.Id, plugin.Capabilities, settingsFile) },
+                _ => Array.Empty<string?>(),
             })
             .OfType<string>();
 
@@ -131,7 +133,7 @@ public static class PluginRenderers
             return null;
         }
 
-        return RenderText.Shown($"{plugin.Id} unavailable: {string.Join("; ", problems.Select(problem => $"{problem.Code} — {problem.Message}"))}");
+        return RenderText.Shown($"{plugin.Id} unavailable: {string.Join(" ", problems.Select(problem => $"{problem.Code} — {problem.Message}"))}");
     }
 
     /// <summary>

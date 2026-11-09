@@ -2294,6 +2294,7 @@ public partial class PageClaimsTests
     [InlineData("docs/INSTALL.md", "install_first")]
     [InlineData("docs/INSTALL.md", "upgrade_command")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "plugin_availability")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", "plugin_grants")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "plugin_updates")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "install_first")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "upgrade_command")]

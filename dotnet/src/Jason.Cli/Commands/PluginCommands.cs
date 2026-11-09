@@ -205,8 +205,8 @@ public static class PluginCommands
 
     /// <summary>What <c>--human</c> says under what <c>list</c> and <c>reload</c> always said: what each plugin still needs.</summary>
     private const string HumanNeeds =
-        "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a valid "
-        + "plugin asks for and is granted nothing of is named with the key that grants it in the settings file this CLI uses.";
+        "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a plugin "
+        + "asks for and is granted nothing of is named with the key that grants it in the settings file this CLI uses.";
 
     private static Command List(CliEnvironment env, Option<string?> actor)
     {

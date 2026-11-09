@@ -42,7 +42,7 @@ public static class StatusCommand
         Optional — absent never fails:  no update is waiting to be resumed | a provider plugin is installed |
                                         each plugin package this release publishes is the one installed |
                                         every plugin installed is available | a plugin is granted a journal
-                                        kind | every plugin loaded is granted something of each capability it
+                                        kind | every plugin is granted something of each capability it
                                         asks for | a route is configured | a binding names an account | a
                                         provider CLI you name answers | the skill packs are deployed to an agent
                                         harness, and the files their record names are there | every enabled
@@ -102,7 +102,7 @@ public static class StatusCommand
         installation, so the check never decides readiness. 'jason plugin list' says which kinds each plugin
         declares and which it is granted.
 
-        The grants check names each loaded plugin that asks for a capability and is granted nothing of it, by
+        The grants check names each plugin that asks for a capability and is granted nothing of it, by
         its id and the capability's key under Plugins:Grants, and never what the manifest asks for. Such a
         plugin runs without what it is not granted, and nothing else stops, so the check never decides
         readiness. 'jason plugin list --human' says what each asks for, the key that grants it and the settings

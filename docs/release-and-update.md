@@ -935,10 +935,11 @@ in session 0 shows none — `jason status` says so in its `notifications` check 
 ### The environment an autostarted runtime has
 
 It is the account's logon environment, not your shell's. Anything your shell's profile sets — a `PATH` a version
-manager edits, a `JASON_DATA_DIR` you export, a proxy variable — is not there. The data directory is why the
-registration carries it explicitly; a plugin whose executable is only on a `PATH` your profile builds is the
-other half, and it will be reported `unavailable` by a runtime that started at logon while working perfectly
-from a terminal. `jason plugin list` from the same account says which.
+manager edits, a `JASON_DATA_DIR` you export, a proxy variable — is not there, save that from 0.34.0 a macOS
+registration carries the `PATH` of the terminal that registered it, as the macOS paragraph below says. The data
+directory is why the registration carries it explicitly; a plugin whose executable is only on a `PATH` your profile
+builds is the other half, and it will be reported `unavailable` by a runtime that started at logon while working
+perfectly from a terminal. `jason plugin list` from the same account says which.
 
 On Linux the registration is a `systemd --user` unit, and the environment it starts the runtime with is the systemd
 user manager's, which reads no shell profile: not `~/.profile`, and not `~/.bashrc`, where a version manager or a

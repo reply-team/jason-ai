@@ -401,7 +401,7 @@ otherwise: half of what it reports is not the runtime's to know.
 | migrations are applied | each plugin package this release publishes is the one installed |
 | the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
 | role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a plugin is granted a journal kind |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | every plugin loaded is granted something of each capability it asks for |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | every plugin is granted something of each capability it asks for |
 | | a route is configured |
 | | a binding names an account |
 | | a provider CLI **you name** answers |
@@ -466,11 +466,11 @@ again.
 plugin's id and its kinds and nothing else, and it never decides `ready`: a kind no plugin handles is an ordinary
 installation. `jason plugin list` says which kinds each plugin declares and which it is granted.
 
-`plugin_grants` names each loaded plugin that asks for a capability and is granted nothing of it, with the keys under
-`Plugins:Grants:<id>` that would grant it — `reply is granted nothing it asks for under Exec.` It quotes a plugin's id
-and those keys and never what the manifest asks for, and it never decides `ready`: such a plugin runs without what it is
-not granted, and nothing else stops. `jason plugin list --human` says what each asks for, the key that grants it and the
-settings file, and `jason plugin reload` reads the grant.
+`plugin_grants` names each plugin, an unavailable one included, that asks for a capability and is granted nothing of
+it, with the keys under `Plugins:Grants:<id>` that would grant it — `reply is granted nothing it asks for under Exec.`
+It quotes a plugin's id and those keys and never what the manifest asks for, and it never decides `ready`: such a
+plugin runs without what it is not granted, and nothing else stops. `jason plugin list --human` says what each asks
+for, the key that grants it and the settings file, and `jason plugin reload` reads the grant.
 
 To check a provider's own CLI as well, name it — this build knows no vendor's command by heart:
 

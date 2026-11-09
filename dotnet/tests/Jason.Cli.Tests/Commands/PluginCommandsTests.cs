@@ -361,29 +361,37 @@ public class PluginCommandsTests
     [InlineData("reload")]
     public async Task Human_mode_names_each_problem_of_an_unavailable_plugin_with_its_message(string verb)
     {
-        var registry = OnePlugin(PluginStatus.Unavailable, new PluginCapabilitiesDto(Exec("reply", granted: false), null, null));
-        var unavailable = registry with
-        {
-            Plugins =
-            [
-                registry.Plugins[0] with
-                {
-                    Problems =
-                    [
-                        new PluginProblemDto("executable_missing", "capabilities.exec.executables[0].name", "'reply' was not found."),
-                        new PluginProblemDto("executable_incompatible", "capabilities.exec.executables[1].name", "'other' is 0.1.0, older than 0.4.0."),
-                    ],
-                },
-            ],
-        };
-        using var cli = new CliRun(Serialize(unavailable));
+        using var cli = new CliRun(Serialize(Unavailable(granted: true)));
 
         await cli.RunAsync("plugin", verb, "--human");
 
         Assert.Equal(
-            "reply unavailable: executable_missing — 'reply' was not found.; executable_incompatible — 'other' is 0.1.0, older than 0.4.0.",
+            "reply unavailable: executable_missing — 'reply' was not found. executable_incompatible — 'other' is 0.1.0, older than 0.4.0.",
             Lines(cli.Text)[^1]);
         Assert.DoesNotContain("granted nothing", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A plugin the machine cannot run is granted what the settings say all the same, so one granted nothing says both,
+    /// its problems and then the grant, as <c>jason plugin install</c> does: the three verbs read one registry the same
+    /// way, and the view install points to says the grant too.
+    /// </summary>
+    [Theory]
+    [InlineData("list")]
+    [InlineData("reload")]
+    public async Task Human_mode_says_an_unavailable_plugin_s_problems_and_then_how_to_grant_it(string verb)
+    {
+        using var cli = new CliRun(Serialize(Unavailable(granted: false)));
+
+        await cli.RunAsync("plugin", verb, "--human");
+
+        Assert.Equal(
+            new[]
+            {
+                "reply unavailable: executable_missing — 'reply' was not found. executable_incompatible — 'other' is 0.1.0, older than 0.4.0.",
+                $"reply is loaded and granted nothing. It asks to run: reply. Grant it under Plugins:Grants:reply:Exec in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+            },
+            Lines(cli.Text)[^2..]);
     }
 
     /// <summary>What a manifest asks for and what a runtime says of it are text nobody wrote here: shown inert.</summary>
@@ -421,7 +429,7 @@ public class PluginCommandsTests
         await cli.RunAsync("plugin", verb, "--help");
 
         Assert.Contains(
-            "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a valid plugin asks for and is granted nothing of is named with the key that grants it in the settings file this CLI uses.",
+            "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a plugin asks for and is granted nothing of is named with the key that grants it in the settings file this CLI uses.",
             System.Text.RegularExpressions.Regex.Replace(cli.Text, @"\s+", " "),
             StringComparison.Ordinal);
     }
@@ -434,6 +442,26 @@ public class PluginCommandsTests
         new([new ExecutableDto(name, "/usr/local/bin/" + name, null, null)], granted ? [name] : []);
 
     /// <summary>A registry of one plugin, <c>reply</c>, as an activated reload answers it.</summary>
+    /// <summary><c>reply</c> unavailable with two problems, its one program granted or not.</summary>
+    private static PluginRegistryDto Unavailable(bool granted)
+    {
+        var registry = OnePlugin(PluginStatus.Unavailable, new PluginCapabilitiesDto(Exec("reply", granted), null, null));
+        return registry with
+        {
+            Plugins =
+            [
+                registry.Plugins[0] with
+                {
+                    Problems =
+                    [
+                        new PluginProblemDto("executable_missing", "capabilities.exec.executables[0].name", "'reply' was not found."),
+                        new PluginProblemDto("executable_incompatible", "capabilities.exec.executables[1].name", "'other' is 0.1.0, older than 0.4.0."),
+                    ],
+                },
+            ],
+        };
+    }
+
     private static PluginRegistryDto OnePlugin(PluginStatus status, PluginCapabilitiesDto capabilities)
     {
         var registry = TwoPlugins();

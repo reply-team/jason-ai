@@ -1749,7 +1749,8 @@ public sealed class DoctorComposerTests
 
     /// <summary>
     /// The status fact that names a plugin granted nothing of what it asks for travels as it is: its id as the alias the
-    /// runtime section writes it as, and the capability's key, and never the program its manifest asks to run.
+    /// runtime section writes it as — and a plugin Jason ships by its own id — and the capability's key, and never the
+    /// program its manifest asks to run.
     /// </summary>
     [Fact]
     public async Task The_grants_fact_names_a_plugin_by_its_alias_and_a_key_and_never_what_its_manifest_asks_for()
@@ -1760,14 +1761,15 @@ public sealed class DoctorComposerTests
         {
             Capabilities = new PluginCapabilitiesDto(new ExecCapabilityDto([new ExecutableDto("SENTINEL_PROGRAM", null, null, null)], []), null, null),
         };
-        runtime.Registry = new PluginRegistryDto(new SnapshotDto("snp_01JDOCTOR", Now, SnapshotSource.Startup, 1), "rts_01JDOCTOR", [waiting], null, Activated: true);
+        var shipped = StubRuntime.Plugin("reply", "sha256:shipped", PluginStatus.Valid, []) with { Capabilities = waiting.Capabilities };
+        runtime.Registry = new PluginRegistryDto(new SnapshotDto("snp_01JDOCTOR", Now, SnapshotSource.Startup, 2), "rts_01JDOCTOR", [waiting, shipped], null, Activated: true);
 
         var bundle = await ComposeAsync(dir, runtime);
 
         var check = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "plugin_grants")!;
         Assert.Equal("failed", Text(check["state"]));
         Assert.False(check["required"]!.GetValue<bool>());
-        Assert.StartsWith("<plugin-1> is granted nothing it asks for under Exec.", Text(check["fact"]), StringComparison.Ordinal);
+        Assert.StartsWith("<plugin-1> is granted nothing it asks for under Exec. reply is granted nothing it asks for under Exec.", Text(check["fact"]), StringComparison.Ordinal);
         AssertAbsent(bundle, "sentinel-waiting", "SENTINEL_PROGRAM");
     }
 

@@ -99,10 +99,10 @@ trace, the key and the moment included.
   `~/.profile` nor `~/.bashrc`, where npm's global directory or a version manager most often adds itself — so that
   directory reaches it only through `~/.config/environment.d/` or the unit's own `Environment=`.
   On macOS, a runtime started at logon is a LaunchAgent, and launchd's default search path is
-  `/usr/bin:/bin:/usr/sbin:/sbin`, which holds neither `~/.local/bin` nor a package manager's directory; the
-  registration records the `PATH` of the terminal it was made from (`jason runtime autostart status` names it). The
-  repair is to register again from a terminal whose `PATH` has `reply`, with `jason runtime autostart enable`, then
-  `jason runtime restart`.
+  `/usr/bin:/bin:/usr/sbin:/sbin`, which holds neither `~/.local/bin` nor a package manager's directory; from Jason
+  0.34.0 the registration records the `PATH` of the terminal it was made from (`jason runtime autostart status`
+  names it). The repair is to register again from a terminal whose `PATH` has `reply`, with
+  `jason runtime autostart enable`, then `jason runtime restart`.
 - **On Windows, `node.exe` on the same search path.** npm installs the CLI as `reply.cmd`, and the
   runtime starts no program through a shell: `cmd.exe` would parse the arguments, which is the thing the
   argument array exists to prevent. So the runtime reads that shim, cross-checks the entry script it

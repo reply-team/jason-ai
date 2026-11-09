@@ -1094,10 +1094,12 @@ internal static class StatusChecks
     }
 
     /// <summary>
-    /// Which loaded plugins ask for a capability and are granted nothing of it, read from the same <c>plugin.list</c>
-    /// answer as <c>plugin_availability</c>: each named with the keys under <c>Plugins:Grants:&lt;id&gt;</c> that would grant
-    /// it. Optional, and never deciding readiness: such a plugin runs without what it is not granted, and an installation
-    /// with no plugin is ready too. A plugin this machine holds back is the check above's to name.
+    /// Which plugins ask for a capability and are granted nothing of it, read from the same <c>plugin.list</c> answer as
+    /// <c>plugin_availability</c>: each named with the keys under <c>Plugins:Grants:&lt;id&gt;</c> that would grant it.
+    /// Optional, and never deciding readiness: such a plugin runs without what it is not granted, and an installation with
+    /// no plugin is ready too. A plugin this machine holds back is named here as well, whatever its status: the runtime
+    /// resolves its grants before it decides its status, so what it is granted is as true of it as of any other, and one
+    /// report then says both its problems, in the check above, and its grant.
     /// </summary>
     /// <remarks>
     /// Only ids and capability keys are quoted: what a manifest asks for — a program, a host, a variable — is its author's
@@ -1123,13 +1125,13 @@ internal static class StatusChecks
         }
 
         var waiting = plugins
-            .Where(plugin => plugin.Status == PluginStatus.Valid && plugin.Capabilities is not null)
+            .Where(plugin => plugin.Capabilities is not null)
             .Select(plugin => (Plugin: plugin, Keys: PluginRenderers.Asked(plugin.Capabilities!).Select(ask => ask.Key).ToList()))
             .Where(entry => entry.Keys.Count > 0)
             .ToList();
         if (waiting.Count == 0)
         {
-            return new StatusCheck(Name, false, CheckState.Ok, "Every plugin loaded is granted something of each capability it asks for.", null);
+            return new StatusCheck(Name, false, CheckState.Ok, "Every plugin is granted something of each capability it asks for.", null);
         }
 
         var named = string.Join(" ", waiting.Take(MostNamed).Select(entry =>

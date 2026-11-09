@@ -105,7 +105,10 @@ jason runtime autostart disable
 
 `enable` registers **the runtime itself** to start when this account logs on: a logon task on Windows, a
 LaunchAgent on macOS, a `systemd --user` unit on Linux. `disable` takes that registration away, and `status`
-says what is registered and whether the executable it names is still on disk.
+says what is registered and whether the executable it names is still on disk. On macOS the registration also
+carries the `PATH` of the terminal `enable` ran from, which the runtime started at logon then searches, and
+`jason runtime autostart status` says it under `path`; an agent an earlier version registered carries none, and
+launchd's default `/usr/bin:/bin:/usr/sbin:/sbin` holds no program a package manager installed.
 
 **It is registration, not supervision.** Nothing watches the runtime afterwards: a runtime that stops stays
 stopped until somebody starts it. There is no restart policy, and no second process whose job is to keep the
@@ -225,7 +228,10 @@ program it needs is not on the `PATH` this runtime started with, which is why a 
 terminal can be unavailable to a runtime that started at logon. `jason status` names each unavailable plugin
 with its problem codes in its optional `plugin_availability` check, which never makes the installation not
 ready: work routed to such a plugin fails at the claim, and a notification plugin delivers nothing; nothing
-else stops.
+else stops. Beside it, the optional `plugin_grants` check names each plugin, an unavailable one included, that asks
+for a capability and is granted nothing of it, by its id and the capability's key under `Plugins:Grants:<id>`; it
+never decides `ready` either, and `jason plugin list --human` says what the plugin asks for, the key and the
+settings file.
 
 On macOS a runtime started at logon is a LaunchAgent, and launchd's default search path is
 `/usr/bin:/bin:/usr/sbin:/sbin`, which holds no program a package manager installed; the registration records the

@@ -125,7 +125,11 @@ nothing: the verb exits 1, says why, and you stop and say so too. A different pa
 The runtime from step 1 is then asked to reload, so the package is loaded at once, granted nothing yet: what it may
 run and which work it takes are steps 4 and 5. Without a runtime the package is placed all the same, and the runtime
 loads it at its next start; the verb never starts one. A runtime that answers and refuses the reload leaves the package
-placed, and the verb exits 1 with `load: rejected` in its body and the runtime's refusal under `error`.
+placed, and the verb exits 1 with `load: rejected` in its body and the runtime's refusal under `error`. After a reload
+that answered, the body also says what the runtime made of the package — its `status`, its `problems` with their
+messages, its `capabilities` as the reload answered them, requested and granted, and `settings_file`, the file step 4
+edits — and under `--human` the verb prints each problem with its message and, while the package is granted nothing it
+asks for, the sentence that names the key under `Plugins:Grants:reply`, that file and `jason plugin reload`.
 
 So the package is the one released with your runtime, file for file: it has the content digest of the release's own
 tree, and `jason status` says so in its `plugin_package` check, which fails when the package installed is an earlier
@@ -184,7 +188,8 @@ The reload reads every package, recomputes each content digest, freezes the rout
 snapshots together — or refuses the lot and keeps what was working. `plugin list` shows the package as `valid`
 with its digest and what it was granted; `route resolve` says which plugin would perform one operation for one
 campaign, and why it could not. After a reload, `jason status` also names a plugin that is installed but
-unavailable, with its problem codes, in its `plugin_availability` check.
+unavailable, with its problem codes, in its `plugin_availability` check. Beside it, `plugin_grants` names a plugin
+that asks for a capability and is granted nothing of it, by its id and the capability's key.
 
 ## 6. Create the work
 

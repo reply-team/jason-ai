@@ -1434,7 +1434,7 @@ public class ReplyPackageTests
             readme,
             StringComparison.Ordinal);
         Assert.Contains(
-            "On macOS, a runtime started at logon is a LaunchAgent, and launchd's default search path is `/usr/bin:/bin:/usr/sbin:/sbin`, which holds neither `~/.local/bin` nor a package manager's directory; the registration records the `PATH` of the terminal it was made from (`jason runtime autostart status` names it). The repair is to register again from a terminal whose `PATH` has `reply`, with `jason runtime autostart enable`, then `jason runtime restart`.",
+            "On macOS, a runtime started at logon is a LaunchAgent, and launchd's default search path is `/usr/bin:/bin:/usr/sbin:/sbin`, which holds neither `~/.local/bin` nor a package manager's directory; from Jason 0.34.0 the registration records the `PATH` of the terminal it was made from (`jason runtime autostart status` names it). The repair is to register again from a terminal whose `PATH` has `reply`, with `jason runtime autostart enable`, then `jason runtime restart`.",
             readme,
             StringComparison.Ordinal);
     }
