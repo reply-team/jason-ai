@@ -2264,6 +2264,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Theory]
     [InlineData("plugin_availability")]
+    [InlineData("plugin_grants")]
     [InlineData("plugin_updates")]
     [InlineData("install_first")]
     [InlineData("upgrade_command")]
@@ -2289,6 +2290,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Theory]
     [InlineData("docs/INSTALL.md", "plugin_availability")]
+    [InlineData("docs/INSTALL.md", "plugin_grants")]
     [InlineData("docs/INSTALL.md", "install_first")]
     [InlineData("docs/INSTALL.md", "upgrade_command")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "plugin_availability")]

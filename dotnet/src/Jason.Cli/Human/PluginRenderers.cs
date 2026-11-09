@@ -151,27 +151,7 @@ public static class PluginRenderers
             return null;
         }
 
-        var asked = new List<(string Key, string? Verb, IReadOnlyList<string> Names)>();
-        void Ask(string key, string verb, IReadOnlyList<string>? requested, IReadOnlyList<string>? granted)
-        {
-            if (requested is { Count: > 0 } && granted is not { Count: > 0 })
-            {
-                asked.Add((key, verb, requested));
-            }
-        }
-
-        Ask("Exec", "run", capabilities.Exec?.Requested?.Select(executable => executable.Name).ToList(), capabilities.Exec?.Granted);
-        Ask("Http", "reach", capabilities.Http?.Requested, capabilities.Http?.Granted);
-        Ask("Env", "read", capabilities.Env?.Requested, capabilities.Env?.Granted);
-        Ask("Api", "call", capabilities.Api?.Requested, capabilities.Api?.Granted);
-        Ask("Subscriptions", "be told of", capabilities.Subscriptions?.Requested, capabilities.Subscriptions?.Granted);
-
-        // A manifest names no directory, so there is nothing requested to name: it asks for places, and the person names them.
-        if (capabilities.Files is { } files && files.Granted is not { Count: > 0 })
-        {
-            asked.Add(("Files", null, []));
-        }
-
+        var asked = Asked(capabilities);
         if (asked.Count == 0)
         {
             return null;
@@ -196,6 +176,37 @@ public static class PluginRenderers
         }
 
         return RenderText.Shown(sentence.ToString());
+    }
+
+    /// <summary>
+    /// Each capability a plugin asks for and is granted nothing of, in the manifest's order: its key under
+    /// <c>Plugins:Grants:&lt;id&gt;</c>, the verb that says it, and what it asks for. A capability granted part of what it
+    /// asks for is not one of them. <c>Files</c> names nothing requested, since a manifest names no directory.
+    /// </summary>
+    internal static IReadOnlyList<(string Key, string? Verb, IReadOnlyList<string> Names)> Asked(PluginCapabilitiesDto capabilities)
+    {
+        var asked = new List<(string Key, string? Verb, IReadOnlyList<string> Names)>();
+        void Ask(string key, string verb, IReadOnlyList<string>? requested, IReadOnlyList<string>? granted)
+        {
+            if (requested is { Count: > 0 } && granted is not { Count: > 0 })
+            {
+                asked.Add((key, verb, requested));
+            }
+        }
+
+        Ask("Exec", "run", capabilities.Exec?.Requested?.Select(executable => executable.Name).ToList(), capabilities.Exec?.Granted);
+        Ask("Http", "reach", capabilities.Http?.Requested, capabilities.Http?.Granted);
+        Ask("Env", "read", capabilities.Env?.Requested, capabilities.Env?.Granted);
+        Ask("Api", "call", capabilities.Api?.Requested, capabilities.Api?.Granted);
+        Ask("Subscriptions", "be told of", capabilities.Subscriptions?.Requested, capabilities.Subscriptions?.Granted);
+
+        // A manifest names no directory, so there is nothing requested to name: it asks for places, and the person names them.
+        if (capabilities.Files is { } files && files.Granted is not { Count: > 0 })
+        {
+            asked.Add(("Files", null, []));
+        }
+
+        return asked;
     }
 
     /// <summary>
