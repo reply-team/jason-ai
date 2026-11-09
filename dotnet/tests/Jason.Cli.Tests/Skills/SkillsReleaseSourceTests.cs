@@ -5,6 +5,7 @@ using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Process;
 using Jason.Cli.Tests.Update;
+using Jason.Contracts.Plugins;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
 
@@ -197,6 +198,9 @@ public class SkillsReleaseSourceTests
     [InlineData("outside.md")]
     [InlineData("skills//outside.md")]
     [InlineData("skills/./outside.md")]
+    [InlineData("skills/runtime/a:b.md")]
+    [InlineData("skills/runtime/a\u0001b.md")]
+    [InlineData("C:x")]
     public async Task A_package_with_an_entry_outside_its_layout_is_refused_whole(string entry)
     {
         using var dir = new TempPaths();
@@ -209,6 +213,106 @@ public class SkillsReleaseSourceTests
         AssertNothingStaged(dir);
         Assert.False(File.Exists(Path.Combine(dir.Paths.Root, "skills", "outside.md")));
         Assert.False(File.Exists(Path.Combine(dir.Paths.Root, "outside.md")));
+    }
+
+    /// <summary>
+    /// An entry whose mode says it is a link, as Unix zip tools write one, is refused whole: unpacked, its text would be
+    /// a path to somewhere else.
+    /// </summary>
+    [Fact]
+    public async Task A_package_with_a_link_entry_is_refused_whole()
+    {
+        using var dir = new TempPaths();
+        const string link = "skills/runtime/linked.md";
+        var package = SkillsPackage.Zip(
+            Tag,
+            [.. SkillsPackage.Files(Tag), (link, "../../outside.md")],
+            entry => entry.ExternalAttributes = entry.FullName == link ? 0xA1FF << 16 : entry.ExternalAttributes);
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(package);
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+
+        Assert.Contains(link, refusal.Message, StringComparison.Ordinal);
+        AssertNothingStaged(dir);
+    }
+
+    /// <summary>
+    /// An entry the package holds twice is refused whole, and so is one written twice in two cases: on a file system that
+    /// ignores case the second would land on the first.
+    /// </summary>
+    [Theory]
+    [InlineData("skills/README.md")]
+    [InlineData("skills/readme.md")]
+    public async Task A_package_that_holds_an_entry_twice_is_refused_whole(string again)
+    {
+        using var dir = new TempPaths();
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(SkillsPackage.Zip(Tag, [.. SkillsPackage.Files(Tag), (again, "again")]));
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+
+        Assert.Contains($"'{again}' twice", refusal.Message, StringComparison.Ordinal);
+        AssertNothingStaged(dir);
+    }
+
+    /// <summary>
+    /// A package holds what a plugin's package may: at most <see cref="PackageDigest.MaxFiles"/> files and
+    /// <see cref="PackageDigest.MaxBytes"/> bytes by what its entries declare. One over either is refused whole.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_package_over_its_bounds_is_refused_whole(bool overFiles)
+    {
+        using var dir = new TempPaths();
+        IEnumerable<(string, string)> extra = overFiles
+            ? Enumerable.Range(0, PackageDigest.MaxFiles).Select(index => ($"skills/runtime/many/{index}.md", "one"))
+            : [("skills/runtime/large.md", new string('a', (int)PackageDigest.MaxBytes))];
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(SkillsPackage.Zip(Tag, [.. SkillsPackage.Files(Tag), .. extra]));
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+
+        Assert.Contains($"at most {PackageDigest.MaxFiles} files and {PackageDigest.MaxBytes} bytes", refusal.Message, StringComparison.Ordinal);
+        AssertNothingStaged(dir);
+    }
+
+    /// <summary>A <c>source.json</c> over 64 KB is not that file, whatever it says, and the package is refused whole.</summary>
+    [Fact]
+    public async Task A_package_whose_source_file_is_over_its_size_is_refused_whole()
+    {
+        using var dir = new TempPaths();
+        var padded = SkillsPackage.Source(Tag) + new string(' ', 64 * 1024);
+        var files = SkillsPackage.Files(Tag).Select(file => file.Name == "source.json" ? (file.Name, padded) : file);
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(SkillsPackage.Zip(Tag, files));
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+
+        Assert.Contains("larger than that file ever is", refusal.Message, StringComparison.Ordinal);
+        AssertNothingStaged(dir);
+    }
+
+    /// <summary>
+    /// The commit a package names is what a deployment records, so it is forty lowercase hexadecimal digits or the package
+    /// is refused whole: not in capitals, not one digit short, not with a letter past f.
+    /// </summary>
+    [Theory]
+    [InlineData("C0FFEE0000000000000000000000000000C0FFEE")]
+    [InlineData("c0ffee000000000000000000000000000c0ffee")]
+    [InlineData("c0ffee0000000000000000000000000000c0ffeg")]
+    public async Task A_package_that_names_no_commit_is_refused_whole(string commit)
+    {
+        using var dir = new TempPaths();
+        var files = SkillsPackage.Files(Tag).Select(file => file.Name == "source.json" ? (file.Name, SkillsPackage.Source(Tag, commit)) : file);
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(SkillsPackage.Zip(Tag, files));
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+
+        Assert.Contains("names no commit", refusal.Message, StringComparison.Ordinal);
+        AssertNothingStaged(dir);
     }
 
     /// <summary>A package with no <c>source.json</c> says nothing an installation can record, and is refused.</summary>

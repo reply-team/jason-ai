@@ -30,15 +30,20 @@ internal static class SkillsPackage
         ("source.json", Source(tag)),
     ];
 
-    /// <summary>The package's bytes. <paramref name="entries"/> replaces its files, for a test about a package that is wrong.</summary>
-    public static byte[] Zip(string tag, IEnumerable<(string Name, string Text)>? entries = null)
+    /// <summary>
+    /// The package's bytes. <paramref name="entries"/> replaces its files, for a test about a package that is wrong, and
+    /// <paramref name="shape"/> is given each entry before its text is written, for one whose attributes are.
+    /// </summary>
+    public static byte[] Zip(string tag, IEnumerable<(string Name, string Text)>? entries = null, Action<ZipArchiveEntry>? shape = null)
     {
         using var memory = new MemoryStream();
         using (var zip = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
         {
             foreach (var (name, text) in entries ?? Files(tag))
             {
-                using var stream = zip.CreateEntry(name).Open();
+                var entry = zip.CreateEntry(name);
+                shape?.Invoke(entry);
+                using var stream = entry.Open();
                 stream.Write(Encoding.UTF8.GetBytes(text));
             }
         }
