@@ -66,6 +66,9 @@ trace, the key and the moment included.
 - **The Reply CLI, installed and signed in.** It is a Node program installed with npm, on Node 20 or
   newer; [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) is where it comes from and
   what documents it. Running `reply auth login` is yours to do, as the person whose account it is.
+  Where `npm install -g` is refused with `EACCES`, npm's global prefix is a directory this account does not own:
+  install it under a prefix of the account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin`
+  on the search path the runtime sees, as "A runtime that can find it" below says.
 - **Version 0.18.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
   the answer. 0.18.0 is the release that names a cancel of a send Reply is sending, a cancel Reply could not confirm
   and a sending schedule that cannot time a send each by a code of its own, and passes on the moment Reply expects to
@@ -95,6 +98,11 @@ trace, the key and the moment included.
   logon is a `systemd --user` unit, whose environment is the user manager's and reads no shell profile — neither
   `~/.profile` nor `~/.bashrc`, where npm's global directory or a version manager most often adds itself — so that
   directory reaches it only through `~/.config/environment.d/` or the unit's own `Environment=`.
+  On macOS, a runtime started at logon is a LaunchAgent, and launchd's default search path is
+  `/usr/bin:/bin:/usr/sbin:/sbin`, which holds neither `~/.local/bin` nor a package manager's directory; the
+  registration records the `PATH` of the terminal it was made from (`jason runtime autostart status` names it). The
+  repair is to register again from a terminal whose `PATH` has `reply`, with `jason runtime autostart enable`, then
+  `jason runtime restart`.
 - **On Windows, `node.exe` on the same search path.** npm installs the CLI as `reply.cmd`, and the
   runtime starts no program through a shell: `cmd.exe` would parse the arguments, which is the thing the
   argument array exists to prevent. So the runtime reads that shim, cross-checks the entry script it

@@ -72,6 +72,11 @@ npm install -g reply-cli
 **Ask first.** Where Node is missing, or older than 20, install it first: it is a system package, so it is the
 person's to allow.
 
+Where `npm install -g` is refused with `EACCES`, npm's global prefix is a directory this account does not own: install
+it under a prefix of the account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the
+search path the runtime sees, which is not always the one your shell sees
+([the plugin's prerequisites](../plugins/reply/README.md#what-you-need), "A runtime that can find it").
+
 **Yours to do.** Sign in, in your own terminal, as the person whose account it is. It may open your browser:
 
 ```

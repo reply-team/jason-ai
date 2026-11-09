@@ -3,6 +3,17 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.14.7
+
+- The README says what to do when `npm install -g reply-cli` is refused with `EACCES`, npm's global prefix being a
+  directory the account does not own: install it under a prefix of the account's own,
+  `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the search path the runtime sees.
+- The README says what search path a runtime started at logon on macOS has: launchd's default,
+  `/usr/bin:/bin:/usr/sbin:/sbin`, unless the registration carries the `PATH` of the terminal it was made from, which
+  it does from Jason 0.34.0; the repair is to register again from a terminal whose `PATH` has `reply`, with
+  `jason runtime autostart enable`, then `jason runtime restart`. Nothing the package does has changed; update the
+  package (`jason update apply`) to have the page.
+
 ## 0.14.6
 
 - The README states what Reply detects of a contact's later replies by email, in a Jason user's words. A direct email's
