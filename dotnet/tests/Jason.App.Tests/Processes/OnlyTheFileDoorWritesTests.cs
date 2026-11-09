@@ -183,7 +183,7 @@ public class OnlyTheFileDoorWritesTests
                 || (type == typeof(DirectoryInfo) && name is nameof(DirectoryInfo.Create) or nameof(DirectoryInfo.CreateSubdirectory) or nameof(DirectoryInfo.Delete) or nameof(DirectoryInfo.MoveTo))
                 || (type == typeof(FileSystemInfo) && (name is nameof(FileSystemInfo.Delete) or nameof(FileSystemInfo.CreateAsSymbolicLink) || SetsMetadata(name)))
                 || (type == typeof(RandomAccess) && name is nameof(RandomAccess.Write) or nameof(RandomAccess.WriteAsync) or nameof(RandomAccess.SetLength))
-                || (type == typeof(Directory) && name is nameof(Directory.CreateDirectory) or nameof(Directory.Delete) or nameof(Directory.Move) or nameof(Directory.CreateSymbolicLink) or nameof(Directory.CreateTempSubdirectory) || SetsATime(name))
+                || (type == typeof(Directory) && (name is nameof(Directory.CreateDirectory) or nameof(Directory.Delete) or nameof(Directory.Move) or nameof(Directory.CreateSymbolicLink) or nameof(Directory.CreateTempSubdirectory) || SetsATime(name)))
                 || (type == typeof(MemoryMappedFile) && name == nameof(MemoryMappedFile.CreateFromFile))
                 || (type == typeof(Path) && name == nameof(Path.GetTempFileName)))
             {
@@ -233,5 +233,24 @@ public class OnlyTheFileDoorWritesTests
     private static class ReadsOnly
     {
         public static string ReadAll() => File.ReadAllText("x") + File.Exists("y") + Directory.Exists("z");
+    }
+
+    /// <summary>
+    /// A method of the host's own that happens to be named like a timestamp setter is not one: the guard names the type
+    /// that declares the call, and a name alone is not a write.
+    /// </summary>
+    [Fact]
+    public void The_guard_leaves_a_timestamp_setter_of_another_type_alone()
+    {
+        var call = typeof(NamedLikeAFileCall).GetMethod(nameof(NamedLikeAFileCall.CallsItsOwn))!;
+
+        Assert.Empty(Forbidden(call));
+    }
+
+    private static class NamedLikeAFileCall
+    {
+        public static void CallsItsOwn() => SetLastWriteTime("x");
+
+        private static void SetLastWriteTime(string path) => _ = path.Length;
     }
 }
