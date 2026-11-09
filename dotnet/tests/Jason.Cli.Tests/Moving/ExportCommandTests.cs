@@ -665,6 +665,25 @@ public sealed class ExportCommandTests
         Assert.Contains(machine.Harness, machine.Error.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Two_names_apart_only_by_case_are_refused_and_nothing_is_written()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Only Linux holds two names apart only by case in one folder by default.");
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.PlantHarness("projects/acme/Notes.md", "one");
+        var other = Path.GetFullPath(machine.PlantHarness("projects/acme/notes.md", "another"));
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(machine.Out.ToString());
+        Assert.Equal("export_refused", error.Code);
+        Assert.Contains("case", error.Message, StringComparison.Ordinal);
+        Assert.Contains(other, error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+    }
+
     private static bool CanTake(string lockFile)
     {
         try
