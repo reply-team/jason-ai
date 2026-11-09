@@ -63,6 +63,7 @@ public sealed class UiAssetInstallerTests : IDisposable
     [InlineData("/abs.html")]
     [InlineData("jason-ui/index.html")]
     [InlineData(".hidden")]
+    [InlineData("assets/con.js")]
     public void An_entry_that_is_not_a_file_of_a_build_refuses_the_whole_asset_before_anything_changes(string entry)
     {
         Install(Zip(("index.html", "keep"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}")));

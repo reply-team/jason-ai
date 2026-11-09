@@ -398,8 +398,8 @@ public static class PluginInstaller
     /// The file entries, each checked before anything is unpacked: a relative path of plain segments, none hidden — the digest
     /// would not count a hidden one, so it would land beside the package unvouched for — and none that Windows would read as
     /// something else: a drive or an alternate stream after a colon, which the digest never sees, a control character, a
-    /// trailing dot or space it drops. None twice, within what a package may hold by what they declare, and a
-    /// <c>plugin.yaml</c> at the root.
+    /// trailing dot or space it drops. None a link, and none a name <see cref="ArchiveNames"/> refuses. None twice, within
+    /// what a package may hold by what they declare, and a <c>plugin.yaml</c> at the root.
     /// </summary>
     private static List<ZipArchiveEntry> Checked(ZipArchive archive)
     {
@@ -420,6 +420,13 @@ public static class PluginInstaller
             {
                 throw new PluginInstallException(
                     $"'{Shown(name)}' is not a file of a plugin package: entries are relative paths of plain segments, none hidden, none naming a drive or a stream, none holding a control character, none ending in a dot or a space. Nothing was changed.");
+            }
+
+            // The rules every archive this CLI unpacks is held to, beside the package's own.
+            if (!ArchiveNames.Plain(name) || ArchiveNames.IsLink(entry))
+            {
+                throw new PluginInstallException(
+                    $"'{Shown(name)}' is not a file of a plugin package: it is a link, or a name some system cannot hold, a device name such as CON or NUL among them. Nothing was changed.");
             }
 
             if (!names.Add(name))

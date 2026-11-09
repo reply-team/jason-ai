@@ -89,7 +89,7 @@ public static class UiAssetInstaller
         }
     }
 
-    /// <summary>The file entries, each checked: a relative path of plain segments, none hidden, within the bounds by what they declare, and the two files a build must have.</summary>
+    /// <summary>The file entries, each checked: a relative path of plain segments, none hidden, none a link or a name <see cref="ArchiveNames"/> refuses, within the bounds by what they declare, and the two files a build must have.</summary>
     private static List<ZipArchiveEntry> Checked(ZipArchive archive)
     {
         var files = new List<ZipArchiveEntry>();
@@ -107,6 +107,12 @@ public static class UiAssetInstaller
                 || segments.Any(segment => segment.Length == 0 || segment is "." or ".." || segment.StartsWith('.')))
             {
                 throw new UiAssetRefusedException($"'{name}' is not a file of a UI build: entries are relative paths of plain segments, none hidden.");
+            }
+
+            // The rules every archive this CLI unpacks is held to, beside the build's own.
+            if (!ArchiveNames.Plain(name) || ArchiveNames.IsLink(entry))
+            {
+                throw new UiAssetRefusedException($"'{name}' is not a file of a UI build: it is a link, or a name some system cannot hold, a device name such as CON or NUL among them.");
             }
 
             if (segments.Length > 1 && segments[0] != UiAssetLayout.AssetsDirectory)

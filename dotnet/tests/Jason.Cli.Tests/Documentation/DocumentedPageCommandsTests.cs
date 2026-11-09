@@ -39,6 +39,10 @@ public class DocumentedPageCommandsTests
         // The verb that starts a person's own agent host. Typed for real as the others are: with no runtime in this test's
         // data directory its first read finds no descriptor and it exits 3 before a host is looked for or a terminal named.
         "jason session ",
+        // The two verbs that move an installation. Typed for real: `export` writes its archive in this test's own directory
+        // from this test's own data directory and harness root, the home and the root being named below so nothing resolves
+        // to a real one; `import` is given an archive that is not there and refuses it before it reads or writes anything else.
+        "jason export", "jason import ",
     ];
 
     /// <summary>
@@ -223,7 +227,11 @@ public class DocumentedPageCommandsTests
             // `~` too, which a shell would have expanded and these lines are not. This test's own directory, so no line
             // names a folder of the machine's; a walk up from it for a project's marker writes nothing, and what a
             // marker it meets names is asked of a runtime that is not there.
-            WorkingDirectory: dir.Paths.Root);
+            WorkingDirectory: dir.Paths.Root,
+            // A home and a harness root of this test's own, read where a verb resolves a folder from them: `jason export`
+            // walks the harness root, and the real one is a person's.
+            Identity: new Jason.Cli.Doctor.IdentityFacts(Path.Combine(dir.Paths.Root, "home"), "pat", "BENCH-3", null, null),
+            Variables: new Dictionary<string, string>(StringComparer.Ordinal) { ["JASON_Harness__Root"] = Path.Combine(dir.Paths.Root, "harness") });
 
     /// <summary>
     /// Every request refused before it leaves the process. Most of these commands never get this far — there is

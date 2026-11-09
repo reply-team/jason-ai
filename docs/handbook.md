@@ -240,8 +240,8 @@ would later refuse to launch, rather than writing one.
 [`skills/README.md`](../skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
 browser UI, the page `jason ui open` opens; a runtime works without it.
 
-One question, answered check by check. It is one of nine names in this CLI with no API operation behind
-it — `status`, `uninstall`, `logs` and `doctor`, the `skills` and `update` nouns, `ui install` and
+One question, answered check by check. It is one of eleven names in this CLI with no API operation behind
+it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and
 `plugin install`, which change this installation's files as those two do, and `session open`, which starts your own
 agent host in a terminal — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
@@ -367,6 +367,18 @@ your business in — `~/Jason` unless `Harness:Root` names another — is never 
 yours. Like `status`, this verb has no API
 operation behind it: removing Jason from a machine is not something the runtime performs or is asked about.
 [docs/INSTALL.md](INSTALL.md) §7 is the fuller account.
+
+### Moving it to another machine
+
+`jason export`, with the runtime stopped, writes the database, the settings, the plugins, the role skills, a custom
+UI, the logs and the harness root's tree into one archive, with `export.json` listing every file's size and SHA-256;
+`jason import <file>` on the other machine checks all of it before writing anything, moves an installation already
+there aside under `--replace` and deletes nothing, rewrites the settings file's paths under the old home, data
+directory and harness root to this machine's, registers at logon when the old machine did, then starts the runtime
+and asks it to record each project folder where it now stands. The archive carries the settings file with every
+secret in it, so keep it as you keep that file. Both verbs refuse while the runtime runs unless `--stop` is given,
+and neither has an API operation behind it: the files are copied cold, which no runtime can do to itself while it
+answers. [docs/INSTALL.md](INSTALL.md) §8 is the fuller account.
 
 ## Using it
 

@@ -458,6 +458,52 @@ connecting a LinkedIn account, connecting a mailbox by single sign-on, signing i
 and each is theirs to do: say what it is for, and wait until they say it is done. Never send them there for the work
 itself.
 
+## Moving the installation to another machine
+
+Install Jason on the new machine first, the same version or a newer one. Then, on the old machine:
+
+```sh
+jason runtime stop
+jason export
+```
+
+and on the new one, with the archive copied across:
+
+```sh
+jason import jason-export-20261109T100005Z.zip
+jason skills install
+jason runtime autostart enable
+jason status
+```
+
+`jason export --stop` and `jason import --stop` stop a running runtime themselves; without the flag both refuse
+while it runs and name `jason runtime stop`. **Ask first** before you run `jason runtime stop`, `jason export --stop`,
+`jason import --stop` or `jason import --replace`: say in words what is stopped, and for `--replace`
+that the installation already here is moved aside into `<data>/replaced-<stamp>/` and `<root>.replaced-<stamp>`,
+and run it only on the person's yes, as "Starting and stopping it" says. The export starts the runtime again when it
+was running; the import ends with it running, because it asks it to record each project folder where it now
+stands, unless the runtime does not start: then the import exits 1 with the files in place, and names
+`jason runtime start` and then `jason project link` for each project folder. Of the three
+lines the import leaves to the person, `jason runtime autostart enable` is only for when they want it started at
+logon and the old machine did not do so; when it did, the import has already registered it, or said that this
+machine cannot.
+
+**What travels:** the database, the settings file, the plugins, the role skills with their record, a custom UI,
+the logs, and the harness root's tree — the person's memory files and every project's and campaign's folder.
+Whether the runtime started at logon travels as a fact, and the import registers it again. **What does not:**
+backups, the work directories, staged skills, the shipped UI, the copies an update keeps, anything an earlier
+import moved aside, the skills deployed into agent hosts, and anything outside the data directory and the
+harness root. The archive carries the settings file with everything in it, a token under `Plugins:Config`
+included: tell the person to keep the archive as they keep that file.
+
+The import refuses before it writes anything when the archive is damaged, names a path outside where it
+places files, a newer Jason wrote it, or an installation is already here — a database, or a harness root with
+a folder marker in it, which a Jason that has already run on the new machine has. `--replace` then moves what is
+there aside, into `<data>/replaced-<stamp>/` and `<root>.replaced-<stamp>`, and deletes nothing: those are the
+person's to remove once they are content. In the settings file every path under the old machine's home
+directory, data directory or harness root is rewritten to the same place on this one, and each rewrite is said;
+a path elsewhere that is not on this machine is said and left as written, for the person to correct.
+
 ## Taking it off again
 
 ```sh

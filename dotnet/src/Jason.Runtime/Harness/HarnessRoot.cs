@@ -6,7 +6,8 @@ namespace Jason.Runtime.Harness;
 
 /// <summary>
 /// The rule for where the harness root may be, written once for the validator that refuses a setting and for the folders
-/// that are made under the root. A refusal compares where the paths lead, not how they are spelled, and compares them as
+/// that are made under the root; the root's own rule is <see cref="HarnessRootRule"/> in the contracts, which the CLI holds a
+/// root to as well. A refusal compares where the paths lead, not how they are spelled, and compares them as
 /// the platform's file systems do by default: Windows and macOS ignore case, Linux does not (<see cref="FolderPaths"/>).
 /// </summary>
 public static class HarnessRoot
@@ -23,7 +24,7 @@ public static class HarnessRoot
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(home);
-        return Normal(Written(options) is { } root ? root : Path.Combine(home, HarnessOptions.DefaultFolder));
+        return HarnessRootRule.Of(options.Root, home);
     }
 
     /// <summary>
@@ -35,44 +36,7 @@ public static class HarnessRoot
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(home);
-
-        const string Setting = HarnessOptions.Section + ":Root";
-        var written = Written(options);
-        if (written is not null && (written.Contains('\0', StringComparison.Ordinal) || !Path.IsPathFullyQualified(Undevice(written))))
-        {
-            return $"{Setting} must be an absolute path, one that starts at a drive, a share or /, and ~ is not expanded; {OptionRules.Written("value", written, "is not one")}";
-        }
-
-        // Every place is compared where it leads: a device prefix, a junction or a symbolic link does not make the home or
-        // the data directory another folder.
-        var root = Of(options, home);
-
-        // Where the root stands to the data directory, the runtime's own: it may be none of the three. Decided apart from
-        // the home's relations, since an unset root is held to this one alone: a default that leads to the home, through a
-        // junction say, and so holds the data directory beside it, is refused for that.
-        var toData = ToData(Real(root), paths) switch
-        {
-            Place.Data => ("is the data directory", "be the data directory", "is the data directory"),
-            Place.InsideData => ("is inside the data directory", "be inside the data directory", "is inside it"),
-            Place.HoldsData => ("holds the data directory", "hold the data directory", "holds it"),
-            _ => default((string Is, string Rule, string Written)?),
-        };
-        if (written is null)
-        {
-            return toData is { } standing
-                ? $"{Setting} is not set, and its default, {HarnessOptions.DefaultFolder} in the home directory, {standing.Is}, which is the runtime's own; set {Setting} to an absolute path apart from it."
-                : null;
-        }
-
-        // A CLAUDE.md at the root is read by every agent session started anywhere below it, so the root is never where
-        // every session of the account starts below: the home directory, a folder that holds it, the top of a drive.
-        return Where(root, paths, home) switch
-        {
-            Place.Home => $"{Setting} must not be the home directory itself: every agent session started anywhere in it would read the memory files kept at the root; the value written is the home directory.",
-            Place.Top => $"{Setting} must not be the top of a drive, a share or the file system: every agent session started anywhere below it would read the memory files kept at the root; the value written is such a top.",
-            Place.HoldsHome => $"{Setting} must not hold the home directory: every agent session started anywhere in the home would read the memory files kept at the root; the value written holds it.",
-            _ => toData is { } where ? $"{Setting} must not {where.Rule}, which is the runtime's own; the value written {where.Written}." : null,
-        };
+        return HarnessRootRule.Refusal(options.Root, paths.Root, home);
     }
 
     /// <summary>
@@ -88,12 +52,12 @@ public static class HarnessRoot
         ArgumentNullException.ThrowIfNull(home);
         return Where(folder, paths, home) switch
         {
-            Place.Home => "path must not be the home directory: every agent session started anywhere in it would read the project's memory file.",
-            Place.Top => "path must not be the top of a drive, a share or the file system: every agent session started below it would read the project's memory file.",
-            Place.HoldsHome => "path must not hold the home directory: every agent session started anywhere in the home would read the project's memory file.",
-            Place.Data => "path must not be the data directory, which is the runtime's own.",
-            Place.InsideData => "path must not be inside the data directory, which is the runtime's own.",
-            Place.HoldsData => "path must not hold the data directory, which is the runtime's own.",
+            HarnessPlace.Home => "path must not be the home directory: every agent session started anywhere in it would read the project's memory file.",
+            HarnessPlace.Top => "path must not be the top of a drive, a share or the file system: every agent session started below it would read the project's memory file.",
+            HarnessPlace.HoldsHome => "path must not hold the home directory: every agent session started anywhere in the home would read the project's memory file.",
+            HarnessPlace.Data => "path must not be the data directory, which is the runtime's own.",
+            HarnessPlace.InsideData => "path must not be inside the data directory, which is the runtime's own.",
+            HarnessPlace.HoldsData => "path must not hold the data directory, which is the runtime's own.",
             _ => null,
         };
     }
@@ -118,12 +82,12 @@ public static class HarnessRoot
 
         return Where(directory, paths, home) switch
         {
-            Place.Home => "a file grant must not be the home directory; name a folder of its own.",
-            Place.Top => "a file grant must not be the top of a drive, a share or the file system; name a folder of its own.",
-            Place.HoldsHome => "a file grant must not hold the home directory; name a folder of its own.",
-            Place.Data => "a file grant must not be the data directory, which is the runtime's own.",
-            Place.InsideData => "a file grant must not be inside the data directory, which is the runtime's own.",
-            Place.HoldsData => "a file grant must not hold the data directory, which is the runtime's own.",
+            HarnessPlace.Home => "a file grant must not be the home directory; name a folder of its own.",
+            HarnessPlace.Top => "a file grant must not be the top of a drive, a share or the file system; name a folder of its own.",
+            HarnessPlace.HoldsHome => "a file grant must not hold the home directory; name a folder of its own.",
+            HarnessPlace.Data => "a file grant must not be the data directory, which is the runtime's own.",
+            HarnessPlace.InsideData => "a file grant must not be inside the data directory, which is the runtime's own.",
+            HarnessPlace.HoldsData => "a file grant must not hold the data directory, which is the runtime's own.",
             _ => ToHarnessRoot(directory, root),
         };
     }
@@ -157,45 +121,8 @@ public static class HarnessRoot
             : null;
     }
 
-    /// <summary>Where a folder stands to the places no level of the harness may be, each compared where it leads.</summary>
-    private enum Place
-    {
-        Apart,
-        Home,
-        Top,
-        HoldsHome,
-        Data,
-        InsideData,
-        HoldsData,
-    }
-
-    /// <summary>
-    /// Where <paramref name="folder"/> stands, the home's relations first — the home itself, the top of a drive, a folder
-    /// holding the home — and then the data directory's: the data directory itself, a folder inside it, one holding it.
-    /// </summary>
-    private static Place Where(string folder, JasonPaths paths, string home)
-    {
-        var at = Real(folder);
-        var account = Real(home);
-        return Same(at, account) ? Place.Home
-            : Same(at, Normal(Path.GetPathRoot(at) ?? at)) ? Place.Top
-            : Inside(account, at) ? Place.HoldsHome
-            : ToData(at, paths);
-    }
-
-    /// <summary>Where a folder, already where it leads, stands to the data directory alone: the directory itself, a folder inside it, one holding it, or apart.</summary>
-    private static Place ToData(string at, JasonPaths paths)
-    {
-        var data = Real(paths.Root);
-        return Same(at, data) ? Place.Data
-            : Inside(at, data) ? Place.InsideData
-            : Inside(data, at) ? Place.HoldsData
-            : Place.Apart;
-    }
-
-    private static string? Written(HarnessOptions options) => string.IsNullOrWhiteSpace(options.Root) ? null : options.Root;
-
-    private static string Normal(string path) => FolderPaths.Normal(path);
+    /// <summary>Where a folder stands to the places no level of the harness may be, by the rule the root is held to (<see cref="HarnessRootRule.Where"/>).</summary>
+    private static HarnessPlace Where(string folder, JasonPaths paths, string home) => HarnessRootRule.Where(folder, paths.Root, home);
 
     private static string Real(string path) => FolderPaths.Real(path);
 

@@ -20,14 +20,15 @@ public sealed partial class CatalogClaimsTests
     {
         var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
 
-        Assert.Empty(Mentioning("jason skills install"));
+        Assert.Equal(["operating-the-installation"], Mentioning("jason skills install"));
         Assert.Equal(["operating-the-installation"], Mentioning("jason skills update"));
         Assert.Equal(["operating-the-installation", "troubleshooting-jason"], Mentioning("jason status"));
         Assert.Contains(
-            $"None of the {InteractiveCount()} mentions `jason skills install`; `jason skills update` is mentioned only by `operating-the-installation`, `jason status` only by it and `troubleshooting-jason`",
+            $"Of the {InteractiveCount()}, `jason skills install` and `jason skills update` are mentioned only by `operating-the-installation`, `jason status` only by it and `troubleshooting-jason`",
             catalog,
             StringComparison.Ordinal);
         Assert.DoesNotContain("`jason skills update` and `jason status` are mentioned only by `operating-the-installation`", catalog, StringComparison.Ordinal);
+        Assert.DoesNotContain($"None of the {InteractiveCount()} mentions `jason skills install`", catalog, StringComparison.Ordinal);
         Assert.DoesNotContain("mentions `jason skills install` or `jason skills update`", catalog, StringComparison.Ordinal);
         Assert.DoesNotContain("None of the five mentions `jason skills install`, `jason skills update` or `jason status`", catalog, StringComparison.Ordinal);
     }
@@ -46,7 +47,7 @@ public sealed partial class CatalogClaimsTests
 
         foreach (var (page, text, pattern, expected) in new[]
         {
-            ("skills/runtime/README.md", catalog, @"None of the (\w+) mentions", word),
+            ("skills/runtime/README.md", catalog, @"Of the (\w+), `jason skills install`", word),
             ("skills/runtime/README.md", catalog, @"That deploys the (\w+) interactive skills", word),
             ("docs/golden-path.md", golden, @"(\w+) skills, one per moment", char.ToUpperInvariant(word[0]) + word[1..]),
         })

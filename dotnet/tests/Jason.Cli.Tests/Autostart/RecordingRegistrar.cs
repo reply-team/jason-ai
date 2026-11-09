@@ -28,6 +28,9 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
 
     public AutostartState Read() => Refuses is null ? State : throw Refuses;
 
+    /// <summary>Called at each apply, before it is recorded: a test's look at the machine at that moment.</summary>
+    public Action? OnApply { get; set; }
+
     public void Apply(AutostartRegistration registration)
     {
         if (Refuses is not null)
@@ -36,6 +39,7 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
         }
 
         ArgumentNullException.ThrowIfNull(registration);
+        OnApply?.Invoke();
 
         // A machine holds one registration per account: a second `enable` replaces what the first left.
         Applied.Add(registration);
