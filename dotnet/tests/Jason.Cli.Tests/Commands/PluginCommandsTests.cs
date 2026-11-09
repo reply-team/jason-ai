@@ -64,11 +64,14 @@ public class PluginCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(
-            """
+            $"""
             ID             VERSION  KIND          STATUS       OPERATIONS              GRANTS                                             DIGEST
             -------------  -------  ------------  -----------  ----------------------  -------------------------------------------------  ------------
             fake-provider  1.0.0    provider      valid        echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2 | subscriptions 1/2  3f2a9c1b4d5e
             notifier       0.2.0    notification  unavailable  -                       exec 1/1 | http - | env - | subscriptions -        9a8b7c6d5e4f
+
+            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them under Plugins:Grants:fake-provider:Http in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.
+            notifier unavailable: executable_missing — No 'notify' was found.
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
     }
@@ -222,9 +225,10 @@ public class PluginCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(
-            """
+            $"""
             activated snapshot snp_01J4 with 2 plugins
-            notifier unavailable: executable_missing
+            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them under Plugins:Grants:fake-provider:Http in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.
+            notifier unavailable: executable_missing — No 'notify' was found.
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
     }
@@ -263,6 +267,184 @@ public class PluginCommandsTests
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Equal(envelope + Environment.NewLine, cli.Text);
+    }
+
+    /// <summary>
+    /// A plugin the runtime loaded that the settings grant nothing reads <c>valid</c>, and every call it makes would be
+    /// refused: under the table one sentence names what it asks for, the key it is granted under, the settings file this CLI
+    /// uses and the reload, in that order. The table keeps its counts.
+    /// </summary>
+    [Theory]
+    [InlineData("list")]
+    [InlineData("reload")]
+    public async Task Human_mode_says_how_to_grant_a_plugin_granted_nothing(string verb)
+    {
+        using var cli = new CliRun(Serialize(OnePlugin(PluginStatus.Valid, new PluginCapabilitiesDto(Exec("reply", granted: false), null, null))));
+
+        var exit = await cli.RunAsync("plugin", verb, "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(
+            $"reply is loaded and granted nothing. It asks to run: reply. Grant it under Plugins:Grants:reply:Exec in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+            Lines(cli.Text)[^1]);
+        if (verb == "list")
+        {
+            Assert.Contains("exec 0/1", cli.Text, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Granted something is not granted everything: each capability granted nothing of what it asks has its own sentence and
+    /// its own key, in the manifest's order, and one granted part of what it asks (env 1/2 here) has none. A directory is no
+    /// name a manifest can ask for, so files has words of its own.
+    /// </summary>
+    [Theory]
+    [InlineData("list")]
+    [InlineData("reload")]
+    public async Task Human_mode_says_what_a_partly_granted_plugin_is_granted_nothing_of(string verb)
+    {
+        var capabilities = new PluginCapabilitiesDto(
+            Exec("reply", granted: true),
+            new ListCapabilityDto(["api.example.com"], []),
+            new ListCapabilityDto(["FAKE_TOKEN", "OTHER_TOKEN"], ["FAKE_TOKEN"]),
+            new ListCapabilityDto(["read", "journal.append"], []))
+        {
+            Subscriptions = new ListCapabilityDto(["workitem_failed"], []),
+            Files = new FilesCapabilityDto(true, []),
+        };
+        using var cli = new CliRun(Serialize(OnePlugin(PluginStatus.Valid, capabilities)));
+
+        await cli.RunAsync("plugin", verb, "--human");
+
+        var file = cli.Environment.Paths.UserSettingsFile;
+        Assert.Equal(
+            "reply is loaded and granted only part of what it asks for."
+            + $" It asks to reach: api.example.com. Grant it under Plugins:Grants:reply:Http in {file}."
+            + $" It asks to call: read, journal.append. Grant them under Plugins:Grants:reply:Api in {file}."
+            + $" It asks to be told of: workitem_failed. Grant it under Plugins:Grants:reply:Subscriptions in {file}."
+            + $" It asks for directories to write to; grant them under Plugins:Grants:reply:Files in {file}, each an absolute path."
+            + " Then run `jason plugin reload`.",
+            Lines(cli.Text)[^1]);
+    }
+
+    /// <summary>An environment variable is asked for by name, and the last capability named carries the reload.</summary>
+    [Fact]
+    public async Task Human_mode_names_the_variables_a_plugin_asks_to_read()
+    {
+        var capabilities = new PluginCapabilitiesDto(null, null, new ListCapabilityDto(["FAKE_TOKEN"], []));
+        using var cli = new CliRun(Serialize(OnePlugin(PluginStatus.Valid, capabilities)));
+
+        await cli.RunAsync("plugin", "list", "--human");
+
+        Assert.Equal(
+            $"reply is loaded and granted nothing. It asks to read: FAKE_TOKEN. Grant it under Plugins:Grants:reply:Env in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+            Lines(cli.Text)[^1]);
+    }
+
+    /// <summary>A plugin granted all it asks for has nothing said under the table.</summary>
+    [Fact]
+    public async Task Human_mode_says_nothing_more_of_a_plugin_granted_what_it_asks()
+    {
+        using var cli = new CliRun(Serialize(OnePlugin(PluginStatus.Valid, new PluginCapabilitiesDto(Exec("reply", granted: true), null, null))));
+
+        await cli.RunAsync("plugin", "reload", "--human");
+
+        Assert.Equal("activated snapshot snp_01J4 with 1 plugin" + Environment.NewLine, cli.Text);
+    }
+
+    /// <summary>
+    /// A plugin the machine cannot run says why in the runtime's own words: each problem's code with its message, never the
+    /// code alone, since the message is where the repair is.
+    /// </summary>
+    [Theory]
+    [InlineData("list")]
+    [InlineData("reload")]
+    public async Task Human_mode_names_each_problem_of_an_unavailable_plugin_with_its_message(string verb)
+    {
+        var registry = OnePlugin(PluginStatus.Unavailable, new PluginCapabilitiesDto(Exec("reply", granted: false), null, null));
+        var unavailable = registry with
+        {
+            Plugins =
+            [
+                registry.Plugins[0] with
+                {
+                    Problems =
+                    [
+                        new PluginProblemDto("executable_missing", "capabilities.exec.executables[0].name", "'reply' was not found."),
+                        new PluginProblemDto("executable_incompatible", "capabilities.exec.executables[1].name", "'other' is 0.1.0, older than 0.4.0."),
+                    ],
+                },
+            ],
+        };
+        using var cli = new CliRun(Serialize(unavailable));
+
+        await cli.RunAsync("plugin", verb, "--human");
+
+        Assert.Equal(
+            "reply unavailable: executable_missing — 'reply' was not found.; executable_incompatible — 'other' is 0.1.0, older than 0.4.0.",
+            Lines(cli.Text)[^1]);
+        Assert.DoesNotContain("granted nothing", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>What a manifest asks for and what a runtime says of it are text nobody wrote here: shown inert.</summary>
+    [Theory]
+    [InlineData("list")]
+    [InlineData("reload")]
+    public async Task Human_mode_shows_what_a_manifest_asks_for_and_a_problem_s_message_inert(string verb)
+    {
+        const string Hostile = "x\u001b[2J‮y";
+        var registry = OnePlugin(PluginStatus.Valid, new PluginCapabilitiesDto(null, new ListCapabilityDto([Hostile], []), null));
+        var broken = registry.Plugins[0] with
+        {
+            Id = "other",
+            Status = PluginStatus.Unavailable,
+            Problems = [new PluginProblemDto("executable_missing", "capabilities.exec.executables[0].name", Hostile)],
+        };
+        using var cli = new CliRun(Serialize(registry with { Plugins = [registry.Plugins[0], broken] }));
+
+        await cli.RunAsync("plugin", verb, "--human");
+
+        Assert.DoesNotContain('\u001b', cli.Text);
+        Assert.DoesNotContain('‮', cli.Text);
+        Assert.Contains("It asks to reach: x�[2J�y.", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("executable_missing — x�[2J�y", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The help is the verb's contract, and says what it now prints for people under the table.</summary>
+    [Theory]
+    [InlineData("list")]
+    [InlineData("reload")]
+    public async Task The_help_says_what_human_mode_says_of_each_plugin(string verb)
+    {
+        using var cli = new CliRun();
+
+        await cli.RunAsync("plugin", verb, "--help");
+
+        Assert.Contains(
+            "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a valid plugin asks for and is granted nothing of is named with the key that grants it in the settings file this CLI uses.",
+            System.Text.RegularExpressions.Regex.Replace(cli.Text, @"\s+", " "),
+            StringComparison.Ordinal);
+    }
+
+    private static string Serialize(PluginRegistryDto registry) => JsonSerializer.Serialize(registry, JasonJson.Options);
+
+    private static string[] Lines(string text) => text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+
+    private static ExecCapabilityDto Exec(string name, bool granted) =>
+        new([new ExecutableDto(name, "/usr/local/bin/" + name, null, null)], granted ? [name] : []);
+
+    /// <summary>A registry of one plugin, <c>reply</c>, as an activated reload answers it.</summary>
+    private static PluginRegistryDto OnePlugin(PluginStatus status, PluginCapabilitiesDto capabilities)
+    {
+        var registry = TwoPlugins();
+        var reply = registry.Plugins[0] with
+        {
+            Id = "reply",
+            Capabilities = capabilities,
+            Status = status,
+            Problems = [],
+        };
+        return registry with { Snapshot = registry.Snapshot with { PluginCount = 1 }, Plugins = [reply] };
     }
 
     /// <summary>A registry the way a machine with one working plugin and one it cannot run answers.</summary>
