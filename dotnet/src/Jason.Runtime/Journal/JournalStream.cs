@@ -24,7 +24,7 @@ namespace Jason.Runtime.Journal;
 /// Where it starts is a position in the table, not a public id: a line's id is made before the write that stores it
 /// waits for the database, so two lines can become readable in another order than their ids say, and a stream that
 /// followed ids could pass a line over. The table's own key grows in the order the writes are committed, because
-/// SQLite takes them one at a time. With no <see cref="Streams.SinceParameter"/> the stream starts at the last line
+/// SQLite takes them one at a time. With no <see cref="Streams.AfterParameter"/> the stream starts at the last line
 /// written when it opens; with one, a line's public id, it starts after that line in the order of the table. So a program
 /// that resumes from the newest id <c>journal.list</c> showed it may be sent a line it already has once more, one
 /// committed after that line under an older id, and is never short of one: it drops a repeat by its id.
@@ -40,7 +40,7 @@ public static class JournalStream
     /// <summary>The most lines one read takes; a read that fills it is followed at once by the next.</summary>
     public const int BatchSize = 200;
 
-    /// <summary>The prefix of a journal line's public id, the form <see cref="Streams.SinceParameter"/> takes.</summary>
+    /// <summary>The prefix of a journal line's public id, the form <see cref="Streams.AfterParameter"/> takes.</summary>
     private const string JournalIdPrefix = "jrn";
 
     /// <summary>The one word a stream closed for a revoked UI token gives as its reason.</summary>
@@ -48,6 +48,13 @@ public static class JournalStream
 
     /// <summary>How long the runtime waits for the other side to answer its close before it lets the connection go.</summary>
     private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// The longest one frame may wait for the other side to take it. A reader that has stopped taking frames fills the
+    /// connection's buffers and the send waits on them; past this the reader is cut, without a close, because it
+    /// would not read one either.
+    /// </summary>
+    public static readonly TimeSpan SendWait = TimeSpan.FromSeconds(30);
 
     public static async Task HandleAsync(HttpContext context, IServiceScopeFactory scopes, IHostApplicationLifetime lifetime)
     {
@@ -66,7 +73,7 @@ public static class JournalStream
         long after;
         try
         {
-            after = await StartAsync(scopes, context.Request.Query[Streams.SinceParameter].ToString(), context.RequestAborted).ConfigureAwait(false);
+            after = await StartAsync(scopes, context.Request.Query[Streams.AfterParameter].ToString(), context.RequestAborted).ConfigureAwait(false);
         }
         catch (DomainException ex)
         {
@@ -83,14 +90,17 @@ public static class JournalStream
 
         try
         {
-            var (status, description) = await SendAsync(socket, scopes, after, bearer, tokens, lifetime.ApplicationStopping, peerClosed.Token, ending.Token, context.RequestAborted).ConfigureAwait(false);
-            if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+            // A stream whose last send was cut has no close to give: the finally lets the connection go.
+            if (await SendAsync(socket, scopes, after, bearer, tokens, lifetime.ApplicationStopping, peerClosed.Token, ending.Token).ConfigureAwait(false) is { } close)
             {
-                using var closing = new CancellationTokenSource(CloseWait);
-                await socket.CloseOutputAsync(status, description, closing.Token).ConfigureAwait(false);
-            }
+                if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+                {
+                    using var closing = new CancellationTokenSource(CloseWait);
+                    await socket.CloseOutputAsync(close.Status, close.Description, closing.Token).ConfigureAwait(false);
+                }
 
-            await Task.WhenAny(receiving, Task.Delay(CloseWait, CancellationToken.None)).ConfigureAwait(false);
+                await Task.WhenAny(receiving, Task.Delay(CloseWait, CancellationToken.None)).ConfigureAwait(false);
+            }
         }
         catch (Exception ex) when (ex is WebSocketException or OperationCanceledException)
         {
@@ -108,29 +118,32 @@ public static class JournalStream
     }
 
     /// <summary>
-    /// The key of the last line the stream does not send: the line <see cref="Streams.SinceParameter"/> names by its
+    /// The key of the last line the stream does not send: the line <see cref="Streams.AfterParameter"/> names by its
     /// public id, or the newest line now. The one place the parameter is read.
     /// </summary>
-    private static async Task<long> StartAsync(IServiceScopeFactory scopes, string since, CancellationToken cancellationToken)
+    private static async Task<long> StartAsync(IServiceScopeFactory scopes, string afterId, CancellationToken cancellationToken)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
-        if (string.IsNullOrEmpty(since))
+        if (string.IsNullOrEmpty(afterId))
         {
             return await db.Journal.AsNoTracking().MaxAsync(e => (long?)e.Id, cancellationToken).ConfigureAwait(false) ?? 0;
         }
 
-        if (!PublicId.IsWellFormed(JournalIdPrefix, since))
+        if (!PublicId.IsWellFormed(JournalIdPrefix, afterId))
         {
-            throw new ValidationException([new ErrorDetail(Streams.SinceParameter, "invalid", $"{Streams.SinceParameter} must be the id of a journal line, {JournalIdPrefix}_ and 26 characters.")]);
+            throw new ValidationException([new ErrorDetail(Streams.AfterParameter, "invalid", $"{Streams.AfterParameter} must be the id of a journal line, {JournalIdPrefix}_ and 26 characters.")]);
         }
 
-        return await db.Journal.AsNoTracking().Where(e => e.PublicId == since).Select(e => (long?)e.Id).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false)
-            ?? throw new ValidationException([new ErrorDetail(Streams.SinceParameter, "unknown", $"{Streams.SinceParameter} names no journal line.")]);
+        return await db.Journal.AsNoTracking().Where(e => e.PublicId == afterId).Select(e => (long?)e.Id).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new ValidationException([new ErrorDetail(Streams.AfterParameter, "unknown", $"{Streams.AfterParameter} names no journal line.")]);
     }
 
-    /// <summary>Sends every line after <paramref name="after"/> until the stream has to end, and answers how it ends.</summary>
-    private static async Task<(WebSocketCloseStatus Status, string Description)> SendAsync(
+    /// <summary>
+    /// Sends every line after <paramref name="after"/> until the stream has to end, and answers how it ends: the close
+    /// to send, or none when a send was cut.
+    /// </summary>
+    private static async Task<(WebSocketCloseStatus Status, string Description)?> SendAsync(
         WebSocket socket,
         IServiceScopeFactory scopes,
         long after,
@@ -138,11 +151,11 @@ public static class JournalStream
         UiTokenStore? tokens,
         CancellationToken stopping,
         CancellationToken peerClosed,
-        CancellationToken ending,
-        CancellationToken aborted)
+        CancellationToken ending)
     {
-        // Only the wait between two reads ends early on a stop or the other side's close; a read and a send in flight
-        // finish, because a send cancelled part way leaves no connection to send the close on.
+        // The wait, the read and every send end on a stop, on the other side's close and on the connection's end, so
+        // an open stream never holds a stop. A read or a wait cut short is said at the top of the loop. A send cut short
+        // leaves a frame half written, after which no close can be sent, and the other side was not reading anyway.
         while (true)
         {
             if (peerClosed.IsCancellationRequested)
@@ -162,22 +175,36 @@ public static class JournalStream
 
             IReadOnlyList<JournalEntryDto> lines;
             long last;
-            using (var scope = scopes.CreateScope())
+            try
             {
+                using var scope = scopes.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
                 var fetched = await db.Journal.AsNoTracking()
                     .Where(e => e.Id > after)
                     .OrderBy(e => e.Id)
                     .Take(BatchSize)
-                    .ToListAsync(aborted)
+                    .ToListAsync(ending)
                     .ConfigureAwait(false);
                 last = fetched.Count == 0 ? after : fetched[^1].Id;
-                lines = fetched.Count == 0 ? [] : await JournalEntries.ToDtosAsync(db, fetched, aborted).ConfigureAwait(false);
+                lines = fetched.Count == 0 ? [] : await JournalEntries.ToDtosAsync(db, fetched, ending).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stopping.IsCancellationRequested || peerClosed.IsCancellationRequested)
+            {
+                continue;
             }
 
             foreach (var line in lines)
             {
-                await socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(line, JasonJson.Options), WebSocketMessageType.Text, endOfMessage: true, aborted).ConfigureAwait(false);
+                using var sending = CancellationTokenSource.CreateLinkedTokenSource(ending);
+                sending.CancelAfter(SendWait);
+                try
+                {
+                    await socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(line, JasonJson.Options), WebSocketMessageType.Text, endOfMessage: true, sending.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (sending.IsCancellationRequested)
+                {
+                    return null;
+                }
             }
 
             after = last;

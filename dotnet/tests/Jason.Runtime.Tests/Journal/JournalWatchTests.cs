@@ -41,21 +41,21 @@ public class JournalWatchTests
     }
 
     [Fact]
-    public async Task A_watch_given_since_starts_after_the_line_it_names_and_renders_it_under_human()
+    public async Task A_watch_given_after_starts_after_the_line_it_names_and_renders_it_under_human()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var campaign = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Resumed" }, Ct);
         var named = await AppendAsync(api, campaign, "named");
-        var after = await AppendAsync(api, campaign, "after");
+        var next = await AppendAsync(api, campaign, "next");
 
-        using (var json = Watch.Start(api, "journal", "watch", "--since", named.Id))
+        using (var json = Watch.Start(api, "journal", "watch", "--after", named.Id))
         {
             var first = await json.LineAsync(_ => true);
-            Assert.Equal(after.Id, (string?)JsonNode.Parse(first)!["id"]);
+            Assert.Equal(next.Id, (string?)JsonNode.Parse(first)!["id"]);
             Assert.Equal(ExitCodes.Success, (await json.InterruptAsync()).Exit);
         }
 
-        using var human = Watch.Start(api, "journal", "watch", "--since", named.Id, "--human");
+        using var human = Watch.Start(api, "journal", "watch", "--after", named.Id, "--human");
         var listed = (await api.PostAsync(Operations.JournalList, new { Limit = 1 }, Ct)).Body;
         var line = JsonNode.Parse(listed)!["items"]![0]!.ToJsonString();
         var rendered = JournalRenderers.Entry(line)!;
@@ -66,15 +66,15 @@ public class JournalWatchTests
     }
 
     [Fact]
-    public async Task A_since_the_runtime_refuses_is_exit_1_with_the_runtime_s_answer()
+    public async Task An_after_the_runtime_refuses_is_exit_1_with_the_runtime_s_answer()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
 
-        var (exit, output, _) = await Watch.RunAsync(api, "journal", "watch", "--since", "jrn_01K7QN00000000000000000000");
+        var (exit, output, _) = await Watch.RunAsync(api, "journal", "watch", "--after", "jrn_01K7QN00000000000000000000");
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Equal("validation_failed", (string?)JsonNode.Parse(output)!["error"]!["code"]);
-        Assert.Equal(Streams.SinceParameter, (string?)JsonNode.Parse(output)!["error"]!["details"]![0]!["field"]);
+        Assert.Equal(Streams.AfterParameter, (string?)JsonNode.Parse(output)!["error"]!["details"]![0]!["field"]);
         Assert.Equal("unknown", (string?)JsonNode.Parse(output)!["error"]!["details"]![0]!["code"]);
     }
 

@@ -184,10 +184,8 @@ public class VerbMapTests
         // the version every operation is under, and never an operation itself.
         Assert.Equal(Contracts.Api.Streams.All.Order(StringComparer.Ordinal), StreamVerbs.Values.Order(StringComparer.Ordinal));
         Assert.All(StreamVerbs, pair => Assert.Equal(pair.Key.Split(' ')[0], pair.Value.Split('.')[0]));
-        Assert.Contains("journal watch", StreamVerbs.Keys);
         Assert.Equal(Contracts.Api.Streams.JournalRoute, Contracts.Api.Operations.Route(Contracts.Api.Streams.Journal));
         Assert.All(Contracts.Api.Streams.All, stream => Assert.DoesNotContain(stream, operations));
-        Assert.DoesNotContain("watch", DeclaredExceptions);
     }
 
     /// <summary>

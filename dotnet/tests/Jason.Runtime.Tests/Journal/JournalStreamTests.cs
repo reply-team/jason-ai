@@ -15,8 +15,8 @@ namespace Jason.Runtime.Tests.Journal;
 
 /// <summary>
 /// <c>GET /v1/journal.stream</c>, opened the way a program and a page open it: every line written after it opens arrives,
-/// oldest first, one text frame each in the shape <c>journal.list</c> answers a line; a line's id starts it after that
-/// line, in the order the lines were committed; the bearer comes in the header, or as a subprotocol on this route alone,
+/// oldest first, one text frame each in the shape <c>journal.list</c> answers a line; a line's id, as <c>after</c>, starts
+/// it after that line, in the order the lines were committed; the bearer comes in the header, or as a subprotocol on this route alone,
 /// and a token that is revoked or unknown is refused at the upgrade; and the stream ends when the UI token it was opened
 /// with is revoked and when the runtime stops.
 /// </summary>
@@ -48,21 +48,20 @@ public class JournalStreamTests
     }
 
     [Fact]
-    public async Task The_stream_starts_after_the_line_since_names()
+    public async Task The_stream_starts_after_the_line_after_names()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var campaign = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Resumed" }, Ct);
-        var older = await AppendAsync(api, campaign, "older");
+        await AppendAsync(api, campaign, "older");
         var named = await AppendAsync(api, campaign, "named");
-        var after = await AppendAsync(api, campaign, "after");
+        var next = await AppendAsync(api, campaign, "next");
 
-        using var socket = await OpenAsync(api, header: api.Runtime.Token, since: named.Id);
-        Assert.Equal(after.Id, (string?)(await ReadAsync(socket))["id"]);
+        using var socket = await OpenAsync(api, header: api.Runtime.Token, after: named.Id);
+        Assert.Equal(next.Id, (string?)(await ReadAsync(socket))["id"]);
 
-        // Neither the line since names nor one before it comes after it: the next frame is the next line written.
+        // Neither the line after names nor one before it comes after it: the next frame is the next line written.
         var later = await AppendAsync(api, campaign, "later");
         Assert.Equal(later.Id, (string?)(await ReadAsync(socket))["id"]);
-        Assert.NotEqual(older.Id, later.Id);
     }
 
     /// <summary>
@@ -83,7 +82,7 @@ public class JournalStreamTests
         var listed = await api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Limit = 2 }, Ct);
         Assert.Equal([newerLooking, olderLooking], listed.Items.Select(line => line.Id));
 
-        using var socket = await OpenAsync(api, header: api.Runtime.Token, since: listed.Items[0].Id);
+        using var socket = await OpenAsync(api, header: api.Runtime.Token, after: listed.Items[0].Id);
         Assert.Equal(olderLooking, (string?)(await ReadAsync(socket))["id"]);
         var later = await AppendAsync(api, campaign, "later");
         Assert.Equal(later.Id, (string?)(await ReadAsync(socket))["id"]);
@@ -93,18 +92,21 @@ public class JournalStreamTests
     [InlineData("not an id!", "invalid")]
     [InlineData("jrn_01K7QN00000000000000000000", "unknown")]
     [InlineData("anJuXzAxSzdRTjAwMDAwMDAwMDAwMDAwMDAwMDAw", "invalid")]
-    public async Task A_since_that_names_no_line_is_refused_before_the_socket_opens_in_the_api_s_error_shape(string since, string code)
+    public async Task An_after_that_names_no_line_is_refused_before_the_socket_opens_in_the_api_s_error_shape(string after, string code)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
 
-        var (status, body) = await UpgradeAsync(api, since);
+        var (status, body) = await UpgradeAsync(api, after);
 
         Assert.Equal(HttpStatusCode.BadRequest, status);
         var error = JsonSerializer.Deserialize<ErrorResponse>(body, JasonJson.Options)!.Error;
         Assert.Equal("validation_failed", error.Code);
         var detail = Assert.Single(error.Details!);
-        Assert.Equal(Streams.SinceParameter, detail.Field);
+        Assert.Equal(Streams.AfterParameter, detail.Field);
         Assert.Equal(code, detail.Code);
+
+        // The answer says what the value must be and never repeats it.
+        Assert.DoesNotContain(after, body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -227,6 +229,7 @@ public class JournalStreamTests
     }
 
     [Fact]
+    [Critical(Family.S5, "the runtime's stop closes an open stream")]
     public async Task The_runtime_s_stop_closes_an_open_stream_as_going_away_and_is_not_held_by_it()
     {
         var api = await RuntimeApiFixture.StartAsync(Ct);
@@ -247,8 +250,40 @@ public class JournalStreamTests
         }
     }
 
-    internal static Uri Address(RuntimeApiFixture api, string? since = null) =>
-        new($"ws://127.0.0.1:{api.Runtime.BaseUrl.Port}{Streams.JournalRoute}{(since is null ? string.Empty : $"?{Streams.SinceParameter}={Uri.EscapeDataString(since)}")}");
+    /// <summary>
+    /// A reader that has stopped taking frames, a <c>jason journal watch | less</c> left paused on a busy journal: the
+    /// lines fill the connection's buffers and the runtime's send waits on them. The stop cuts that send rather than
+    /// wait out the host's shutdown timeout, fifteen seconds here, and lets the connection go without a close, which
+    /// nobody would read.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S5, "a reader that stops taking frames never holds the stop")]
+    public async Task A_reader_that_stops_taking_frames_does_not_hold_the_runtime_s_stop()
+    {
+        var api = await RuntimeApiFixture.StartAsync(Ct);
+        await using (api)
+        {
+            using var socket = await OpenAsync(api, header: api.Runtime.Token);
+
+            // Far more than the loopback buffers and the server's own hold, which the stream fills and then waits on.
+            var large = new string('x', 512 * 1024);
+            for (var i = 0; i < 128; i++)
+            {
+                await CommitAsync(api, PublicId.New("jrn"), $"large_{i}", large);
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(3), Ct);
+
+            var stopping = Stopwatch.StartNew();
+            await api.Runtime.StopAsync();
+            stopping.Stop();
+
+            Assert.True(stopping.Elapsed < TimeSpan.FromSeconds(10), $"The stop took {stopping.Elapsed.TotalSeconds:0.0} s with a reader that takes nothing.");
+        }
+    }
+
+    internal static Uri Address(RuntimeApiFixture api, string? after = null) =>
+        new($"ws://127.0.0.1:{api.Runtime.BaseUrl.Port}{Streams.JournalRoute}{(after is null ? string.Empty : $"?{Streams.AfterParameter}={Uri.EscapeDataString(after)}")}");
 
     internal static ClientWebSocket Client(string? header = null, string? subprotocolBearer = null)
     {
@@ -267,10 +302,10 @@ public class JournalStreamTests
         return socket;
     }
 
-    internal static async Task<ClientWebSocket> OpenAsync(RuntimeApiFixture api, string? header = null, string? subprotocolBearer = null, string? since = null)
+    internal static async Task<ClientWebSocket> OpenAsync(RuntimeApiFixture api, string? header = null, string? subprotocolBearer = null, string? after = null)
     {
         var socket = Client(header, subprotocolBearer);
-        await socket.ConnectAsync(Address(api, since), Ct);
+        await socket.ConnectAsync(Address(api, after), Ct);
         return socket;
     }
 
@@ -281,19 +316,19 @@ public class JournalStreamTests
             Ct);
 
     /// <summary>A journal line committed as it stands, under an id the test chose, the way the journal's writer stores one.</summary>
-    private static async Task CommitAsync(RuntimeApiFixture api, string id, string key)
+    private static async Task CommitAsync(RuntimeApiFixture api, string id, string key, string? reason = null)
     {
         using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
-        db.Journal.Add(new JournalEntry { PublicId = id, Ts = DateTime.UtcNow, ActorType = ActorType.Role, ActorId = "planner", Kind = "plan_revision", Key = key });
+        db.Journal.Add(new JournalEntry { PublicId = id, Ts = DateTime.UtcNow, ActorType = ActorType.Role, ActorId = "planner", Kind = "plan_revision", Key = key, Reason = reason });
         await db.SaveChangesAsync(Ct);
     }
 
     /// <summary>An upgrade made by hand, so a refusal's status and body are both read.</summary>
-    private static async Task<(HttpStatusCode Status, string Body)> UpgradeAsync(RuntimeApiFixture api, string since)
+    private static async Task<(HttpStatusCode Status, string Body)> UpgradeAsync(RuntimeApiFixture api, string after)
     {
         using var http = new HttpClient { BaseAddress = api.Runtime.BaseUrl };
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{Streams.JournalRoute}?{Streams.SinceParameter}={Uri.EscapeDataString(since)}")
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{Streams.JournalRoute}?{Streams.AfterParameter}={Uri.EscapeDataString(after)}")
         {
             Version = HttpVersion.Version11,
             VersionPolicy = HttpVersionPolicy.RequestVersionExact,

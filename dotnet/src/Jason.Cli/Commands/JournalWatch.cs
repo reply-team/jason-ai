@@ -25,25 +25,26 @@ public static class JournalWatch
 
         var command = new Command(
             "watch",
-            "Print each chronicle entry as it is written, oldest first, until interrupted. Exit 0 on an interrupt, 3 when the runtime cannot be reached, refuses the token or ends the stream.");
-        var since = new Option<string?>(Options.Since)
+            "Print each chronicle entry as it is written, oldest first, until interrupted. Exit 0 on an interrupt, 1 when the runtime refuses the request, an --after that names no line among them, 3 when the runtime cannot be reached, refuses the token or ends the stream.");
+        var after = new Option<string?>(Options.After)
         {
+            HelpName = "id",
             Description = "The id of the last line you have (jrn_...): the watch starts after it, and may print a line you already have once more, never miss one. Without it, the entries written from now on.",
         };
         var human = VerbOptions.Human();
-        command.Options.Add(since);
+        command.Options.Add(after);
         command.Options.Add(human);
 
         command.SetAction((parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
-            return WatchAsync(env, parseResult.GetValue(since), parseResult.GetValue(human), cancellationToken);
+            return WatchAsync(env, parseResult.GetValue(after), parseResult.GetValue(human), cancellationToken);
         });
 
         return command;
     }
 
-    private static async Task<int> WatchAsync(CliEnvironment env, string? since, bool human, CancellationToken cancellationToken)
+    private static async Task<int> WatchAsync(CliEnvironment env, string? after, bool human, CancellationToken cancellationToken)
     {
         var reader = new DescriptorReader(env.Paths);
         var look = reader.Look();
@@ -52,9 +53,9 @@ public static class JournalWatch
             return Fail(env, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied);
         }
 
-        var path = string.IsNullOrEmpty(since)
+        var path = string.IsNullOrEmpty(after)
             ? Streams.JournalRoute
-            : $"{Streams.JournalRoute}?{Streams.SinceParameter}={Uri.EscapeDataString(since)}";
+            : $"{Streams.JournalRoute}?{Streams.AfterParameter}={Uri.EscapeDataString(after)}";
 
         using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler);
         RuntimeStream stream;
@@ -166,6 +167,6 @@ public static class JournalWatch
 
     private static class Options
     {
-        public const string Since = "--since";
+        public const string After = "--after";
     }
 }

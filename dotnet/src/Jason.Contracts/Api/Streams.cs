@@ -27,7 +27,7 @@ public static class Streams
     /// The query parameter that names where the stream starts: a journal line's id, <c>jrn_</c> and its ULID, the
     /// <c>id</c> every frame and every <c>journal.list</c> line carries; the stream sends the lines committed after it.
     /// </summary>
-    public const string SinceParameter = "since";
+    public const string AfterParameter = "after";
 
     /// <summary>Every stream the runtime has, by name, as <see cref="Operations"/> lists the operations.</summary>
     public static IReadOnlyList<string> All { get; } = [Journal];
