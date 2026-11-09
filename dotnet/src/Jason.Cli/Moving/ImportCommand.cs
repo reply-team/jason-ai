@@ -745,6 +745,15 @@ public static class ImportCommand
                     string.Create(CultureInfo.InvariantCulture, $"The {ExportManifest.FileName} in {file} is not the format {ExportManifest.CurrentFormat} this Jason reads. Nothing was written."));
             }
 
+            // Export writes the version of the build that ran it, which always parses; one that does not is damage or a hand
+            // edit, and a version that cannot be compared cannot be held to this one.
+            if (!SemanticVersion.TryParse(manifest.JasonVersion, out _))
+            {
+                throw new ImportRefusal(
+                    CliErrors.ImportUnreadable,
+                    $"The {ExportManifest.FileName} in {file} gives jason_version '{manifest.JasonVersion}', which is no version a Jason writes, so this Jason cannot tell whether it can read what the archive holds. Nothing was written.");
+            }
+
             return manifest;
         }
 

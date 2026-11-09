@@ -242,6 +242,49 @@ public sealed class ImportCommandTests
         Assert.Contains("Install Jason 0.34.0 or later first", error.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("banana")]
+    [InlineData("0.33")]
+    [InlineData("v0.33.0")]
+    [InlineData("")]
+    public async Task An_archive_whose_version_does_not_parse_is_unreadable_and_nothing_is_written(string version)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Version = version }.Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "import_unreadable");
+        Assert.Contains("jason_version", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("0.33.0-rc.1")]
+    [InlineData("0.33.0+abc")]
+    public async Task An_archive_of_this_version_s_candidate_or_build_is_placed(string version)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Version = version }.Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.Success, exit);
+    }
+
+    [Fact]
+    public async Task An_archive_a_newer_candidate_wrote_is_refused_as_newer()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Version = "0.34.0-rc.1" }.Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Refused(to, exit, "import_newer_version");
+    }
+
     [Fact]
     public async Task An_archive_an_older_Jason_wrote_is_placed()
     {
