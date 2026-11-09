@@ -21,7 +21,8 @@ namespace Jason.App.Tests.EndToEnd;
 /// a line a subscriber's chain is handed and the envelope that chain hands on, after its handler read the campaign back
 /// through its door, and a value of a plugin's configuration that the provider's refusal quotes. None of them may appear
 /// anywhere in the log, whole or in part, and neither may a bearer: the run
-/// token by its value, the door's by its shape.
+/// token by its value, offered once as the subprotocol a page opens the journal's stream with, and the door's by its
+/// shape.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -150,6 +151,18 @@ public class LogInvariantTests
         var descriptor = new Jason.Cli.Discovery.DescriptorReader(it.Paths).Read();
         Assert.NotNull(descriptor);
         sentinels["the run token"] = descriptor.Token;
+
+        // The journal's stream, opened the way a page opens it: the bearer offered as a subprotocol, a header of the
+        // upgrade the request line is written for.
+        using (var stream = new System.Net.WebSockets.ClientWebSocket())
+        {
+            stream.Options.AddSubProtocol(Jason.Contracts.Api.Streams.JournalSubProtocol);
+            stream.Options.AddSubProtocol(Jason.Contracts.Api.Streams.BearerSubProtocolPrefix + descriptor.Token);
+            var origin = new Uri(descriptor.BaseUrl);
+            await stream.ConnectAsync(new Uri($"ws://{origin.Authority}{Jason.Contracts.Api.Streams.JournalRoute}"), Ct);
+            Assert.Equal(Jason.Contracts.Api.Streams.JournalSubProtocol, stream.SubProtocol);
+            await stream.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, Ct);
+        }
 
         // The candidate goes, and the reload that activates what is left is given a reason somebody typed.
         Directory.Delete(unloadable, recursive: true);
@@ -381,6 +394,12 @@ public class LogInvariantTests
                 && (string?)line["CampaignId"] == campaign);
         AssertSeen(events, "a line of the attempt's scope", line => (string?)line["CampaignId"] == campaign && line["@mt"]?.GetValue<string>().StartsWith("Plugin", StringComparison.Ordinal) == true);
         AssertSeen(events, "a request line", line => line["RequestPath"] is not null && line["StatusCode"] is not null);
+        AssertSeen(
+            events,
+            "the journal stream's upgrade",
+            line => (string?)line["RequestPath"] == Jason.Contracts.Api.Streams.JournalRoute
+                && (string?)line["RequestMethod"] == "GET"
+                && (int?)line["StatusCode"] == 101);
         AssertSeen(
             events,
             "the subscription handler's end",
