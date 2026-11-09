@@ -10,7 +10,8 @@ the machine.
 
 ## 1. What you need
 
-**From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
+Jason is used from a release: nothing in its repository is built, cloned or tested to use it, which is for changing
+Jason (§3). **From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
 script ends by teaching it its role skills (§4). Teaching it is a fetch of its own: a release takes its skills from
 the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as. A machine
 without the network teaches it from a checkout instead, with `--source`, which also takes a git repository at a ref;
@@ -261,6 +262,8 @@ have done their work: you may delete those three — only those — with `Remove
 ---
 
 ## 3. Build from source
+
+This section is for people changing Jason; to use Jason, skip it: section 2 installs a release.
 
 A build of the executable from the runtime's repository, rather than a release (§2), needs two things from this page:
 

@@ -4,7 +4,8 @@ Jason is a local-first, vendor-neutral SDR domain runtime: a .NET runtime proces
 campaign state and exposes a loopback Runtime API, a CLI that is a pure client of that API,
 JavaScript plugins that execute provider operations in a separate plugin-host process, and skills
 that teach AI agents the job. `docs/architecture.md` is the design authority for anything not
-covered here.
+covered here. Jason is used from a release; nothing here is built, cloned or tested to use it: this
+repository is for changing Jason.
 
 ## Layout
 

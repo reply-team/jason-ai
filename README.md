@@ -29,6 +29,9 @@ plans each person's line of contact, writes, sends through your provider, reads 
 while you're in meetings. Your agent does the thinking, Jason keeps the memory, and every message waits for your
 approval.
 
+**You use Jason from a release.** Nothing in this repository is built, cloned or tested to use it; the source is here
+for changing Jason.
+
 > **Plugins are plain JavaScript.** A plugin is a small JavaScript package the runtime runs in its own embedded engine,
 > with no Node and no build step, so one package runs the same on macOS, Linux and Windows. The runtime is C#, chosen
 > for cross-platform builds, stability and speed; its code is fully open. [Why](#plugins-are-javascript).

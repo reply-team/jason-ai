@@ -1,6 +1,7 @@
 # Developing Jason
 
-For people working on Jason itself: building and running this checkout, the commands, and how a change lands.
+For people working on Jason itself: building and running this checkout, the commands, and how a change lands. To use
+Jason, install a release instead ([docs/INSTALL.md](docs/INSTALL.md)): nothing here is built, cloned or tested for that.
 
 You need the .NET SDK named in `global.json`, Node 24 for the UI, and git.
 
