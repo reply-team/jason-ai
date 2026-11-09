@@ -111,7 +111,13 @@ public class SkillsFromTheReleaseTests
 
         Assert.True(install.Exit == ExitCodes.Success, install.Error);
         Assert.Equal([$"/{ReleaseAssets.Checksums}", $"/{ReleaseAssets.Skills}"], first.Requested);
-        Assert.All(Deployments(dir), deployment => Assert.Equal(Served, deployment.Source));
+        Assert.All(Deployments(dir), deployment =>
+        {
+            Assert.Equal(Served, deployment.Source);
+            Assert.Equal("v1.2.3", deployment.Ref);
+            Assert.False(deployment.RefOverridden);
+            Assert.Equal(SkillsPackage.Commit, deployment.Commit);
+        });
 
         var later = Release("1.2.4").ServedFromADirectory();
         var update = await AtBuildAsync(dir, "1.2.4", later, ["skills", "update", "--root", Harness(dir)]);
@@ -146,6 +152,122 @@ public class SkillsFromTheReleaseTests
         {
             Assert.Equal(SkillsSource.DefaultSource, deployment.Source);
             Assert.Equal("v1.2.4", deployment.Ref);
+        });
+    }
+
+    /// <summary>
+    /// A record of the earlier default is the default's, so on a release build <c>--feed</c> reads its release there too,
+    /// and the record is written with the default it has now; no git is run.
+    /// </summary>
+    [Fact]
+    public async Task An_update_with_a_feed_reads_a_record_of_the_earlier_default_there_and_records_the_default()
+    {
+        using var dir = new TempPaths();
+        await RecordedEarlierAsync(dir, overridden: false);
+        var later = Release("1.2.4").ServedFromADirectory();
+        var git = Unreachable();
+
+        var update = await AtBuildAsync(dir, "1.2.4", later, ["skills", "update", "--feed", Served, "--root", Harness(dir)], git);
+
+        Assert.True(update.Exit == ExitCodes.Success, update.Error);
+        Assert.Empty(git.Requested);
+        Assert.Contains($"/{ReleaseAssets.Skills}", later.Requested);
+        Assert.All(later.Hosts, host => Assert.Equal("127.0.0.1", host));
+        Assert.All(Deployments(dir), deployment =>
+        {
+            Assert.Equal(SkillsSource.DefaultSource, deployment.Source);
+            Assert.Equal("v1.2.4", deployment.Ref);
+            Assert.False(deployment.RefOverridden);
+        });
+    }
+
+    /// <summary>
+    /// A deployment from a feed of its own reads that feed, and <c>--feed</c> on an update is not it: the run's feed is
+    /// read for the default's deployments only, and the record keeps its own.
+    /// </summary>
+    [Fact]
+    public async Task An_update_with_a_feed_reads_a_record_of_another_feed_where_it_says()
+    {
+        using var dir = new TempPaths();
+        Assert.Equal(ExitCodes.Success, (await AtBuildAsync(dir, "1.2.3", Release("1.2.3").ServedFromADirectory(), ["skills", "install", "--feed", Served, "--root", Harness(dir)])).Exit);
+        var later = Release("1.2.4").ServedFromADirectory();
+
+        var update = await AtBuildAsync(dir, "1.2.4", later, ["skills", "update", "--feed", Mirror, "--root", Harness(dir)]);
+
+        Assert.True(update.Exit == ExitCodes.Success, update.Error);
+        Assert.Contains($"/{ReleaseAssets.Skills}", later.Requested);
+        Assert.All(later.Hosts, host => Assert.Equal("127.0.0.1", host));
+        Assert.All(Deployments(dir), deployment =>
+        {
+            Assert.Equal(Served, deployment.Source);
+            Assert.Equal("v1.2.4", deployment.Ref);
+        });
+    }
+
+    /// <summary>A deployment from a directory is read where it stands, and <c>--feed</c> on an update asks no feed for it.</summary>
+    [Fact]
+    public async Task An_update_with_a_feed_reads_a_directory_record_where_it_stands()
+    {
+        using var dir = new TempPaths();
+        var checkout = Path.Combine(dir.Paths.Root, "checkout");
+        foreach (var (name, text) in SkillsPackage.Files("v1.2.3"))
+        {
+            var path = Path.Combine(checkout, Path.Combine(name.Split('/')));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, text, Ct);
+        }
+
+        Assert.Equal(ExitCodes.Success, (await AtBuildAsync(dir, "1.2.3", Release("1.2.3"), ["skills", "install", "--source", checkout, "--root", Harness(dir)])).Exit);
+        var later = Release("1.2.4").ServedFromADirectory();
+
+        var update = await AtBuildAsync(dir, "1.2.4", later, ["skills", "update", "--feed", Served, "--root", Harness(dir)]);
+
+        Assert.True(update.Exit == ExitCodes.Success, update.Error);
+        Assert.Empty(later.Requested);
+        Assert.All(Deployments(dir), deployment => Assert.Equal(Path.GetFullPath(checkout), deployment.Source));
+    }
+
+    /// <summary>
+    /// A deployment from a git repository is cloned from it, at a ref somebody chose here, and <c>--feed</c> on an update
+    /// asks no feed for it.
+    /// </summary>
+    [Fact]
+    public async Task An_update_with_a_feed_reads_a_git_record_from_its_repository()
+    {
+        using var dir = new TempPaths();
+        await RecordedEarlierAsync(dir, overridden: true);
+        var later = Release("1.2.4").ServedFromADirectory();
+        var git = Unreachable();
+
+        var update = await AtBuildAsync(dir, "1.2.4", later, ["skills", "update", "--feed", Served, "--root", Harness(dir)], git);
+
+        Assert.Equal(ExitCodes.ApiError, update.Exit);
+        Assert.Empty(later.Requested);
+        Assert.Contains(git.Requested, request => request.Arguments.Contains(SkillsSource.EarlierDefaultSource) && request.Arguments.Contains("v1.2.3"));
+        Assert.All(Deployments(dir), deployment => Assert.Equal(SkillsSource.EarlierDefaultSource, deployment.Source));
+    }
+
+    /// <summary>
+    /// A development build's own tag is not published, so an update there keeps a deployment from the default as it is
+    /// and asks the release at the record's ref, where its packs are.
+    /// </summary>
+    [Fact]
+    public async Task On_a_development_build_a_record_of_the_default_keeps_its_ref_and_reads_that_release()
+    {
+        using var dir = new TempPaths();
+        Assert.Equal(ExitCodes.Success, (await AtBuildAsync(dir, "1.2.3", Release("1.2.3"), ["skills", "install", "--root", Harness(dir)])).Exit);
+        Directory.Delete(dir.Paths.SkillsStagedSourcesDirectory, recursive: true);
+        var release = Release("1.2.3");
+
+        var update = await AtBuildAsync(dir, "1.2.4-dev", release, ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.True(update.Exit == ExitCodes.Success, update.Error);
+        Assert.Contains($"/reply-team/jason-ai/releases/download/v1.2.3/{ReleaseAssets.Skills}", release.Requested);
+        Assert.All(Deployments(dir), deployment =>
+        {
+            Assert.Equal(SkillsSource.DefaultSource, deployment.Source);
+            Assert.Equal("v1.2.3", deployment.Ref);
+            Assert.False(deployment.RefOverridden);
         });
     }
 
@@ -274,6 +396,9 @@ public class SkillsFromTheReleaseTests
 
     /// <summary>A release served on this machine from a plain directory, as CI and a mirror serve one.</summary>
     private const string Served = "http://127.0.0.1:8099/manifest.json";
+
+    /// <summary>Another feed, a mirror's, which a request it is asked shows by its host.</summary>
+    private const string Mirror = "https://mirror.example.test/jason/manifest.json";
 
     private static FakeRelease Release(string version)
     {
