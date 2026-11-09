@@ -47,6 +47,12 @@ internal static class SkillsRelease
     private const int MaxSourceFileBytes = 64 * 1024;
 
     /// <summary>
+    /// Called with the staged path just before the unpacked tree is moved there; null outside tests. A test's only way to
+    /// have another run put a tree at the tag between the clean-up and the move: a race a test may lose is no proof.
+    /// </summary>
+    internal static AsyncLocal<Action<string>?> BeforeMove { get; } = new();
+
+    /// <summary>
     /// Whether a source is a release feed: the address of a release's <c>manifest.json</c> that
     /// <see cref="UpdateFeed.IsAllowed"/> accepts. Any other address is a git one.
     /// </summary>
@@ -101,38 +107,64 @@ internal static class SkillsRelease
         var tree = Path.Combine(partial, "tree");
         bool placed;
         Directory.CreateDirectory(partial);
-        using (new FileStream(Path.Combine(partial, SkillsSource.Claim), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+        try
         {
-            foreach (var entry in entries)
+            using (new FileStream(Path.Combine(partial, SkillsSource.Claim), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
             {
-                var target = Path.Combine(tree, Path.Combine(entry.FullName.Split('/')));
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                var writing = SourceFile;
                 try
                 {
-                    entry.ExtractToFile(target, overwrite: false);
+                    foreach (var entry in entries)
+                    {
+                        writing = entry.FullName;
+                        var target = Path.Combine(tree, Path.Combine(entry.FullName.Split('/')));
+                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                        try
+                        {
+                            entry.ExtractToFile(target, overwrite: false);
+                        }
+                        catch (InvalidDataException corrupt)
+                        {
+                            throw new SkillsSourceUnavailable($"'{entry.FullName}' could not be read out of the skills package for '{pin}': {corrupt.Message}");
+                        }
+                    }
+
+                    // The last thing written before the move, so an unpack that ends any earlier is never taken for a finished one.
+                    writing = CompletionMark;
+                    await File.WriteAllTextAsync(Path.Combine(tree, CompletionMark), commit, cancellationToken).ConfigureAwait(false);
                 }
-                catch (InvalidDataException corrupt)
+                catch (Exception failed) when (failed is IOException or UnauthorizedAccessException)
                 {
-                    throw new SkillsSourceUnavailable($"'{entry.FullName}' could not be read out of the skills package for '{pin}': {corrupt.Message}");
+                    // The checks above refuse every name they know to be wrong; a file system can still refuse one they let
+                    // through, and that is a refusal of the package like the others rather than a crash.
+                    throw new SkillsSourceUnavailable($"'{writing}' could not be written out of the skills package for '{pin}': {failed.Message} Nothing was staged.");
                 }
-            }
 
-            // The last thing written before the move, so an unpack that ends any earlier is never taken for a finished one.
-            await File.WriteAllTextAsync(Path.Combine(tree, CompletionMark), commit, cancellationToken).ConfigureAwait(false);
-
-            try
-            {
-                Directory.Move(tree, staged);
-                placed = true;
-            }
-            catch (IOException) when (Completed(staged))
-            {
-                // Another run unpacking the same tag finished first. A tag is one commit, so that tree is this one.
-                placed = false;
+                try
+                {
+                    BeforeMove.Value?.Invoke(staged);
+                    Directory.Move(tree, staged);
+                    placed = true;
+                }
+                catch (IOException) when (Completed(staged))
+                {
+                    // Another run unpacking the same tag finished first. A tag is one commit, so that tree is this one.
+                    placed = false;
+                }
+                catch (IOException moved)
+                {
+                    // Another run put a tree of its own there after this one cleared the way, a git fetch of the same tag
+                    // say. It is not this package, and a run that finds it removes it before it unpacks.
+                    throw new SkillsSourceUnavailable(
+                        $"The skills package for '{pin}' was unpacked, but another run put a tree at {staged} meanwhile, so it could not be moved there: {moved.Message} Run the command again: it replaces that tree.");
+                }
             }
         }
-
-        SkillsSource.TryRemove(partial);
+        finally
+        {
+            // After the claim is let go, as before: whatever ended the unpack, its partial tree goes with it.
+            SkillsSource.TryRemove(partial);
+        }
 
         return placed ? new StagedSource(staged, feed, pin, overridden, commit) : Reused(staged, feed, pin, overridden);
     }
@@ -218,7 +250,7 @@ internal static class SkillsRelease
     /// <summary>
     /// The file entries, each checked: a relative path of plain segments — names that start with a dot included, since each
     /// pack's <c>.claude-plugin</c> is one — under <c>skills/</c>, or <see cref="SourceFile"/> at the root; each once, no
-    /// link, and within the bounds a package has by what they declare.
+    /// link, none a directory of another's, and within the bounds a package has by what they declare.
     /// </summary>
     private static List<ZipArchiveEntry> Checked(ZipArchive archive, string pin)
     {
@@ -234,7 +266,7 @@ internal static class SkillsRelease
 
             var segments = name.Split('/');
             if (name.StartsWith('/') || name.Contains('\\', StringComparison.Ordinal) || Path.IsPathRooted(name)
-                || segments.Any(segment => segment.Length == 0 || segment is "." or ".." || segment.Any(Unsafe))
+                || segments.Any(segment => segment.Length == 0 || segment is "." or ".." || Unsafe(segment))
                 || (name != SourceFile && (segments.Length < 2 || segments[0] != SkillsDirectory))
                 || IsLink(entry))
             {
@@ -257,12 +289,36 @@ internal static class SkillsRelease
                 $"A skills package holds at most {PackageDigest.MaxFiles} files and {PackageDigest.MaxBytes} bytes; the one for '{pin}' holds more. Nothing was staged."));
         }
 
+        // A name cannot be a file and a directory above another file at once, and on a file system that ignores case
+        // neither can two names that differ only in case, so they are compared as the names are.
+        var directories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in files)
+        {
+            var name = file.FullName;
+            for (var end = name.IndexOf('/', StringComparison.Ordinal); end > 0; end = name.IndexOf('/', end + 1))
+            {
+                directories.TryAdd(name[..end], name);
+            }
+        }
+
+        foreach (var file in files)
+        {
+            if (directories.TryGetValue(file.FullName, out var under))
+            {
+                throw new SkillsSourceUnavailable($"The skills package for '{pin}' holds '{file.FullName}' as a file and as a directory of '{under}'. Nothing was staged.");
+            }
+        }
+
         return files;
     }
 
-    /// <summary>A character no segment of a path here carries: a control character, or one a file name on some system cannot hold.</summary>
-    private static bool Unsafe(char character) =>
-        char.IsControl(character) || character is ':' or '*' or '?' or '"' or '<' or '>' or '|';
+    /// <summary>
+    /// A segment no path here carries: one with a control character or a character a file name on some system cannot hold,
+    /// or one that ends in a dot or a space, which Windows drops from a name, so it would be written as another.
+    /// </summary>
+    private static bool Unsafe(string segment) =>
+        segment.Any(character => char.IsControl(character) || character is ':' or '*' or '?' or '"' or '<' or '>' or '|')
+        || segment.EndsWith('.') || segment.EndsWith(' ');
 
     /// <summary>What Unix zip tools write for a link: the entry's mode says it is one.</summary>
     private static bool IsLink(ZipArchiveEntry entry) => ((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000;

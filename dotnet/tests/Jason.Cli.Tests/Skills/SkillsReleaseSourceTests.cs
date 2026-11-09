@@ -187,7 +187,8 @@ public class SkillsReleaseSourceTests
 
     /// <summary>
     /// What a package holds is held before anything is written: entries are relative paths of plain segments under
-    /// <c>skills/</c>, beside <c>source.json</c> alone, each once. A package that reaches anywhere else is refused whole.
+    /// <c>skills/</c>, beside <c>source.json</c> alone, each once. A package that reaches anywhere else is refused whole, and
+    /// so is a segment that Windows would write as another name: one ending in a dot or a space.
     /// </summary>
     [Theory]
     [InlineData("../outside.md")]
@@ -201,6 +202,9 @@ public class SkillsReleaseSourceTests
     [InlineData("skills/runtime/a:b.md")]
     [InlineData("skills/runtime/a\u0001b.md")]
     [InlineData("C:x")]
+    [InlineData("skills/runtime/x.")]
+    [InlineData("skills/runtime/x ")]
+    [InlineData("skills/runtime./x.md")]
     public async Task A_package_with_an_entry_outside_its_layout_is_refused_whole(string entry)
     {
         using var dir = new TempPaths();
@@ -254,6 +258,81 @@ public class SkillsReleaseSourceTests
 
         Assert.Contains($"'{again}' twice", refusal.Message, StringComparison.Ordinal);
         AssertNothingStaged(dir);
+    }
+
+    /// <summary>
+    /// A name that is a file in one entry and a directory of another's cannot be both, in either order, and on a file
+    /// system that ignores case nor can two that differ only in case: the package is refused whole.
+    /// </summary>
+    [Theory]
+    [InlineData("skills/runtime/x", "skills/runtime/x/y.md")]
+    [InlineData("skills/runtime/x/y.md", "skills/runtime/x")]
+    [InlineData("skills/runtime/X", "skills/runtime/x/y.md")]
+    public async Task A_package_whose_file_is_another_entry_s_directory_is_refused_whole(string first, string second)
+    {
+        using var dir = new TempPaths();
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(SkillsPackage.Zip(Tag, [.. SkillsPackage.Files(Tag), (first, "one"), (second, "two")]));
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+
+        var file = first.EndsWith(".md", StringComparison.Ordinal) ? second : first;
+        Assert.Contains($"'{file}' as a file and as a directory of", refusal.Message, StringComparison.Ordinal);
+        AssertNothingStaged(dir);
+    }
+
+    /// <summary>
+    /// A file the checks let through and the file system still refuses — here a name longer than any file system holds —
+    /// is refused like every other, saying what could not be written, and leaves nothing behind it.
+    /// </summary>
+    [Fact]
+    public async Task A_package_whose_file_cannot_be_written_is_refused_and_nothing_is_staged()
+    {
+        using var dir = new TempPaths();
+        var name = $"skills/runtime/{new string('a', 300)}.md";
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(SkillsPackage.Zip(Tag, [.. SkillsPackage.Files(Tag), (name, "long")]));
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+
+        Assert.Contains(name, refusal.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was staged.", refusal.Message, StringComparison.Ordinal);
+        AssertNothingStaged(dir);
+    }
+
+    /// <summary>
+    /// A tree another run puts at the tag while this one unpacks, and which is not the package's, is in the way of the
+    /// move: the refusal says so and that running again replaces it, and the run again does.
+    /// </summary>
+    [Fact]
+    public async Task A_tree_put_at_the_tag_meanwhile_is_refused_naming_a_rerun_and_the_rerun_stages()
+    {
+        using var dir = new TempPaths();
+        var release = new FakeRelease(SemanticVersion.Parse(Build)).WithSkills(SkillsPackage.Zip(Tag));
+        SkillsRelease.BeforeMove.Value = staged =>
+        {
+            Directory.CreateDirectory(Path.Combine(staged, ".git"));
+            File.WriteAllText(Path.Combine(staged, ".git", "HEAD"), "ref: refs/heads/main\n");
+        };
+
+        SkillsSourceUnavailable refusal;
+        try
+        {
+            refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+                () => SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct));
+        }
+        finally
+        {
+            SkillsRelease.BeforeMove.Value = null;
+        }
+
+        Assert.Contains("Run the command again", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateDirectories(dir.Paths.SkillsStagedSourcesDirectory, "*.partial-*"));
+
+        var again = await SkillsSource.StageAsync(Machine(dir, release), null, null, overriddenByRecord: null, Ct);
+
+        Assert.Equal(SkillsPackage.Commit, again.Commit);
+        Assert.False(Directory.Exists(Path.Combine(again.Directory, ".git")));
     }
 
     /// <summary>
