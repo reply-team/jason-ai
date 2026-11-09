@@ -72,8 +72,11 @@ internal sealed class MovingMachine : IDisposable
 
     public int Pid { get; private set; }
 
-    /// <summary>The variables the CLI reads; the harness root's is set, so nothing resolves to a real home.</summary>
+    /// <summary>The variables the CLI reads; the harness root's is set unless a test says not, and the home is made up, so nothing resolves to a real home.</summary>
     public Dictionary<string, string> Variables { get; } = [];
+
+    /// <summary>Whether the harness root's variable is set; a machine without it resolves the root as the runtime would.</summary>
+    public bool RootVariable { get; set; } = true;
 
     private StandIn Handler { get; }
 
@@ -82,7 +85,7 @@ internal sealed class MovingMachine : IDisposable
     {
         Out = new StringWriter();
         Error = new StringWriter();
-        if (!Variables.ContainsKey("JASON_Harness__Root"))
+        if (RootVariable && !Variables.ContainsKey("JASON_Harness__Root"))
         {
             Variables["JASON_Harness__Root"] = Harness;
         }

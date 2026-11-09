@@ -16,7 +16,7 @@ namespace Jason.Cli;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Ten names are not one-to-one with anything, and they are named here because this is where the rule is
+/// <b>Eleven names are not one-to-one with anything, and they are named here because this is where the rule is
 /// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
 /// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
 /// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
@@ -78,9 +78,15 @@ namespace Jason.Cli;
 /// start, as <c>runtime stop</c> and <c>runtime start</c> ask it, and only when <c>--stop</c> says so.
 /// </para>
 /// <para>
-/// Guards hold the list to these: the verb-map tests to the five verbs, the three nouns, the <c>ui</c> group's three
+/// <c>import</c> is the eleventh, the other half of <c>export</c>. It places an archive's files on this machine, cold, the
+/// database among them, which no runtime can take while it runs on them, so no operation can stand behind it either: of the
+/// runtime it asks to stop, only under <c>--stop</c>; to start, as <c>runtime start</c> asks it; and <c>project.link</c>
+/// once for each project folder it placed, as <c>project link</c> asks it.
+/// </para>
+/// <para>
+/// Guards hold the list to these: the verb-map tests to the six verbs, the three nouns, the <c>ui</c> group's three
 /// operations and <c>install</c>, the <c>plugin</c> group's two operations and <c>install</c>, and the <c>session</c>
-/// noun's one verb, <c>open</c>. An eleventh has to be added in the open rather than arriving as one more verb somebody
+/// noun's one verb, <c>open</c>. A twelfth has to be added in the open rather than arriving as one more verb somebody
 /// thought was obviously fine.
 /// </para>
 /// </remarks>
@@ -232,6 +238,7 @@ public static class CliApp
         root.Subcommands.Add(DoctorCommand.Build(env));
         root.Subcommands.Add(UninstallCommand.Build(env));
         root.Subcommands.Add(ExportCommand.Build(env));
+        root.Subcommands.Add(ImportCommand.Build(env));
 
         return root;
     }

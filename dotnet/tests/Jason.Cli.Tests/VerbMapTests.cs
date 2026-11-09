@@ -28,7 +28,7 @@ public class VerbMapTests
     /// <c>export</c> writes this installation's files into one archive while the runtime is stopped, which the runtime
     /// cannot do of itself while it runs.
     /// </summary>
-    private static readonly string[] DeclaredExceptions = ["status", "uninstall", "logs", "doctor", "export"];
+    private static readonly string[] DeclaredExceptions = ["status", "uninstall", "logs", "doctor", "export", "import"];
 
     /// <summary>
     /// The nouns with no API operation behind them. Two change this installation rather than asking the
@@ -105,7 +105,7 @@ public class VerbMapTests
     /// without one is the map drifting from the rule its own doc comment states.
     /// </summary>
     [Fact]
-    [Critical(Family.R2, "the ten declared exceptions")]
+    [Critical(Family.R2, "the eleven declared exceptions")]
     public void Exactly_the_declared_names_have_no_api_operation_behind_them()
     {
         var operations = typeof(Contracts.Api.Operations)
@@ -120,8 +120,8 @@ public class VerbMapTests
         Assert.Equal(WithoutAnOperation.Order(StringComparer.Ordinal), strangers);
 
         // And the verbs stand for none either. Each says it never will, and nothing held that: an
-        // `uninstall.*`, `status.*`, `logs.*`, `doctor.*` or `export.*` operation arriving in the contracts would have kept
-        // this test green while the ten declared exceptions quietly became nine.
+        // `uninstall.*`, `status.*`, `logs.*`, `doctor.*`, `export.*` or `import.*` operation arriving in the contracts would have kept
+        // this test green while the eleven declared exceptions quietly became ten.
         Assert.All(DeclaredExceptions, exception => Assert.DoesNotContain(exception, operations));
     }
 

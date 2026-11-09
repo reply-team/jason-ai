@@ -214,12 +214,15 @@ public static class RuntimeAutostartCommands
         _ => "unsupported",
     };
 
+    /// <summary>What <c>status</c> says on a machine with no way to register, and <c>jason import</c> says the same way.</summary>
+    internal const string CannotRegister = "No logon registration, and this machine has no way to register one.";
+
     private static string Sentence(AutostartStatusResponse answer)
     {
         if (!answer.Registered)
         {
             return answer.Platform == "unsupported"
-                ? "No logon registration, and this machine has no way to register one."
+                ? CannotRegister
                 : "No logon registration.";
         }
 

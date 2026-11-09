@@ -104,6 +104,24 @@ public sealed class ExportCommandTests
         Assert.Contains("'jason runtime start'", error.Message, StringComparison.Ordinal);
     }
 
+    // ---- the help ----------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Its_help_publishes_what_is_carried_never_carried_and_the_secrets_line()
+    {
+        using var machine = new MovingMachine();
+
+        var exit = await CliApp.RunAsync(["export", "--help"], machine.Env(), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var help = machine.Out.ToString().ReplaceLineEndings(" ");
+        Assert.Contains("Carried: data/state/jason.db", help, StringComparison.Ordinal);
+        Assert.Contains("data/logs/", help, StringComparison.Ordinal);
+        Assert.Contains("Never carried: state/backups/", help, StringComparison.Ordinal);
+        Assert.Contains("Secrets travel whole.", help, StringComparison.Ordinal);
+        Assert.Contains("Exit codes: 0 written", help, StringComparison.Ordinal);
+    }
+
     // ---- what it carries ---------------------------------------------------------------------------------------------
 
     [Fact]

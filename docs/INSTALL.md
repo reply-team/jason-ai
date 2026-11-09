@@ -384,8 +384,8 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of ten names in
-this CLI with no API operation behind it — `status`, `uninstall`, `logs`, `doctor` and `export`, the `skills` and
+One question — "can this installation start work?" — answered check by check. It is one of eleven names in
+this CLI with no API operation behind it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and
 `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and
 `session open`, which starts your own agent host in a terminal — and it cannot be
 otherwise: half of what it reports is not the runtime's to know.
@@ -590,7 +590,8 @@ jason uninstall --force
 **The data directory is kept.** It holds the database, the settings, the plugins, the logs and the work
 directories — the record of what you did — and the copies an update keeps — the executable it replaced and the
 copy of the program kept for finishing an interrupted update, under `update/` — so a copy of the program stays there after an uninstall until
-`--purge-data` removes it; and the verb says in one line that it kept it and where. To remove
+`--purge-data` removes it; and the verb says in one line that it kept it and where. To take it to another machine
+instead, `jason export` writes it and the harness root into one archive (§8). To remove
 that as well you have to say so: `--human` prints what will be deleted and asks before anything at all is
 removed — and a no removes nothing at all — and when nobody is there to be asked the word is said in advance:
 
@@ -614,3 +615,56 @@ when everything it set out to remove is gone, and 1 when it did not get there �
 not stop, a purge you did not confirm), something it set out to remove is still there (a record it could not
 read, a file it could not remove, a moved copy nothing will remove), or it stopped part-way. Every step that did
 happen is listed either way: in the report on stdout, or on stderr where the report itself could not be written.
+
+## 8. Moving the installation to another machine
+
+Install Jason on the new machine first (§2), the same version or a newer one: an archive a newer Jason wrote is
+refused, naming the version to install. Then stop the runtime on the old machine and write the archive:
+
+```sh
+jason runtime stop
+jason export
+```
+
+`jason export` writes `jason-export-<stamp>.zip` in the folder you run it in, or the file you name, and never
+over a file that is already there. `--stop` stops a running runtime for you and starts it again once the archive
+is written; without it the verb refuses while the runtime runs. Copy the archive across, then on the new machine:
+
+```sh
+jason import jason-export-20261109T100005Z.zip
+jason skills install
+jason runtime autostart enable
+jason status
+```
+
+**What travels:** the database, the settings file, the plugins, the role skills with their record, a custom UI
+under `ui/custom/`, the logs, and the harness root's tree — your memory files and every project's and campaign's
+folder — with `export.json` listing every file's size and SHA-256. Whether the runtime started at logon travels as
+a fact: the import registers it again on a machine that can, and on one that cannot says "No logon registration,
+and this machine has no way to register one." **What does not:** the backups under `state/backups/`, the run and
+work directories, staged skills, the shipped UI under `ui/default/`, the copies an update keeps, anything an
+earlier import moved aside, the skills deployed into agent hosts (`jason skills install` deploys them again), and
+anything outside the data directory and the harness root. **The archive carries the settings file with
+everything in it, a token under `Plugins:Config` included: keep the archive as you keep that file.**
+
+**Before anything is written**, the import refuses an archive it cannot read, a name in it that would land
+outside the data directory or the harness root, a file whose size or SHA-256 is not the one `export.json` lists,
+an archive a newer Jason wrote, and an installation already here — a database, or a harness root with a folder
+marker in it, which a Jason that has run once on the new machine has. The refusal names what is there. Give
+`--replace` to move it aside and place the archive instead: the data directory's parts go into
+`<data>/replaced-<stamp>/` and the harness root to `<root>.replaced-<stamp>`, nothing is deleted, and the answer
+names both as yours to remove. The harness root is `--root` when given, else the one this machine's runtime
+would read (`JASON_Harness__Root`, else `Harness:Root` in this machine's settings file, else `~/Jason`).
+
+**The settings file is made this machine's.** Every absolute path under the old machine's home directory, data
+directory or harness root is rewritten to the same place here, `Harness:Root` first, and each rewrite is said; a
+path elsewhere that is not on this machine is said and left as written, for you to correct. Every other value,
+the secrets among them, is placed as it was. A role skills pack the record says came from a folder that is not
+here is named, with `jason skills install` to deploy it again.
+
+**Then the runtime starts on it**, and the import asks it to record each project folder where it now stands, as
+`jason project link` does; a link the runtime refuses is named with its code, and the folder stays. The import
+exits 0 when everything was placed and the runtime answered, 1 when it refused (nothing written) or the runtime
+did not start (the files are in place; start it with `jason runtime start`), and 2 on a usage error. Three
+things are left to you, in this order: `jason skills install`, `jason runtime autostart enable` if the runtime
+should start at logon here and the import did not register it, and `jason status`.

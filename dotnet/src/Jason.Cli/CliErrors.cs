@@ -53,6 +53,24 @@ public static class CliErrors
     /// <summary>What <c>jason export</c> would carry holds something an archive cannot, so nothing was written.</summary>
     public const string ExportRefused = "export_refused";
 
+    /// <summary>The file <c>jason import</c> was given cannot be read as an archive <c>jason export</c> wrote, so nothing was written.</summary>
+    public const string ImportUnreadable = "import_unreadable";
+
+    /// <summary>The archive, or the place <c>jason import</c> would put it, holds something an import never writes, so nothing was written.</summary>
+    public const string ImportRefused = "import_refused";
+
+    /// <summary>A file in the archive is not the one its listing names by size and digest, so nothing was written.</summary>
+    public const string ImportDigestMismatch = "import_digest_mismatch";
+
+    /// <summary>A newer Jason wrote the archive than the one asked to import it, so nothing was written.</summary>
+    public const string ImportNewerVersion = "import_newer_version";
+
+    /// <summary>An installation is already here and <c>--replace</c> was not given, so nothing was written.</summary>
+    public const string ImportNotEmpty = "import_not_empty";
+
+    /// <summary>What is here could not be moved aside, or the archive could not be placed in full.</summary>
+    public const string ImportUnwritable = "import_unwritable";
+
     public static string Serialize(string code, string message, bool retryable) =>
         JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(code, message, retryable)), JasonJson.Options);
 }
