@@ -47,6 +47,19 @@ public static class ReplyPlugins
             File.ReadAllText(Path.Combine(PackageSource, "plugin.yaml")), PluginId, PackageSource, new Jason.Runtime.Plugins.Manifest.ManifestBounds(3_600_000, 512)).Manifest
         ?? throw new InvalidOperationException("The official package's manifest does not read."));
 
+    /// <summary>
+    /// The published operations the official package performs: every one but the audience family, which the package
+    /// does not perform yet. This is the one place the package may cover less than the catalog, so its error table, its
+    /// README's count and the plugins index are all held to the same list, and the day the package performs the family
+    /// the exception goes here and nowhere else.
+    /// </summary>
+    public static IReadOnlyList<string> PublishedItPerforms { get; } =
+    [
+        .. Jason.Contracts.Operations.OperationCatalog.All
+            .Select(contract => contract.Id)
+            .Where(id => !id.StartsWith("audience.", StringComparison.Ordinal)),
+    ];
+
     /// <summary>The package's error table, which is data and is read as data by the tests that hold it to the contracts.</summary>
     public static string ErrorTableModule => Path.Combine(PackageSource, "modules", "errors.js");
 

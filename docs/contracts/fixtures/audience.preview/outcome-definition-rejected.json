@@ -1,0 +1,30 @@
+{
+  "operation": "audience.preview",
+  "version": 1,
+  "case": "the provider refuses a value its own filters do not know, which the plugin's declared schema could not say",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "validation",
+      "code": "definition_rejected",
+      "message": "The provider knows no industry called Freight Brokerage.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "class": "validation",
+    "retriable": false
+  }
+}

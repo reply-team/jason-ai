@@ -1,0 +1,57 @@
+{
+  "operation": "audience.preview",
+  "version": 1,
+  "case": "an input without the definition the runtime composes at its root",
+  "input": {
+    "args": {
+      "definition": {
+        "industries": [
+          {
+            "value": "Logistics",
+            "type": "include"
+          },
+          {
+            "value": "Freight Brokerage",
+            "type": "exclude"
+          }
+        ],
+        "job_titles": [
+          {
+            "value": "Head of Operations",
+            "type": "include"
+          }
+        ],
+        "company_sizes": [
+          "51-200",
+          "201-500"
+        ],
+        "headcount_growth": {
+          "min": 5,
+          "max": 40
+        },
+        "locations": [
+          {
+            "value": "Portugal",
+            "type": "include"
+          }
+        ]
+      }
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/definition",
+        "reason": "required"
+      }
+    ]
+  }
+}

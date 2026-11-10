@@ -1,0 +1,35 @@
+{
+  "operation": "audience.filter_values",
+  "version": 1,
+  "case": "the same value twice, which a person would be offered twice",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "values": [
+        "Logistics",
+        "Logistics"
+      ]
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [
+      {
+        "pointer": "/values",
+        "reason": "unique_items"
+      }
+    ]
+  }
+}

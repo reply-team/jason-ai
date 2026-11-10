@@ -165,7 +165,9 @@ runtime's own descriptions say it; an operation with only its name here does wha
 They are the runtime's own operations, on Jason's own records. The operations a plugin performs at a provider are
 another vocabulary, one document each under `docs/contracts/` ([docs/contracts/](contracts/README.md)), and run as
 `provider_op` work items. Four names are in both — `campaign.create`, `campaign.get`, `campaign.pause` and
-`contact.update` — and here each of them means Jason's own record.
+`contact.update` — and here each of them means Jason's own record. Three more are in both and mean the same work in each:
+`audience.preview`, `audience.filter_values` and `audience.availability` are the provider's reads, asked here for a
+campaign when a person or an agent asks, outside any work item.
 `docs/api/fixtures/` holds requests and answers the runtime's own tests recorded for many of them, one folder per
 operation ([docs/api/fixtures/](api/fixtures/)).
 
@@ -226,6 +228,20 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `contact.archive`
 - `contact.threads`: a person's threads, read from the provider when a person asks, outside any work item.
 - `contact.thread`: one thread, read the same way.
+
+### `audience`
+
+A campaign's reads at the provider, answered by the plugin the campaign's route for each operation names, when a person
+or an agent asks, outside any work item: nothing is recorded, journaled or pinned
+([docs/routing.md](routing.md), "A read on request").
+
+- `audience.preview`: how many people an audience holds, and a sample of them without contact details. It takes the
+  audience's `definition`, held first to the schema the routed plugin declares, or an audience the campaign holds by its
+  number, and answers `count`, `companies` and `sample`.
+- `audience.filter_values`: the values one of the provider's filters takes, starting with `query`, in the provider's
+  order.
+- `audience.availability`: whether the campaign's account may search now, why not, and its credits and headroom where
+  the provider says.
 
 ### `workitem`
 
@@ -346,6 +362,12 @@ that is not that attempt does not call them.
 - `route.list`: every route, or the global set plus one campaign's.
 - `route.set`: sends one campaign's work, or one of its operations, to a plugin.
 - `route.unset`: takes one campaign route away.
+
+### `operation`
+
+- `operation.describe`: what a canonical operation takes for a campaign — its argument schema and, for one that carries
+  an audience's definition, the schema the plugin the campaign's route names declares for it, with that schema's keys.
+  The route is resolved now and held to the route's half of the claim; nothing is invoked.
 
 ### `suppression`
 

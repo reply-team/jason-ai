@@ -31,7 +31,7 @@ public partial class ReplyErrorTableTests
     public void The_table_is_held_for_every_operation_the_package_performs()
     {
         Assert.Equal(
-            OperationCatalog.All.Select(contract => contract.Id).Order(StringComparer.Ordinal),
+            ReplyPlugins.PublishedItPerforms.Order(StringComparer.Ordinal),
             ReplyErrorTable.Performed().Order(StringComparer.Ordinal));
     }
 

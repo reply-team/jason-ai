@@ -1,0 +1,81 @@
+{
+  "operation": "operation.describe",
+  "case": "campaign-get",
+  "request": {
+    "campaign_id": "cmp_1",
+    "operation": "campaign.get"
+  },
+  "status": 200,
+  "response": {
+    "operation": "campaign.get",
+    "version": 1,
+    "plugin_id": "stand-in-search",
+    "plugin_version": "1.0.0",
+    "arguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "campaign": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "external_id"
+          ],
+          "properties": {
+            "external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "The provider's own identifier, given to link a campaign for the first time. Later calls work by the pin."
+            }
+          }
+        }
+      },
+      "$defs": {
+        "campaign": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "status",
+            "external_ids"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "active",
+                "paused",
+                "archived"
+              ]
+            },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "campaign": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              },
+              "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+            }
+          }
+        }
+      }
+    },
+    "definition": null
+  }
+}

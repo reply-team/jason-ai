@@ -19,11 +19,11 @@ public partial class InteractiveSkillTests
         Assert.Contains("**Status: draft.**", Flattened("troubleshooting-jason"), StringComparison.Ordinal);
         Assert.DoesNotContain("| `troubleshooting-jason` | Claude Code", File.ReadAllText(SkillPack.Catalog()), StringComparison.Ordinal);
         Assert.Contains(
-            "Only an active campaign's work is claimed, with one exception: a paused campaign still lets through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record`, `campaign.pause` and `message.cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one holds every item but theirs.",
+            "Only an active campaign's work is claimed, with one exception: a paused campaign still lets through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record`, `campaign.pause`, `message.cancel` and `audience.search_cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one holds every item but theirs.",
             Flattened("troubleshooting-jason"),
             StringComparison.Ordinal);
         Assert.Equal(
-            ["campaign.pause", "message.cancel", "optout.record"],
+            ["audience.search_cancel", "campaign.pause", "message.cancel", "optout.record"],
             Jason.Contracts.Operations.OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal));
     }
 

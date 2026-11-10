@@ -295,7 +295,7 @@ public sealed class RouteService(
     private static JsonNode? Recorded(CampaignRoute? route) =>
         route is null ? null : new JsonObject { ["plugin"] = route.PluginId, ["binding"] = route.Binding?.DeepClone() };
 
-    private static OperationContract RequireContract(string? operation)
+    internal static OperationContract RequireContract(string? operation)
     {
         if (string.IsNullOrWhiteSpace(operation))
         {

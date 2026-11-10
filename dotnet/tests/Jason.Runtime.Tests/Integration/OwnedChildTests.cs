@@ -184,13 +184,49 @@ public class OwnedChildTests
         Assert.False(OwnedChild.IsRunning(pid));
     }
 
-    /// <summary>A long-lived child this test owns: the stand-in vendor program, holding for half a minute.</summary>
+    /// <summary>
+    /// A long-lived child this test owns: the stand-in vendor program, holding for half a minute, handed over once it
+    /// answers to its own name. On Linux <see cref="Process.Start(ProcessStartInfo)"/> can return before it does, and a
+    /// name read in that instant is the name of the thread that started it ('.NET TP Worker'), so the name rule would
+    /// leave the test's own child alone.
+    /// </summary>
     private static Process StartBystander()
     {
         var info = new ProcessStartInfo("dotnet") { UseShellExecute = false, CreateNoWindow = true };
         info.ArgumentList.Add(FakeProviderCli.Dll);
         info.ArgumentList.Add("hold");
         info.ArgumentList.Add("30000");
-        return Process.Start(info)!;
+        var bystander = Process.Start(info)!;
+        var waited = Stopwatch.StartNew();
+        while (!AnswersTo(bystander, HostName))
+        {
+            if (bystander.HasExited || waited.Elapsed > TimeSpan.FromSeconds(30))
+            {
+                OwnedChild.End(bystander);
+                bystander.Dispose();
+                Assert.Fail($"The bystander never answered to the name {HostName}.");
+            }
+
+            Thread.Sleep(10);
+        }
+
+        return bystander;
+    }
+
+    private static bool AnswersTo(Process process, string name)
+    {
+        try
+        {
+            using var seen = Process.GetProcessById(process.Id);
+            return OwnedChild.NameFits(seen.ProcessName, name);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 }

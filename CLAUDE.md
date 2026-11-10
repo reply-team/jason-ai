@@ -99,9 +99,12 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   override, global default, with exact masking and no fallback to another plugin. Routes are frozen
   by the same reload that freezes plugins: the `Routes` section of `settings.json` is read only
   there and at startup, `route.set`/`route.unset` copy the global half from the active snapshot, and
-  a bad route rejects the whole reload. The claim is fail-closed: twenty checks in one published
-  order, one code per reason, decided before a child exists, with the attempt kept. A binding names
-  an account and never a credential. A provider identifier is pinned once and never overwritten — a
+  a bad route rejects the whole reload. The claim is fail-closed: twenty-five checks in one published
+  order, one code per reason, decided before a child exists, with the attempt kept; an audience's definition is the
+  provider's own shape, held at the claim to the schema the routed plugin declares, never at create. A binding names
+  an account and never a credential. A person's reads on request are routed by the person's pin; a campaign's reads
+  (an audience's preview, a filter's values, whether the account may search) by the campaign's route for the
+  operation, held to the route's half of the claim. A provider identifier is pinned once and never overwritten — a
   different value is recorded beside it as a divergence and the attempt still succeeds. Provenance
   is written at the claim and completed at the end; nothing rewrites it. `docs/routing.md` is the
   contract.
@@ -110,6 +113,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   package problems reject the whole reload and keep the previous snapshot, and so does a settings file the
   reload cannot read (`settings_file_unreadable`; one that is not there rejects nothing); the four `executable_*`
   ones and, at a start only, `probe_timed_out` are environmental and only make that plugin `unavailable`.
+  A provider that performs `audience.search` or `audience.preview` declares the schema of an audience's definition
+  under `audience_definition`, held to the published dialect at load as a binding schema is, and one that searches
+  performs `audience.search_status` too.
   Every package has a `sha256:` content digest that the child recomputes before it runs anything. The
   invocation goes to the child on stdin, exactly one outcome comes back on stdout, diagnostics are JSON
   Lines on stderr, and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3

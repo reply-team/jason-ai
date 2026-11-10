@@ -47,23 +47,24 @@ public sealed partial class ClaimOrderDocTests
     /// read as a number, so a check added or removed fails here until every count in prose follows the table.
     /// </summary>
     [Theory]
-    [InlineData("docs/routing.md", "Of the (?<n>\\w+) answers a claim can give", "all")]
-    [InlineData("docs/routing.md", "The last (?<n>\\w+) are questions about a work item", "after binding_invalid")]
-    [InlineData("docs/routing.md", "### At the claim — the (?<n>\\w+), in the order they are checked", "all")]
-    [InlineData("docs/routing.md", "rows 7 and (?<n>\\w+) below", "row of input_invalid")]
-    [InlineData("docs/routing.md", "The (?<n>\\w+) is not a refusal at all", "row of approval_required")]
-    [InlineData("docs/routing.md", "The (?<n>\\w+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
-    [InlineData("docs/routing.md", "every refusal from check 2 to check (?<n>\\w+) keeps its code", "row of template_not_offered")]
-    [InlineData("docs/work-execution.md", "whichever of the (?<n>\\w+) pre-flight reasons applies", "all")]
-    [InlineData("docs/work-execution.md", "the same rule the (?<n>\\w+) provider checks follow", "all")]
-    [InlineData("docs/work-execution.md", "\\| the (?<n>\\w+) pre-flight codes \\|", "all")]
-    [InlineData("docs/work-execution.md", "(?<n>\\w+) checks, in this order", "all")]
-    [InlineData("docs/work-execution.md", "The first (?<n>\\w+) are refusals", "refusals")]
-    [InlineData("docs/work-execution.md", "all of them are final: (?<n>\\w+) are `permanent`", "permanent")]
-    [InlineData("docs/work-execution.md", "The (?<n>\\w+) is not a refusal: `approval_required`", "row of approval_required")]
-    [InlineData("docs/work-execution.md", "The (?<n>\\w+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
-    [InlineData("docs/work-execution.md", "every refusal of the claim from check 2 to check (?<n>\\w+) keeps its code", "row of template_not_offered")]
-    [InlineData("CLAUDE.md", "The claim is fail-closed: (?<n>\\w+) checks in one published order", "all")]
+    [InlineData("docs/routing.md", "Of the (?<n>[\\w-]+) answers a claim can give", "all")]
+    [InlineData("docs/routing.md", "The last (?<n>[\\w-]+) are questions about a work item", "after binding_invalid")]
+    [InlineData("docs/routing.md", "### At the claim — the (?<n>[\\w-]+), in the order they are checked", "all")]
+    [InlineData("docs/routing.md", "rows 7, (?<n>[\\w-]+) and [\\w-]+ below", "row of input_invalid")]
+    [InlineData("docs/routing.md", "rows 7, [\\w-]+ and (?<n>[\\w-]+) below", "row of definition_invalid")]
+    [InlineData("docs/routing.md", "The (?<n>[\\w-]+) is not a refusal at all", "row of approval_required")]
+    [InlineData("docs/routing.md", "The (?<n>[\\w-]+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
+    [InlineData("docs/routing.md", "every refusal from check 2 to check (?<n>[\\w-]+) keeps its code", "row of template_not_offered")]
+    [InlineData("docs/work-execution.md", "whichever of the (?<n>[\\w-]+) pre-flight reasons applies", "all")]
+    [InlineData("docs/work-execution.md", "the same rule the (?<n>[\\w-]+) provider checks follow", "all")]
+    [InlineData("docs/work-execution.md", "\\| the (?<n>[\\w-]+) pre-flight codes \\|", "all")]
+    [InlineData("docs/work-execution.md", "(?<n>[\\w-]+) checks, in this order", "all")]
+    [InlineData("docs/work-execution.md", "The first (?<n>[\\w-]+) are refusals", "refusals")]
+    [InlineData("docs/work-execution.md", "all of them are final: (?<n>[\\w-]+) are `permanent`", "permanent")]
+    [InlineData("docs/work-execution.md", "The (?<n>[\\w-]+) is not a refusal: `approval_required`", "row of approval_required")]
+    [InlineData("docs/work-execution.md", "The (?<n>[\\w-]+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
+    [InlineData("docs/work-execution.md", "every refusal of the claim from check 2 to check (?<n>[\\w-]+) keeps its code", "row of template_not_offered")]
+    [InlineData("CLAUDE.md", "The claim is fail-closed: (?<n>[\\w-]+) checks in one published order", "all")]
     public void Each_count_of_the_claim_s_checks_is_the_number_the_code_asks(string relative, string sentence, string counted)
     {
         var codes = ProviderOpPreflight.Codes;
@@ -71,10 +72,11 @@ public sealed partial class ClaimOrderDocTests
         {
             "all" => codes.Count,
             "refusals" => IndexOf(codes, "approval_required"),
-            // Every refusal but two: input_invalid is validation and provider_answer_lost is ambiguous.
-            "permanent" => IndexOf(codes, "approval_required") - 2,
+            // Every refusal but three: input_invalid and definition_invalid are validation, provider_answer_lost is ambiguous.
+            "permanent" => IndexOf(codes, "approval_required") - 3,
             "after binding_invalid" => codes.Count - (IndexOf(codes, "binding_invalid") + 1),
             "row of input_invalid" => IndexOf(codes, "input_invalid") + 1,
+            "row of definition_invalid" => IndexOf(codes, "definition_invalid") + 1,
             // The last refusal an unsettled send turns ambiguous: the row just before provider_answer_lost's own.
             "row of template_not_offered" => IndexOf(codes, "template_not_offered") + 1,
             "row of approval_required" => IndexOf(codes, "approval_required") + 1,
@@ -104,7 +106,10 @@ public sealed partial class ClaimOrderDocTests
         return index;
     }
 
-    /// <summary>A count as prose writes it — a numeral, a cardinal or an ordinal up to twenty; -1 for anything else.</summary>
+    /// <summary>
+    /// A count as prose writes it — a numeral, a cardinal or an ordinal up to thirty, the ones past twenty hyphenated as
+    /// "twenty-five" and "twenty-fifth"; -1 for anything else.
+    /// </summary>
     private static int NumberWord(string word)
     {
         string[] cardinals = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
@@ -112,10 +117,30 @@ public sealed partial class ClaimOrderDocTests
         string[] ordinals = ["zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh",
             "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth", "twentieth"];
         var lower = word.ToLowerInvariant();
+        if (int.TryParse(lower, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number))
+        {
+            return number;
+        }
+
+        if (lower is "thirty" or "thirtieth")
+        {
+            return 30;
+        }
+
+        if (lower.StartsWith("twenty-", StringComparison.Ordinal))
+        {
+            var unit = lower["twenty-".Length..];
+            var past = Array.IndexOf(cardinals, unit);
+            if (past < 0)
+            {
+                past = Array.IndexOf(ordinals, unit);
+            }
+
+            return past is > 0 and < 10 ? 20 + past : -1;
+        }
+
         var cardinal = Array.IndexOf(cardinals, lower);
-        return int.TryParse(lower, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number)
-            ? number
-            : cardinal >= 0 ? cardinal : Array.IndexOf(ordinals, lower);
+        return cardinal >= 0 ? cardinal : Array.IndexOf(ordinals, lower);
     }
 
     private static string Source(string relative)

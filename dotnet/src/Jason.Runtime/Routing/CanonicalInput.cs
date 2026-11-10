@@ -37,6 +37,27 @@ public static class CanonicalInput
     /// </summary>
     private const string SendKey = "send";
 
+    /// <summary>
+    /// The key, in the arguments and at the root alike, of the search an operation acts on by its reference: the caller
+    /// names the work item under <c>args.search</c>, and the runtime composes the search under <c>search</c>.
+    /// </summary>
+    private const string SearchKey = "search";
+
+    /// <summary>
+    /// The root key of an audience's definition, the provider's own shape: the runtime composes it from
+    /// <c>args.definition</c>, or from the audience <c>args.audience</c> names, and the plugin reads it there and nowhere
+    /// else.
+    /// </summary>
+    private const string DefinitionKey = "definition";
+
+    /// <summary>The arguments key of an audience the campaign holds, named by its number.</summary>
+    private const string AudienceKey = "audience";
+
+    /// <summary>The member of a composed search where the next status read starts, where the document declares one.</summary>
+    private const string CursorKey = "cursor";
+
+    private const string RefPrefix = "#/$defs/";
+
     /// <summary>The root key of the campaign the work belongs to.</summary>
     private const string CampaignKey = "campaign";
 
@@ -81,6 +102,30 @@ public static class CanonicalInput
                 ["operation"] = JsonValue.Create(send.Operation),
                 ["reference"] = JsonValue.Create(reference),
             };
+        }
+
+        // The search the same way, and where the place a status read starts belongs to the document, that too: the
+        // plugin's own cursor, which the runtime stores and never parses, and null where it keeps none yet.
+        if (NamesASearch(contract) && facts.Search is { Reference: { } searched } search)
+        {
+            var composed = new JsonObject
+            {
+                ["work_item"] = JsonValue.Create(search.WorkItem),
+                ["reference"] = JsonValue.Create(searched),
+            };
+            if (Declares(contract, SearchKey, CursorKey))
+            {
+                composed[CursorKey] = search.Cursor is null ? null : JsonValue.Create(search.Cursor);
+            }
+
+            input[SearchKey] = composed;
+        }
+
+        // The definition is the runtime's to place, at the root, so the plugin reads it in one place whichever way the
+        // work named it: as written, or as the audience it names by number was searched under.
+        if (CarriesADefinition(contract) && Definition(input["args"], facts.Audience) is { } definition)
+        {
+            input[DefinitionKey] = definition;
         }
 
         // A required contact is always here by the time anything is composed — the pre-flight refused the item
@@ -180,6 +225,34 @@ public static class CanonicalInput
     }
 
     /// <summary>
+    /// The input of a read made for a campaign on a person's or an agent's request rather than for a work item: the
+    /// arguments the caller gave, the definition where the operation carries one, and the campaign with the routed
+    /// plugin's own pins, exactly as <see cref="Compose"/> places them. No person: the reads a campaign's route answers
+    /// name nobody.
+    /// </summary>
+    public static JsonObject ComposeCampaignRead(
+        OperationContract contract,
+        Campaign campaign,
+        IReadOnlyDictionary<string, string> campaignPins,
+        JsonObject args,
+        JsonObject? definition)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(campaign);
+        ArgumentNullException.ThrowIfNull(campaignPins);
+        ArgumentNullException.ThrowIfNull(args);
+
+        var input = new JsonObject { ["args"] = args };
+        if (CarriesADefinition(contract) && definition is not null)
+        {
+            input[DefinitionKey] = definition;
+        }
+
+        input[CampaignKey] = Campaign(campaign, campaignPins);
+        return input;
+    }
+
+    /// <summary>
     /// The arguments as the planner wrote them, copied rather than shared: an edit to the item's context after
     /// the claim belongs to the next attempt, never to the one about to run.
     /// </summary>
@@ -198,29 +271,107 @@ public static class CanonicalInput
         return contract.InputSchema["properties"] is JsonObject properties && properties.ContainsKey(SendKey);
     }
 
+    /// <summary>Whether the operation acts on a search by its reference: its input carries the search the runtime composes.</summary>
+    public static bool NamesASearch(OperationContract contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+
+        return contract.InputSchema["properties"] is JsonObject properties && properties.ContainsKey(SearchKey);
+    }
+
+    /// <summary>
+    /// Whether the operation carries an audience's definition: its input declares the definition the runtime composes at
+    /// the root, which the routed plugin's <c>audience_definition</c> is the schema of.
+    /// </summary>
+    public static bool CarriesADefinition(OperationContract contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+
+        return contract.InputSchema["properties"] is JsonObject properties && properties.ContainsKey(DefinitionKey);
+    }
+
     /// <summary>
     /// Whether the operation makes a send a later read or take-back can name: it declares the provider's reference for the
     /// send as an identifier of the work item itself.
     /// </summary>
-    public static bool MakesASend(string? operation) =>
-        operation is not null
-        && OperationCatalog.Find(operation) is { } contract
-        && contract.ExternalIds.TryGetValue(SendKey, out var kind)
-        && kind.Entity == PinnedEntity.WorkItem;
+    public static bool MakesASend(string? operation) => Makes(operation, SendKey);
+
+    /// <summary>
+    /// Whether the operation makes a search a later status read or stop can name: it declares the provider's reference for
+    /// the search as an identifier of the work item itself.
+    /// </summary>
+    public static bool MakesASearch(string? operation) => Makes(operation, SearchKey);
 
     /// <summary>
     /// The work item the arguments name under <c>args.send</c>, or null where they name none: creation held the arguments
     /// to the operation's schema, so a value there is a work item's id.
     /// </summary>
-    public static string? NamedSend(WorkItem item)
+    public static string? NamedSend(WorkItem item) => Named(item, SendKey);
+
+    /// <summary>The work item the arguments name under <c>args.search</c>, or null where they name none.</summary>
+    public static string? NamedSearch(WorkItem item) => Named(item, SearchKey);
+
+    /// <summary>
+    /// The audience the arguments name by its number under <c>args.audience</c>, or null where they name none: creation
+    /// held the arguments to the operation's schema, so a value there is a whole number.
+    /// </summary>
+    public static int? NamedAudience(WorkItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
 
         return item.Context[WorkItemService.InputKey] is JsonObject arguments
-            && arguments[SendKey] is JsonValue named
+            && arguments[AudienceKey] is JsonValue named
+            && named.GetValueKind() == JsonValueKind.Number
+            && named.TryGetValue(out int number)
+            ? number
+            : null;
+    }
+
+    private static bool Makes(string? operation, string key) =>
+        operation is not null
+        && OperationCatalog.Find(operation) is { } contract
+        && contract.ExternalIds.TryGetValue(key, out var kind)
+        && kind.Entity == PinnedEntity.WorkItem;
+
+    private static string? Named(WorkItem item, string key)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        return item.Context[WorkItemService.InputKey] is JsonObject arguments
+            && arguments[key] is JsonValue named
             && named.GetValueKind() == JsonValueKind.String
             ? named.GetValue<string>()
             : null;
+    }
+
+    /// <summary>
+    /// The definition the work carries, copied: the one the arguments write, or, where they write none, the one the audience
+    /// they name was searched under; null where neither is there, which the schema then refuses by pointer.
+    /// </summary>
+    private static JsonObject? Definition(JsonNode? args, NamedAudience? audience) =>
+        args?[DefinitionKey] is JsonObject written
+            ? written.DeepClone().AsObject()
+            : audience?.Definition.DeepClone().AsObject();
+
+    /// <summary>
+    /// Whether the schema the input declares at the root under <paramref name="key"/> — directly, or through one reference
+    /// into its <c>$defs</c> — declares <paramref name="member"/>.
+    /// </summary>
+    private static bool Declares(OperationContract contract, string key, string member)
+    {
+        if (contract.InputSchema["properties"]?[key] is not JsonObject declared)
+        {
+            return false;
+        }
+
+        if (declared["$ref"] is JsonValue reference
+            && reference.TryGetValue(out string? target)
+            && target.StartsWith(RefPrefix, StringComparison.Ordinal))
+        {
+            declared = contract.InputSchema["$defs"]?[target[RefPrefix.Length..]] as JsonObject ?? declared;
+        }
+
+        return declared["properties"] is JsonObject members && members.ContainsKey(member);
     }
 
     /// <summary>

@@ -184,7 +184,7 @@ An item is **eligible** — the dispatcher would claim it right now — when all
    `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs`
    ([docs/contracts/README.md](contracts/README.md)): an operation whose not running is the harm, which must still
    reach the provider after somebody paused Jason's campaign first. Today those are `campaign.pause`,
-   `optout.record` and `message.cancel`;
+   `optout.record`, `message.cancel` and `audience.search_cancel`;
 3. `not_before` is unset or already past;
 4. `due_at` is unset or still ahead;
 5. `retry_after` is unset or already past.
@@ -228,7 +228,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the twenty pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the twenty-five pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -251,8 +251,8 @@ date and expires by it like any waiting item, and a held manager check-in is sti
 ## Approvals
 
 An operation's contract says what approval it needs. Most published operations publish `auto`, which is
-the one approval a runtime may give itself. `campaign.enroll`, `campaign.activate`, `enrollment.stop` and
-`contact.delete` publish `confirm_once`, `conversation.reply`, `social_invitation.send` and `message.send` publish
+the one approval a runtime may give itself. `campaign.enroll`, `campaign.activate`, `enrollment.stop`,
+`contact.delete` and `audience.search` publish `confirm_once`, `conversation.reply`, `social_invitation.send` and `message.send` publish
 `confirm_each`, and work naming any of them is **parked** at the claim rather than run: the item moves to
 `awaiting_approval` and an `apr_` row records what is being approved. The two words ask the same of a person in this
 version: one work item is one person, so each reply, each invitation and each message is already its own decision.
@@ -520,7 +520,7 @@ byte of what the host wrote, where the host's row in [execution-profiles.md §12
 names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the twenty provider checks follow.
+existed. It is the same rule the twenty-five provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -849,7 +849,7 @@ settings at all and are never refused for this reason.
 | `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
 | `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
-| the twenty pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the twenty-five pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -863,41 +863,46 @@ context key like any other, and what it holds is not an argument. An item that c
 operation that declares required arguments, carries no arguments at all, so `workitem.create` refuses it with
 `validation_failed` and a `required` detail on `context.input`. The runtime **composes** what the plugin
 receives from the item — the arguments, the contact cut to the projection the operation declares, the
-campaign, the identifiers that plugin itself pinned, and the work item's own id as the idempotency key
-— and validates the whole composed document against the operation's input schema at the claim. A
-plugin never sees a work item's context.
+campaign, the identifiers that plugin itself pinned, and the work item's own id as the idempotency key; for a read or a
+take-back of a send, the send the arguments name with its reference, for a status read or a stop of a search, the search
+with its reference, and for a search, the audience's `definition` at the root
+([docs/contracts/README.md](contracts/README.md)) — and validates the whole composed document against the operation's
+input schema at the claim, and a definition, which is the provider's own shape, against the schema the routed plugin
+declares for one. A plugin never sees a work item's context.
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Twenty checks,
+**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-five checks,
 in this order, and the first that answers is the one that decides:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed →
-contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → input_invalid →
+contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
+search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
 argument_unsupported → template_not_offered → provider_answer_lost → approval_required →
 provider_blocked
 ```
 
-The first eighteen are refusals and all of them are final: sixteen are `permanent`, `input_invalid` is
-`validation`, because it is the one a planner can fix by editing the item, and `provider_answer_lost` is
+The first twenty-three are refusals and all of them are final: twenty are `permanent`, `input_invalid` and
+`definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
 `ambiguous`, because it refuses to repeat a send whose earlier attempt lost its answer, either under a plugin whose
 manifest does not say it settles the send by the work item's key, or where the routed package, by its id and digest, or
 its binding is not the one the unsettled attempt ran under, or the input composed now is not the one it was composed
 with, and so keeps what that attempt left unknown. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
-nothing ever falls back to another plugin. The nineteenth is not a refusal: `approval_required` parks the
+nothing ever falls back to another plugin. The twenty-fourth is not a refusal: `approval_required` parks the
 item for a person (§Approvals above), and it is asked after every refusal so that nobody is asked to approve work
-that would have been refused anyway. The twentieth, `provider_blocked`, is not a refusal either: it parks work an
+that would have been refused anyway. The twenty-fifth, `provider_blocked`, is not a refusal either: it parks work an
 open provider block holds — the operations whose document says `dispatch.under_provider_block: waits`, nothing else —
 as `waiting`, with no attempt, until the block clears or a trial gets past it (§Provider blocks below). [docs/routing.md](routing.md) says what each one means and what to
 change.
 
-Two of those checks measure a document against a schema — the binding against the plugin's (7), the
-composed input against the operation's (15) — and one answer they can give is not a refusal. Where a
+Three of those checks measure a document against a schema — the binding against the plugin's (7), the
+composed input against the operation's (19), the composed definition against the plugin's (20) — and one answer they
+can give is not a refusal. Where a
 pattern of that schema did not finish matching, twice, nothing was found wrong and nothing has run, so
 the attempt ends `validation_timed_out`, `transient`, and the dispatcher retries it under the ordinary
-retry rule — never `input_invalid` or `binding_invalid`, which would send a planner to edit an item that
-may be right.
+retry rule — never `input_invalid` or `binding_invalid`, nor `definition_invalid`, which would send a planner to edit an
+item that may be right.
 
 **A failure's class decides the retry, not the code table.** A provider attempt ends with one of five
 classes: `transient` comes back, `permanent` and `validation` are final, `blocked` — the provider refused the
@@ -915,7 +920,7 @@ that attempt was composed with — its arguments, and the whole composed input b
 settles a send only at the provider and the account that took it, and so does an item edited since, or a person or a
 campaign whose part of the input changed since, since the key settles only the request it went with and a provider
 holding it answers a repeat with the earlier send.
-While the item carries one, every refusal of the claim from check 2 to check 17 keeps its code and is recorded
+While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code and is recorded
 `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the person
 (`docs/routing.md`). An answer that arrived and does not satisfy the
 operation's output schema is `result_invalid`: ambiguous, and never repeated; so is a failure whose code

@@ -1,0 +1,32 @@
+{
+  "operation": "audience.availability",
+  "version": 1,
+  "case": "the user the plugin signs in as may not search: an answer, not a refusal of the read",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "available": false,
+      "reason": "not_permitted",
+      "detail": "Your role does not allow searching the people database.",
+      "credits": null,
+      "headroom": null,
+      "vendor": {
+        "status": "restricted_member"
+      }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

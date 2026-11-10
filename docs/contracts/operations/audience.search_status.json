@@ -1,0 +1,227 @@
+{
+  "id": "audience.search_status",
+  "version": 1,
+  "l1": { "name": "job.get", "contract_version": "2.0.0", "family": 21, "core": false },
+  "intent": "\"How far has this search got, and who was found since I last asked?\"",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": [],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+  "channel_arguments": null,
+  "channel_templates": null,
+  "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "runs" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.search_status:1:input",
+    "title": "audience.search_status input",
+    "description": "One page of a search an earlier work item of this campaign started, read by the reference the provider gave it, from where the last read stopped. The caller names the work item; the runtime supplies the reference and the cursor, so no caller can name either.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "search", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["search", "limit"],
+        "properties": {
+          "search": {
+            "type": "string",
+            "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+            "description": "The work item of this campaign whose search is read: an `audience.search` that succeeded `accepted`, with a reference."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "At most this many people on the page. Required: absence is not a default, and a page may come back shorter."
+          }
+        }
+      },
+      "search": { "$ref": "#/$defs/search" },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "$defs": {
+      "search": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["work_item", "reference", "cursor"],
+        "description": "The search `args.search` names, composed by the runtime: never written by a caller.",
+        "properties": {
+          "work_item": { "type": "string", "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$", "description": "The work item that started the search, as `args.search` names it." },
+          "reference": { "type": "string", "minLength": 1, "maxLength": 256, "description": "The provider's reference for the search, as that work item's succeeded attempt returned it under `external_ids.search`." },
+          "cursor": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^[!-~]+$",
+            "description": "Where this read starts: the `cursor` an earlier read of this search answered, kept by the runtime and never parsed, or null to read from the first person found."
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.search_status:1:output",
+    "title": "audience.search_status result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["state", "found", "people", "cursor", "has_more", "vendor"],
+    "properties": {
+      "state": {
+        "type": "string",
+        "enum": ["in_progress", "finished", "exhausted", "paused", "paused_for_credits", "paused_for_limit"],
+        "description": "`in_progress`: the provider is still searching, so the search is read again. `finished`: it reached the count it was asked for. `exhausted`: the source ran out before it did. Those two are final: once a read answers either with `has_more` false, the search has nothing more to give. `paused`: a person paused it at the provider. `paused_for_credits`: it stopped because the account's credits ran out. `paused_for_limit`: it stopped because the account's plan holds no more contacts. The three paused states hold the search until a person acts at the provider — resumes it, buys credits, raises the plan — so it may move again and is read again."
+      },
+      "found": {
+        "type": ["integer", "null"],
+        "minimum": 0,
+        "description": "How many people the search has found in all so far, or null where the provider does not say."
+      },
+      "people": {
+        "type": "array",
+        "maxItems": 100,
+        "items": { "$ref": "#/$defs/person" },
+        "description": "The people found after `search.cursor`, at most `args.limit` of them, in the provider's own order. Empty where none were found since."
+      },
+      "cursor": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2048,
+        "pattern": "^[!-~]+$",
+        "description": "Where the next read starts, in the provider's own words: the same one back when nothing moved. The runtime keeps it and never parses it."
+      },
+      "has_more": {
+        "type": "boolean",
+        "description": "Whether more people are readable now from `cursor`."
+      },
+      "vendor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "description": "The provider's own word for the search's state. A closed list, so nothing else travels here.",
+        "properties": { "status": { "type": ["string", "null"], "maxLength": 64 } }
+      }
+    },
+    "$defs": {
+      "person": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["external_id", "first_name", "last_name", "title", "company", "location", "channels", "raw"],
+        "description": "One person the search found and revealed, in the one shape every provider answers in.",
+        "properties": {
+          "external_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "The provider's identifier for the person. Reported, never pinned by this operation."
+          },
+          "first_name": { "type": ["string", "null"], "maxLength": 200, "description": "The person's first name, or null where the provider holds none." },
+          "last_name": { "type": ["string", "null"], "maxLength": 200, "description": "The person's last name, or null where the provider holds none." },
+          "title": { "type": ["string", "null"], "maxLength": 200, "description": "The person's job title, as the provider holds it, or null where it holds none." },
+          "company": { "$ref": "#/$defs/company" },
+          "location": {
+            "type": ["string", "null"],
+            "maxLength": 500,
+            "description": "Where the person is, as the provider spells it — a city, a region, a country, or all three on one line — or null where it holds none."
+          },
+          "channels": {
+            "type": "array",
+            "maxItems": 8,
+            "items": { "$ref": "#/$defs/channel" },
+            "description": "How the person is reached, as present: each address, number and LinkedIn profile the provider holds for them and revealed. Empty where it holds none."
+          },
+          "raw": {
+            "type": ["string", "null"],
+            "maxLength": 16384,
+            "description": "The provider's own record for the person, untranslated, written as JSON text and trimmed by the plugin to fit, or null where it gives none to keep. Jason reads none of it: the fields beside it carry what Jason reads."
+          }
+        }
+      },
+      "company": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "domain", "size", "industry"],
+        "description": "The company the person works at, as the provider holds it; each member null where it holds none.",
+        "properties": {
+          "name": { "type": ["string", "null"], "maxLength": 200 },
+          "domain": { "type": ["string", "null"], "maxLength": 253, "description": "The company's web domain, such as `example.com`." },
+          "size": { "type": ["string", "null"], "maxLength": 64, "description": "The company's headcount in the provider's own words or band, such as `51-200`." },
+          "industry": { "type": ["string", "null"], "maxLength": 200, "description": "The company's industry, as the provider names it." }
+        }
+      },
+      "channel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "value"],
+        "properties": {
+          "channel": { "type": "string", "enum": ["email", "phone", "linkedin"] },
+          "value": { "type": "string", "minLength": 1, "maxLength": 500, "description": "The address, the number or the LinkedIn profile's link, as the provider holds it." }
+        }
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "search_not_found", "class": "permanent", "when": "The provider holds no search under the reference, or not one this account may see. Nothing was read." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential, or the user it signs in to the provider as, may not read this account's searches. This code stands for an answer the plugin cannot read as a provider block; one it can is `provider_blocked`." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing, and the runtime moves the cursor only on an answer, so the next attempt simply asks again from the same place." },
+    { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "The search read is the one the runtime names under `search.reference`, from `search.cursor`; the plugin reads by nothing the caller wrote.",
+    "A page holds at most `args.limit` people: those the search found after `search.cursor`, or from the first where it is null, in the provider's own order. `cursor` says where the next read starts — the same one back when nothing moved — and `has_more` whether more people are readable now. A person a page returned is not returned again after its cursor.",
+    "A page may come back short of `limit` with `has_more: true`: the plugin stops before the result would pass 768 KiB, counted as the runtime counts it.",
+    "A state this vocabulary has no word for is the nearest of its six — one in which the provider still searches is `in_progress`, one that holds the search until a person acts is `paused` — with the provider's own word under `vendor.status` either way.",
+    "Each person comes back in the shape `audience.search` answers in, with every channel the provider revealed and its own record under `raw` as JSON text.",
+    "An answer larger than the plugin may read from a program fails `provider_answer_too_large` as permanent: asking again would cut it at the same place.",
+    "Nothing is pinned."
+  ]
+}

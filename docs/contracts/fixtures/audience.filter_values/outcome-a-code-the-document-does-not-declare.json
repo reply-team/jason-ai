@@ -1,0 +1,36 @@
+{
+  "operation": "audience.filter_values",
+  "version": 1,
+  "case": "the search's refusal of a definition, which the typeahead does not declare: outside the contract, and never repeated",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "validation",
+      "code": "definition_rejected",
+      "message": "No such value.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [
+      {
+        "pointer": "/error/code",
+        "reason": "enum"
+      }
+    ]
+  }
+}

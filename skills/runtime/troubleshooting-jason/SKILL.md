@@ -109,7 +109,7 @@ when the moment arrives. Say when that is, and stop.
 **How you recognise it.** The item looks perfectly healthy and is never claimed — and the campaign it belongs
 to is not active. Only an active campaign's work is claimed, with one exception: a paused campaign still lets
 through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record`,
-`campaign.pause` and `message.cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one
+`campaign.pause`, `message.cancel` and `audience.search_cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one
 holds every item but theirs.
 
 **What it means.** This is about the *campaign*, not the item, which is why reading the item over and over

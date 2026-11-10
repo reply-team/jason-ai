@@ -1,0 +1,31 @@
+{
+  "operation": "audience.search_cancel",
+  "version": 1,
+  "case": "a caller that names the reference itself, which only the runtime supplies",
+  "input": {
+    "args": {
+      "search": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG",
+      "reference": "search-5521"
+    },
+    "search": {
+      "work_item": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG",
+      "reference": "search-5521"
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "paused",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/args/reference",
+        "reason": "additional_properties"
+      }
+    ]
+  }
+}
