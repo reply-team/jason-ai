@@ -444,9 +444,19 @@ test('reply auth status and reply account list are allowed without a card, and a
     for (const scope of [windows(), mac()]) {
         for (const command of ['reply auth login', 'reply schedule list', 'reply --version', 'reply', 'reply auth', 'reply account', 'reply auth logout',
             'reply account list && reply sequences delete 5', 'npx reply prospects list', "bash -c 'reply contacts create --email a@example.com'",
-            'echo $(reply campaigns list)', 'X=1 reply people list', '/usr/local/bin/reply sequences list', 'reply auth status; reply auth login']) {
+            'echo $(reply campaigns list)', 'X=1 reply people list', '/usr/local/bin/reply sequences list', 'reply auth status; reply auth login',
+            'reply contacts delete', 'env reply contacts delete', 'echo x | xargs reply contacts delete', 'true && reply contacts delete',
+            // The package's own name through a runner is reply too.
+            'npx reply-cli contacts delete', 'pnpm dlx reply-cli@0.19.0 contacts delete', 'yarn dlx reply-cli contacts delete',
+            // A reply refusal comes before the card a jason command gets.
+            'jason status && reply contacts delete']) {
             assert.ok(refused(run(scope, command)), command);
             assert.ok(refused(judge('PowerShell', { command }, scope)), `PowerShell: ${command}`);
+        }
+        // reply is read as a program only where a program stands: not in a draft, a message, a pattern or a folder's name.
+        for (const command of ['cat > draft.md <<\'EOF\'\nWe will reply within a day\nEOF', 'git commit -m "Draft the reply"', 'grep -i reply notes.md',
+            'ls C:/work/reply']) {
+            assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
         }
     }
     for (const command of ['reply.cmd sequences list', 'REPLY.EXE auth login', '"C:\\Program Files\\nodejs\\reply.cmd" contacts list']) {

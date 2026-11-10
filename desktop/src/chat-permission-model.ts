@@ -326,17 +326,37 @@ function jasonIn(command: string, scope: ChatScope): 'deny' | 'jason' | null {
     return found;
 }
 
+/** True when a program's name is one that runs another program or a whole script. */
+function runsAnotherProgram(name: string): boolean {
+    return runsAnother.has(name.toLowerCase());
+}
+
+/** True when a token names reply: the program itself, or its package `reply-cli`, with or without a version. */
+function isReply(platform: Platform, token: string): boolean {
+    const program = programOf(platform, token);
+    return program === 'reply' || /^reply-cli(@.*)?$/i.test(program);
+}
+
 /**
  * True when any command inside the text, in any part, form or nesting, runs reply with words other than the two the chat
- * runs: `auth status` and `account list`. Read as jason is read, by every token whose program is reply.
+ * runs: `auth status` and `account list`. reply is read as a program only where a program stands: the first token of a
+ * part after any `NAME=value` assignments, or a later token of a part in which an earlier token runs another program (a
+ * shell, an exec wrapper, a package runner). A quoted word is one token, and one given to such a program is read as a
+ * command of its own. So a draft, a message, a search pattern or a folder's name that holds the word is not reply.
  */
 function replyRefused(command: string, scope: ChatScope): boolean {
     for (const part of command.split(/&&|\|\||\$\(|[;|&`\n\r<>(){}]/)) {
-        const tokens = part.trim().split(/\s+/).map(unquoted).filter((token) => token !== '');
+        const tokens = (part.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(unquoted).filter((token) => token !== '');
+        const first = tokens.findIndex((token) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token));
+        let runner = false;
         for (const [at, token] of tokens.entries()) {
-            if (programOf(scope.platform, token) !== 'reply') continue;
-            const words = tokens.slice(at + 1);
-            if (!allowedReply.some((pair) => pair.every((word, index) => words[index] === word))) return true;
+            if (runner && /\s/.test(token) && replyRefused(token, scope)) return true;
+            if (at !== first && !runner) continue;
+            if (isReply(scope.platform, token)) {
+                const words = tokens.slice(at + 1);
+                if (!allowedReply.some((pair) => pair.every((word, index) => words[index] === word))) return true;
+            }
+            if (runsAnotherProgram(programOf(scope.platform, token))) runner = true;
         }
     }
     return false;
@@ -423,10 +443,10 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
     if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
+    if (replyRefused(command, scope)) return { verdict: 'deny', message: replyRefusal };
     // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
     // person's to answer, each time.
     if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
-    if (replyRefused(command, scope)) return { verdict: 'deny', message: replyRefusal };
     // Only the Bash tool's commands are fenced by the host and may be allowed or remembered; any other tool's command is
     // the person's to answer, each time.
     if (tool !== 'Bash') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
