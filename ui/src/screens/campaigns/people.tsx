@@ -25,6 +25,8 @@ type Props = {
     more: (() => Promise<void>) | null;
     onSearch: (q: string) => void;
     onWaiting: (person: MembershipItem) => void;
+    /** Opens anybody not waiting for you in the person panel, from this campaign. */
+    onPerson: (contactId: string) => void;
 };
 
 /** Why a person is in the count they were listed under, in the few words a row has room for. */
@@ -54,7 +56,7 @@ function about(person: MembershipItem): string {
 
 /**
  * The campaign's people under one count of the view, or All of them, found by a search: each with why the count
- * counts them. A person waiting for you opens what waits in place; anybody else opens on People.
+ * counts them. A person waiting for you opens what waits in place; anybody else opens in the person panel.
  */
 export function CampaignPeople({
     at,
@@ -69,6 +71,7 @@ export function CampaignPeople({
     more,
     onSearch,
     onWaiting,
+    onPerson,
 }: Props) {
     const columns =
         at.view === 'summary'
@@ -123,9 +126,10 @@ export function CampaignPeople({
                             className="row"
                             href={`#/people/${encodeURIComponent(person.contact.id)}`}
                             onClick={(event) => {
-                                if (!opens) return;
+                                if (event.ctrlKey || event.metaKey || event.shiftKey) return;
                                 event.preventDefault();
-                                onWaiting(person);
+                                if (opens) onWaiting(person);
+                                else onPerson(person.contact.id);
                             }}
                         >
                             <span

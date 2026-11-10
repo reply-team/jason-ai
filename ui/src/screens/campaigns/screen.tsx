@@ -7,6 +7,7 @@ import { Toolbar } from '../../layout/toolbar';
 import { session } from '../../api/session';
 import { ApprovalPanel } from '../attention/approval-panel';
 import { QuestionPanel } from '../attention/question-panel';
+import { PersonPanel } from '../people/panel/panel';
 import * as timeline from '../people/store';
 import { Search } from '../../lists/search';
 import {
@@ -15,6 +16,7 @@ import {
     replace,
     route,
     type CampaignFilters,
+    type CampaignTab,
     type CampaignView,
     type Period,
     type Route,
@@ -88,6 +90,9 @@ export function CampaignsScreen() {
 
     // The dialog open, with the campaign it belongs to: it never shows over another one.
     const [act, setAct] = useState<{ id: string | null; what: Act } | null>(null);
+    // The person opened from this campaign's People, shown in place of the panel until closed or the tab is left.
+    const [person, setPerson] = useState<{ id: string; tab: CampaignTab; contactId: string } | null>(null);
+    const personShown = person && selected && person.id === selected && person.tab === at.tab ? person.contactId : null;
     const acting = act && act.id === selected ? act.what : null;
     const setActing = (what: Act | null) => setAct(what ? { id: selected, what } : null);
     /** The open campaign as it is now: its numbers, and what its tab shows. A People list reads the numbers with itself. */
@@ -288,7 +293,10 @@ export function CampaignsScreen() {
                     onClose={() => (store.waiting.value = null)}
                 />
             )}
-            {selected && !waiting && (
+            {selected && !waiting && personShown && (
+                <PersonPanel contactId={personShown} campaignId={selected} onClose={() => setPerson(null)} />
+            )}
+            {selected && !waiting && !personShown && (
                 <div className="panel">
                     {store.panelFailure.value && <Notice danger>{store.panelFailure.value}</Notice>}
                     {tabFailure && <Notice danger>{tabFailure}</Notice>}
@@ -341,6 +349,7 @@ export function CampaignsScreen() {
                                         const what = person.why ? store.waitingOf(person.why) : null;
                                         if (what) void store.openWaiting(api, selected!, what);
                                     }}
+                                    onPerson={(contactId) => setPerson({ id: selected!, tab: at.tab, contactId })}
                                 />
                             )}
                             {at.tab === 'inbox' && (

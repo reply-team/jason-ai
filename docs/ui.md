@@ -69,8 +69,9 @@ zone (`jason campaign activity`). A person may be in several columns, and each c
 counts. A search finds a campaign by its name, and the archived ones appear on request (`jason campaign list --query`,
 `--include-archived`); the view, the period and both filters are part of the page's address. Every number opens its
 campaign with exactly the people it counts (`jason campaign list-contacts --summary`, or `--activity` with the period),
-each with why: a person waiting for you opens the approval or the question in place, as on Attention, and a failure
-shows the reason the runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
+each with why: a person waiting for you opens the approval or the question in place, as on Attention, anybody else
+opens the person's panel in place, with the page's address left as the campaign's, and a failure shows the reason the
+runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
 its people and the provider campaign it is linked to; **Add people** finds people and adds them (`jason campaign
 add-contacts`). A campaign opens on its **Sequence**, which puts what is planned, what waits for you and what is running
 above the now line, and ends with **What happened**, the campaign's journal (`jason journal list --campaign`),

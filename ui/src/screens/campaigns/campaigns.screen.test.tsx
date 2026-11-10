@@ -591,6 +591,35 @@ describe('A campaign’s people', () => {
         expect(await screen.findByRole('heading', { level: 2, name: 'Spring' })).toBeTruthy();
     });
 
+    it('anybody not waiting for you opens in the person panel in place, from this campaign, and Close returns to the list', async () => {
+        const api = peopleApi('campaign.list_contacts/summary-failed')
+            .answer('contact.get', 'contact.get/imported')
+            .answer('workitem.list', 'workitem.list/by-contact-open-imported')
+            .answer('journal.list', 'journal.list/by-contact-empty')
+            .answer('suppression.list', 'suppression.list/grace-email-clear');
+        open(api, people('failed'));
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+        const address = location.hash;
+
+        fireEvent.click(await row('Cleo Example'));
+
+        const person = await waitFor(() => {
+            const shown = document.querySelector<HTMLElement>('.person-panel');
+            expect(shown && within(shown).queryByRole('heading', { level: 2 })).toBeTruthy();
+            return shown!;
+        });
+        expect(sent(api, 'contact.get')).toEqual([fixtures['contact.get/imported'].request]);
+        expect(location.hash).toBe(address);
+        // The panel keeps its tab itself: the address stays the campaign's.
+        fireEvent.click(within(person).getByRole('tab', { name: 'Details' }));
+        expect(location.hash).toBe(address);
+
+        fireEvent.click(within(person).getByRole('button', { name: 'Close' }));
+        expect(document.querySelector('.person-panel')).toBeNull();
+        expect(await row('Cleo Example')).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 2, name: 'Spring' })).toBeTruthy();
+    });
+
     it('a number opened after the world moved shows the list as it is now', async () => {
         // The table was read when Waiting was 3; the panel asks again and the runtime now says 2.
         const api = peopleApi('campaign.list_contacts/summary-waiting-after').answer(
