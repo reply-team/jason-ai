@@ -173,16 +173,27 @@ const walkTitles: Readonly<Record<string, string>> = {
 };
 
 /**
+ * True when a folder holds the data directory, read as a walk would most likely reach it: a leading `~` as the home
+ * folder, and on Windows each component without its trailing dots and spaces, as Windows reads the name.
+ */
+function holdsData(value: string, scope: ChatScope): boolean {
+    let text = /^~([\\/]|$)/.test(value) ? `${scope.home}${value.slice(1)}` : value;
+    if (scope.platform === 'win32') text = text.split(/[\\/]/).map((part) => (part === '.' || part === '..' ? part : part.replace(/[. ]+$/, ''))).join('\\');
+    return inside(scope, located(text, scope), located(scope.data, scope));
+}
+
+/**
  * A folder a search or a listing walks: one that holds the data directory is refused, since the walk would read what the
- * chat never reads; any other is judged as a read of it. Its card is remembered by the folder it names and by the tool's
- * own kind, so a grant covers that tool's walks of that folder only: never a Read, a sibling, a folder under it or
- * another tool's walk, and a Read's grant never covers it.
+ * chat never reads, and that comes before a card for its spelling; any other is judged as a read of it. Its card is
+ * remembered by the folder it names and by the tool's own kind, so a grant covers that tool's walks of that folder only:
+ * never a Read, a sibling, a folder under it or another tool's walk, and a Read's grant never covers it.
  */
 function judgeFolder(tool: string, value: string, scope: ChatScope): Judgement {
     const judged = judgePath(value, scope, false);
-    if (judged.verdict === 'deny' || judgeSpelling(value, scope) !== null) return judged;
+    if (judged.verdict === 'deny') return judged;
+    if (holdsData(value, scope)) return { verdict: 'deny', message: searchRefusal };
+    if (judgeSpelling(value, scope) !== null) return judged;
     const folder = located(value, scope);
-    if (inside(scope, folder, located(scope.data, scope))) return { verdict: 'deny', message: searchRefusal };
     if (judged.verdict !== 'ask' || judged.remember === null) return judged;
     return {
         verdict: 'ask',
@@ -209,15 +220,19 @@ function judgeGlob(input: Record<string, unknown>, scope: ChatScope): Judgement 
     const pattern = typeof input['pattern'] === 'string' ? input['pattern'] : '';
     // A .. anywhere, a brace's alternative included, climbs where the fixed leading folders do not show.
     if (pattern.split(/[\\/{},]/).includes('..')) return { verdict: 'deny', message: climbRefusal };
-    if (pattern.startsWith('~')) return worse(judged, { verdict: 'ask', title: 'Use a path that begins with ~', detail: shorten(pattern), remember: null });
     const parts = pattern.split(/[\\/]/);
     const fixed: string[] = [];
     for (const part of parts) {
         if (/[*?[{]/.test(part)) break;
         fixed.push(part);
     }
-    if (fixed.length === 0) return judged;
     const separator = pathsOf(scope.platform).sep;
+    if (pattern.startsWith('~')) {
+        // A walk of a ~ folder that holds the data directory is refused; any other is a card each time.
+        const home: Judgement = { verdict: 'ask', title: 'Use a path that begins with ~', detail: shorten(pattern), remember: null };
+        return worse(worse(fixed.length === 0 ? home : judgeFolder('Glob', fixed.join(separator), scope), home), judged);
+    }
+    if (fixed.length === 0) return judged;
     const leading = pattern.startsWith('/') && fixed[0] === '' ? `${separator}${fixed.slice(1).join(separator)}` : fixed.join(separator);
     // The walked folder's card comes first, so that a tie keeps its key rather than the path's.
     return worse(judgeFolder('Glob', pathsOf(scope.platform).resolve(spelled(folder, scope), leading || '.'), scope), judged);

@@ -220,6 +220,26 @@ test('a search or a listing of a folder that holds the data directory is refused
     assert.equal(judge('LS', { path: '/Users/someone/Documents' }, mac()).verdict, 'ask');
 });
 
+test('a walk refusal comes before a spelling card: a leading ~ is the home folder, and Windows reads a name without its trailing dots and spaces', () => {
+    const refused = (judged: ReturnType<typeof judge>) => judged.verdict === 'deny' && /narrower folder/.test(judged.message);
+    for (const scope of [windows(), mac()]) {
+        for (const [tool, input] of [['Grep', { pattern: 'token', path: '~' }], ['Glob', { pattern: '~/**/*.json' }], ['LS', { path: '~/' }],
+            ['Glob', { pattern: '*.json', path: '~' }]] as const) {
+            assert.ok(refused(judge(tool, input, scope)), `${scope.platform} ${tool} ${JSON.stringify(input)}`);
+        }
+    }
+    for (const [tool, input] of [['Grep', { pattern: 'token', path: 'C:\\Users\\someone.' }], ['LS', { path: 'C:\\Users\\someone. .' }],
+        ['Grep', { pattern: 'token', path: 'C:\\Users.\\someone' }], ['Glob', { pattern: '**/*.json', path: 'C:/Users /someone' }]] as const) {
+        assert.ok(refused(judge(tool, input, windows())), `${tool} ${JSON.stringify(input)}`);
+    }
+    // A ~ folder that does not hold the data directory, and a trailing dot elsewhere, are still the spelling card.
+    for (const [tool, input, scope] of [['Grep', { pattern: 'x', path: '~/Documents' }, mac()], ['Glob', { pattern: '~/.ssh/*' }, mac()],
+        ['Grep', { pattern: 'x', path: 'C:\\elsewhere.' }, windows()]] as const) {
+        const judged = judge(tool, input, scope);
+        assert.ok(judged.verdict === 'ask' && judged.remember === null, `${tool} ${JSON.stringify(input)}`);
+    }
+});
+
 test('a relative path with .. that climbs out of the chat folder is judged where it lands', () => {
     assert.equal(read(windows(), '..\\..\\run\\runtime.json').verdict, 'deny');
     assert.equal(read(windows(), 'sub\\..\\..\\..\\config\\settings.json').verdict, 'deny');
