@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { JasonDesktop } from '../../src/platform/desktop';
+import type { DesktopSetup, JasonDesktop } from '../../src/platform/desktop';
 
 // The seam is the whole of what the page may ask of the desktop, and the desktop's main process is written to it. A
 // member added or dropped is a change of the seam, so each object below names exactly the members of its part:
@@ -24,16 +24,27 @@ const setup = {
     configurePlugin: true,
     onChanged: true,
 } as const satisfies Record<keyof JasonDesktop['setup'], true>;
+// What setup.status answers is the seam too: the desktop's main process fills each field.
+const status = {
+    hosts: true,
+    reply: true,
+    runtimeVersion: true,
+    bundleVersion: true,
+    versionsDiffer: true,
+    plugins: true,
+    settingsRefused: true,
+} as const satisfies Record<keyof DesktopSetup, true>;
 
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
     Exactly<keyof typeof chat, keyof JasonDesktop['chat']>,
     Exactly<keyof typeof setup, keyof JasonDesktop['setup']>,
-] = [true, true, true];
+    Exactly<keyof typeof status, keyof DesktopSetup>,
+] = [true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true]);
+        expect(held).toEqual([true, true, true, true]);
         expect([
             ...Object.keys(top).filter((name) => name !== 'chat' && name !== 'setup'),
             ...Object.keys(chat).map((name) => `chat.${name}`),
@@ -52,6 +63,15 @@ describe('the desktop seam', () => {
             'setup.installProgram',
             'setup.configurePlugin',
             'setup.onChanged',
+        ]);
+        expect(Object.keys(status)).toEqual([
+            'hosts',
+            'reply',
+            'runtimeVersion',
+            'bundleVersion',
+            'versionsDiffer',
+            'plugins',
+            'settingsRefused',
         ]);
     });
 });

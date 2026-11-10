@@ -308,6 +308,32 @@ describe('the console', () => {
         await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1));
     });
 
+    it("says under the versions line, as text, that the runtime is not the bundle's version", async () => {
+        const sentence = `The runtime is 0.33.0 and this desktop carries 0.34.0: run jason update. ${hostile}`;
+        renderConsole(
+            pending(new FakeApi()),
+            stubDesktop({ ...setupFound, runtimeVersion: '0.33.0', versionsDiffer: sentence }),
+        );
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        show('Connect');
+        const connect = await waitFor(() => panel('Connect'));
+        const versions = await waitFor(() => connect.querySelector<HTMLElement>('.versions')!);
+        const under = versions.nextElementSibling!;
+        expect(under.classList.contains('versions-differ')).toBe(true);
+        expect(under.textContent!.trim()).toBe(sentence);
+        expect(connect.querySelector('img')).toBeNull();
+        expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
+    it("draws nothing under the versions line when the runtime is the bundle's version", async () => {
+        renderConsole(pending(new FakeApi()));
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        show('Connect');
+        const connect = await waitFor(() => panel('Connect'));
+        await waitFor(() => connect.querySelector('.versions')!);
+        expect(connect.querySelector('.versions-differ')).toBeNull();
+    });
+
     it('refuses to configure a plugin over a settings file it cannot read, and reloads with no values on Reload', async () => {
         const fake = pending(new FakeApi());
         const reason = `The settings file is not valid JSON at line 3. ${hostile}`;

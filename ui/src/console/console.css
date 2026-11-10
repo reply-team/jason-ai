@@ -912,6 +912,10 @@ body,
 .jc-console .versions {
     margin-top: 18px;
 }
+.jc-console .versions-differ {
+    margin-top: 4px;
+    color: var(--amber);
+}
 .jc-console .harness {
     height: 100%;
     overflow-y: auto;

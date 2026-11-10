@@ -131,6 +131,11 @@ export interface DesktopSetup {
     runtimeVersion: string | null;
     /** The version of the release the desktop carries. */
     bundleVersion: string;
+    /**
+     * When the runtime's version is not the bundle's, the desktop's sentence saying so, which names `jason update` as
+     * the way to bring them together; null otherwise.
+     */
+    versionsDiffer: string | null;
     /** The plugins the release carries that the desktop can configure. */
     plugins: DesktopPlugin[];
     /**

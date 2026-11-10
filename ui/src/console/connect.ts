@@ -301,5 +301,6 @@ export function connectView(): Html {
         <div class="meta versions">
             Jason Desktop ${state.bundleVersion} · runtime ${state.runtimeVersion ?? 'not running'}
         </div>
+        ${state.versionsDiffer === null ? null : html`<div class="meta versions-differ">${state.versionsDiffer}</div>`}
     </div>`;
 }

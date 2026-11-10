@@ -94,6 +94,7 @@ export const setupFound: DesktopSetup = {
             binding: null,
         },
     ],
+    versionsDiffer: null,
     settingsRefused: null,
 };
 
