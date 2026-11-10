@@ -33,6 +33,7 @@ function standInDesktop(): void {
                     },
                     runtimeVersion: null,
                     bundleVersion: '0.0.0-smoke',
+                    versionsDiffer: null,
                     plugins: [],
                     settingsRefused: null,
                 }),
@@ -71,6 +72,12 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     await expect(page.getByRole('heading', { name: 'What should Jason work on?' })).toBeVisible();
     await expect(page.locator('.dv-dockview')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Needs you', level: 1 })).toBeVisible();
+
+    // The built page loads the console's stylesheets as its own chunk's: a style only console.css gives, and one only
+    // the dock's stylesheet gives, are applied. The element alone would be there unstyled.
+    await expect(page.locator('.jc-console .shell')).toHaveCSS('display', 'flex');
+    await expect(page.locator('.jc-console .side')).toHaveCSS('width', '232px');
+    await expect(page.locator('.dv-tabs-and-actions-container').first()).toHaveCSS('display', 'flex');
 
     const side = page.locator('.side');
     await side.getByRole('button', { name: 'Activity' }).click();
