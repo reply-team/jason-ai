@@ -1,0 +1,11 @@
+{
+  "kind": "audience_reserve_low",
+  "version": 1,
+  "case": "three untouched under a threshold of five",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": { "untouched": 3, "threshold": 5 }
+  },
+  "expect": "valid"
+}

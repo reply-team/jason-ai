@@ -29,7 +29,8 @@ public static class CampaignMapper
             Utc(campaign.UpdatedAt),
             campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null,
             campaign.IdempotencyKey,
-            campaign.FolderPath);
+            campaign.FolderPath,
+            campaign.AudienceThreshold);
     }
 
     public static CampaignSummaryDto ToSummary(Campaign campaign)

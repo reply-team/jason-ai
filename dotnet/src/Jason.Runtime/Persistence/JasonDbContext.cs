@@ -199,6 +199,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             campaign.ToTable(t => t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)"));
             campaign.Property(c => c.ManagerEventWatermark).HasDefaultValue(0);
             campaign.Property(c => c.ResponderWatermark).HasDefaultValue(0);
+            campaign.Property(c => c.AudienceWatermark).HasDefaultValue(0);
 
             // One key names one campaign, and the database is what says so: two creates deciding "is it free?" by
             // looking would both see yes. A campaign made without a key is in nobody's way.
@@ -732,6 +733,11 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.HasIndex(e => e.Ts, "ix_journal_suppression_added_ts").HasFilter("kind = 'suppression_added'");
             entry.HasIndex(e => new { e.CampaignId, e.Ts }, "ix_journal_contacts_added_campaign_ts").HasFilter("kind = 'contacts_added'");
             entry.HasIndex(e => new { e.CampaignId, e.Ts }, "ix_journal_contacts_removed_campaign_ts").HasFilter("kind = 'contacts_removed'");
+
+            // The reserve step reads a campaign's latest line of each of its two kinds on every recount, and only those
+            // lines are indexed.
+            entry.HasIndex(e => new { e.CampaignId, e.Id }, "ix_journal_audience_reserve_low_campaign_id").HasFilter("kind = 'audience_reserve_low'");
+            entry.HasIndex(e => new { e.CampaignId, e.Id }, "ix_journal_audience_reserve_recovered_campaign_id").HasFilter("kind = 'audience_reserve_recovered'");
 
             // One person's lines, newest first: their timeline, and the newest of them is their latest activity.
             entry.HasIndex(e => new { e.ContactId, e.PublicId });

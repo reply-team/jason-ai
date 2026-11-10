@@ -271,6 +271,16 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("archived_at");
 
+                    b.Property<int?>("AudienceThreshold")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("audience_threshold");
+
+                    b.Property<int>("AudienceWatermark")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("audience_watermark");
+
                     b.Property<string>("Context")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1273,6 +1283,14 @@ namespace Jason.Runtime.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_journal_campaign_kind_key")
                         .HasFilter("kind = 'inbound_reply_observed'");
+
+                    b.HasIndex(new[] { "CampaignId", "Id" }, "ix_journal_audience_reserve_low_campaign_id")
+                        .HasDatabaseName("ix_journal_audience_reserve_low_campaign_id")
+                        .HasFilter("kind = 'audience_reserve_low'");
+
+                    b.HasIndex(new[] { "CampaignId", "Id" }, "ix_journal_audience_reserve_recovered_campaign_id")
+                        .HasDatabaseName("ix_journal_audience_reserve_recovered_campaign_id")
+                        .HasFilter("kind = 'audience_reserve_recovered'");
 
                     b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_events")
                         .IsUnique()

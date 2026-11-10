@@ -196,13 +196,17 @@ scan would consider.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in nine short steps: **expire**, **enforce**, **events**,
-**sync**, **respond**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a
+Each tick, the dispatcher runs one scan in ten short steps: **expire**, **enforce**, **events**,
+**sync**, **respond**, **reserve**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a
 reader that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
 each live campaign's conversations and says, in the chronicle, each thread that moved
 ([docs/inbound-sync.md](inbound-sync.md) is the contract). Respond reads those lines, whichever writer said them, and
 for a thread the campaign holds by its own pin queues a `conversation.get` of the thread and a responder created
-waiting on it, or records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Summon
+waiting on it, or records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
+counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
+the number was written since its last look, and says once per crossing that the reserve fell under the threshold or
+recovered ([docs/campaign-manager.md](campaign-manager.md) §9); it runs before summon, so a low reserve summons the
+review in the same scan, and creates no work. Summon
 is the campaign-manager loop — where a campaign that something happened to, or that has not been looked at
 for long enough, gets a check-in put on the queue ([docs/campaign-manager.md](campaign-manager.md) is the
 contract). All three run before the claim, so a read, a responder or a check-in created this tick can be claimed this
@@ -457,7 +461,9 @@ Now:
   person's decision and a cancel is one too: neither is a failure, and either, finishing after a failure, is the newer
   finish, so the person is no longer `failed`.
 - `working` — Work about them is planned or running. Work waiting for an approval is `waiting`'s.
-- `new` — Nothing has been done or planned for them yet.
+- `new` — Nothing has been done or planned for them yet: no work about them was created by a person, a role, an
+  attempt or a plugin. Work the runtime made about them by itself, the read of their thread and the responder a reply
+  woke, does not count. A campaign's reserve is this count ([docs/campaign-manager.md](campaign-manager.md) §9).
 - `idle` — Their work finished without failing, nothing is planned, and they were never put into the sequence.
 - `sequence` — They were put into the provider's sequence and are not out of it.
 - `out` — They replied, opted out, were stopped in the sequence, or hard-bounced. A reply is one the inbound read or

@@ -126,26 +126,28 @@ public class CampaignCommandsTests
     }
 
     /// <summary>
-    /// The campaign's own review cadence, sent and taken away the same way the profile is — including the
-    /// difference that makes the whole patch shape worth having: saying nothing leaves it alone, and saying
-    /// null puts the campaign back on the installation's cadence.
+    /// The campaign's own review cadence and its audience threshold, sent and taken away the same way the profile is —
+    /// including the difference that makes the whole patch shape worth having: saying nothing leaves the field alone, and
+    /// saying null puts the campaign back on the installation's cadence, or stops the counting.
     /// </summary>
-    [Fact]
-    public async Task Update_sends_the_review_cadence_and_clears_it_with_an_explicit_null()
+    [Theory]
+    [InlineData("--review-seconds", "600", "review_seconds")]
+    [InlineData("--audience-threshold", "50", "audience_threshold")]
+    public async Task Update_sends_a_number_the_dispatcher_reads_and_clears_it_with_an_explicit_null(string option, string value, string field)
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("campaign", "update", "cmp_A", "--review-seconds", "600");
+        var exit = await cli.RunAsync("campaign", "update", "cmp_A", option, value);
 
         Assert.Equal(ExitCodes.Success, exit);
-        cli.AssertPosted(Operations.CampaignUpdate, "{\"campaign_id\":\"cmp_A\",\"review_seconds\":600}");
+        cli.AssertPosted(Operations.CampaignUpdate, $"{{\"campaign_id\":\"cmp_A\",\"{field}\":{value}}}");
 
         using var clearing = new CliRun();
 
-        var cleared = await clearing.RunAsync("campaign", "update", "cmp_A", "--clear", "review_seconds");
+        var cleared = await clearing.RunAsync("campaign", "update", "cmp_A", "--clear", field);
 
         Assert.Equal(ExitCodes.Success, cleared);
-        clearing.AssertPosted(Operations.CampaignUpdate, "{\"campaign_id\":\"cmp_A\",\"review_seconds\":null}");
+        clearing.AssertPosted(Operations.CampaignUpdate, $"{{\"campaign_id\":\"cmp_A\",\"{field}\":null}}");
     }
 
     [Fact]
@@ -550,7 +552,7 @@ public class CampaignCommandsTests
     public async Task Human_mode_renders_one_campaign()
     {
         var campaign = JsonSerializer.Serialize(
-            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, "prj_A", "default", new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null),
+            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, "prj_A", "default", new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null, AudienceThreshold: 50),
             JasonJson.Options);
         using var cli = new CliRun(campaign);
 
@@ -566,6 +568,9 @@ public class CampaignCommandsTests
         // Which host this campaign's agent work uses is part of what the campaign is, so it is shown with it.
         Assert.Contains("Profile:", cli.Text, StringComparison.Ordinal);
         Assert.Contains("local-claude", cli.Text, StringComparison.Ordinal);
+
+        // So is the reserve it keeps, since the dispatcher counts against it.
+        Assert.Matches("(?m)^Reserve: +threshold 50 untouched\\r?$", cli.Text);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
