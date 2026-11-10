@@ -118,9 +118,9 @@ function folderThere(path: unknown): string | null {
 }
 
 /** Removes a turn's file; one that cannot be removed now is left for the next start's sweep. */
-function removeQuietly(desktop: string, turnId: string): void {
+function removeQuietly(turns: string, turnId: string): void {
     try {
-        removeTurnFiles(desktop, turnId);
+        removeTurnFiles(turns, turnId);
     } catch {
         // Left for the next start.
     }
@@ -145,7 +145,7 @@ export class Chat {
     constructor(options: ChatOptions) {
         this.#options = options;
         this.#platform = options.platform ?? currentPlatform();
-        sweepTurnFiles(options.paths.desktop);
+        sweepTurnFiles(options.paths.turns);
         this.#broker = new PermissionBroker({
             emit: (chatId, event) => options.emit(chatId, event),
             ...(options.decided ? { decided: options.decided } : {}),
@@ -210,7 +210,7 @@ export class Chat {
     closeAll(): void {
         for (const [chatId, running] of [...this.#running.entries()]) {
             this.stop(chatId);
-            if (running.turnId !== null) removeQuietly(this.#options.paths.desktop, running.turnId);
+            if (running.turnId !== null) removeQuietly(this.#options.paths.turns, running.turnId);
         }
         this.#broker.endAll();
     }
@@ -282,7 +282,7 @@ export class Chat {
                 if (turnId !== null) this.#broker.endTurn(turnId);
                 await endpoint?.close();
             } finally {
-                if (turnId !== null) removeQuietly(paths.desktop, turnId);
+                if (turnId !== null) removeQuietly(paths.turns, turnId);
             }
         };
         try {
@@ -312,7 +312,7 @@ export class Chat {
                         return this.#broker.ask(id, tool, input);
                     },
                 });
-                const mcpConfig = writeTurnConfig(paths.desktop, id, endpoint.url, secret);
+                const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
                 const rules = dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop));
                 args = claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, dataRules: rules, model: resolved.model, resume });
             } else {

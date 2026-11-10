@@ -116,17 +116,32 @@ export function rulePath(platform: Platform, path: string): string {
 }
 
 /**
+ * The data directory's own entries, which the runtime, the command line and the desktop make: named by the data rules
+ * whether they exist yet or not, so one made while a turn runs is refused as well.
+ */
+export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor'];
+
+/** The desktop folder's own entries but the chat folder, named the same way; `turns` holds every turn's configuration. */
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns'];
+
+/** The known names, then every name that is there and is not one of them, spelled as it is. */
+function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {
+    return [...new Set([...known, ...present])].filter((name) => name.toLowerCase() !== kept);
+}
+
+/**
  * The host's own rules for the installation's data: every entry of the data directory but `desktop`, and every entry of
- * `desktop` but the chat folder (the turn's own configuration among them), refused to its file tools and to the file
- * commands it recognises in Bash (`cat`, `head`, a redirection). Without them a read-only command such as `cat` reads
- * outside the working directories without asking; the permission model refuses the same paths when it is asked.
+ * `desktop` but the chat folder (the turns' configurations among them), the known ones whether they exist or not,
+ * refused to its file tools and to the file commands it recognises in Bash (`cat`, `head`, a redirection). Without them
+ * a read-only command such as `cat` reads outside the working directories without asking; the permission model refuses
+ * the same paths when it is asked.
  */
 export function dataRules(platform: Platform, data: string, dataEntries: readonly string[], desktopEntries: readonly string[]): string[] {
     const paths = platform === 'win32' ? win32 : posix;
     const desktop = paths.join(data, 'desktop');
     const targets = [
-        ...dataEntries.filter((name) => name.toLowerCase() !== 'desktop').map((name) => paths.join(data, name)),
-        ...desktopEntries.filter((name) => name.toLowerCase() !== 'chat').map((name) => paths.join(desktop, name)),
+        ...namesOf(knownDataEntries, dataEntries, 'desktop').map((name) => paths.join(data, name)),
+        ...namesOf(knownDesktopEntries, desktopEntries, 'chat').map((name) => paths.join(desktop, name)),
     ];
     return targets.flatMap((target) => {
         const rule = rulePath(platform, target);

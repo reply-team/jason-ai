@@ -135,19 +135,28 @@ test('an absolute path is spelled as Claude Code\'s file rules spell one, on bot
     assert.equal(rulePath('darwin', '/Users/a/[x]*?!#'), '//Users/a/\\[x\\]\\*\\?\\!\\#');
 });
 
+/** The folders and files the data rules refuse, one per entry, from the four rules each one gets. */
+const targetsOf = (rules: readonly string[]) => [...new Set(rules.map((rule) => rule.replace(/^(?:Read|Edit)\((.*?)(?:\/\*\*)?\)$/, '$1')))];
+
 test('the data rules refuse every entry of the data directory but desktop, and every entry of desktop but the chat folder', () => {
-    const rules = dataRules('darwin', '/Users/a/.jason', ['config', 'run', 'jason.db', 'desktop', 'Desktop'], ['settings.json', 'chat', 'provider-keys', 'turn-1.mcp.json']);
-    const targets = [...new Set(rules.map((rule) => rule.replace(/^(?:Read|Edit)\((.*?)(?:\/\*\*)?\)$/, '$1')))];
-    assert.deepEqual(targets, [
-        '//Users/a/.jason/config',
-        '//Users/a/.jason/run',
+    const rules = dataRules('darwin', '/Users/a/.jason', ['config', 'run', 'jason.db', 'desktop', 'Desktop'], ['settings.json', 'chat', 'provider-keys', 'notes.txt']);
+    assert.deepEqual(targetsOf(rules), [
+        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        '//Users/a/.jason/desktop/settings.json',
-        '//Users/a/.jason/desktop/provider-keys',
-        '//Users/a/.jason/desktop/turn-1.mcp.json',
+        ...['settings.json', 'provider-keys', 'electron', 'turns'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
-    assert.ok(dataRules('win32', 'C:\\d', ['CONFIG'], ['CHAT']).every((rule) => rule.includes('//c/d/CONFIG')));
+    const windows = targetsOf(dataRules('win32', 'C:\\d', ['CONFIG'], ['CHAT', 'Turns']));
+    assert.ok(windows.includes('//c/d/CONFIG') && windows.includes('//c/d/config') && windows.includes('//c/d/desktop/Turns'));
+    assert.ok(!windows.some((target) => /chat$/i.test(target)));
+});
+
+test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
+    assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
+        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor'].map((name) => `//home/a/.jason/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns'].map((name) => `//home/a/.jason/desktop/${name}`),
+    ]);
 });
 
 test('the host\'s environment puts the bundled jason first on PATH and names the data directory', () => {

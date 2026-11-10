@@ -1,9 +1,10 @@
 // What one chat turn writes, and removes when it ends: the host's MCP configuration, which names the turn's permission
-// endpoint and carries the turn's secret. It lies under `<data>/desktop/`, outside the chat folder, so the permission
-// model refuses the agent a read of it; the secret is never on argv and never in a log.
+// endpoint and carries the turn's secret. It lies in `<data>/desktop/turns/`, outside the chat folder, so the permission
+// model refuses the agent a read of it and one host rule covers every turn's; the secret is never on argv and never in
+// a log. Every function here takes that folder.
 
 import { randomBytes } from 'node:crypto';
-import { readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serverName } from './chat-permission-endpoint.ts';
 
@@ -32,40 +33,44 @@ export function turnConfig(url: string, secret: string): object {
     return { mcpServers: { [serverName]: { type: 'http', url, headers: { Authorization: `Bearer ${secret}` }, timeout: hostCallLimitMs } } };
 }
 
-export function turnConfigPath(desktop: string, turnId: string): string {
+export function turnConfigPath(turns: string, turnId: string): string {
     if (!turnIdShape.test(turnId)) throw new Error('That is not a turn id the desktop made.');
-    return join(desktop, `turn-${turnId}.mcp.json`);
+    return join(turns, `turn-${turnId}.mcp.json`);
 }
 
-/** Writes the turn's configuration, readable by this user alone; a file already there is never overwritten. */
-export function writeTurnConfig(desktop: string, turnId: string, url: string, secret: string): string {
-    const file = turnConfigPath(desktop, turnId);
+/**
+ * Writes the turn's configuration, readable by this user alone, making the folder when it is not there; a file already
+ * there is never overwritten.
+ */
+export function writeTurnConfig(turns: string, turnId: string, url: string, secret: string): string {
+    const file = turnConfigPath(turns, turnId);
+    mkdirSync(turns, { recursive: true, mode: 0o700 });
     writeFileSync(file, `${JSON.stringify(turnConfig(url, secret))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     return file;
 }
 
-export function removeTurnFiles(desktop: string, turnId: string): void {
-    rmSync(turnConfigPath(desktop, turnId), { force: true });
+export function removeTurnFiles(turns: string, turnId: string): void {
+    rmSync(turnConfigPath(turns, turnId), { force: true });
 }
 
 const turnFileShape = /^turn-[0-9a-f]{24}\.mcp\.json$/;
 
 /**
- * Removes every turn file under `<data>/desktop`, at the desktop's start: a desktop that ended mid-turn, or a removal a
- * scanner held, leaves one behind with its secret. Only names of the turn file's own shape are touched, and a file
- * that cannot be removed is left.
+ * Removes every turn file in `<data>/desktop/turns/`, at the desktop's start: a desktop that ended mid-turn, or a
+ * removal a scanner held, leaves one behind with its secret. Only names of the turn file's own shape there are touched,
+ * nothing else under `<data>/desktop`, and a file that cannot be removed is left.
  */
-export function sweepTurnFiles(desktop: string): void {
+export function sweepTurnFiles(turns: string): void {
     let names: string[];
     try {
-        names = readdirSync(desktop);
+        names = readdirSync(turns);
     } catch {
         return;
     }
     for (const name of names) {
         if (!turnFileShape.test(name)) continue;
         try {
-            rmSync(join(desktop, name), { force: true });
+            rmSync(join(turns, name), { force: true });
         } catch {
             // Left for the next start.
         }

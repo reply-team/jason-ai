@@ -31,6 +31,7 @@ test('the desktop’s own files are under <data>/desktop and its log beside the 
     assert.equal(paths.settings, join(data, 'desktop', 'settings.json'));
     assert.equal(paths.chat, join(data, 'desktop', 'chat'));
     assert.equal(paths.providerKeys, join(data, 'desktop', 'provider-keys'));
+    assert.equal(paths.turns, join(data, 'desktop', 'turns'));
     assert.equal(paths.logs, join(data, 'logs'));
     assert.equal(paths.installationSettings, join(data, 'config', 'settings.json'));
     assert.equal(paths.runFile, join(data, 'run', 'runtime.json'));

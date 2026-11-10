@@ -27,11 +27,11 @@ async function turn(t: { after: (fn: () => void | Promise<void>) => void }) {
     broker.openTurn('chat_a', id, { platform, cwd: paths.chat, chat: paths.chat, added: [], data: root, protectedFiles: [paths.installationSettings], denied: ['runtime'], deniedOperations: [], home: root, real: realPathOf });
     const secret = newSecret();
     const endpoint = await openEndpoint({ secret, decide: (tool, input) => broker.ask(id, tool, input) });
-    const config = writeTurnConfig(paths.desktop, id, endpoint.url, secret);
+    const config = writeTurnConfig(paths.turns, id, endpoint.url, secret);
     t.after(async () => {
         broker.endTurn(id);
         await endpoint.close();
-        removeTurnFiles(paths.desktop, id);
+        removeTurnFiles(paths.turns, id);
         rmSync(root, { recursive: true, force: true });
     });
     return { root, paths, broker, cards, config };

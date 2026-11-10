@@ -13,6 +13,8 @@ export interface DesktopPaths {
     chat: string;
     /** `<data>/desktop/provider-keys`: the AI providers' keys, encrypted by the operating system. */
     providerKeys: string;
+    /** `<data>/desktop/turns/`: one MCP configuration per running chat turn, with that turn's secret. */
+    turns: string;
     /**
      * `<data>/desktop/electron/`: Electron's own files (its `userData` and `sessionData`), where the page's storage, the
      * single-instance lock and, on Windows, the key the operating system's encryption of `provider-keys` is made with
@@ -43,6 +45,7 @@ export function desktopPaths(data: string): DesktopPaths {
         settings: join(desktop, 'settings.json'),
         chat: join(desktop, 'chat'),
         providerKeys: join(desktop, 'provider-keys'),
+        turns: join(desktop, 'turns'),
         electron: join(desktop, 'electron'),
         electronLogs: join(desktop, 'electron', 'logs'),
         logs: join(data, 'logs'),

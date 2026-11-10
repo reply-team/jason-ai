@@ -151,9 +151,10 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     assert.ok(fence.includes('Bash(jason approval approve:*)') && fence.includes('Bash(jason -*)'), fence.join(' '));
     assert.ok(fence.some((rule) => rule.endsWith('/config/**)')) && fence.some((rule) => rule.endsWith('/logs/**)')), 'the data directory outside the chat is fenced off');
     const config = flagValue(host.args, '--mcp-config');
-    assert.ok(same(join(config, '..'), r.b.paths.desktop), 'the turn file is the desktop folder, outside the chat folder');
+    assert.ok(same(join(config, '..'), r.b.paths.turns), 'the turn file is in desktop/turns, outside the chat folder');
     assert.equal(existsSync(config), false, 'the turn file is gone once the turn is over');
-    assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat'], 'nothing of the turn is left beside the chat folder');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'turns'], 'nothing of the turn is left beside the chat folder');
+    assert.deepEqual(readdirSync(r.b.paths.turns), [], 'nothing of the turn is left in turns/');
     assert.deepEqual(readdirSync(r.b.paths.chat), [], 'the turn writes nothing into the chat folder');
     assert.equal(existsSync(join(r.b.root, 'harness')), false, 'nothing reaches the harness root');
     assert.deepEqual(r.started, [{ host: 'claude', resumed: false }]);
@@ -248,7 +249,7 @@ test('a stop ends the host and what it started, then the turn is done with no er
     assert.deepEqual(await done, { kind: 'done', error: null });
     assert.equal(r.chat.isRunning('c1'), false);
     assert.ok(await settle(() => gone(grandchild)), 'the process the host started is gone too');
-    assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat']);
+    assert.deepEqual(readdirSync(r.b.paths.turns), []);
 });
 
 test('a stop while a card waits takes the card away before the turn is done', async (t) => {
@@ -309,7 +310,7 @@ test('a turn whose file cannot be removed still ends: it is no longer running, i
     assert.deepEqual(doneOf(said), { kind: 'done', error: null });
     assert.equal(r.chat.isRunning('c1'), false);
     assert.equal(r.ended.length, 1);
-    const left = readdirSync(r.b.paths.desktop).filter((name) => name.startsWith('turn-'));
+    const left = readdirSync(r.b.paths.turns).filter((name) => name.startsWith('turn-'));
     assert.equal(left.length, 1, 'the folder the host put there stays, for the next start to remove');
     plan(r, []);
     assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
@@ -339,7 +340,7 @@ test('a failed turn says the host\'s last words: an error result, a Codex failur
         const said = await r.turn(`c-${host}-${error.length}`, words, { host });
         assert.deepEqual(doneOf(said), { kind: 'done', error }, `${host} ${JSON.stringify(steps)}`);
     }
-    assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat']);
+    assert.deepEqual(readdirSync(r.b.paths.turns), []);
 });
 
 test('a host that cannot drive the chat, one it does not know, one not on the PATH and a provider with no key are refused before anything starts', async (t) => {
@@ -483,21 +484,25 @@ test('closing the window removes every running turn\'s file before it returns, s
     const done = r.until('c1', (event) => event.kind === 'done');
     await r.chat.send('c1', words, { host: 'claude' });
     assert.ok(await settle(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8') !== ''));
-    const turnFiles = () => readdirSync(r.b.paths.desktop).filter((name) => name.startsWith('turn-'));
+    const turnFiles = () => readdirSync(r.b.paths.turns).filter((name) => name.startsWith('turn-'));
     assert.equal(turnFiles().length, 1);
     r.chat.closeAll();
     assert.deepEqual(turnFiles(), []);
     await done;
 });
 
-test('a start removes the turn files a desktop that ended mid-turn left behind, and nothing else', (t) => {
+test('a start removes the turn files a desktop that ended mid-turn left in turns/, and nothing else', (t) => {
     const r = rig(t);
     const left = ['turn-0123456789abcdef01234567.mcp.json', 'turn-fedcba9876543210fedcba98.mcp.json'];
     const kept = ['turn-notes.txt', 'turn-0123.mcp.json', 'settings.json'];
-    mkdirSync(r.b.paths.desktop, { recursive: true });
-    for (const name of [...left, ...kept]) writeFileSync(join(r.b.paths.desktop, name), '{}');
+    mkdirSync(r.b.paths.turns, { recursive: true });
+    for (const name of [...left, ...kept]) writeFileSync(join(r.b.paths.turns, name), '{}');
+    // Under <data>/desktop itself nothing is touched, a name of the turn file's own shape included.
+    const beside = ['turn-00112233445566778899aabb.mcp.json', 'settings.json'];
+    for (const name of beside) writeFileSync(join(r.b.paths.desktop, name), '{}');
     new Chat({ paths: r.b.paths, env: r.b.env, bundle: r.bundle, dataNamed: true, cli: r.b.cli, keyFor: () => undefined, fence: () => fence, emit: () => undefined });
-    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'chat').sort(), [...kept].sort());
+    assert.deepEqual(readdirSync(r.b.paths.turns).sort(), [...kept].sort());
+    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'chat' && name !== 'turns').sort(), [...beside].sort());
 });
 
 test('a deny list that cannot be read starts no turn, and leaves nothing open', async (t) => {

@@ -318,8 +318,9 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     await act('configurePlugin journal-forwarder', () => setup.configurePlugin('journal-forwarder', { token: 'b', target: 'https://hooks.example.com/in' }), ['config/settings.json'], pluginKeys('journal-forwarder'));
     await act('Reload', () => setup.configurePlugin('slack', {}), [], []);
 
-    // A chat turn writes one file, its MCP configuration beside the chat folder, and removes it when the turn is over.
-    const turnFile = /^desktop\/turn-[0-9a-f]{24}\.mcp\.json$/;
+    // A chat turn writes one file, its MCP configuration in desktop/turns/ beside the chat folder, and removes it when
+    // the turn is over.
+    const turnFile = /^desktop\/turns\/turn-[0-9a-f]{24}\.mcp\.json$/;
     let during: string[] = [];
     await act('a chat turn', async () => {
         b.env.STUB_HOST_PLAN = JSON.stringify([{ ask: { tool: 'Bash', input: { command: 'git status' } } }]);
