@@ -459,3 +459,98 @@ describe('Exclude', () => {
         expect(asked(api, 'campaign.remove_contacts')).toHaveLength(0);
     });
 });
+
+describe('Move', () => {
+    /** A campaign's row on Sequences. */
+    const membership = (name: string) =>
+        within(panel()).getByText(name, { selector: 'a' }).closest('li') as HTMLElement;
+
+    /** Opens Move on the Nordic pilot row, picks the campaign named and gives the reason the recordings carry. */
+    async function moveTo(name: string) {
+        const row = membership('Nordic pilot');
+        fireEvent.click(within(row).getByRole('button', { name: 'Move' }));
+        fireEvent.click(within(row).getByRole('button', { name: /Choose a campaign/ }));
+        fireEvent.click(await within(row).findByRole('option', { name: new RegExp(name) }));
+        fireEvent.input(within(row).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' }), {
+            target: { value: 'Moved to the follow-ups.' },
+        });
+        return row;
+    }
+
+    it('adds the person to the campaign chosen, then takes them out of the one they were in', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel', 'contact.get/person-after-move')
+            .answer('campaign.list', 'campaign.list/move-targets')
+            .answer('campaign.add_contacts', 'campaign.add_contacts/move-in')
+            .answer('campaign.remove_contacts', 'campaign.remove_contacts/move-out');
+        open(api, ingrid.id, 'sequences');
+        await within(await shown()).findByText('Nordic pilot', { selector: 'a' });
+        // A campaign the person already left is not moved out of.
+        expect(within(membership('Spring webinar')).queryByRole('button', { name: 'Move' })).toBeNull();
+
+        // Moving into the campaign they are moving out of is nothing to do.
+        let row = await moveTo('Nordic pilot');
+        expect(within(row).getByRole<HTMLButtonElement>('button', { name: 'Move to Nordic pilot' }).disabled).toBe(
+            true,
+        );
+        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+
+        row = await moveTo('Q4 follow-ups');
+        fireEvent.click(within(row).getByRole('button', { name: 'Move to Q4 follow-ups' }));
+
+        await waitFor(() => expect(asked(api, 'contact.get')).toHaveLength(2));
+        expect(asked(api, 'campaign.add_contacts')).toEqual([recorded('campaign.add_contacts/move-in')]);
+        expect(asked(api, 'campaign.remove_contacts')).toEqual([recorded('campaign.remove_contacts/move-out')]);
+        const order = api.calls
+            .map((call) => call.operation)
+            .filter((op) => op.startsWith('campaign.') && op !== 'campaign.list');
+        expect(order).toEqual(['campaign.add_contacts', 'campaign.remove_contacts']);
+        await waitFor(() => expect(membership('Nordic pilot').textContent).toContain('Excluded'));
+        expect(membership('Q4 follow-ups').textContent).toContain('Enrolled');
+        expect((await within(panel()).findByRole('status')).textContent).toContain(
+            'Moved from Nordic pilot to Q4 follow-ups.',
+        );
+    });
+
+    it('says a move left half done, that the person is in both campaigns, and offers the remove again', async () => {
+        const api = people()
+            .answer(
+                'contact.get',
+                'contact.get/person-panel',
+                'contact.get/person-after-half-move',
+                'contact.get/person-after-move',
+            )
+            .answer('campaign.list', 'campaign.list/move-targets')
+            .answer('campaign.add_contacts', 'campaign.add_contacts/move-in')
+            .answer(
+                'campaign.remove_contacts',
+                'campaign.remove_contacts/move-out-archived',
+                'campaign.remove_contacts/move-out',
+            );
+        open(api, ingrid.id, 'sequences');
+        await within(await shown()).findByText('Nordic pilot', { selector: 'a' });
+        const row = await moveTo('Q4 follow-ups');
+        fireEvent.click(within(row).getByRole('button', { name: 'Move to Q4 follow-ups' }));
+
+        const half = await within(panel()).findByRole('alert');
+        expect(half.textContent).toContain('Ingrid Solberg is now in both Nordic pilot and Q4 follow-ups.');
+        expect(half.textContent).toContain('is archived');
+        await waitFor(() => expect(membership('Q4 follow-ups').textContent).toContain('Enrolled'));
+        expect(membership('Nordic pilot').textContent).toContain('Enrolled');
+        // Nothing was taken back: the add stands.
+        expect(asked(api, 'campaign.remove_contacts')).toHaveLength(1);
+
+        fireEvent.click(within(half).getByRole('button', { name: 'Take them out of Nordic pilot again' }));
+        await waitFor(() => expect(asked(api, 'contact.get')).toHaveLength(3));
+        expect(asked(api, 'campaign.remove_contacts')).toEqual([
+            recorded('campaign.remove_contacts/move-out'),
+            recorded('campaign.remove_contacts/move-out'),
+        ]);
+        expect(asked(api, 'campaign.add_contacts')).toHaveLength(1);
+        await waitFor(() => expect(membership('Nordic pilot').textContent).toContain('Excluded'));
+        expect(within(panel()).queryByRole('alert')).toBeNull();
+        expect((await within(panel()).findByRole('status')).textContent).toContain(
+            'Moved from Nordic pilot to Q4 follow-ups.',
+        );
+    });
+});

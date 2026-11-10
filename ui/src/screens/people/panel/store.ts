@@ -1,6 +1,7 @@
 import { signal } from '@preact/signals-react';
 import type { Api } from '../../../api/client';
 import type {
+    AddContactsResult,
     Contact,
     ContactCampaign,
     ContactUpdateRequest,
@@ -145,10 +146,49 @@ export async function exclude(
     campaignId: string,
     contactId: string,
     reason?: string,
+    reread = true,
 ): Promise<RemoveContactsResult['items'][number] | undefined> {
     const body: Record<string, unknown> = { campaign_id: campaignId, contact_ids: [contactId] };
     if (reason) body['reason'] = reason;
     const result = await api.call<RemoveContactsResult>('campaign.remove_contacts', body, 'write');
-    await people.open(api, contactId);
+    if (reread) await people.open(api, contactId);
     return result.items.find((each) => each.contact_id === contactId) ?? result.items[0];
+}
+
+/**
+ * What a move came to: done; refused at the add, so nothing changed; or added to the new campaign with the step out
+ * of the old one refused, so the person is in both. Nothing is taken back.
+ */
+export type MoveOutcome = { moved: true } | { notAdded: string } | { notRemoved: unknown };
+
+/**
+ * Moves the person between campaigns as two acts in order: campaign.add_contacts to the new one, then
+ * campaign.remove_contacts from the old one, only once the add stands. The person is read again after any act went
+ * through. A refused add is thrown as it came when the call itself failed.
+ */
+export async function move(
+    api: Api,
+    contactId: string,
+    from: string,
+    to: string,
+    reason?: string,
+): Promise<MoveOutcome> {
+    const body: Record<string, unknown> = { campaign_id: to, contacts: [{ contact_id: contactId }] };
+    if (reason) body['reason'] = reason;
+    const added = await api.call<AddContactsResult>('campaign.add_contacts', body, 'write');
+    const item = added.items.find((each) => each.contact_id === contactId) ?? added.items[0];
+    if (item?.status !== 'added' && item?.status !== 'already_member')
+        return { notAdded: item?.error?.message ?? item?.status ?? 'no answer for the person' };
+    let outcome: MoveOutcome;
+    try {
+        const out = await exclude(api, from, contactId, reason, false);
+        outcome =
+            out?.status === 'removed' || out?.status === 'already_excluded'
+                ? { moved: true }
+                : { notRemoved: out?.error?.message ?? out?.status ?? 'no answer for the person' };
+    } catch (error) {
+        outcome = { notRemoved: error };
+    }
+    await people.open(api, contactId);
+    return outcome;
 }
