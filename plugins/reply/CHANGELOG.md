@@ -3,6 +3,17 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.15.1
+
+- The known break of the contract that 0.15.0 lists is gone, because the contract no longer asks for what broke it:
+  `audience.search` takes no `exclude`, and no provider is asked to leave people already known out of a search. A
+  provider whose search can take a list of people to skip takes it under `args.provider`; Reply's start takes none.
+  Nothing this package does has changed. The README's row for `audience.search` and "What it cannot do" no longer speak
+  of `exclude`, nor say that the runtime recognises the people a search finds when they land: in this build a search's
+  people do not become a campaign's. They still say that a person Reply already holds is never found, while
+  `audience.preview` counts and samples them, and that a person the campaign has and Reply does not hold can be found
+  and charged for.
+
 ## 0.15.0
 
 - The package performs the audience family over Reply's Live Data: `audience.preview`, `audience.search`,

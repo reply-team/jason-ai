@@ -12,13 +12,21 @@ explains it. Where the two seem to differ, the document is right and this page i
 
 "Find up to this many people matching this definition, and make them ours." The spending act of the audience family:
 one search of the provider's database, charged per person found and taken, its people revealed — names, titles,
-companies, and the addresses, numbers and profiles they are reached at. It is how a campaign gets people Jason did not
-hold: a new audience from a definition, or more of one it already searched under, a top-up.
+companies, and the addresses, numbers and profiles they are reached at. It is how a campaign gets people from the
+provider: a new audience from a definition, or more of one it already searched under, a top-up.
 
 A person approves it once per work item (`confirm_once`), reading the count, the definition and the options before
 anything is spent. Nobody picks among candidates: where a provider finds people first and reveals them after, both
-happen inside the plugin, and every person the search returns is revealed. People already known are left out by the
-request itself, under `exclude`, never by sorting what came back.
+happen inside the plugin, and every person the search returns is revealed.
+
+The contract asks no provider to leave people already known out of a search: not every provider's search takes a list
+of people to skip, and those that do take different things — their own identifiers, addresses, profile links. So a
+search may find, and be charged for, a person the campaign already holds, and a top-up at a provider that does not skip
+the people it found before may find them again. A provider whose search can take such a list takes it under
+`args.provider`, the object every operation reserves for the provider and its skills, which the runtime hands to the
+plugin as written ([the input a plugin receives](../README.md#the-input-a-plugin-receives)). That a campaign never
+holds the same person twice is the runtime's to keep, whichever provider searched, when the people a search found
+become the campaign's; in this build they do not yet ([`docs/campaign-manager.md`](../../campaign-manager.md) §11).
 
 A search buys records and reaches nobody, so its reach is `control`. It runs through an open provider block of its
 account rather than waiting on it — a block over the account's sends does not hold its searches — and a `blocked`
@@ -61,7 +69,6 @@ as they were written, a top-up's number among them ([`docs/campaign-manager.md`]
       "company_sizes": ["51-200"]
     },
     "count": 250,
-    "exclude": { "emails": ["known@northwind-freight.example"] },
     "people_per_company": 2,
     "find_phones": false
   },
@@ -76,9 +83,6 @@ as they were written, a top-up's number among them ([`docs/campaign-manager.md`]
 ```
 
 - `count` is an upper bound, 1 to 1000, never a promise: the search stops at it, or sooner where the source runs out.
-- `exclude` names people already known — by the provider's own identifier, by email address, by LinkedIn profile — up
-  to 500 of each. Nobody named there comes back: the provider leaves them out where it can, and the plugin drops them
-  where it cannot.
 - `people_per_company`, `include_without_email` and `find_phones` read as 1, false and false where they are absent.
   Phones may cost extra: the document's `cost_basis` says so.
 
@@ -150,8 +154,8 @@ its reference, whatever state it is in. Only where none matches does the repeat 
 Search the provider for up to 250 people matching the definition below, for Jason's campaign Q3 LatAm founders: a metered search, charged per person found.
 ```
 
-The definition is highlighted whole beside the line, with the count, the audience's number, the options and the
-exclusions, so the person approving reads what will be searched and what it may cost.
+The definition is highlighted whole beside the line, with the count, the audience's number and the options, so the
+person approving reads what will be searched and what it may cost.
 
 ## The properties
 
@@ -176,7 +180,7 @@ exclusions, so the person approving reads what will be searched and what it may 
 | under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |
-| preview a person reads | `Search the provider for up to {/args/count} people matching the definition below, for Jason's campaign {/campaign/name}: a metered search, charged per person found.`; highlighted: `/args/count`, `/definition`, `/args/audience`, `/args/people_per_company`, `/args/include_without_email`, `/args/find_phones`, `/args/exclude` |
+| preview a person reads | `Search the provider for up to {/args/count} people matching the definition below, for Jason's campaign {/campaign/name}: a metered search, charged per person found.`; highlighted: `/args/count`, `/definition`, `/args/audience`, `/args/people_per_company`, `/args/include_without_email`, `/args/find_phones` |
 | pinned identifiers | `search` names a work_item |
 | recovery read | The provider's searches of this account started at or after `context.unsettled_since`: the one under this work item's key, where the provider keeps a key for a search, or else the one of the same definition and options. A search found is this request's, and is answered `accepted` with its reference whatever state it is in; a new search is started only where none matches. |
 | after an ambiguous end | `after_recovery_read` — a later attempt performs the recovery read above and answers from it when the effect already happened |

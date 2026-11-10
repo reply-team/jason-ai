@@ -103,9 +103,9 @@ a condition beside it — and the last column is the line the operation's own pa
 ## The audience family
 
 Six operations find people for a campaign at the provider, under the noun `audience`. The envelope — how many people,
-whom to leave out, how many of one company, whether people without an email count, whether phones are wanted — is the
-documents'. The **definition** inside it — which industries, titles and company sizes, as the provider names them — is
-the provider's own shape, which the plugin declares (below). A person comes back in one shape whoever the provider:
+how many of one company, whether people without an email count, whether phones are wanted — is the documents'. The
+**definition** inside it — which industries, titles and company sizes, as the provider names them — is the provider's
+own shape, which the plugin declares (below). A person comes back in one shape whoever the provider:
 `external_id`, names, title, company (name, domain, size, industry), location, the channels the provider holds, and
 `raw`, the provider's own record as JSON text of at most 16 KiB, which a plugin trims rather than exceed and which
 nothing in the runtime reads.

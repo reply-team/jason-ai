@@ -1,7 +1,7 @@
 {
   "operation": "audience.search",
   "version": 1,
-  "case": "the same address excluded twice",
+  "case": "every option named: at most one person from any one company, phones asked for, people without an address taken too",
   "input": {
     "args": {
       "definition": {
@@ -36,13 +36,10 @@
           }
         ]
       },
-      "count": 100,
-      "exclude": {
-        "emails": [
-          "known@northwind-freight.example",
-          "known@northwind-freight.example"
-        ]
-      }
+      "count": 250,
+      "people_per_company": 1,
+      "include_without_email": true,
+      "find_phones": true
     },
     "definition": {
       "industries": [
@@ -86,12 +83,5 @@
     },
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
-  "expect": {
-    "invalid": [
-      {
-        "pointer": "/args/exclude/emails",
-        "reason": "unique_items"
-      }
-    ]
-  }
+  "expect": "valid"
 }
