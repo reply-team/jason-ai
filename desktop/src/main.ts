@@ -32,6 +32,8 @@ import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
 import { Setup } from './setup.ts';
 import { loginPath } from './shell-path.ts';
+import { uninstallStart } from './uninstall.ts';
+import { runUninstall } from './uninstall-start.ts';
 
 function readText(file: string): string | null {
     try {
@@ -314,7 +316,11 @@ app.setPath('userData', early.electron);
 app.setPath('sessionData', early.electron);
 app.setAppLogsPath(early.electronLogs);
 
-if (!app.requestSingleInstanceLock()) {
+const uninstalling = uninstallStart(process.argv);
+if (uninstalling !== null) {
+    // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
+    void app.whenReady().then(() => runUninstall(uninstalling.quiet)).finally(() => app.quit());
+} else if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {
     // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray.
