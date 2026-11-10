@@ -239,7 +239,44 @@ export function close(): void {
     waiting.value = null;
     campaign.value = null;
     counted.value = null;
+    results.value = null;
     panelFailure.value = null;
+}
+
+/**
+ * The Results tab's two answers, with the campaign and the period they were read for: the campaign's people now, from
+ * campaign.summary, and the period's counts, from campaign.activity. The tab shows them as they came; it divides nothing.
+ */
+export const results = signal<{
+    id: string;
+    period: Period;
+    now: CampaignSummaryRow;
+    counts: CampaignActivityRow;
+} | null>(null);
+let resulting = 0;
+
+/** Reads the open campaign's Results again: both answers, or the runtime's refusal said above the tab. */
+export async function loadResults(api: Api, id: string, period: Period, now: Date, zone: string): Promise<void> {
+    const mine = ++resulting;
+    try {
+        const [summed, active] = await Promise.all([
+            api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: [id] }),
+            api.call<CampaignActivityResponse>('campaign.activity', {
+                campaign_ids: [id],
+                ...periodWindow(period, now, zone),
+            }),
+        ]);
+        const [row, counts] = [summed.campaigns[0], active.campaigns[0]];
+        if (mine === resulting && row && counts) results.value = { id, period, now: row, counts };
+    } catch (error) {
+        if (mine === resulting) fail(error, panelFailure);
+    }
+}
+
+/** The Results of this campaign for this period, or none while they are on their way. */
+export function resultsFor(id: string | null, period: Period) {
+    const found = results.value;
+    return found && found.id === id && found.period === period ? found : null;
 }
 
 /** What the People tab lists: one count of the view, or All, its everyone; and what the search found. */

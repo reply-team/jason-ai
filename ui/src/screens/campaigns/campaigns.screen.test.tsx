@@ -234,7 +234,12 @@ describe('The campaign panel', () => {
         expect(screen.getByText('Provider ids')).toBeTruthy();
         expect(screen.getByText('Raw campaign record')).toBeTruthy();
         expect(screen.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected')).toBe('true');
-        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Sequence', 'People', 'Settings']);
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'Sequence',
+            'People',
+            'Results',
+            'Settings',
+        ]);
     });
 
     it('closes back to the table', async () => {
@@ -684,6 +689,46 @@ describe('A campaign’s Sequence', () => {
         route.value = again;
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(4));
         expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign'].request);
+    });
+});
+
+describe('A campaign’s Results', () => {
+    /** The figures as the page shows them: each tile's name and its number. */
+    async function figures(): Promise<string[]> {
+        const group = await screen.findByRole('group', { name: 'The campaign’s results' });
+        await waitFor(() => expect(group.getAttribute('aria-busy')).toBe('false'));
+        return within(group)
+            .getAllByRole('figure')
+            .map((tile) => tile.getAttribute('aria-label') ?? '');
+    }
+
+    it('shows four figures as the runtime counts them: its people now, and the period’s contacted, replied and opted out', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.activity', 'campaign.activity/one');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+
+        expect(await figures()).toEqual(['People, 22', 'Contacted, 4', 'Replied, 2', 'Opted out, 2']);
+        expect(screen.getByRole('tab', { name: 'Results' }).getAttribute('aria-selected')).toBe('true');
+        expect(screen.getByText('Contacted, replied and opted out: Last 7 days')).toBeTruthy();
+        // Two reads, each the runtime's answer: nothing on the page divides one figure by another.
+        expect(sent(api, 'campaign.summary')).toContainEqual(fixtures['campaign.summary/some'].request);
+        expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/one'].request]);
+        expect(screen.queryByText(/%/)).toBeNull();
+    });
+
+    it('a campaign nothing has happened in yet shows its zeros, not blanks', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/summer')
+            .answer('campaign.get', 'campaign.get/summer')
+            .answer('campaign.activity', 'campaign.activity/summer');
+        open(api, { ...table, id: fixtures['campaign.get/summer'].request.campaign_id, tab: 'results' });
+
+        expect(await figures()).toEqual(['People, 2', 'Contacted, 0', 'Replied, 0', 'Opted out, 0']);
+        expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/summer'].request]);
     });
 });
 

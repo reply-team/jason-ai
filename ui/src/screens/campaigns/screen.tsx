@@ -24,6 +24,7 @@ import { views } from './labels';
 import { CampaignPanel } from './panel';
 import { TransitionDialog, type Transition } from './pause-dialog';
 import { CampaignPeople } from './people';
+import { CampaignResults } from './results';
 import { CampaignSettings } from './settings';
 import { CampaignTimeline } from './timeline';
 import * as store from './store';
@@ -93,6 +94,7 @@ export function CampaignsScreen() {
         if (!selected) return;
         if (at.tab === 'people') void store.listMembers(api, selected, table, query, new Date(), zone);
         else void store.count(api, selected, table, new Date(), zone);
+        if (at.tab === 'results') void store.loadResults(api, selected, at.period, new Date(), zone);
         if (at.tab === 'sequence') {
             void store.loadPending(api, selected);
             void timeline.loadTimeline(api, { campaign_id: selected }, timeline.chip.value, false);
@@ -120,6 +122,12 @@ export function CampaignsScreen() {
     useEffect(() => {
         if (selected && listing) void store.listMembers(api, selected, table, query, new Date(), zone);
     }, [api, listing]);
+
+    // The Results tab reads its two answers when it opens, and again for another period.
+    const resulting = selected && at.tab === 'results' ? `${selected}|${at.period}` : null;
+    useEffect(() => {
+        if (selected && resulting) void store.loadResults(api, selected, at.period, new Date(), zone);
+    }, [api, resulting]);
 
     /** Decides what waits on a person, then reads the table's row and the panel again: the person may have left a count. */
     const decide = async (operation: string, body: Record<string, unknown>) => {
@@ -319,6 +327,9 @@ export function CampaignsScreen() {
                                         if (what) void store.openWaiting(api, selected!, what);
                                     }}
                                 />
+                            )}
+                            {at.tab === 'results' && (
+                                <CampaignResults period={at.period} shown={store.resultsFor(selected, at.period)} />
                             )}
                             {at.tab === 'settings' && (
                                 <CampaignSettings campaign={campaign} now={new Date()} zone={zone} onAct={setActing} />
