@@ -22,7 +22,7 @@ import {
     settleStart,
     writeRollback,
 } from '../src/rollback.ts';
-import { feed, firstCheckMs, menuItemOf, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
+import { feed, firstCheckMs, menuItemOf, runtimeRefusal, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -102,10 +102,11 @@ function fakeUpdater(answers: { latest?: string; fails?: () => boolean } = {}) {
     return updater as typeof updater & FeedUpdater;
 }
 
-function updaterOn(s: ReturnType<typeof scratch>, updater: FeedUpdater, extra: { log?: ReturnType<typeof memoryLog> } = {}) {
+function updaterOn(s: ReturnType<typeof scratch>, updater: FeedUpdater, extra: { log?: ReturnType<typeof memoryLog>; stop?: () => Promise<{ exit: number } | null> } = {}) {
     const timers = handTimers();
     const states: UpdateState[] = [];
     const order: string[] = [];
+    const told: string[] = [];
     const log = extra.log ?? memoryLog();
     const updates = new Updater({
         updater,
@@ -114,10 +115,15 @@ function updaterOn(s: ReturnType<typeof scratch>, updater: FeedUpdater, extra: {
         rollback: s.rollback,
         log,
         timers,
+        stopRuntime: async () => {
+            order.push('stopRuntime');
+            return extra.stop ? extra.stop() : null;
+        },
+        refused: (why) => void told.push(why),
         beforeInstall: async () => void order.push('beforeInstall'),
         changed: (state) => void states.push(state),
     });
-    return { updates, timers, states, order, log };
+    return { updates, timers, states, order, told, log };
 }
 
 // ---- The rollback record ------------------------------------------------------------------------------------------
@@ -258,9 +264,33 @@ test('installing copies the application’s own folder aside under <data>/deskto
     assert.deepEqual(readRollback(s.rollback), { pending: { fromVersion: '0.34.0', toVersion: '0.35.0', directory: copy }, rejected: [] });
     for (const path of written(before, snapshot(s.data))) assert.ok(path.startsWith('desktop/rollback/0.34.0/') || path === 'desktop/rollback/state.json', `the install wrote ${path}`);
     assert.deepEqual(snapshot(s.application), application, 'the installed application is not touched before the installer runs');
-    assert.deepEqual([...order, ...updater.calls.slice(-1)], ['beforeInstall', 'quitAndInstall']);
+    assert.deepEqual([...order, ...updater.calls.slice(-1)], ['stopRuntime', 'beforeInstall', 'quitAndInstall'], 'the runtime the application carries is stopped before anything closes');
     assert.deepEqual(log.lines.at(-1), { level: 'info', name: 'update_installing', fields: { From: '0.34.0', To: '0.35.0' } });
     assert.equal(existsSync(rollbackStateFile(s.rollback)), true);
+});
+
+test('a runtime the application carries that does not stop keeps the update from being installed, and the person is told why', async (t) => {
+    for (const stop of [async () => ({ exit: 1 }), async () => ({ exit: -1 }), async (): Promise<{ exit: number } | null> => Promise.reject(new Error('planted-stop-error'))]) {
+        const s = scratch(t);
+        const updater = fakeUpdater({ latest: '0.35.0' });
+        const { updates, timers, order, told, log } = updaterOn(s, updater, { stop });
+        updates.start();
+        await timers.fire();
+        await updates.download();
+        const application = snapshot(s.application);
+        assert.equal(await updates.install(), false);
+
+        assert.deepEqual(order, ['stopRuntime'], 'nothing is closed');
+        assert.equal(updater.calls.includes('quitAndInstall'), false, 'the installer is not started');
+        assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' }, 'the person can try again');
+        assert.deepEqual(snapshot(s.application), application);
+        assert.equal(told.length, 1);
+        assert.match(told[0]!, /^The update was not installed, because the runtime this application carries did not stop \(jason runtime stop (exited 1|did not finish)\)\. Jason was left as it was\. Stop the runtime with jason runtime stop, then choose Restart Jason and Its Runtime to Install again\.$/);
+        assert.doesNotMatch(told[0]!, /planted/);
+        assert.deepEqual(log.lines.at(-1), { level: 'error', name: 'update_failed', fields: { Step: 'runtime', Failures: 1 } });
+    }
+    assert.match(runtimeRefusal(1), /jason runtime stop exited 1/);
+    assert.match(runtimeRefusal(-1), /jason runtime stop did not finish/);
 });
 
 test('the copy holds no file of <data>, even when <data> lies inside the installed application, and its record names no secret', async (t) => {
@@ -354,7 +384,7 @@ test('the menu offers one step at a time, and in a build that is not installed n
     assert.deepEqual(menuItemOf({ step: 'checking' }, true), { label: 'Checking for Updates…', enabled: false, act: null });
     assert.deepEqual(menuItemOf({ step: 'offered', version: '0.35.0' }, true), { label: 'Download Jason 0.35.0', enabled: true, act: 'download' });
     assert.deepEqual(menuItemOf({ step: 'downloading', version: '0.35.0' }, true), { label: 'Downloading Jason 0.35.0…', enabled: false, act: null });
-    assert.deepEqual(menuItemOf({ step: 'downloaded', version: '0.35.0' }, true), { label: 'Restart to Install Jason 0.35.0', enabled: true, act: 'install' });
+    assert.deepEqual(menuItemOf({ step: 'downloaded', version: '0.35.0' }, true), { label: 'Restart Jason and Its Runtime to Install 0.35.0', enabled: true, act: 'install' });
     assert.deepEqual(menuItemOf({ step: 'installing', version: '0.35.0' }, true), { label: 'Installing Jason 0.35.0…', enabled: false, act: null });
     assert.deepEqual(menuItemOf({ step: 'idle' }, false), { label: 'Updates Come to an Installed Build', enabled: false, act: null });
 });
@@ -365,7 +395,7 @@ test('the updater’s log lines, read back, carry versions, steps and counts, ne
     let failing = true;
     const updater = fakeUpdater({ latest: '0.35.0', fails: () => failing });
     const timers = handTimers();
-    const updates = new Updater({ updater, version: '0.34.0', application: s.application, rollback: s.rollback, log: fileLogger(logs), timers, beforeInstall: async () => undefined, changed: () => undefined });
+    const updates = new Updater({ updater, version: '0.34.0', application: s.application, rollback: s.rollback, log: fileLogger(logs), timers, stopRuntime: async () => null, refused: () => undefined, beforeInstall: async () => undefined, changed: () => undefined });
     updates.start();
     await timers.fire();
     failing = false;

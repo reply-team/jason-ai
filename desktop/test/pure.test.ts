@@ -123,6 +123,7 @@ test('the system screen’s sentence names jason update when the versions differ
 
 test('a log names a CLI verb by its closed list, never by its arguments', () => {
     assert.equal(verbOf(['status']), 'status');
+    assert.equal(verbOf(['runtime', 'stop']), 'runtime stop');
     assert.equal(verbOf(['plugin', 'install', 'slack', '--feed', 'http://127.0.0.1:1/m.json']), 'plugin install');
     assert.equal(verbOf(['skills', 'install', '--root', '/private/path']), 'skills install');
     assert.equal(verbOf(['secret-word']), 'other');

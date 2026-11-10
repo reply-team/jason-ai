@@ -2,8 +2,11 @@
  * The updater: electron-updater reading this repository's GitHub releases on the stable channel only (a release with a
  * pre-release part is never offered, no channel is set, nothing is downgraded). It looks on the back-off `backoff.ts`
  * computes, offers what it found, downloads it only when the person says so and installs it only when the person says so
- * again, after the application's own folder has been kept aside (`rollback.ts`). electron-updater is handed in, so
- * nothing here needs Electron to be tested.
+ * again, after the application's own folder has been kept aside (`rollback.ts`) and the runtime this application carries,
+ * when it is the one running, has stopped (`own-runtime.ts`): the installer replaces the executable it runs from, and the
+ * first start of the new version starts the runtime again from the new one. A runtime that does not stop keeps the update
+ * from being installed, and the person is told why. electron-updater is handed in, so nothing here needs Electron to be
+ * tested.
  *
  * `quitAndInstall` starts the downloaded installer from inside `node_modules` (electron-updater's own spawn), the one
  * start the desktop makes that the process guard cannot see.
@@ -60,10 +63,16 @@ export function menuItemOf(state: UpdateState, installed: boolean): MenuItem {
         case 'downloading':
             return { label: `Downloading Jason ${state.version}…`, enabled: false, act: null };
         case 'downloaded':
-            return { label: `Restart to Install Jason ${state.version}`, enabled: true, act: 'install' };
+            return { label: `Restart Jason and Its Runtime to Install ${state.version}`, enabled: true, act: 'install' };
         case 'installing':
             return { label: `Installing Jason ${state.version}…`, enabled: false, act: null };
     }
+}
+
+/** What the person is told when the runtime this application carries did not stop, so the update was not installed. */
+export function runtimeRefusal(exit: number): string {
+    const how = exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${exit}`;
+    return `The update was not installed, because the runtime this application carries did not stop (${how}). Jason was left as it was. Stop the runtime with jason runtime stop, then choose Restart Jason and Its Runtime to Install again.`;
 }
 
 export interface UpdaterDeps {
@@ -76,6 +85,13 @@ export interface UpdaterDeps {
     rollback: string;
     log: Logger;
     timers?: Timers;
+    /**
+     * Stops the runtime this application carries when it is the one running (`stopOwnRuntime`): null once none of its
+     * runs, else the exit of `jason runtime stop`.
+     */
+    stopRuntime(): Promise<{ exit: number } | null>;
+    /** Tells the person why the update was not installed. */
+    refused(why: string): void;
     /** Lets the window and the tray go before the installer runs. */
     beforeInstall(): Promise<void>;
     changed(state: UpdateState): void;
@@ -168,7 +184,10 @@ export class Updater {
         }
     }
 
-    /** Keeps the application aside and installs what was downloaded: only on the person's word. */
+    /**
+     * Keeps the application aside, stops the runtime it carries when that is the one running, and installs what was
+     * downloaded: only on the person's word. A runtime that does not stop ends it there, before anything is closed.
+     */
     async install(): Promise<boolean> {
         if (this.state.step !== 'downloaded') return false;
         const { version } = this.state;
@@ -178,6 +197,13 @@ export class Updater {
         } catch {
             this.deps.log.error('update_failed', { Step: 'keep', Failures: 1 });
             this.show({ step: 'downloaded', version });
+            return false;
+        }
+        const running = await this.deps.stopRuntime().catch(() => ({ exit: -1 }));
+        if (running !== null) {
+            this.deps.log.error('update_failed', { Step: 'runtime', Failures: 1 });
+            this.show({ step: 'downloaded', version });
+            this.deps.refused(runtimeRefusal(running.exit));
             return false;
         }
         this.deps.log.info('update_installing', { From: this.deps.version, To: version });

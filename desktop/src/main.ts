@@ -5,9 +5,9 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, ipcMain, safeStorage, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
@@ -18,6 +18,7 @@ import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart } from './login-item.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
+import { stopOwnRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, settleStart } from './rollback.ts';
 import { Updater } from './updates.ts';
@@ -213,6 +214,8 @@ async function run(): Promise<void> {
               application: applicationFolder(process.platform, process.execPath),
               rollback,
               log,
+              stopRuntime: () => stopOwnRuntime({ platform: process.platform, executable, readRunFile: () => readText(paths.runFile), cli, realpath: (file) => realpathSync.native(file) }),
+              refused: (why) => dialog.showErrorBox('Jason', why),
               async beforeInstall() {
                   quitting = true;
                   repairer.stop();
