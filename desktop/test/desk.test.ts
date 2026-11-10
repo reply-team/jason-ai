@@ -162,6 +162,27 @@ test('the count is shown again only when it changed, and a stopped watcher reads
     assert.equal(cli.asked.length, asked);
 });
 
+test('a start that failed shows the runtime as not answering in the tray, and reads nothing until a pairing succeeds', async () => {
+    const cli = fakeCli(() => page(['a']));
+    const timers = handTimers();
+    const shown: Attention[] = [];
+    const log = memoryLog();
+    const watcher = new AttentionWatcher({ cli, log, timers, show: (attention) => shown.push(attention), notify: () => undefined });
+    watcher.unreachable();
+    assert.deepEqual(shown, [{ state: 'unreachable' }]);
+    assert.equal(trayView(shown[0]!).status, 'The runtime is not answering');
+    assert.deepEqual(cli.asked, [], 'nothing is read before the first pairing');
+    assert.equal(timers.pending.length, 0);
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['tray_state', { State: 'unreachable' }]]);
+
+    watcher.start();
+    await timers.fire();
+    assert.deepEqual(shown.map((attention) => attention.state), ['unreachable', 'unreachable', 'up']);
+    watcher.unreachable();
+    assert.equal(shown.length, 3, 'a watcher that reads shows what it read, not the failed start');
+    watcher.stop();
+});
+
 test('the count’s log lines, read back, carry counts and states only: no name and no text the runtime answered', async (t) => {
     const directory = mkdtempSync(join(tmpdir(), 'jason-desktop-desk-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));

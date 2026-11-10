@@ -10,7 +10,7 @@ import type { Cli, CliResult } from '../src/cli.ts';
 import { runtimeOrigin } from '../src/descriptor.ts';
 import { refusalOf } from '../src/ipc.ts';
 import { fileLogger } from '../src/log.ts';
-import { Repairer, repairCadenceMs, runIdentity } from '../src/repair.ts';
+import { atFirstPairing, Repairer, repairCadenceMs, runIdentity } from '../src/repair.ts';
 import { memoryLog } from './harness.ts';
 
 const first = 'http://127.0.0.1:41234';
@@ -167,6 +167,29 @@ test('Reload pairs again at the runtime’s current origin even when nothing cha
     repairer.pairedWith(s.read());
     assert.equal(await repairer.reload(), 'repaired');
     assert.deepEqual(loaded, [`${first}/ui/#pair=planted-pair-1`]);
+});
+
+test('after a start that failed, the count and the re-pair loop begin at the first pairing that succeeds, by Reload, and once', async (t) => {
+    const s = scratch(t);
+    const cli = pairingCli(s.read);
+    const loaded: string[] = [];
+    let begun = 0;
+    const repairer = new Repairer({ readRunFile: s.read, cli, load: async (link) => void loaded.push(link), log: memoryLog(), paired: atFirstPairing(() => (begun += 1)) });
+    assert.equal(await repairer.reload(), 'gone', 'no runtime yet: Reload pairs nothing');
+    assert.equal(begun, 0);
+    s.write(first, 100);
+    assert.equal(await repairer.reload(), 'repaired');
+    assert.equal(begun, 1);
+    s.write(second, 101);
+    assert.equal(await repairer.check(), 'repaired');
+    assert.equal(await repairer.reload(), 'repaired');
+    assert.equal(begun, 1, 'begun once, whatever pairs after');
+
+    let started = 0;
+    const atStart = atFirstPairing(() => (started += 1));
+    atStart();
+    atStart();
+    assert.equal(started, 1, 'the start that loaded begins it the same way, once');
 });
 
 test('two looks at once pair once', async (t) => {

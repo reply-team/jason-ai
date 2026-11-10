@@ -125,6 +125,17 @@ export class AttentionWatcher {
         this.schedule(0);
     }
 
+    /**
+     * A start that failed: the tray says the runtime is not answering, and nothing is read until the first pairing that
+     * succeeds starts the watcher. Once it reads, what it read is what the tray shows.
+     */
+    unreachable(): void {
+        if (this.running || this.shown.state === 'unreachable') return;
+        this.shown = { state: 'unreachable' };
+        this.deps.log.info('tray_state', { State: 'unreachable' });
+        this.deps.show(this.shown);
+    }
+
     stop(): void {
         this.running = false;
         if (this.handle !== null) this.timers.clearTimeout(this.handle);

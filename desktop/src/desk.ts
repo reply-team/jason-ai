@@ -188,9 +188,14 @@ export class Desk {
         this.renderMenu();
     }
 
-    /** Starts reading the count; called only after the start found the runtime up. */
+    /** Starts reading the count; called at the first pairing that succeeded (`atFirstPairing`). */
     watch(): void {
         this.watcher.start();
+    }
+
+    /** The start failed: the tray says the runtime is not answering until a pairing succeeds. */
+    notStarted(): void {
+        this.watcher.unreachable();
     }
 
     close(): void {

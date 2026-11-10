@@ -39,6 +39,21 @@ export interface RepairDeps {
     load(link: string): Promise<void>;
     log: Logger;
     clock?: () => number;
+    /** Told of every pairing that succeeded, the menu's Reload's included. */
+    paired?(): void;
+}
+
+/**
+ * Runs `begin` once, at the first pairing that succeeds: the start's own, or, after a start that failed, the first
+ * Reload or look that pairs. The tray's count and the re-pair loop begin there, and only there.
+ */
+export function atFirstPairing(begin: () => void): () => void {
+    let begun = false;
+    return () => {
+        if (begun) return;
+        begun = true;
+        begin();
+    };
 }
 
 export class Repairer {
@@ -102,6 +117,7 @@ export class Repairer {
             this.deps.log.info('window_repaired', { From: this.paired?.origin ?? 'none', Origin: now.origin });
             this.paired = now;
             this.failedAt = null;
+            this.deps.paired?.();
             return 'repaired';
         } finally {
             this.busy = false;

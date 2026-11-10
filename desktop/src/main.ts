@@ -14,7 +14,7 @@ import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { LoginItem, openedAtLogin, RuntimeAutostart } from './login-item.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
-import { Repairer } from './repair.ts';
+import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptNotice, settleStart } from './rollback.ts';
 import { Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
@@ -175,7 +175,13 @@ async function run(): Promise<void> {
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
     const jason = cliAt(executable, env);
     const cli = loggedCli(jason, log);
-    const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)) });
+    // The count and the re-pair loop begin at the first pairing that succeeds: the start's, or a Reload's after a start
+    // that failed.
+    const begin = atFirstPairing(() => {
+        desk.watch();
+        repairer.start();
+    });
+    const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)), paired: begin });
     const login = new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead, log });
     const autostart = version === null ? null : new RuntimeAutostart({ cli, log });
     // The updater runs only in an installed build: a development build has no installer to hand an update to.
@@ -228,6 +234,7 @@ async function run(): Promise<void> {
 
     await showStarting(window, 'Starting Jason…', false);
     if (version === null) {
+        desk.notStarted();
         await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
         return;
     }
@@ -249,10 +256,10 @@ async function run(): Promise<void> {
         await window.loadURL(started.link);
         log.info('window_loaded', { Origin: started.origin });
         settleStart(rollback, app.getVersion(), true, log);
-        desk.watch();
         repairer.pairedWith(readText(paths.runFile));
-        repairer.start();
+        begin();
     } catch (error) {
+        desk.notStarted();
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
         log.error('window_load_failed', { Step: step, Exit: exit });
