@@ -52,7 +52,10 @@ export type DesktopChatEvent =
 
 /** An agent host or a key provider the chat's dropdown lists, found on this machine or not. */
 export interface DesktopHost {
-    /** What `chat.send`'s `host` names, and `setProviderKey`'s `providerId` for a key provider. */
+    /**
+     * What `chat.send`'s `host` names, and `setProviderKey`'s `providerId` for a key provider. A program's id is the
+     * command that runs it, such as `claude`.
+     */
     id: string;
     label: string;
     /** `program`: a program on this machine, such as Claude Code; `provider`: a key that runs through Claude Code. */

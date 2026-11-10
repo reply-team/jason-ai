@@ -1,0 +1,176 @@
+import type { JournalEntry } from '../api/types';
+import type { DesktopChatEvent, DesktopSetup, JasonDesktop } from '../platform/desktop';
+import { JournalStream, type StreamSocket } from '../platform/journal-stream';
+
+// A stand-in for Jason Desktop's seam, and for the journal stream, as the console's screen tests want them: every call
+// recorded, every event the test's to send.
+
+export const setupFound: DesktopSetup = {
+    hosts: [
+        {
+            id: 'claude',
+            label: 'Claude Code',
+            kind: 'program',
+            found: true,
+            version: '2.1.0',
+            drivesChat: true,
+            install: null,
+        },
+        {
+            id: 'codex',
+            label: 'Codex',
+            kind: 'program',
+            found: false,
+            version: null,
+            drivesChat: true,
+            install: 'codex',
+        },
+        {
+            id: 'gemini',
+            label: 'Gemini CLI',
+            kind: 'program',
+            found: true,
+            version: '0.9.0',
+            drivesChat: false,
+            install: null,
+        },
+        {
+            id: 'deepseek',
+            label: 'DeepSeek',
+            kind: 'provider',
+            found: false,
+            version: null,
+            drivesChat: true,
+            install: null,
+        },
+    ],
+    reply: {
+        cli: { found: true, version: '0.19.0', install: null },
+        signedIn: true,
+        user: 'person@example.test',
+        wired: true,
+        accounts: [
+            { id: 'acc_1', channel: 'email', name: 'Sales inbox', address: 'sales@example.test', status: 'active' },
+        ],
+    },
+    runtimeVersion: '0.34.0',
+    bundleVersion: '0.34.0',
+    plugins: [
+        {
+            id: 'telegram',
+            label: 'Telegram',
+            description: 'Tells you when something waits.',
+            tokenLabel: 'Bot token',
+            connected: false,
+        },
+    ],
+};
+
+export interface StubDesktop extends JasonDesktop {
+    calls: { name: string; args: unknown[] }[];
+    emit(chatId: string, event: DesktopChatEvent): void;
+    changed(): void;
+    status: DesktopSetup;
+    /** Calls whose promise the test settles: by name, the reason they reject with. */
+    refuse: Map<string, string>;
+}
+
+export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
+    const chatHandlers = new Set<(chatId: string, event: DesktopChatEvent) => void>();
+    const changeHandlers = new Set<() => void>();
+    const calls: { name: string; args: unknown[] }[] = [];
+    const refuse = new Map<string, string>();
+    const call =
+        (name: string) =>
+        (...args: unknown[]): Promise<void> => {
+            calls.push({ name, args });
+            const reason = refuse.get(name);
+            return reason === undefined ? Promise.resolve() : Promise.reject(new Error(reason));
+        };
+    const stub: StubDesktop = {
+        platform: 'win32',
+        calls,
+        refuse,
+        status,
+        onCommand: () => () => undefined,
+        chat: {
+            send: call('chat.send'),
+            stop: call('chat.stop'),
+            answer: call('chat.answer'),
+            onEvent(handler) {
+                chatHandlers.add(handler);
+                return () => chatHandlers.delete(handler);
+            },
+        },
+        setup: {
+            status: () => {
+                calls.push({ name: 'setup.status', args: [] });
+                return Promise.resolve(stub.status);
+            },
+            connectReply: call('setup.connectReply'),
+            connectReplyWithKey: call('setup.connectReplyWithKey'),
+            setProviderKey: call('setup.setProviderKey'),
+            installProgram: call('setup.installProgram'),
+            setPluginToken: call('setup.setPluginToken'),
+            onChanged(handler) {
+                changeHandlers.add(handler);
+                return () => changeHandlers.delete(handler);
+            },
+        },
+        emit: (chatId, event) => chatHandlers.forEach((handler) => handler(chatId, event)),
+        changed: () => changeHandlers.forEach((handler) => handler()),
+    };
+    return stub;
+}
+
+export interface StubStream {
+    stream: JournalStream;
+    /** The address and protocols of every connection the stream opened. */
+    opened: { url: string; protocols: string[] }[];
+    open(): void;
+    send(line: JournalEntry): void;
+}
+
+export function stubStream(): StubStream {
+    let socket: StreamSocket | null = null;
+    const opened: { url: string; protocols: string[] }[] = [];
+    const stream = new JournalStream({
+        origin: 'http://127.0.0.1:7781',
+        token: () => 'tok',
+        open: (url, protocols) => {
+            opened.push({ url, protocols });
+            socket = { onopen: null, onmessage: null, onclose: null, close: () => undefined };
+            return socket;
+        },
+        later: (run, delay) => setTimeout(run, delay),
+        cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+        reachable: () => Promise.resolve(true),
+    });
+    return {
+        stream,
+        opened,
+        open: () => socket?.onopen?.(),
+        send: (line) => socket?.onmessage?.({ data: JSON.stringify(line) }),
+    };
+}
+
+export const journalLine = (fields: Partial<JournalEntry>): JournalEntry => ({
+    id: 'jrn_1',
+    ts: new Date().toISOString(),
+    actor: { type: 'agent', id: 'manager' },
+    kind: 'contact_added',
+    key: null,
+    old: null,
+    new: null,
+    reason: null,
+    campaign_id: 'cmp_1',
+    work_item_id: null,
+    contact_id: 'cnt_1',
+    campaign_name: 'Spring',
+    contact_name: 'A Person',
+    work_item_kind: null,
+    work_item_role: null,
+    work_item_operation: null,
+    actor_role: null,
+    ...fields,
+});

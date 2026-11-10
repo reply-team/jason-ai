@@ -1,0 +1,3 @@
+/* The browser shell's stylesheet, for the screens the console shows in its page panel: scoped to `.harness` by the
+   build (src/console/scope.ts), so that none of it reaches the console around it. */
+@import '../styles/app.css';
