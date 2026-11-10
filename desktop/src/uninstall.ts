@@ -12,10 +12,16 @@
  *
  * What stays is said by name: the data directory with everything Jason keeps there, the harness root with the person's
  * folders, and the updater's cache under the profile.
+ *
+ * Before any of it, a runtime started from the jason executable this application carries is stopped through
+ * `jason runtime stop` (`own-runtime.ts`), since the uninstaller then removes that executable. One that does not stop
+ * ends the uninstall there: nothing is taken off, the start exits 1, and the uninstaller quits before it removes a file,
+ * so no folder is left half removed. A runtime started from any other executable is not stopped, and is named.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join, posix, win32 } from 'node:path';
+import type { Whose } from './own-runtime.ts';
 import type { CommandStatus } from './path-command.ts';
 
 /** On the command line of the start the uninstaller makes. */
@@ -59,6 +65,8 @@ export interface UninstallDeps {
     folder: string | null;
     command: { status(): CommandStatus; remove(): CommandStatus };
     login: { isOn(): boolean; set(on: boolean): Promise<void> };
+    /** Whose the running runtime is and stopping this application's (`own-runtime.ts`); null when the bundle carries no CLI. */
+    runtime: { whose(): Promise<Whose>; stop(): Promise<{ exit: number } | null> } | null;
     /** `jason runtime autostart status` and `disable`, through the bundled CLI; null when the bundle carries none. */
     autostart: { status(): Promise<{ registered: boolean; executable: string | null } | null>; disable(): Promise<boolean | null> } | null;
     /** The application's own folder, the one the uninstaller removes. */
@@ -73,6 +81,19 @@ export interface UninstallReport {
     removed: string[];
     /** What is not the desktop's to take off and stays, each with why. */
     left: string[];
+    /** Why nothing was taken off and the uninstall goes no further: the runtime this application carries did not stop. */
+    refused: string | null;
+}
+
+/** What the person is told when the runtime this application carries did not stop, so nothing was removed. */
+export function runtimeRefusal(exit: number): string {
+    const how = exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${exit}`;
+    return `Nothing was removed, because the runtime this application carries is running and did not stop (${how}). Stop it with jason runtime stop, then uninstall Jason again.`;
+}
+
+/** The exit of the uninstaller's start: 1 when the uninstall is to go no further, which the uninstaller acts on. */
+export function uninstallExit(report: UninstallReport): number {
+    return report.refused === null ? 0 : 1;
 }
 
 /** The four files a PATH command of either name can be in the folder. */
@@ -85,6 +106,13 @@ function commandFiles(platform: NodeJS.Platform, folder: string): string[] {
 export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
     const removed: string[] = [];
     const left: string[] = [];
+
+    const whose = deps.runtime === null ? 'none' : await deps.runtime.whose();
+    if (whose === 'ours') {
+        const failed = await deps.runtime!.stop().catch(() => ({ exit: -1 }));
+        if (failed !== null) return { removed: [], left: [], refused: runtimeRefusal(failed.exit) };
+        removed.push('The runtime this application carries, which was running: it was stopped with jason runtime stop');
+    }
 
     if (deps.folder !== null) {
         const files = commandFiles(deps.platform, deps.folder);
@@ -116,12 +144,13 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
     left.push(`The data directory, ${deps.dataDirectory}, with the campaigns, the journal, the settings and the logs`);
     left.push(`The harness root, ${deps.harnessRoot}, with your folders and memory files`);
     left.push(`The updater’s cache, ${deps.updaterCache}`);
-    left.push('A runtime that is running: it is not stopped here; jason runtime stop stops it');
-    return { removed, left };
+    if (whose === 'another') left.push('A runtime that is running and is not this application’s: it is not stopped here; jason runtime stop stops it');
+    return { removed, left, refused: null };
 }
 
 /** What the uninstall shows the person. */
 export function uninstallText(report: UninstallReport): { message: string; detail: string } {
+    if (report.refused !== null) return { message: 'Jason was not removed.', detail: report.refused };
     const list = (lines: readonly string[]) => lines.map((line) => `• ${line}`).join('\n');
     const taken = report.removed.length === 0 ? 'Nothing else was placed on this computer.' : `Taken off:\n${list(report.removed)}`;
     return { message: 'Jason is being removed from this computer.', detail: `${taken}\n\nLeft in place:\n${list(report.left)}` };

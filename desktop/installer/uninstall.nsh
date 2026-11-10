@@ -2,8 +2,10 @@
 ; still there to be started. A person's uninstall starts it with --uninstall: it takes off the PATH command's files that
 ; are its own, "Open Jason at login" and a logon registration of the runtime that starts this application's executable,
 ; and says what it took and what it leaves - a file another program wrote, the data directory, the harness root and the
-; updater's cache under the profile. A silent uninstall (/S) shows nothing. The uninstall an update runs takes off none
-; of it, because the new version is installed in the same place at once.
+; updater's cache under the profile. Before that it stops the runtime this application carries, when that is the one
+; running, through jason runtime stop. A silent uninstall (/S) shows nothing. The uninstall an update runs takes off none
+; of it, because the new version is installed in the same place at once, and the application stopped its runtime before
+; it started the update.
 
 ; Which running programs the installer and the uninstaller close before they replace or remove the files: the
 ; application's own executable, found by its exact path, and nothing else. electron-builder's own check, which this
@@ -42,15 +44,28 @@
   ${endIf}
 !macroend
 
+; The start's exit code says whether to go on: 1 when the runtime this application carries is running and did not
+; stop, which the start has already said unless the uninstall is silent. The uninstaller then quits before it removes a
+; file, so no folder is left half removed. A start that could not be made at all says nothing, and the uninstall goes on.
 !macro customUnInstall
   ${ifNot} ${isUpdated}
     ${GetParameters} $R0
     ClearErrors
     ${GetOptions} $R0 "/S" $R1
     ${if} ${Errors}
-      ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall'
+      StrCpy $R2 "0"
+      ClearErrors
+      ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall' $R2
     ${else}
-      ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall --quiet'
+      StrCpy $R2 "0"
+      ClearErrors
+      ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall --quiet' $R2
+    ${endIf}
+    ${ifNot} ${Errors}
+      ${if} $R2 != "0"
+        SetErrorLevel 1
+        Quit
+      ${endIf}
     ${endIf}
   ${endIf}
 !macroend
