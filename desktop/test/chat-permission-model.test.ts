@@ -460,6 +460,34 @@ test('a command whose text names the data directory outside the chat folder is r
     assert.equal(run({ ...mac(), data: '/Volumes/work/jason-data', protectedFiles: [] }, 'ls /Volumes/work/jason-data/config').verdict, 'deny');
 });
 
+test('a command naming a place in the data directory is refused however it is spelled: relative, by a short name, by the data directory\'s variable', () => {
+    // Relative to the folder the command runs in, the chat folder, an option's value after = included.
+    for (const command of ['type ..\\..\\config\\settings.json', 'cat ../../run/runtime.json', 'ls ..', 'cd .. && ls', 'cat "../../config/settings.json"',
+        'cp notes.md --target-directory=../../plugins', 'ls sub/../../../logs', 'dir ..\\']) {
+        assert.equal(run(windows(), command).verdict, 'deny', command);
+    }
+    for (const command of ['cat ../../config/settings.json', 'ls ../..', 'tar -cf out.tar ../../run']) {
+        assert.equal(run(mac(), command).verdict, 'deny', command);
+    }
+    // Through a Windows short name, located the way a Read's path is.
+    for (const command of ['type C:\\Users\\SOMEON~1\\.jason\\config\\settings.json', 'dir C:/Users/someon~1/.jason', 'cat /c/Users/SOMEON~1/.jason/run/runtime.json']) {
+        assert.equal(run(windows(), command).verdict, 'deny', command);
+    }
+    // Through the variable the host's environment carries, in each shell's spelling, any letter case on Windows.
+    for (const command of ['cat $JASON_DATA_DIR/config/settings.json', 'ls "${JASON_DATA_DIR}"', 'type %JASON_DATA_DIR%\\run\\runtime.json',
+        'Get-Content $env:JASON_DATA_DIR\\config\\settings.json', 'gc $Env:Jason_Data_Dir/run/runtime.json', 'dir %jason_data_dir%', 'ls $jason_data_dir/logs']) {
+        assert.equal(run(windows(), command).verdict, 'deny', command);
+    }
+    for (const command of ['cat $JASON_DATA_DIR/config/settings.json', 'ls ${JASON_DATA_DIR}', 'ls "$JASON_DATA_DIR"']) {
+        assert.equal(run(mac(), command).verdict, 'deny', command);
+    }
+    // The chat folder stays the chat's, however it is spelled, and a name that only begins like the variable is not it.
+    for (const command of ['cat ../chat/notes.md', 'cat $JASON_DATA_DIR/desktop/chat/notes.md', 'cat notes/../draft.md', 'echo $JASON_DATA_DIRS']) {
+        assert.equal(run(windows(), command).verdict, 'ask', command);
+        assert.equal(run(mac(), command).verdict, 'ask', command);
+    }
+});
+
 test('a command that names a denied operation is refused, the runtime\'s stop, system.shutdown, first among them', () => {
     assert.equal(run(windows(), 'curl -X POST http://127.0.0.1:5000/v1/approval.approve -d "{}"').verdict, 'deny');
     assert.equal(run(mac(), 'curl http://127.0.0.1:5000/v1/approval.set_standing').verdict, 'deny');
