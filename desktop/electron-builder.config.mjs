@@ -91,10 +91,10 @@ export function checkBundle(folder, version, platform) {
     if (said !== version) throw new Error(`${folder} was prepared as ${String(said)}, and the package is built at ${version}.`);
 }
 
-/** Electron's own Chromium notices, from the unpacked distribution into the package's notices folder. */
-export function copyChromiumNotices(appOutDir, resources) {
-    const source = join(appOutDir, 'LICENSES.chromium.html');
-    if (!existsSync(source)) throw new Error(`${appOutDir} holds no LICENSES.chromium.html; the package would carry no Chromium notices.`);
+/** Electron's own Chromium notices, from the folder the unpacked distribution left them in into the package's notices folder. */
+export function copyChromiumNotices(from, resources) {
+    const source = join(from, 'LICENSES.chromium.html');
+    if (!existsSync(source)) throw new Error(`${from} holds no LICENSES.chromium.html; the package would carry no Chromium notices.`);
     mkdirSync(join(resources, 'notices'), { recursive: true });
     copyFileSync(source, join(resources, 'notices', 'LICENSES.chromium.html'));
 }
@@ -141,7 +141,12 @@ export function configuration({ version, sign = null }) {
         detectUpdateChannel: false,
         generateUpdatesFilesForAllChannels: false,
         beforePack: async (context) => checkBundle(bundleFolder(context.arch), version, context.electronPlatformName),
-        afterPack: async (context) => copyChromiumNotices(context.appOutDir, resourcesOf(context)),
+        // Electron's Chromium notices are where electron-builder left them once it unpacked the distribution: beside
+        // Jason.exe on Windows, and on macOS already moved from beside the .app into its resources, which the .app carries.
+        afterPack: async (context) => {
+            const resources = resourcesOf(context);
+            copyChromiumNotices(context.electronPlatformName === 'darwin' ? resources : context.appOutDir, resources);
+        },
         win: {
             target: [{ target: 'nsis', arch: ['x64'] }],
             icon: 'resources/icon.png',

@@ -201,25 +201,31 @@ test('Chromium’s notices go into the package’s notices folder, and a distrib
     assert.equal(typeof built.beforePack, 'function');
 });
 
-test('after each pack the Chromium notices land in that platform’s resources folder: beside Jason.exe, or inside Jason.app', async (t) => {
+test('after each pack the Chromium notices land in that platform’s resources folder, from where electron-builder left them: beside Jason.exe, or inside Jason.app', async (t) => {
     // Windows: electron-builder's unpacked folder, Electron's notices at its top, resources/ beside the program.
     const win = temporary(t);
     writeFileSync(join(win, 'LICENSES.chromium.html'), '<html>chromium win32</html>');
     await built.afterPack({ appOutDir: win, electronPlatformName: 'win32', arch: 1 });
     assert.equal(readFileSync(join(win, 'resources', 'notices', 'LICENSES.chromium.html'), 'utf8'), '<html>chromium win32</html>');
 
-    // macOS: the notices beside Jason.app, the resources folder inside it.
+    // macOS: electron-builder has already moved Electron's notices from beside the .app into its resources folder, so
+    // that the application carries them; nothing is left beside Jason.app.
     const mac = temporary(t);
-    writeFileSync(join(mac, 'LICENSES.chromium.html'), '<html>chromium darwin</html>');
-    mkdirSync(join(mac, 'Jason.app', 'Contents', 'Resources'), { recursive: true });
+    const contents = join(mac, 'Jason.app', 'Contents', 'Resources');
+    mkdirSync(contents, { recursive: true });
+    writeFileSync(join(contents, 'LICENSES.chromium.html'), '<html>chromium darwin</html>');
     await built.afterPack({ appOutDir: mac, electronPlatformName: 'darwin', arch: 3 });
-    assert.equal(readFileSync(join(mac, 'Jason.app', 'Contents', 'Resources', 'notices', 'LICENSES.chromium.html'), 'utf8'), '<html>chromium darwin</html>');
+    assert.equal(readFileSync(join(contents, 'notices', 'LICENSES.chromium.html'), 'utf8'), '<html>chromium darwin</html>');
     assert.equal(existsSync(join(mac, 'resources')), false);
 
-    // A Mac pack with no .app, or a distribution without the notices, stops the pack.
+    // A Mac pack with no .app, or a distribution without the notices where that platform's are, stops the pack.
     const empty = temporary(t);
     writeFileSync(join(empty, 'LICENSES.chromium.html'), '<html>chromium</html>');
     await assert.rejects(built.afterPack({ appOutDir: empty, electronPlatformName: 'darwin', arch: 3 }), /holds no \.app/);
+    const beside = temporary(t);
+    writeFileSync(join(beside, 'LICENSES.chromium.html'), '<html>chromium</html>');
+    mkdirSync(join(beside, 'Jason.app', 'Contents', 'Resources'), { recursive: true });
+    await assert.rejects(built.afterPack({ appOutDir: beside, electronPlatformName: 'darwin', arch: 3 }), /Resources holds no LICENSES\.chromium\.html/);
     await assert.rejects(built.afterPack({ appOutDir: temporary(t), electronPlatformName: 'win32', arch: 1 }), /no LICENSES\.chromium\.html/);
 });
 

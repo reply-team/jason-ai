@@ -8,7 +8,7 @@ export function bundleFiles(platform: string): string[];
 export function releaseVersion(value: string | undefined): string;
 export function bundleFolder(arch: number): string;
 export function checkBundle(folder: string, version: string, platform: string): void;
-export function copyChromiumNotices(appOutDir: string, resources: string): void;
+export function copyChromiumNotices(from: string, resources: string): void;
 
 interface Target {
     target: string;
