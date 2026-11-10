@@ -25,6 +25,7 @@ public class PersonPanelExchangesTests
     private static readonly string Webinar = Id("cmp", 202);
     private static readonly string FollowUps = Id("cmp", 203);
     private const string Email = "ingrid@fjordline.example";
+    private const string LinkedIn = "https://www.linkedin.com/in/ingrid-solberg-example";
 
     /// <summary>The reads the panel opens with: the person, whether each of their addresses is on Jason's do-not-contact register, the researcher's findings, and the campaigns a move may go to.</summary>
     [Fact]
@@ -33,7 +34,7 @@ public class PersonPanelExchangesTests
         await using var api = await StartAsync();
 
         Assert.Empty((await api.RecordAsync<Page<SuppressionDto>>(Operations.SuppressionList, "person-email-clear", new { channel = "email", value = Email }, Ct)).Items);
-        Assert.Empty((await api.RecordAsync<Page<SuppressionDto>>(Operations.SuppressionList, "person-linkedin-clear", new { channel = "linkedin", value = "https://www.linkedin.com/in/ingrid-solberg-example" }, Ct)).Items);
+        Assert.Empty((await api.RecordAsync<Page<SuppressionDto>>(Operations.SuppressionList, "person-linkedin-clear", new { channel = "linkedin", value = LinkedIn }, Ct)).Items);
 
         var findings = await api.RecordAsync<Page<WorkItemSummaryDto>>(
             Operations.WorkItemList,
@@ -78,6 +79,24 @@ public class PersonPanelExchangesTests
 
         var saved = await api.RecordAsync<ContactDto>(Operations.ContactUpdate, "person-saved", new { contact_id = Ingrid, title = "VP Revenue", reason = "Promoted in October.", actor = Ada }, Ct);
         Assert.Equal("VP Revenue", saved.Title);
+        // The channels are replaced whole, each as the panel sends it: the ones the person had, and the one added.
+        var channels = await api.RecordAsync<ContactDto>(
+            Operations.ContactUpdate,
+            "person-channels",
+            new
+            {
+                contact_id = Ingrid,
+                channels = new object[]
+                {
+                    new { channel = "email", value = Email, label = (string?)null, primary = true, data = (object?)null },
+                    new { channel = "linkedin", value = LinkedIn, label = (string?)null, primary = false, data = (object?)null },
+                    new { channel = "phone", value = "+4791234567", label = (string?)null, primary = false, data = (object?)null },
+                },
+                reason = "Gave a phone number.",
+                actor = Ada,
+            },
+            Ct);
+        Assert.Equal(3, channels.Channels.Count);
         Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.ContactUpdate, "person-refused", new { contact_id = Ingrid, time_zone = "Europe/Atlantis", reason = "Moved.", actor = Ada }, HttpStatusCode.BadRequest, Ct)).Code);
 
         // The provider's contact.update takes the arguments its document declares and nothing else; the runtime composes the rest at the claim.
@@ -219,7 +238,7 @@ public class PersonPanelExchangesTests
             UpdatedAt = day.AddDays(-30),
         };
         ingrid.Channels.Add(new ContactChannel { Channel = "email", Value = Email, IsPrimary = true });
-        ingrid.Channels.Add(new ContactChannel { Channel = "linkedin", Value = "https://www.linkedin.com/in/ingrid-solberg-example", IsPrimary = false });
+        ingrid.Channels.Add(new ContactChannel { Channel = "linkedin", Value = LinkedIn, IsPrimary = false });
         db.Contacts.Add(ingrid);
 
         db.CampaignContacts.AddRange(

@@ -614,7 +614,7 @@ yourself. Nothing else. No telemetry.
 Everything below is public, and every page is written to be followed by a person or by an agent.
 
 **In numbers:** 19 guides · 24 operation contracts, each in Markdown and machine-readable JSON · 778 contract fixtures and
-309 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 7 runtime skills and 9 role
+310 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 7 runtime skills and 9 role
 skills · release notes on every release.
 
 | To… | Read |

@@ -1,0 +1,74 @@
+{
+  "operation": "contact.update",
+  "case": "person-channels",
+  "request": {
+    "contact_id": "cnt_1",
+    "channels": [
+      {
+        "channel": "email",
+        "value": "ingrid@fjordline.example",
+        "label": null,
+        "primary": true,
+        "data": null
+      },
+      {
+        "channel": "linkedin",
+        "value": "https://www.linkedin.com/in/ingrid-solberg-example",
+        "label": null,
+        "primary": false,
+        "data": null
+      },
+      {
+        "channel": "phone",
+        "value": "+4791234567",
+        "label": null,
+        "primary": false,
+        "data": null
+      }
+    ],
+    "reason": "Gave a phone number.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": "cnt_1",
+    "first_name": "Ingrid",
+    "last_name": "Solberg",
+    "company": "Fjordline",
+    "title": "VP Revenue",
+    "time_zone": "Europe/Oslo",
+    "channels": [
+      {
+        "channel": "email",
+        "value": "ingrid@fjordline.example",
+        "label": null,
+        "primary": true,
+        "data": null
+      },
+      {
+        "channel": "linkedin",
+        "value": "https://www.linkedin.com/in/ingrid-solberg-example",
+        "label": null,
+        "primary": false,
+        "data": null
+      },
+      {
+        "channel": "phone",
+        "value": "+4791234567",
+        "label": null,
+        "primary": false,
+        "data": null
+      }
+    ],
+    "custom": {},
+    "external_ids": [],
+    "created_at": "2026-09-16T00:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "archived_at": null,
+    "campaigns": null,
+    "last_activity": null
+  }
+}

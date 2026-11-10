@@ -166,6 +166,7 @@ public static class ApiFixtures
         "contact.threads/not-linked",
         "contact.threads/provider-failed",
         "contact.threads/two-threads",
+        "contact.update/person-channels",
         "contact.update/person-refused",
         "contact.update/person-saved",
         "decision.answer/answered",
