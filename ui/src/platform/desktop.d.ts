@@ -168,14 +168,15 @@ export interface JasonDesktop {
         /** Installs a program by a `DesktopHost.install` or `DesktopReply.cli.install` id, with npm. */
         installProgram(programId: string): Promise<void>;
         /**
-         * Configures one of `status().plugins` in one edit of the settings file: its configuration (the token where the
-         * plugin reads one from there; the forwarder's `url` from `target`), its grant, and for a notification channel
-         * its binding with `target`. A field left out keeps what the file holds. Every key the desktop does not own is
-         * kept, the file is written whole beside itself and renamed over, and a file the desktop cannot parse is left
-         * as it is and refused. Then the runtime reads its plugins again and the desktop reads them back; `status()`
-         * says what the runtime answered, which is "configured", never that anything was delivered.
+         * Configures one of `status().plugins` in one edit of the settings file. It writes `Plugins:Config:<id>` (the
+         * token where the plugin reads one from there; the forwarder's `url` from `target`), `Plugins:Grants:<id>:Http`,
+         * and for the three notification plugins `Notifications:Plugins:<id>:Binding` with `target` under the plugin's
+         * own key. A field left out keeps what the file holds. Every key the desktop does not own is kept and the file
+         * is written whole beside itself and renamed over; a file the desktop cannot parse is refused, never
+         * overwritten. Then the runtime reads its plugins again and the desktop reads them back; `status()` says what
+         * the runtime answered, which is "configured", never that anything was delivered. No token ever comes back.
          */
-        configurePlugin(pluginId: string, values: { token?: string; target?: string }): Promise<void>;
+        configurePlugin(pluginId: string, settings: { token?: string; target?: string }): Promise<void>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };
