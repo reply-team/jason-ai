@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { commandPrefix, isCompound, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
+import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
 
 const denied = ['approval approve', 'approval set-standing', 'decision answer', 'runtime', 'plugin install', 'ui', 'journal watch'];
 
@@ -237,6 +238,17 @@ test('every deny-list command is refused without a card, with its arguments and 
     }
     assert.deepEqual(run(windows(), 'jason plugin list'), { verdict: 'allow' });
     assert.deepEqual(run(windows(), 'jason journal read cmp_A'), { verdict: 'allow' });
+});
+
+test('with the file the desktop carries, export and import are refused, and so are the verbs the chat refuses beyond the CLI', () => {
+    const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+    for (const scope of [{ ...windows(), denied: file }, { ...mac(), denied: file }]) {
+        for (const command of ['jason export --stop', 'jason export', 'jason import --replace backup.zip', 'jason suppression remove --channel email --value a@example.com',
+            'jason route set --campaign cmp_A --plugin x --operation campaign.get', 'jason route unset --campaign cmp_A --operation campaign.get',
+            'jason role set-profile researcher --execution-profile local-claude']) {
+            assert.equal(run(scope, command).verdict, 'deny', command);
+        }
+    }
 });
 
 test('a jason command that starts with an option is refused, as the host\'s own rule refuses it', () => {

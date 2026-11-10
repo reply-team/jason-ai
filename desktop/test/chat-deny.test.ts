@@ -26,3 +26,7 @@ test('the host is denied every entry of the file in its own rule syntax, and eve
     assert.ok(rules.includes('Bash(jason -*)'));
     assert.equal(rules.length, entries.length + 1);
 });
+
+test('the file refuses the installation verbs export and import, and the four the chat refuses beyond the CLI\'s table', () => {
+    for (const verb of ['export', 'import', 'suppression remove', 'route set', 'route unset', 'role set-profile']) assert.ok(entries.includes(verb), verb);
+});

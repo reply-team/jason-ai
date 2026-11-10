@@ -355,7 +355,7 @@ public class DefaultActorTests
     ];
 
     /// <summary>The verbs not run above, each with why.</summary>
-    private static readonly Dictionary<string, string> NotRun = new(StringComparer.Ordinal)
+    internal static readonly Dictionary<string, string> NotRun = new(StringComparer.Ordinal)
     {
         ["runtime start"] = "starts the runtime's process",
         ["runtime restart"] = "starts the runtime's process",
