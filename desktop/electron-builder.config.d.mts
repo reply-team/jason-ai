@@ -3,6 +3,7 @@
 export const signer: string;
 export const fuses: Readonly<Record<string, boolean>>;
 export const chatLists: readonly string[];
+export function electronChecksums(): Record<string, string>;
 export function bundleFiles(platform: string): string[];
 export function releaseVersion(value: string | undefined): string;
 export function bundleFolder(arch: number): string;
@@ -24,6 +25,7 @@ export interface Configuration {
     asar: boolean;
     npmRebuild: boolean;
     extraResources: { from: string; to: string }[];
+    electronDownload: { checksums: Record<string, string> };
     electronFuses: Record<string, boolean>;
     publish: { provider: string; owner: string; repo: string; releaseType: string }[];
     detectUpdateChannel: boolean;

@@ -287,6 +287,9 @@ runs:
     # and the Trusted Signing client, whose one credential is the Azure CLI's sign-in above. The client is a pinned
     # version, refused unless its package hashes to the pinned digest; the runner's own newest x64 signtool runs it. The
     # build tooling is desktop/package-lock.json's, installed by npm ci without a package's scripts; none of it is a test.
+    # What electron-builder fetches as it packs is held to digests that tooling carries: Electron's distribution to the
+    # sha256 the electron package's checksums.json names, which the configuration hands it, never to sums fetched beside
+    # it, and electron-builder's own tools (nsis, the resource and icon tools, 7-Zip) to the sha256 its source names.
     - name: Fetch the Trusted Signing client and name the account it signs with
       id: desktop-signing
       if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
@@ -755,7 +758,10 @@ runs:
     # each architecture's application carries its own signed jason, the very bytes, which keeps that signature and its
     # entitlements, and electron-builder signs the application around it with the same Developer ID, hardened, and has the
     # notary accept it with the key the notarization above kept in this job's keychain. The build tooling is
-    # desktop/package-lock.json's, installed by npm ci without a package's scripts; none of it is a test.
+    # desktop/package-lock.json's, installed by npm ci without a package's scripts; none of it is a test. What
+    # electron-builder fetches as it packs is held to digests that tooling carries: each architecture's Electron
+    # distribution to the sha256 the electron package's checksums.json names, which the configuration hands it, never to
+    # sums fetched beside it, and electron-builder's own tools (dmgbuild among them) to the sha256 its source names.
     - name: Build the desktop's Mac packages, signed and notarized
       if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
       shell: bash

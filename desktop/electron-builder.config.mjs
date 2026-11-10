@@ -34,6 +34,15 @@ export const fuses = Object.freeze({
     grantFileProtocolExtraPrivileges: true,
 });
 
+/**
+ * The sha256 of every file of Electron's release, as the electron package the lockfile installs carries them in its
+ * checksums.json. npm ci --ignore-scripts installs that package without running its own download, so the lockfile's
+ * integrity hash is what holds these digests.
+ */
+export function electronChecksums() {
+    return JSON.parse(readFileSync(join(desktop, 'node_modules', 'electron', 'checksums.json'), 'utf8'));
+}
+
 /** The files the chat's fence reads, packaged inside the application beside package.json. */
 export const chatLists = Object.freeze(['chat-deny-list.txt', 'chat-allow-list.txt']);
 
@@ -121,6 +130,10 @@ export function configuration({ version, sign = null }) {
             { from: '../LICENSE', to: 'notices/LICENSE' },
             { from: 'THIRD-PARTY-NOTICES', to: 'notices/THIRD-PARTY-NOTICES' },
         ],
+        // electron-builder fetches Electron's distribution for each platform and architecture it packs, and @electron/get
+        // refuses a zip, downloaded or cached, whose sha256 is not the one the electron package names; without these it
+        // would check the zip against a SHASUMS256.txt fetched from the same release.
+        electronDownload: { checksums: electronChecksums() },
         electronFuses: { ...fuses },
         publish: [{ provider: 'github', owner: 'reply-team', repo: 'jason-ai', releaseType: 'release' }],
         // A candidate writes latest.yml and latest-mac.yml as a release does, never a channel of its own: the release's

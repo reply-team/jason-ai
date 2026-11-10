@@ -132,6 +132,11 @@ file, and signs the package itself: a Mac package is never built unsigned. Insid
 folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package carries no UI: `jason ui install`
 places the UI of the runtime's own release.
 
+electron-builder fetches Electron's distribution for each platform and architecture it packs. The configuration hands it
+the sha256 of each file from the `checksums.json` the `electron` package carries, which `package-lock.json` pins, so a zip
+that does not match, downloaded or cached, stops the pack; its own tools (nsis, the resource and icon tools, 7-Zip,
+dmgbuild) it checks against the sha256 its own source names.
+
 `scripts/check-package.mjs` reads a built package back against this configuration: the feed and, on Windows, the
 publisher its `app-update.yml` names, and the fuses its binary carries. The release runs it on every package it builds:
 

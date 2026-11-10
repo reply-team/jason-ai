@@ -12,7 +12,7 @@ import { bundleFiles, bundleFolder, chatLists, checkBundle, configuration, copyC
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { devDependencies: Record<string, string> };
-const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8')) as { packages: Record<string, { version?: string; dev?: boolean }> };
+const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8')) as { packages: Record<string, { version?: string; integrity?: string; dev?: boolean }> };
 
 type Configuration = ReturnType<typeof configuration>;
 const built: Configuration = configuration({ version: '0.34.0-rc.1' });
@@ -26,6 +26,23 @@ function temporary(t: { after(fn: () => void): void }): string {
 test('the package is built on Electron 44.10.2 exactly', () => {
     assert.equal(manifest.devDependencies['electron'], '44.10.2');
     assert.equal(lock.packages['node_modules/electron']?.version, '44.10.2');
+});
+
+test('each Electron zip a pack unpacks is held to the sha256 the lockfile’s electron package names, never to sums fetched beside it', () => {
+    // npm ci --ignore-scripts installs the electron package, held by the lockfile's integrity hash, without running its
+    // own download; electron-builder fetches the distribution itself, and @electron/get refuses a zip, downloaded or
+    // cached, whose sha256 is not the one given here, rather than one it would read from SHASUMS256.txt on the same host.
+    const electron = join(root, 'node_modules', 'electron');
+    const installed = JSON.parse(readFileSync(join(electron, 'package.json'), 'utf8')) as { version: string };
+    const checksums = JSON.parse(readFileSync(join(electron, 'checksums.json'), 'utf8')) as Record<string, string>;
+    assert.equal(installed.version, lock.packages['node_modules/electron']?.version);
+    assert.match(lock.packages['node_modules/electron']?.integrity ?? '', /^sha512-/);
+    assert.deepEqual(built.electronDownload, { checksums });
+    for (const zip of ['win32-x64', 'darwin-arm64', 'darwin-x64']) {
+        assert.match(checksums[`electron-v${installed.version}-${zip}.zip`] ?? '', /^[0-9a-f]{64}$/, `no sha256 for Electron's ${zip} zip`);
+    }
+    // No distribution of its own: the one fetched is the one checked.
+    assert.equal('electronDist' in built, false);
 });
 
 test('electron-builder is a pinned development dependency, installed from the lockfile and never carried', () => {
