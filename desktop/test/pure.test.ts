@@ -91,13 +91,16 @@ test('the pairing link is taken only when it is a UI page at the runtime’s ori
 
 // ---- What the CLI said ---------------------------------------------------------------------------------------------
 
-test('jason status is read by its checks: the runtime up, and whether it is the bundle’s version', () => {
-    const status = (runtime: string, version: string) =>
-        JSON.stringify({ ready: false, checks: [{ name: 'runtime', state: runtime }, { name: 'runtime_version', state: version }] });
-    assert.deepEqual(statusFacts(status('ok', 'ok')), { runtimeUp: true, sameVersion: true });
-    assert.deepEqual(statusFacts(status('ok', 'failed')), { runtimeUp: true, sameVersion: false });
-    assert.deepEqual(statusFacts(status('failed', 'unknown')), { runtimeUp: false, sameVersion: false });
-    assert.deepEqual(statusFacts('jason: not json'), { runtimeUp: false, sameVersion: false });
+test('jason status is read by its checks: the runtime up, whether it is the bundle’s version, and whether its UI needs installing', () => {
+    const status = (runtime: string, version: string, ui = 'ok') =>
+        JSON.stringify({ ready: false, checks: [{ name: 'runtime', state: runtime }, { name: 'runtime_version', state: version }, { name: 'ui_module', state: ui }] });
+    assert.deepEqual(statusFacts(status('ok', 'ok')), { runtimeUp: true, sameVersion: true, uiNeeded: false, uiServed: true });
+    assert.deepEqual(statusFacts(status('ok', 'failed')), { runtimeUp: true, sameVersion: false, uiNeeded: false, uiServed: true });
+    // ui_module is failed only while a UI is served (with a problem, for another API, or a stale default); absent is none.
+    assert.deepEqual(statusFacts(status('ok', 'ok', 'failed')), { runtimeUp: true, sameVersion: true, uiNeeded: true, uiServed: true });
+    assert.deepEqual(statusFacts(status('ok', 'ok', 'absent')), { runtimeUp: true, sameVersion: true, uiNeeded: true, uiServed: false });
+    assert.deepEqual(statusFacts(status('failed', 'unknown', 'unknown')), { runtimeUp: false, sameVersion: false, uiNeeded: true, uiServed: false });
+    assert.deepEqual(statusFacts('jason: not json'), { runtimeUp: false, sameVersion: false, uiNeeded: true, uiServed: false });
     assert.equal(runtimeVersionIn(JSON.stringify({ runtime_version: '0.34.0-rc.1' })), '0.34.0-rc.1');
     assert.equal(runtimeVersionIn(''), null);
     assert.equal(pluginValid(JSON.stringify({ plugins: [{ id: 'reply', status: 'valid' }] }), 'reply'), true);

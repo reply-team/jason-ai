@@ -72,6 +72,33 @@ test('a runtime of another version keeps its own UI: no ui install, no role skil
     assert.deepEqual(saved, [], 'skills deployed half-way are deployed again next time');
 });
 
+test('a runtime that already serves its own UI is not asked to install one: no fetch at every start', async (t) => {
+    const b = bench(t, { env: { STUB_UI_MODULE: 'ok' } });
+    runtimeAlreadyUp(b);
+    const { verbs, started } = await start(b);
+    assert.equal(verbs.some((args) => args[0] === 'ui' && args[1] === 'install'), false);
+    assert.equal(started.link, 'http://127.0.0.1:41234/ui/#pair=planted-pair-code');
+});
+
+test('with no UI installed, the UI is installed, and an install that fails stops the start, since there is nothing to show', async (t) => {
+    const b = bench(t, { env: { STUB_UI_MODULE: 'absent' } });
+    runtimeAlreadyUp(b);
+    assert.ok((await start(b)).verbs.some((args) => args[0] === 'ui' && args[1] === 'install'));
+
+    const failing = bench(t, { env: { STUB_UI_MODULE: 'absent', STUB_UI_INSTALL_FAILS: 'yes' } });
+    runtimeAlreadyUp(failing);
+    await assert.rejects(start(failing), (error: unknown) => error instanceof StartFailed && error.step === 'ui install' && /could not be reached/.test(error.message));
+});
+
+test('a UI that is served but not this runtime’s is installed again, and an install that fails is logged and the start goes on', async (t) => {
+    const b = bench(t, { env: { STUB_UI_MODULE: 'failed', STUB_UI_INSTALL_FAILS: 'yes' } });
+    runtimeAlreadyUp(b);
+    const { verbs, log, started } = await start(b);
+    assert.ok(verbs.some((args) => args[0] === 'ui' && args[1] === 'install'));
+    assert.deepEqual(log.lines.find((line) => line.name === 'ui_installed')?.fields, { Exit: 1 });
+    assert.equal(started.link, 'http://127.0.0.1:41234/ui/#pair=planted-pair-code');
+});
+
 test('the skills are deployed once per bundle version', async (t) => {
     const b = bench(t);
     runtimeAlreadyUp(b);

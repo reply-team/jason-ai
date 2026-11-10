@@ -5,10 +5,10 @@
  */
 
 import { cp, mkdtemp, readdir, rm } from 'node:fs/promises';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { Cli } from './cli.ts';
+import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import type { DesktopPaths } from './paths.ts';
@@ -19,6 +19,7 @@ import type { DesktopSettings } from './settings.ts';
 import {
     bundledPlugin,
     bundledPlugins,
+    defaultRoutePlugin,
     hasBinding,
     isConfigured,
     parseInstallationSettings,
@@ -31,6 +32,7 @@ import {
     versionAtLeast,
     versionIn,
     withPluginConfigured,
+    withReplyWired,
     type PluginRuntime,
     type PluginValues,
     type ReplyAccount,
@@ -110,13 +112,24 @@ function readText(file: string): string | null {
     }
 }
 
-/** Writes a file through one beside it renamed over it, so a reader sees the old text or the new and never half. */
-function writeAtomically(file: string, text: string): void {
+/**
+ * Writes a file through one beside it renamed over it, so a reader sees the old text or the new and never half; a rename
+ * that fails takes the file beside it away again.
+ */
+export function writeAtomically(file: string, text: string): void {
     mkdirSync(dirname(file), { recursive: true });
     const temporary = `${file}.${process.pid}.tmp`;
-    writeFileSync(temporary, text, { mode: 0o600 });
-    renameSync(temporary, file);
+    try {
+        writeFileSync(temporary, text, { mode: 0o600 });
+        renameSync(temporary, file);
+    } catch (error) {
+        rmSync(temporary, { force: true });
+        throw error;
+    }
 }
+
+/** What the page adds to `settingsRefused`, and what a refusal thrown for the same file ends with. */
+const editByHand = 'Edit it by hand, then press Reload.';
 
 function words(result: RunResult, otherwise: string): string {
     return (result.stderr.trim() || result.stdout.trim() || otherwise).slice(-1000);
@@ -252,17 +265,20 @@ export class Setup {
         };
     }
 
-    async #reply(wired: boolean): Promise<ReplyState> {
+    /** Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. */
+    async #reply(valid: boolean): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [] };
         }
+        const routes = valid ? await this.#deps.cli.run(['route', 'list']) : null;
+        const wired = routes !== null && routes.exit === 0 && defaultRoutePlugin(routes.stdout) === 'reply';
         const version = await this.#version('reply');
         // Older than Jason's Reply plugin requires, the CLI is offered the update and is not asked for its accounts,
         // which it has no command for.
         const current = version !== null && versionAtLeast(version, replyMinimumVersion);
         const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
-        const accounts = auth.signedIn && current ? parseReplyAccounts((await this.#run('reply', 'account list', ['account', 'list'])).stdout) : [];
+        const accounts = auth.signedIn && current ? parseReplyAccounts((await this.#run('reply', 'account list', ['account', 'list', '--json'])).stdout) : [];
         return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts };
     }
 
@@ -271,8 +287,7 @@ export class Setup {
             const result = await this.#run('reply', 'auth login', ['auth', 'login'], { timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'browser', Exit: result.exit });
             if (result.exit !== 0) throw new Refused(words(result, 'Reply did not sign in.'));
-            await this.#deployReplySkills();
-            this.#changed();
+            await this.#signedIn();
         });
     }
 
@@ -282,9 +297,58 @@ export class Setup {
             const result = await this.#run('reply', 'auth login --with-token', ['auth', 'login', '--with-token'], { stdin: key.trim(), timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'key', Exit: result.exit });
             if (result.exit !== 0) throw new Refused(words(result, 'Reply did not accept that key.'));
+            await this.#signedIn();
+        });
+    }
+
+    /** After a sign-in: Jason's Reply plugin wired to the profile signed in, and the Reply skills deployed either way. */
+    async #signedIn(): Promise<void> {
+        try {
+            const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
+            await this.#wireReply(auth.profile ?? 'default');
+        } finally {
             await this.#deployReplySkills();
             this.#changed();
+        }
+    }
+
+    /**
+     * Places Jason's Reply plugin with the CLI, grants it the Reply CLI and, where the settings file names no global
+     * default, names it that default for the profile signed in, as the golden path does by hand; then the reload.
+     */
+    async #wireReply(profile: string): Promise<void> {
+        let routeWritten = false;
+        await this.#placeAndEdit('reply', (settings) => {
+            const wired = withReplyWired(settings, profile);
+            routeWritten = wired.routeWritten;
+            return wired.settings;
         });
+        const reload = await this.#reloadPlugins();
+        this.#deps.log.info('reply_wired', { RouteWritten: routeWritten, Exit: reload.exit });
+        if (reload.exit !== 0) throw this.#reloadRefused(reload);
+    }
+
+    /** The settings file as an object for an edit; one the desktop cannot parse is logged by its path and refused. */
+    #readForEdit(): Record<string, unknown> {
+        const file = this.#deps.paths.installationSettings;
+        try {
+            return parseInstallationSettings(readText(file));
+        } catch (error) {
+            this.#deps.log.warn('settings_refused', { Path: file });
+            throw new Refused(`${(error as Error).message} ${editByHand}`);
+        }
+    }
+
+    /**
+     * One plugin placed with `jason plugin install` and one edit of the settings file: the edit is tried before the
+     * install, so a file or a value it refuses is refused before anything is fetched, and made again on the file as it
+     * is just before the write, so an edit made while the package was fetched is not lost.
+     */
+    async #placeAndEdit(pluginId: string, edit: (settings: Record<string, unknown>) => Record<string, unknown>): Promise<void> {
+        edit(this.#readForEdit());
+        const placed = await this.#deps.cli.run(['plugin', 'install', pluginId, ...feedArguments(this.#deps.settings())], { timeoutMs: installLimit });
+        if (placed.exit !== 0) throw new Refused(words(placed, `jason plugin install ${pluginId} did not place the plugin.`));
+        writeAtomically(this.#deps.paths.installationSettings, `${JSON.stringify(edit(this.#readForEdit()), null, 2)}\n`);
     }
 
     /**
@@ -337,9 +401,10 @@ export class Setup {
 
     /**
      * Places one of the four bundled plugins with the CLI, writes its token, its target, ntfy's server and its grant into
-     * the installation's settings as a person would, and asks the runtime to load its plugins again. With no values it
-     * only asks for the reload, which is what Reload is. A settings file the desktop cannot read is refused and left as
-     * it is. The token travels in that file only: never in an argument, an environment or a log.
+     * the installation's settings as a person would, asks the runtime to load its plugins again and reads them back. With
+     * no values it only asks for the reload and the read-back, which is what Reload is. A settings file the desktop
+     * cannot read is refused and left as it is. The token travels in that file only: never in an argument, an
+     * environment or a log.
      */
     configurePlugin(pluginId: unknown, values: unknown): Promise<void> {
         return this.#serial(async () => {
@@ -351,44 +416,37 @@ export class Setup {
                 target: typeof asked.target === 'string' ? asked.target : undefined,
                 server: typeof asked.server === 'string' ? asked.server : undefined,
             };
-            if (wanted.token === undefined && wanted.target === undefined && wanted.server === undefined) {
-                await this.#reload(plugin.id, wanted);
-                return;
+            if (wanted.token !== undefined || wanted.target !== undefined || wanted.server !== undefined) {
+                await this.#placeAndEdit(plugin.id, (settings) => withPluginConfigured(settings, plugin, wanted));
             }
-
-            const file = this.#deps.paths.installationSettings;
-            let current: Record<string, unknown>;
-            try {
-                current = parseInstallationSettings(readText(file));
-            } catch (error) {
-                this.#deps.log.warn('settings_refused', { Path: file });
-                throw error;
-            }
-            const next = withPluginConfigured(current, plugin, wanted);
-
-            const placed = await this.#deps.cli.run(['plugin', 'install', plugin.id, ...feedArguments(this.#deps.settings())], { timeoutMs: installLimit });
-            if (placed.exit !== 0) throw new Refused(words(placed, `jason plugin install ${plugin.id} did not place the plugin.`));
-
-            // Read again just before writing, so an edit made while the package was fetched is not lost.
-            const latest = parseInstallationSettings(readText(file));
-            const merged = JSON.stringify(latest) === JSON.stringify(current) ? next : withPluginConfigured(latest, plugin, wanted);
-            writeAtomically(file, `${JSON.stringify(merged, null, 2)}\n`);
             await this.#reload(plugin.id, wanted);
         });
     }
 
     /** Asks the runtime to read its plugins again, and keeps what it said about the settings file for `status()`. */
-    async #reload(pluginId: string, wanted: PluginValues): Promise<void> {
+    async #reloadPlugins(): Promise<CliResult> {
         const reload = await this.#deps.cli.run(['plugin', 'reload']);
         this.#reloadRefusal = reload.exit === 0 ? null : settingsUnreadable(reload.stdout);
+        return reload;
+    }
+
+    #reloadRefused(reload: CliResult): Refused {
+        return new Refused(this.#reloadRefusal ?? words(reload, 'The runtime did not load the plugins again.'));
+    }
+
+    /** The reload, then the plugin list read back, so what is logged says whether the plugin is now valid. */
+    async #reload(pluginId: string, wanted: PluginValues): Promise<void> {
+        const reload = await this.#reloadPlugins();
+        const listed = reload.exit === 0 ? await this.#deps.cli.run(['plugin', 'list']) : null;
         this.#deps.log.info('plugin_configured', {
             PluginId: pluginId,
             TokenChanged: wanted.token !== undefined,
             TargetChanged: wanted.target !== undefined,
             ServerChanged: wanted.server !== undefined,
             Exit: reload.exit,
+            Valid: listed !== null && listed.exit === 0 && (pluginRuntimes(listed.stdout).get(pluginId)?.valid ?? false),
         });
         this.#changed();
-        if (reload.exit !== 0) throw new Refused(this.#reloadRefusal ?? words(reload, 'The runtime did not load the plugins again.'));
+        if (reload.exit !== 0) throw this.#reloadRefused(reload);
     }
 }

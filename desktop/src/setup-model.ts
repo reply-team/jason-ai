@@ -58,8 +58,8 @@ export const bundledPlugins: readonly BundledPlugin[] = [
         serverLabel: 'Server (optional)',
         note: 'A server that needs a token reads it from NTFY_TOKEN in the runtime’s environment, granted under Plugins:Grants:ntfy:Env, as the plugin’s README says; the desktop sets neither.',
         target: { key: 'topic', label: 'Topic', where: 'binding', pattern: '^[A-Za-z0-9_-]+$', maxLength: 64 },
-        // The star is the public server alone, as the manifest says; a server of the person's own replaces it.
-        http: ['*'],
+        // The public server, by the name the manifest declares; a server of the person's own replaces it.
+        http: ['ntfy.sh'],
     },
     {
         id: 'journal-forwarder',
@@ -112,11 +112,33 @@ function section(root: Json, path: readonly string[]): Json {
     return here;
 }
 
-function setOrRemove(object: Json, name: string, value: string | undefined): void {
+/** The object at a path when it is there, made nowhere; refused when something there is not an object. */
+function existing(root: Json, path: readonly string[]): Json | undefined {
+    let here = root;
+    for (const name of path) {
+        const next = here[keyOf(here, name)];
+        if (next === undefined || next === null) return undefined;
+        if (typeof next !== 'object' || Array.isArray(next)) {
+            throw new Refused(`The settings file has ${path.join(':')} as something other than an object, so it was left as it is.`);
+        }
+        here = next as Json;
+    }
+    return here;
+}
+
+/**
+ * One value at a path: absent leaves it, empty removes it from a section already there, anything else writes it, making
+ * the section only then.
+ */
+function setOrRemove(root: Json, path: readonly string[], name: string, value: string | undefined): void {
     if (value === undefined) return;
-    const key = keyOf(object, name);
-    if (value === '') delete object[key];
-    else object[key] = value;
+    if (value === '') {
+        const object = existing(root, path);
+        if (object !== undefined) delete object[keyOf(object, name)];
+        return;
+    }
+    const object = section(root, path);
+    object[keyOf(object, name)] = value;
 }
 
 /** An address this machine answers on, the one place plain http may go. */
@@ -164,46 +186,77 @@ function at(root: unknown, path: readonly string[]): unknown {
     return here;
 }
 
+/** What a plugin's Http grant derives from: the forwarder's receiver, ntfy's own server; undefined for the others. */
+function grantSource(settings: Json, plugin: BundledPlugin): unknown {
+    if (plugin.target.where === 'config') return at(settings, ['Plugins', 'Config', plugin.id, plugin.target.key]);
+    if (plugin.serverLabel !== null) return at(settings, ['Notifications', 'Plugins', plugin.id, 'Binding', 'server']);
+    return undefined;
+}
+
 /**
  * The installation's settings with one plugin configured, as a person would write it: the token under
- * `Plugins:Config:<id>:token`, the hosts under `Plugins:Grants:<id>:Http`, the target as the notification binding or the
- * plugin's own setting, and for ntfy its server beside the topic. Everything is checked before anything is changed;
- * every other key stays as it was, `Routes` is never touched, and the input is not changed.
+ * `Plugins:Config:<id>:token`, the target as the notification binding or the plugin's own setting, for ntfy its server
+ * beside the topic, and the hosts under `Plugins:Grants:<id>:Http`. Everything is checked before anything is changed; a
+ * section is made only when a value is written into it; the grant is written only where there is none, or where the
+ * server or receiver it derives from changed, so a grant a person wrote outlives a new token or topic; every other key
+ * stays as it was, `Routes` is never touched, and the input is not changed.
  */
 export function withPluginConfigured(settings: Json, plugin: BundledPlugin, values: PluginValues): Json {
     if (plugin.tokenLabel === null && values.token !== undefined && values.token !== '') {
         throw new Refused(`${plugin.label} takes no token from the settings file.`);
     }
     if (plugin.serverLabel === null && values.server !== undefined) throw new Refused(`${plugin.label} takes no server.`);
+    const token = values.token?.trim();
     const target = values.target?.trim();
     const server = values.server?.trim();
     const problem = (target === undefined ? null : targetProblem(plugin, target)) ?? (server === undefined ? null : serverProblem(server));
     if (problem !== null) throw new Refused(problem);
 
     const next = structuredClone(settings);
-    const config = section(next, ['Plugins', 'Config', plugin.id]);
-    setOrRemove(config, 'token', values.token?.trim());
-
+    const config = ['Plugins', 'Config', plugin.id];
+    setOrRemove(next, config, 'token', token);
     if (plugin.target.where === 'binding') {
-        if (target !== undefined || server !== undefined) {
-            const binding = section(next, ['Notifications', 'Plugins', plugin.id, 'Binding']);
-            setOrRemove(binding, plugin.target.key, target);
-            setOrRemove(binding, 'server', server);
-        }
+        const binding = ['Notifications', 'Plugins', plugin.id, 'Binding'];
+        setOrRemove(next, binding, plugin.target.key, target);
+        setOrRemove(next, binding, 'server', server);
     } else {
-        setOrRemove(config, plugin.target.key, target);
+        setOrRemove(next, config, plugin.target.key, target);
     }
 
-    // The grant follows what the settings now hold: the forwarder's receiver, ntfy's own server, or the plugin's default.
-    const own = plugin.target.where === 'config'
-        ? at(next, ['Plugins', 'Config', plugin.id, plugin.target.key])
-        : plugin.serverLabel !== null ? at(next, ['Notifications', 'Plugins', plugin.id, 'Binding', 'server']) : undefined;
-    const hosts = typeof own === 'string' && own !== '' ? [new URL(own).host] : plugin.http;
-    if (hosts !== null) {
+    const before = grantSource(settings, plugin);
+    const after = grantSource(next, plugin);
+    const hosts = typeof after === 'string' && after !== '' ? [new URL(after).host] : plugin.http;
+    const grants = existing(next, ['Plugins', 'Grants', plugin.id]);
+    const granted = grants !== undefined && grants[keyOf(grants, 'Http')] !== undefined;
+    const given = [token, target, server].some((value) => value !== undefined && value !== '');
+    if (hosts !== null && ((!granted && given) || before !== after)) {
         const grant = section(next, ['Plugins', 'Grants', plugin.id]);
         grant[keyOf(grant, 'Http')] = [...hosts];
     }
     return next;
+}
+
+/** The Reply plugin's binding as the golden path writes it: the reply-cli profile the route acts as. */
+export interface ReplyWiring {
+    settings: Json;
+    /** Whether `Routes:Default` was written, which it is only where the file holds none. */
+    routeWritten: boolean;
+}
+
+/**
+ * The installation's settings with Jason's Reply plugin granted its one executable (`Plugins:Grants:reply:Exec`) and,
+ * where the file names no global default at all, named the global default with the signed-in profile
+ * (`Routes:Default`), as the golden path writes both by hand. A default a person set is never replaced; every other key
+ * stays as it was, and the input is not changed.
+ */
+export function withReplyWired(settings: Json, profile: string): ReplyWiring {
+    const next = structuredClone(settings);
+    const grant = section(next, ['Plugins', 'Grants', 'reply']);
+    grant[keyOf(grant, 'Exec')] = ['reply'];
+    const routes = existing(next, ['Routes']);
+    const routeWritten = routes === undefined || routes[keyOf(routes, 'Default')] === undefined;
+    if (routeWritten) section(next, ['Routes'])[keyOf(routes ?? {}, 'Default')] = { Plugin: 'reply', Binding: { profile } };
+    return { settings: next, routeWritten };
 }
 
 const present = (value: unknown) => typeof value === 'string' && value !== '';
@@ -232,7 +285,9 @@ export function parseInstallationSettings(text: string | null): Json {
     try {
         raw = JSON.parse(text);
     } catch {
-        throw new Refused('The settings file is not JSON the desktop can read, so it was left as it is. Fix it, or remove it, and try again.');
+        throw new Refused(
+            'The settings file is not plain JSON, so the desktop left it as it is: comments and trailing commas, which the runtime reads, are among what the desktop cannot keep when it writes the file.',
+        );
     }
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
         throw new Refused('The settings file does not hold a JSON object, so it was left as it is.');
@@ -285,12 +340,40 @@ export interface ReplyAccount {
     status: string;
 }
 
-export function parseReplyAuth(stdout: string): { signedIn: boolean; user: string | null } {
+// The two answers of the Reply CLI read here, in the shapes reply-cli 0.18.0 and 0.19.0 print (unchanged between them):
+//
+// `reply auth status --json` (src/commands/auth.ts, the object built in src/auth/status.ts) prints
+//   {"authenticated": bool, "profile": string, "source"?, "method"?, "user"?: {"id"?, "username"?, "team_id"?},
+//    "expires_at"?, "expired"?, "team_id"?, "acting_user_id"?, "acting_email"?}
+// and exits 1 when the profile holds no credential.
+//
+// `reply account list --json` (src/operations/commands.ts, src/operations/accounts.ts) prints
+//   {"items": [{"id", "channel", "name", "address", "owner_user_id", "status", "reply_status"}]}
+//
+// `--json` is the CLI's global flag for compact output (src/index.ts, src/utils/output.ts); without it the same object is
+// printed indented, so it is passed to both.
+
+/** The profile a route's binding may name: the Reply plugin's binding schema takes one to sixty-four characters. */
+const profileLimit = 64;
+
+export function parseReplyAuth(stdout: string): { signedIn: boolean; user: string | null; profile: string | null } {
     try {
-        const raw = JSON.parse(stdout) as { authenticated?: unknown; user?: { username?: unknown } };
-        return { signedIn: raw.authenticated === true, user: typeof raw.user?.username === 'string' ? raw.user.username : null };
+        const raw = JSON.parse(stdout) as { authenticated?: unknown; profile?: unknown; user?: { username?: unknown } };
+        const profile = typeof raw.profile === 'string' && raw.profile.length > 0 && raw.profile.length <= profileLimit ? raw.profile : null;
+        return { signedIn: raw.authenticated === true, user: typeof raw.user?.username === 'string' ? raw.user.username : null, profile };
     } catch {
-        return { signedIn: false, user: null };
+        return { signedIn: false, user: null, profile: null };
+    }
+}
+
+/** The plugin `jason route list` names as the global default, or null for none or an answer it cannot read. */
+export function defaultRoutePlugin(stdout: string): string | null {
+    try {
+        const raw = JSON.parse(stdout) as { global?: { default?: { plugin_id?: unknown } | null } };
+        const plugin = raw.global?.default?.plugin_id;
+        return typeof plugin === 'string' ? plugin : null;
+    } catch {
+        return null;
     }
 }
 
@@ -316,6 +399,10 @@ export interface StatusFacts {
     runtimeUp: boolean;
     /** Whether the runtime answering is the build of the CLI that asked, which is the bundle's. */
     sameVersion: boolean;
+    /** Whether `ui_module` is anything but ok: no UI, one with a problem, one for another API, or a stale default. */
+    uiNeeded: boolean;
+    /** Whether a UI is served all the same: `ui_module` is failed only while one is, and absent when none is. */
+    uiServed: boolean;
 }
 
 /** What `jason status` printed, read by its checks' names and states; anything unreadable says no runtime. */
@@ -323,9 +410,10 @@ export function statusFacts(stdout: string): StatusFacts {
     try {
         const raw = JSON.parse(stdout) as { checks?: { name?: unknown; state?: unknown }[] };
         const state = (name: string) => raw.checks?.find((check) => check.name === name)?.state;
-        return { runtimeUp: state('runtime') === 'ok', sameVersion: state('runtime_version') === 'ok' };
+        const ui = state('ui_module');
+        return { runtimeUp: state('runtime') === 'ok', sameVersion: state('runtime_version') === 'ok', uiNeeded: ui !== 'ok', uiServed: ui === 'ok' || ui === 'failed' };
     } catch {
-        return { runtimeUp: false, sameVersion: false };
+        return { runtimeUp: false, sameVersion: false, uiNeeded: true, uiServed: false };
     }
 }
 
@@ -378,3 +466,4 @@ export function pluginRuntimes(stdout: string): Map<string, PluginRuntime> {
     }
     return answered;
 }
+

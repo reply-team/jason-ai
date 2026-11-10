@@ -1,16 +1,27 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { fileLogger } from '../src/log.ts';
+import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
-import { Setup } from '../src/setup.ts';
-import { bundledPlugin, Refused, serverPattern, withPluginConfigured } from '../src/setup-model.ts';
+import { Setup, writeAtomically } from '../src/setup.ts';
+import {
+    bundledPlugin,
+    defaultRoutePlugin,
+    parseInstallationSettings,
+    parseReplyAccounts,
+    parseReplyAuth,
+    Refused,
+    serverPattern,
+    withPluginConfigured,
+    withReplyWired,
+} from '../src/setup-model.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
 
-function setupOn(b: Bench, log = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null }) {
+function setupOn(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null }) {
     return new Setup({
         paths: b.paths,
         cli: loggedCli(b.cli, log),
@@ -57,7 +68,7 @@ test('each of the four plugins writes its own closed set of keys', () => {
         Notifications: { Plugins: { telegram: { Binding: { chat: '@team_room' } } } },
     });
     assert.deepEqual(configure('ntfy', { target: 'my-topic' }), {
-        Plugins: { Config: { ntfy: {} }, Grants: { ntfy: { Http: ['*'] } } },
+        Plugins: { Grants: { ntfy: { Http: ['ntfy.sh'] } } },
         Notifications: { Plugins: { ntfy: { Binding: { topic: 'my-topic' } } } },
     });
     assert.deepEqual(configure('journal-forwarder', { token: 'b', target: 'https://hooks.example.com:8443/in' }), {
@@ -83,17 +94,16 @@ test('ntfy alone takes a server, checked before anything is written, and its gra
     const ntfy = bundledPlugin('ntfy')!;
     const own = withPluginConfigured({}, ntfy, { target: 'alerts', server: 'https://ntfy.example.com:8443' });
     assert.deepEqual(own, {
-        Plugins: { Config: { ntfy: {} }, Grants: { ntfy: { Http: ['ntfy.example.com:8443'] } } },
+        Plugins: { Grants: { ntfy: { Http: ['ntfy.example.com:8443'] } } },
         Notifications: { Plugins: { ntfy: { Binding: { topic: 'alerts', server: 'https://ntfy.example.com:8443' } } } },
     });
-    // Absent keeps the server and so its grant; empty removes it and puts the grant back to any host.
+    // Absent keeps the server and so its grant; empty removes it and puts the grant back to the public server.
     assert.deepEqual((withPluginConfigured(own, ntfy, { target: 'other' }) as { Plugins: unknown }).Plugins, own.Plugins);
     assert.deepEqual(withPluginConfigured(own, ntfy, { server: '' }), {
-        Plugins: { Config: { ntfy: {} }, Grants: { ntfy: { Http: ['*'] } } },
+        Plugins: { Grants: { ntfy: { Http: ['ntfy.sh'] } } },
         Notifications: { Plugins: { ntfy: { Binding: { topic: 'alerts' } } } },
     });
     assert.deepEqual((withPluginConfigured({}, ntfy, { target: 't', server: 'https://ntfy.example.com:443' }) as { Plugins: unknown }).Plugins, {
-        Config: { ntfy: {} },
         Grants: { ntfy: { Http: ['ntfy.example.com'] } },
     });
     for (const here of ['http://localhost:2586', 'http://127.0.0.1', 'http://[::1]:8080']) {
@@ -126,62 +136,211 @@ test('a target is checked against the pattern of the plugin’s own binding, as 
         assert.equal(plugin.target.pattern, declared(id, plugin.target.key), `${id}'s ${plugin.target.key}`);
     }
     assert.equal(serverPattern, declared('ntfy', 'server'), 'the server pattern is the ntfy binding’s own');
+
+    // A default grant is the host the manifest declares, never a star.
+    for (const id of ['slack', 'telegram', 'ntfy']) {
+        const manifest = readFileSync(join(import.meta.dirname, '..', '..', 'plugins', id, 'plugin.yaml'), 'utf8').replace(/\r\n/g, '\n');
+        const hosts = /\n {2}http:\n(?: {4}#.*\n| {4}any_granted_host:.*\n)* {4}hosts: \[([^\]]*)\]/.exec(manifest)?.[1]?.split(',').map((host) => host.trim());
+        assert.deepEqual(bundledPlugin(id)!.http, hosts, id);
+    }
+});
+
+test('a grant is written when there is none, or when what it derives from changes; a person’s own grant is kept', () => {
+    const slack = bundledPlugin('slack')!;
+    const theirs = { Plugins: { Grants: { slack: { Http: ['slack.com', 'files.slack.com'] } } } };
+    const kept = withPluginConfigured(theirs, slack, { token: 't2', target: 'C0123ABCD' }) as typeof theirs;
+    assert.deepEqual(kept.Plugins.Grants.slack.Http, ['slack.com', 'files.slack.com'], 'a token or a channel change keeps it');
+
+    const ntfy = bundledPlugin('ntfy')!;
+    // A self-hosted server set by hand, with its grant: configuring the topic keeps both.
+    const selfHosted = {
+        Plugins: { Grants: { ntfy: { Http: ['ntfy.mine.example'], Env: ['NTFY_TOKEN'] } } },
+        Notifications: { Plugins: { ntfy: { Binding: { topic: 'old', server: 'https://ntfy.mine.example' } } } },
+    };
+    const topic = withPluginConfigured(selfHosted, ntfy, { target: 'new-topic' }) as typeof selfHosted;
+    assert.deepEqual(topic.Plugins.Grants.ntfy, { Http: ['ntfy.mine.example'], Env: ['NTFY_TOKEN'] });
+    assert.equal(topic.Notifications.Plugins.ntfy.Binding.topic, 'new-topic');
+    // A grant written by hand for the public server stays as it is when only the topic changes.
+    const star = withPluginConfigured({ Plugins: { Grants: { ntfy: { Http: ['*'] } } } }, ntfy, { target: 'a' }) as typeof selfHosted;
+    assert.deepEqual(star.Plugins.Grants.ntfy.Http, ['*']);
+    // The server it derives from changes: the grant follows it, and the Env grant beside it is kept.
+    const moved = withPluginConfigured(selfHosted, ntfy, { server: 'https://other.example:8443' }) as typeof selfHosted;
+    assert.deepEqual(moved.Plugins.Grants.ntfy, { Http: ['other.example:8443'], Env: ['NTFY_TOKEN'] });
+    assert.deepEqual((withPluginConfigured(selfHosted, ntfy, { server: 'https://ntfy.mine.example' }) as typeof selfHosted).Plugins.Grants.ntfy.Http, ['ntfy.mine.example']);
+
+    const forwarder = bundledPlugin('journal-forwarder')!;
+    const receiving = { Plugins: { Config: { 'journal-forwarder': { url: 'https://hooks.example.com/in' } }, Grants: { 'journal-forwarder': { Http: ['hooks.example.com', 'backup.example.com'] } } } };
+    const token = withPluginConfigured(receiving, forwarder, { token: 'b' }) as typeof receiving;
+    assert.deepEqual(token.Plugins.Grants['journal-forwarder'].Http, ['hooks.example.com', 'backup.example.com']);
+    const url = withPluginConfigured(receiving, forwarder, { target: 'https://elsewhere.example.com/in' }) as typeof receiving;
+    assert.deepEqual(url.Plugins.Grants['journal-forwarder'].Http, ['elsewhere.example.com']);
+    assert.throws(() => withPluginConfigured(receiving, forwarder, { target: '' }), Refused, 'an empty target is refused, not removed');
+});
+
+test('a section is made only when a value is written into it', () => {
+    assert.deepEqual(withPluginConfigured({}, bundledPlugin('slack')!, { token: '' }), {}, 'removing what is not there writes nothing');
+    assert.deepEqual(withPluginConfigured({ Harness: { Root: 'r' } }, bundledPlugin('ntfy')!, { server: '' }), { Harness: { Root: 'r' } });
+    const ntfy = withPluginConfigured({}, bundledPlugin('ntfy')!, { target: 'a' }) as { Plugins: Record<string, unknown> };
+    assert.deepEqual(Object.keys(ntfy.Plugins), ['Grants'], 'ntfy takes nothing under Plugins:Config');
+});
+
+test('the parse refusal says comments and trailing commas are among what the desktop cannot keep', () => {
+    for (const text of ['{ // a note\n "Dispatcher": {} }', '{ "Dispatcher": {}, }', '{ "Plugins": ']) {
+        assert.throws(() => parseInstallationSettings(text), (error: unknown) => error instanceof Refused && /comments and trailing commas/.test(error.message) && /runtime reads/.test(error.message), text);
+    }
+    assert.deepEqual(parseInstallationSettings(null), {});
+});
+
+test('wiring Reply grants it its executable and names it the global default, only where no default is set', () => {
+    const fresh = withReplyWired({ Harness: { Root: 'r' } }, 'default');
+    assert.deepEqual(fresh, {
+        routeWritten: true,
+        settings: {
+            Harness: { Root: 'r' },
+            Plugins: { Grants: { reply: { Exec: ['reply'] } } },
+            Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } },
+        },
+    });
+    assert.deepEqual((withReplyWired({}, 'work').settings as { Routes: unknown }).Routes, { Default: { Plugin: 'reply', Binding: { profile: 'work' } } });
+    const foreign = { routes: { default: { Plugin: 'other' } }, Plugins: { Grants: { reply: { Exec: ['reply'], Http: ['x'] } } } };
+    assert.deepEqual(withReplyWired(foreign, 'default'), { routeWritten: false, settings: foreign });
+    // Operations routed by hand are a Routes key of their own, and a default is still set beside them.
+    const operations = withReplyWired({ Routes: { Operations: { 'contact.find': { Plugin: 'other' } } } }, 'default');
+    assert.equal(operations.routeWritten, true);
+    assert.deepEqual((operations.settings as { Routes: unknown }).Routes, { Operations: { 'contact.find': { Plugin: 'other' } }, Default: { Plugin: 'reply', Binding: { profile: 'default' } } });
+});
+
+test('Reply’s answers are read in the shapes reply-cli prints, and the route list by its global default', () => {
+    assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', source: 'store', method: 'api_key', user: { id: 7, username: 'someone@example.com', team_id: 3 } })), {
+        signedIn: true,
+        user: 'someone@example.com',
+        profile: 'work',
+    });
+    assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, profile: 'default' });
+    assert.deepEqual(parseReplyAuth('Not signed in.'), { signedIn: false, user: null, profile: null });
+    assert.equal(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'x'.repeat(65) })).profile, null, 'a profile the binding cannot hold is not taken');
+    assert.deepEqual(parseReplyAccounts(JSON.stringify({ items: [{ id: 5, channel: 'email', name: 'Sales', address: 'sales@example.com', owner_user_id: 7, status: 'active', reply_status: 'ok' }] })), [
+        { id: '5', channel: 'email', name: 'Sales', address: 'sales@example.com', status: 'active' },
+    ]);
+    const routes = (global: unknown) => JSON.stringify({ routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations: {} }, campaigns: [] });
+    assert.equal(defaultRoutePlugin(routes({ plugin_id: 'reply', binding: { profile: 'default' }, binding_identity: null })), 'reply');
+    assert.equal(defaultRoutePlugin(routes(null)), null);
+    assert.equal(defaultRoutePlugin('{'), null);
 });
 
 // ---- The written set -----------------------------------------------------------------------------------------------
 
-test('the desktop writes its own files and the keys it was asked to, and nothing else', async (t) => {
+/** Every leaf of a settings object by its path, `A:B:C`, an array being one leaf. */
+function leaves(value: unknown, prefix = ''): Map<string, string> {
+    const found = new Map<string, string>();
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        for (const [key, inner] of Object.entries(value)) for (const [path, leaf] of leaves(inner, prefix === '' ? key : `${prefix}:${key}`)) found.set(path, leaf);
+    } else if (prefix !== '') {
+        found.set(prefix, JSON.stringify(value));
+    }
+    return found;
+}
+
+function settingsLeaves(b: Bench): Map<string, string> {
+    return existsSync(b.paths.installationSettings) ? leaves(readInstallationSettings(b)) : new Map();
+}
+
+const replyLeftovers = () => readdirSync(tmpdir()).filter((name) => name.startsWith('jason-reply-skills-')).length;
+
+test('each act of the Connect cards writes under <data> what it names and nothing else, and nothing outside <data>', async (t) => {
     const b = bench(t, { programs: ['reply', 'npm'] });
-    const original = { Routes: { Default: { Plugin: 'reply' } }, Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Harness: { Root: 'kept' } };
-    writeInstallationSettings(b, original);
-    const before = snapshot(b.paths.data);
+    writeInstallationSettings(b, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Harness: { Root: 'kept' } });
+    // The bench's root holds the data directory, the stubs' PATH and Node, and the stubs' own record of what they ran.
+    const outside = () => ({ top: readdirSync(b.root).filter((name) => name !== 'record.jsonl').sort(), bin: [...snapshot(join(b.root, 'bin'))] });
+    const outsideBefore = outside();
+    const leftoversBefore = replyLeftovers();
 
     const log = fileLogger(b.paths.logs);
-    let settings: DesktopSettings = readSettings(b.paths.settings);
-    await startInstallation({
+    const isLog = (path: string) => /^logs\/desktop-\d{8}(?:_\d{3,9})?\.jsonl$/.test(path);
+    const act = async (name: string, run: () => Promise<unknown>, files: readonly (string | RegExp)[], keys: readonly string[]) => {
+        const before = snapshot(b.paths.data);
+        const settingsBefore = settingsLeaves(b);
+        await run();
+        for (const path of written(before, snapshot(b.paths.data)).filter((path) => !isLog(path))) {
+            assert.ok(files.some((file) => (typeof file === 'string' ? file === path : file.test(path))), `${name} wrote ${path}`);
+        }
+        const settingsAfter = settingsLeaves(b);
+        for (const path of new Set([...settingsBefore.keys(), ...settingsAfter.keys()])) {
+            if (settingsBefore.get(path) === settingsAfter.get(path)) continue;
+            assert.ok(keys.some((key) => path === key || path.startsWith(`${key}:`)), `${name} changed ${path}`);
+        }
+    };
+
+    let desktopSettings: DesktopSettings = readSettings(b.paths.settings);
+    await act('the start', () => startInstallation({
         cli: loggedCli(b.cli, log),
         paths: b.paths,
         log,
         bundle: join(b.root, 'bundle'),
         bundleVersion: '0.34.0-rc.1',
-        settings,
+        settings: desktopSettings,
         saveSettings: (next) => {
-            settings = next;
+            desktopSettings = next;
             writeSettings(b.paths.settings, next);
         },
-    });
-    const setup = setupOn(b, memoryLog(), settings);
-    await setup.configurePlugin('slack', { token: 'xoxb-planted', target: 'C0123ABCD' });
-    await setup.configurePlugin('ntfy', { target: 'jason-topic' });
-    await setup.setProviderKey('deepseek', 'sk-planted-provider');
-    await setup.connectReplyWithKey('planted-reply-key');
+    }), ['run/runtime.json', 'desktop/settings.json'], []);
 
-    const changed = written(before, snapshot(b.paths.data));
-    const theCli = ['run/runtime.json'];
-    const ours = changed.filter((path) => !theCli.includes(path));
-    for (const path of ours) {
-        assert.ok(
-            path.startsWith('desktop/') || /^logs\/desktop-\d{8}(?:_\d{3,9})?\.jsonl$/.test(path) || path === 'config/settings.json',
-            `the desktop wrote ${path}`,
-        );
-    }
-    assert.ok(ours.includes('desktop/settings.json'));
-    assert.ok(ours.includes('desktop/provider-keys'));
-    assert.ok(ours.some((path) => path.startsWith('desktop/chat/.claude/skills/reply-')));
-    assert.equal(ours.some((path) => path.includes('campaign-launch')), false, 'only the Reply skills are copied');
+    const setup = setupOn(b, log, desktopSettings);
+    const replySkills = /^desktop\/chat\/\.claude\/skills\/reply-[a-z-]+\/SKILL\.md$/;
+    const replyKeys = ['Plugins:Grants:reply:Exec', 'Routes:Default'];
+    const pluginKeys = (id: string) => [`Plugins:Config:${id}`, `Plugins:Grants:${id}:Http`, `Notifications:Plugins:${id}:Binding`];
+    await act('status', () => setup.status(), [], []);
+    await act('connectReplyWithKey', () => setup.connectReplyWithKey('planted-reply-key'), ['config/settings.json', replySkills], replyKeys);
+    await act('connectReply', () => setup.connectReply(), ['config/settings.json', replySkills], replyKeys);
+    await act('setProviderKey', () => setup.setProviderKey('deepseek', 'sk-planted-provider'), ['desktop/provider-keys'], []);
+    await act('installProgram', () => setup.installProgram('codex'), [], []);
+    await act('configurePlugin slack', () => setup.configurePlugin('slack', { token: 'xoxb-planted', target: 'C0123ABCD' }), ['config/settings.json'], pluginKeys('slack'));
+    await act('configurePlugin telegram', () => setup.configurePlugin('telegram', { token: 'planted-bot', target: '@team_room' }), ['config/settings.json'], pluginKeys('telegram'));
+    await act('configurePlugin ntfy', () => setup.configurePlugin('ntfy', { target: 'jason-topic', server: 'https://ntfy.example.com' }), ['config/settings.json'], pluginKeys('ntfy'));
+    await act('configurePlugin journal-forwarder', () => setup.configurePlugin('journal-forwarder', { token: 'b', target: 'https://hooks.example.com/in' }), ['config/settings.json'], pluginKeys('journal-forwarder'));
+    await act('Reload', () => setup.configurePlugin('slack', {}), [], []);
 
     assert.deepEqual(readInstallationSettings(b), {
-        Routes: { Default: { Plugin: 'reply' } },
         Plugins: {
-            Grants: { reply: { Exec: ['reply'] }, slack: { Http: ['slack.com'] }, ntfy: { Http: ['*'] } },
-            Config: { slack: { token: 'xoxb-planted' }, ntfy: {} },
+            Grants: {
+                reply: { Exec: ['reply'] },
+                slack: { Http: ['slack.com'] },
+                telegram: { Http: ['api.telegram.org'] },
+                ntfy: { Http: ['ntfy.example.com'] },
+                'journal-forwarder': { Http: ['hooks.example.com'] },
+            },
+            Config: { slack: { token: 'xoxb-planted' }, telegram: { token: 'planted-bot' }, 'journal-forwarder': { token: 'b', url: 'https://hooks.example.com/in' } },
         },
         Harness: { Root: 'kept' },
-        Notifications: { Plugins: { slack: { Binding: { channel: 'C0123ABCD' } }, ntfy: { Binding: { topic: 'jason-topic' } } } },
+        Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } },
+        Notifications: {
+            Plugins: {
+                slack: { Binding: { channel: 'C0123ABCD' } },
+                telegram: { Binding: { chat: '@team_room' } },
+                ntfy: { Binding: { topic: 'jason-topic', server: 'https://ntfy.example.com' } },
+            },
+        },
     });
-    const keys = readFileSync(b.paths.providerKeys, 'utf8');
-    assert.equal(keys.includes('sk-planted-provider'), false, 'the key is kept encrypted');
+    assert.equal(readFileSync(b.paths.installationSettings, 'utf8').includes('planted-reply-key'), false, 'the Reply key is the Reply CLI’s alone');
+    assert.equal(readFileSync(b.paths.providerKeys, 'utf8').includes('sk-planted-provider'), false, 'the key is kept encrypted');
     assert.equal(readFileSync(b.paths.settings, 'utf8').includes('planted'), false);
+
+    assert.deepEqual(outside(), outsideBefore, 'nothing is written beside <data>');
+    assert.equal(replyLeftovers(), leftoversBefore, 'the folder the Reply skills are written to is removed');
+});
+
+test('the settings file is written whole or not at all, and a write that cannot be renamed into place leaves no file beside it', (t) => {
+    const b = bench(t);
+    const file = join(b.paths.data, 'config', 'settings.json');
+    writeAtomically(file, '{"a":1}\n');
+    assert.equal(readFileSync(file, 'utf8'), '{"a":1}\n');
+    assert.deepEqual(readdirSync(dirname(file)), ['settings.json']);
+
+    // A folder where the file should be: the rename fails, and the temporary file is removed.
+    const blocked = join(b.paths.data, 'blocked', 'settings.json');
+    mkdirSync(join(blocked, 'inside'), { recursive: true });
+    assert.throws(() => writeAtomically(blocked, '{}'));
+    assert.deepEqual(readdirSync(dirname(blocked)), ['settings.json']);
 });
 
 // ---- The cards' actions against stubs on the PATH ------------------------------------------------------------------
@@ -192,7 +351,7 @@ test('a plugin is placed with jason plugin install, its settings written, then j
     const log = memoryLog();
     await setupOn(b, log, settings).configurePlugin('telegram', { token: 'planted-bot-token', target: '@team_room' });
     const runs = b.record().filter((entry) => entry.name === 'jason');
-    assert.deepEqual(runs.map((entry) => entry.args), [['plugin', 'install', 'telegram', '--feed', 'http://127.0.0.1:9/manifest.json'], ['plugin', 'reload']]);
+    assert.deepEqual(runs.map((entry) => entry.args), [['plugin', 'install', 'telegram', '--feed', 'http://127.0.0.1:9/manifest.json'], ['plugin', 'reload'], ['plugin', 'list']]);
     for (const entry of b.record()) {
         assert.equal(JSON.stringify(entry.args).includes('planted-bot-token'), false);
         assert.equal(JSON.stringify(entry.env).includes('planted-bot-token'), false);
@@ -245,20 +404,40 @@ test('Reload is the call with no values: it writes nothing, and a refusal the re
     const fine = bench(t);
     const ok = setupOn(fine);
     await ok.configurePlugin('ntfy', {});
-    assert.deepEqual(fine.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [['plugin', 'reload']]);
+    assert.deepEqual(fine.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [['plugin', 'reload'], ['plugin', 'list']]);
     assert.equal(existsSync(fine.paths.installationSettings), false);
     assert.equal((await ok.status()).settingsRefused, null);
+
+    // A file there is left byte for byte, its time included, and nothing but the reload and its read-back is run.
+    const kept = bench(t);
+    writeInstallationSettings(kept, '{ "Dispatcher": { "MaxParallel": 2 } }');
+    const mtime = statSync(kept.paths.installationSettings).mtimeMs;
+    await setupOn(kept).configurePlugin('journal-forwarder', {});
+    assert.equal(readFileSync(kept.paths.installationSettings, 'utf8'), '{ "Dispatcher": { "MaxParallel": 2 } }');
+    assert.equal(statSync(kept.paths.installationSettings).mtimeMs, mtime);
+    assert.deepEqual(kept.record().map((entry) => [entry.name, ...entry.args]), [['jason', 'plugin', 'reload'], ['jason', 'plugin', 'list']]);
+
+    const unknown = bench(t);
+    await assert.rejects(setupOn(unknown).configurePlugin('reply', {}), Refused, 'the Reload of a plugin outside the four is refused');
+    await assert.rejects(setupOn(unknown).configurePlugin('../x', {}), Refused);
+    assert.deepEqual(unknown.record(), []);
 });
 
-test('a settings file the desktop cannot parse is refused, said so, and left as it was', async (t) => {
+test('a settings file the desktop cannot parse is refused, said so once, and left as it was', async (t) => {
     const b = bench(t);
-    writeInstallationSettings(b, '{ "Plugins": ');
+    writeInstallationSettings(b, '{ "Plugins": {}, }');
     const log = memoryLog();
-    await assert.rejects(setupOn(b, log).configurePlugin('slack', { token: 't', target: 'C1234ABCD' }), (error: unknown) => error instanceof Refused && /not JSON/.test(error.message));
-    assert.equal(readFileSync(b.paths.installationSettings, 'utf8'), '{ "Plugins": ');
+    await assert.rejects(
+        setupOn(b, log).configurePlugin('slack', { token: 't', target: 'C1234ABCD' }),
+        (error: unknown) => error instanceof Refused && /comments and trailing commas/.test(error.message) && error.message.endsWith('Edit it by hand, then press Reload.'),
+    );
+    assert.equal(readFileSync(b.paths.installationSettings, 'utf8'), '{ "Plugins": {}, }');
     assert.deepEqual(b.record(), [], 'nothing is installed or reloaded');
     assert.deepEqual(log.lines.map((line) => line.name), ['settings_refused']);
-    assert.match((await setupOn(b).status()).settingsRefused ?? '', /not JSON/);
+    // The page adds the sentence that says what to do to what this says, so it is not said here as well.
+    const refused = (await setupOn(b).status()).settingsRefused ?? '';
+    assert.match(refused, /comments and trailing commas/);
+    assert.equal(refused.includes('press Reload'), false);
 });
 
 test('the Reply card signs in with the key on standard input, and the Reply CLI alone keeps it', async (t) => {
@@ -277,13 +456,61 @@ test('the Reply card’s browser sign-in runs reply auth login and nothing else 
     const b = bench(t, { programs: ['reply'] });
     await setupOn(b).connectReply();
     const replies = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
-    assert.deepEqual(replies, ['auth login', 'skills install adapter --project --agent codex']);
+    assert.deepEqual(replies, ['auth login', 'auth status --json', 'skills install adapter --project --agent codex']);
 });
 
-test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plugin is valid', async (t) => {
+test('a sign-in wires Jason’s Reply plugin: placed, granted reply, named the global default, and reloaded', async (t) => {
+    const b = bench(t, { programs: ['reply'] });
+    const settings: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null };
+    const log = memoryLog();
+    await setupOn(b, log, settings).connectReplyWithKey('planted-reply-key');
+    assert.deepEqual(b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [
+        ['plugin', 'install', 'reply', '--feed', 'http://127.0.0.1:9/manifest.json'],
+        ['plugin', 'reload'],
+    ]);
+    assert.deepEqual(readInstallationSettings(b), {
+        Plugins: { Grants: { reply: { Exec: ['reply'] } } },
+        Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } },
+    });
+    assert.equal(readFileSync(b.paths.installationSettings, 'utf8').includes('planted-reply-key'), false);
+    assert.equal(JSON.stringify(log.lines).includes('planted-reply-key'), false);
+    assert.deepEqual(log.lines.find((line) => line.name === 'reply_wired')?.fields, { RouteWritten: true, Exit: 0 });
+    assert.equal((await setupOn(b).status()).reply.wired, true);
+
+    // The profile reply auth status names is the one the route binds.
+    const work = bench(t, { programs: ['reply'], env: { STUB_REPLY_PROFILE: 'work' } });
+    await setupOn(work).connectReply();
+    assert.deepEqual((readInstallationSettings(work) as { Routes: unknown }).Routes, { Default: { Plugin: 'reply', Binding: { profile: 'work' } } });
+});
+
+test('a global default a person set to another plugin is kept, and the Reply card does not say it is wired', async (t) => {
+    const b = bench(t, { programs: ['reply'] });
+    writeInstallationSettings(b, { Routes: { Default: { Plugin: 'other', Binding: { account: 'a' } } } });
+    const log = memoryLog();
+    await setupOn(b, log).connectReply();
+    assert.deepEqual(readInstallationSettings(b), {
+        Routes: { Default: { Plugin: 'other', Binding: { account: 'a' } } },
+        Plugins: { Grants: { reply: { Exec: ['reply'] } } },
+    });
+    assert.deepEqual(log.lines.find((line) => line.name === 'reply_wired')?.fields, { RouteWritten: false, Exit: 0 });
+    assert.equal((await setupOn(b).status()).reply.wired, false);
+
+    // A file the desktop cannot parse is left as it is, and the sign-in itself still stands.
+    const unreadable = bench(t, { programs: ['reply'] });
+    writeInstallationSettings(unreadable, '{ /* mine */ }');
+    await assert.rejects(setupOn(unreadable).connectReply(), (error: unknown) => error instanceof Refused && /comments/.test(error.message));
+    assert.equal(readFileSync(unreadable.paths.installationSettings, 'utf8'), '{ /* mine */ }');
+    assert.equal(unreadable.record().some((entry) => entry.name === 'jason'), false);
+    assert.ok(existsSync(join(unreadable.paths.chat, '.claude', 'skills', 'reply-cli', 'SKILL.md')), 'the Reply skills are deployed all the same');
+});
+
+test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plugin is valid and the global default', async (t) => {
     const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
+    writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
     assert.deepEqual(reply, { cli: { found: true, version: '0.19.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [] });
+    assert.ok(b.record().some((entry) => entry.name === 'reply' && entry.args.join(' ') === 'account list --json'));
 
     const missing = bench(t);
     const absent = await setupOn(missing).status();
@@ -296,7 +523,7 @@ test('a Reply CLI older than the one Jason’s Reply plugin requires is offered 
     assert.deepEqual(reply.cli, { found: true, version: '0.11.0', install: 'reply' });
     assert.deepEqual(reply.accounts, []);
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
-    assert.equal(asked.includes('account list'), false, 'that version has no account command');
+    assert.equal(asked.some((said) => said.startsWith('account list')), false, 'that version has no account command');
 
     const current = bench(t, { programs: ['reply', 'npm'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
     assert.equal((await setupOn(current).status()).reply.cli.install, null);

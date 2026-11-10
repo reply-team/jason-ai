@@ -1,6 +1,6 @@
 // A stand-in for the jason executable: answers the verbs the desktop runs in the shapes the real CLI prints, and
 // writes only what the real CLI would (the run file, as a started runtime does).
-const { existsSync, mkdirSync, writeFileSync } = require('node:fs');
+const { existsSync, mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const record = require('./record.cjs');
 
@@ -21,6 +21,7 @@ if (args[0] === 'status') {
         checks: [
             { name: 'runtime', required: true, state: up ? 'ok' : 'failed', fact: '', fix: '' },
             { name: 'runtime_version', required: false, state: up ? (process.env.STUB_SAME_VERSION === 'no' ? 'failed' : 'ok') : 'unknown', fact: '', fix: '' },
+            { name: 'ui_module', required: false, state: up ? process.env.STUB_UI_MODULE || 'absent' : 'unknown', fact: '', fix: '' },
         ],
     });
     process.exit(1);
@@ -59,6 +60,18 @@ if (args[0] === 'status') {
         },
     });
     process.exit(1);
+} else if (verb === 'ui install' && process.env.STUB_UI_INSTALL_FAILS === 'yes') {
+    process.stderr.write('The release could not be reached.\n');
+    process.exit(1);
+} else if (verb === 'route list') {
+    // The global default is the one the settings file holds, as the runtime's reload froze it.
+    let settings = {};
+    try {
+        settings = JSON.parse(readFileSync(join(data, 'config', 'settings.json'), 'utf8'));
+    } catch {}
+    const route = settings.Routes && settings.Routes.Default;
+    const global = route ? { plugin_id: route.Plugin, binding: route.Binding || null, binding_identity: null } : null;
+    print({ routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations: {} }, campaigns: [] });
 } else if (['ui install', 'skills install', 'plugin install', 'plugin reload'].includes(verb)) {
     print({});
 } else {

@@ -1,6 +1,6 @@
 /**
  * Bringing up the installation the CLI uses, through the CLI's own verbs: a runtime started only when none is up, the
- * UI build installed only when the runtime is the bundle's version, the skills deployed from the bundle, and the link
+ * UI build installed only when the runtime is the bundle's version and `jason status` says its UI is not ok, the skills deployed from the bundle, and the link
  * the CLI's pairing prints. Nothing here starts a runtime as the desktop's own child or writes the runtime's files.
  */
 
@@ -13,7 +13,7 @@ import type { DesktopSettings } from './settings.ts';
 import { runtimeVersionIn, statusFacts } from './setup-model.ts';
 
 /** The verbs the desktop runs, by the words that name them; the log names a verb by these and nothing else. */
-const verbs = ['status', 'runtime start', 'runtime status', 'ui install', 'ui open', 'skills install', 'plugin install', 'plugin reload', 'plugin list', '--version'] as const;
+const verbs = ['status', 'runtime start', 'runtime status', 'ui install', 'ui open', 'skills install', 'plugin install', 'plugin reload', 'plugin list', 'route list', '--version'] as const;
 
 export function verbOf(args: readonly string[]): string {
     const two = args.slice(0, 2).join(' ');
@@ -100,11 +100,14 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
 
     const runtimeVersion = runtimeVersionIn((await cli.run(['runtime', 'status'])).stdout);
 
-    if (facts.sameVersion) {
+    if (!facts.sameVersion) {
+        log.warn('versions_differ', { RuntimeVersion: runtimeVersion ?? 'unknown', BundleVersion: deps.bundleVersion });
+    } else if (facts.uiNeeded) {
+        // Only when ui_module is not ok, so a start fetches nothing while the runtime serves this build's UI. An install
+        // that fails stops the start only when there is no UI to show at all.
         const ui = await cli.run(['ui', 'install', ...feedArguments(deps.settings)], { timeoutMs: 300_000 });
         log.info('ui_installed', { Exit: ui.exit });
-    } else {
-        log.warn('versions_differ', { RuntimeVersion: runtimeVersion ?? 'unknown', BundleVersion: deps.bundleVersion });
+        if (ui.exit !== 0 && !facts.uiServed) throw new StartFailed('ui install', ui, said(ui) || 'jason ui install placed no UI, and the runtime serves none.');
     }
 
     mkdirSync(paths.chat, { recursive: true });
