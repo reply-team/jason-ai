@@ -15,7 +15,7 @@ import { Desk } from './desk.ts';
 import { LoginItem, openedAtLogin, RuntimeAutostart } from './login-item.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { Repairer } from './repair.ts';
-import { applicationFolder, settleStart } from './rollback.ts';
+import { applicationFolder, keptNotice, settleStart } from './rollback.ts';
 import { Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
@@ -258,7 +258,7 @@ async function run(): Promise<void> {
         log.error('window_load_failed', { Step: step, Exit: exit });
         const kept = settleStart(rollback, app.getVersion(), false, log);
         const said = error instanceof Error ? error.message : String(error);
-        if (current !== null) await showStarting(current, kept === null ? said : `${said} The version of Jason this one was updated from is kept at ${kept}.`, true);
+        if (current !== null) await showStarting(current, kept === null ? said : keptNotice(said, kept), true);
     }
 }
 

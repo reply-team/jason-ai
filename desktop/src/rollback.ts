@@ -9,7 +9,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { cp } from 'node:fs/promises';
-import { basename, dirname, join, posix, win32 } from 'node:path';
+import { basename, dirname, isAbsolute, join, posix, relative, win32 } from 'node:path';
 import type { Logger } from './log.ts';
 
 export interface PendingUpdate {
@@ -89,6 +89,26 @@ export function writeRollback(rollback: string, state: RollbackState): void {
     renameSync(temporary, file);
 }
 
+/** Whether `path` is `folder` or lies inside it. */
+function within(folder: string, path: string): boolean {
+    const rest = relative(folder, path);
+    return rest === '' || (!rest.startsWith('..') && !isAbsolute(rest));
+}
+
+/** Copies `source` into `target`, leaving out `data` wherever it lies inside `source`. */
+async function copyOutside(source: string, target: string, data: string): Promise<void> {
+    if (!within(source, data)) {
+        await cp(source, target, { recursive: true, verbatimSymlinks: true });
+        return;
+    }
+    mkdirSync(target, { recursive: true });
+    for (const name of readdirSync(source)) {
+        const path = join(source, name);
+        if (within(data, path)) continue;
+        await copyOutside(path, join(target, name), data);
+    }
+}
+
 /**
  * Copies the installed application under `<rollback>/<fromVersion>/` and records the update as pending; whatever copy an
  * earlier update left is removed first, so one previous version is kept at most. Returns the folder of the copy.
@@ -104,9 +124,25 @@ export async function keepPrevious(rollback: string, application: string, fromVe
     for (const name of kept) if (name !== basename(rollbackStateFile(rollback))) rmSync(join(rollback, name), { recursive: true, force: true });
     const directory = join(rollback, fromVersion, application.split(/[\\/]/).filter(Boolean).at(-1) ?? 'Jason');
     mkdirSync(directory, { recursive: true });
-    await cp(application, directory, { recursive: true, verbatimSymlinks: true });
+    // `<rollback>` is `<data>/desktop/rollback`: a data directory placed inside the application's folder stays out of the
+    // copy, so the copy never holds the run token, a provider key or anything else of the installation's state.
+    await copyOutside(application, directory, dirname(dirname(rollback)));
     writeRollback(rollback, { rejected: state.rejected, pending: { fromVersion, toVersion, directory } });
     return directory;
+}
+
+/**
+ * What the starting page says when an update's first start failed and the previous version is kept. Nothing puts the
+ * copy back by itself: the runtime has no guard against a data directory a newer version migrated, so going back is the
+ * person's act alone.
+ */
+export function keptNotice(said: string, kept: string): string {
+    return [
+        said,
+        `The version of Jason this one was updated from is kept at ${kept}.`,
+        'To go back, quit Jason and put that folder back in the place of the installed one, by hand: nothing does it for you.',
+        'This puts back the previous application and the Jason it carried; the data directory stays as the newer version left it.',
+    ].join(' ');
 }
 
 /**

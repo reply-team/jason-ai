@@ -14,6 +14,7 @@ import {
     applicationFolder,
     isFirstLaunchOfUpdate,
     isRejected,
+    keptNotice,
     parseRollbackState,
     readRollback,
     rollbackStateFile,
@@ -256,6 +257,39 @@ test('installing copies the application’s own folder aside under <data>/deskto
     assert.deepEqual([...order, ...updater.calls.slice(-1)], ['beforeInstall', 'quitAndInstall']);
     assert.deepEqual(log.lines.at(-1), { level: 'info', name: 'update_installing', fields: { From: '0.34.0', To: '0.35.0' } });
     assert.equal(existsSync(rollbackStateFile(s.rollback)), true);
+});
+
+test('the copy holds no file of <data>, even when <data> lies inside the installed application, and its record names no secret', async (t) => {
+    const s = scratch(t);
+    // A data directory a person put inside the application's folder, holding the run token and a provider key.
+    const data = join(s.application, 'data');
+    const rollback = join(data, 'desktop', 'rollback');
+    mkdirSync(join(data, 'runtime'), { recursive: true });
+    mkdirSync(join(data, 'desktop'), { recursive: true });
+    writeFileSync(join(data, 'runtime', 'run.json'), '{"token":"planted-run-token-55"}');
+    writeFileSync(join(data, 'desktop', 'provider-keys.json'), '{"reply":"planted-provider-key-55"}');
+    const application = [...snapshot(s.application).keys()].filter((path) => !path.startsWith('data/')).sort();
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates, timers } = updaterOn({ ...s, data, rollback }, updater);
+    updates.start();
+    await timers.fire();
+    await updates.download();
+    assert.equal(await updates.install(), true);
+
+    const copy = join(rollback, '0.34.0', 'Jason');
+    assert.deepEqual([...snapshot(copy).keys()].sort(), application, 'the copy is the application without the data directory');
+    for (const path of snapshot(copy).keys()) assert.doesNotMatch(readFileSync(join(copy, path), 'utf8'), /planted-/, `${path} carries a secret`);
+    const record = readFileSync(rollbackStateFile(rollback), 'utf8');
+    assert.doesNotMatch(record, /planted-|token|key/i);
+    assert.deepEqual(Object.keys(JSON.parse(record)).sort(), ['pending', 'rejected']);
+});
+
+test('the starting page, when an update did not start, names the kept copy and says what putting it back does', () => {
+    const notice = keptNotice('The runtime did not start.', 'C:/data/desktop/rollback/0.34.0/Jason');
+    assert.ok(notice.startsWith('The runtime did not start. '));
+    assert.ok(notice.includes('C:/data/desktop/rollback/0.34.0/Jason'));
+    assert.ok(notice.includes('This puts back the previous application and the Jason it carried; the data directory stays as the newer version left it.'));
+    assert.match(notice, /by hand/);
 });
 
 test('the new version’s first start settles the record: a start that worked removes the copy, one that failed keeps it and refuses that version', (t) => {
