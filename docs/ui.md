@@ -71,15 +71,16 @@ counts. A search finds a campaign by its name, and the archived ones appear on r
 campaign with exactly the people it counts (`jason campaign list-contacts --summary`, or `--activity` with the period),
 each with why: a person waiting for you opens the approval or the question in place, as on Attention, and a failure
 shows the reason the runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
-its people and the provider campaign it is linked to. **Pause** stops Jason releasing its work while what is running
-finishes; the provider's own sequence keeps sending until a role pauses it there. **Start** releases the work again
-(`jason campaign pause`, `jason campaign start`, with your reason). **Add people** finds people and adds them (`jason
-campaign add-contacts`). Its **Timeline** puts what is planned, what waits for you and what is running above the now
-line, and the campaign's journal below it (`jason journal list --campaign`), narrowed by chips to replies, work,
-decisions or changes; its **People** are listed by the same counts with a search, Removed among them
+its people and the provider campaign it is linked to; **Add people** finds people and adds them (`jason campaign
+add-contacts`). A campaign opens on its **Sequence**, which puts what is planned, what waits for you and what is running
+above the now line, and the campaign's journal below it (`jason journal list --campaign`), narrowed by chips to replies,
+work, decisions or changes; its **People** are listed by the same counts with a search, Removed among them
 (`--summary removed`); in Activity the tab is **People Activity**, and everything it lists is the period's, All being
-everyone something happened to (`--activity people`); its **Details** are its record, its context as the roles read
-it, and what each provider calls it.
+everyone something happened to (`--activity people`); its **Settings** are its record, its context as the roles read
+it and what each provider calls it, with the moves its status allows. **Pause** stops Jason releasing an active
+campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
+**Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
+`jason campaign start`, with your reason). An address naming a tab the campaign no longer has opens its Sequence.
 
 ## Performance
 

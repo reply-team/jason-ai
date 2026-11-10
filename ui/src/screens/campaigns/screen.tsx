@@ -20,11 +20,11 @@ import {
     type Route,
 } from '../../router';
 import { AddPeopleDialog } from './add-dialog';
-import { Details } from './details';
 import { views } from './labels';
 import { CampaignPanel } from './panel';
-import { TransitionDialog } from './pause-dialog';
+import { TransitionDialog, type Transition } from './pause-dialog';
 import { CampaignPeople } from './people';
+import { CampaignSettings } from './settings';
 import { CampaignTimeline } from './timeline';
 import * as store from './store';
 import { CampaignTable } from './table';
@@ -33,6 +33,7 @@ import { Notice } from '../../layout/notice';
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 type At = Extract<Route, { screen: 'campaigns' }>;
+type Act = Transition | 'add';
 
 export function CampaignsScreen() {
     const api = useApi();
@@ -40,9 +41,9 @@ export function CampaignsScreen() {
     const at: At =
         current.screen === 'campaigns'
             ? current
-            : { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} };
+            : { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} };
     const table: store.Table = { view: at.view, period: at.period, filters: at.filters };
-    const key = href({ screen: 'campaigns', tab: 'timeline', ...table });
+    const key = href({ screen: 'campaigns', tab: 'sequence', ...table });
     const countedUnder = store.numbersKey(table);
     const selected = at.id ?? null;
 
@@ -67,7 +68,7 @@ export function CampaignsScreen() {
         void store.open(api, selected, table, new Date(), zone, at.tab !== 'people').then((known) => {
             if (known) return;
             store.notice.value = 'The campaign in this address no longer exists; it was closed.';
-            replace({ screen: 'campaigns', tab: 'timeline', ...table });
+            replace({ screen: 'campaigns', tab: 'sequence', ...table });
         });
     }, [api, selected]);
 
@@ -81,18 +82,18 @@ export function CampaignsScreen() {
         }
     }, [countedUnder]);
 
-    const close = () => navigate({ screen: 'campaigns', tab: 'timeline', ...table });
+    const close = () => navigate({ screen: 'campaigns', tab: 'sequence', ...table });
 
     // The dialog open, with the campaign it belongs to: it never shows over another one.
-    const [act, setAct] = useState<{ id: string | null; what: 'pause' | 'start' | 'add' } | null>(null);
+    const [act, setAct] = useState<{ id: string | null; what: Act } | null>(null);
     const acting = act && act.id === selected ? act.what : null;
-    const setActing = (what: 'pause' | 'start' | 'add' | null) => setAct(what ? { id: selected, what } : null);
+    const setActing = (what: Act | null) => setAct(what ? { id: selected, what } : null);
     /** The open campaign as it is now: its numbers, and what its tab shows. A People list reads the numbers with itself. */
     const rereadPanel = () => {
         if (!selected) return;
         if (at.tab === 'people') void store.listMembers(api, selected, table, query, new Date(), zone);
         else void store.count(api, selected, table, new Date(), zone);
-        if (at.tab === 'timeline') {
+        if (at.tab === 'sequence') {
             void store.loadPending(api, selected);
             void timeline.loadTimeline(api, { campaign_id: selected }, timeline.chip.value, false);
         }
@@ -277,7 +278,7 @@ export function CampaignsScreen() {
                                 onAct={setActing}
                                 onClose={close}
                             />
-                            {(acting === 'pause' || acting === 'start') && (
+                            {acting && acting !== 'add' && (
                                 <TransitionDialog
                                     campaign={campaign}
                                     kind={acting}
@@ -291,7 +292,7 @@ export function CampaignsScreen() {
                             {acting === 'add' && (
                                 <AddPeopleDialog campaign={campaign} onAdded={reread} onClose={() => setActing(null)} />
                             )}
-                            {at.tab === 'timeline' && (
+                            {at.tab === 'sequence' && (
                                 <CampaignTimeline
                                     campaign={campaign}
                                     me={session.actorId.value ?? ''}
@@ -319,7 +320,9 @@ export function CampaignsScreen() {
                                     }}
                                 />
                             )}
-                            {at.tab === 'details' && <Details campaign={campaign} now={new Date()} zone={zone} />}
+                            {at.tab === 'settings' && (
+                                <CampaignSettings campaign={campaign} now={new Date()} zone={zone} onAct={setActing} />
+                            )}
                         </>
                     )}
                 </div>

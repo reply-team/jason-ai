@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { Campaign } from '../../api/types';
 import { shortDate } from '../../time/format';
 
@@ -42,10 +43,10 @@ export function Details({ campaign, now, zone }: Props) {
                 ) : (
                     <dl className="facts">
                         {context.map(([k, v]) => (
-                            <>
-                                <dt key={`${k}-k`}>{k}</dt>
-                                <dd key={`${k}-v`}>{value(v)}</dd>
-                            </>
+                            <Fragment key={k}>
+                                <dt>{k}</dt>
+                                <dd>{value(v)}</dd>
+                            </Fragment>
                         ))}
                     </dl>
                 )}
@@ -55,11 +56,11 @@ export function Details({ campaign, now, zone }: Props) {
                     <h3>Provider ids</h3>
                     <dl className="facts">
                         {pins.map((pin) => (
-                            <>
-                                <dt key={`${pin.plugin_id}-${pin.kind}-k`}>
+                            <Fragment key={`${pin.plugin_id}-${pin.kind}`}>
+                                <dt>
                                     {pin.plugin_id} {pin.kind}
                                 </dt>
-                                <dd key={`${pin.plugin_id}-${pin.kind}-v`}>
+                                <dd>
                                     <span className="mono">{pin.value}</span> · pinned{' '}
                                     {shortDate(new Date(pin.recorded_at), zone, now)}
                                     {pin.recorded_by_attempt_id && (
@@ -73,7 +74,7 @@ export function Details({ campaign, now, zone }: Props) {
                                         </span>
                                     )}
                                 </dd>
-                            </>
+                            </Fragment>
                         ))}
                     </dl>
                 </div>

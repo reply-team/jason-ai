@@ -448,6 +448,11 @@ details.fold pre {
 .pfilters .chip.on .n { color: var(--text-secondary); }
 .pfilters .check { margin-left: auto; font-size: var(--text-sm); }
 
+/* A campaign's tabs: a narrow panel scrolls them rather than wrapping; Settings puts the status moves above the record. */
+.campaign-tabs .tabs { overflow-x: auto; scrollbar-width: thin; }
+.campaign-tabs .tabs a { flex: none; white-space: nowrap; }
+.campaign-tabs-settings { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-5) 0; }
+
 /* The people an Add people dialog will add, each with its way out. */
 .picked { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
 .picked .badge .iconbtn { width: 16px; height: 16px; font-size: 12px; }

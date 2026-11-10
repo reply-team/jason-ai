@@ -22,7 +22,9 @@ export type PeopleFilters = {
     archived?: boolean;
 };
 
-export type CampaignTab = 'timeline' | 'people' | 'details';
+/** A campaign's tabs, in the order they are drawn; the first is where a campaign opens. */
+export const campaignTabs = ['sequence', 'people', 'inbox', 'results', 'settings'] as const;
+export type CampaignTab = (typeof campaignTabs)[number];
 export type CampaignView = 'summary' | 'activity';
 export type Period = 'today' | '7d' | '30d' | '90d';
 export type CampaignFilters = {
@@ -137,8 +139,9 @@ function campaigns(segments: string[], query: string): Route {
     const q = params.get('q');
     if (q) filters.q = q;
     if (params.get('archived') === '1') filters.archived = true;
-    if (id === null) return { screen: 'campaigns', tab: 'timeline', view, period, filters };
-    const tab: CampaignTab = segments[1] === 'people' || segments[1] === 'details' ? segments[1] : 'timeline';
+    if (id === null) return { screen: 'campaigns', tab: 'sequence', view, period, filters };
+    // A tab an older address named, or none, opens the first.
+    const tab: CampaignTab = campaignTabs.find((each) => each === segments[1]) ?? 'sequence';
     const at = { screen: 'campaigns' as const, id, tab, view, period, filters };
     if (tab !== 'people') return at;
     const filter = params.get('filter');
@@ -248,7 +251,7 @@ export function href(route: Route): string {
     }
     if (route.screen === 'campaigns') {
         const id = route.id ? `/${encodeURIComponent(route.id)}` : '';
-        const tab = route.id && route.tab !== 'timeline' ? `/${route.tab}` : '';
+        const tab = route.id && route.tab !== 'sequence' ? `/${route.tab}` : '';
         return `#/campaigns${id}${tab}${campaignQuery(route)}`;
     }
     if (route.screen === 'performance') {

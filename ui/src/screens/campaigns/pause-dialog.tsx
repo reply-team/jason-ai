@@ -7,7 +7,12 @@ import * as store from './store';
 import { Dialog } from '../../layout/dialog';
 import { Notice } from '../../layout/notice';
 
-type Props = { campaign: Campaign; kind: 'pause' | 'start'; onDone: () => void; onClose: () => void };
+/** Pause stops an active campaign's work; Resume releases a paused one's again; Start releases a draft's for the first time. */
+export type Transition = 'pause' | 'resume' | 'start';
+
+type Props = { campaign: Campaign; kind: Transition; onDone: () => void; onClose: () => void };
+
+const verbs: Record<Transition, string> = { pause: 'Pause', resume: 'Resume', start: 'Start' };
 
 /** The provider campaign's own name for itself: the plugin that holds its pin, as a person would write it. */
 function provider(campaign: Campaign): string | null {
@@ -16,20 +21,21 @@ function provider(campaign: Campaign): string | null {
 }
 
 /** What pausing or starting does, said before it is done: Jason's own release of work, and nothing at the provider. */
-function says(campaign: Campaign, kind: 'pause' | 'start'): string {
-    if (kind === 'start') return "Jason releases this campaign's work again.";
+function says(campaign: Campaign, kind: Transition): string {
+    if (kind === 'resume') return "Jason releases this campaign's work again.";
+    if (kind === 'start') return "Jason starts releasing this campaign's work.";
     const name = provider(campaign);
     const sequence = name ? ` ${name}'s sequence keeps sending until a role pauses it there.` : '';
     return `Jason stops releasing this campaign's work. Work already running finishes.${sequence} Your reason is recorded.`;
 }
 
-/** Pause or Start, with an optional reason the journal keeps. */
+/** Pause, Resume or Start, with an optional reason the journal keeps. */
 export function TransitionDialog({ campaign, kind, onDone, onClose }: Props) {
     const api = useApi();
     const [reason, setReason] = useState('');
     const [busy, setBusy] = useState(false);
     const [refused, setRefused] = useState<string | null>(null);
-    const verb = kind === 'pause' ? 'Pause' : 'Start';
+    const verb = verbs[kind];
 
     const act = async () => {
         setBusy(true);

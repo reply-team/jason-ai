@@ -1,5 +1,7 @@
 import type { Campaign, CampaignActivityRow, CampaignSummaryRow } from '../../api/types';
-import { href, type CampaignTab, type Route } from '../../router';
+import type { MessageKey } from '../../locale/en';
+import { t } from '../../platform/i18n';
+import { campaignTabs, href, type CampaignTab, type Route } from '../../router';
 import { periodLabels } from '../../time/periods';
 import { activityColumns, summaryColumns } from './labels';
 import { ActionsRow } from '../../layout/actions-row';
@@ -12,11 +14,20 @@ type Props = {
     campaign: Campaign;
     at: At;
     counted: CampaignSummaryRow | CampaignActivityRow | null;
-    onAct: (act: 'pause' | 'start' | 'add') => void;
+    onAct: (act: 'add') => void;
     onClose: () => void;
 };
 
-const tabNames: Record<CampaignTab, string> = { timeline: 'Timeline', people: 'People', details: 'Details' };
+const tabNames: Record<CampaignTab, MessageKey> = {
+    sequence: 'campaign.tab.sequence',
+    people: 'campaign.tab.people',
+    inbox: 'campaign.tab.inbox',
+    results: 'campaign.tab.results',
+    settings: 'campaign.tab.settings',
+};
+
+/** The tabs drawn, in the router's order; one the address may name but this list leaves out is not drawn yet. */
+const drawn: readonly CampaignTab[] = campaignTabs.filter((tab) => tab !== 'inbox' && tab !== 'results');
 const number = new Intl.NumberFormat('en-US');
 
 /** "active · 22 people · reply campaign 4711": where it stands, how many it holds, and the provider campaign it is linked to. */
@@ -59,17 +70,6 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                 onClose={onClose}
             />
             <ActionsRow>
-                {/* A draft is taken live by the planner or the command line; an archived campaign is over. */}
-                {campaign.status === 'active' && (
-                    <button className="btn" type="button" onClick={() => onAct('pause')}>
-                        Pause
-                    </button>
-                )}
-                {campaign.status === 'paused' && (
-                    <button className="btn" type="button" onClick={() => onAct('start')}>
-                        Start
-                    </button>
-                )}
                 <button className="btn" type="button" onClick={() => onAct('add')}>
                     Add people
                 </button>
@@ -94,14 +94,20 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                         })}
                 </div>
             )}
-            <Tabs
-                tabs={(['timeline', 'people', 'details'] as const).map((each) => ({
-                    key: each,
-                    label: each === 'people' && at.view === 'activity' ? 'People Activity' : tabNames[each],
-                }))}
-                active={at.tab}
-                to={to}
-            />
+            <div className="campaign-tabs">
+                <Tabs
+                    tabs={drawn.map((each) => ({
+                        key: each,
+                        label: t(
+                            each === 'people' && at.view === 'activity'
+                                ? 'campaign.tab.peopleActivity'
+                                : tabNames[each],
+                        ),
+                    }))}
+                    active={at.tab}
+                    to={to}
+                />
+            </div>
         </>
     );
 }
