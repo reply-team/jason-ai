@@ -1,0 +1,21 @@
+{
+  "operation": "suppression.add",
+  "case": "person-email",
+  "request": {
+    "channel": "email",
+    "value": "ingrid@fjordline.example",
+    "reason": "Asked not to be emailed.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": "sup_1",
+    "channel": "email",
+    "value": "ingrid@fjordline.example",
+    "reason": "Asked not to be emailed.",
+    "created_at": "2026-10-16T09:00:00.000Z"
+  }
+}

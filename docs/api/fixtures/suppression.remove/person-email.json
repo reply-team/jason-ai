@@ -1,0 +1,19 @@
+{
+  "operation": "suppression.remove",
+  "case": "person-email",
+  "request": {
+    "channel": "email",
+    "value": "ingrid@fjordline.example",
+    "reason": "Asked to hear from us again.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "channel": "email",
+    "value": "ingrid@fjordline.example",
+    "removed": true
+  }
+}

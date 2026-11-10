@@ -1,0 +1,33 @@
+{
+  "operation": "campaign.remove_contacts",
+  "case": "exclude-one",
+  "request": {
+    "campaign_id": "cmp_2",
+    "contact_ids": [
+      "cnt_1"
+    ],
+    "reason": "Not a fit for the pilot.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_2",
+    "summary": {
+      "removed": 1,
+      "not_member": 0,
+      "already_excluded": 0,
+      "rejected": 0
+    },
+    "items": [
+      {
+        "index": 0,
+        "status": "removed",
+        "contact_id": "cnt_1",
+        "error": null
+      }
+    ]
+  }
+}
