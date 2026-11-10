@@ -235,9 +235,10 @@ jobs:
     # The one job that holds the Apple identity. It builds this platform, and the package action signs and notarizes
     # its executable; then the osx-x64 executable and the desktop's Mac packages, which carry the two. It runs no test,
     # so no test code and no test-only package shares a runner with the identity: the desktop's build tooling does,
-    # pinned by desktop/package-lock.json and installed by npm ci without a package's scripts, and none of it is a test. The tier at the tag is the Linux leg's, above; this job publishes on its own, as the Windows job does. It
-    # runs in the signing environment, which only release tags and release branches may run in, as every job that holds
-    # a secret does.
+    # pinned by desktop/package-lock.json and installed by npm ci without a package's scripts, and none of it is a
+    # test. The tier at the tag is the Linux leg's, above; this job publishes on its own, as the Windows job does. It
+    # runs in the signing environment, which only release tags and release branches may run in, as every job that
+    # holds a secret does.
     environment: signing
     steps:
       - uses: actions/checkout@v7

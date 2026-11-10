@@ -37,11 +37,14 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>
     /// Every step of the action that builds, checks or uploads a desktop runs only on its platform's call, with that
-    /// platform's signing asked for and the desktop asked for, and stands while the identity is still held: after the
-    /// last check of the call's own executable and before the step that forgets the identity.
+    /// platform's signing asked for and the desktop asked for. Of them, only what the identity is for stands while it is
+    /// held: on Windows the signing client's fetch, and on both the build, which signs, and the check of what it built,
+    /// one after another, right after the last check of the call's own executable and right before the step that forgets
+    /// the identity. Node is set up before the identity is taken, so the action that installs it never runs beside the
+    /// identity, and the upload, which needs none, comes right after the identity is forgotten.
     /// </summary>
     [Fact]
-    public void The_desktop_s_steps_run_only_where_they_are_signed_and_before_the_identity_is_forgotten()
+    public void Only_the_desktop_s_build_and_its_check_run_while_the_identity_is_held()
     {
         var steps = ActionSteps();
         var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses") ?? "").ToList();
@@ -55,21 +58,33 @@ public partial class ReleaseWorkflowTests
                 || (Scalar(Node(step, "with") as YamlMappingNode ?? new YamlMappingNode(), "path") ?? "").Contains("desktop/", StringComparison.Ordinal)),
             step => Assert.Contains(Scalar(step, "if"), new[] { WindowsDesktop, MacDesktop }));
 
-        foreach (var (condition, after, forget) in new[]
+        foreach (var (condition, taken, after, window, forget) in new[]
         {
-            (WindowsDesktop, "Verify the signature of the Windows executable", "Forget the Azure sign-in"),
-            (MacDesktop, "Assess the macOS executable as Gatekeeper does", "Forget the Developer ID identity"),
+            (WindowsDesktop, "Sign in to Azure with this job's OIDC token", "Verify the signature of the Windows executable",
+                new[] { "Fetch the Trusted Signing client and name the account it signs with", "Build the desktop's Windows installer, each file signed as it is made", WindowsDesktopVerify },
+                "Forget the Azure sign-in"),
+            (MacDesktop, "Import the Developer ID identity into a keychain of this job's own", "Assess the macOS executable as Gatekeeper does",
+                new[] { "Build the desktop's Mac packages, signed and notarized", MacDesktopVerify },
+                "Forget the Developer ID identity"),
         })
         {
-            var held = steps.Select((step, index) => (Step: step, Index: index)).Where(each => Scalar(each.Step, "if") == condition).ToList();
-            Assert.True(held.Count >= 4, $"Fewer than four steps run under '{condition}'.");
+            int At(string name)
+            {
+                var index = names.IndexOf(name);
+                Assert.True(index >= 0, $"The action has no step named '{name}'.");
+                return index;
+            }
 
-            var last = names.IndexOf(after);
-            var forgotten = names.IndexOf(forget);
-            Assert.True(last >= 0, $"The action has no step named '{after}'.");
-            Assert.True(forgotten >= 0, $"The action has no step named '{forget}'.");
-            Assert.All(held, each => Assert.InRange(each.Index, last + 1, forgotten - 1));
-            Assert.Equal(held.Count, held[^1].Index - held[0].Index + 1);
+            var held = steps.Select((step, index) => (Step: step, Index: index)).Where(each => Scalar(each.Step, "if") == condition).Select(each => each.Index).ToList();
+            var node = Assert.Single(held, index => Scalar(steps[index], "uses") == "actions/setup-node@v5");
+            var upload = Assert.Single(held, index => Scalar(steps[index], "uses") == "actions/upload-artifact@v7");
+            var inside = window.Select(At).ToList();
+
+            Assert.Equal([node, .. inside, upload], held);
+            Assert.True(node < At(taken), $"Node is set up under '{condition}' after the identity is taken.");
+            Assert.Equal(Enumerable.Range(At(after) + 1, inside.Count), inside);
+            Assert.Equal(At(forget) - 1, inside[^1]);
+            Assert.Equal(At(forget) + 1, upload);
         }
     }
 
@@ -116,6 +131,44 @@ public partial class ReleaseWorkflowTests
         Assert.True(check >= 0, "The client's digest is never compared with the pinned one.");
         Assert.True(unpack > check, "The client is unpacked before its digest is checked.");
         Assert.Equal(1, Regex.Count(run, "Expand-Archive"));
+        Assert.Contains("microsoft.artifactsigning.client/$version/microsoft.artifactsigning.client.$version.nupkg\" -OutFile $package", run, StringComparison.Ordinal);
+
+        // What the sign hook runs is what this step fetched and checked, and nothing else.
+        var hook = Mapping(ActionStep("Build the desktop's Windows installer, each file signed as it is made"), "env");
+        Assert.Equal("${{ steps.desktop-signing.outputs.signtool }}", Scalar(hook, "JASON_SIGNTOOL"));
+        Assert.Equal("${{ steps.desktop-signing.outputs.dlib }}", Scalar(hook, "JASON_SIGNING_DLIB"));
+        Assert.Equal("${{ steps.desktop-signing.outputs.metadata }}", Scalar(hook, "JASON_SIGNING_METADATA"));
+    }
+
+    /// <summary>
+    /// The signing client's one credential is the Azure CLI's sign-in: the metadata it is handed excludes, by name, the
+    /// same nine sources the signing action excludes, and names the account and the profile the action signs with.
+    /// </summary>
+    [Fact]
+    public void The_signing_client_tries_the_azure_cli_s_sign_in_alone()
+    {
+        var run = Scalar(Assert.Single(ActionSteps(), step => Scalar(step, "id") == "desktop-signing"), "run")!;
+        var lines = run.Split('\n').Select(line => line.Trim()).ToList();
+
+        var listed = Assert.Single(lines, line => line.StartsWith("$excluded = @(", StringComparison.Ordinal));
+        var excluded = Regex.Matches(listed, "'([A-Za-z]+)'").Select(match => match.Groups[1].Value).ToList();
+        Assert.Equal(@"$excluded = @(" + string.Join(", ", excluded.Select(name => $"'{name}'")) + ")", listed);
+
+        // The action's own exclusions, by its input names: exclude-environment-credential is EnvironmentCredential.
+        var action = Mapping(ActionStep("Sign the Windows executable with Artifact Signing"), "with");
+        var byTheAction = action.Children
+            .Select(pair => (Name: ((YamlScalarNode)pair.Key).Value!, Value: (pair.Value as YamlScalarNode)?.Value))
+            .Where(pair => pair.Name.StartsWith("exclude-", StringComparison.Ordinal) && pair.Value == "true")
+            .Select(pair => string.Concat(pair.Name["exclude-".Length..].Split('-').Select(word => char.ToUpperInvariant(word[0]) + word[1..])))
+            .Select(name => name.Replace("Powershell", "PowerShell", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(9, byTheAction.Count);
+        Assert.Equal(byTheAction.Order(StringComparer.Ordinal), excluded.Order(StringComparer.Ordinal));
+        Assert.DoesNotContain("AzureCliCredential", excluded);
+        Assert.Equal("false", Scalar(action, "exclude-azure-cli-credential"));
+
+        Assert.Contains("$named = [ordered]@{ Endpoint = $env:SIGNING_ENDPOINT; CodeSigningAccountName = $env:SIGNING_ACCOUNT; CertificateProfileName = $env:SIGNING_PROFILE; ExcludeCredentials = $excluded }", lines);
+        Assert.Contains("Set-Content -LiteralPath $metadata -Value ($named | ConvertTo-Json) -NoNewline", lines);
     }
 
     /// <summary>
@@ -239,11 +292,13 @@ public partial class ReleaseWorkflowTests
     {
         var windows = Scalar(ActionStep("Build the desktop's Windows installer, each file signed as it is made"), "run")!;
         Assert.Equal("${{ inputs.version }}", Scalar(Mapping(ActionStep("Build the desktop's Windows installer, each file signed as it is made"), "env"), "VERSION"));
+        Assert.Equal("${{ steps.publish.outputs.executable }}", Scalar(Mapping(ActionStep("Build the desktop's Windows installer, each file signed as it is made"), "env"), "EXECUTABLE"));
         Assert.Contains("node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version $env:VERSION --executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)", windows, StringComparison.Ordinal);
         Assert.Contains("$env:JASON_VERSION = $env:VERSION", windows, StringComparison.Ordinal);
 
         var mac = Scalar(ActionStep("Build the desktop's Mac packages, signed and notarized"), "run")!;
         Assert.Equal("${{ inputs.version }}", Scalar(Mapping(ActionStep("Build the desktop's Mac packages, signed and notarized"), "env"), "VERSION"));
+        Assert.Equal("${{ steps.publish.outputs.executable }}", Scalar(Mapping(ActionStep("Build the desktop's Mac packages, signed and notarized"), "env"), "EXECUTABLE"));
         Assert.Contains("node scripts/prepare.mjs --rid osx-arm64 --output bundles/arm64 --version \"$VERSION\" --executable \"$arm64\"", mac, StringComparison.Ordinal);
         Assert.Contains("node scripts/prepare.mjs --rid osx-x64 --output bundles/x64 --version \"$VERSION\" --executable \"$GITHUB_WORKSPACE/$EXECUTABLE\"", mac, StringComparison.Ordinal);
         Assert.Contains("JASON_VERSION=\"$VERSION\"", mac, StringComparison.Ordinal);

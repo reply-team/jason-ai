@@ -2889,15 +2889,19 @@ public partial class ReleaseWorkflowTests
     /// The notarization step itself, run as GitHub runs a bash step, against a notary that answers as told: only an
     /// accepted submission passes; a refused one has its log asked for and fails, as does a wait that ran out and an answer
     /// that is not one. And none of the made-up secret values reaches what the step printed, nor, for an accepted
-    /// submission, its id: a release's log is public, and only a submission that failed needs its id read.
+    /// submission, its id: a release's log is public, and only a submission that failed needs its id read. On the call
+    /// that builds the desktop, the key is kept in the job's keychain for the packages, while its file is still there, and
+    /// the file is gone when the step ends either way.
     /// </summary>
     [Theory]
-    [InlineData("Accepted", 0, 0, false)]
-    [InlineData("Invalid", 1, 1, true)]
-    [InlineData("In Progress", 0, 1, true)]
-    [InlineData(null, 1, 1, false)]
+    [InlineData("Accepted", 0, 0, false, false)]
+    [InlineData("Accepted", 0, 0, false, true)]
+    [InlineData("Invalid", 1, 1, true, false)]
+    [InlineData("Invalid", 1, 1, true, true)]
+    [InlineData("In Progress", 0, 1, true, false)]
+    [InlineData(null, 1, 1, false, false)]
     [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
-    public void The_notarization_step_passes_an_accepted_submission_alone(string? status, int notary, int exit, bool logAsked)
+    public void The_notarization_step_passes_an_accepted_submission_alone(string? status, int notary, int exit, bool logAsked, bool desktop)
     {
         Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "The step is bash; CI's Linux and macOS legs run this row.");
 
@@ -2907,12 +2911,15 @@ public partial class ReleaseWorkflowTests
         var calls = Path.Combine(tree.Root, "calls.txt");
         var answer = status is null ? "notarytool could not reach the service" : $$"""{"id":"0f1e2d3c-made-up","message":"Processing complete","status":"{{status}}"}""";
 
-        // A notary that records what it is asked, never on stdout, and answers as this row says.
+        // A notary that records what it is asked, never on stdout, keeps a copy of the key file it was handed with its
+        // mode, and answers as this row says.
+        var witness = Path.Combine(tree.Root, "key-as-handed");
         File.WriteAllText(Path.Combine(bin, "xcrun"), $$"""
             #!/bin/bash
             echo "$*" >> '{{calls}}'
-            if [ "$2" = submit ]; then printf '%s\n' '{{answer}}'; exit {{notary}}; fi
+            if [ "$2" = submit ]; then cp -p "$5" '{{witness}}'; printf '%s\n' '{{answer}}'; exit {{notary}}; fi
             if [ "$2" = log ]; then echo "the notary's log of $3"; fi
+            if [ "$2" = store-credentials ] && [ -f "$5" ]; then echo "the key's file was there" >> '{{calls}}'; fi
             """.ReplaceLineEndings("\n"));
         File.WriteAllText(Path.Combine(bin, "ditto"), "#!/bin/bash\necho \"$*\" >> '" + calls + "'\n: > \"$5\"\n");
         File.SetUnixFileMode(Path.Combine(bin, "xcrun"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -2928,6 +2935,8 @@ public partial class ReleaseWorkflowTests
             ["NOTARY_KEY"] = "-----BEGIN PRIVATE KEY-----\nmade-up-key-material\n-----END PRIVATE KEY-----",
             ["NOTARY_KEY_ID"] = "MADEUPKEYID",
             ["NOTARY_ISSUER"] = "00000000-made-up-issuer",
+            ["KEYCHAIN"] = Path.Combine(tree.Root, "jason-signing.keychain-db"),
+            ["DESKTOP"] = desktop ? "true" : "false",
         };
 
         var ran = Bash(environment, tree.Root, Scalar(ActionStep("Notarize the macOS executable"), "run")!);
@@ -2936,8 +2945,15 @@ public partial class ReleaseWorkflowTests
         var asked = File.ReadAllLines(calls);
         Assert.Contains(asked, line => line.StartsWith("notarytool submit ", StringComparison.Ordinal) && line.Contains("--wait", StringComparison.Ordinal));
         Assert.Equal(logAsked, asked.Any(line => line.StartsWith("notarytool log 0f1e2d3c-made-up ", StringComparison.Ordinal)));
-        Assert.Equal(environment["NOTARY_KEY"] + "\n", File.ReadAllText(Path.Combine(tree.Root, "jason-notary.p8")));
-        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(Path.Combine(tree.Root, "jason-notary.p8")));
+        var kept = desktop && status == "Accepted";
+        Assert.Equal(kept, asked.Any(line => line.StartsWith("notarytool store-credentials jason-notary --key ", StringComparison.Ordinal)));
+        Assert.Equal(kept, asked.Contains("the key's file was there"));
+        Assert.Equal(environment["NOTARY_KEY"] + "\n", File.ReadAllText(witness));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(witness));
+
+        // The key's file is gone when the step ends, whatever it ended with: what comes after it in the job, the
+        // desktop's build tooling among it, never finds the key on disk.
+        Assert.False(File.Exists(Path.Combine(tree.Root, "jason-notary.p8")), "The notary key's file outlives the notarization step.");
 
         foreach (var secret in (string[])["made-up-key-material", "MADEUPKEYID", "00000000-made-up-issuer"])
         {

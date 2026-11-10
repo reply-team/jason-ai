@@ -215,6 +215,13 @@ runs:
         # The signing action takes absolute paths only.
         "file=$((Resolve-Path -LiteralPath $env:EXECUTABLE).Path)" >> $env:GITHUB_OUTPUT
 
+    # The desktop's build tooling runs on a Node set up before the sign-in, so the action that installs it never runs
+    # beside the identity.
+    - uses: actions/setup-node@v5
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
+      with:
+        node-version: 24
+
     # No subscription: the signing service needs a token of the tenant alone, and the application's role is on the
     # signing account, never on a subscription a sign-in would select. The two actions that hold the identity are pinned
     # to the commit of a release, with its tag beside it, where every other action keeps its major tag: a tag can move.
@@ -319,11 +326,6 @@ runs:
         "dlib=$dlib" >> $env:GITHUB_OUTPUT
         "metadata=$metadata" >> $env:GITHUB_OUTPUT
 
-    - uses: actions/setup-node@v5
-      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
-      with:
-        node-version: 24
-
     - name: Build the desktop's Windows installer, each file signed as it is made
       if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
       shell: pwsh
@@ -409,6 +411,18 @@ runs:
         ./.github/scripts/Assert-UpdateFeed.ps1 -Feed "$dist/latest.yml" -Version $env:VERSION
         if ($LASTEXITCODE -ne 0) { throw "latest.yml does not describe the files beside it as they will be published." }
 
+    - name: Forget the Azure sign-in
+      if: always() && inputs.rid == 'win-x64' && inputs.sign-windows == 'true'
+      shell: pwsh
+      run: |
+        # Whatever happened above. A command that fails is warned of rather than failing the step, so that nothing
+        # after it is skipped.
+        az account clear
+        if ($LASTEXITCODE -ne 0) { Write-Host "::warning title=Signing::The Azure CLI's sign-in could not be cleared." }
+        exit 0
+
+    # The desktop's files, uploaded once the sign-in is forgotten: an upload needs no identity, and a check that failed
+    # above has already failed the job.
     - uses: actions/upload-artifact@v7
       if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
       with:
@@ -420,16 +434,6 @@ runs:
         if-no-files-found: error
         retention-days: ${{ inputs.retention-days }}
 
-    - name: Forget the Azure sign-in
-      if: always() && inputs.rid == 'win-x64' && inputs.sign-windows == 'true'
-      shell: pwsh
-      run: |
-        # Whatever happened above. A command that fails is warned of rather than failing the step, so that nothing
-        # after it is skipped.
-        az account clear
-        if ($LASTEXITCODE -ne 0) { Write-Host "::warning title=Signing::The Azure CLI's sign-in could not be cleared." }
-        exit 0
-
     # The runtime a logon task starts has no console window only because the executable declares so. So the file
     # about to be archived is read for that declaration, rather than the project that asked for it.
     # It is read after the signature, which rewrites the file.
@@ -439,6 +443,13 @@ runs:
       env:
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
       run: ./.github/scripts/Assert-ApplicationManifest.ps1 -Executable $env:EXECUTABLE
+
+    # The desktop's build tooling runs on a Node set up before the identity is imported, so the action that installs it
+    # never runs beside the identity.
+    - uses: actions/setup-node@v5
+      if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
+      with:
+        node-version: 24
 
     # The macOS executable is signed between the publish and the staging, so that the staged copy, the archive and the
     # caller's smoke test all carry the one signed file, and the native libraries it bundles are signed and bundled again
@@ -657,6 +668,9 @@ runs:
         key="$RUNNER_TEMP/jason-notary.p8"
         zip="$RUNNER_TEMP/jason-notarize.zip"
         answer="$RUNNER_TEMP/jason-notary.json"
+        # The key's file is needed by this step alone: it is removed when the step ends, however it ends, so nothing
+        # after it in the job, the desktop's build tooling among it, finds the key on disk.
+        trap 'rm -f "$key"' EXIT
 
         # The notary takes a zip, not a bare executable, and ditto writes the one Apple documents. --wait holds the
         # step until the service answers, for thirty minutes at most; anything but Accepted fails it, with the
@@ -732,11 +746,6 @@ runs:
     # entitlements, and electron-builder signs the application around it with the same Developer ID, hardened, and has the
     # notary accept it with the key the notarization above kept in this job's keychain. The build tooling is
     # desktop/package-lock.json's, installed by npm ci without a package's scripts; none of it is a test.
-    - uses: actions/setup-node@v5
-      if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
-      with:
-        node-version: 24
-
     - name: Build the desktop's Mac packages, signed and notarized
       if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
       shell: bash
@@ -824,21 +833,6 @@ runs:
 
         pwsh -NoProfile -File .github/scripts/Assert-UpdateFeed.ps1 -Feed "$feed" -Version "$VERSION" || { echo "::error title=Desktop::latest-mac.yml does not describe the files beside it as they will be published."; exit 1; }
 
-    - uses: actions/upload-artifact@v7
-      if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
-      with:
-        name: jason-desktop-osx-x64
-        path: |
-          desktop/dist/jason-desktop-macos-arm64.dmg
-          desktop/dist/jason-desktop-macos-arm64.zip
-          desktop/dist/jason-desktop-macos-arm64.zip.blockmap
-          desktop/dist/jason-desktop-macos-x64.dmg
-          desktop/dist/jason-desktop-macos-x64.zip
-          desktop/dist/jason-desktop-macos-x64.zip.blockmap
-          desktop/dist/latest-mac.yml
-        if-no-files-found: error
-        retention-days: ${{ inputs.retention-days }}
-
     - name: Forget the Developer ID identity
       if: always() && startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'
       shell: bash
@@ -857,6 +851,23 @@ runs:
           security delete-keychain "$RUNNER_TEMP/jason-signing.keychain-db" || echo "::warning title=Signing::This job's keychain could not be deleted."
         fi
         rm -f "$searchlist"
+
+    # The desktop's files, uploaded once the identity is forgotten: an upload needs no identity, and a check that failed
+    # above has already failed the job.
+    - uses: actions/upload-artifact@v7
+      if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
+      with:
+        name: jason-desktop-osx-x64
+        path: |
+          desktop/dist/jason-desktop-macos-arm64.dmg
+          desktop/dist/jason-desktop-macos-arm64.zip
+          desktop/dist/jason-desktop-macos-arm64.zip.blockmap
+          desktop/dist/jason-desktop-macos-x64.dmg
+          desktop/dist/jason-desktop-macos-x64.zip
+          desktop/dist/jason-desktop-macos-x64.zip.blockmap
+          desktop/dist/latest-mac.yml
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
 
     - name: Put LICENSE and THIRD-PARTY-NOTICES beside the executable
       shell: pwsh
