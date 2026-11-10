@@ -16,10 +16,13 @@ public static class PluginRenderers
     private const int OperationsShown = 2;
 
     /// <summary>
-    /// The active snapshot as a table, and under it the diagnostics of a load that was refused — the same
-    /// problems the rejected reload answered with, so the question "why is it not there" is answered here too.
+    /// The active snapshot as a table; under it, what each plugin still needs (<see cref="Needs"/>); and under that the
+    /// diagnostics of a load that was refused — the same problems the rejected reload answered with, so the question "why
+    /// is it not there" is answered here too.
     /// </summary>
-    public static string? Registry(string json)
+    /// <param name="json">The body <c>plugin.list</c> answered.</param>
+    /// <param name="settingsFile">The settings file this CLI uses, which is where a grant is written.</param>
+    public static string? Registry(string json, string settingsFile)
     {
         var registry = RenderText.Read<PluginRegistryDto>(json);
         if (registry?.Snapshot is null || registry.Plugins is null)
@@ -41,6 +44,13 @@ public static class PluginRenderers
         }
 
         var lines = new List<string> { table.Render() };
+        var needs = Needs(registry.Plugins, settingsFile).ToList();
+        if (needs.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.AddRange(needs);
+        }
+
         if (registry.LastReload is { Activated: false } rejected)
         {
             lines.Add(string.Empty);
@@ -70,10 +80,12 @@ public static class PluginRenderers
     }
 
     /// <summary>
-    /// What the reload activated, and which plugins the machine cannot run. A refused reload never reaches
+    /// What the reload activated, and what each plugin still needs (<see cref="Needs"/>). A refused reload never reaches
     /// here: it is an API error, printed verbatim with exit code 1.
     /// </summary>
-    public static string? Reload(string json)
+    /// <param name="json">The body <c>plugin.reload</c> answered.</param>
+    /// <param name="settingsFile">The settings file this CLI uses, which is where a grant is written.</param>
+    public static string? Reload(string json, string settingsFile)
     {
         var registry = RenderText.Read<PluginRegistryDto>(json);
         if (registry?.Snapshot?.Id is null || registry.Plugins is null || !registry.Activated)
@@ -87,12 +99,116 @@ public static class PluginRenderers
             string.Create(CultureInfo.InvariantCulture, $"activated snapshot {registry.Snapshot.Id} with {count} {(count == 1 ? "plugin" : "plugins")}"),
         };
 
-        foreach (var plugin in registry.Plugins.Where(plugin => plugin.Status == PluginStatus.Unavailable))
+        lines.AddRange(Needs(registry.Plugins, settingsFile));
+        return RenderText.Lines(lines);
+    }
+
+    /// <summary>
+    /// What each plugin that cannot do its work yet still needs, in the snapshot's order: for a plugin the machine cannot
+    /// run, its problems (<see cref="Problems"/>); then, for it and for one that loaded <c>valid</c>, the capabilities it
+    /// asks for and is granted nothing of (<see cref="Ungranted"/>), as <c>jason plugin install</c> says them. The runtime
+    /// resolves a plugin's grants before its status, so they are as true of a plugin it holds back. A plugin granted what
+    /// it asks for, and able to run, has no line.
+    /// </summary>
+    private static IEnumerable<string> Needs(IEnumerable<PluginDto> plugins, string settingsFile) =>
+        plugins
+            .SelectMany(plugin => plugin.Status switch
+            {
+                PluginStatus.Unavailable => new[] { Problems(plugin), Ungranted(plugin.Id, plugin.Capabilities, settingsFile) },
+                PluginStatus.Valid => new[] { Ungranted(plugin.Id, plugin.Capabilities, settingsFile) },
+                _ => Array.Empty<string?>(),
+            })
+            .OfType<string>();
+
+    /// <summary>
+    /// Each problem that makes a plugin unavailable, by its code and the runtime's message, never the code alone: the
+    /// message is where the runtime says what to do. Null for a plugin with none. The message is the runtime's words about
+    /// what a manifest names, so it is shown inert.
+    /// </summary>
+    public static string? Problems(PluginDto plugin)
+    {
+        ArgumentNullException.ThrowIfNull(plugin);
+        if (plugin.Problems is not { Count: > 0 } problems || plugin.Status != PluginStatus.Unavailable)
         {
-            lines.Add($"{plugin.Id} unavailable: {string.Join(", ", (plugin.Problems ?? []).Select(problem => problem.Code))}");
+            return null;
         }
 
-        return RenderText.Lines(lines);
+        return RenderText.Shown($"{plugin.Id} unavailable: {string.Join(" ", problems.Select(problem => $"{problem.Code} — {problem.Message}"))}");
+    }
+
+    /// <summary>
+    /// What a loaded plugin asks for and is granted nothing of, as one sentence a person or an agent can act on: what it
+    /// asks for, the key that grants it, the settings file, and the reload that reads it, in that order and per capability
+    /// in the manifest's order. A capability granted part of what it asks has no sentence: it is granted something, and the
+    /// table counts the rest. The CLI compares granted with requested, as the table's counts do, and reads no manifest.
+    /// Null when there is nothing to say. What the manifest asks for is its author's text, so the sentence is shown inert.
+    /// </summary>
+    /// <param name="id">The plugin's id.</param>
+    /// <param name="capabilities">Its capabilities, as the runtime answered them.</param>
+    /// <param name="settingsFile">The settings file this CLI uses.</param>
+    public static string? Ungranted(string id, PluginCapabilitiesDto? capabilities, string settingsFile)
+    {
+        if (capabilities is null)
+        {
+            return null;
+        }
+
+        var asked = Asked(capabilities);
+        if (asked.Count == 0)
+        {
+            return null;
+        }
+
+        var grantedAnything = new[]
+        {
+            capabilities.Exec?.Granted, capabilities.Http?.Granted, capabilities.Env?.Granted, capabilities.Api?.Granted,
+            capabilities.Subscriptions?.Granted, capabilities.Files?.Granted,
+        }.Any(granted => granted is { Count: > 0 });
+
+        var sentence = new System.Text.StringBuilder(grantedAnything
+            ? $"{id} is loaded and granted only part of what it asks for."
+            : $"{id} is loaded and granted nothing.");
+        for (var at = 0; at < asked.Count; at++)
+        {
+            var (key, verb, names) = asked[at];
+            var last = at == asked.Count - 1;
+            sentence.Append(verb is null
+                ? $" It asks for directories to write to; grant them under Plugins:Grants:{id}:{key} in {settingsFile}, each an absolute path.{(last ? " Then run `jason plugin reload`." : string.Empty)}"
+                : $" It asks to {verb}: {string.Join(", ", names)}. Grant {(names.Count == 1 ? "it" : "them")} under Plugins:Grants:{id}:{key} in {settingsFile}{(last ? ", then run `jason plugin reload`." : ".")}");
+        }
+
+        return RenderText.Shown(sentence.ToString());
+    }
+
+    /// <summary>
+    /// Each capability a plugin asks for and is granted nothing of, in the manifest's order: its key under
+    /// <c>Plugins:Grants:&lt;id&gt;</c>, the verb that says it, and what it asks for. A capability granted part of what it
+    /// asks for is not one of them. <c>Files</c> names nothing requested, since a manifest names no directory.
+    /// </summary>
+    internal static IReadOnlyList<(string Key, string? Verb, IReadOnlyList<string> Names)> Asked(PluginCapabilitiesDto capabilities)
+    {
+        var asked = new List<(string Key, string? Verb, IReadOnlyList<string> Names)>();
+        void Ask(string key, string verb, IReadOnlyList<string>? requested, IReadOnlyList<string>? granted)
+        {
+            if (requested is { Count: > 0 } && granted is not { Count: > 0 })
+            {
+                asked.Add((key, verb, requested));
+            }
+        }
+
+        Ask("Exec", "run", capabilities.Exec?.Requested?.Select(executable => executable.Name).ToList(), capabilities.Exec?.Granted);
+        Ask("Http", "reach", capabilities.Http?.Requested, capabilities.Http?.Granted);
+        Ask("Env", "read", capabilities.Env?.Requested, capabilities.Env?.Granted);
+        Ask("Api", "call", capabilities.Api?.Requested, capabilities.Api?.Granted);
+        Ask("Subscriptions", "be told of", capabilities.Subscriptions?.Requested, capabilities.Subscriptions?.Granted);
+
+        // A manifest names no directory, so there is nothing requested to name: it asks for places, and the person names them.
+        if (capabilities.Files is { } files && files.Granted is not { Count: > 0 })
+        {
+            asked.Add(("Files", null, []));
+        }
+
+        return asked;
     }
 
     /// <summary>

@@ -14,10 +14,15 @@ namespace Jason.Contracts.Api;
 /// <param name="Executable">The program the registration runs.</param>
 /// <param name="ExecutableExists">Whether that program is still where the registration says it is.</param>
 /// <param name="ArtifactPath">Where the document that is the registration lives, where the platform keeps one.</param>
+/// <param name="Path">
+/// The search path the registered runtime starts with, as the registration carries it: on macOS, the PATH of the process
+/// that registered it, null for a LaunchAgent that carries none, which launchd starts on its own; null elsewhere.
+/// </param>
 public sealed record AutostartStatusResponse(
     bool Registered,
     string Platform,
     string? DataDirectory,
     string? Executable,
     bool? ExecutableExists,
-    string? ArtifactPath);
+    string? ArtifactPath,
+    string? Path = null);

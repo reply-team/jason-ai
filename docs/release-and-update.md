@@ -816,7 +816,7 @@ a file in the account's own home:
 | platform | what is registered | where the document lives |
 | --- | --- | --- |
 | Windows | a logon task called `Jason-<SID>`, one per account and named for its SID, with an interactive logon for that account (`InteractiveToken`), registered from a task document with `schtasks /Create /XML` | `<data>/autostart/jason-task.xml`; the task itself is the Task Scheduler's |
-| macOS | a LaunchAgent labelled `ai.jason.runtime`, `RunAtLoad` and no `KeepAlive` | `~/Library/LaunchAgents/ai.jason.runtime.plist` |
+| macOS | a LaunchAgent labelled `ai.jason.runtime`, `RunAtLoad` and no `KeepAlive`, and the `PATH` of the process that registered it under `EnvironmentVariables` | `~/Library/LaunchAgents/ai.jason.runtime.plist` |
 | Linux | a `systemd --user` unit, enabled into your default target | `~/.config/systemd/user/jason.service` |
 
 **It is registration, not supervision.** What starts at logon is `jason runtime run --detached --data-dir
@@ -935,10 +935,11 @@ in session 0 shows none — `jason status` says so in its `notifications` check 
 ### The environment an autostarted runtime has
 
 It is the account's logon environment, not your shell's. Anything your shell's profile sets — a `PATH` a version
-manager edits, a `JASON_DATA_DIR` you export, a proxy variable — is not there. The data directory is why the
-registration carries it explicitly; a plugin whose executable is only on a `PATH` your profile builds is the
-other half, and it will be reported `unavailable` by a runtime that started at logon while working perfectly
-from a terminal. `jason plugin list` from the same account says which.
+manager edits, a `JASON_DATA_DIR` you export, a proxy variable — is not there, save that from 0.34.0 a macOS
+registration carries the `PATH` of the terminal that registered it, as the macOS paragraph below says. The data
+directory is why the registration carries it explicitly; a plugin whose executable is only on a `PATH` your profile
+builds is the other half, and it will be reported `unavailable` by a runtime that started at logon while working
+perfectly from a terminal. `jason plugin list` from the same account says which.
 
 On Linux the registration is a `systemd --user` unit, and the environment it starts the runtime with is the systemd
 user manager's, which reads no shell profile: not `~/.profile`, and not `~/.bashrc`, where a version manager or a
@@ -948,6 +949,14 @@ the user manager. It does through a file ending `.conf` in `~/.config/environmen
 `PATH=/opt/tool/bin:$PATH`, say — which the user manager passes to every service it starts, read when it starts
 and again at `systemctl --user daemon-reload`; or through the unit's own environment, an `Environment=` line in a
 drop-in `systemctl --user edit jason.service` opens. Or start the runtime from that terminal instead.
+
+On macOS the registration is a LaunchAgent, and launchd starts an agent on a search path of its own,
+`/usr/bin:/bin:/usr/sbin:/sbin`, which holds no program a package manager installed. So `enable` records the `PATH`
+of the process that registers, under the agent's `EnvironmentVariables`, and the runtime starts at logon with it;
+`jason runtime autostart status` says it under `path`, and an agent an earlier version registered carries none, so
+`--human` names launchd's. A program installed after the registration, in a directory that `PATH` did not hold, is
+missing to a runtime started at logon until you register again from a terminal whose `PATH` has it, with
+`jason runtime autostart enable`, then `jason runtime restart`.
 
 ### What tests prove here, and what they cannot
 

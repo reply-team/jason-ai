@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Autostart;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
+using Jason.Cli.Human;
 using Jason.Cli.Installation;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
@@ -265,6 +266,7 @@ internal static class StatusChecks
             var registry = asked ? await ReadAsync<PluginRegistryDto>(client!, Operations.PluginList, cancellationToken).ConfigureAwait(false) : null;
             checks.Add(PluginAvailability(asked, registry));
             checks.Add(PluginSubscriptions(asked, registry));
+            checks.Add(PluginGrants(asked, registry));
             var routes = client is null ? null : await ReadAsync<RoutesDto>(client, Operations.RouteList, cancellationToken).ConfigureAwait(false);
             checks.Add(Route(routes));
             checks.Add(Binding(routes));
@@ -1088,6 +1090,66 @@ internal static class StatusChecks
             false,
             CheckState.Ok,
             named + $" `{Repair.ListPlugins}` says which kinds each plugin declares and which it is granted.",
+            null);
+    }
+
+    /// <summary>
+    /// Which plugins ask for a capability and are granted nothing of it, read from the same <c>plugin.list</c> answer as
+    /// <c>plugin_availability</c>: each named with the keys under <c>Plugins:Grants:&lt;id&gt;</c> that would grant it.
+    /// Optional, and never deciding readiness: such a plugin runs without what it is not granted, and an installation with
+    /// no plugin is ready too. A plugin this machine holds back is named here as well, whatever its status: the runtime
+    /// resolves its grants before it decides its status, so what it is granted is as true of it as of any other, and one
+    /// report then says both its problems, in the check above, and its grant.
+    /// </summary>
+    /// <remarks>
+    /// Only ids and capability keys are quoted: what a manifest asks for — a program, a host, a variable — is its author's
+    /// text, and a bundle carries this fact as it is, so the full sentence stays in <c>jason plugin list --human</c>.
+    /// </remarks>
+    private static StatusCheck PluginGrants(bool asked, PluginRegistryDto? registry)
+    {
+        const string Name = "plugin_grants";
+        if (!asked)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime did not answer, so what its plugins are granted was not asked.", null);
+        }
+
+        if (registry?.Plugins is not { } listed)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "plugin.list did not answer, so what each plugin is granted is not known.", null);
+        }
+
+        var plugins = listed.Where(plugin => plugin is not null).ToList();
+        if (plugins.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, "No plugin is installed, so none waits for a grant.", null);
+        }
+
+        var waiting = plugins
+            .Where(plugin => plugin.Capabilities is not null)
+            .Select(plugin => (Plugin: plugin, Keys: PluginRenderers.Asked(plugin.Capabilities!).Select(ask => ask.Key).ToList()))
+            .Where(entry => entry.Keys.Count > 0)
+            .ToList();
+        if (waiting.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, "Every plugin is granted something of each capability it asks for.", null);
+        }
+
+        var named = string.Join(" ", waiting.Take(MostNamed).Select(entry =>
+            $"{(PluginIds.IsWellFormed(entry.Plugin.Id) ? entry.Plugin.Id : "A plugin whose id no package can have")} is granted nothing it asks for under {string.Join(", ", entry.Keys)}."));
+        var more = waiting.Count - MostNamed;
+        if (more > 0)
+        {
+            named += string.Create(CultureInfo.InvariantCulture, $" {more} more {(more == 1 ? "plugin is granted nothing it asks" : "plugins are granted nothing they ask")} for.");
+        }
+
+        return new StatusCheck(
+            Name,
+            false,
+            CheckState.Failed,
+            named
+                + " Such a plugin runs without what it is not granted, and nothing else stops, so this check never decides readiness."
+                + $" `{Repair.ListPlugins} --human` says what each asks for, the key that grants it and the settings file, and"
+                + $" `{Repair.ReloadPlugins}` reads the grant.",
             null);
     }
 
