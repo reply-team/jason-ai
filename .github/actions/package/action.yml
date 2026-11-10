@@ -346,9 +346,13 @@ runs:
 
     # Each of the four files read back out of the installer, as a person's machine unpacks it: the installer itself, the
     # uninstaller it writes (electron-builder removes its own copy once the installer holds it), and, from the application
-    # archive it carries, Jason.exe and the bundled jason.exe, which is the executable this call signed byte for byte. The
-    # feed's digest is computed again from the installer as it will be published, and the feed and Jason.exe name the
-    # release's version. 7-Zip, which the runner carries, opens the installer; nothing of it runs.
+    # archive it carries, Jason.exe and the bundled jason.exe, which is the executable this call signed byte for byte and
+    # declares, as the archived one does, what the runtime's logon start needs. Then every program and library the
+    # application carries, each with its signer: the release's, or, for a library that came signed by Microsoft, which
+    # the sign hook leaves as it came, Microsoft's, verified as strictly. The libraries the installer loads from its own
+    # archive, the nsis plugins electron-builder brings, are listed with their signers. The feed's digest and size of
+    # each file it names are computed again from the files as they will be published, and the feed and Jason.exe name
+    # the release's version. 7-Zip, which the runner carries, opens the installer; nothing of it runs.
     - name: Verify the desktop's Windows installer and what it carries
       if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
       shell: pwsh
@@ -377,16 +381,33 @@ runs:
 
         $bundled = (Get-FileHash -LiteralPath (Join-Path $app 'resources/bundle/jason.exe') -Algorithm SHA256).Hash
         if ($bundled -ne (Get-FileHash -LiteralPath $env:EXECUTABLE -Algorithm SHA256).Hash) { throw "The bundled jason.exe is not the executable this call signed." }
+        ./.github/scripts/Assert-ApplicationManifest.ps1 -Executable (Join-Path $app 'resources/bundle/jason.exe')
+        if ($LASTEXITCODE -ne 0) { throw "The bundled jason.exe does not declare what the runtime's logon start needs." }
+
+        $carried = @(Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll' } | Sort-Object FullName)
+        if ($carried.Count -lt 3) { throw "The application the installer carries holds $($carried.Count) programs and libraries, fewer than Jason.exe, jason.exe and Electron's libraries." }
+        foreach ($file in $carried) {
+          $came = Get-AuthenticodeSignature -LiteralPath $file.FullName
+          $by = if ($came.SignerCertificate) { $came.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) } else { 'nobody' }
+          $publisher = if ($by -ceq 'Microsoft Corporation') { 'Microsoft Corporation' } else { 'ReplyApp Inc.' }
+          ./.github/scripts/Assert-WindowsSignature.ps1 -Executable $file.FullName -Publisher $publisher
+          if ($LASTEXITCODE -ne 0) { throw "$($file.Name) is signed by neither ReplyApp Inc. nor, as it came, Microsoft Corporation." }
+        }
+        Write-Host "$($carried.Count) programs and libraries the application carries, each signed"
+
+        foreach ($plugin in @(Get-ChildItem -LiteralPath (Join-Path $opened '$PLUGINSDIR') -File -Filter '*.dll' | Sort-Object Name)) {
+          $signature = Get-AuthenticodeSignature -LiteralPath $plugin.FullName
+          $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { 'nobody' }
+          Write-Host "nsis plugin $($plugin.Name): $($signature.Status), signed by $signer"
+        }
 
         # The file version is the package's version as it is; the product version is Windows' four numbers.
         $said = (Get-Item -LiteralPath (Join-Path $app 'Jason.exe')).VersionInfo.FileVersion
         if ($said -ne $env:VERSION) { throw "Jason.exe says it is $said, and the release is $env:VERSION." }
 
-        $feed = Get-Content -LiteralPath "$dist/latest.yml" -Raw
-        Write-Host $feed
-        $sha512 = [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $installer).Path)))
-        if ($feed -notmatch "(?m)^version: $([regex]::Escape($env:VERSION))\s*$") { throw "latest.yml does not name $env:VERSION." }
-        if (-not $feed.Contains("sha512: $sha512")) { throw "latest.yml does not carry the installer's digest as it will be published." }
+        Write-Host (Get-Content -LiteralPath "$dist/latest.yml" -Raw)
+        ./.github/scripts/Assert-UpdateFeed.ps1 -Feed "$dist/latest.yml" -Version $env:VERSION
+        if ($LASTEXITCODE -ne 0) { throw "latest.yml does not describe the files beside it as they will be published." }
 
     - uses: actions/upload-artifact@v7
       if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
@@ -740,8 +761,8 @@ runs:
     # Each architecture read back: the application signed, accepted by Gatekeeper as notarized and stapled; its bundled
     # jason the executable that architecture's call signed, byte for byte, with its own entitlements and of that
     # architecture alone; the application inside the zip the same; the dmg notarized and stapled in turn, since a person
-    # opens it before the application. The feed's digests are computed again from the zips as they will be published, and
-    # the feed and each application name the release's version.
+    # opens it before the application. The feed's digest and size of each file it names are computed again from the files
+    # as they will be published, and the feed and each application name the release's version.
     - name: Verify the desktop's Mac packages and what they carry
       if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
       shell: bash
@@ -793,8 +814,6 @@ runs:
           codesign --verify --deep --strict --verbose=2 "$unzipped/Jason.app"
           xcrun stapler validate "$unzipped/Jason.app"
           cmp "$unzipped/Jason.app/Contents/Resources/bundle/jason" "$nested"
-          digest="$(openssl dgst -sha512 -binary "$zip" | openssl base64 -A)"
-          grep -qF "sha512: $digest" "$feed" || { echo "::error title=Desktop::latest-mac.yml does not carry the $arch zip's digest as it will be published."; exit 1; }
 
           codesign --verify --strict --verbose=2 "$dmg"
           xcrun notarytool submit "$dmg" --keychain-profile jason-notary --keychain "$KEYCHAIN" --wait --timeout 30m
@@ -802,6 +821,8 @@ runs:
           xcrun stapler validate "$dmg"
           notarized --type open --context context:primary-signature "$dmg" || { echo "::error title=Desktop::The $arch dmg is not accepted as Notarized Developer ID."; exit 1; }
         done
+
+        pwsh -NoProfile -File .github/scripts/Assert-UpdateFeed.ps1 -Feed "$feed" -Version "$VERSION" || { echo "::error title=Desktop::latest-mac.yml does not describe the files beside it as they will be published."; exit 1; }
 
     - uses: actions/upload-artifact@v7
       if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
