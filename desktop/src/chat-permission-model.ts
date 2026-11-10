@@ -253,11 +253,19 @@ export function isCompound(command: string): boolean {
  * build tools that run a file the agent may write with no card. It is a closed list: a program it does not name is
  * remembered by its first word. They are names to recognise, never to run, and are written as one string so the process
  * guard, which refuses a quoted shell name in any module but the login-shell lookup, keeps holding this one as it holds
- * the others.
+ * the others. An interpreter is also matched by its stem followed by a version (`python3.12`, `node22`).
  */
 const runsAnother = new Set(
-    'cmd sh bash zsh pwsh powershell env sudo xargs npx wsl start python python3 py node deno bun ruby perl php npm pnpm yarn make'.split(' '),
+    ('cmd sh bash zsh pwsh powershell env sudo xargs npx wsl start python python3 py node deno bun ruby perl php npm pnpm yarn make '
+        + 'timeout nohup time command exec watch nice stdbuf setsid doas').split(' '),
 );
+const interpreterStem = /^(python|pythonw|node|nodejs|ruby|perl|php)[0-9.]*$/;
+
+/** True when a program's name, without a folder or an executable's extension, is one that runs another program or a script. */
+function runsAnotherProgram(name: string): boolean {
+    const key = name.toLowerCase();
+    return runsAnother.has(key) || interpreterStem.test(key);
+}
 
 /**
  * What "always, in this chat" covers of a command: the program and its first word. Nothing for a compound command, a
@@ -272,7 +280,7 @@ export function commandPrefix(command: string): string | null {
     if (!words.every((word) => /^[A-Za-z0-9._/:@+=,%-]+$/.test(word) && !/(^|[^.])\.\.([\\/]|$)/.test(word))) return null;
     const [program, first] = words;
     if (program === undefined || first === undefined || first.startsWith('-')) return null;
-    if (/[\\/:]/.test(program) || runsAnother.has(program.toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, ''))) return null;
+    if (/[\\/:]/.test(program) || runsAnotherProgram(program.toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, ''))) return null;
     return `${program} ${first}`;
 }
 
@@ -324,11 +332,6 @@ function jasonIn(command: string, scope: ChatScope): 'deny' | 'jason' | null {
     const text = command.toLowerCase();
     if (scope.deniedOperations.some((operation) => new RegExp(`(?<![a-z0-9_])${operation.replace('.', '\\.')}(?![a-z0-9_])`).test(text))) return 'deny';
     return found;
-}
-
-/** True when a program's name is one that runs another program or a whole script. */
-function runsAnotherProgram(name: string): boolean {
-    return runsAnother.has(name.toLowerCase());
 }
 
 /** True when a token names reply: the program itself, or its package `reply-cli`, with or without a version. */

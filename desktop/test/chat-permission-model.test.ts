@@ -744,7 +744,10 @@ test('a program that runs a file the agent may write with no card is never remem
     // The chat writes in its folders with no card, so "python build.py" remembered would run whatever build.py says next.
     const once = ['python build.py', 'python3 build.py', 'py build.py', 'node build.js', 'deno run build.ts', 'bun build.ts', 'ruby build.rb',
         'perl build.pl', 'php build.php', 'npm run build', 'pnpm run build', 'yarn build', 'make all', 'PYTHON.EXE build.py', 'node.exe build.js',
-        'npm.cmd run build'];
+        'npm.cmd run build',
+        // An interpreter by its stem and any version.
+        'python3.12 build.py', 'pythonw build.py', 'python2 build.py', 'nodejs build.js', 'node22 build.js', 'ruby3.3 build.rb', 'perl5.38 build.pl',
+        'php8.3 build.php', 'PYTHON3.12.EXE build.py'];
     for (const command of once) {
         assert.equal(commandPrefix(command), null, command);
         const card = run(windows(), command);
@@ -754,6 +757,23 @@ test('a program that runs a file the agent may write with no card is never remem
     assert.equal(commandPrefix('git status'), 'git status');
     assert.equal(commandPrefix('makefile-lint check'), 'makefile-lint check');
     assert.equal(commandPrefix('nodemon app'), 'nodemon app');
+    assert.equal(commandPrefix('python-lint check'), 'python-lint check');
+    assert.equal(commandPrefix('phpunit run'), 'phpunit run');
+});
+
+test('a program that runs the command it is given is never remembered: timeout, nohup, time and the other wrappers', () => {
+    // A remembered `timeout 600` would cover any program after it.
+    for (const command of ['timeout 600 rm x', 'nohup rm', 'time rm', 'command rm', 'exec rm', 'watch rm', 'nice rm', 'stdbuf -oL rm', 'setsid rm',
+        'doas rm', 'TIMEOUT.EXE 600', 'timeout 600']) {
+        assert.equal(commandPrefix(command), null, command);
+        for (const scope of [windows(), mac()]) {
+            const card = run(scope, command);
+            assert.ok(card.verdict === 'ask' && card.remember === null, `${scope.platform} ${command}`);
+        }
+    }
+    // reply after one of them is reply.
+    assert.equal(run(mac(), 'timeout 60 reply contacts delete').verdict, 'deny');
+    assert.equal(run(mac(), 'python3.12 -m x reply contacts delete').verdict, 'deny');
 });
 
 test('a read-only command naming a path outside the chat\'s folders gets a card, never an allowance', () => {
