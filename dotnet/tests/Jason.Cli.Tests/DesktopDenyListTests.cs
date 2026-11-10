@@ -71,22 +71,40 @@ public class DesktopDenyListTests
 
         Assert.True(File.Exists(file), $"desktop/chat-allow-list.txt is not there. Rerun this test with {UpdateVariable}=1 and commit the file.");
         Assert.Equal(text, File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal));
+    }
 
-        static IEnumerable<string> Verbs(Command command, string[] words)
+    /// <summary>
+    /// Each verb asked each time is a leaf of the CLI's command tree, as the allow list's walk reads it: one that became a
+    /// group, or was renamed, would take nothing out of the allow list, and its verbs would run without asking.
+    /// </summary>
+    [Fact]
+    public void Each_verb_asked_each_time_is_a_leaf_of_the_cli_s_command_tree()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var verbs = Verbs(root, []).ToHashSet(StringComparer.Ordinal);
+
+        Assert.Empty(AskedEachTime.Where(verb => !verbs.Contains(verb)).ToList());
+    }
+
+    /// <summary>
+    /// Every leaf of the command tree but a hidden command and what is under it: a hidden verb is on no list, so it goes to
+    /// the person's card, the safe side.
+    /// </summary>
+    private static IEnumerable<string> Verbs(Command command, string[] words)
+    {
+        foreach (var sub in command.Subcommands.Where(sub => !sub.Hidden))
         {
-            foreach (var sub in command.Subcommands.Where(sub => !sub.Hidden))
+            string[] path = [.. words, sub.Name];
+            if (sub.Subcommands.Count == 0)
             {
-                string[] path = [.. words, sub.Name];
-                if (sub.Subcommands.Count == 0)
+                yield return string.Join(' ', path);
+            }
+            else
+            {
+                foreach (var verb in Verbs(sub, path))
                 {
-                    yield return string.Join(' ', path);
-                }
-                else
-                {
-                    foreach (var verb in Verbs(sub, path))
-                    {
-                        yield return verb;
-                    }
+                    yield return verb;
                 }
             }
         }
