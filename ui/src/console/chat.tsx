@@ -1,7 +1,23 @@
-import { useCallback, useRef, type FormEvent, type KeyboardEvent } from 'react';
+import { computed, effect } from '@preact/signals-react';
+import { useCallback, useMemo, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopHost } from '../platform/desktop';
 import { act, define } from './actions';
-import { answered, lost, newChat, said, shown, failed, type Answer, type Chat } from './chat-model';
+import {
+    answered,
+    failed,
+    handed,
+    kept,
+    lost,
+    newChat,
+    replaced,
+    said,
+    shown,
+    stopAsked,
+    takenBack,
+    typed,
+    type Answer,
+    type Chat,
+} from './chat-model';
 import { html, type Html } from './html';
 import { markdownView } from './markdown-view';
 import { svg } from './icons';
@@ -10,7 +26,8 @@ import { Painted } from './painted';
 import { changeChat, chats, here, messageOf, setup } from './state';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
-// back as events. The agent's words are drawn as a fixed subset of Markdown, every word of them as text.
+// back as events. The agent's words are drawn as a fixed subset of Markdown, every word of them as text. A message sent
+// while a turn runs waits in the page, and the page hands it to the desktop as the next turn when the turn ends well.
 
 const suggestions = ['What is waiting for me?', 'How are my campaigns doing?', 'Help me start a new campaign.'];
 
@@ -36,16 +53,38 @@ export function hostOf(chat: Chat): DesktopHost | null {
     return drive.find((each) => each.id === chat.host) ?? drive[0] ?? null;
 }
 
-export function sendTurn(id: string, text: string): void {
+/**
+ * Starts a turn on the host chosen now, with the chat's campaign. `resent` says the words were the waiting message: a
+ * turn of those the page cannot start ends with its error, and the words are given back as a failed turn gives them.
+ */
+export function sendTurn(id: string, text: string, resent = false): void {
     const chat = chats.value[id];
-    const host = chat && hostOf(chat);
-    if (!chat || !host || chat.running || !text.trim()) return;
-    changeChat(id, (each) => said(each, text.trim()));
+    const words = text.trim();
+    if (!chat || chat.running || !words) return;
+    const host = hostOf(chat);
+    if (!host) {
+        if (resent)
+            changeChat(id, (each) =>
+                failed(said(each, words, true), 'No agent host that drives the chat was found on this machine.'),
+            );
+        return;
+    }
+    changeChat(id, (each) => said(each, words, resent));
     const options = { host: host.id, ...(chat.campaignId ? { campaignId: chat.campaignId } : {}) };
     here()
-        .desktop.chat.send(id, text.trim(), options)
+        .desktop.chat.send(id, words, options)
         .catch((error: unknown) => changeChat(id, (each) => failed(each, messageOf(error))));
 }
+
+// A turn that ended well made the waiting message the next turn: it is sent once, from here, by sendTurn. The desktop
+// forgets the turn before it says the turn is done, so this send is never refused as one made while a turn runs.
+effect(() => {
+    const ready = Object.values(chats.value).filter((chat) => chat.outbox !== null);
+    for (const chat of ready) {
+        changeChat(chat.id, handed);
+        sendTurn(chat.id, chat.outbox!, true);
+    }
+});
 
 define('chat.suggest', ([id, text]) => {
     if (typeof id === 'string' && typeof text === 'string') sendTurn(id, text);
@@ -130,27 +169,52 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
     return html`${parts}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
 }
 
+/**
+ * A chat's thread, drawn again only when what it shows changed: typing in the box changes the chat, and must neither
+ * draw the thread afresh, closing what the person opened in it, nor read its Markdown again.
+ */
+function threadOf(chatId: string) {
+    let last: { chat: Chat; host: DesktopHost | null; view: Html } | null = null;
+    return computed(() => {
+        const chat = chats.value[chatId];
+        if (!chat) return html``;
+        const host = hostOf(chat);
+        const same =
+            last !== null &&
+            last.host === host &&
+            last.chat.entries === chat.entries &&
+            last.chat.running === chat.running &&
+            last.chat.title === chat.title &&
+            last.chat.campaignId === chat.campaignId;
+        if (!same) last = { chat, host, view: threadView(chat, host) };
+        return last!.view;
+    });
+}
+
 export function ChatPanel({ chatId }: { chatId: string }) {
-    const box = useRef<HTMLTextAreaElement>(null);
+    const thread = useMemo(() => threadOf(chatId), [chatId]);
+    const view = useCallback(() => thread.value, [thread]);
     const chat = chats.value[chatId];
-    const view = useCallback(() => {
-        const current = chats.value[chatId];
-        return current ? threadView(current, hostOf(current)) : html``;
-    }, [chatId]);
     if (!chat) return null;
     const { drive, other } = chatHosts(setup.value?.hosts ?? []);
     const host = hostOf(chat);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
-        const text = box.current?.value ?? '';
-        if (!text.trim() || !host || chat.running) return;
-        if (box.current) box.current.value = '';
-        sendTurn(chatId, text);
+        const current = chats.value[chatId];
+        if (!current || !host) return;
+        if (current.running) {
+            changeChat(chatId, kept);
+            return;
+        }
+        if (!current.draft.trim()) return;
+        changeChat(chatId, (each) => typed(each, ''));
+        sendTurn(chatId, current.draft);
     };
     const enter = (event: KeyboardEvent<HTMLTextAreaElement>) => {
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) send(event);
     };
     const stop = () => {
+        changeChat(chatId, stopAsked);
         here()
             .desktop.chat.stop(chatId)
             .catch((error: unknown) => changeChat(chatId, (each) => failed(each, messageOf(error))));
@@ -168,12 +232,39 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </button>
                     </div>
                 )}
+                {chat.waiting !== null && (
+                    <div className="note chat-waiting" role="status" aria-label="Waiting message">
+                        <div>
+                            {chat.held
+                                ? 'Not sent. Take it back when the box is empty, or swap it with the box.'
+                                : 'Waiting to send when this turn ends'}
+                        </div>
+                        <div className="said">{chat.waiting}</div>
+                        <div className="crow">
+                            <button
+                                className="btn sm"
+                                type="button"
+                                disabled={chat.draft.trim() !== ''}
+                                title={chat.draft.trim() !== '' ? 'Empty the box to take it back' : undefined}
+                                onClick={() => changeChat(chatId, takenBack)}
+                            >
+                                Take back
+                            </button>
+                            {chat.draft.trim() !== '' && (
+                                <button className="btn sm" type="button" onClick={() => changeChat(chatId, replaced)}>
+                                    Replace
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
                 <textarea
-                    ref={box}
                     id="box"
                     rows={2}
-                    placeholder="Ask Jason…"
+                    placeholder={chat.running ? 'Sent when this turn ends…' : 'Ask Jason…'}
                     aria-label="Your message"
+                    value={chat.draft}
+                    onChange={(event) => changeChat(chatId, (each) => typed(each, event.target.value))}
                     onKeyDown={enter}
                 />
                 <div className="crow">
@@ -195,9 +286,18 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     </select>
                     <span className="grow" />
                     {chat.running ? (
-                        <button className="send" type="button" title="Stop" aria-label="Stop" onClick={stop}>
-                            ■
-                        </button>
+                        <>
+                            <button
+                                className="btn sm"
+                                type="submit"
+                                disabled={chat.stopping || chat.waiting !== null || chat.draft.trim() === ''}
+                            >
+                                Send when the turn ends
+                            </button>
+                            <button className="send" type="button" title="Stop" aria-label="Stop" onClick={stop}>
+                                ■
+                            </button>
+                        </>
                     ) : (
                         <button className="send" type="submit" title="Send" aria-label="Send" disabled={!host}>
                             ↑
