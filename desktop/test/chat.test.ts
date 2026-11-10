@@ -282,7 +282,7 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     const r = rig(t);
     const said = await r.turn('c1', words, { host: 'codex' });
     assert.deepEqual(said, [
-        { kind: 'step', text: 'jason campaign list' },
+        { kind: 'step', text: 'Ran a jason command', detail: 'jason campaign list --json' },
         { kind: 'text', text: `heard ${words.length} characters` },
         { kind: 'done', error: null },
     ]);
