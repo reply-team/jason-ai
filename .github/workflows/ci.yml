@@ -3,8 +3,8 @@ name: CI
 # Which checks a run needs is decided once, by the version job, which every other job needs, from the event and the
 # branch a change lands on:
 # - a draft pull request's push runs the Linux set: the version, linux-x64, install.sh on ubuntu, the update on
-#   linux-x64 and the UI; linux-x64 tests the critical tier alone, the tests that carry the Critical trait, and a
-#   draft's run keeps no record of the tree it tested;
+#   linux-x64, the UI and the desktop; linux-x64 tests the critical tier alone, the tests that carry the Critical
+#   trait, and a draft's run keeps no record of the tree it tested;
 # - a pull request into a release branch runs the Linux set when it is ready as well, which is all a release branch's
 #   ruleset requires, and reports nothing as skipped; its linux-x64 tests the critical tier there too, under its own
 #   name once the pull request is ready. The whole suite runs once per release, on the release's pull request into main,
@@ -1697,6 +1697,24 @@ jobs:
         env:
           JASON_EXE: ${{ github.workspace }}/dotnet/src/Jason.App/bin/Release/net10.0/jason
         run: npm run e2e
+
+  # The desktop's check, which the rulesets of main and of the release branches require since the desktop application
+  # landed on another release branch. This tree carries no desktop/, so there is nothing to check: the job reports under
+  # the check's own name, on every run of the Linux set as the desktop's own job does, as a success whose one step says
+  # why. When the desktop arrives here from main, its own job takes this one's place.
+  desktop:
+    name: The desktop on ubuntu
+    needs: version
+    if: needs.version.outputs.linux == 'true'
+    runs-on: ubuntu-latest
+    # It checks nothing out and reads nothing: its token can do nothing.
+    permissions: {}
+    steps:
+      - name: Nothing to check
+        shell: bash
+        run: |
+          echo "The desktop on ubuntu passes by rule: this tree carries no desktop application, so there is nothing to check."
+          echo "The desktop on ubuntu passes by rule: this tree carries no desktop application, so there is nothing to check." >> "$GITHUB_STEP_SUMMARY"
 
   # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
   # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not

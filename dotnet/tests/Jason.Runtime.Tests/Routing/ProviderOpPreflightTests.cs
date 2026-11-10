@@ -242,7 +242,7 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the twenty is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the twenty-five is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -1042,7 +1042,7 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// Check 11 asks whether the composed input satisfies the operation's schema, and a pattern that did not finish
+    /// Check 19 asks whether the composed input satisfies the operation's schema, and a pattern that did not finish
     /// matching, twice, leaves that unanswered. Nothing has happened — no child exists — so it is not
     /// <c>input_invalid</c>, which would tell a planner to edit an item that may be right: the attempt ends
     /// <c>transient</c>, under a code of its own, and the next scan asks again.

@@ -162,7 +162,7 @@ public sealed class Claimer(
                 continue;
             }
 
-            // Held by a provider block, whether the twentieth check said so or a person released work the block still
+            // Held by a provider block, whether the twenty-fifth check said so or a person released work the block still
             // holds: the item waits on the block, with no attempt, unless it is the block's trial.
             if (verdict is { Block: { } block } && (released is not null || verdict.Code == AttemptErrors.ProviderBlocked)
                 && !await TrialAsync(db, block, item, now, ct).ConfigureAwait(false))

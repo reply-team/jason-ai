@@ -22,7 +22,10 @@ request itself, under `exclude`, never by sorting what came back.
 
 A search buys records and reaches nobody, so its reach is `control`. It runs through an open provider block of its
 account rather than waiting on it — a block over the account's sends does not hold its searches — and a `blocked`
-answer ends it, final. A look at the same audience, free and approved by nobody, is
+answer ends it, final. That answer opens no block of the account and is counted on none — only the `blocked` answer
+of held work does that — and the next search is not held by it either: it is claimed, and the provider answers it on
+its own. That is the intent: a block guards the account's sends, a search sends nothing, and a search that waited on
+one would hold a purchase behind a send's trouble. A look at the same audience, free and approved by nobody, is
 [`audience.preview`](audience.preview.md).
 
 ## The definition and the audience

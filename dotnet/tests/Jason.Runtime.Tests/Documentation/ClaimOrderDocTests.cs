@@ -64,6 +64,7 @@ public sealed partial class ClaimOrderDocTests
     [InlineData("docs/work-execution.md", "The (?<n>[\\w-]+) is not a refusal: `approval_required`", "row of approval_required")]
     [InlineData("docs/work-execution.md", "The (?<n>[\\w-]+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
     [InlineData("docs/work-execution.md", "every refusal of the claim from check 2 to check (?<n>[\\w-]+) keeps its code", "row of template_not_offered")]
+    [InlineData("docs/work-execution.md", "the claim's (?<n>[\\w-]+) check parks held work an open block already holds", "row of provider_blocked")]
     [InlineData("CLAUDE.md", "The claim is fail-closed: (?<n>[\\w-]+) checks in one published order", "all")]
     public void Each_count_of_the_claim_s_checks_is_the_number_the_code_asks(string relative, string sentence, string counted)
     {

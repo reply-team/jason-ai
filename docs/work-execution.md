@@ -993,7 +993,7 @@ sender parks alone, on that block.
 **Two ways in, one wait.** An attempt of held work that answers `blocked` ends `blocked` — over, and never counted
 toward `max_attempts` — and its item waits on the block the answer names, which that attempt opens where none of its
 grain is open and which is seen again where one is: counted, with the latest reason, link and `clears_at`. And the
-claim's twentieth check parks held work an open block already holds, before an attempt exists
+claim's twenty-fifth check parks held work an open block already holds, before an attempt exists
 ([docs/routing.md](routing.md) §7). Either way the item moves to `waiting` on the same wait row a role's wait uses,
 naming the block with no `mode`, `until` or `deadline`; the item's `due_at` bounds it, an item past its due date
 expires, and cancelling the item closes the wait. A person's approval stays as they gave it: approved work the block
