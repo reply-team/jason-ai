@@ -787,6 +787,25 @@ describe('Research', () => {
         expect(finding.querySelector('b')).toBeNull();
     });
 
+    it('draws the findings that were read, with the first that could not be read said above them', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('workitem.list', 'workitem.list/researcher-findings-two')
+            .answer('workitem.get', 'workitem.get/researcher-finding-second');
+        api.unreachable('workitem.get', (body) => (body as { work_item_id: string }).work_item_id === 'wi_1');
+        open(api, ingrid.id, 'research');
+        const read = await within(await shown()).findByText('Fjordline runs ferries between Bergen and Stavanger.');
+        expect(asked(api, 'workitem.list')).toEqual([recorded('workitem.list/researcher-findings-two')]);
+        expect(asked(api, 'workitem.get')).toEqual([
+            recorded('workitem.get/researcher-finding'),
+            recorded('workitem.get/researcher-finding-second'),
+        ]);
+        expect(within(panel()).queryByText('Fjordline opened an office in Bergen in September.')).toBeNull();
+        const failed = within(panel()).getByRole('alert');
+        expect(failed.textContent).toContain('Failed to fetch');
+        expect(failed.compareDocumentPosition(read) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it('asks the researcher about the person in the campaign the control names, with the question given', async () => {
         const api = findings(people().answer('contact.get', 'contact.get/person-panel')).answer(
             'workitem.create',

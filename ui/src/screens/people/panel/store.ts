@@ -240,7 +240,10 @@ export async function move(
     return outcome;
 }
 
-/** What the researcher found about the person: its finished work, newest first, each read whole for its result. */
+/**
+ * What the researcher found about the person: its latest twenty finished items, newest first, each read whole for its
+ * result. A finding that cannot be read leaves the others drawn, and the first failure is said above them.
+ */
 export const findings = signal<{ contactId: string; items: WorkItemWithResult[] } | null>(null);
 export const findingsFailure = signal<string | null>(null);
 let findingsGeneration = 0;
@@ -258,10 +261,16 @@ export async function loadFindings(api: Api, contactId: string): Promise<void> {
             order: 'finished',
             limit: 20,
         });
-        const items = await Promise.all(
+        const read = await Promise.allSettled(
             page.items.map((each) => api.call<WorkItemWithResult>('workitem.get', { work_item_id: each.id })),
         );
-        if (mine === findingsGeneration) findings.value = { contactId, items };
+        if (mine !== findingsGeneration) return;
+        findings.value = {
+            contactId,
+            items: read.flatMap((each) => (each.status === 'fulfilled' ? [each.value] : [])),
+        };
+        const failed = read.find((each) => each.status === 'rejected');
+        if (failed) fail(failed.reason, findingsFailure);
     } catch (error) {
         if (mine === findingsGeneration) fail(error, findingsFailure);
     }
