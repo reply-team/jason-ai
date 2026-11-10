@@ -282,7 +282,8 @@ public partial class ReleaseWorkflowTests
     /// Beyond the four files held to the release's signer by name, the Windows check reads the application manifest out
     /// of the bundled jason.exe as the job read it out of the executable it archives, and holds every program and library
     /// the application carries to a signature signtool and Windows accept: the release's signer's, or, for a library that
-    /// came signed by Microsoft, Microsoft's own, which the sign hook leaves as it came. The libraries the installer itself
+    /// came signed by Microsoft, Microsoft's own, which the sign hook leaves as it came, and then only from a certificate one
+    /// of Microsoft's own code-signing authorities issued, never one that only names Microsoft. The libraries the installer itself
     /// loads from its own archive, the nsis plugins electron-builder brings, are listed with their signers as a reading.
     /// </summary>
     [Fact]
@@ -298,6 +299,10 @@ public partial class ReleaseWorkflowTests
         Assert.Contains("$carried = @(Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll' } | Sort-Object FullName)", lines);
         Assert.Contains("if ($carried.Count -lt 3) { throw \"The application the installer carries holds $($carried.Count) programs and libraries, fewer than Jason.exe, jason.exe and Electron's libraries.\" }", lines);
         Assert.Contains("$publisher = if ($by -ceq 'Microsoft Corporation') { 'Microsoft Corporation' } else { 'ReplyApp Inc.' }", lines);
+        var publisher = lines.IndexOf("$publisher = if ($by -ceq 'Microsoft Corporation') { 'Microsoft Corporation' } else { 'ReplyApp Inc.' }");
+        Assert.Equal(
+            "if ($by -ceq 'Microsoft Corporation' -and $came.SignerCertificate.Issuer -cnotmatch '^CN=Microsoft [^,]*Code Signing PCA [0-9]{4}, O=Microsoft Corporation, ') { throw \"$($file.Name) names Microsoft Corporation as its signer, and its certificate was issued by $($came.SignerCertificate.Issuer), none of Microsoft's code-signing authorities.\" }",
+            lines[publisher + 1]);
         Assert.Contains("./.github/scripts/Assert-WindowsSignature.ps1 -Executable $file.FullName -Publisher $publisher", lines);
         Assert.Contains("if ($LASTEXITCODE -ne 0) { throw \"$($file.Name) is signed by neither ReplyApp Inc. nor, as it came, Microsoft Corporation.\" }", lines);
 

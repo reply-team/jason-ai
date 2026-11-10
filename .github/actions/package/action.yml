@@ -353,7 +353,8 @@ runs:
     # archive it carries, Jason.exe and the bundled jason.exe, which is the executable this call signed byte for byte and
     # declares, as the archived one does, what the runtime's logon start needs. Then every program and library the
     # application carries, each with its signer: the release's, or, for a library that came signed by Microsoft, which
-    # the sign hook leaves as it came, Microsoft's, verified as strictly. The libraries the installer loads from its own
+    # the sign hook leaves as it came, Microsoft's, verified as strictly and issued by one of Microsoft's own code-signing
+    # authorities, never a certificate that only names Microsoft. The libraries the installer loads from its own
     # archive, the nsis plugins electron-builder brings, are listed with their signers. The feed's digest and size of
     # each file it names are computed again from the files as they will be published, and the feed and Jason.exe name
     # the release's version. The application's app-update.yml and its fuses are read back against the configuration it
@@ -395,6 +396,7 @@ runs:
           $came = Get-AuthenticodeSignature -LiteralPath $file.FullName
           $by = if ($came.SignerCertificate) { $came.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) } else { 'nobody' }
           $publisher = if ($by -ceq 'Microsoft Corporation') { 'Microsoft Corporation' } else { 'ReplyApp Inc.' }
+          if ($by -ceq 'Microsoft Corporation' -and $came.SignerCertificate.Issuer -cnotmatch '^CN=Microsoft [^,]*Code Signing PCA [0-9]{4}, O=Microsoft Corporation, ') { throw "$($file.Name) names Microsoft Corporation as its signer, and its certificate was issued by $($came.SignerCertificate.Issuer), none of Microsoft's code-signing authorities." }
           ./.github/scripts/Assert-WindowsSignature.ps1 -Executable $file.FullName -Publisher $publisher
           if ($LASTEXITCODE -ne 0) { throw "$($file.Name) is signed by neither ReplyApp Inc. nor, as it came, Microsoft Corporation." }
         }
