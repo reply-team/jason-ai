@@ -13,7 +13,7 @@
     "items": [
       {
         "id": "jrn_1",
-        "ts": "2026-10-16T08:50:00.000Z",
+        "ts": "2026-10-16T08:55:00.000Z",
         "actor": {
           "type": "system",
           "id": "dispatcher"
@@ -23,6 +23,37 @@
         "work_item_id": null,
         "attempt_id": null,
         "key": "sha256:recorded-1",
+        "old": null,
+        "new": {
+          "plugin": "reply",
+          "thread": "t_701",
+          "channel": "linkedin",
+          "last_activity_at": "2026-10-16T08:55:00.000Z",
+          "unread": true,
+          "has_meeting_intent": null,
+          "contact_id": null
+        },
+        "reason": null,
+        "contact_id": null,
+        "campaign_name": "LatAm pilot",
+        "contact_name": null,
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": null
+      },
+      {
+        "id": "jrn_2",
+        "ts": "2026-10-16T08:50:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": "dispatcher"
+        },
+        "kind": "inbound_reply_observed",
+        "campaign_id": "cmp_1",
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": "sha256:recorded-2",
         "old": null,
         "new": {
           "plugin": "reply",
@@ -43,7 +74,7 @@
         "actor_role": null
       },
       {
-        "id": "jrn_2",
+        "id": "jrn_3",
         "ts": "2026-10-16T08:41:00.000Z",
         "actor": {
           "type": "system",
@@ -53,7 +84,7 @@
         "campaign_id": "cmp_1",
         "work_item_id": null,
         "attempt_id": null,
-        "key": "sha256:recorded-2",
+        "key": "sha256:recorded-3",
         "old": null,
         "new": {
           "plugin": "reply",

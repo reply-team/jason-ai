@@ -501,73 +501,6 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
-    /// A campaign's Inbox at 09:00 UTC on 16 October: the table and the panel it opens from, the lines that say a reply was
-    /// observed in the campaign, the route its conversations are read through, and each person's threads through that
-    /// route, one read for someone the route reaches and the refusal for someone linked through an account no route
-    /// binds; a campaign no reply was observed in; and the same campaign once no route reads conversations at all.
-    /// </summary>
-    [Fact]
-    public async Task Campaign_inbox_exchanges_for_the_screen()
-    {
-        var reads = new FakeProviderReads();
-        await using var api = await RuntimeApiFixture.StartAsync(
-            Ct,
-            clock: new FixedClock(Nine),
-            configureServices: services => services.AddSingleton<IProviderReadInvoker>(reads));
-        var seed = await Seed.PeopleAsync(api);
-        string[] replied = ["inbound_reply_observed"];
-
-        // Paula answers in the pilot as well, through the account no route binds.
-        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
-            var person = await db.Contacts.SingleAsync(c => c.PublicId == seed.Paula, Ct);
-            var pilot = await db.Campaigns.SingleAsync(c => c.PublicId == seed.LatAm, Ct);
-            db.Journal.Add(new JournalEntry
-            {
-                PublicId = "jrn_01K7QN00000000000000000197",
-                Ts = new DateTime(2026, 10, 16, 8, 50, 0, DateTimeKind.Utc),
-                ActorType = Actors.Dispatcher.Type,
-                ActorId = Actors.Dispatcher.Id,
-                Kind = JournalKinds.InboundReplyObserved,
-                CampaignId = pilot.Id,
-                ContactId = person.Id,
-                Key = Jason.Runtime.Dispatch.InboundSync.ObservationKey("reply", "t_601", "2026-10-16T08:50:00.000Z"),
-                New = new JsonObject { ["plugin"] = "reply", ["thread"] = "t_601", ["channel"] = "email", ["last_activity_at"] = "2026-10-16T08:50:00.000Z", ["unread"] = true, ["has_meeting_intent"] = null, ["contact_id"] = seed.Paula },
-            });
-            await db.SaveChangesAsync(Ct);
-        }
-
-        var shown = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "inbox", new { limit = 100 }, Ct);
-        Assert.Equal([seed.LatAm, seed.ReEngage], shown.Items.Select(c => c.Id).Order(StringComparer.Ordinal));
-        Assert.Equal(2, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "inbox-all", new { campaign_ids = shown.Items.Select(c => c.Id) }, Ct)).Campaigns.Count);
-        Assert.Equal(CampaignStatus.Active, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "inbox", new { campaign_id = seed.LatAm }, Ct)).Status);
-        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "inbox-one", new { campaign_ids = new[] { seed.LatAm } }, Ct)).Campaigns);
-
-        var lines = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-campaign-replies", new { campaign_id = seed.LatAm, kinds = replied, limit = 50 }, Ct);
-        Assert.Equal([seed.Paula, seed.Mateo], lines.Items.Select(e => e.ContactId));
-        Assert.Equal("reply", (await api.RecordAsync<RouteResolutionDto>(Operations.RouteResolve, "conversations", new { campaign_id = seed.LatAm, operation = "conversation.list" }, Ct)).PluginId);
-        Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.ContactThreads, "inbox-paula", new { contact_id = seed.Paula, plugin_id = "reply", limit = 100 }, HttpStatusCode.NotFound, Ct)).Code);
-        reads.Answer(FakeProviderReads.Result(Seed.Threads(more: false)));
-        Assert.Equal(2, (await api.RecordAsync<ContactThreadsResponse>(Operations.ContactThreads, "inbox-mateo", new { contact_id = seed.Mateo, plugin_id = "reply", limit = 100 }, Ct)).Items.Count);
-
-        // The paused campaign, in which no reply was observed: its panel and its empty lines, after which nothing is read.
-        Assert.Equal(CampaignStatus.Paused, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "inbox-quiet", new { campaign_id = seed.ReEngage }, Ct)).Status);
-        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "inbox-quiet", new { campaign_ids = new[] { seed.ReEngage } }, Ct)).Campaigns);
-        Assert.Empty((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-campaign-replies-none", new { campaign_id = seed.ReEngage, kinds = replied, limit = 50 }, Ct)).Items);
-
-        // Every route taken away: the pilot's conversations are read through nothing.
-        var plugins = api.Resolve<PluginRegistry>();
-        api.Resolve<RouteRegistry>().Replace(new RouteSnapshot(
-            PublicId.New(RouteSnapshot.IdPrefix),
-            Nine,
-            plugins.Snapshot.Id,
-            RouteSet.Empty,
-            new Dictionary<string, RouteSet>(StringComparer.Ordinal)));
-        Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.RouteResolve, "no-route", new { campaign_id = seed.LatAm, operation = "conversation.list" }, HttpStatusCode.NotFound, Ct)).Code);
-    }
-
-    /// <summary>
     /// The Campaigns screen at 09:00 UTC on 16 October: the table in both views, a campaign's People tab under each count,
     /// its Timeline under each chip, the rows a waiting person opens, and the three writes the panel makes. The counts are
     /// CampaignWorld's, whose comments say who counts where.
@@ -826,7 +759,7 @@ public class RecordedExchangesTests
     }
 
     /// <summary>Rows written the way the claim and a role write them, with the ids fixed and a preview a person can read.</summary>
-    private static class Seed
+    internal static class Seed
     {
         internal sealed record PeopleIds(string LatAm, string ReEngage, string OldList, string Mateo, string Aguilar, string Grace, string Paula, string Marcos);
 
