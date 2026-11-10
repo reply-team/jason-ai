@@ -73,8 +73,10 @@ public static partial class LogsCommand
 
         Where: the logs directory of the data directory — ~/.jason/logs, or logs under JASON_DATA_DIR when that is set.
         The files read are the runtime's own, directly in that directory: runtime-YYYYMMDD.jsonl, and
-        runtime-YYYYMMDD_001.jsonl, _002 and so on when a day's file reached its size limit. Nothing else in the
-        directory is read.
+        runtime-YYYYMMDD_001.jsonl, _002 and so on when a day's file reached its size limit. With
+        --source runtime|desktop set to desktop, the desktop application's files are read instead, named the same way:
+        desktop-YYYYMMDD.jsonl, desktop-YYYYMMDD_001.jsonl and so on. One source is read at a time, the runtime's when
+        --source is not given, and nothing else in the directory is read.
 
         Filters — every one given must hold, and none is required; with none, everything written is shown:
           --level <level>   at or above: verbose, debug, information, warning, error, fatal, in any case (the names
@@ -142,6 +144,10 @@ public static partial class LogsCommand
         {
             Description = "Only events stamped at or after this moment, as ISO-8601 with Z or an offset — for example 2026-09-18T09:00:00Z.",
         };
+        var source = new Option<string?>("--source")
+        {
+            Description = "Whose log to read: runtime (the default) or desktop, the desktop application's.",
+        };
         var limit = new Option<int?>("--limit")
         {
             Description = $"How many events to return, the newest that match (the default is {DefaultLimit}, at most {MaxLimit}).",
@@ -152,25 +158,27 @@ public static partial class LogsCommand
         command.Options.Add(campaign);
         command.Options.Add(workItem);
         command.Options.Add(since);
+        command.Options.Add(source);
         command.Options.Add(limit);
         command.Options.Add(human);
 
         command.SetAction(parse => Run(
             env,
             Filter(parse.GetValue(level), parse.GetValue(campaign), parse.GetValue(workItem), parse.GetValue(since)),
+            Source(parse.GetValue(source)),
             Limit(parse.GetValue(limit)),
             parse.GetValue(human)));
         return command;
     }
 
-    private static int Run(CliEnvironment env, LogFilter filter, int limit, bool human)
+    private static int Run(CliEnvironment env, LogFilter filter, LogSource source, int limit, bool human)
     {
         var directory = env.Paths.LogsDirectory;
 
         LogsDocument document;
         try
         {
-            document = Read(directory, filter, limit);
+            document = Read(directory, filter, source, limit);
         }
         catch (Exception failure) when (failure is UnauthorizedAccessException or IOException)
         {
@@ -189,7 +197,7 @@ public static partial class LogsCommand
         return ExitCodes.Success;
     }
 
-    private static LogsDocument Read(string directory, LogFilter filter, int limit)
+    private static LogsDocument Read(string directory, LogFilter filter, LogSource source, int limit)
     {
         if (File.Exists(directory))
         {
@@ -197,7 +205,7 @@ public static partial class LogsCommand
         }
 
         var exists = Directory.Exists(directory);
-        var files = exists ? LogFiles.In(directory) : [];
+        var files = exists ? LogFiles.In(directory, source) : [];
         var tail = LogReader.Tail(files, filter, limit);
 
         return new LogsDocument(
@@ -243,6 +251,13 @@ public static partial class LogsCommand
 
         return new LogFilter(atLeast, Since(since), campaign, workItem);
     }
+
+    private static LogSource Source(string? source) => source switch
+    {
+        null or "runtime" => LogSource.Runtime,
+        "desktop" => LogSource.Desktop,
+        _ => throw new UsageException($"--source must be runtime or desktop; '{source}' is neither."),
+    };
 
     private static DateTimeOffset? Since(string? since)
     {

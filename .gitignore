@@ -37,3 +37,7 @@ ui/dist/
 ui/artifacts/
 ui/test-results/
 ui/playwright-report/
+
+# The desktop's build and the bundle it carries
+desktop/lib/
+desktop/bundle/

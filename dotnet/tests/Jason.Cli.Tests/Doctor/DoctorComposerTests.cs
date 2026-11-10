@@ -572,7 +572,10 @@ public sealed class DoctorComposerTests
         var section = Section(await ComposeAsync(dir, Running(dir)), "logs");
 
         Assert.Equal(
-            ["directory", "exists", "files", "files_truncated", "recent_errors", "recent_errors_truncated", "slice", "slice_truncated", "skipped_lines"],
+            [
+                "directory", "exists", "files", "files_truncated", "recent_errors", "recent_errors_truncated", "slice", "slice_truncated", "skipped_lines",
+                "desktop_files", "desktop_files_truncated", "desktop_slice", "desktop_slice_truncated", "desktop_skipped_lines",
+            ],
             Keys(section));
         Assert.Equal(Path.Combine("<data>", "logs"), Text(section["directory"]));
         Assert.Equal(["runtime-20261003.jsonl", "runtime-20261004.jsonl"], section["files"]!.AsArray().Select(file => Text(file!["name"])));
@@ -591,6 +594,56 @@ public sealed class DoctorComposerTests
         Assert.Equal("line 301", Text(slice[1]!["@mt"]));
         Assert.True(section["slice_truncated"]!.GetValue<bool>());
         Assert.Equal(1, section["skipped_lines"]!.GetValue<int>());
+    }
+
+    /// <summary>
+    /// The desktop application writes its own log beside the runtime's. The bundle carries its files and the newest of
+    /// its events apart from the runtime's, bounded on their own, and neither source is ever read into the other's list.
+    /// </summary>
+    [Fact]
+    public async Task The_logs_section_carries_a_bounded_tail_of_the_desktop_s_log_apart_from_the_runtime_s()
+    {
+        using var dir = new TempPaths();
+        var logs = Directory.CreateDirectory(dir.Paths.LogsDirectory).FullName;
+        Write(logs, "runtime-20261004.jsonl", Event(At(0), "runtime line"), Event(At(1), "runtime failure", "Error"));
+        Write(logs, "desktop-20261003.jsonl", [.. Enumerable.Range(0, 400).Select(n => Event(At(n), $"desktop {n}"))]);
+        Write(logs, "desktop-20261004.jsonl", [.. Enumerable.Range(400, 400).Select(n => Event(At(n), n == 799 ? "desktop failure" : $"desktop {n}", n == 799 ? "Error" : null)), "not an event"]);
+
+        var section = Section(await ComposeAsync(dir, Running(dir)), "logs");
+
+        Assert.Equal(["runtime-20261004.jsonl"], section["files"]!.AsArray().Select(file => Text(file!["name"])));
+        Assert.Equal(["runtime line", "runtime failure"], section["slice"]!.AsArray().Select(evt => Text(evt!["@mt"])));
+        Assert.Equal(["runtime failure"], section["recent_errors"]!.AsArray().Select(evt => Text(evt!["@mt"])));
+        Assert.Equal(0, section["skipped_lines"]!.GetValue<int>());
+
+        Assert.Equal(["desktop-20261003.jsonl", "desktop-20261004.jsonl"], section["desktop_files"]!.AsArray().Select(file => Text(file!["name"])));
+        Assert.Equal(["name", "bytes", "modified_at"], Keys(section["desktop_files"]![0]!));
+        Assert.False(section["desktop_files_truncated"]!.GetValue<bool>());
+        var desktop = section["desktop_slice"]!.AsArray();
+        Assert.Equal(DoctorComposer.DesktopSliceEvents, desktop.Count);
+        Assert.Equal("desktop failure", Text(desktop[^1]!["@mt"]));
+        Assert.Equal($"desktop {800 - DoctorComposer.DesktopSliceEvents}", Text(desktop[0]!["@mt"]));
+        Assert.True(section["desktop_slice_truncated"]!.GetValue<bool>());
+        Assert.Equal(1, section["desktop_skipped_lines"]!.GetValue<int>());
+    }
+
+    /// <summary>The desktop's tail ends at its own byte budget, in the bundle's bytes, before its event count does.</summary>
+    [Fact]
+    public async Task The_desktop_s_tail_ends_at_its_own_budget_before_its_event_count()
+    {
+        using var dir = new TempPaths();
+        var logs = Directory.CreateDirectory(dir.Paths.LogsDirectory).FullName;
+        Write(logs, "desktop-20261004.jsonl", [.. Enumerable.Range(0, 400).Select(n => Event(At(n), new string('w', 10 * 1024) + n))]);
+
+        var bundle = await ComposeAsync(dir, Running(dir));
+
+        var section = Section(bundle, "logs");
+        var desktop = section["desktop_slice"]!.AsArray();
+        Assert.InRange(desktop.Count, 60, 110);
+        Assert.True(section["desktop_slice_truncated"]!.GetValue<bool>());
+        Assert.EndsWith("399", Text(desktop[^1]!["@mt"]), StringComparison.Ordinal);
+        Assert.Empty(section["slice"]!.AsArray());
+        Assert.InRange(bundle.Contents.Single(entry => entry.Name == "logs").Bytes, 0, DoctorComposer.DesktopSliceBytes + (64 * 1024));
     }
 
     /// <summary>A few enormous events end the slice by their size before the event count does.</summary>
