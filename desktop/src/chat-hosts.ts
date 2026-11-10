@@ -30,6 +30,14 @@ export const claudeAllowedTools: readonly string[] = [
     'Bash(reply account list:*)',
 ];
 
+/**
+ * The tools taken out of every turn by a bare rule, which removes a tool from the model's context. PowerShell is on by
+ * default on Windows for claude.ai accounts with Git Bash, and the fence (the deny rules and the `jason`/`reply` allow
+ * rules) names the Bash tool; with PowerShell gone, the one shell a turn has is the fenced one. Git Bash is Claude Code's
+ * own prerequisite on Windows. The permission model still reads a PowerShell command as a shell command.
+ */
+export const claudeRemovedTools: readonly string[] = ['PowerShell'];
+
 export interface ClaudeTurn {
     /** The turn's `--mcp-config` file, which names the permission endpoint. */
     mcpConfig: string;
@@ -62,7 +70,7 @@ export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDire
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
     args.push('--allowedTools', ...claudeAllowedTools);
-    args.push('--disallowedTools', ...denyRules(turn.denied), ...turn.dataRules);
+    args.push('--disallowedTools', ...claudeRemovedTools, ...denyRules(turn.denied), ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', claudeTurnSettings);
     for (const folder of turn.addDirs) args.push('--add-dir', folder);

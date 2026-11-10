@@ -78,6 +78,14 @@ test('the host\'s argv carries every deny-list entry as a disallowed tool, and a
     assert.ok(disallowed.includes('Bash(jason -*)'));
 });
 
+test('the PowerShell tool is taken out of every turn by a bare rule, so the one shell is the fenced one', () => {
+    for (const args of [claudeArguments(turn), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'], dataRules: ['Read(//d/config)'] })]) {
+        const disallowed = valuesOf(args, '--disallowedTools');
+        assert.equal(disallowed.filter((rule) => rule === 'PowerShell').length, 1);
+        assert.ok(!valuesOf(args, '--allowedTools').some((rule) => rule.startsWith('PowerShell')));
+    }
+});
+
 test('the data rules join the disallowed tools after the deny list', () => {
     const rules = ['Read(//data/config)', 'Read(//data/config/**)'];
     const disallowed = valuesOf(claudeArguments({ ...turn, dataRules: rules }), '--disallowedTools');
