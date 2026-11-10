@@ -22,6 +22,7 @@ export interface Configuration {
     directories: { output: string; buildResources: string };
     files: string[];
     asar: boolean;
+    npmRebuild: boolean;
     extraResources: { from: string; to: string }[];
     electronFuses: Record<string, boolean>;
     publish: { provider: string; owner: string; repo: string; releaseType: string }[];

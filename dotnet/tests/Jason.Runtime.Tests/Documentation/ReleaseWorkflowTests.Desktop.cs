@@ -91,13 +91,16 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The build tooling is the lockfile's, installed without any package's install scripts, and only the Windows build
     /// names the sign hook; the Mac build is signed by electron-builder's own signing with the identity the call holds.
+    /// The only package-manager commands each build runs are exactly those two, in that order: no second install, no
+    /// rebuild, no <c>npm exec</c> or <c>npx</c>. What <c>npm run package</c> runs, and that nothing runs around it or
+    /// in a rebuild of the dependencies, is held by the desktop's own packaging rows.
     /// </summary>
     [Fact]
     public void The_desktop_is_built_from_the_lockfile_without_install_scripts()
     {
         var windows = ActionStep("Build the desktop's Windows installer, each file signed as it is made");
         var mac = ActionStep("Build the desktop's Mac packages, signed and notarized");
-        foreach (var build in new[] { windows, mac })
+        foreach (var (build, package) in new[] { (windows, "npm run package -- --win --x64"), (mac, "npm run package -- --mac --arm64 --x64") })
         {
             var run = Scalar(build, "run") ?? "";
             Assert.Equal("desktop", Scalar(build, "working-directory"));
@@ -105,6 +108,17 @@ public partial class ReleaseWorkflowTests
             Assert.DoesNotContain("npm install", run, StringComparison.Ordinal);
             Assert.True(run.IndexOf("npm ci", StringComparison.Ordinal) < run.IndexOf("npm run package", StringComparison.Ordinal),
                 "The desktop is packaged before its tooling is installed.");
+
+            // Each command a line runs, a continued line read as one, from the first package-manager word on; a line that
+            // only says what failed is no command.
+            var commands = run.Replace("\\\n", " ", StringComparison.Ordinal).Split('\n')
+                .Select(line => line.Trim())
+                .Where(line => !Regex.IsMatch(line, "^if \\(\\$LASTEXITCODE -ne 0\\) \\{ throw \"[^\"]*\" \\}$"))
+                .Select(line => Regex.Match(line, @"(?<![\w./-])(npm|npx|pnpm|yarn|corepack)(?![\w./-]).*$"))
+                .Where(match => match.Success)
+                .Select(match => match.Value)
+                .ToList();
+            Assert.Equal(["npm ci --ignore-scripts", package], commands);
         }
 
         Assert.Contains("$env:JASON_WINDOWS_SIGN = '1'", Scalar(windows, "run"), StringComparison.Ordinal);

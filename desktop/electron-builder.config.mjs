@@ -113,6 +113,9 @@ export function configuration({ version, sign = null }) {
         // the chat's two lists, and package.json. node_modules holds the one runtime dependency, the updater.
         files: ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', ...chatLists],
         asar: true,
+        // No rebuild of the production dependencies, which would run their install scripts: the one there is, the
+        // updater, is plain JavaScript.
+        npmRebuild: false,
         extraResources: [
             { from: 'bundles/${arch}', to: 'bundle' },
             { from: '../LICENSE', to: 'notices/LICENSE' },

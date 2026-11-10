@@ -35,6 +35,21 @@ test('electron-builder is a pinned development dependency, installed from the lo
     assert.equal(entry?.dev, true);
 });
 
+test('no package’s script runs in a pack: no rebuild of the dependencies, and nothing around the two scripts the release runs', () => {
+    // electron-builder rebuilds the production dependencies by default, running their install scripts; the one there
+    // is, electron-updater, is plain JavaScript and needs none.
+    assert.equal(built.npmRebuild, false);
+    const scripts = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> }).scripts;
+    assert.equal(scripts['package'], 'npm run build && electron-builder --config electron-builder.config.mjs --publish never');
+    assert.equal(scripts['build'], 'tsc -p tsconfig.json');
+    // npm runs pre<name> and post<name> around a script, and the install hooks on an install the release never asks for.
+    for (const name of ['package', 'build']) {
+        assert.equal(scripts[`pre${name}`], undefined, `pre${name}`);
+        assert.equal(scripts[`post${name}`], undefined, `post${name}`);
+    }
+    for (const name of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'preprepare', 'postprepare']) assert.equal(scripts[name], undefined, name);
+});
+
 test('the fuses: no plain Node, no NODE_OPTIONS, no inspector, only app.asar and only app.asar as signed', () => {
     assert.deepEqual(built.electronFuses, {
         runAsNode: false,
