@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../../api/context';
 import { FiltersBar } from '../../layout/filters-bar';
 import { PeriodSwitch } from '../../layout/period-switch';
@@ -23,6 +23,7 @@ import { AddPeopleDialog } from './add-dialog';
 import { views } from './labels';
 import { CampaignPanel } from './panel';
 import { TransitionDialog, type Transition } from './pause-dialog';
+import { CampaignInbox } from './inbox';
 import { CampaignPeople } from './people';
 import { CampaignResults } from './results';
 import { CampaignSettings } from './settings';
@@ -95,6 +96,7 @@ export function CampaignsScreen() {
         if (at.tab === 'people') void store.listMembers(api, selected, table, query, new Date(), zone);
         else void store.count(api, selected, table, new Date(), zone);
         if (at.tab === 'results') void store.loadResults(api, selected, at.period, new Date(), zone);
+        if (at.tab === 'inbox') void store.loadInbox(api, selected);
         if (at.tab === 'sequence') {
             void store.loadPending(api, selected);
             void timeline.loadTimeline(api, { campaign_id: selected }, timeline.chip.value, false);
@@ -128,6 +130,13 @@ export function CampaignsScreen() {
     useEffect(() => {
         if (selected && resulting) void store.loadResults(api, selected, at.period, new Date(), zone);
     }, [api, resulting]);
+    // The Inbox reads its lines and its route when it opens, and shows nothing read before it opened.
+    const inboxOf = selected && at.tab === 'inbox' ? selected : null;
+    const inboxFrom = useMemo(() => store.inboxReads(), [api, inboxOf]);
+    const inboxShown = store.inbox.value;
+    useEffect(() => {
+        if (inboxOf) void store.loadInbox(api, inboxOf);
+    }, [api, inboxOf]);
 
     /** Decides what waits on a person, then reads the table's row and the panel again: the person may have left a count. */
     const decide = async (operation: string, body: Record<string, unknown>) => {
@@ -326,6 +335,16 @@ export function CampaignsScreen() {
                                         const what = person.why ? store.waitingOf(person.why) : null;
                                         if (what) void store.openWaiting(api, selected!, what);
                                     }}
+                                />
+                            )}
+                            {at.tab === 'inbox' && (
+                                <CampaignInbox
+                                    shown={
+                                        inboxShown && inboxShown.id === selected && inboxShown.read > inboxFrom
+                                            ? inboxShown
+                                            : null
+                                    }
+                                    zone={zone}
                                 />
                             )}
                             {at.tab === 'results' && (

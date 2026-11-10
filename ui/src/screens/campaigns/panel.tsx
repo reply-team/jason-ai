@@ -26,8 +26,6 @@ const tabNames: Record<CampaignTab, MessageKey> = {
     settings: 'campaign.tab.settings',
 };
 
-/** The tabs drawn, in the router's order; one the address may name but this list leaves out is not drawn yet. */
-const drawn: readonly CampaignTab[] = campaignTabs.filter((tab) => tab !== 'inbox');
 const number = new Intl.NumberFormat('en-US');
 
 /** "active · 22 people · reply campaign 4711": where it stands, how many it holds, and the provider campaign it is linked to. */
@@ -96,7 +94,7 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
             )}
             <div className="campaign-tabs">
                 <Tabs
-                    tabs={drawn.map((each) => ({
+                    tabs={campaignTabs.map((each) => ({
                         key: each,
                         label: t(
                             each === 'people' && at.view === 'activity'

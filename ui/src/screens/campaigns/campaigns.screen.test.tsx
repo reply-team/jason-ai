@@ -237,6 +237,7 @@ describe('The campaign panel', () => {
         expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
             'Sequence',
             'People',
+            'Inbox',
             'Results',
             'Settings',
         ]);
@@ -689,6 +690,83 @@ describe('A campaign’s Sequence', () => {
         route.value = again;
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(4));
         expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign'].request);
+    });
+});
+
+describe('A campaign’s Inbox', () => {
+    const pilot: Route = { ...table, id: fixtures['campaign.get/inbox'].request.campaign_id, tab: 'inbox' };
+
+    function inboxApi() {
+        return new FakeApi()
+            .answer('campaign.list', 'campaign.list/inbox')
+            .answer('campaign.summary', 'campaign.summary/inbox-all', 'campaign.summary/inbox-one')
+            .answer('campaign.get', 'campaign.get/inbox')
+            .answer('journal.list', 'journal.list/by-campaign-replies');
+    }
+
+    /** Each person's section, by the name it is headed with. */
+    const person = (name: string) =>
+        screen.getByRole('heading', { level: 3, name }).closest('.campaign-tabs-inbox-person') as HTMLElement;
+
+    it('lists the people a reply was observed for, each with their threads read through the campaign’s route', async () => {
+        const api = inboxApi()
+            .answer('route.resolve', 'route.resolve/conversations')
+            .answer('contact.threads', 'contact.threads/inbox-paula', 'contact.threads/inbox-mateo');
+        open(api, pilot);
+
+        expect(await screen.findByText(/Re: Soluna's next quarter/)).toBeTruthy();
+        // In the order the runtime listed their lines, each once.
+        expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+            'Paula Mendes',
+            'Mateo Ruiz',
+        ]);
+        expect(within(person('Mateo Ruiz')).getByText(/Happy to connect\./)).toBeTruthy();
+        // Paula is linked through an account no route reaches: said for her, and nothing offers to try again.
+        expect(within(person('Paula Mendes')).getByText(/no route reaches the reply account/)).toBeTruthy();
+        expect(within(person('Paula Mendes')).queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.getByRole('tab', { name: 'Inbox' }).getAttribute('aria-selected')).toBe('true');
+
+        expect(sent(api, 'journal.list')).toEqual([fixtures['journal.list/by-campaign-replies'].request]);
+        expect(sent(api, 'route.resolve')).toEqual([fixtures['route.resolve/conversations'].request]);
+        // The plugin asked is the one the route resolved to, for every person.
+        expect(sent(api, 'contact.threads')).toEqual(
+            expect.arrayContaining([
+                fixtures['contact.threads/inbox-paula'].request,
+                fixtures['contact.threads/inbox-mateo'].request,
+            ]),
+        );
+        expect(sent(api, 'contact.threads')).toHaveLength(2);
+        expect(
+            sent(api, 'contact.threads').every(
+                (body) => body['plugin_id'] === fixtures['route.resolve/conversations'].response.plugin_id,
+            ),
+        ).toBe(true);
+    });
+
+    it('a campaign no route reads conversations for says so, names its people, and asks for no threads', async () => {
+        const api = inboxApi().answer('route.resolve', 'route.resolve/no-route');
+        open(api, pilot);
+
+        expect(await screen.findByText(/No route reads this campaign’s conversations/)).toBeTruthy();
+        expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+            'Paula Mendes',
+            'Mateo Ruiz',
+        ]);
+        expect(sent(api, 'contact.threads')).toEqual([]);
+    });
+
+    it('a campaign no reply was observed in says so, and reads nothing else', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/inbox')
+            .answer('campaign.summary', 'campaign.summary/inbox-all', 'campaign.summary/inbox-quiet')
+            .answer('campaign.get', 'campaign.get/inbox-quiet')
+            .answer('journal.list', 'journal.list/by-campaign-replies-none');
+        open(api, { ...pilot, id: fixtures['campaign.get/inbox-quiet'].request.campaign_id });
+
+        expect(await screen.findByText('No reply has been observed in this campaign yet.')).toBeTruthy();
+        expect(sent(api, 'journal.list')).toEqual([fixtures['journal.list/by-campaign-replies-none'].request]);
+        expect(sent(api, 'route.resolve')).toEqual([]);
+        expect(sent(api, 'contact.threads')).toEqual([]);
     });
 });
 

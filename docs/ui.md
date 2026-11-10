@@ -76,7 +76,10 @@ add-contacts`). A campaign opens on its **Sequence**, which puts what is planned
 above the now line, and the campaign's journal below it (`jason journal list --campaign`), narrowed by chips to replies,
 work, decisions or changes; its **People** are listed by the same counts with a search, Removed among them
 (`--summary removed`); in Activity the tab is **People Activity**, and everything it lists is the period's, All being
-everyone something happened to (`--activity people`); its **Results** are four figures as the runtime counts them,
+everyone something happened to (`--activity people`); its **Inbox** lists, from its latest 50 reply lines, each of
+the last 25 people a reply was observed for (`jason journal list --campaign --kind inbound_reply_observed`) with their
+threads, read through the plugin the campaign's route reads conversations through (`jason route resolve`, `jason
+contact threads`), and says so when no route does; its **Results** are four figures as the runtime counts them,
 its people now and who was contacted, replied and opted out in the period (`jason campaign summary`, `jason campaign
 activity`), with nothing divided on the page; its **Settings** are its record, its context as the roles read
 it and what each provider calls it, with the moves its status allows. **Pause** stops Jason releasing an active

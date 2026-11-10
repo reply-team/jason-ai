@@ -448,10 +448,12 @@ details.fold pre {
 .pfilters .chip.on .n { color: var(--text-secondary); }
 .pfilters .check { margin-left: auto; font-size: var(--text-sm); }
 
-/* A campaign's tabs: a narrow panel scrolls them rather than wrapping; Results draws its four figures as tiles; Settings puts the status moves above the record. */
+/* A campaign's tabs: a narrow panel scrolls them rather than wrapping; Inbox lists each person who replied with their threads; Results draws its four figures as tiles; Settings puts the status moves above the record. */
 .campaign-tabs .tabs { overflow-x: auto; scrollbar-width: thin; }
 .campaign-tabs .tabs a { flex: none; white-space: nowrap; }
 .campaign-tabs-settings { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-5) 0; }
+.campaign-tabs-inbox { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-4) var(--space-5); }
+.campaign-tabs-inbox > .notice { margin: 0; }
 .campaign-tabs-results { padding: var(--space-4) var(--space-5); }
 .campaign-tabs-results .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .campaign-tabs-results .tile, .campaign-tabs-results .tile:hover { cursor: default; background: var(--bg); }
