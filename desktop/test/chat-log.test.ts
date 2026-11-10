@@ -87,3 +87,42 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         ['allowed person', 'allowed person', 'refused model'],
     );
 });
+
+test('a missing instruction text is logged once, by a closed line that names the file and nothing of a turn', async (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
+    const log = fileLogger(b.paths.logs);
+    let ends = 0;
+    let ended: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => (ended = resolve));
+    const chat: Chat = new Chat({
+        paths: b.paths,
+        env: b.env,
+        bundle: join(b.root, 'bundle'),
+        dataNamed: true,
+        cli: b.cli,
+        keyFor: () => undefined,
+        fence: () => ({ ...fence, instructions: null }),
+        emit(_chatId, event) {
+            if (event.kind === 'done' && ++ends === 2) ended();
+            if (event.kind === 'done' && ends === 1) void chat.send('c1', 'planted second words', { host: 'claude' });
+        },
+        ...loggedTurns(log),
+    });
+    t.after(() => chat.closeAll());
+    await chat.send('c1', 'planted words', { host: 'claude' });
+    await done;
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const missing = lines0(text).filter((line) => line.EventName === 'chat_instructions_missing');
+    assert.equal(missing.length, 1);
+    const { '@t': _at, ...line } = missing[0]!;
+    assert.deepEqual(line, {
+        '@mt': 'The chat instruction text {File} is not in the application; turns run without it',
+        '@l': 'Warning',
+        File: 'chat-instructions.md',
+        SourceContext: 'Jason.Desktop',
+        EventName: 'chat_instructions_missing',
+    });
+    assert.equal(text.includes('planted'), false);
+});

@@ -17,6 +17,7 @@ import { startHost, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
+import { placeInstructions } from './chat-instructions.ts';
 import type { Cli } from './cli.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch } from './programs.ts';
@@ -54,12 +55,14 @@ export interface ChatOptions {
     dataNamed: boolean;
     cli: Cli;
     keyFor(providerId: string): string | undefined;
-    /** The deny list's commands and operations and the allow list's verbs, read at each turn. */
+    /** The deny list's commands and operations, the allow list's verbs and the instruction text, read at each turn. */
     fence(): ChatFence;
     emit(chatId: string, event: ChatEvent): void;
     started?(host: string, resumed: boolean): void;
     ended?(turn: TurnEnded): void;
     decided?(decided: Decided): void;
+    /** Said once, the first time the application is found to carry no instruction text; the turns run without it. */
+    instructionsMissing?(): void;
     /** How long a card waits for the person; thirty minutes unless a test shortens it. */
     answerWindowMs?: number;
     platform?: Platform;
@@ -141,11 +144,20 @@ export class Chat {
     #running = new Map<string, Running>();
     /** Per chat id, the host it last ran on and the session that host named; in memory only. */
     #sessions = new Map<string, { host: string; session: string }>();
+    /** Whether the missing instruction text was said already. */
+    #missingSaid = false;
 
     constructor(options: ChatOptions) {
         this.#options = options;
         this.#platform = options.platform ?? currentPlatform();
         sweepTurnFiles(options.paths.turns);
+        // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
+        // turn's to refuse, and a file that cannot be written now is written again before it.
+        try {
+            this.#placeInstructions(options.fence());
+        } catch {
+            // Nothing to do until a turn starts.
+        }
         this.#broker = new PermissionBroker({
             emit: (chatId, event) => options.emit(chatId, event),
             ...(options.decided ? { decided: options.decided } : {}),
@@ -257,6 +269,19 @@ export class Chat {
         return folders;
     }
 
+    /**
+     * Writes the instruction text into the chat folder where a memory file is missing or differs. With no text in the
+     * application, nothing is written and the gap is said once.
+     */
+    #placeInstructions(fence: ChatFence): void {
+        if (fence.instructions === null) {
+            if (!this.#missingSaid) this.#options.instructionsMissing?.();
+            this.#missingSaid = true;
+            return;
+        }
+        placeInstructions(this.#options.paths.chat, fence.instructions);
+    }
+
     async #turn(
         chatId: string,
         text: string,
@@ -286,9 +311,10 @@ export class Chat {
             }
         };
         try {
+            const fence = this.#options.fence();
+            this.#placeInstructions(fence);
             if (resolved.program === 'claude') {
                 const id = newTurnId();
-                const fence = this.#options.fence();
                 turnId = id;
                 running.turnId = id;
                 const scope: ChatScope = {
