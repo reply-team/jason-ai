@@ -11,7 +11,8 @@
  *   another executable stays, and is named.
  *
  * What stays is said by name: the data directory with everything Jason keeps there, the harness root with the person's
- * folders, and the updater's cache under the profile.
+ * folders, and the updater's cache under the profile. A removal that fails is named there too, with what takes it off,
+ * and the others are still made: the uninstall goes on, since what is left outside the folder is the person's to finish.
  *
  * Before any of it, a runtime started from the jason executable this application carries is stopped through
  * `jason runtime stop` (`own-runtime.ts`), since the uninstaller then removes that executable. One that does not stop,
@@ -35,12 +36,22 @@ export function uninstallStart(argv: readonly string[]): { quiet: boolean } | nu
     return argv.includes(uninstallFlag) ? { quiet: argv.includes(quietFlag) } : null;
 }
 
-/** The harness root as the runtime reads it: `JASON_Harness__Root`, else the installation's settings, else `~/Jason`. */
+/** The value of a key read as the runtime's configuration reads keys: without regard to case. */
+function keyed(record: unknown, key: string): unknown {
+    if (typeof record !== 'object' || record === null || Array.isArray(record)) return undefined;
+    const found = Object.keys(record).find((name) => name.toLowerCase() === key.toLowerCase());
+    return found === undefined ? undefined : (record as Record<string, unknown>)[found];
+}
+
+/**
+ * The harness root as the runtime reads it: `JASON_Harness__Root`, else the installation's settings, else `~/Jason`;
+ * the variable's name and the settings' keys without regard to case, as the runtime's configuration reads them.
+ */
 export function harnessRoot(env: Readonly<Record<string, string | undefined>>, home: string, installationSettings: string): string {
-    const named = env['JASON_Harness__Root']?.trim();
+    const named = (keyed(env, 'JASON_Harness__Root') as string | undefined)?.trim();
     if (named) return named;
     try {
-        const root = (JSON.parse(readFileSync(installationSettings, 'utf8')) as { Harness?: { Root?: unknown } }).Harness?.Root;
+        const root = keyed(keyed(JSON.parse(readFileSync(installationSettings, 'utf8')), 'Harness'), 'Root');
         if (typeof root === 'string' && root.trim() !== '') return root.trim();
     } catch {
         // No settings, or none that say: the default.
@@ -119,23 +130,38 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
     if (deps.folder !== null) {
         const files = commandFiles(deps.platform, deps.folder);
         const before = files.filter((file) => existsSync(file));
-        deps.command.remove();
+        let failed = false;
+        try {
+            deps.command.remove();
+        } catch {
+            failed = true;
+        }
         for (const file of before) {
-            if (existsSync(file)) left.push(`${file}, which another program wrote`);
-            else removed.push(file);
+            if (!existsSync(file)) removed.push(file);
+            else if (failed) left.push(`${file}, which could not be taken off: deleting the file takes it off`);
+            else left.push(`${file}, which another program wrote`);
         }
     }
 
     if (deps.login.isOn()) {
-        await deps.login.set(false);
-        removed.push('Open Jason at login');
+        try {
+            await deps.login.set(false);
+            removed.push('Open Jason at login');
+        } catch {
+            left.push('Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it');
+        }
     }
 
-    const registration = deps.autostart === null ? null : await deps.autostart.status();
+    let registration: { registered: boolean; executable: string | null } | null = null;
+    try {
+        registration = deps.autostart === null ? null : await deps.autostart.status();
+    } catch {
+        left.push('The runtime’s start at logon, which could not be read: jason runtime autostart status says whether it is there');
+    }
     if (registration?.registered === true) {
         const executable = registration.executable;
         if (executable !== null && inside(deps.platform, deps.application, executable)) {
-            const still = await deps.autostart?.disable();
+            const still = await deps.autostart?.disable().catch(() => null);
             if (still === false) removed.push('The runtime’s start at logon');
             else left.push('The runtime’s start at logon, which could not be taken off: jason runtime autostart disable takes it off');
         } else {
@@ -146,7 +172,7 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
     left.push(`The data directory, ${deps.dataDirectory}, with the campaigns, the journal, the settings and the logs`);
     left.push(`The harness root, ${deps.harnessRoot}, with your folders and memory files`);
     left.push(`The updater’s cache, ${deps.updaterCache}`);
-    if (running.kind === 'another') left.push('A runtime that is running and is not this application’s: it is not stopped here; jason runtime stop stops it');
+    if (running.kind === 'another') left.push('A runtime is running that this application could not confirm as its own: it was not stopped; jason runtime stop stops it');
     return { removed, left, refused: null };
 }
 
@@ -154,6 +180,6 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
 export function uninstallText(report: UninstallReport): { message: string; detail: string } {
     if (report.refused !== null) return { message: 'Jason was not removed.', detail: report.refused };
     const list = (lines: readonly string[]) => lines.map((line) => `• ${line}`).join('\n');
-    const taken = report.removed.length === 0 ? 'Nothing else was placed on this computer.' : `Taken off:\n${list(report.removed)}`;
+    const taken = report.removed.length === 0 ? 'Nothing was taken off.' : `Taken off:\n${list(report.removed)}`;
     return { message: 'Jason is being removed from this computer.', detail: `${taken}\n\nLeft in place:\n${list(report.left)}` };
 }

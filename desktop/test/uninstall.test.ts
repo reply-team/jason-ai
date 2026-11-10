@@ -166,18 +166,19 @@ test('what stays is said by name: the data directory, the harness root, the upda
     const report = await uninstall(deps);
     const { message, detail } = uninstallText(report);
     assert.equal(message, 'Jason is being removed from this computer.');
-    assert.match(detail, /Nothing else was placed on this computer\./);
+    assert.match(detail, /^Nothing was taken off\.\n\nLeft in place:\n/);
+    assert.doesNotMatch(detail, /placed/);
     for (const named of [
         'The data directory, C:\\Users\\someone\\.jason',
         'The harness root, C:\\Users\\someone\\Jason',
         'The updater’s cache, C:\\Users\\someone\\AppData\\Local\\jason-desktop-updater',
-        'A runtime that is running and is not this application’s: it is not stopped here; jason runtime stop stops it',
+        'A runtime is running that this application could not confirm as its own: it was not stopped; jason runtime stop stops it',
     ]) {
         assert.ok(detail.includes(named), named);
     }
     assert.equal(uninstallExit(report), 0);
     // With no runtime running, none is named.
-    assert.ok(!(await uninstall(bench(t).deps)).left.some((line) => line.includes('runtime that is running')));
+    assert.ok(!(await uninstall(bench(t).deps)).left.some((line) => line.includes('A runtime is running')));
 });
 
 test('the runtime this application carries is stopped through jason runtime stop before anything is taken off', async (t) => {
@@ -187,7 +188,7 @@ test('the runtime this application carries is stopped through jason runtime stop
     assert.deepEqual(acts, ['runtime stop', 'login false']);
     assert.equal(report.removed[0], 'The runtime this application carries, which was running: it was stopped with jason runtime stop');
     assert.ok(report.removed.includes(join(folder, 'jason.cmd')));
-    assert.ok(!report.left.some((line) => line.includes('runtime that is running')));
+    assert.ok(!report.left.some((line) => line.includes('A runtime is running')));
     assert.equal(uninstallExit(report), 0);
 });
 
@@ -232,6 +233,48 @@ test('when the runtime this application carries does not stop, or a runtime did 
         runtimeRefusal({ kind: 'unanswered', pid: null }),
         'Nothing was removed, because a runtime may be running that did not answer, and its run file names no process. jason runtime status answers once the runtime does, and jason runtime start starts one in place of a run file left behind. Then uninstall Jason again.',
     );
+});
+
+test('a removal that fails is named among what is left with its act, the others still run, and the uninstall still exits 0', async (t) => {
+    const { folder, deps, acts } = bench(t, { loginOn: true, registration: { registered: true, executable } });
+    writeFileSync(join(folder, 'jason.cmd'), windowsShim(executable));
+    deps.command = { status: deps.command.status.bind(deps.command), remove: () => { throw new Error('planted-remove-error'); } };
+    deps.login = { isOn: () => true, set: async () => { acts.push('login false'); throw new Error('planted-login-error'); } };
+    deps.autostart = { status: deps.autostart!.status, disable: async () => { acts.push('autostart disable'); throw new Error('planted-disable-error'); } };
+    const report = await uninstall(deps);
+    assert.deepEqual(acts, ['login false', 'autostart disable'], 'each removal is tried after one before it failed');
+    assert.deepEqual(report.removed, []);
+    for (const named of [
+        `${join(folder, 'jason.cmd')}, which could not be taken off: deleting the file takes it off`,
+        'Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it',
+        'The runtime’s start at logon, which could not be taken off: jason runtime autostart disable takes it off',
+    ]) {
+        assert.ok(report.left.includes(named), named);
+    }
+    assert.equal(report.refused, null);
+    assert.equal(uninstallExit(report), 0);
+    assert.doesNotMatch(uninstallText(report).detail, /planted/);
+
+    // A registration that cannot be read is said, and nothing is disabled.
+    const unread = bench(t);
+    unread.deps.autostart = { status: async () => Promise.reject(new Error('planted-status-error')), disable: async () => (unread.acts.push('autostart disable'), false) };
+    const read = await uninstall(unread.deps);
+    assert.deepEqual(unread.acts, []);
+    assert.ok(read.left.includes('The runtime’s start at logon, which could not be read: jason runtime autostart status says whether it is there'));
+    assert.equal(uninstallExit(read), 0);
+});
+
+test('the harness root is read from the settings without regard to the case of its keys, as the runtime reads them', (t) => {
+    const home = 'C:\\Users\\someone';
+    const settings = join(scratch(t), 'settings.json');
+    for (const written of [{ harness: { root: 'D:\\Lower' } }, { HARNESS: { ROOT: 'D:\\Upper' } }, { Harness: { rOOt: 'D:\\Mixed' } }]) {
+        writeFileSync(settings, JSON.stringify(written));
+        assert.equal(harnessRoot({}, home, settings), Object.values(Object.values(written)[0]!)[0]);
+    }
+    writeFileSync(settings, JSON.stringify({ harness: { root: 7 } }));
+    assert.equal(harnessRoot({}, home, settings), join(home, 'Jason'));
+    assert.equal(harnessRoot({ JASON_HARNESS__ROOT: 'E:\\Upper' }, home, settings), 'E:\\Upper');
+    assert.equal(harnessRoot({ jason_harness__root: 'E:\\Lower' }, home, settings), 'E:\\Lower');
 });
 
 test('the harness root and the updater’s cache are found as the runtime and electron-updater find them', (t) => {
