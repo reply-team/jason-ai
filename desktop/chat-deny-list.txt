@@ -39,7 +39,7 @@ route unset
 role set-profile
 role add
 #
-# The Runtime API operations the verbs above call, so that no other program reaches them on the agent's behalf:
+# The Runtime API operations the verbs above call, so that a command naming one is refused by the desktop:
 approval.approve
 approval.reject
 approval.set_standing
