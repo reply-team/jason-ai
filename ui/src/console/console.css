@@ -923,3 +923,8 @@ body,
 .jc-console .harness .app.chromeless {
     min-height: 100%;
 }
+/* Settings: the icon beside each section's heading, set on the line of its words. */
+.jc-console .settings-icon {
+    vertical-align: -2px;
+    color: var(--teal);
+}

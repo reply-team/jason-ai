@@ -27,6 +27,21 @@ describe('Settings', () => {
         expect(fake.calls.map((c) => c.operation)).toEqual(['system.info']);
     });
 
+    it('marks each section with an icon of its own, hidden from a screen reader, in either language', async () => {
+        renderApp(new FakeApi());
+        route.value = { screen: 'settings' };
+        await waitFor(() => screen.getByRole('heading', { name: 'Appearance' }));
+        const icon = (name: string) =>
+            screen.getByRole('heading', { name, level: 2 }).querySelector('svg.settings-icon[aria-hidden="true"]');
+        expect(icon('Appearance')).toBeTruthy();
+        expect(icon('Language')).toBeTruthy();
+        expect(icon('Appearance')!.innerHTML).not.toBe(icon('Language')!.innerHTML);
+        fireEvent.click(screen.getByRole('button', { name: 'Українська' }));
+        await waitFor(() => screen.getByRole('heading', { name: 'Мова', level: 2 }));
+        expect(icon('Вигляд')).toBeTruthy();
+        expect(icon('Мова')).toBeTruthy();
+    });
+
     it('sets the theme on the document', async () => {
         renderApp(new FakeApi());
         route.value = { screen: 'settings' };
