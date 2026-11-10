@@ -181,6 +181,27 @@ test('"always" on a card that cannot be remembered covers that request alone', a
     assert.deepEqual([sent.at(-1)?.event.kind, sent.at(-1)?.event.request], ['permission', 'req_2']);
 });
 
+test('a request the host withdraws is refused, its card goes, and an answer after it changes nothing', async () => {
+    const { broker, sent, decided, turn } = bench();
+    turn('chat_a', 'turn_1');
+    const withdrawn = new AbortController();
+    const asked = broker.ask('turn_1', 'Bash', command, withdrawn.signal);
+    await settle();
+    assert.deepEqual(sent.map((each) => each.event.kind), ['permission']);
+    withdrawn.abort();
+    const answer = await within(asked);
+    assert.equal(answer.behavior, 'deny');
+    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission_gone', request: 'req_1' });
+    assert.deepEqual(decided, [{ outcome: 'withdrawn', by: 'host' }]);
+    broker.answer('chat_a', 'req_1', { allow: true, always: true });
+    assert.deepEqual(decided, [{ outcome: 'withdrawn', by: 'host' }]);
+    // A request withdrawn before it is asked makes no card.
+    const early = new AbortController();
+    early.abort();
+    assert.equal((await broker.ask('turn_1', 'Bash', command, early.signal)).behavior, 'deny');
+    assert.equal(sent.filter((each) => each.event.kind === 'permission').length, 1);
+});
+
 test('"always" never holds for a refusal', async () => {
     const { broker, sent, turn } = bench();
     turn('chat_a', 'turn_1');

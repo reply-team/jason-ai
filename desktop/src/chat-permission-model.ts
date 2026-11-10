@@ -3,6 +3,7 @@
 // what to put on the person's card. The platform is passed in, so both platforms' path rules are tested on either.
 
 import { posix, win32 } from 'node:path';
+import { serverName } from './chat-permission-endpoint.ts';
 
 export type Platform = 'win32' | 'darwin' | 'linux';
 
@@ -62,6 +63,8 @@ const allowedReply = [['auth', 'status'], ['account', 'list']];
 const dataRefusal = 'That path is the installation\'s own data, outside the chat\'s folder: the chat neither reads nor writes it. Nothing was done.';
 const deviceRefusal = 'That path names a device or a volume, not a file in a folder: the chat neither reads nor writes it. Nothing was done.';
 const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat never writes there. Nothing was done.';
+const climbRefusal = 'That pattern climbs out of its folder with ..: the chat does not take it. Name the folder as the path instead. Nothing was done.';
+const ownToolRefusal = 'That tool answers the chat\'s own permission requests: only the person answers them. Nothing was done.';
 const lengthRefusal = 'That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
 /** The longest path each platform takes: the `\\?\` form's limit on Windows, `PATH_MAX` on macOS and Linux. */
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
@@ -172,6 +175,9 @@ function judgeGlob(input: Record<string, unknown>, scope: ChatScope): Judgement 
     const folder = named(input['path']) ? input['path'] : scope.cwd;
     const judged = judgePath(folder, scope, false);
     const pattern = typeof input['pattern'] === 'string' ? input['pattern'] : '';
+    // A .. anywhere, a brace's alternative included, climbs where the fixed leading folders do not show.
+    if (pattern.split(/[\\/{},]/).includes('..')) return { verdict: 'deny', message: climbRefusal };
+    if (pattern.startsWith('~')) return worse(judged, { verdict: 'ask', title: 'Use a path that begins with ~', detail: shorten(pattern), remember: null });
     const parts = pattern.split(/[\\/]/);
     const fixed: string[] = [];
     for (const part of parts) {
@@ -332,6 +338,7 @@ function unnamed(tool: string, input: Record<string, unknown>): Judgement {
 
 /** Decides without a person where the answer is already known, and otherwise says what to put in front of them. */
 export function judge(tool: string, input: Record<string, unknown>, scope: ChatScope): Judgement {
+    if (tool.startsWith(`mcp__${serverName}__`)) return { verdict: 'deny', message: ownToolRefusal };
     if (tool === 'Glob') return judgeGlob(input, scope);
     const reader = readers[tool];
     if (reader !== undefined) {

@@ -2,6 +2,11 @@
 // transport on the loopback interface (the Model Context Protocol, revision 2025-11-25, "Transports"). Claude Code reaches it
 // through the turn's MCP configuration, which carries the turn's secret as a bearer token. It decides nothing itself:
 // every question goes to the broker, and only a click in the application's own page can say yes to a card.
+//
+// A call's stream carries no event ids, so it is neither primed nor resumable: the endpoint lives on loopback for one
+// turn, and a stream that is cut means the host or the desktop is gone, when nothing is left to resume. That is the
+// stream 2025-03-26 describes as well, which is why that revision is still spoken. A client that wants the call back
+// cancels it (notifications/cancelled), and the card it waited on goes.
 
 import { timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -18,7 +23,8 @@ export const promptToolName = `mcp__${serverName}__${toolName}`;
 
 export interface EndpointOptions {
     secret: string;
-    decide: (tool: string, input: Record<string, unknown>) => Promise<ToolAnswer>;
+    /** `signal` is aborted when the client cancels the call. */
+    decide: (tool: string, input: Record<string, unknown>, signal: AbortSignal) => Promise<ToolAnswer>;
     /** How often a waiting call's stream says it is alive; thirty seconds unless a test shortens it. */
     keepAliveMs?: number;
 }
@@ -83,6 +89,9 @@ function readBody(request: IncomingMessage): Promise<string | null> {
 export async function openEndpoint(options: EndpointOptions): Promise<Endpoint> {
     const keepAliveMs = options.keepAliveMs ?? 30_000;
     let port = 0;
+    /** The calls still waiting, by their JSON-RPC id as the client wrote it, so a cancellation can name one. */
+    const waiting = new Map<string, AbortController>();
+    const idKey = (id: unknown) => JSON.stringify(id);
 
     /** A browser page could reach a loopback port; a page always says its Origin, and a rebound name its Host. */
     function trusted(request: IncomingMessage): number | null {
@@ -93,7 +102,7 @@ export async function openEndpoint(options: EndpointOptions): Promise<Endpoint> 
         return null;
     }
 
-    function stream(response: ServerResponse, id: unknown, progressToken: unknown, answer: Promise<ToolAnswer>): void {
+    function stream(response: ServerResponse, id: unknown, progressToken: unknown, withdrawn: AbortSignal, answer: Promise<ToolAnswer>): void {
         response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
         response.write(': waiting for the answer\n\n');
         let progress = 0;
@@ -109,6 +118,11 @@ export async function openEndpoint(options: EndpointOptions): Promise<Endpoint> 
         const finish = (body: ToolAnswer) => {
             clearInterval(alive);
             if (response.writableEnded || response.destroyed) return;
+            // A cancelled request is not answered: its stream just ends.
+            if (withdrawn.aborted) {
+                response.end();
+                return;
+            }
             const result = { content: [{ type: 'text', text: JSON.stringify(body) }] };
             response.end(`event: message\ndata: ${JSON.stringify({ jsonrpc: '2.0', id, result })}\n\n`);
         };
@@ -119,7 +133,13 @@ export async function openEndpoint(options: EndpointOptions): Promise<Endpoint> 
     function answer(message: Message, response: ServerResponse): void {
         const { id, method, params } = message;
         if (id === undefined) {
-            // A notification: the one this endpoint accepts is the client saying it is initialized.
+            // A notification: the client saying it is initialized, or withdrawing a call it made.
+            if (method === 'notifications/cancelled') {
+                const named = object(params) ? params['requestId'] : undefined;
+                if (typeof named === 'string' || typeof named === 'number') waiting.get(idKey(named))?.abort();
+                plain(response, 202);
+                return;
+            }
             plain(response, method === 'notifications/initialized' ? 202 : 400);
             return;
         }
@@ -131,6 +151,8 @@ export async function openEndpoint(options: EndpointOptions): Promise<Endpoint> 
             const asked = object(params) ? params['protocolVersion'] : undefined;
             const protocolVersion = typeof asked === 'string' && protocolVersions.includes(asked) ? asked : protocolVersions[0];
             json(response, { jsonrpc: '2.0', id, result: { protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'jason-desktop', version: '1' } } });
+        } else if (method === 'ping') {
+            json(response, { jsonrpc: '2.0', id, result: {} });
         } else if (method === 'tools/list') {
             json(response, { jsonrpc: '2.0', id, result: { tools: [{ name: toolName, description: 'Asks the person whether a tool may run.', inputSchema }] } });
         } else if (method === 'tools/call') {
@@ -142,7 +164,14 @@ export async function openEndpoint(options: EndpointOptions): Promise<Endpoint> 
                 return;
             }
             const meta = params['_meta'];
-            stream(response, id, object(meta) ? meta['progressToken'] : undefined, options.decide(tool, input));
+            const withdrawn = new AbortController();
+            const key = idKey(id);
+            waiting.set(key, withdrawn);
+            const answer = options.decide(tool, input, withdrawn.signal);
+            void answer.finally(() => {
+                if (waiting.get(key) === withdrawn) waiting.delete(key);
+            }).catch(() => undefined);
+            stream(response, id, object(meta) ? meta['progressToken'] : undefined, withdrawn.signal, answer);
         } else {
             json(response, { jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found.' } });
         }

@@ -207,6 +207,24 @@ test('a relative path with .. that climbs out of the chat folder is judged where
     assert.equal(judge('Glob', { pattern: '../../run/*' }, windows()).verdict, 'deny');
 });
 
+test('a Glob pattern with a .. segment anywhere is refused, and one that begins with ~ is a card', () => {
+    for (const pattern of ['src/**/../../../run/*', '**/..', 'a/*/../b', '*\\..\\..\\config\\*', '{x,..}/*']) {
+        assert.equal(judge('Glob', { pattern }, windows()).verdict, 'deny', pattern);
+        assert.equal(judge('Glob', { pattern }, mac()).verdict, 'deny', pattern);
+    }
+    const home = judge('Glob', { pattern: '~/.ssh/*' }, mac());
+    assert.ok(home.verdict === 'ask' && home.remember === null, JSON.stringify(home));
+    // A name that only holds two dots is not a .. segment.
+    assert.deepEqual(judge('Glob', { pattern: '**/x..y.md' }, mac()), { verdict: 'allow' });
+});
+
+test('the chat\'s own permission tool is refused by name: the agent never answers its own cards', () => {
+    for (const tool of ['mcp__jason_desktop__decide', 'mcp__jason_desktop__other']) {
+        assert.equal(judge(tool, { tool_name: 'Bash', input: { command: 'jason runtime stop' } }, mac()).verdict, 'deny', tool);
+    }
+    assert.equal(judge('mcp__other__decide', {}, mac()).verdict, 'ask');
+});
+
 test('on Windows, case, drive letter case and slashes do not change where a path is', () => {
     assert.equal(read(windows(), 'c:/USERS/someone/.JASON/run/runtime.json').verdict, 'deny');
     assert.equal(read(windows(), 'C:/Users/someone/.jason/config/settings.json').verdict, 'deny');
@@ -237,7 +255,11 @@ test('on Windows, a UNC path is outside every folder of the chat and gets a card
 
 test('on macOS, case does not change where a path is, and a linked folder is judged where it leads', () => {
     assert.equal(read(mac(), '/users/SOMEONE/.jason/RUN/runtime.json').verdict, 'deny');
-    assert.equal(read(mac(), '/var/folders/x').verdict, 'ask');
+    // /var is a link to /private/var: the card is remembered by the folder the read reaches, not the one it named.
+    const card = read(mac(), '/var/folders/x');
+    assert.ok(card.verdict === 'ask' && card.remember === 'read:/private/var/folders', JSON.stringify(card));
+    const same = read(mac(), '/private/var/folders/y');
+    assert.ok(same.verdict === 'ask' && same.remember === card.remember);
 });
 
 test('a link or a junction in the chat folder that leads into the data directory is refused', () => {

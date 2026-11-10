@@ -307,9 +307,9 @@ export class Chat {
                 const secret = newSecret();
                 endpoint = await openEndpoint({
                     secret,
-                    decide: (tool, input) => {
+                    decide: (tool, input, signal) => {
                         requests++;
-                        return this.#broker.ask(id, tool, input);
+                        return this.#broker.ask(id, tool, input, signal);
                     },
                 });
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);

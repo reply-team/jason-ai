@@ -15,8 +15,8 @@ export type BrokerEvent =
 
 /** How one request was settled, for the log: never its tool, its input or its words. */
 export interface Decided {
-    outcome: 'allowed' | 'refused' | 'timed_out';
-    by: 'model' | 'person';
+    outcome: 'allowed' | 'refused' | 'timed_out' | 'withdrawn';
+    by: 'model' | 'person' | 'host';
 }
 
 export interface BrokerOptions {
@@ -39,6 +39,8 @@ interface Pending {
     remember: string | null;
     timer: NodeJS.Timeout;
     settle: (answer: ToolAnswer) => void;
+    /** Stops listening for the host's withdrawal once the request is settled. */
+    forget: () => void;
 }
 
 /** Claude Code's guidance: an input of about 40 KB or more is not copied back into the answer. */
@@ -47,6 +49,7 @@ const saidNo = 'The person said no. Do not try another way to do the same thing;
 const unanswered = 'Nobody answered within thirty minutes, so nothing was run.';
 const ended = 'The chat stopped, so nothing was run.';
 const notRunning = 'This chat is not running, so nothing was run.';
+const withdrawn = 'The request was withdrawn, so nothing was run.';
 
 function allowed(input: Record<string, unknown>): ToolAnswer {
     return JSON.stringify(input).length >= copyLimit ? { behavior: 'allow' } : { behavior: 'allow', updatedInput: input };
@@ -69,8 +72,11 @@ export class PermissionBroker {
         this.#turns.set(turnId, { chat: chatId, scope });
     }
 
-    /** The host's question for a turn. A turn that is not open is refused. */
-    ask(turnId: string, tool: string, input: Record<string, unknown>): Promise<ToolAnswer> {
+    /**
+     * The host's question for a turn. A turn that is not open is refused, and so is a request the host withdraws
+     * (`signal`, a cancellation the endpoint was sent): its card goes.
+     */
+    ask(turnId: string, tool: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<ToolAnswer> {
         const turn = this.#turns.get(turnId);
         if (turn === undefined) return Promise.resolve({ behavior: 'deny', message: notRunning });
         const judged = judge(tool, input, turn.scope);
@@ -79,12 +85,18 @@ export class PermissionBroker {
         if (judged.remember !== null && this.#always.get(turn.chat)?.has(judged.remember) === true) {
             return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'person' }));
         }
+        if (signal?.aborted === true) return Promise.resolve(this.#decided({ behavior: 'deny', message: withdrawn }, { outcome: 'withdrawn', by: 'host' }));
         const request = (this.#options.newId ?? randomUUID)();
         return new Promise((settle) => {
             const timer = setTimeout(() => {
                 if (this.#settle(request, { behavior: 'deny', message: unanswered })) this.#options.decided?.({ outcome: 'timed_out', by: 'person' });
             }, this.#options.timeoutMs ?? PermissionBroker.unanswered);
-            this.#pending.set(request, { chat: turn.chat, turn: turnId, input, remember: judged.remember, timer, settle });
+            const withdraw = () => {
+                if (this.#settle(request, { behavior: 'deny', message: withdrawn })) this.#options.decided?.({ outcome: 'withdrawn', by: 'host' });
+            };
+            signal?.addEventListener('abort', withdraw, { once: true });
+            const forget = () => signal?.removeEventListener('abort', withdraw);
+            this.#pending.set(request, { chat: turn.chat, turn: turnId, input, remember: judged.remember, timer, settle, forget });
             this.#options.emit(turn.chat, { kind: 'permission', request, title: judged.title, detail: judged.detail, remember: judged.remember === null ? null : judged.covers });
         });
     }
@@ -126,6 +138,7 @@ export class PermissionBroker {
         if (pending === undefined) return false;
         this.#pending.delete(request);
         clearTimeout(pending.timer);
+        pending.forget();
         if (gone) this.#options.emit(pending.chat, { kind: 'permission_gone', request });
         pending.settle(answer);
         return true;

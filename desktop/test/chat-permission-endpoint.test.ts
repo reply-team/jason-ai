@@ -54,13 +54,15 @@ function events(body: string): Record<string, unknown>[] {
         .map((data) => JSON.parse(data) as Record<string, unknown>);
 }
 
-async function open(decide: (tool: string, input: Record<string, unknown>) => Promise<ToolAnswer> = async () => ({ behavior: 'deny', message: 'no' }), keepAliveMs?: number) {
+type Decide = (tool: string, input: Record<string, unknown>, signal: AbortSignal) => Promise<ToolAnswer>;
+
+async function open(decide: Decide = async () => ({ behavior: 'deny', message: 'no' }), keepAliveMs?: number) {
     const asked: { tool: string; input: Record<string, unknown> }[] = [];
     const endpoint = await openEndpoint({
         secret,
-        decide: (tool, input) => {
+        decide: (tool, input, signal) => {
             asked.push({ tool, input });
-            return decide(tool, input);
+            return decide(tool, input, signal);
         },
         ...(keepAliveMs === undefined ? {} : { keepAliveMs }),
     });
@@ -102,6 +104,30 @@ test('the initialized notification is accepted with 202 and no body', async () =
     const { endpoint } = await open();
     const reply = await send(endpoint, { body: { jsonrpc: '2.0', method: 'notifications/initialized' } });
     assert.deepEqual([reply.status, reply.body], [202, '']);
+});
+
+test('ping is answered with an empty result', async () => {
+    const { endpoint } = await open();
+    const reply = await send(endpoint, { body: { jsonrpc: '2.0', id: 9, method: 'ping' } });
+    assert.deepEqual(JSON.parse(reply.body), { jsonrpc: '2.0', id: 9, result: {} });
+});
+
+test('a cancellation is accepted with 202 and withdraws the call it names, whose stream ends with no answer', async () => {
+    let withdrawn: AbortSignal | undefined;
+    const { endpoint } = await open((_tool, _input, signal) => {
+        withdrawn = signal;
+        return new Promise((resolve) => signal.addEventListener('abort', () => resolve({ behavior: 'deny', message: 'withdrawn' })));
+    });
+    const replied = send(endpoint, { body: call({ command: 'git push' }) });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const other = await send(endpoint, { body: { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 8 } } });
+    assert.equal(other.status, 202);
+    assert.equal(withdrawn?.aborted, false, 'a cancellation of another request changes nothing');
+    const cancelled = await send(endpoint, { body: { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 7, reason: 'The user interrupted.' } } });
+    assert.deepEqual([cancelled.status, cancelled.body], [202, '']);
+    assert.equal(withdrawn?.aborted, true);
+    const reply = await replied;
+    assert.deepEqual(events(reply.body).filter((each) => 'id' in each), []);
 });
 
 test('tools/list offers one tool, decide, with the input Claude Code sends a permission prompt tool', async () => {
