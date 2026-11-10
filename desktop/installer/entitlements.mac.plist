@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The entitlements of the desktop application and its helpers, signed in with the hardened runtime notarization
+  requires. V8 compiles JavaScript into memory it maps for execution, which the hardened runtime refuses unless the
+  signature allows it; nothing else is asked for, and library validation stays on, since every framework the
+  application loads is signed with its own identity. The bundled jason keeps its own signature and its own
+  entitlements (dotnet/src/Jason.App/jason.entitlements): the build skips it.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+</dict>
+</plist>

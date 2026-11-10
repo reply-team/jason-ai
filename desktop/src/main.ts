@@ -165,6 +165,8 @@ async function run(): Promise<void> {
             sandbox: true,
             webSecurity: true,
             spellcheck: false,
+            // A packaged build opens no DevTools, whatever the page or a key asks.
+            devTools: !app.isPackaged,
         },
     });
     let current: BrowserWindow | null = window;
