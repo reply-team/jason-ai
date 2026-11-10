@@ -12,7 +12,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
-import { LoginItem, openedAtLogin, RuntimeAutostart } from './login-item.ts';
+import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart } from './login-item.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptNotice, settleStart } from './rollback.ts';
@@ -119,6 +119,9 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
     setup.onChanged(() => window()?.webContents.send(eventChannels['setup.changed']));
 }
 
+/** Brings the window forward; the desk's own once it is open. */
+let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
+
 async function run(): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
@@ -213,6 +216,7 @@ async function run(): Promise<void> {
     });
     const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, command });
     desk.open();
+    showWindow = () => desk.show();
     void desk.readAutostart();
     updates?.start();
     let runtimeVersion: string | null = null;
@@ -280,13 +284,11 @@ app.setAppLogsPath(early.electronLogs);
 if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {
-    app.on('second-instance', () => {
-        const [window] = BrowserWindow.getAllWindows();
-        if (window) {
-            if (window.isMinimized()) window.restore();
-            window.focus();
-        }
+    // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray.
+    app.on('second-instance', (_event, argv) => {
+        if (showsOnSecondStart(argv)) showWindow();
     });
+    app.on('activate', () => showWindow());
     app.on('window-all-closed', () => app.quit());
     void app.whenReady().then(run);
 }

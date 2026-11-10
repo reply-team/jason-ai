@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { verbOf } from '../src/installation.ts';
 import { fileLogger } from '../src/log.ts';
-import { launchAgent, launchAgentFile, LoginItem, loginFlag, openedAtLogin, RuntimeAutostart, type ElectronLogin } from '../src/login-item.ts';
+import { bringForward, launchAgent, launchAgentFile, LoginItem, loginFlag, openedAtLogin, RuntimeAutostart, showsOnSecondStart, type ElectronLogin } from '../src/login-item.ts';
 import { memoryLog } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }): string {
@@ -54,6 +54,23 @@ test('a start the computer made is told by its flag, and only by it', () => {
     assert.equal(openedAtLogin(['Jason.exe', '--opened-at-login']), true);
     assert.equal(openedAtLogin(['Jason.exe']), false);
     assert.equal(openedAtLogin(['Jason.exe', '--opened-at-login=no']), false);
+});
+
+test('starting Jason again while it runs brings the window forward, hidden or minimized; a start the computer made at sign-in does not', () => {
+    assert.equal(showsOnSecondStart(['Jason.exe']), true, 'a shortcut, the Start menu or the Dock');
+    assert.equal(showsOnSecondStart(['Jason.exe', '--opened-at-login']), false);
+
+    const window = (minimized: boolean) => {
+        const did: string[] = [];
+        return { did, isMinimized: () => minimized, restore: () => void did.push('restore'), show: () => void did.push('show'), focus: () => void did.push('focus') };
+    };
+    const hidden = window(false);
+    bringForward(hidden);
+    assert.deepEqual(hidden.did, ['show', 'focus'], 'a window hidden in the tray is shown, not only focused');
+    const minimized = window(true);
+    bringForward(minimized);
+    assert.deepEqual(minimized.did, ['restore', 'show', 'focus']);
+    bringForward(null);
 });
 
 test('Open Jason at login is off by default and nothing is registered until the person turns it on', (t) => {

@@ -52,6 +52,30 @@ export function openedAtLogin(argv: readonly string[]): boolean {
     return argv.includes(loginFlag);
 }
 
+/**
+ * Whether another start of Jason while this one runs brings the window into view: one the person made (a shortcut, the
+ * Start menu, the Dock) does; one the computer made at sign-in leaves it in the tray, as the first one would.
+ */
+export function showsOnSecondStart(argv: readonly string[]): boolean {
+    return !openedAtLogin(argv);
+}
+
+/** The part of a window that bringing it forward uses. */
+export interface Forwardable {
+    isMinimized(): boolean;
+    restore(): void;
+    show(): void;
+    focus(): void;
+}
+
+/** Brings the window into view: restored when minimized, shown when hidden in the tray, then focused. */
+export function bringForward(window: Forwardable | null): void {
+    if (window === null) return;
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+}
+
 /** The part of Electron's `app` the Windows login item is read and set through. */
 export interface ElectronLogin {
     getLoginItemSettings(options: { args: string[] }): { openAtLogin: boolean };

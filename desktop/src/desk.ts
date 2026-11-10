@@ -11,7 +11,7 @@ import type { Cli } from './cli.ts';
 import { eventChannels } from './ipc.ts';
 import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
 import type { Logger } from './log.ts';
-import type { LoginItem, RuntimeAutostart } from './login-item.ts';
+import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
 import { commandMenuOf, type CommandStatus, type PathCommand } from './path-command.ts';
 import { menuItemOf, type Updater } from './updates.ts';
 
@@ -69,11 +69,7 @@ export class Desk {
 
     /** Shows the window, brought forward. */
     show(): void {
-        const window = this.deps.window();
-        if (window === null) return;
-        if (window.isMinimized()) window.restore();
-        window.show();
-        window.focus();
+        bringForward(this.deps.window());
     }
 
     /** Sends the page one of the commands it declares, only while the window shows the runtime's page. */
