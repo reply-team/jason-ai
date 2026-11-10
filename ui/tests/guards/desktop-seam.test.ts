@@ -21,7 +21,7 @@ const setup = {
     connectReplyWithKey: true,
     setProviderKey: true,
     installProgram: true,
-    setPluginToken: true,
+    configurePlugin: true,
     onChanged: true,
 } as const satisfies Record<keyof JasonDesktop['setup'], true>;
 
@@ -50,7 +50,7 @@ describe('the desktop seam', () => {
             'setup.connectReplyWithKey',
             'setup.setProviderKey',
             'setup.installProgram',
-            'setup.setPluginToken',
+            'setup.configurePlugin',
             'setup.onChanged',
         ]);
     });

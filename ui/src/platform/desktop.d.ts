@@ -91,15 +91,33 @@ export interface DesktopReply {
     accounts: DesktopReplyAccount[];
 }
 
-/** A notification plugin the release carries, and whether it is connected. */
+/**
+ * A plugin the release carries that the desktop can configure: the three notification channels (slack, telegram, ntfy)
+ * and the journal forwarder. The desktop knows these four from a table of its own and reads no manifest.
+ */
 export interface DesktopPlugin {
     id: string;
     label: string;
     description: string;
-    /** What the token is called on the plugin's side, for the field's label. */
-    tokenLabel: string;
-    /** Whether a token is set; the token itself never comes back. */
-    connected: boolean;
+    /**
+     * The one value `configurePlugin`'s `target` sets, by the key the plugin reads it under: slack `channel`, telegram
+     * `chat` and ntfy `topic` in its notification binding, the forwarder's `url` in its configuration. `label` names
+     * the field.
+     */
+    target: { key: 'channel' | 'chat' | 'topic' | 'url'; label: string };
+    /** What the token is called on the plugin's side, for the field's label; null where the desktop sets no token. */
+    tokenLabel: string | null;
+    /** A sentence for under the fields: what the desktop does not set for this plugin, and where that is set instead. */
+    note: string | null;
+    /** Whether the settings file holds the desktop's keys for this plugin. Neither the token nor the target comes back. */
+    configured: boolean;
+    /**
+     * What the runtime answered for the plugin when it last read its plugins: whether its package and configuration
+     * are valid, and how many grants it holds. Null while the runtime is not running or does not list the plugin.
+     */
+    runtime: { valid: boolean; grants: number } | null;
+    /** Whether the plugin's notification binding is in the settings file; null for the forwarder, which has none. */
+    binding: boolean | null;
 }
 
 /** `setup.status()`: what the Connect cards show. */
@@ -111,8 +129,13 @@ export interface DesktopSetup {
     runtimeVersion: string | null;
     /** The version of the release the desktop carries. */
     bundleVersion: string;
-    /** The notification plugins the release carries. */
+    /** The plugins the release carries that the desktop can configure. */
     plugins: DesktopPlugin[];
+    /**
+     * Why the desktop could not read the settings file, in its own words; null when it could. While it cannot, no
+     * plugin is configured from here: the person edits the file by hand and reads the cards again.
+     */
+    settingsRefused: string | null;
 }
 
 export interface JasonDesktop {
@@ -144,8 +167,15 @@ export interface JasonDesktop {
         setProviderKey(providerId: string, key: string): Promise<void>;
         /** Installs a program by a `DesktopHost.install` or `DesktopReply.cli.install` id, with npm. */
         installProgram(programId: string): Promise<void>;
-        /** Sets the token of a notification plugin the release carries, and has the runtime read its plugins again. */
-        setPluginToken(pluginId: string, token: string): Promise<void>;
+        /**
+         * Configures one of `status().plugins` in one edit of the settings file: its configuration (the token where the
+         * plugin reads one from there; the forwarder's `url` from `target`), its grant, and for a notification channel
+         * its binding with `target`. A field left out keeps what the file holds. Every key the desktop does not own is
+         * kept, the file is written whole beside itself and renamed over, and a file the desktop cannot parse is left
+         * as it is and refused. Then the runtime reads its plugins again and the desktop reads them back; `status()`
+         * says what the runtime answered, which is "configured", never that anything was delivered.
+         */
+        configurePlugin(pluginId: string, values: { token?: string; target?: string }): Promise<void>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

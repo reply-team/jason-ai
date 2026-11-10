@@ -241,7 +241,7 @@ describe('the console', () => {
         );
     });
 
-    it('connects: lists the hosts found or not, installs one, and hands a token to the desktop', async () => {
+    it('connects: lists the hosts found or not, installs one, and configures a plugin through the desktop', async () => {
         const fake = pending(new FakeApi());
         const desktop = stubDesktop();
         renderConsole(fake, desktop);
@@ -258,13 +258,47 @@ describe('the console', () => {
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.installProgram')).toBe(true));
         expect(desktop.calls.find((each) => each.name === 'setup.installProgram')!.args).toEqual(['codex']);
         await waitFor(() => within(panel('Connect')).getByLabelText('Bot token'));
-        fireEvent.input(within(panel('Connect')).getByLabelText('Bot token'), { target: { value: ' 123:abc ' } });
-        fireEvent.click(within(panel('Connect')).getAllByRole('button', { name: 'Connect' }).at(-1)!);
-        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.setPluginToken')).toBe(true));
-        expect(desktop.calls.find((each) => each.name === 'setup.setPluginToken')!.args).toEqual([
+        const plugins = within(panel('Connect'));
+        expect(plugins.getByText('Plugins')).toBeTruthy();
+        expect(plugins.getAllByText('Configured')).toHaveLength(2);
+        expect(plugins.getByText('Not configured')).toBeTruthy();
+        expect(panel('Connect').textContent).toContain('The runtime reads it as valid, with 1 grant.');
+        expect(panel('Connect').textContent).toContain(
+            'The runtime does not take its package or configuration as they stand.',
+        );
+        expect(panel('Connect').textContent).toContain('It has no binding yet: set its chat id.');
+        expect(panel('Connect').textContent).toContain(setupFound.plugins[1]!.note!);
+        expect(panel('Connect').textContent).not.toMatch(/connected/i);
+        expect(plugins.queryByRole('button', { name: /test/i })).toBeNull();
+        fireEvent.input(plugins.getByLabelText('Bot token'), { target: { value: ' 123:abc ' } });
+        fireEvent.input(plugins.getByLabelText('Chat id'), { target: { value: ' -1001 ' } });
+        const telegram = panel('Connect').querySelector<HTMLElement>('.plugin[data-id="telegram"]')!;
+        const read = desktop.calls.filter((each) => each.name === 'setup.status').length;
+        fireEvent.click(within(telegram).getByRole('button', { name: 'Configure' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.configurePlugin')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'setup.configurePlugin')!.args).toEqual([
             'telegram',
-            '123:abc',
+            { token: '123:abc', target: '-1001' },
         ]);
-        expect(setupFound.plugins[0]!.connected).toBe(false);
+        await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1));
+    });
+
+    it('refuses to configure a plugin over a settings file it cannot read, and reads it again on Reload', async () => {
+        const fake = pending(new FakeApi());
+        const reason = `The settings file is not valid JSON at line 3. ${hostile}`;
+        const desktop = stubDesktop({ ...setupFound, settingsRefused: reason });
+        renderConsole(fake, desktop);
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        show('Connect');
+        const connect = await waitFor(() => panel('Connect'));
+        await waitFor(() => within(connect).getByRole('alert'));
+        const alert = within(connect).getByRole('alert');
+        expect(alert.textContent).toContain(`${reason} Edit it by hand, then press Reload.`);
+        expect(alert.querySelector('img')).toBeNull();
+        expect(within(connect).queryByRole('button', { name: 'Configure' })).toBeNull();
+        expect(within(connect).queryByLabelText('Bot token')).toBeNull();
+        fireEvent.click(within(alert).getByRole('button', { name: 'Reload' }));
+        await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(2));
+        expect(desktop.calls.some((each) => each.name === 'setup.configurePlugin')).toBe(false);
     });
 });

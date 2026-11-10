@@ -60,10 +60,37 @@ export const setupFound: DesktopSetup = {
             id: 'telegram',
             label: 'Telegram',
             description: 'Tells you when something waits.',
+            target: { key: 'chat', label: 'Chat id' },
             tokenLabel: 'Bot token',
-            connected: false,
+            note: null,
+            configured: false,
+            runtime: { valid: true, grants: 0 },
+            binding: false,
+        },
+        {
+            id: 'ntfy',
+            label: 'ntfy',
+            description: 'Tells a topic you follow when something waits.',
+            target: { key: 'topic', label: 'Topic' },
+            tokenLabel: null,
+            note: 'A server of your own, and one that needs a token, are set as the plugin README says.',
+            configured: true,
+            runtime: { valid: true, grants: 1 },
+            binding: true,
+        },
+        {
+            id: 'journal-forwarder',
+            label: 'Journal forwarder',
+            description: 'Sends each journal line to an address of yours.',
+            target: { key: 'url', label: 'Receiver URL' },
+            tokenLabel: 'Bearer token',
+            note: null,
+            configured: true,
+            runtime: { valid: false, grants: 1 },
+            binding: null,
         },
     ],
+    settingsRefused: null,
 };
 
 export interface StubDesktop extends JasonDesktop {
@@ -111,7 +138,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
             connectReplyWithKey: call('setup.connectReplyWithKey'),
             setProviderKey: call('setup.setProviderKey'),
             installProgram: call('setup.installProgram'),
-            setPluginToken: call('setup.setPluginToken'),
+            configurePlugin: call('setup.configurePlugin'),
             onChanged(handler) {
                 changeHandlers.add(handler);
                 return () => changeHandlers.delete(handler);

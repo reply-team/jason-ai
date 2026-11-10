@@ -1,4 +1,4 @@
-import type { DesktopHost, DesktopSetup } from '../platform/desktop';
+import type { DesktopHost, DesktopPlugin, DesktopSetup } from '../platform/desktop';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
 import { signInSentence } from './live';
@@ -61,22 +61,30 @@ define('connect.providerKey', ([provider, remove]) => {
         void doing('Keeping the key…', () => here().desktop.setup.setProviderKey(provider, key));
 });
 
-define('connect.pluginToken', ([plugin]) => {
-    if (typeof plugin !== 'string') return;
-    const token = take(`plugin:${plugin}`);
-    if (token) void doing('Connecting…', () => here().desktop.setup.setPluginToken(plugin, token));
+define('connect.plugin', ([id]) => {
+    const plugin = setup.value?.plugins.find((each) => each.id === id);
+    if (!plugin) return;
+    const token = take(`plugin:${plugin.id}:token`);
+    const target = take(`plugin:${plugin.id}:target`);
+    if (!token && !target) return;
+    const values = { ...(token ? { token } : {}), ...(target ? { target } : {}) };
+    void doing(`Configuring ${plugin.label}…`, () => here().desktop.setup.configurePlugin(plugin.id, values));
 });
 
-const secret = (key: string, label: string): Html =>
+define('connect.reload', () => void doing('Reading the settings again…', () => Promise.resolve()));
+
+const field = (key: string, label: string, kind: 'text' | 'password'): Html =>
     html`<input
         class="inp"
-        type="password"
+        type="${kind}"
         autocomplete="off"
         aria-label="${label}"
         placeholder="${label}"
         data-input="connect.type"
         ${argsOf(key)}
     />`;
+
+const secret = (key: string, label: string): Html => field(key, label, 'password');
 
 function program(host: DesktopHost, busy: Html | null): Html {
     const sentence = signInSentence(host);
@@ -160,6 +168,59 @@ function reply(state: DesktopSetup['reply'], busy: Html | null): Html {
     </div>`;
 }
 
+function runtimeWords(plugin: DesktopPlugin): string {
+    if (plugin.runtime === null) return 'The runtime has not read it.';
+    if (!plugin.runtime.valid) return 'The runtime does not take its package or configuration as they stand.';
+    const grants = plugin.runtime.grants === 1 ? '1 grant' : `${plugin.runtime.grants} grants`;
+    return `The runtime reads it as valid, with ${grants}.`;
+}
+
+function plugin(each: DesktopPlugin, busy: Html | null, refused: boolean): Html {
+    return html`<div class="setrow plugin" data-id="${each.id}">
+        <div class="grow">
+            <b>${each.label}</b> <span class="meta">${each.description}</span>
+            <div class="meta">
+                ${runtimeWords(each)}
+                ${each.binding === false ? html` It has no binding yet: set its ${each.target.label.toLowerCase()}.` : null}
+            </div>
+            ${each.note ? html`<div class="meta">${each.note}</div>` : null}
+        </div>
+        ${
+            each.configured
+                ? html`<span class="pillc green">Configured</span>`
+                : html`<span class="pillc gray">Not configured</span>`
+        }
+        ${
+            refused
+                ? null
+                : html`${field(`plugin:${each.id}:target`, each.target.label, 'text')}
+                      ${each.tokenLabel ? secret(`plugin:${each.id}:token`, each.tokenLabel) : null}
+                      <button class="btn sm" type="button" ${busy} ${act('connect.plugin', each.id)}>Configure</button>`
+        }
+    </div>`;
+}
+
+function plugins(state: DesktopSetup, busy: Html | null): Html {
+    const refused = state.settingsRefused !== null;
+    return html`<div class="card">
+        <div class="hd">
+            <b>Plugins</b>
+            <span class="meta">Where Jason tells you something waits, and where the journal goes.</span>
+        </div>
+        <div class="bd">
+            ${
+                refused
+                    ? html`<div class="note am" role="alert">
+                          ${state.settingsRefused} Edit it by hand, then press Reload.
+                          <button class="btn sm" type="button" ${busy} ${act('connect.reload')}>Reload</button>
+                      </div>`
+                    : null
+            }
+            ${state.plugins.map((each) => plugin(each, busy, refused))}
+        </div>
+    </div>`;
+}
+
 export function connectView(): Html {
     const state = setup.value;
     const busy = setupBusy.value;
@@ -195,37 +256,7 @@ export function connectView(): Html {
                   </div>`
                 : null
         }
-        ${reply(state.reply, disabled)}
-        ${
-            state.plugins.length
-                ? html`<div class="card">
-                      <div class="hd"><b>Notifications</b></div>
-                      <div class="bd">
-                          ${state.plugins.map(
-                              (plugin) =>
-                                  html`<div class="setrow">
-                                      <div class="grow">
-                                          <b>${plugin.label}</b> <span class="meta">${plugin.description}</span>
-                                      </div>
-                                      ${
-                                          plugin.connected
-                                              ? html`<span class="pillc green">Connected</span>`
-                                              : html`${secret(`plugin:${plugin.id}`, plugin.tokenLabel)}
-                                                    <button
-                                                        class="btn sm"
-                                                        type="button"
-                                                        ${disabled}
-                                                        ${act('connect.pluginToken', plugin.id)}
-                                                    >
-                                                        Connect
-                                                    </button>`
-                                      }
-                                  </div>`,
-                          )}
-                      </div>
-                  </div>`
-                : null
-        }
+        ${reply(state.reply, disabled)} ${state.plugins.length ? plugins(state, disabled) : null}
         <div class="meta versions">
             Jason Desktop ${state.bundleVersion} · runtime ${state.runtimeVersion ?? 'not running'}
         </div>
