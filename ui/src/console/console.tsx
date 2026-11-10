@@ -50,12 +50,21 @@ function ChatTab({ params, api }: IDockviewPanelProps<{ chatId: string }>) {
     return <ChatPanel chatId={params.chatId} />;
 }
 
+/** What a campaign's Chat in the page panel does: brings forward the newest chat about the campaign the console still
+ *  holds, and opens one only when there is none. One function for every render, so the pages it is handed to keep it. */
+function chatAbout(campaign: { id: string; name: string }): void {
+    const held = Object.values(chats.value).filter((chat) => chat.campaignId === campaign.id);
+    const newest = held[held.length - 1]; // the console keeps its chats in the order they were opened
+    if (newest) here().dock.showChat(newest.id);
+    else here().dock.chat(campaign);
+}
+
 function PagePanel() {
     return (
         <div className="harness">
             <div className="app chromeless">
                 <div className="content">
-                    <CampaignChat.Provider value={(campaign) => here().dock.chat(campaign)}>
+                    <CampaignChat.Provider value={chatAbout}>
                         <CurrentPage />
                     </CampaignChat.Provider>
                 </div>

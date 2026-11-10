@@ -76,18 +76,22 @@ add-contacts`). A campaign opens on its **Sequence**, which puts what is planned
 above the now line, and ends with **What happened**, the campaign's journal (`jason journal list --campaign`),
 narrowed by chips to replies, work, decisions or changes; its **People** are listed by the same counts with a search, Removed among them
 (`--summary removed`); in Activity the tab is **People Activity**, and everything it lists is the period's, All being
-everyone something happened to (`--activity people`); its **Inbox** shows its latest reply lines newest first
-(`jason journal list --campaign --kind inbound_reply_observed`), the last ten people who replied each with their
-threads asked of the plugin their line names (`jason contact threads`), read when the tab opens and when you refresh
-it, and a reply tied to nobody as its channel and moment; its **Results** are four figures as the runtime counts them,
+everyone something happened to (`--activity people`); its **Inbox** shows its latest fifty reply lines in the order
+Jason observed them, the latest first (`jason journal list --campaign --kind inbound_reply_observed`), each reply at the
+moment the provider says its thread moved, the line's own moment only when it names none; the ten people Jason saw
+reply last, each with their threads asked of the plugin their line names (`jason contact threads`), and a reply tied to nobody as its
+channel and moment. It is read when the tab opens and when you refresh it, by its own Refresh, which it has whether
+it is loading, empty or failed, or by the toolbar's while the tab is open. Its **Results** are four figures as the runtime counts them,
 its people now and who was contacted, replied and opted out in the period (`jason campaign summary`, `jason campaign
-activity`), with nothing divided on the page; its **Settings** are its record, its context as the roles read
+activity`), with nothing divided on the page. A read of the Inbox or the Results that failed says so over that
+tab of that campaign alone, never as loading, and is gone once you leave the tab. Its **Settings** are its record, its context as the roles read
 it and what each provider calls it, with the moves its status allows. **Pause** stops Jason releasing an active
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
 `jason campaign start`, with your reason). An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
-opens a chat about the campaign and moves nowhere; the browser has no chat, and no Chat tab.
+brings forward the newest chat about the campaign the desktop still holds, opens one only when there is none, and
+moves nowhere; the browser has no chat, and no Chat tab.
 
 ## Performance
 
