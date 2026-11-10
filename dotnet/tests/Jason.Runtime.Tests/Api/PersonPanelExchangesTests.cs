@@ -64,6 +64,8 @@ public class PersonPanelExchangesTests
             ("mateo-linkedin-clear", "linkedin", "https://www.linkedin.com/in/mateo-ruiz-example"),
             ("mateo-phone-clear", "phone", "+525512345678"),
             ("aguilar-email-clear", "email", "aguilar@andina.example"),
+            ("grace-email-clear", "email", "grace@navy.example"),
+            ("person-phone-clear", "phone", "+4791234567"),
         ];
         foreach (var (@case, channel, value) in reads)
         {
@@ -125,6 +127,7 @@ public class PersonPanelExchangesTests
 
         var on = await api.RecordAsync<SuppressionDto>(Operations.SuppressionAdd, "person-email", new { channel = "email", value = Email, reason = "Asked not to be emailed.", actor = Ada }, Ct);
         Assert.Equal(Email, on.Value);
+        Assert.Single((await api.RecordAsync<Page<SuppressionDto>>(Operations.SuppressionList, "person-email-listed", new { channel = "email", value = Email }, Ct)).Items);
         var off = await api.RecordAsync<SuppressionRemovedDto>(Operations.SuppressionRemove, "person-email", new { channel = "email", value = Email, reason = "Asked to hear from us again.", actor = Ada }, Ct);
         Assert.True(off.Removed);
     }
