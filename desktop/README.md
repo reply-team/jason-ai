@@ -24,8 +24,9 @@ and names `jason update`. A `feed` in the desktop's settings is passed to every 
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, and the version whose skills were last deployed).
 - `<data>/desktop/chat/`: the chat's working folder, where the skills for it are deployed.
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`).
-- `<data>/desktop/profile/`: Electron's own profile, set before anything else, so a second data directory is a second
-  desktop and nothing of it lands outside `<data>`.
+- `<data>/desktop/electron/`: Electron's own files (its profile, the page's storage, and in `logs/` what Electron itself
+  logs), set before anything else, so a second data directory is a second desktop and nothing of it lands outside
+  `<data>`.
 - `<data>/logs/desktop-YYYYMMDD[_NNN].jsonl`: its log, in the runtime log's shape and under the same limits
   (`Logging:RetainedFileCountLimit`, `Logging:FileSizeLimitBytes`). `jason logs --source desktop` reads it.
 
@@ -49,7 +50,8 @@ forwarder is admitted to); each card's note says where those are set.
 
 - The page is the runtime's own, at `http://127.0.0.1:<port>`; navigation is locked to that origin. A link or
   `window.open` that leaves it goes to the system browser only when it is `https:`.
-- `contextIsolation` on, `nodeIntegration` off, `sandbox` on; no permission is granted and no webview attached.
+- `contextIsolation` on, `nodeIntegration` off, `sandbox` on; no webview attached, and of the permissions a page asks
+  for only `clipboard-sanitized-write` is granted, to the runtime's origin alone, so a Copy button works.
 - The preload exposes `window.jasonDesktop` and nothing else. Every call is answered only when it comes from the top frame
   of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
 
@@ -59,7 +61,9 @@ Every process is started with a file and arguments, never through a shell, and o
 `src/cli.ts` (the bundled `jason`), `src/programs.ts` (the agent hosts, `reply`, `node` and `npm`), `src/shell-path.ts`
 (on macOS only, the login shell's PATH, read before anything is started) and `scripts/prepare.mjs` (`dotnet publish`).
 On Windows, a program npm installed is a batch file; the desktop reads which script it hands to Node and starts that
-with Node. `test/process-guard.test.ts` holds this.
+with Node. `test/process-guard.test.ts` holds this, and also refuses a `require` of `child_process`, an IPC handler
+registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`
+outside the navigation lock in `src/main.ts`.
 
 ## Building and testing
 

@@ -7,13 +7,14 @@ import { planCommand, windowsShim, wrapperScript } from '../src/command-line.ts'
 import { loopbackOrigin, pairingLink, runtimeOrigin } from '../src/descriptor.ts';
 import { feedArguments, verbOf } from '../src/installation.ts';
 import { dataDirectory, desktopPaths } from '../src/paths.ts';
+import { permissionAllowed } from '../src/permissions.ts';
 import { findOnPath, launchOf, npmScript } from '../src/program-path.ts';
 import { pathOf, withPath } from '../src/programs.ts';
 import { hosts, keyProviders, notTheChatYet, providerEnvironment, signInSentence } from '../src/providers-model.ts';
 import { isFeed, parseSettings } from '../src/settings.ts';
 import { versionsDifferSentence } from '../src/setup.ts';
 import { pluginValid, runtimeVersionIn, statusFacts, versionAtLeast, versionIn } from '../src/setup-model.ts';
-import { pathFromOutput, withUsualPlaces } from '../src/shell-path.ts';
+import { loginShellOptions, pathFromOutput, withUsualPlaces } from '../src/shell-path.ts';
 
 // ---- One installation ----------------------------------------------------------------------------------------------
 
@@ -35,12 +36,34 @@ test('the desktop’s own files are under <data>/desktop and its log beside the 
     assert.equal(paths.runFile, join(data, 'run', 'runtime.json'));
 });
 
-test('Electron keeps its own profile under <data>/desktop, set before the single-instance lock, so a second installation is a second desktop', () => {
-    assert.equal(desktopPaths(resolve('/d')).profile, join(resolve('/d'), 'desktop', 'profile'));
+test('Electron keeps its own files under <data>/desktop/electron and its logs in electron/logs, set before the lock and before ready', () => {
+    const data = resolve('/d');
+    assert.equal(desktopPaths(data).electron, join(data, 'desktop', 'electron'));
+    assert.equal(desktopPaths(data).electronLogs, join(data, 'desktop', 'electron', 'logs'));
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
-    const set = main.indexOf("app.setPath('userData', ");
-    assert.ok(set > 0, 'main.ts sets the userData path');
-    assert.ok(set < main.indexOf('app.requestSingleInstanceLock()'), 'before the lock, which lives in that folder');
+    const lock = main.indexOf('app.requestSingleInstanceLock()');
+    const ready = main.indexOf('app.whenReady()');
+    for (const set of ["app.setPath('userData', early.electron)", "app.setPath('sessionData', early.electron)", 'app.setAppLogsPath(early.electronLogs)']) {
+        const at = main.indexOf(set);
+        assert.ok(at > 0, `main.ts runs ${set}`);
+        assert.ok(at < lock && at < ready, `${set} comes before the lock, which lives in that folder, and before ready`);
+    }
+});
+
+test('the page is granted one permission, writing to the clipboard, and only at the runtime’s origin', () => {
+    const origin = 'http://127.0.0.1:41234';
+    assert.equal(permissionAllowed('clipboard-sanitized-write', origin, origin), true);
+    assert.equal(permissionAllowed('clipboard-sanitized-write', `${origin}/ui/#/attention`, origin), true);
+    assert.equal(permissionAllowed('clipboard-sanitized-write', 'http://127.0.0.1:9999', origin), false);
+    assert.equal(permissionAllowed('clipboard-sanitized-write', 'file:///C:/app/shell/starting.html', origin), false);
+    assert.equal(permissionAllowed('clipboard-sanitized-write', origin, null), false);
+    assert.equal(permissionAllowed('clipboard-sanitized-write', 'not a url', origin), false);
+    for (const other of ['clipboard-read', 'media', 'notifications', 'geolocation', 'openExternal', 'fullscreen']) {
+        assert.equal(permissionAllowed(other, origin, origin), false, other);
+    }
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    assert.ok(main.includes('setPermissionRequestHandler((_contents, permission, callback, details) => callback(permissionAllowed(permission, details.requestingUrl, origin())))'));
+    assert.ok(main.includes('setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, origin()))'));
 });
 
 // ---- The run file and the pairing link -----------------------------------------------------------------------------
@@ -131,7 +154,12 @@ test('a batch file npm wrote is started as the script it names with Node, and an
     assert.equal(npmScript(`${shim}IF EXIST "%dp0%\\node.exe" (SET "_prog=%dp0%\\node.exe")`), 'node_modules\\reply-cli\\dist\\index.js');
     assert.equal(npmScript(':: Created by npm\r\nSET "NPM_CLI_JS=%~dp0\\node_modules\\npm\\bin\\npm-cli.js"\r\n"%NODE_EXE%" "%NPM_CLI_JS%" %*'), 'node_modules\\npm\\bin\\npm-cli.js');
     assert.equal(npmScript('node "%dp0%\\..\\evil.js" %*'), null);
+    assert.equal(npmScript('"%_prog%"  "%dp0%\\..\\evil.js" %*'), null);
     assert.equal(npmScript('del /q C:\\'), null);
+    // The script is the one npm's own program variable starts, never a quoted path that merely sits under node_modules.
+    assert.equal(npmScript('"%dp0%\\node_modules\\x\\cli.js" %*'), null);
+    assert.equal(npmScript('"%other%"  "%dp0%\\node_modules\\x\\cli.js" %*'), null);
+    assert.equal(npmScript('SET "NPM_CLI_JS=%~dp0\\node_modules\\npm\\bin\\npm-cli.js"\r\nrun.exe "%NPM_CLI_JS%" %*'), null);
 
     const text = `${shim}node.exe`;
     const launch = launchOf('C:\\npm\\reply.cmd', 'win32', () => text, 'C:\\node\\node.exe', () => false);
@@ -150,8 +178,15 @@ test('the PATH is one entry, whatever case Windows wrote its name in', () => {
     assert.deepEqual(withPath({ Path: 'old', HOME: 'h', EMPTY: undefined }, 'new'), { HOME: 'h', PATH: 'new' });
 });
 
-test('the login shell’s PATH is read after its marker, and the usual places are added once', () => {
-    assert.equal(pathFromOutput('motd noise\n__JASON_PATH__/usr/bin:/bin'), '/usr/bin:/bin');
+test('the login shell is killed outright at its time limit, since an interactive shell may ignore a polite signal', () => {
+    assert.equal(loginShellOptions.killSignal, 'SIGKILL');
+    assert.equal(loginShellOptions.timeout, 5000);
+});
+
+test('the login shell’s PATH is read between its two markers, and the usual places are added once', () => {
+    assert.equal(pathFromOutput('motd noise\n__JASON_PATH__/usr/bin:/bin__JASON_PATH_END__'), '/usr/bin:/bin');
+    assert.equal(pathFromOutput('__JASON_PATH__/usr/bin:/bin__JASON_PATH_END__\nlogout: saving session\n'), '/usr/bin:/bin', 'a logout script’s output is cut off');
+    assert.equal(pathFromOutput('__JASON_PATH__/usr/bin:/bin\nlogout noise'), null, 'without the closing marker nothing is taken');
     assert.equal(pathFromOutput('no marker'), null);
     const home = resolve('/Users/x');
     const path = withUsualPlaces(['/usr/bin', '/opt/homebrew/bin'].join(delimiter), home);

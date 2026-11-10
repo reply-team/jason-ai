@@ -2,6 +2,13 @@ import { execFile } from 'node:child_process';
 import { delimiter, join } from 'node:path';
 
 const marker = '__JASON_PATH__';
+const closing = '__JASON_PATH_END__';
+
+/**
+ * How the login shell is started: killed outright at five seconds, since an interactive shell may ignore SIGTERM and a
+ * hanging rc file would otherwise hold the desktop before any window exists.
+ */
+export const loginShellOptions = { timeout: 5000, killSignal: 'SIGKILL', windowsHide: true } as const;
 
 /** Pure: a PATH with the places an agent's command line lands added at its end, which a profile may not name yet. */
 export function withUsualPlaces(path: string, home: string): string {
@@ -12,11 +19,16 @@ export function withUsualPlaces(path: string, home: string): string {
     return entries.join(delimiter);
 }
 
-/** Pure: the PATH the login shell printed after the marker, or null when it printed none. */
+/**
+ * Pure: the PATH the login shell printed between the two markers, or null when it printed no such pair. What a logout
+ * script prints after the closing marker is cut off.
+ */
 export function pathFromOutput(stdout: string): string | null {
     const at = stdout.lastIndexOf(marker);
     if (at < 0) return null;
-    const path = stdout.slice(at + marker.length).trim();
+    const end = stdout.indexOf(closing, at + marker.length);
+    if (end < 0) return null;
+    const path = stdout.slice(at + marker.length, end).trim();
     return path === '' ? null : path;
 }
 
@@ -30,7 +42,7 @@ export async function loginPath(inherited: string, home: string): Promise<string
     if (process.platform !== 'darwin') return inherited;
     const shell = process.env.SHELL || '/bin/zsh';
     return new Promise((resolve) => {
-        execFile(shell, ['-ilc', `printf '${marker}%s' "$PATH"`], { timeout: 5000, windowsHide: true }, (error, stdout) => {
+        execFile(shell, ['-ilc', `printf '${marker}%s${closing}' "$PATH"`], loginShellOptions, (error, stdout) => {
             resolve(withUsualPlaces((error ? null : pathFromOutput(String(stdout))) ?? inherited, home));
         });
     });

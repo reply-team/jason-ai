@@ -61,6 +61,27 @@ test('a shell is named only by the macOS login-shell lookup', () => {
     );
 });
 
+test('a require of child_process is refused even in a named module, destructured or whole, since only an import names what it takes', () => {
+    assert.notDeepEqual(processViolations('src/cli.ts', "const { exec } = require('node:child_process');"), []);
+    assert.notDeepEqual(processViolations('src/cli.ts', "const { execFile } = require('child_process');"), []);
+    assert.notDeepEqual(processViolations('src/programs.ts', "const cp = require('child_process');"), []);
+    assert.notDeepEqual(processViolations('src/programs.ts', "const cp = await import('node:child_process');"), []);
+});
+
+test('a second IPC registration surface, webContents.ipc, is refused outside the module that checks the sender', () => {
+    assert.notDeepEqual(processViolations('src/main.ts', "window.webContents.ipc.handle('jason:setup.status', () => null);"), []);
+    assert.notDeepEqual(processViolations('src/setup.ts', 'contents.ipc.on("x", () => {});'), []);
+    assert.notDeepEqual(processViolations('src/main.ts', 'contents.ipc . handleOnce("x", () => {});'), []);
+});
+
+test('shell.openPath is refused everywhere, and shell.openExternal anywhere but main.ts’s navigation lock', () => {
+    assert.notDeepEqual(processViolations('src/main.ts', 'void shell.openPath(file);'), []);
+    assert.notDeepEqual(processViolations('src/setup.ts', 'void shell.openExternal(url);'), []);
+    const locked = 'function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\n';
+    assert.deepEqual(processViolations('src/main.ts', locked), []);
+    assert.notDeepEqual(processViolations('src/main.ts', `${locked}\nfunction other() {\n    void shell.openExternal('https://x');\n}\n`), []);
+});
+
 test('utilityProcess is refused everywhere', () => {
     assert.notDeepEqual(processViolations('src/cli.ts', "import { utilityProcess } from 'electron';"), []);
 });

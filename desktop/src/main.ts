@@ -15,6 +15,7 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
+import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
@@ -67,7 +68,8 @@ function showStarting(window: BrowserWindow, message: string, failed: boolean): 
 
 /**
  * Locks the window to the runtime's origin: a navigation elsewhere is refused, and a link or `window.open` that leaves
- * it goes to the system browser only when it is https. Nothing the page asks for is granted: no permission, no webview.
+ * it goes to the system browser only when it is https. Of what the page asks for, only writing to the clipboard is
+ * granted, and only at the runtime's origin; no other permission, no webview.
  */
 function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): void {
     const leave = (url: string) => {
@@ -92,8 +94,8 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
         leave(url);
         return { action: 'deny' };
     });
-    contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-    contents.session.setPermissionCheckHandler(() => false);
+    contents.session.setPermissionRequestHandler((_contents, permission, callback, details) => callback(permissionAllowed(permission, details.requestingUrl, origin())));
+    contents.session.setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, origin()));
 }
 
 function registerSetup(setup: Setup, origin: () => string | null, log: Logger, window: () => BrowserWindow | null): void {
@@ -198,9 +200,13 @@ async function run(): Promise<void> {
     }
 }
 
-// Electron's profile follows the data directory, so the desktop's whole state is under <data>/desktop and a second
-// installation, one JASON_DATA_DIR names, is a second desktop with its own lock.
-app.setPath('userData', desktopPaths(dataDirectory(process.env, homedir())).profile);
+// Electron's own files follow the data directory, before anything opens: its profile, the page's storage and its own
+// logs are under <data>/desktop/electron, never the account's application data, so a second installation (one
+// JASON_DATA_DIR names) is a second desktop with its own lock, and a purge of the data directory takes all of it.
+const early = desktopPaths(dataDirectory(process.env, homedir()));
+app.setPath('userData', early.electron);
+app.setPath('sessionData', early.electron);
+app.setAppLogsPath(early.electronLogs);
 
 if (!app.requestSingleInstanceLock()) {
     app.quit();

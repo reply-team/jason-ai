@@ -98,6 +98,17 @@ test('the limits are the runtime’s Logging settings where valid, and its defau
     assert.deepEqual(limitsFrom(JSON.stringify({ Logging: { RetainedFileCountLimit: 0, FileSizeLimitBytes: 10 } })), defaultLimits);
 });
 
+test('the desktop’s default limits are the runtime’s own LoggingOptions defaults, read from its source', () => {
+    const source = readFileSync(join(import.meta.dirname, '..', '..', 'dotnet', 'src', 'Jason.Runtime', 'Configuration', 'LoggingOptions.cs'), 'utf8');
+    const initial = (property: string) => {
+        const text = new RegExp(`\\b${property}\\s*\\{\\s*get;\\s*set;\\s*\\}\\s*=\\s*([^;]+);`).exec(source)?.[1];
+        assert.ok(text, `LoggingOptions.${property} has an initial value`);
+        return text.split('*').map((factor) => Number(factor.trim().replace(/L$/, ''))).reduce((product, factor) => product * factor, 1);
+    };
+    assert.equal(defaultLimits.retainedFileCountLimit, initial('RetainedFileCountLimit'));
+    assert.equal(defaultLimits.fileSizeLimitBytes, initial('FileSizeLimitBytes'));
+});
+
 test('a line that cannot be written is lost, never thrown', (t) => {
     const directory = scratch(t);
     const blocked = join(directory, 'a-file');

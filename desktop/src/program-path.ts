@@ -64,13 +64,15 @@ export function launchOf(found: string, platform: NodeJS.Platform, readText: (fi
 }
 
 /**
- * The script, relative to the batch file's folder, that a batch file npm wrote hands to Node: either the shape npm writes
- * for every installed package (`"%dp0%\node_modules\…\cli.js" %*`) or the one npm itself is installed with
- * (`SET "NPM_CLI_JS=%~dp0\node_modules\npm\bin\npm-cli.js"`). Null for anything else, and for a script outside the folder.
+ * The script, relative to the batch file's folder, that a batch file npm wrote hands to Node, read by the line that
+ * starts it: either the shape npm writes for every installed package (`"%_prog%"  "%dp0%\node_modules\…\cli.js" %*`,
+ * `_prog` being Node) or the one npm itself is installed with (`"%NODE_EXE%" "%NPM_CLI_JS%" %*`, the script set by
+ * `SET "NPM_CLI_JS=%~dp0\node_modules\npm\bin\npm-cli.js"`). Null for anything else, and for a script outside the folder.
  */
 export function npmScript(text: string): string | null {
-    if (!/node(?:\.exe)?/i.test(text)) return null;
-    const shim = /"%dp0%\\([^"%]+)"\s*%\*/.exec(text) ?? /SET\s+"NPM_CLI_JS=%~dp0\\([^"%]+)"/i.exec(text);
+    const packaged = /"%_prog%"\s+"%dp0%\\([^"%]+)"\s*%\*/i.exec(text);
+    const npm = /"%NODE_EXE%"\s+"%NPM_CLI_JS%"\s*%\*/i.test(text) ? /SET\s+"NPM_CLI_JS=%~dp0\\([^"%]+)"/i.exec(text) : null;
+    const shim = packaged ?? npm;
     const relative = shim?.[1];
     if (relative === undefined) return null;
     if (relative.split(/[\\/]/).some((part) => part === '..') || /^[a-z]:/i.test(relative)) return null;
