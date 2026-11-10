@@ -1,0 +1,19 @@
+{
+  "operation": "suppression.remove",
+  "case": "person-linkedin",
+  "request": {
+    "channel": "linkedin",
+    "value": "https://www.linkedin.com/in/ingrid-solberg-example",
+    "reason": "Asked to hear from us again.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "channel": "linkedin",
+    "value": "https://www.linkedin.com/in/ingrid-solberg-example",
+    "removed": true
+  }
+}

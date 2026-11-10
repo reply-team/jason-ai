@@ -132,6 +132,19 @@ public class PersonPanelExchangesTests
         Assert.True(off.Removed);
     }
 
+    /// <summary>The person's second address put on the register with no reason, read listed, and taken off again with the reason that requires.</summary>
+    [Fact]
+    public async Task Do_not_contact_the_second_address()
+    {
+        await using var api = await StartAsync();
+
+        var on = await api.RecordAsync<SuppressionDto>(Operations.SuppressionAdd, "person-linkedin", new { channel = "linkedin", value = LinkedIn, actor = Ada }, Ct);
+        Assert.Equal(LinkedIn, on.Value);
+        Assert.Single((await api.RecordAsync<Page<SuppressionDto>>(Operations.SuppressionList, "person-linkedin-listed", new { channel = "linkedin", value = LinkedIn }, Ct)).Items);
+        var off = await api.RecordAsync<SuppressionRemovedDto>(Operations.SuppressionRemove, "person-linkedin", new { channel = "linkedin", value = LinkedIn, reason = "Asked to hear from us again.", actor = Ada }, Ct);
+        Assert.True(off.Removed);
+    }
+
     /// <summary>The person excluded from a campaign, and the person as they read afterwards.</summary>
     [Fact]
     public async Task Exclude_from_a_campaign()
