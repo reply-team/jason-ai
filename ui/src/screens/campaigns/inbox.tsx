@@ -5,22 +5,24 @@ import { when } from '../../time/format';
 import { channelName } from '../people/labels';
 import { ThreadMessages } from '../people/threads';
 import * as threadsStore from '../people/threads-store';
-import type { InboxPerson } from './store';
+import type { InboxEntry } from './inbox-lines';
 
 type Props = {
-    /** The people and the route's plugin, or none while they are on their way. */
-    shown: { people: InboxPerson[]; pluginId: string | null } | null;
+    /** The entries of the latest lines and how many people were left out, or none while they are on their way. */
+    shown: { read: number; entries: InboxEntry[]; left: number } | null;
     zone: string;
+    /** Reads the lines again, and with them every person's threads. */
+    onRefresh: () => void;
 };
 
-/** One person's threads at the plugin the campaign's route reads conversations through, read when the tab shows them. */
-function PersonThreads({ person, pluginId, zone }: { person: InboxPerson; pluginId: string; zone: string }) {
+/** One person's threads at the plugin their line names, read when the tab shows them. */
+function PersonThreads({ contactId, pluginId, zone }: { contactId: string; pluginId: string; zone: string }) {
     const api = useApi();
-    const view = useMemo(() => threadsStore.threadsView(), [person.contactId, pluginId]);
+    const view = useMemo(() => threadsStore.threadsView(), [contactId, pluginId]);
     const { threads, next, failure } = view.state.value;
     const [opened, setOpened] = useState<string | null>(null);
     const now = new Date();
-    const read = (offset: number) => threadsStore.loadThreads(api, view, person.contactId, pluginId, offset);
+    const read = (offset: number) => threadsStore.loadThreads(api, view, contactId, pluginId, offset);
     useEffect(() => {
         setOpened(null);
         void read(0);
@@ -67,7 +69,7 @@ function PersonThreads({ person, pluginId, zone }: { person: InboxPerson; plugin
                     </button>
                     {opened === thread.external_id && (
                         <ThreadMessages
-                            contactId={person.contactId}
+                            contactId={contactId}
                             pluginId={pluginId}
                             threadId={thread.external_id}
                             zone={zone}
@@ -85,29 +87,58 @@ function PersonThreads({ person, pluginId, zone }: { person: InboxPerson; plugin
 }
 
 /**
- * The Inbox: everyone a reply was observed for in the campaign, as its journal says, each with their threads read
- * through the plugin the campaign's route names. What a thread says is the provider's, shown as text.
+ * The Inbox: what the campaign's latest reply lines say, newest first. Each person is shown with their threads asked of
+ * the plugin their line names; a reply the provider tied to nobody is its channel and moment. What a thread says is the
+ * provider's, shown as text.
  */
-export function CampaignInbox({ shown, zone }: Props) {
+export function CampaignInbox({ shown, zone, onRefresh }: Props) {
     const now = new Date();
     if (shown === null) return <div className="end loading">loading…</div>;
-    if (shown.people.length === 0) return <div className="empty">No reply has been observed in this campaign yet.</div>;
+    if (shown.entries.length === 0)
+        return <div className="empty">No reply has been observed in this campaign yet.</div>;
     return (
         <div className="campaign-tabs-inbox">
-            {shown.pluginId === null && (
-                <Notice status>
-                    No route reads this campaign’s conversations, so their threads can’t be read here.
-                </Notice>
-            )}
-            {shown.people.map((person) => (
-                <div key={person.contactId} className="section threads campaign-tabs-inbox-person">
-                    <div className="threads-head">
-                        <h3>{person.name ?? person.contactId}</h3>
-                        <span className="hint">replied {when(new Date(person.at), now, zone)}</span>
+            <div className="campaign-tabs-inbox-head">
+                <span className="hint">
+                    The latest replies, newest first
+                    {shown.left > 0 && `; ${shown.left} more not shown here`}
+                </span>
+                <button className="btn ghost" type="button" aria-label="Refresh the inbox" onClick={onRefresh}>
+                    Refresh
+                </button>
+            </div>
+            {shown.entries.map((entry, i) =>
+                entry.kind === 'untied' ? (
+                    <div key={`untied-${i}`} className="campaign-tabs-inbox-untied">
+                        <span className="ch">{entry.channel && channelName(entry.channel)}</span>
+                        <span className="s">A reply arrived; no person in Jason is tied to it</span>
+                        <time>{when(new Date(entry.at), now, zone)}</time>
                     </div>
-                    {shown.pluginId !== null && <PersonThreads person={person} pluginId={shown.pluginId} zone={zone} />}
-                </div>
-            ))}
+                ) : (
+                    <div
+                        key={`${entry.contactId}|${entry.pluginId ?? ''}`}
+                        className="section threads campaign-tabs-inbox-person"
+                    >
+                        <div className="threads-head">
+                            <h3>{entry.name ?? entry.contactId}</h3>
+                            <span className="hint">
+                                replied {when(new Date(entry.at), now, zone)}
+                                {entry.pluginId && ` · at ${entry.pluginId}`}
+                            </span>
+                        </div>
+                        {entry.pluginId ? (
+                            <PersonThreads
+                                key={shown.read}
+                                contactId={entry.contactId}
+                                pluginId={entry.pluginId}
+                                zone={zone}
+                            />
+                        ) : (
+                            <div className="empty">The line names no plugin, so no threads are read.</div>
+                        )}
+                    </div>
+                ),
+            )}
         </div>
     );
 }

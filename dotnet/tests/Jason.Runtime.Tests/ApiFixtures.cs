@@ -250,8 +250,6 @@ public static class ApiFixtures
         "rolenote.set/project",
         "rolenote.set/two-levels",
         "route.list/empty",
-        "route.resolve/conversations",
-        "route.resolve/no-route",
         "subscription.list/one-kind",
         "subscription.rewind/not-human",
         "subscription.rewind/since-without-offset",

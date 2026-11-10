@@ -17,10 +17,10 @@ import type {
     MembershipItem,
     MembershipWhy,
     Page,
-    RouteResolution,
     WorkItemSummary,
 } from '../../api/types';
 import { mergePage } from '../../lists/paging';
+import { inboxEntriesOf, inboxLines, type InboxEntry } from './inbox-lines';
 import type { CampaignFilters, CampaignView, Period } from '../../router';
 import { periodWindow } from '../../time/periods';
 
@@ -282,19 +282,11 @@ export function resultsFor(id: string | null, period: Period) {
     return found && found.id === id && found.period === period ? found : null;
 }
 
-/** How many of the campaign's latest reply lines the Inbox reads, and how many of the people in them it shows. */
-export const inboxLines = 50;
-export const inboxPeople = 25;
-
-/** Someone a reply was observed for in the campaign, as the line names them, with the moment of their latest one. */
-export type InboxPerson = { contactId: string; name: string | null; at: string };
-
 /**
- * The Inbox tab: the people the campaign's `inbound_reply_observed` lines name, and the plugin the campaign's route
- * sends `conversation.list` to, or none when no route does. Their threads are read through that plugin, one person at a
- * time; the tab never names a plugin of its own.
+ * The Inbox tab: what the campaign's latest `inbound_reply_observed` lines say, as entries (`inboxEntriesOf`). Each
+ * person's threads are asked of the plugin their line names, never of a plugin of the tab's own.
  */
-export const inbox = signal<{ id: string; read: number; people: InboxPerson[]; pluginId: string | null } | null>(null);
+export const inbox = signal<{ id: string; read: number; entries: InboxEntry[]; left: number } | null>(null);
 let inboxing = 0;
 
 /** How many Inbox reads have begun: a tab opened now shows only a read numbered above it. */
@@ -302,22 +294,9 @@ export function inboxReads(): number {
     return inboxing;
 }
 
-/** The people of the latest lines, each once, in the order the runtime listed the lines. */
-export function inboxPeopleOf(lines: JournalEntry[]): InboxPerson[] {
-    const people: InboxPerson[] = [];
-    for (const line of lines) {
-        if (!line.contact_id || people.some((p) => p.contactId === line.contact_id)) continue;
-        people.push({ contactId: line.contact_id, name: line.contact_name, at: line.ts });
-        if (people.length === inboxPeople) break;
-    }
-    return people;
-}
-
 /**
- * Reads the Inbox: the campaign's reply lines, then, only when they name someone, where its route sends
- * `conversation.list`. A campaign no route reads conversations for is a fact the tab says, not a failure. Each read is
- * numbered, so a tab that opens shows only a read made since (`inboxReads`): no thread is asked of a plugin the route
- * named before.
+ * Reads the Inbox's lines, when the tab opens and when the person asks again; nothing reads it in the background. Each
+ * read is numbered, so a tab that opens shows only a read made since (`inboxReads`), and its threads are read anew.
  */
 export async function loadInbox(api: Api, id: string): Promise<void> {
     const mine = ++inboxing;
@@ -327,20 +306,8 @@ export async function loadInbox(api: Api, id: string): Promise<void> {
             kinds: ['inbound_reply_observed'],
             limit: inboxLines,
         });
-        const people = inboxPeopleOf(lines.items);
-        let pluginId: string | null = null;
-        if (people.length > 0) {
-            try {
-                const route = await api.call<RouteResolution>('route.resolve', {
-                    campaign_id: id,
-                    operation: 'conversation.list',
-                });
-                pluginId = route.plugin_id;
-            } catch (error) {
-                if (!(error instanceof ApiError && error.code === 'no_route')) throw error;
-            }
-        }
-        if (mine === inboxing) inbox.value = { id, read: mine, people, pluginId };
+        const { entries, left } = inboxEntriesOf(lines.items);
+        if (mine === inboxing) inbox.value = { id, read: mine, entries, left };
     } catch (error) {
         if (mine === inboxing) fail(error, panelFailure);
     }

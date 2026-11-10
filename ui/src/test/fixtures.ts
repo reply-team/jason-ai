@@ -13,8 +13,6 @@ import type {
     Page,
     Project,
     Routes,
-    RouteResolution,
-    RouteResolveRequest,
     SystemInfo,
     UiRevoke,
     UiRevokeRequest,
@@ -225,8 +223,6 @@ import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
 import routeListEmpty from '../../../docs/api/fixtures/route.list/empty.json';
 import projectGetById from '../../../docs/api/fixtures/project.get/by-id.json';
 import projectGetBySlug from '../../../docs/api/fixtures/project.get/by-slug.json';
-import routeResolveConversations from '../../../docs/api/fixtures/route.resolve/conversations.json';
-import routeResolveNoRoute from '../../../docs/api/fixtures/route.resolve/no-route.json';
 import systemInfoWithUi from '../../../docs/api/fixtures/system.info/with-ui.json';
 import systemInfoWithoutUi from '../../../docs/api/fixtures/system.info/without-ui.json';
 import uiRevokeNeverUsed from '../../../docs/api/fixtures/ui.revoke/never-used.json';
@@ -751,8 +747,6 @@ export const fixtures = {
     'route.list/empty': routeListEmpty satisfies Exchange<object, Routes>,
     'project.get/by-id': projectGetById satisfies Exchange<{ project_id: string }, Project>,
     'project.get/by-slug': projectGetBySlug satisfies Exchange<{ slug: string }, Project>,
-    'route.resolve/conversations': routeResolveConversations satisfies Exchange<RouteResolveRequest, RouteResolution>,
-    'route.resolve/no-route': routeResolveNoRoute satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
     'system.info/with-ui': systemInfoWithUi satisfies Exchange<object, SystemInfo>,
     'system.info/without-ui': systemInfoWithoutUi satisfies Exchange<object, SystemInfo>,
     'ui.revoke/never-used': uiRevokeNeverUsed satisfies Exchange<UiRevokeRequest, UiRevoke>,

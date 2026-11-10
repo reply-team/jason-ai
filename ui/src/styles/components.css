@@ -453,7 +453,10 @@ details.fold pre {
 .campaign-tabs .tabs a { flex: none; white-space: nowrap; }
 .campaign-tabs-settings { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-5) 0; }
 .campaign-tabs-inbox { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-4) var(--space-5); }
-.campaign-tabs-inbox > .notice { margin: 0; }
+.campaign-tabs-inbox-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.campaign-tabs-inbox-head .hint, .campaign-tabs-inbox-untied .s { color: var(--text-muted); font-size: var(--text-sm); }
+.campaign-tabs-inbox-untied { display: flex; align-items: baseline; gap: var(--space-3); }
+.campaign-tabs-inbox-untied .s { flex: 1; }
 .campaign-tabs-results { padding: var(--space-4) var(--space-5); }
 .campaign-tabs-results .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .campaign-tabs-results .tile, .campaign-tabs-results .tile:hover { cursor: default; background: var(--bg); }

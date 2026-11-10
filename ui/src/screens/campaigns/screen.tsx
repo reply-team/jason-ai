@@ -96,7 +96,6 @@ export function CampaignsScreen() {
         if (at.tab === 'people') void store.listMembers(api, selected, table, query, new Date(), zone);
         else void store.count(api, selected, table, new Date(), zone);
         if (at.tab === 'results') void store.loadResults(api, selected, at.period, new Date(), zone);
-        if (at.tab === 'inbox') void store.loadInbox(api, selected);
         if (at.tab === 'sequence') {
             void store.loadPending(api, selected);
             void timeline.loadTimeline(api, { campaign_id: selected }, timeline.chip.value, false);
@@ -130,7 +129,8 @@ export function CampaignsScreen() {
     useEffect(() => {
         if (selected && resulting) void store.loadResults(api, selected, at.period, new Date(), zone);
     }, [api, resulting]);
-    // The Inbox reads its lines and its route when it opens, and shows nothing read before it opened.
+    // The Inbox reads its lines when it opens and when the person asks, never with the panel, and shows nothing read
+    // before it opened.
     const inboxOf = selected && at.tab === 'inbox' ? selected : null;
     const inboxFrom = useMemo(() => store.inboxReads(), [api, inboxOf]);
     const inboxShown = store.inbox.value;
@@ -345,6 +345,7 @@ export function CampaignsScreen() {
                                             : null
                                     }
                                     zone={zone}
+                                    onRefresh={() => void store.loadInbox(api, selected!)}
                                 />
                             )}
                             {at.tab === 'results' && (
