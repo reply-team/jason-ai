@@ -244,12 +244,13 @@ const runsAnother = new Set(
  * What "always, in this chat" covers of a command: the program and its first word. Nothing for a compound command, a
  * program named by a path, or a shell or exec wrapper, whose card covers its one request; and nothing for a command any
  * of whose words the shell would rewrite before it runs (a quote, a backslash, a variable, a `~`, a glob or a brace),
- * because a later word is covered unread: such a command is a card each time, and the person sees its text.
+ * or that climbs by a `..` segment, because a later word is covered unread: such a command is a card each time, and the
+ * person sees its text. Two dots that are not a segment (`main..feature`, `./...`) are not a climb.
  */
 export function commandPrefix(command: string): string | null {
     if (isCompound(command)) return null;
     const words = command.trim().split(/\s+/);
-    if (!words.every((word) => /^[A-Za-z0-9._/:@+=,%-]+$/.test(word))) return null;
+    if (!words.every((word) => /^[A-Za-z0-9._/:@+=,%-]+$/.test(word) && !/(^|[^.])\.\.([\\/]|$)/.test(word))) return null;
     const [program, first] = words;
     if (program === undefined || first === undefined || first.startsWith('-')) return null;
     if (/[\\/:]/.test(program) || runsAnother.has(program.toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, ''))) return null;
@@ -369,28 +370,38 @@ function namesData(command: string, scope: ChatScope): boolean {
 }
 
 /**
- * True when a word of the command, or an option's value after its `=`, names a place in the data directory outside the
- * chat folder, located as a Read's path is: read against the folder the command runs in, with links, junctions and
- * Windows' short names followed, and Git Bash's `/c/...` read as the drive's path. A word the shell would expand first
- * (a variable, a `~`) is left to the variable's name and the text's spellings.
+ * The places a command's words name, each located as a Read's path is: read against the folder the command runs in, with
+ * links, junctions and Windows' short names followed, and Git Bash's `/c/...` read as the drive's path. A word is split
+ * on `=`, `@` and `,` as on spaces, so a value joined to an option, a file a program reads by `@`, or one item of a list
+ * is located on its own; a piece that begins with one dash and a letter is also located without those two characters,
+ * as a one-dash option's joined value (`-T../x`). A piece the shell would expand first (a variable, a `~`) is left to the
+ * variable's name and the text's spellings.
  */
-function wordNamesData(command: string, scope: ChatScope): boolean {
-    const data = located(scope.data, scope);
-    const chat = located(scope.chat, scope);
+function placesOf(command: string, scope: ChatScope): string[] {
+    const places: string[] = [];
     for (const word of command.split(/[\s;|&<>()`]+/).map(unquoted)) {
-        for (const value of new Set([word, word.slice(word.indexOf('=') + 1)])) {
+        const pieces = new Set([word, ...word.split(/[=@,]/)]);
+        for (const piece of [...pieces]) if (/^-[A-Za-z]/.test(piece)) pieces.add(piece.slice(2));
+        for (const value of pieces) {
             if (value === '' || value.length > pathLimit(scope.platform) || /^~|[$%]/.test(value)) continue;
             // Git Bash's /c/... is the drive's own path.
             const drive = scope.platform === 'win32' ? /^[\\/]+([a-z])(?=[\\/]|$)/i.exec(value) : null;
-            const path = located(drive ? `${drive[1]}:${value.slice(drive[0].length) || '\\'}` : value, scope);
-            if (inside(scope, data, path) && !inside(scope, chat, path)) return true;
+            places.push(located(drive ? `${drive[1]}:${value.slice(drive[0].length) || '\\'}` : value, scope));
         }
     }
-    return false;
+    return places;
+}
+
+/** True when a place the command's words name is in the data directory outside the chat folder. */
+function wordNamesData(places: readonly string[], scope: ChatScope): boolean {
+    const data = located(scope.data, scope);
+    const chat = located(scope.chat, scope);
+    return places.some((path) => inside(scope, data, path) && !inside(scope, chat, path));
 }
 
 function judgeCommand(tool: string, command: string, scope: ChatScope): Judgement {
-    if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(command, scope)) return { verdict: 'deny', message: dataRefusal };
+    const places = placesOf(command, scope);
+    if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
     if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
     // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
