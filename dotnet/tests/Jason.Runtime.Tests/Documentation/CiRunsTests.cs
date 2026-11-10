@@ -58,7 +58,7 @@ public class CiRunsTests
     /// <summary>The set the version pull request runs once it is ready.</summary>
     private const string VersionOnly = "version-only";
 
-    /// <summary>The eleven checks the main branch's ruleset requires before a merge.</summary>
+    /// <summary>The twelve checks the main branch's ruleset requires before a merge.</summary>
     private static readonly string[] Required =
     [
         "The version this tree carries",
@@ -72,12 +72,14 @@ public class CiRunsTests
         "install.sh on ubuntu",
         "install.ps1 on windows",
         "The UI on ubuntu",
+        "The desktop on ubuntu",
     ];
 
     /// <summary>What the Linux set runs: a draft's push, and all a release branch's ruleset requires.</summary>
     private static readonly string[] TheLinuxSet =
     [
         "The version this tree carries", "linux-x64", "install.sh on ubuntu", "an update on linux-x64", "The UI on ubuntu",
+        "The desktop on ubuntu",
     ];
 
     /// <summary>The commit, the tree and the pull request a run is about. Made up.</summary>
@@ -1305,6 +1307,7 @@ public class CiRunsTests
             ["install-sh"] = Linux,
             ["install-ps1"] = Full,
             ["ui"] = Linux,
+            ["desktop"] = Linux,
             [StandIn] = Skipping,
         };
         Assert.Equal(expected.OrderBy(pair => pair.Key, StringComparer.Ordinal), conditions.OrderBy(pair => pair.Key, StringComparer.Ordinal));
@@ -1331,6 +1334,40 @@ public class CiRunsTests
         Assert.Equal(order.Order(), order);
         Assert.All(steps.Where(step => Scalar(step, "run") is not null), step => Assert.Null(Node(step, "continue-on-error")));
         Assert.All(steps.Where(step => Lines(step).Intersect(commands, StringComparer.Ordinal).Any()), step => Assert.Null(Node(step, "if")));
+        Assert.Null(Node(job, "continue-on-error"));
+    }
+
+    /// <summary>
+    /// One job runs the desktop application's checks, in the order desktop/README.md gives them: the install, the
+    /// type-check and the Node tests, in the desktop's own folder, on a node of 22 or later, which runs the tests' TypeScript
+    /// as it is. Electron's own binary is never downloaded: no test starts a window. None of the steps may fail without
+    /// failing the job, and none may be skipped.
+    /// </summary>
+    [Fact]
+    public void The_desktop_job_runs_the_install_the_type_check_and_the_node_tests_in_order()
+    {
+        var job = Mapping(Jobs(), "desktop");
+        Assert.Equal("The desktop on ubuntu", Scalar(job, "name"));
+        Assert.Equal("ubuntu-latest", Scalar(job, "runs-on"));
+        Assert.Equal("desktop", Scalar(Mapping(Mapping(job, "defaults"), "run"), "working-directory"));
+        Assert.Equal("1", Scalar(Mapping(job, "env"), "ELECTRON_SKIP_BINARY_DOWNLOAD"));
+        Assert.Equal("read", Scalar(Mapping(job, "permissions"), "contents"));
+
+        var steps = Steps(job);
+        var commands = new[] { "npm ci", "npm run check", "npm test" };
+        var runs = steps.Select(step => Scalar(step, "run")?.Trim()).ToList();
+        var order = commands.Select(command => runs.IndexOf(command)).ToList();
+        Assert.DoesNotContain(-1, order);
+        Assert.Equal(order.Order(), order);
+
+        var node = steps.FindIndex(step => Scalar(step, "uses")?.StartsWith("actions/setup-node@", StringComparison.Ordinal) == true);
+        Assert.InRange(node, 0, order[0] - 1);
+        var with = Mapping(steps[node], "with");
+        Assert.InRange(int.Parse(Scalar(with, "node-version")!, System.Globalization.CultureInfo.InvariantCulture), 22, int.MaxValue);
+        Assert.Equal("desktop/package-lock.json", Scalar(with, "cache-dependency-path"));
+
+        Assert.All(steps.Where(step => Scalar(step, "run") is not null), step => Assert.Null(Node(step, "continue-on-error")));
+        Assert.All(steps.Where(step => commands.Contains(Scalar(step, "run")?.Trim())), step => Assert.Null(Node(step, "if")));
         Assert.Null(Node(job, "continue-on-error"));
     }
 

@@ -3,8 +3,8 @@ name: CI
 # Which checks a run needs is decided once, by the version job, which every other job needs, from the event and the
 # branch a change lands on:
 # - a draft pull request's push runs the Linux set: the version, linux-x64, install.sh on ubuntu, the update on
-#   linux-x64 and the UI; linux-x64 tests the critical tier alone, the tests that carry the Critical trait, and a
-#   draft's run keeps no record of the tree it tested;
+#   linux-x64, the UI and the desktop; linux-x64 tests the critical tier alone, the tests that carry the Critical
+#   trait, and a draft's run keeps no record of the tree it tested;
 # - a pull request into a release branch runs the Linux set when it is ready as well, which is all a release branch's
 #   ruleset requires, and reports nothing as skipped; its linux-x64 tests the critical tier there too, under its own
 #   name once the pull request is ready. The whole suite runs once per release, on the release's pull request into main,
@@ -1697,6 +1697,39 @@ jobs:
         env:
           JASON_EXE: ${{ github.workspace }}/dotnet/src/Jason.App/bin/Release/net10.0/jason
         run: npm run e2e
+
+  # The desktop application's checks, in the order desktop/README.md gives them. No test starts a window, so
+  # Electron's own binary is never downloaded; the tests run their TypeScript as it is, on node 22 or later.
+  desktop:
+    name: The desktop on ubuntu
+    needs: version
+    if: needs.version.outputs.linux == 'true'
+    runs-on: ubuntu-latest
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Check (types)
+        run: npm run check
+
+      - name: Node tests
+        run: npm test
 
   # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
   # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not
