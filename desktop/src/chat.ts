@@ -113,6 +113,15 @@ function folderThere(path: unknown): string | null {
     }
 }
 
+/** Removes a turn's file; one that cannot be removed now is left for the next start's sweep. */
+function removeQuietly(desktop: string, turnId: string): void {
+    try {
+        removeTurnFiles(desktop, turnId);
+    } catch {
+        // Left for the next start.
+    }
+}
+
 function entriesOf(folder: string): string[] {
     try {
         return readdirSync(folder);
@@ -254,10 +263,15 @@ export class Chat {
         let endpoint: Endpoint | null = null;
         let args: string[];
         let requests = 0;
+        // Closes what the turn opened. The file's removal runs whatever came before it, and a removal that fails (a scanner
+        // holding the file on Windows) leaves the file for the next start to remove.
         const finishFiles = async () => {
-            if (turnId !== null) this.#broker.endTurn(turnId);
-            await endpoint?.close();
-            if (turnId !== null) removeTurnFiles(paths.desktop, turnId);
+            try {
+                if (turnId !== null) this.#broker.endTurn(turnId);
+                await endpoint?.close();
+            } finally {
+                if (turnId !== null) removeQuietly(paths.desktop, turnId);
+            }
         };
         try {
             if (resolved.program === 'claude') {
@@ -335,11 +349,15 @@ export class Chat {
         if (running.stopped) host.stop();
 
         void host.exited.then(async (exit) => {
-            await finishFiles();
-            this.#running.delete(chatId);
-            this.#options.ended?.({ host: resolved.host, exit: exit.code ?? -1, durationMs: Date.now() - begun, steps, requests });
-            this.#options.emit(chatId, { kind: 'done', error: this.#ending(resolved.label, exit, result, running.stopped, host) });
-        });
+            try {
+                await finishFiles();
+            } finally {
+                // The turn ends whatever closing its files did: it is no longer running, its end is told, and its done sent.
+                this.#running.delete(chatId);
+                this.#options.ended?.({ host: resolved.host, exit: exit.code ?? -1, durationMs: Date.now() - begun, steps, requests });
+                this.#options.emit(chatId, { kind: 'done', error: this.#ending(resolved.label, exit, result, running.stopped, host) });
+            }
+        }).catch(() => undefined);
     }
 
     #ending(label: string, exit: { code: number | null; startError: string | null }, result: string | null | undefined, stopped: boolean, host: HostProcess): string | null {

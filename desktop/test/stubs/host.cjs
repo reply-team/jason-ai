@@ -7,10 +7,12 @@
 //   { "fail": { "stderr": "words", "code": 3 } }      write to stderr and exit with the code, with no result
 //   { "end": "no_result" }                            exit 0 with no result
 //   { "end": "error", "text": "words" }               end with a failed result
+//   { "jam": true }                                   Claude Code only: put a folder where the turn's MCP file is, so its removal fails
 //   { "recover": "words" }                            Codex only: report an error that its turn then completes past
 // With no plan the turn says one line and ends well.
 const { spawn } = require('node:child_process');
-const { writeFileSync } = require('node:fs');
+const { mkdirSync, rmSync, writeFileSync } = require('node:fs');
+const { join } = require('node:path');
 const { decide } = require('./mcp-http.cjs');
 
 const print = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
@@ -55,7 +57,11 @@ async function claude(args, stdin) {
             }
             print({ type: 'assistant', message: { content: [{ type: 'text', text: said }] } });
         } else if (step.wait !== undefined) return wait(step.wait);
-        else if (step.fail !== undefined) {
+        else if (step.jam !== undefined) {
+            rmSync(config, { force: true });
+            mkdirSync(config);
+            writeFileSync(join(config, 'held'), 'held');
+        } else if (step.fail !== undefined) {
             process.stderr.write(`${step.fail.stderr}\n`);
             process.exit(step.fail.code);
         } else if (step.end === 'no_result') process.exit(0);

@@ -303,6 +303,20 @@ test('a Codex turn that reported an error and then completed ends with no error'
     assert.ok(texts(said).includes('back'));
 });
 
+test('a turn whose file cannot be removed still ends: it is no longer running, its end is told, and the chat sends again', async (t) => {
+    const r = rig(t);
+    plan(r, [{ jam: true }]);
+    const said = await r.turn('c1', words, { host: 'claude' });
+    assert.deepEqual(doneOf(said), { kind: 'done', error: null });
+    assert.equal(r.chat.isRunning('c1'), false);
+    assert.equal(r.ended.length, 1);
+    const left = readdirSync(r.b.paths.desktop).filter((name) => name.startsWith('turn-'));
+    assert.equal(left.length, 1, 'the folder the host put there stays, for the next start to remove');
+    plan(r, []);
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
+    assert.equal(r.ended.length, 2);
+});
+
 test('a turn resumes only on the host that named the session', async (t) => {
     const r = rig(t);
     await r.turn('c1', words, { host: 'claude' });
