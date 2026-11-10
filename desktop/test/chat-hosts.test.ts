@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readFence } from '../src/chat-deny.ts';
-import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexLine, dataRules, hostEnvironment, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
+import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexLine, dataRules, hostEnvironment, knownDataEntries, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
 import { desktopPaths } from '../src/paths.ts';
 import { markersIn, plantedConfiguration, plantedMarkers } from './planted-session.ts';
 
@@ -153,7 +153,7 @@ const targetsOf = (rules: readonly string[]) => [...new Set(rules.map((rule) => 
 test('the data rules refuse every entry of the data directory but desktop, and every entry of desktop but the chat folder', () => {
     const rules = dataRules('darwin', '/Users/a/.jason', ['config', 'run', 'jason.db', 'desktop', 'Desktop'], ['settings.json', 'chat', 'provider-keys', 'notes.txt']);
     assert.deepEqual(targetsOf(rules), [
-        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor'].map((name) => `//Users/a/.jason/${name}`),
+        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
         ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
@@ -166,7 +166,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
-        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor'].map((name) => `//home/a/.jason/${name}`),
+        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//home/a/.jason/${name}`),
         ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
@@ -179,6 +179,26 @@ test('every entry the desktop names in its folder but the chat folder is a known
         .map((path) => path.slice(paths.desktop.length + 1));
     assert.ok(named.includes('rollback'), named.join(' '));
     assert.deepEqual(named.filter((name) => !knownDesktopEntries.includes(name)), []);
+});
+
+test('every top-level entry the runtime\'s paths and the command line write in the data directory is a known entry', () => {
+    const dotnet = join(here, '..', '..', 'dotnet', 'src');
+    const names = new Set<string>();
+    const add = (text: string, pattern: RegExp) => {
+        for (const match of text.matchAll(pattern)) names.add(match[1] ?? '');
+    };
+    add(readFileSync(join(dotnet, 'Jason.Contracts', 'Discovery', 'JasonPaths.cs'), 'utf8'), /Path\.Combine\(Root, "([^"]+)"/g);
+    add(readFileSync(join(dotnet, 'Jason.Contracts', 'Update', 'UpdateLedger.cs'), 'utf8'), /DirectoryName = "([^"]+)"/g);
+    const cli = join(dotnet, 'Jason.Cli');
+    for (const file of readdirSync(cli, { recursive: true, encoding: 'utf8' }).filter((name) => name.endsWith('.cs'))) {
+        const text = readFileSync(join(cli, file), 'utf8');
+        add(text, /DirectoryName = "([^"]+)"/g);
+        add(text, /Path\.Combine\((?:dataDirectory|data|paths\.Root|env\.Paths\.Root), "([^"]+)"/g);
+    }
+    // A repository's .git is only looked for, to refuse removing a data directory under version control; nothing writes it.
+    names.delete('.git');
+    for (const name of ['autostart', 'update', 'doctor', 'state', 'config']) assert.ok(names.has(name), [...names].join(' '));
+    assert.deepEqual([...names].filter((name) => !knownDataEntries.includes(name)), []);
 });
 
 test('the host\'s environment puts the bundled jason first on PATH and names the data directory', () => {

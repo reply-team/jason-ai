@@ -119,7 +119,7 @@ export function rulePath(platform: Platform, path: string): string {
  * The data directory's own entries, which the runtime, the command line and the desktop make: named by the data rules
  * whether they exist yet or not, so one made while a turn runs is refused as well.
  */
-export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor'];
+export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'];
 
 /**
  * The desktop folder's own entries but the chat folder, named the same way; `turns` holds every turn's configuration,
