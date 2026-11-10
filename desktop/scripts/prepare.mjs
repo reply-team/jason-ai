@@ -1,25 +1,29 @@
-// Prepares desktop/bundle/: the jason executable of this checkout, published as the release publishes it, the skills
-// package `jason skills install --source` deploys from, and version.json naming the version both were prepared as.
+// Prepares a bundle folder, desktop/bundle/ by default: the jason executable, with the repository's LICENSE and
+// THIRD-PARTY-NOTICES beside it as every release's zip and tarball carry them, the skills package `jason skills install --source`
+// deploys from, and version.json naming the version all of it was prepared as.
 //
-//   node scripts/prepare.mjs [--pre rc.1] [--rid win-x64]
+//   node scripts/prepare.mjs [--pre rc.1] [--rid win-x64] [--output bundles/x64] [--version 0.34.0] [--executable <file>]
 //
-// The version is the repository's VersionPrefix with a pre-release word, so a build of the desktop always carries a
-// candidate's version string and resolves that candidate's own release directory; `dev` is refused. dotnet is started
-// with a file and arguments, never through a shell.
+// The version is the repository's VersionPrefix with a pre-release word, so a development build of the desktop carries a
+// candidate's version string and resolves that candidate's own release directory; `dev` is refused. `--version` names
+// the whole version instead, a release's or a candidate's, which a package is built at. `--executable` takes an
+// executable the release has already built and signed, copied byte for byte, instead of publishing this checkout's; the
+// release passes it so the package carries the very file its zip or tarball does. Otherwise dotnet publishes, started with a
+// file and arguments, never through a shell. The output is a folder inside desktop/, emptied first.
 
 import { execFile } from 'node:child_process';
-import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { arch, platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { releaseVersion } from '../electron-builder.config.mjs';
 
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(desktop, '..');
-const bundle = join(desktop, 'bundle');
 
-function option(name, fallback) {
-    const at = process.argv.indexOf(`--${name}`);
-    return at >= 0 && process.argv[at + 1] ? process.argv[at + 1] : fallback;
+function option(argv, name, fallback) {
+    const at = argv.indexOf(`--${name}`);
+    return at >= 0 && argv[at + 1] ? argv[at + 1] : fallback;
 }
 
 function defaultRid() {
@@ -29,38 +33,77 @@ function defaultRid() {
     return `${os}-${cpu}`;
 }
 
-const props = readFileSync(join(root, 'dotnet', 'Directory.Build.props'), 'utf8');
-const prefix = /<VersionPrefix>([0-9]+\.[0-9]+\.[0-9]+)<\/VersionPrefix>/.exec(props)?.[1];
-if (!prefix) throw new Error('dotnet/Directory.Build.props names no VersionPrefix.');
-const pre = option('pre', 'rc.1');
-if (!/^[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$/.test(pre) || /^dev$/i.test(pre.split('.')[0])) {
-    throw new Error(`"${pre}" is not a candidate's pre-release word; a desktop build never carries a dev version.`);
+/** The repository's VersionPrefix, as dotnet/Directory.Build.props under `repository` names it. */
+export function versionPrefix(repository = root) {
+    const props = readFileSync(join(repository, 'dotnet', 'Directory.Build.props'), 'utf8');
+    const prefix = /<VersionPrefix>([0-9]+\.[0-9]+\.[0-9]+)<\/VersionPrefix>/.exec(props)?.[1];
+    if (!prefix) throw new Error('dotnet/Directory.Build.props names no VersionPrefix.');
+    return prefix;
 }
-const version = `${prefix}-${pre}`;
-const rid = option('rid', defaultRid());
 
-rmSync(bundle, { recursive: true, force: true });
-mkdirSync(bundle, { recursive: true });
+/** What a run prepares, from its arguments: the folder, the version, the runtime identifier, and the executable given. */
+export function plan(argv, prefix = versionPrefix()) {
+    const output = resolve(desktop, option(argv, 'output', 'bundle'));
+    const inside = relative(desktop, output);
+    if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) throw new Error(`--output ${output} is not a folder inside desktop/.`);
+    const whole = option(argv, 'version', null);
+    let version;
+    if (whole !== null) {
+        version = releaseVersion(whole);
+    } else {
+        const pre = option(argv, 'pre', 'rc.1');
+        if (!/^[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$/.test(pre) || /^dev$/i.test(pre.split('.')[0])) {
+            throw new Error(`"${pre}" is not a candidate's pre-release word; a desktop build never carries a dev version.`);
+        }
+        version = `${prefix}-${pre}`;
+    }
+    const rid = option(argv, 'rid', defaultRid());
+    const given = option(argv, 'executable', null);
+    const executable = given === null ? null : resolve(given);
+    const name = rid.startsWith('win-') ? 'jason.exe' : 'jason';
+    if (executable !== null && basename(executable) !== name) throw new Error(`--executable ${executable} is not a ${name} for ${rid}.`);
+    return { output, version, rid, executable, name };
+}
 
-const args = [
-    'publish', join(root, 'dotnet', 'src', 'Jason.App'),
-    '--configuration', 'Release',
-    '--runtime', rid,
-    '--self-contained',
-    '-p:PublishSingleFile=true',
-    `-p:Version=${version}`,
-    '--output', bundle,
-];
-console.log(`dotnet ${args.join(' ')}`);
-await new Promise((done, fail) => {
-    const child = execFile('dotnet', args, { cwd: root, windowsHide: true, maxBuffer: 64 * 1024 * 1024 }, (error) => (error ? fail(error) : done()));
-    child.stdout?.pipe(process.stdout);
-    child.stderr?.pipe(process.stderr);
-});
+/**
+ * Completes a folder that holds the executable: the debug symbols a publish leaves are removed, and the licence, the
+ * notices, the skills and version.json are put beside it.
+ */
+export function complete(folder, version, repository = root) {
+    for (const name of readdirSync(folder)) if (/\.(pdb|dbg)$/i.test(name)) rmSync(join(folder, name), { force: true });
+    copyFileSync(join(repository, 'LICENSE'), join(folder, 'LICENSE'));
+    copyFileSync(join(repository, 'THIRD-PARTY-NOTICES'), join(folder, 'THIRD-PARTY-NOTICES'));
+    cpSync(join(repository, 'skills'), join(folder, 'skills'), { recursive: true });
+    writeFileSync(join(folder, 'version.json'), `${JSON.stringify({ version }, null, 2)}\n`);
+}
 
-// Only the executable is carried: the debug symbols the publish leaves beside it are not.
-for (const name of readdirSync(bundle)) if (/\.(pdb|dbg)$/i.test(name)) rmSync(join(bundle, name), { force: true });
+async function publish(rid, version, output) {
+    const args = [
+        'publish', join(root, 'dotnet', 'src', 'Jason.App'),
+        '--configuration', 'Release',
+        '--runtime', rid,
+        '--self-contained',
+        '-p:PublishSingleFile=true',
+        `-p:Version=${version}`,
+        '--output', output,
+    ];
+    console.log(`dotnet ${args.join(' ')}`);
+    await new Promise((done, fail) => {
+        const child = execFile('dotnet', args, { cwd: root, windowsHide: true, maxBuffer: 64 * 1024 * 1024 }, (error) => (error ? fail(error) : done()));
+        child.stdout?.pipe(process.stdout);
+        child.stderr?.pipe(process.stderr);
+    });
+}
 
-cpSync(join(root, 'skills'), join(bundle, 'skills'), { recursive: true });
-writeFileSync(join(bundle, 'version.json'), `${JSON.stringify({ version }, null, 2)}\n`);
-console.log(`bundle/ prepared as ${version} for ${rid}`);
+async function main() {
+    const { output, version, rid, executable, name } = plan(process.argv);
+    rmSync(output, { recursive: true, force: true });
+    mkdirSync(output, { recursive: true });
+    if (executable === null) await publish(rid, version, output);
+    else copyFileSync(executable, join(output, name));
+    if (name === 'jason') chmodSync(join(output, name), 0o755);
+    complete(output, version);
+    console.log(`${relative(desktop, output)}/ prepared as ${version} for ${rid}`);
+}
+
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

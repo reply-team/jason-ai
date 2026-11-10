@@ -94,5 +94,20 @@ A desktop build always carries a candidate's version string (`0.34.0-rc.1`), nev
 `jason plugin install` resolve that candidate's own release directory. `test/candidate-version.test.ts` proves it against
 a local feed when `JASON_UI_ZIP` names a UI build packaged with `JASON_VERSION` set to the candidate.
 
+A package is built from `electron-builder.config.mjs` at the version `JASON_VERSION` names, a release's or a candidate's,
+around a bundle prepared for each architecture at that same version. On Windows, unsigned:
+
+```sh
+node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version 0.34.0-rc.1
+JASON_VERSION=0.34.0-rc.1 npm run package -- --win --x64   # dist/: the nsis installer, latest.yml, win-unpacked/
+```
+
+The release passes `--executable` with the `jason` it has already built and signed, so the package carries that very
+file, and signs the package itself: a Mac package is never built unsigned. Inside `app.asar` are `lib/`, `shell/`,
+`resources/` and the chat's two lists; beside it, in the package's `resources/`, are `bundle/` (the executable with
+`LICENSE` and `THIRD-PARTY-NOTICES`, the skills and `version.json`) and `notices/` (the repository's `LICENSE`, this
+folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package carries no UI: `jason ui install`
+places the UI of the runtime's own release.
+
 To run it against an installation other than your own, set `JASON_DATA_DIR` and `JASON_Harness__Root` in the environment
 it is started from.
