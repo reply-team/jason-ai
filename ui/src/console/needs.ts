@@ -1,7 +1,8 @@
+import { effect, signal } from '@preact/signals-react';
 import { attentionStore } from '../screens/attention/store';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
-import { toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
+import { toApprovalDetail, toApprovalRow, toQuestionRow, type ApprovalRow } from './live';
 import { clock, here } from './state';
 
 // Needs you: the approvals and the questions waiting on a person, read and decided the way the browser's Attention
@@ -10,6 +11,17 @@ import { clock, here } from './state';
 
 /** The panel's own approvals and questions. */
 export const attention = attentionStore();
+
+/** Which of what waits the panel shows: everything, the approvals only or the questions only. Kept to the panel. */
+export const filter = signal<'all' | 'approvals' | 'questions'>('all');
+
+// When nothing waits at all the panel draws its card and no filter row, so the filter goes back to everything: what
+// arrives next is drawn whatever was chosen before.
+effect(() => {
+    if (attention.loaded.value && attention.approvals.value.length === 0 && attention.questions.value.length === 0) {
+        filter.value = 'all';
+    }
+});
 
 /** What the person typed into a field of the panel, kept while the panel is painted again around it. */
 const typed = new Map<string, string>();
@@ -33,6 +45,17 @@ export function reload(): Promise<void> {
 
 define('needs.type', (args, element) => {
     if (typeof args[0] === 'string' && element instanceof HTMLInputElement) typed.set(args[0], element.value);
+});
+
+const filters: readonly [typeof filter.value, string][] = [
+    ['all', 'All'],
+    ['approvals', 'Approvals'],
+    ['questions', 'Questions'],
+];
+
+define('needs.filter', ([value]) => {
+    const chosen = filters.find(([each]) => each === value);
+    if (chosen) filter.value = chosen[0];
 });
 
 define('needs.open', ([kind, id]) => {
@@ -66,20 +89,33 @@ function approvalDetail(id: string): Html {
     return html`<div class="ask-w">
         ${detail.intent ? html`<div>${detail.intent}</div>` : null}
         ${detail.to ? html`<div class="meta">To ${detail.to}</div>` : null}
+        ${detail.from ? html`<div class="meta needs-from">From <span>${detail.from}</span></div>` : null}
+        ${detail.channel ? html`<div class="meta needs-channel">Channel <span>${detail.channel}</span></div>` : null}
         ${detail.subject ? html`<div><b>${detail.subject}</b></div>` : null}
         ${detail.body ? html`<div class="said">${detail.body}</div>` : null}
         ${detail.facts.map((fact) => html`<div class="meta">${fact}</div>`)}
     </div>`;
 }
 
+/** The person a row is about, with "to" before the name when the operation reaches them by a message. */
+const person = (row: ApprovalRow): Html | null =>
+    row.who ? html`<span class="needs-who">${row.byMessage ? 'to ' : null}<span>${row.who}</span></span>` : null;
+
 function approvals(now: number, busy: boolean): Html {
-    const rows = attention.approvals.value.map((row) => toApprovalRow(row, now));
+    const shown = attention.detail.value;
+    const rows = attention.approvals.value.map((row) =>
+        toApprovalRow(
+            row,
+            now,
+            shown?.kind === 'approvals' && shown.item.id === row.id ? shown.item.preview : undefined,
+        ),
+    );
     return html`${rows.map(
         (row) =>
             html`<div class="ask" data-id="${row.id}">
                 <div class="ask-h">
                     <span class="b amber">${row.what}</span>
-                    <span>${row.who ?? 'No one named'}</span>
+                    ${person(row)}
                     <span class="meta">${row.campaign} · ${row.via} · ${row.age}</span>
                 </div>
                 ${approvalDetail(row.id)}
@@ -143,6 +179,49 @@ function questions(now: number, busy: boolean): Html {
     })}`;
 }
 
+function filterRow(): Html {
+    return html`<div class="needs-filter" role="group" aria-label="Show">
+        ${filters.map(
+            ([value, label]) =>
+                html`<button
+                    class="btn sm"
+                    type="button"
+                    aria-pressed="${filter.value === value ? 'true' : 'false'}"
+                    ${act('needs.filter', value)}
+                >
+                    ${label}
+                </button>`,
+        )}
+    </div>`;
+}
+
+/** What waits, under the filter: a group with its rows, or under its own filter a line that says it holds nothing. */
+function waiting(now: number, busy: boolean): Html {
+    const shown = filter.value;
+    const approvalCount = attention.approvals.value.length;
+    const questionCount = attention.questions.value.length;
+    return html`${
+        shown === 'questions'
+            ? null
+            : approvalCount
+              ? html`<div class="lab">Approvals</div>
+                    ${approvals(now, busy)}`
+              : shown === 'approvals'
+                ? html`<div class="empty needs-none">No approvals waiting.</div>`
+                : null
+    }
+    ${
+        shown === 'approvals'
+            ? null
+            : questionCount
+              ? html`<div class="lab">Questions</div>
+                    ${questions(now, busy)}`
+              : shown === 'questions'
+                ? html`<div class="empty needs-none">No questions for you.</div>`
+                : null
+    }`;
+}
+
 export function needsView(): Html {
     const now = clock.value;
     const busy = attention.busy.value;
@@ -160,19 +239,8 @@ export function needsView(): Html {
             !attention.loaded.value
                 ? html`<div class="empty">Reading what waits…</div>`
                 : none
-                  ? html`<div class="empty">Nothing is waiting for you.</div>`
-                  : html`${
-                        attention.approvals.value.length
-                            ? html`<div class="lab">Approvals</div>
-                                  ${approvals(now, busy)}`
-                            : null
-                    }
-                    ${
-                        attention.questions.value.length
-                            ? html`<div class="lab">Questions</div>
-                                  ${questions(now, busy)}`
-                            : null
-                    }`
+                  ? html`<div class="card needs-empty"><div class="bd">You're all caught up</div></div>`
+                  : html`${filterRow()} ${waiting(now, busy)}`
         }
     </div>`;
 }

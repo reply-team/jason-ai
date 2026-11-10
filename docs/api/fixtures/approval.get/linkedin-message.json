@@ -1,0 +1,160 @@
+{
+  "operation": "approval.get",
+  "case": "linkedin-message",
+  "request": {
+    "approval_id": "apr_2"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_2",
+    "work_item_id": "wi_2",
+    "campaign_id": "cmp_1",
+    "operation": "message.send",
+    "operation_version": 1,
+    "status": "pending",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-2",
+    "subject": {
+      "binding_identity": "sha256:recorded-3",
+      "input": {
+        "args": {
+          "channel": "linkedin",
+          "sender": {
+            "external_id": "s_34",
+            "address": "https://www.linkedin.com/in/owner-example"
+          },
+          "message": {
+            "format": "linkedin_message",
+            "body": "Thanks for connecting, Noor."
+          }
+        },
+        "contacts": [
+          {
+            "id": "cnt_2",
+            "first_name": "Noor",
+            "last_name": "Haddad",
+            "channels": [
+              {
+                "channel": "linkedin",
+                "value": "https://www.linkedin.com/in/noor-example",
+                "primary": true
+              }
+            ],
+            "external_ids": {}
+          }
+        ],
+        "campaign": {
+          "id": "cmp_1",
+          "name": "Spring launch",
+          "status": "active",
+          "external_ids": {
+            "campaign": "c_7714"
+          }
+        }
+      },
+      "operation": "message.send",
+      "operation_version": 1,
+      "plugin": "reply",
+      "work_item": "wi_2"
+    },
+    "preview": {
+      "summary": "Send https://www.linkedin.com/in/noor-example a message by linkedin_message, from the provider's account s_34 (https://www.linkedin.com/in/owner-example), outside any campaign — subject: —; text: Thanks for connecting, Noor.; send after: —",
+      "highlights": {
+        "/contacts/0/channels/0/value": "https://www.linkedin.com/in/noor-example",
+        "/args/channel": "linkedin",
+        "/args/sender": {
+          "external_id": "s_34",
+          "address": "https://www.linkedin.com/in/owner-example"
+        },
+        "/args/message": {
+          "format": "linkedin_message",
+          "body": "Thanks for connecting, Noor."
+        },
+        "/args/message/compose": null,
+        "/args/send_after": null
+      },
+      "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
+      "reach": {
+        "value": "act",
+        "conditional": false,
+        "detail": null
+      },
+      "reversibility": {
+        "value": "irreversible",
+        "conditional": false,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": true,
+        "detail": "metered against the message allowance on channels that meter sending; `none` on channels that do not."
+      },
+      "campaign": {
+        "id": "cmp_1",
+        "name": "Spring launch"
+      },
+      "contact": {
+        "id": "cnt_2",
+        "name": "Noor Haddad",
+        "channel": "linkedin",
+        "value": "https://www.linkedin.com/in/noor-example"
+      },
+      "plugin": "reply",
+      "binding_identity": "sha256:recorded-3",
+      "subject": {
+        "binding_identity": "sha256:recorded-3",
+        "input": {
+          "args": {
+            "channel": "linkedin",
+            "sender": {
+              "external_id": "s_34",
+              "address": "https://www.linkedin.com/in/owner-example"
+            },
+            "message": {
+              "format": "linkedin_message",
+              "body": "Thanks for connecting, Noor."
+            }
+          },
+          "contacts": [
+            {
+              "id": "cnt_2",
+              "first_name": "Noor",
+              "last_name": "Haddad",
+              "channels": [
+                {
+                  "channel": "linkedin",
+                  "value": "https://www.linkedin.com/in/noor-example",
+                  "primary": true
+                }
+              ],
+              "external_ids": {}
+            }
+          ],
+          "campaign": {
+            "id": "cmp_1",
+            "name": "Spring launch",
+            "status": "active",
+            "external_ids": {
+              "campaign": "c_7714"
+            }
+          }
+        },
+        "operation": "message.send",
+        "operation_version": 1,
+        "plugin": "reply",
+        "work_item": "wi_2"
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-3",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-15T12:00:00.000Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_reason": null,
+    "campaign_name": "Spring launch",
+    "contact_name": "Noor Haddad"
+  }
+}

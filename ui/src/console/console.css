@@ -923,3 +923,17 @@ body,
 .jc-console .harness .app.chromeless {
     min-height: 100%;
 }
+/* Needs you: the filter over what waits and the card that says nothing does. */
+.jc-console .needs-filter {
+    display: flex;
+    gap: 6px;
+    margin: 0 0 12px;
+}
+.jc-console .needs-filter .btn[aria-pressed='true'] {
+    border-color: var(--teal);
+    color: var(--teal);
+}
+.jc-console .needs-empty {
+    color: var(--faint);
+    text-align: center;
+}

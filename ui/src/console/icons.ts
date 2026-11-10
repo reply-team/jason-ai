@@ -22,12 +22,18 @@ const icons = {
     up: html`<path d="M12 19V5M5 12l7-7 7 7" />`,
     stop: html`<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />`,
     chat: html`<path d="M4 5h16v11H9l-5 4z" />`,
+    theme: html`<circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 010 18z" fill="currentColor" />`,
+    globe: html`<circle cx="12" cy="12" r="9" /><path
+            d="M3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z"
+        />`,
 } as const;
 
 export type IconName = keyof typeof icons;
 
-export const svg = (name: IconName, size = 16): Html =>
+/** An icon, `size` pixels square; `className` names it for a stylesheet. */
+export const svg = (name: IconName, size = 16, className?: string): Html =>
     html`<svg
+        ${className ? html`class="${className}"` : null}
         width="${size}"
         height="${size}"
         viewBox="0 0 24 24"

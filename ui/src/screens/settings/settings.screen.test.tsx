@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '../../platform/i18n';
@@ -25,6 +26,31 @@ describe('Settings', () => {
         fireEvent.click(screen.getByRole('button', { name: 'English' }));
         expect(document.documentElement.lang).toBe('en');
         expect(fake.calls.map((c) => c.operation)).toEqual(['system.info']);
+    });
+
+    it('marks each section with an icon of its own, hidden from a screen reader, in either language', async () => {
+        renderApp(new FakeApi());
+        route.value = { screen: 'settings' };
+        await waitFor(() => screen.getByRole('heading', { name: 'Appearance' }));
+        const icon = (name: string) =>
+            screen.getByRole('heading', { name, level: 2 }).querySelector('svg.settings-icon[aria-hidden="true"]');
+        expect(icon('Appearance')).toBeTruthy();
+        expect(icon('Language')).toBeTruthy();
+        expect(icon('Appearance')!.innerHTML).not.toBe(icon('Language')!.innerHTML);
+        fireEvent.click(screen.getByRole('button', { name: 'Українська' }));
+        await waitFor(() => screen.getByRole('heading', { name: 'Мова', level: 2 }));
+        expect(icon('Вигляд')).toBeTruthy();
+        expect(icon('Мова')).toBeTruthy();
+    });
+
+    it("sets each icon on the line of its heading's words, in the browser's own stylesheet", () => {
+        // Read from the file: the test run hands a stylesheet import back empty. The run starts in ui/.
+        const sheet = readFileSync('src/styles/app.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
+        const rule = Array.from(sheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g)).find(
+            (each) => each[1]!.trim() === '.settings-icon',
+        );
+        expect(rule?.[2]).toMatch(/vertical-align:\s*-2px;/);
+        expect(rule?.[2]).toMatch(/color:\s*var\(--accent-text\);/);
     });
 
     it('sets the theme on the document', async () => {

@@ -53,22 +53,43 @@ const operations: Readonly<Record<string, string>> = {
     'enrollment.stop': 'Stop sequence',
 };
 
-export const operationWords = (operation: string): string => operations[operation] ?? operation;
+/** The operations that reach their person by a message; a row of any other names its person with no word before. */
+const byMessage: ReadonlySet<string> = new Set(['message.send', 'conversation.reply', 'social_invitation.send']);
+
+/** An operation's code in words; a code with no words here, the names every object has included, is shown as given. */
+export const operationWords = (operation: string): string =>
+    Object.hasOwn(operations, operation) ? operations[operation]! : operation;
+
+const channels: Readonly<Record<string, string>> = {
+    email: 'Email',
+    linkedin: 'LinkedIn',
+};
+
+/** A channel's code in words; a code with no words here, the names every object has included, is shown as given. */
+export const channelWords = (code: string): string => (Object.hasOwn(channels, code) ? channels[code]! : code);
 
 export interface ApprovalRow {
     id: string;
     what: string;
     who: string | null;
+    /** Whether the operation reaches that person by a message, so the row says the message goes to them. */
+    byMessage: boolean;
     campaign: string;
     via: string;
     age: string;
 }
 
-export function toApprovalRow(row: ApprovalSummary, now: number): ApprovalRow {
+/**
+ * One row of what waits: who it reaches is the contact the row carries, else the address the preview highlights when
+ * that approval is already open; a row is never read again for it.
+ */
+export function toApprovalRow(row: ApprovalSummary, now: number, preview?: Record<string, unknown>): ApprovalRow {
+    const highlighted = preview ? text(record(preview['highlights'])?.['/contacts/0/channels/0/value']) : null;
     return {
         id: row.id,
         what: operationWords(row.operation),
-        who: row.contact_name,
+        who: row.contact_name ?? highlighted,
+        byMessage: byMessage.has(row.operation),
         campaign: row.campaign_name,
         via: row.plugin_id,
         age: ageOf(row.requested_at, now),
@@ -78,6 +99,10 @@ export function toApprovalRow(row: ApprovalSummary, now: number): ApprovalRow {
 export interface ApprovalDetail {
     intent: string | null;
     to: string | null;
+    /** The account the message goes from, as the preview highlights it: its address, else its identifier. */
+    from: string | null;
+    /** The channel it goes on, in words. */
+    channel: string | null;
     subject: string | null;
     body: string | null;
     facts: string[];
@@ -93,11 +118,17 @@ const factNames: readonly [string, string][] = [
     ['cost', 'Cost'],
 ];
 
-/** What an approval's preview says the act would do: its intent, its recipient, its message and its properties. */
+/**
+ * What an approval's preview says the act would do: its intent, its recipient, the account and the channel it goes
+ * by, its message and its properties. A value the preview does not carry is null, never a word in its place.
+ */
 export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDetail {
-    const message = record(record(preview['highlights'])?.['/args/message']);
+    const highlights = record(preview['highlights']);
+    const message = record(highlights?.['/args/message']);
+    const sender = record(highlights?.['/args/sender']);
+    const channel = text(highlights?.['/args/channel']);
     const contact = record(preview['contact']);
-    const value = text(contact?.['value']);
+    const value = text(contact?.['value']) ?? text(highlights?.['/contacts/0/channels/0/value']);
     const name = text(contact?.['name']);
     const facts: string[] = [];
     for (const [key, label] of factNames) {
@@ -110,6 +141,8 @@ export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDeta
     return {
         intent: text(preview['intent']),
         to: value ? (name ? `${name}, ${value}` : value) : null,
+        from: text(sender?.['address']) ?? text(sender?.['external_id']),
+        channel: channel ? channelWords(channel) : null,
         subject: text(message?.['subject']),
         body: text(message?.['body']),
         facts,
