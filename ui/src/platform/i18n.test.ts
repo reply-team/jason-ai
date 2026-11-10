@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import * as english from '../locale/en';
 import { en } from '../locale/en';
+import * as ukrainian from '../locale/uk';
 import { uk } from '../locale/uk';
-import { locale, t } from './i18n';
+import { locale, locales, t } from './i18n';
 
 afterEach(() => {
     locale.value = 'en';
@@ -40,5 +42,13 @@ describe('words', () => {
         for (const name of Object.keys(en) as (keyof typeof en)[]) {
             expect(parameters(uk[name]), name).toEqual(parameters(en[name]));
         }
+    });
+
+    it('name each language in its own words, as its own file says them', () => {
+        expect(locales).toEqual([
+            { id: 'en', name: english.name },
+            { id: 'uk', name: ukrainian.name },
+        ]);
+        expect(locales.every((each) => typeof each.name === 'string' && each.name.length > 0)).toBe(true);
     });
 });

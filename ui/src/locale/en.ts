@@ -1,3 +1,6 @@
+/** The language's name, in its own words, as the Settings screen offers it. */
+export const name = 'English';
+
 /** The shell's words. A language file must hold every key here; the compiler says when one does not. */
 export const en = {
     'nav.attention': 'Attention',

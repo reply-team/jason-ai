@@ -1,5 +1,8 @@
 import type { MessageKey } from './en';
 
+/** The language's name, in its own words, as the Settings screen offers it. */
+export const name = 'Українська';
+
 export const uk: Record<MessageKey, string> = {
     'nav.attention': 'Увага',
     'nav.performance': 'Результати',
@@ -23,5 +26,5 @@ export const uk: Record<MessageKey, string> = {
     'chat.get': 'Завантажити Jason Desktop зі сторінки випусків',
     'chat.agent': 'Усе, що є тут, працює й із сесії з вашим агентом у терміналі, з навичками, які розгорнув Jason.',
     'shell.version':
-        'Цей інтерфейс зібрано для API {ui}, а runtime працює з {runtime}. Перевстановіть інтерфейс із відповідного релізу.',
+        'Цей інтерфейс зібрано для API {ui}, а runtime працює з {runtime}. Перевстановіть інтерфейс із відповідного випуску.',
 };
