@@ -1,4 +1,6 @@
+using System.Text.Json.Nodes;
 using Jason.Cli.Tests.Commands;
+using Jason.Contracts.Api;
 
 namespace Jason.Cli.Tests;
 
@@ -22,6 +24,22 @@ public class ResponseFileTests
 
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Equal(0, cli.Requests);
+    }
+
+    [Fact]
+    public async Task An_option_value_beginning_with_an_at_sign_reaches_the_request_as_typed()
+    {
+        using var dir = new TempPaths();
+        var file = Path.Combine(dir.Paths.Root, "name.txt");
+        File.WriteAllText(file, "read from a file\n");
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("campaign", "update", "cmp_A", "--name", "@" + file, "--reason", "@team");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.CampaignUpdate,
+            new JsonObject { ["campaign_id"] = "cmp_A", ["name"] = "@" + file, ["reason"] = "@team" }.ToJsonString());
     }
 
     [Fact]
