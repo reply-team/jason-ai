@@ -379,6 +379,19 @@ test('a jason command that starts with an option is refused, as the host\'s own 
     assert.equal(run(mac(), 'jason --human campaign list').verdict, 'deny');
 });
 
+test('options before the noun never move the anchor: a leading option is refused before any entry is looked for', () => {
+    for (const scope of [windows(), mac()]) {
+        // --actor is the CLI's one root option with a value; a leading option is refused whatever follows it.
+        for (const command of ['jason --human approval approve apr_A', 'jason --actor human:ada export --stop',
+            'jason --actor=human:ada approval approve apr_A', 'jason --actor export campaign list']) {
+            assert.equal(run(scope, command).verdict, 'deny', command);
+        }
+        // After the noun an option's value that equals a noun is only a value: the anchor stays on the first word.
+        const card = run(scope, 'jason campaign list --actor export');
+        assert.ok(card.verdict === 'ask' && card.remember === null, JSON.stringify(card));
+    }
+});
+
 test('a denied verb anywhere in a command refuses it, whatever form names the program', () => {
     for (const scope of [windows(), mac()]) {
         assert.equal(run(scope, 'jason campaign list && jason approval approve apr_A').verdict, 'deny');
