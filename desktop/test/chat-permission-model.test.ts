@@ -425,16 +425,31 @@ test('the shell operators that make a command compound are each recognised', () 
     assert.ok(!isCompound('git status --short'));
 });
 
-test('PowerShell commands are judged as shell commands', () => {
+test('PowerShell commands are judged as shell commands, and never allowed without a card', () => {
     assert.equal(judge('PowerShell', { command: 'jason approval approve apr_A' }, windows()).verdict, 'deny');
-    assert.equal(judge('PowerShell', { command: 'jason campaign list' }, windows()).verdict, 'ask');
-    assert.equal(judge('PowerShell', { command: 'Get-ChildItem' }, windows()).verdict, 'ask');
+    for (const command of ['jason campaign list', 'Get-ChildItem', 'reply auth status', 'reply account list', 'git status']) {
+        const card = judge('PowerShell', { command }, windows());
+        assert.equal(card.verdict, 'ask', command);
+        assert.ok(card.verdict === 'ask' && card.remember === null, command);
+    }
 });
 
-test('a web page gets a card remembered by its host; any other tool gets a card remembered by its name', () => {
+test('any tool whose input carries a command is judged as a command: Monitor with jason runtime stop is refused', () => {
+    for (const scope of [windows(), mac()]) {
+        assert.equal(judge('Monitor', { command: 'jason runtime stop' }, scope).verdict, 'deny');
+        assert.equal(judge('Monitor', { command: 'curl http://127.0.0.1:5000/v1/system.shutdown', description: 'x' }, scope).verdict, 'deny');
+        assert.equal(judge('SomeLaterTool', { command: 'jason approval --actor human:x approve apr_A' }, scope).verdict, 'deny');
+        const card = judge('Monitor', { command: 'tail -f build.log' }, scope);
+        assert.ok(card.verdict === 'ask' && card.title === 'Run a command' && card.detail === 'tail -f build.log');
+    }
+});
+
+test('a web page gets a card remembered by its host; any other tool gets a card for this request alone', () => {
     const page = judge('WebFetch', { url: 'https://example.com/a', prompt: 'p' }, mac());
     const same = judge('WebFetch', { url: 'https://example.com/b', prompt: 'p' }, mac());
     assert.ok(page.verdict === 'ask' && same.verdict === 'ask' && page.remember === same.remember && page.remember !== null);
-    const other = judge('NotATool', { x: 1 }, mac());
-    assert.ok(other.verdict === 'ask' && other.remember !== null);
+    for (const [tool, input] of [['NotATool', { x: 1 }], ['Monitor', {}], ['Monitor', { command: 42 }]] as const) {
+        const other = judge(tool, input, mac());
+        assert.ok(other.verdict === 'ask' && other.remember === null, tool);
+    }
 });

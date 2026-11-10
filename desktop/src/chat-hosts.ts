@@ -31,11 +31,12 @@ export const claudeAllowedTools: readonly string[] = [
 
 /**
  * The tools taken out of every turn by a bare rule, which removes a tool from the model's context. PowerShell is on by
- * default on Windows for claude.ai accounts with Git Bash, and the fence (the deny rules and the `jason`/`reply` allow
- * rules) names the Bash tool; with PowerShell gone, the one shell a turn has is the fenced one. Git Bash is Claude Code's
- * own prerequisite on Windows. The permission model still reads a PowerShell command as a shell command.
+ * default on Windows for claude.ai accounts with Git Bash, and Monitor runs a command in the background; the fence (the
+ * deny rules and the `jason`/`reply` allow rules) names the Bash tool, so with both gone the one shell a turn has is the
+ * fenced one. Git Bash is Claude Code's own prerequisite on Windows. The permission model still reads any tool input that
+ * carries a command as a shell command.
  */
-export const claudeRemovedTools: readonly string[] = ['PowerShell'];
+export const claudeRemovedTools: readonly string[] = ['PowerShell', 'Monitor'];
 
 export interface ClaudeTurn {
     /** The turn's `--mcp-config` file, which names the permission endpoint. */

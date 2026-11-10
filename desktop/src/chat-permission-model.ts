@@ -37,6 +37,11 @@ const detailLimit = 4000;
 const readers: Readonly<Record<string, string>> = { Read: 'file_path', Glob: 'path', Grep: 'path', LS: 'path' };
 const writers: Readonly<Record<string, string>> = { Write: 'file_path', Edit: 'file_path', MultiEdit: 'file_path', NotebookEdit: 'notebook_path' };
 const shells = new Set(['Bash', 'PowerShell']);
+/**
+ * The tools an "always, in this chat" may cover whole: those that run nothing. None is named today, so every other tool's
+ * card covers its one request.
+ */
+const runsNothing: ReadonlySet<string> = new Set<string>();
 /** Inside a working folder, this one still configures the host for the next turn, so writing it is never silent. */
 const hostSettings = '.claude';
 const allowedReply = [['auth', 'status'], ['account', 'list']];
@@ -230,6 +235,9 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
     // person's to answer, each time.
     if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
+    // Only the Bash tool's commands are fenced by the host and may be allowed or remembered; any other tool's command is
+    // the person's to answer, each time.
+    if (tool !== 'Bash') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     if (!isCompound(command)) {
         const tokens = command.trim().split(/\s+/);
         if (tokens[0] === 'reply' && allowedReply.some((words) => words.every((word, index) => tokens[index + 1] === word))) return allow;
@@ -269,11 +277,13 @@ export function judge(tool: string, input: Record<string, unknown>, scope: ChatS
         const value = input[writer];
         return named(value) ? judgePath(value, scope, true) : unnamed(tool, input);
     }
-    if (shells.has(tool)) return judgeCommand(tool, typeof input['command'] === 'string' ? input['command'] : '', scope);
+    const command = input['command'];
+    if (typeof command === 'string') return judgeCommand(tool, command, scope);
+    if (shells.has(tool)) return judgeCommand(tool, '', scope);
     if (tool === 'WebFetch') {
         const url = typeof input['url'] === 'string' ? input['url'] : '';
         const host = hostOf(url);
         return { verdict: 'ask', title: 'Open a web page', detail: shorten(url), remember: host === null ? null : `web:${host.toLowerCase()}` };
     }
-    return { verdict: 'ask', title: `Use ${tool}`, detail: shorten(JSON.stringify(input)), remember: `tool:${tool}` };
+    return { verdict: 'ask', title: `Use ${tool}`, detail: shorten(JSON.stringify(input)), remember: runsNothing.has(tool) ? `tool:${tool}` : null };
 }
