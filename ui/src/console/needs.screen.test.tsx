@@ -89,6 +89,25 @@ describe('Needs you', () => {
         expect(needs().querySelector('.needs-none')).toBeNull();
     });
 
+    it('shows everything again once nothing waited, so an approval that arrives then is drawn', async () => {
+        renderConsole(
+            new FakeApi()
+                .answer('approval.list', 'approval.list/messages-pending')
+                .answer('decision.list', 'decision.list/empty'),
+        );
+        await waitFor(() => expect(row('apr_1')).toBeTruthy());
+        const waiting = attention.approvals.value;
+        show('Questions');
+        await waitFor(() => expect(needs().querySelector('.needs-none')).toBeTruthy());
+
+        attention.approvals.value = [];
+        await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
+        attention.approvals.value = waiting;
+        await waitFor(() => expect(row('apr_1')).toBeTruthy());
+        expect(needs().querySelector('.needs-none')).toBeNull();
+        expect(pressed()).toEqual(['All']);
+    });
+
     it('says no approval is waiting under Approvals while a question is open', async () => {
         renderConsole(
             new FakeApi()

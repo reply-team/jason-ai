@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals-react';
+import { effect, signal } from '@preact/signals-react';
 import { attentionStore } from '../screens/attention/store';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
@@ -14,6 +14,14 @@ export const attention = attentionStore();
 
 /** Which of what waits the panel shows: everything, the approvals only or the questions only. Kept to the panel. */
 export const filter = signal<'all' | 'approvals' | 'questions'>('all');
+
+// When nothing waits at all the panel draws its card and no filter row, so the filter goes back to everything: what
+// arrives next is drawn whatever was chosen before.
+effect(() => {
+    if (attention.loaded.value && attention.approvals.value.length === 0 && attention.questions.value.length === 0) {
+        filter.value = 'all';
+    }
+});
 
 /** What the person typed into a field of the panel, kept while the panel is painted again around it. */
 const typed = new Map<string, string>();
