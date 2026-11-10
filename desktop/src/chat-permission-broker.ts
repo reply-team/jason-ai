@@ -9,7 +9,8 @@ import { judge, type ChatScope } from './chat-permission-model.ts';
 export type ToolAnswer = { behavior: 'allow'; updatedInput?: Record<string, unknown> } | { behavior: 'deny'; message: string };
 
 export type BrokerEvent =
-    | { kind: 'permission'; request: string; title: string; detail: string; remember: boolean }
+    /** `remember` is what "always, in this chat" would cover, as the page prints it; null when it cannot be offered. */
+    | { kind: 'permission'; request: string; title: string; detail: string; remember: string | null }
     | { kind: 'permission_gone'; request: string };
 
 /** How one request was settled, for the log: never its tool, its input or its words. */
@@ -84,7 +85,7 @@ export class PermissionBroker {
                 if (this.#settle(request, { behavior: 'deny', message: unanswered })) this.#options.decided?.({ outcome: 'timed_out', by: 'person' });
             }, this.#options.timeoutMs ?? PermissionBroker.unanswered);
             this.#pending.set(request, { chat: turn.chat, turn: turnId, input, remember: judged.remember, timer, settle });
-            this.#options.emit(turn.chat, { kind: 'permission', request, title: judged.title, detail: judged.detail, remember: judged.remember !== null });
+            this.#options.emit(turn.chat, { kind: 'permission', request, title: judged.title, detail: judged.detail, remember: judged.remember === null ? null : judged.covers });
         });
     }
 

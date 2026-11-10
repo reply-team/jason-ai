@@ -197,7 +197,7 @@ test('a card the person allows lets the tool run, and a card the person refuses 
         const done = r.until('c1', (event) => event.kind === 'done');
         await r.chat.send('c1', words, { host: 'claude' });
         const asked = await card;
-        assert.ok(asked.kind === 'permission' && asked.remember === true);
+        assert.ok(asked.kind === 'permission' && asked.remember === 'git status \u2026');
         r.chat.answer('c1', asked.request, { allow, always: false });
         await done;
         const answer = texts(r.events.get('c1') ?? []).filter((text) => text.startsWith('decision')).at(-1);

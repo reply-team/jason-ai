@@ -31,8 +31,13 @@ export interface ChatScope {
 export type Judgement =
     | { verdict: 'allow' }
     | { verdict: 'deny'; message: string }
-    /** `remember` is what "always, in this chat" would cover; null when an answer can only ever cover this request. */
-    | { verdict: 'ask'; title: string; detail: string; remember: string | null };
+    /** A card whose answer can only ever cover this request. */
+    | { verdict: 'ask'; title: string; detail: string; remember: null }
+    /**
+     * A card "always, in this chat" may answer: `remember` is the key it would keep, and `covers` what that covers, as
+     * the page prints it on the button, so the person sees what they grant.
+     */
+    | { verdict: 'ask'; title: string; detail: string; remember: string; covers: string };
 
 const allow: Judgement = { verdict: 'allow' };
 const detailLimit = 4000;
@@ -147,7 +152,13 @@ function judgePath(value: string, scope: ChatScope, writes: boolean): Judgement 
         return { verdict: 'ask', title: guarded, detail: shorten(path), remember: null };
     }
     if (writes) return { verdict: 'ask', title: 'Change a file outside the chat\'s folders', detail: shorten(path), remember: null };
-    return { verdict: 'ask', title: 'Read a file outside the chat\'s folders', detail: shorten(path), remember: `read:${keyOf(scope.platform, paths.dirname(path))}` };
+    return {
+        verdict: 'ask',
+        title: 'Read a file outside the chat\'s folders',
+        detail: shorten(path),
+        remember: `read:${keyOf(scope.platform, paths.dirname(path))}`,
+        covers: `files in ${shorten(paths.dirname(path))}`,
+    };
 }
 
 /** The worse of two judgements: a refusal over a card, a card over an allowance. */
@@ -178,12 +189,24 @@ export function isCompound(command: string): boolean {
     return /&&|\|\||[;|&`\n\r<>]|\$\(/.test(command);
 }
 
-/** What "always, in this chat" covers of a command: the program and its first word; nothing for a compound command. */
+/**
+ * The programs whose first word is another program or a whole script, so that "the program and its first word" would
+ * cover anything: shells and the wrappers that run a command they are given. They are names to recognise, never to run,
+ * and are written as one string so the process guard, which refuses a quoted shell name in any module but the login-shell
+ * lookup, keeps holding this one as it holds the others.
+ */
+const runsAnother = new Set('cmd sh bash zsh pwsh powershell env sudo xargs npx wsl start'.split(' '));
+
+/**
+ * What "always, in this chat" covers of a command: the program and its first word. Nothing for a compound command, a
+ * program named by a path, or a shell or exec wrapper, whose card covers its one request.
+ */
 export function commandPrefix(command: string): string | null {
     if (isCompound(command)) return null;
     const [program, first] = command.trim().split(/\s+/);
     const plain = /^[A-Za-z0-9._/\\:@+-]+$/;
     if (program === undefined || first === undefined || !plain.test(program) || !plain.test(first) || first.startsWith('-')) return null;
+    if (/[\\/:]/.test(program) || runsAnother.has(program.toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, ''))) return null;
     return `${program} ${first}`;
 }
 
@@ -286,7 +309,8 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
         if (tokens[0] === 'reply' && allowedReply.some((words) => words.every((word, index) => tokens[index + 1] === word))) return allow;
     }
     const prefix = commandPrefix(command);
-    return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: prefix === null ? null : `${tool}:${prefix}` };
+    if (prefix === null) return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
+    return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: `${tool}:${prefix}`, covers: `${prefix} \u2026` };
 }
 
 function hostOf(url: string): string | null {
@@ -326,7 +350,9 @@ export function judge(tool: string, input: Record<string, unknown>, scope: ChatS
     if (tool === 'WebFetch') {
         const url = typeof input['url'] === 'string' ? input['url'] : '';
         const host = hostOf(url);
-        return { verdict: 'ask', title: 'Open a web page', detail: shorten(url), remember: host === null ? null : `web:${host.toLowerCase()}` };
+        if (host === null) return { verdict: 'ask', title: 'Open a web page', detail: shorten(url), remember: null };
+        return { verdict: 'ask', title: 'Open a web page', detail: shorten(url), remember: `web:${host.toLowerCase()}`, covers: `pages on ${host.toLowerCase()}` };
     }
-    return { verdict: 'ask', title: `Use ${tool}`, detail: shorten(JSON.stringify(input)), remember: runsNothing.has(tool) ? `tool:${tool}` : null };
+    const card = { verdict: 'ask', title: `Use ${tool}`, detail: shorten(JSON.stringify(input)) } as const;
+    return runsNothing.has(tool) ? { ...card, remember: `tool:${tool}`, covers: `every use of ${tool}` } : { ...card, remember: null };
 }

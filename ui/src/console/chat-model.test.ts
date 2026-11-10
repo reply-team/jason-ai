@@ -6,8 +6,8 @@ const asking = (chat: Chat): Chat =>
         kind: 'permission',
         request: 'req_1',
         title: 'Run a command',
-        detail: 'jason status',
-        remember: true,
+        detail: 'git status',
+        remember: 'git status \u2026',
     });
 
 describe('a chat as the page keeps it', () => {
@@ -57,8 +57,8 @@ describe('a chat as the page keeps it', () => {
                 kind: 'permission',
                 request: 'req_1',
                 title: 'Run a command',
-                detail: 'jason status',
-                remember: true,
+                detail: 'git status',
+                remember: 'git status \u2026',
                 answer: 'gone',
             },
             { kind: 'error', text: 'Not logged in' },

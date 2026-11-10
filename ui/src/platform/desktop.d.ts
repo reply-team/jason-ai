@@ -38,10 +38,10 @@ export type DesktopChatEvent =
     | { kind: 'text'; text: string }
     /**
      * The agent asks to do something the permission model does not settle on its own: `request` is the id to answer
-     * by `chat.answer`, `title` the act in a few words, `detail` the command or path in full, and `remember` whether
-     * "always, in this chat" may be offered for it.
+     * by `chat.answer`, `title` the act in a few words, `detail` the command or path in full, and `remember` what
+     * "always, in this chat" would cover, in words to print on its button, or null when it may not be offered.
      */
-    | { kind: 'permission'; request: string; title: string; detail: string; remember: boolean }
+    | { kind: 'permission'; request: string; title: string; detail: string; remember: string | null }
     /**
      * A request no longer waits: it was answered, it timed out, or the desktop no longer holds it. An answer sent for
      * it after this changes nothing.

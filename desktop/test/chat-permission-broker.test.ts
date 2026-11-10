@@ -19,7 +19,7 @@ const scope: ChatScope = {
 
 interface Sent {
     chat: string;
-    event: { kind: string; request?: string; title?: string; detail?: string; remember?: boolean };
+    event: { kind: string; request?: string; title?: string; detail?: string; remember?: string | null };
 }
 
 /** Every broker a row made: what it still waits on ends with the row. */
@@ -47,7 +47,7 @@ const outside = { file_path: '/Users/someone/notes/plan.txt' };
 const command = { command: 'git status' };
 /** A new card's fields that say it is a new card. */
 const card = (request: string) => ({ kind: 'permission', request, ...cardText });
-const cardText = { title: 'Run a command', detail: 'git status', remember: true };
+const cardText = { title: 'Run a command', detail: 'git status', remember: 'git status \u2026' };
 /** A promise that must settle soon: a row fails rather than waits forever. */
 function within<T>(promise: Promise<T>, ms = 1000): Promise<T> {
     let timer: NodeJS.Timeout | undefined;
@@ -82,7 +82,7 @@ test('a card is shown to the asking chat, and the person allowing it allows the 
     turn('chat_a', 'turn_1');
     const asked = broker.ask('turn_1', 'Read', outside);
     await settle();
-    assert.deepEqual(sent, [{ chat: 'chat_a', event: { kind: 'permission', request: 'req_1', title: 'Read a file outside the chat\'s folders', detail: '/Users/someone/notes/plan.txt', remember: true } }]);
+    assert.deepEqual(sent, [{ chat: 'chat_a', event: { kind: 'permission', request: 'req_1', title: 'Read a file outside the chat\'s folders', detail: '/Users/someone/notes/plan.txt', remember: 'files in /Users/someone/notes' } }]);
     broker.answer('chat_a', 'req_1', { allow: true, always: false });
     assert.deepEqual(await asked, { behavior: 'allow', updatedInput: outside });
     assert.deepEqual(decided, [{ outcome: 'allowed', by: 'person' }]);
@@ -173,7 +173,7 @@ test('"always" on a card that cannot be remembered covers that request alone', a
     const write = { file_path: '/Users/someone/notes/plan.txt', content: 'x' };
     const first = broker.ask('turn_1', 'Write', write);
     await settle();
-    assert.equal(sent[0]?.event.remember, false);
+    assert.equal(sent[0]?.event.remember, null);
     broker.answer('chat_a', 'req_1', { allow: true, always: true });
     assert.equal((await first).behavior, 'allow');
     void broker.ask('turn_1', 'Write', write);

@@ -281,6 +281,7 @@ test('a read outside every folder gets a card that may be remembered by its fold
     const card = read(windows(), 'C:\\elsewhere\\report.txt');
     assert.equal(card.verdict, 'ask');
     assert.ok(card.verdict === 'ask' && card.remember !== null && card.detail === 'C:\\elsewhere\\report.txt');
+    assert.ok(card.verdict === 'ask' && card.remember !== null && card.covers === 'files in C:\\elsewhere');
     const same = read(windows(), 'c:/ELSEWHERE/other.txt');
     assert.ok(card.verdict === 'ask' && same.verdict === 'ask' && same.remember === card.remember);
     const change = write(windows(), 'C:\\elsewhere\\report.txt');
@@ -427,10 +428,25 @@ test('any other command gets a card, remembered by the program and its first wor
     assert.ok(card.verdict === 'ask' && again.verdict === 'ask' && other.verdict === 'ask');
     assert.equal(card.remember, again.remember);
     assert.notEqual(card.remember, other.remember);
+    assert.ok(card.remember !== null && card.covers === 'git status \u2026');
     assert.equal(commandPrefix('git status --short'), 'git status');
     assert.equal(commandPrefix('npm -v'), null);
     assert.equal(commandPrefix('ls'), null);
     assert.equal(commandPrefix('git status; rm -rf x'), null);
+});
+
+test('a shell, an exec wrapper or a program named by a path is never remembered: its card covers that request alone', () => {
+    const once = ['cmd /c dir', 'CMD.EXE /c dir', 'sh build.sh', 'bash build.sh', 'zsh build.zsh', 'pwsh build.ps1',
+        'powershell.exe Get-ChildItem', 'env node', 'sudo rm', 'xargs rm', 'npx some-package', 'wsl ls', 'start notepad',
+        'Start notepad', './build.sh all', '/usr/bin/git status', 'C:\\tools\\x.exe run', 'tools/x run'];
+    for (const command of once) {
+        assert.equal(commandPrefix(command), null, command);
+        const card = run(windows(), command);
+        assert.ok(card.verdict === 'ask' && card.remember === null, command);
+    }
+    // A program whose name only begins like one of them is remembered as any other.
+    assert.equal(commandPrefix('shellcheck build.sh'), 'shellcheck build.sh');
+    assert.equal(commandPrefix('starter run'), 'starter run');
 });
 
 test('a read-only command naming a path outside the chat\'s folders gets a card, never an allowance', () => {
@@ -481,6 +497,7 @@ test('a web page gets a card remembered by its host; any other tool gets a card 
     const page = judge('WebFetch', { url: 'https://example.com/a', prompt: 'p' }, mac());
     const same = judge('WebFetch', { url: 'https://example.com/b', prompt: 'p' }, mac());
     assert.ok(page.verdict === 'ask' && same.verdict === 'ask' && page.remember === same.remember && page.remember !== null);
+    assert.equal(page.covers, 'pages on example.com');
     for (const [tool, input] of [['NotATool', { x: 1 }], ['Monitor', {}], ['Monitor', { command: 42 }]] as const) {
         const other = judge(tool, input, mac());
         assert.ok(other.verdict === 'ask' && other.remember === null, tool);

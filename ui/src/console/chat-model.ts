@@ -8,7 +8,15 @@ export type Entry =
     | { kind: 'user'; text: string }
     | { kind: 'text'; text: string }
     | { kind: 'step'; text: string }
-    | { kind: 'permission'; request: string; title: string; detail: string; remember: boolean; answer: Answer | null }
+    | {
+          kind: 'permission';
+          request: string;
+          title: string;
+          detail: string;
+          /** What "always, in this chat" would cover, as the button prints it; null when it is not offered. */
+          remember: string | null;
+          answer: Answer | null;
+      }
     | { kind: 'error'; text: string };
 
 export interface Chat {
