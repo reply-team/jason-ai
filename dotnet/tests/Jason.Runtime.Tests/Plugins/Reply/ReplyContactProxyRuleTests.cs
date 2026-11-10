@@ -6,6 +6,7 @@ using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -749,6 +750,7 @@ public class ReplyContactProxyRuleTests
             new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(o => o.RetryDelaySeconds = 0)),
             store,
             new SentFacts(new JournalWriter(clock)),
+            new SearchLanding(new JournalWriter(clock), new ExternalIdStore(new JournalWriter(clock), clock), clock),
             TestOptions.PluginSettings(_ => { }));
         return new Scene(recorder, contact, item, second);
     }

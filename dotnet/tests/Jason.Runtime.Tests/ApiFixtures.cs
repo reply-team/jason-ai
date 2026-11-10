@@ -107,6 +107,7 @@ public static class ApiFixtures
         "campaign.list_contacts/activity-replied-day",
         "campaign.list_contacts/activity-replied-today",
         "campaign.list_contacts/everyone",
+        "campaign.list_contacts/from-a-search",
         "campaign.list_contacts/query",
         "campaign.list_contacts/query-too-long",
         "campaign.list_contacts/summary-failed",

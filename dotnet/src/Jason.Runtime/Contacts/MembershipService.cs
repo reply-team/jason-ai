@@ -276,9 +276,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         var page = people.Select(id => loaded[id]).ToList();
         var contacts = await ContactService.WithCampaignsAndLatestLineAsync(db, page, cancellationToken).ConfigureAwait(false);
 
-        var counted = await memberships
-            .Where(membership => people.Contains(membership.ContactId))
-            .Select(membership => new { membership.ContactId, membership.CampaignId, membership.State, membership.AddedAt, membership.UpdatedAt })
+        var counted = await Listed(memberships, people)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var pairs = counted.Select(membership => (membership.ContactId, membership.CampaignId)).ToList();
@@ -314,11 +312,39 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
                 ContactMapper.ToOffset(lead.Membership.AddedAt),
                 ContactMapper.ToOffset(lead.Membership.UpdatedAt),
                 lead.Why,
-                [.. mine.Select(entry => new CountedIn(publicIds[entry.Membership.CampaignId], entry.Why))]));
+                [.. mine.Select(entry => new CountedIn(publicIds[entry.Membership.CampaignId], entry.Why))],
+                lead.Membership.Source is { } source
+                    ? new MembershipSource(source.Audience, source.Number, source.Search, ContactMapper.ToOffset(source.LandedAt))
+                    : null));
         }
 
         return new Page<MembershipItemDto>(items, next);
     }
+
+    /// <summary>
+    /// The memberships of the listed people, each with where it came from: the search that made it, read beside the
+    /// membership by a left join on the row a landing wrote, through its unique index; null for a member added any other way.
+    /// </summary>
+    internal static IQueryable<ListedMembership> Listed(IQueryable<CampaignContact> memberships, IReadOnlyCollection<int> people) =>
+        memberships
+            .Where(membership => people.Contains(membership.ContactId))
+            .Select(membership => new ListedMembership(
+                membership.ContactId,
+                membership.CampaignId,
+                membership.State,
+                membership.AddedAt,
+                membership.UpdatedAt,
+                membership.Landing == null
+                    ? null
+                    : new ListedSource(
+                        membership.Landing.Audience!.PublicId,
+                        membership.Landing.Audience.Number,
+                        membership.Landing.SearchWorkItem!.PublicId,
+                        membership.Landing.LandedAt)));
+
+    internal sealed record ListedMembership(int ContactId, int CampaignId, MembershipState State, DateTime AddedAt, DateTime UpdatedAt, ListedSource? Source);
+
+    internal sealed record ListedSource(string Audience, int Number, string Search, DateTime LandedAt);
 
     private async Task<(int Id, string PublicId)> OneAsync(string campaignId, CancellationToken cancellationToken)
     {

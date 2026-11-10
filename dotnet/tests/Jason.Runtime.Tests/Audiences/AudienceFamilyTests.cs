@@ -7,6 +7,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Tests.Dispatch;
@@ -128,9 +129,11 @@ public sealed class AudienceFamilyTests
 
     /// <summary>
     /// A search a person approves: parked before the provider hears of it, started once approved under the definition the
-    /// person read, and answered with the provider's reference, which the status read and the stop then act by. The
-    /// status follows the provider until it finishes; a stop of a running search cancels it, and a second stop finds it
-    /// ended, which is a success too. The two searches run under two definitions, the campaign's audiences 1 and 2, and a
+    /// person read, and answered with the provider's reference, which the status read and the stop then act by. Each
+    /// status read starts where the last one stopped, by the cursor the runtime keeps, and its people land as members of
+    /// the campaign, listed with the audience and the search they came from; the read that reaches the last person of a
+    /// finished search ends it. A stop of a running search cancels it, and a second stop finds it ended, which is a
+    /// success too. The two searches run under two definitions, the campaign's audiences 1 and 2, and a
     /// preview that names the second by its number is answered: it is composed with the definition that audience was made
     /// from, without which the plugin's schema refuses it.
     /// </summary>
@@ -152,7 +155,12 @@ public sealed class AudienceFamilyTests
 
         account.Finish("srch-1");
         var finished = await RunAsync(api, campaign, "audience.search_status", new JsonObject { ["search"] = first.Id, ["limit"] = 100 });
-        Assert.Equal(("finished", 3, false), ((string?)finished.Result!["state"], finished.Result["people"]!.AsArray().Count, (bool)finished.Result["has_more"]!));
+        Assert.Equal(("finished", "p-3", false), ((string?)finished.Result!["state"], (string?)finished.Result["people"]!.AsArray().Single()!["external_id"], (bool)finished.Result["has_more"]!));
+
+        var members = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "from-a-search", new { campaign_id = campaign }, Ct);
+        Assert.Equal(["1", "2", "3"], members.Items.Select(member => member.Contact.LastName).Order(StringComparer.Ordinal));
+        Assert.All(members.Items, member => Assert.Equal((first.Id, 1), (member.Source!.Search, member.Source.Number)));
+        Assert.Equal(1, await EndedAsync(api, first.Id));
 
         var second = await ApprovedSearchAsync(api, account, campaign, new JsonObject { ["industries"] = new JsonArray("Logistics") });
         await api.RecordAsync<AudiencePreviewResponse>(Operations.AudiencePreview, "by-number", new { campaign_id = campaign, audience = 2 }, Ct);
@@ -163,8 +171,9 @@ public sealed class AudienceFamilyTests
     }
 
     /// <summary>
-    /// A provider that finishes a search inside its call answers every person it found and keeps no reference, so there
-    /// is nothing to read afterwards: a status read of that search is refused at the claim, before any child runs. And a
+    /// A provider that finishes a search inside its call answers every person it found and keeps no reference: they land
+    /// from the answer itself and the search ends there, so there is nothing to read afterwards, and a status read of that
+    /// search is refused at the claim, before any child runs. And a
     /// campaign's read is asked only of the plugin its route names, which here performs none.
     /// </summary>
     [Fact]
@@ -179,6 +188,11 @@ public sealed class AudienceFamilyTests
         Assert.Equal("finished", (string?)search.Result!["items"]![0]!["status"]);
         Assert.Null((string?)search.Result["items"]![0]!["reference"]);
         Assert.Equal(["p-1", "p-2"], search.Result["items"]![0]!["people"]!.AsArray().Select(person => (string?)person!["external_id"]));
+
+        var members = await api.PostOkAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, new { campaign_id = campaign }, Ct);
+        Assert.Equal(2, members.Items.Count);
+        Assert.All(members.Items, member => Assert.Equal(search.Id, member.Source!.Search));
+        Assert.Equal(1, await EndedAsync(api, search.Id));
 
         var status = await RunAsync(api, campaign, "audience.search_status", new JsonObject { ["search"] = search.Id, ["limit"] = 10 });
         Assert.Equal(WorkItemStatus.Failed, status.Status);
@@ -195,8 +209,11 @@ public sealed class AudienceFamilyTests
 
     private static async Task<RuntimeApiFixture> StartAsync(StandInAccount account)
     {
+        // A clock that stands still, so the people a search lands are recorded at one moment; the poll then never comes due
+        // by itself, and every read here is one the test made.
         var fixture = await RuntimeApiFixture.StartAsync(
             Ct,
+            clock: new FixedClock(new DateTimeOffset(2026, 10, 16, 9, 0, 0, TimeSpan.Zero)),
             prepare: paths =>
             {
                 File.WriteAllText(paths.UserSettingsFile, Idle);
@@ -252,11 +269,21 @@ public sealed class AudienceFamilyTests
         return read;
     }
 
+    /// <summary>
+    /// The item made and run: a campaign runs one item a scan, and a search that ended summons the manager's review, which
+    /// may take the campaign's turn first, so the scan is repeated until the item has run.
+    /// </summary>
     private static async Task<WorkItemDto> RunAsync(RuntimeApiFixture api, string campaign, string operation, JsonObject input)
     {
         var item = await CreateAsync(api, campaign, operation, input);
-        await ScanAsync(api);
-        return await ReadAsync(api, item);
+        var read = await ReadAsync(api, item);
+        for (var scan = 0; scan < 3 && read.Status == WorkItemStatus.Created; scan++)
+        {
+            await ScanAsync(api);
+            read = await ReadAsync(api, item);
+        }
+
+        return read;
     }
 
     private static async Task<string> CreateAsync(RuntimeApiFixture api, string campaign, string operation, JsonObject input) =>
@@ -276,6 +303,14 @@ public sealed class AudienceFamilyTests
     {
         using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
         return await scope.ServiceProvider.GetRequiredService<JasonDbContext>().Audiences.CountAsync(Ct);
+    }
+
+    /// <summary>How many lines say the search ended.</summary>
+    private static async Task<int> EndedAsync(RuntimeApiFixture api, string search)
+    {
+        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<JasonDbContext>().Journal
+            .CountAsync(line => line.Kind == JournalKinds.AudienceSearchEnded && line.Key == search, Ct);
     }
 
     private static Task<WorkItemDto> ReadAsync(RuntimeApiFixture api, string item) =>
@@ -312,10 +347,11 @@ public sealed class AudienceFamilyTests
             }
             case "audience.search_status": {
               const search = call("GET", "searches/" + input.search.reference);
-              const shown = Math.min(search.found, input.args.limit);
+              const from = input.search.cursor === null ? 0 : Number(input.search.cursor.slice("after-".length));
+              const shown = Math.min(search.found - from, input.args.limit);
               const people = [];
-              for (let n = 1; n <= shown; n++) { people.push(person(n)); }
-              return { result: { state: search.state, found: search.found, people, cursor: "after-" + shown, has_more: search.found > shown, vendor: { status: search.state } } };
+              for (let n = from + 1; n <= from + shown; n++) { people.push(person(n)); }
+              return { result: { state: search.state, found: search.found, people, cursor: "after-" + (from + shown), has_more: search.found > from + shown, vendor: { status: search.state } } };
             }
             case "audience.search_cancel": {
               const answer = call("POST", "searches/" + input.search.reference + "/cancel", {});

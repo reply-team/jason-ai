@@ -5,6 +5,7 @@ using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Update;
 using Jason.Runtime.Api;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Execution;
@@ -508,6 +509,7 @@ public static class RuntimeHost
         builder.Services.AddScoped<JournalWriter>();
         builder.Services.AddScoped<AttemptOutcomes>();
         builder.Services.AddScoped<SentFacts>();
+        builder.Services.AddScoped<SearchLanding>();
         builder.Services.AddScoped<ProviderOutcomeRecorder>();
         builder.Services.AddSystemModule().AddCampaignModule().AddProjectModule().AddPreferenceModule().AddContactModule().AddAudienceModule();
         builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddEventsModule().AddSubscriptionModule().AddNotificationsModule().AddCommandModule().AddUiModule();

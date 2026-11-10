@@ -58,6 +58,13 @@ does not hold fails `search_not_found` on a first attempt and answers `already_e
 attempt — an earlier attempt may be the one that removed the search, and nothing tells the plugin which earlier attempts
 reached the cancel. Nothing is pinned.
 
+## What Jason does with the answer
+
+`cancelled`, and `already_ended` with `ended_as` `cancelled` or null, end the search Jason follows as `cancelled`, said once;
+the people it already landed stay the campaign's. `already_ended` with `finished` or `exhausted` leaves the search to its
+reads: it ended by itself, and what it found is still to be read
+([`docs/campaign-manager.md`](../../campaign-manager.md) §10).
+
 ## The properties
 
 <!-- BEGIN GENERATED properties -->

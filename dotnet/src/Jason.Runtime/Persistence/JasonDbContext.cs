@@ -68,6 +68,10 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<Audience> Audiences => Set<Audience>();
 
+    public DbSet<AudienceSearch> AudienceSearches => Set<AudienceSearch>();
+
+    public DbSet<AudienceLanding> AudienceLandings => Set<AudienceLanding>();
+
     /// <summary>
     /// The one connection string for a database file. Spelled once because the provider pools connections per
     /// connection string: anything that wants to release a file's pooled connections must name it exactly.
@@ -707,6 +711,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 .IsUnique()
                 .HasFilter("kind = 'message_sent_observed'");
 
+            // A search ends once, under the key of its work item. The search's row is marked in the same change set, and a
+            // second line — two writers deciding the same ending at once — is refused here.
+            entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_searches_ended")
+                .IsUnique()
+                .HasFilter("kind = 'audience_search_ended'");
+
             // A gap in an account's events is said once. Its line names no campaign, and SQLite keeps every null apart from
             // every other in a unique index, so the index is on the kind and the key alone.
             entry.HasIndex(e => new { e.Kind, e.Key }, "ix_journal_kind_key_gaps")
@@ -853,6 +863,54 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             audience.HasIndex(a => new { a.CampaignId, a.Number }).IsUnique();
             audience.HasIndex(a => new { a.CampaignId, a.DefinitionHash }).IsUnique();
             audience.HasOne(a => a.Campaign).WithMany().HasForeignKey(a => a.CampaignId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AudienceSearch>(search =>
+        {
+            search.ToTable("audience_searches", t =>
+            {
+                t.HasCheckConstraint(
+                    "ck_audience_searches_state",
+                    "state IS NULL OR state IN ('in_progress', 'finished', 'exhausted', 'paused', 'paused_for_credits', 'paused_for_limit')");
+                t.HasCheckConstraint(
+                    "ck_audience_searches_ended_as",
+                    "(ended_as IS NULL AND ended_at IS NULL) OR (ended_as IN ('finished', 'exhausted', 'stalled', 'cancelled') AND ended_at IS NOT NULL)");
+            });
+            search.HasKey(s => s.Id);
+            search.Property(s => s.PluginId).HasMaxLength(64);
+            search.Property(s => s.Reference).HasMaxLength(256);
+            search.Property(s => s.Cursor).HasMaxLength(2048);
+            search.Property(s => s.State).HasMaxLength(32);
+            search.Property(s => s.EndedAs).HasMaxLength(32);
+
+            // One row per search, and the database is what says so: the change set that ends the search makes it once.
+            search.HasIndex(s => s.SearchWorkItemId).IsUnique();
+
+            // The poll step reads the searches still followed, and only those: a campaign's ended searches never cost it.
+            search.HasIndex(s => s.CampaignId)
+                .HasFilter("ended_as IS NULL")
+                .HasDatabaseName("ix_audience_searches_in_flight");
+            search.HasIndex(s => s.AudienceId);
+            search.HasOne(s => s.Campaign).WithMany().HasForeignKey(s => s.CampaignId).OnDelete(DeleteBehavior.Restrict);
+            search.HasOne(s => s.Audience).WithMany().HasForeignKey(s => s.AudienceId).OnDelete(DeleteBehavior.Restrict);
+            search.HasOne(s => s.SearchWorkItem).WithMany().HasForeignKey(s => s.SearchWorkItemId).OnDelete(DeleteBehavior.Restrict);
+            search.HasOne(s => s.ReadWorkItem).WithMany().HasForeignKey(s => s.ReadWorkItemId).OnDelete(DeleteBehavior.Restrict);
+            search.Property(s => s.Failures).HasDefaultValue(0);
+        });
+
+        modelBuilder.Entity<AudienceLanding>(landing =>
+        {
+            landing.ToTable("audience_landings");
+            landing.HasKey(l => l.Id);
+
+            // One membership, one origin: a search that lands a person the campaign already holds makes no row.
+            landing.HasIndex(l => l.CampaignContactId).IsUnique();
+            landing.HasIndex(l => l.AudienceId);
+            landing.HasIndex(l => l.SearchWorkItemId);
+            landing.HasOne(l => l.Membership).WithOne(m => m.Landing).HasForeignKey<AudienceLanding>(l => l.CampaignContactId).OnDelete(DeleteBehavior.Restrict);
+            landing.HasOne(l => l.Audience).WithMany().HasForeignKey(l => l.AudienceId).OnDelete(DeleteBehavior.Restrict);
+            landing.HasOne(l => l.SearchWorkItem).WithMany().HasForeignKey(l => l.SearchWorkItemId).OnDelete(DeleteBehavior.Restrict);
+            landing.HasOne(l => l.ReadWorkItem).WithMany().HasForeignKey(l => l.ReadWorkItemId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<SubscriptionCursor>(cursor =>

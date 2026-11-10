@@ -663,7 +663,18 @@ public class CampaignCommandsTests
             Campaigns: [new ContactCampaignDto("cmp_A", "Spring", MembershipState.Enrolled, Moment, Moment), new ContactCampaignDto("cmp_B", "Autumn", MembershipState.Enrolled, Moment, Moment)]);
         var worked = new MembershipWhy("activity", null, "researcher", Moment, null, null);
         var page = JsonSerializer.Serialize(
-            new Page<MembershipItemDto>([new MembershipItemDto(contact, MembershipState.Enrolled, Moment, Moment, worked, [new CountedIn("cmp_B", worked), new CountedIn("cmp_A")])], null),
+            new Page<MembershipItemDto>(
+                [
+                    new MembershipItemDto(
+                        contact,
+                        MembershipState.Enrolled,
+                        Moment,
+                        Moment,
+                        worked,
+                        [new CountedIn("cmp_B", worked), new CountedIn("cmp_A")],
+                        new MembershipSource("aud_A", 2, "wi_A", Moment)),
+                ],
+                null),
             JasonJson.Options);
         using var cli = new CliRun(page);
 
@@ -676,6 +687,8 @@ public class CampaignCommandsTests
         Assert.Contains("ada@example.com", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Autumn, Spring", cli.Text, StringComparison.Ordinal);
         Assert.Contains("researcher", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("SOURCE", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("audience 2", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 

@@ -35,6 +35,7 @@ public static class DispatcherModule
             .AddScoped<EventScan>()
             .AddScoped<EventStore>()
             .AddScoped<InboundSync>()
+            .AddScoped<SearchPoll>()
             .AddScoped<Responder>()
             .AddScoped<ReserveCounter>()
             .AddScoped<Summoner>()

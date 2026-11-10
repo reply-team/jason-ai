@@ -105,7 +105,7 @@ public static class CanonicalInput
         }
 
         // The search the same way, and where the place a status read starts belongs to the document, that too: the
-        // plugin's own cursor, which the runtime stores and never parses, and null where it keeps none yet.
+        // plugin's own cursor, which the search's row keeps and nothing parses, and null before a read answered one.
         if (NamesASearch(contract) && facts.Search is { Reference: { } searched } search)
         {
             var composed = new JsonObject

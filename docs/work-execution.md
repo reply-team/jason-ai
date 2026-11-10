@@ -196,11 +196,14 @@ scan would consider.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in ten short steps: **expire**, **enforce**, **events**,
-**sync**, **respond**, **reserve**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a
+Each tick, the dispatcher runs one scan in eleven short steps: **expire**, **enforce**, **events**,
+**sync**, **poll**, **respond**, **reserve**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a
 reader that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
 each live campaign's conversations and says, in the chronicle, each thread that moved
-([docs/inbound-sync.md](inbound-sync.md) is the contract). Respond reads those lines, whichever writer said them, and
+([docs/inbound-sync.md](inbound-sync.md) is the contract). Poll follows each search a live campaign's audience is filled
+by: one `audience.search_status` read of a search a cadence after its last, or at once where the last said more people
+are readable now, waiting longer after reads that failed, never while a read or a stop of it is under way, and once its
+reads have landed nobody for the stall bound it ends the search as stalled and reads it no more ([docs/campaign-manager.md](campaign-manager.md) §10). Respond reads those lines, whichever writer said them, and
 for a thread the campaign holds by its own pin queues a `conversation.get` of the thread and a responder created
 waiting on it, or records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
 counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
@@ -209,8 +212,8 @@ recovered ([docs/campaign-manager.md](campaign-manager.md) §9); it runs before 
 review in the same scan, and creates no work. Summon
 is the campaign-manager loop — where a campaign that something happened to, or that has not been looked at
 for long enough, gets a check-in put on the queue ([docs/campaign-manager.md](campaign-manager.md) is the
-contract). All three run before the claim, so a read, a responder or a check-in created this tick can be claimed this
-tick, and sync runs before respond and summon, so a reply it says wakes the responder and the manager in the same scan;
+contract). All four run before the claim, so a read, a responder or a check-in created this tick can be claimed this
+tick, poll runs before summon, so a search it ends summons the review in the same scan, and sync runs before respond and summon, so a reply it says wakes the responder and the manager in the same scan;
 respond runs before summon, so the responder is queued ahead of the check-in the same line wakes. Resume releases the
 waiting work whose wait is over: every item it named has ended — `succeeded`, `failed`, `cancelled` or
 `expired`; an item retried and back in `created`, or itself waiting, has not — or any one has, or its
@@ -1119,6 +1122,8 @@ mistyped one.
 | `Dispatcher:RetryDelaySeconds` | `60` | 0..86400 | multiplied by the failure count to set `retry_after`; 0 retries at the next scan |
 | `Dispatcher:ExitGraceSeconds` | `30` | 0..600 | how long a process may linger after its attempt was completed through the API before the dispatcher stops it |
 | `Dispatcher:EventsCadenceSeconds` | `600` | 60..86400 | how long after one read of an account's events starts the next is due ([docs/events.md](events.md)) |
+| `Dispatcher:SearchCadenceSeconds` | `300` | 60..86400 | how long after the dispatcher's last read of a search's people the next is due, and after the search began, its first; doubled for each of its reads in a row that failed, never past a day ([docs/campaign-manager.md](campaign-manager.md) §10) |
+| `Dispatcher:SearchStallSeconds` | `3600` | 60..604800 | how long the reads of a search may land nobody before the dispatcher calls it stalled and stops reading it ([docs/campaign-manager.md](campaign-manager.md) §10) |
 | `Dispatcher:Blocks:TrialSeconds` | `900` | 60..86400 | how long after a provider block was opened or last seen, or after a trial that said nothing about it, its next trial is due (§Provider blocks) |
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |

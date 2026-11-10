@@ -553,9 +553,10 @@ fake-provider  contact  p_1001  -         -
 ```
 
 - A pin is per plugin and per kind, on a contact or on a campaign, and it is written by a plugin's answer
-  and by nothing else. An `external_ids` field posted to `contact.update` is ignored; no caller can write
-  a pin. An answer whose validation timed out pins nothing: a pin is never overwritten, so it is written
-  only from an answer that was checked, and that one never was. Its result stays on the attempt's trace and the
+  and by nothing else: the identifiers an operation declares, and the people a page of a search lands, each pinned
+  under `contact` by the attempt whose answer carried the page ([campaign-manager](campaign-manager.md) §10). An `external_ids` field posted
+  to `contact.update` is ignored; no caller can write a pin. An answer whose validation timed out pins nothing: a pin is
+  never overwritten, so it is written only from an answer that was checked, and that one never was. Its result stays on the attempt's trace and the
   identifiers it returned in the attempt's provenance, as `external_ids_returned`.
 - **A pin is never overwritten.** The same value again changes nothing. A *different* value is recorded
   beside the pin as a **divergence**, with the attempt that returned it — the original stands, both values

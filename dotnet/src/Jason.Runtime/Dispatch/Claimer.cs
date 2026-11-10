@@ -725,7 +725,8 @@ public sealed class Claimer(
                 ct).ConfigureAwait(false)
             : null;
 
-        // The search's cursor is null: this build keeps none, so a status read starts from the beginning.
+        // Where a status read starts is the search's own row's: the cursor the last read answered, as the row keeps it, and
+        // null before any read answered one. The row is read in the work's own campaign, as the search is.
         var search = CanonicalInput.NamesASearch(contract)
             ? await ReferenceAsync(
                 db,
@@ -735,6 +736,17 @@ public sealed class Claimer(
                 (made, reference, ran) => new NamedSearch(made.PublicId, made.Operation, made.Status, reference, ran?.PluginId, ran?.BindingIdentity),
                 ct).ConfigureAwait(false)
             : null;
+        if (search is not null)
+        {
+            search = search with
+            {
+                Cursor = await AudienceSearches.Named(db, item.CampaignId, search.WorkItem)
+                    .AsNoTracking()
+                    .Select(row => row.Cursor)
+                    .FirstOrDefaultAsync(ct)
+                    .ConfigureAwait(false),
+            };
+        }
 
         var audience = CanonicalInput.CarriesADefinition(contract) && CanonicalInput.NamedAudience(item) is { } number
             && await CampaignAudiences.ByNumber(db, campaign.Id, number).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false) is { } held

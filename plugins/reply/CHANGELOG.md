@@ -3,6 +3,14 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.15.2
+
+- Nothing this package does has changed. The runtime this package is released with makes a search's people the
+  campaign's: it reads each page the status read answers and makes every person a member of the campaign, and a person
+  the campaign already has stays the one member they are, never a second contact. 0.15.1's line that a search's people
+  do not become a campaign's described the build before that. The README says so where it tells that a person the
+  campaign has and Reply does not hold can still be found, and charged for.
+
 ## 0.15.1
 
 - The known break of the contract that 0.15.0 lists is gone, because the contract no longer asks for what broke it:

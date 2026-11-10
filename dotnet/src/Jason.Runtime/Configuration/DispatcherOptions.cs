@@ -87,6 +87,30 @@ public sealed class DispatcherOptions
     /// </summary>
     public int EventsCadenceSeconds { get; set; } = 600;
 
+    /// <summary>The shortest search cadence: a minute, as the other cadences.</summary>
+    public const int MinimumSearchCadenceSeconds = 60;
+
+    /// <summary>The longest search cadence: a day.</summary>
+    public const int MaximumSearchCadenceSeconds = 86_400;
+
+    /// <summary>
+    /// 60..86400; how long after the dispatcher's last read of a search's people the next is due, and after the search
+    /// began, its first. Five minutes unless set: a search lands its people a few at a time every two minutes or so.
+    /// </summary>
+    public int SearchCadenceSeconds { get; set; } = 300;
+
+    /// <summary>The shortest stall bound: a minute.</summary>
+    public const int MinimumSearchStallSeconds = 60;
+
+    /// <summary>The longest stall bound: a week.</summary>
+    public const int MaximumSearchStallSeconds = 604_800;
+
+    /// <summary>
+    /// 60..604800; how long the reads of a search may land nobody before the dispatcher calls it stalled and stops reading
+    /// it, whatever the provider says of it meanwhile. An hour unless set.
+    /// </summary>
+    public int SearchStallSeconds { get; set; } = 3_600;
+
     public AiRoleDefaults AiRole { get; set; } = new() { TimeoutSeconds = 3600, HeartbeatSeconds = 120, MaxAttempts = 3 };
 
     /// <summary>

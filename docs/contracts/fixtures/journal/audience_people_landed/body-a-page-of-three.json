@@ -1,0 +1,7 @@
+{
+  "kind": "audience_people_landed",
+  "version": 1,
+  "case": "a page of three people: one new to the directory, one known there, one the campaign already held",
+  "body": { "key": "wi_01JC0000000000000000000002", "old": null, "new": { "audience": "aud_01JC0000000000000000000001", "plugin": "fake-provider", "state": "in_progress", "people": 3, "landed": 2, "created": 1, "already_member": 1, "skipped": 0, "contact_ids": ["cnt_01JC0000000000000000000001", "cnt_01JC0000000000000000000002"], "created_contact_ids": ["cnt_01JC0000000000000000000002"] } },
+  "expect": "valid"
+}

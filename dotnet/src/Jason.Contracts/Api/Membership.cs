@@ -67,8 +67,8 @@ public sealed record ListContactsRequest(
 /// <summary>
 /// A person listed once, with the whole contact so an agent listing a campaign avoids a get per member. <c>counted</c>
 /// names each campaign asked that lists them, with what it counts them for when a filter asked: the latest first under an
-/// activity count, otherwise in the campaigns' order. <c>state</c>, <c>added_at</c>, <c>updated_at</c> and <c>why</c> are
-/// the first of those memberships.
+/// activity count, otherwise in the campaigns' order. <c>state</c>, <c>added_at</c>, <c>updated_at</c>, <c>why</c> and
+/// <c>source</c> are the first of those memberships.
 /// </summary>
 public sealed record MembershipItemDto(
     ContactDto Contact,
@@ -76,7 +76,15 @@ public sealed record MembershipItemDto(
     DateTimeOffset AddedAt,
     DateTimeOffset UpdatedAt,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipWhy? Why = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CountedIn>? Counted = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CountedIn>? Counted = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipSource? Source = null);
+
+/// <summary>
+/// Where a member came from, when a search brought them: the campaign's audience it ran under (<c>audience</c>, its id, and
+/// <c>number</c>), the search's work item (<c>search</c>) and when the person landed (<c>landed_at</c>). Absent for a
+/// member added any other way.
+/// </summary>
+public sealed record MembershipSource(string Audience, int Number, string Search, DateTimeOffset LandedAt);
 
 /// <summary>A campaign that lists the person, and what it counts them for when a filter asked.</summary>
 public sealed record CountedIn(

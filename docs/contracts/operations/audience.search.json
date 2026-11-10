@@ -165,7 +165,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 256,
-            "description": "The provider's identifier for the person. Reported, never pinned by this operation."
+            "description": "The provider's identifier for the person. This operation pins nothing: Jason pins it, under `contact`, to the person it lands."
           },
           "first_name": { "type": ["string", "null"], "maxLength": 200, "description": "The person's first name, or null where the provider holds none." },
           "last_name": { "type": ["string", "null"], "maxLength": 200, "description": "The person's last name, or null where the provider holds none." },
@@ -185,7 +185,7 @@
           "raw": {
             "type": ["string", "null"],
             "maxLength": 16384,
-            "description": "The provider's own record for the person, untranslated, written as JSON text and trimmed by the plugin to fit, or null where it gives none to keep. Jason reads none of it: the fields beside it carry what Jason reads."
+            "description": "The provider's own record for the person, untranslated, written as JSON text and trimmed by the plugin to fit, or null where it gives none to keep. Jason reads nothing in it — the fields beside it carry what Jason reads — and keeps it, parsed, beside a person it makes."
           }
         }
       },
