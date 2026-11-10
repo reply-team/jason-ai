@@ -23,7 +23,7 @@ using Microsoft.Extensions.Logging;
 namespace Jason.Runtime.Dispatch;
 
 /// <summary>
-/// The fifth step of a scan, and the only one that hands work out. Everything happens inside one immediate
+/// The ninth step of a scan, and the only one that hands work out. Everything happens inside one immediate
 /// transaction, so two runtimes — or two scans — cannot both claim the same item: the second waits, sees the
 /// item already taken and moves on. One item per campaign per scan keeps a busy campaign from starving the
 /// others, and never more than the free handler slots, so a queued item's lease cannot expire before it runs.

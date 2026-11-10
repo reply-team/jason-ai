@@ -60,6 +60,11 @@ public sealed class ManagerOptions
         // trigger: the work runs again by itself. An installation that narrowed this list before the kind existed is
         // not woken by blocks until it adds it.
         JournalKinds.ProviderBlocked,
+
+        // The campaign's untouched people fell under the threshold it set: whether to top the audience up, and how, is
+        // the manager's. Said once per crossing. Its recovery is not a trigger: the manager was told when it fell. An
+        // installation that narrowed this list before the kind existed is not woken by it until it adds it.
+        JournalKinds.AudienceReserveLow,
     ];
 
     /// <summary>

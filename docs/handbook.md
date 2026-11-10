@@ -478,10 +478,13 @@ When a campaign is looked at, and by whom, is its own loop: a failure, a rejecte
 effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,
 and a cadence does it anyway when nothing has happened at all. Replies are found by reading each live
 campaign's conversations on a cadence. How often a manager looks at a campaign when nothing has happened is the
-campaign's own setting:
+campaign's own setting, and so is how many untouched people it wants to keep in reserve: when fewer than that are left,
+the manager is told once, and told again only after the number has gone back up
+([campaign manager](campaign-manager.md) §9):
 
 ```sh
 jason campaign update <campaign-id> --review-seconds 3600
+jason campaign update <campaign-id> --audience-threshold 50
 jason workitem list --campaign <campaign-id> --role manager
 ```
 

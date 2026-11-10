@@ -27,10 +27,35 @@ public class CampaignPeopleSummaryTests
         Assert.Equal(["Dan", "Gus"], await CountedAsync(CampaignSummaryFilter.Working));
     }
 
-    [Fact]
-    public async Task New_is_a_person_with_no_work_at_all()
+    /// <summary>
+    /// New is a person nobody has started on: no work about them in this campaign that a person, a role, an attempt or a
+    /// plugin created. Work the runtime made about them by itself, the read of a thread they replied on, is nobody
+    /// starting on them; and the reserve's count is this number, read on its own.
+    /// </summary>
+    [Theory]
+    [InlineData(ActorType.System, true)]
+    [InlineData(ActorType.Human, false)]
+    [InlineData(ActorType.Role, false)]
+    [InlineData(ActorType.Attempt, false)]
+    [InlineData(ActorType.Plugin, false)]
+    public async Task New_is_a_person_nobody_has_started_on(ActorType madeBy, bool stillNew)
     {
-        Assert.Equal(["Hal", "Quinn"], await CountedAsync(CampaignSummaryFilter.New));
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var world = await CampaignWorld.WriteAsync(db, Ct);
+        Assert.Equal(["Hal", "Quinn"], await NamesAsync(db, CampaignPeople.Matching(db, [world.Spring.Id], CampaignSummaryFilter.New)));
+
+        var read = WorkItemFactory.NewProviderOp(world.Spring, "conversation.get", CampaignWorld.Now);
+        read.Contact = world.People["Quinn"];
+        read.CreatedByType = madeBy;
+        read.Status = WorkItemStatus.Succeeded;
+        read.FinishedAt = CampaignWorld.Now;
+        db.WorkItems.Add(read);
+        await db.SaveChangesAsync(Ct);
+
+        string[] expected = stillNew ? ["Hal", "Quinn"] : ["Hal"];
+        Assert.Equal(expected, await NamesAsync(db, CampaignPeople.Matching(db, [world.Spring.Id], CampaignSummaryFilter.New)));
+        Assert.Equal(expected.Length, await CampaignPeople.UntouchedAsync(db, world.Spring.Id, Ct));
     }
 
     [Fact]

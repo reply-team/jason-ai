@@ -45,6 +45,11 @@ public static class CampaignRenderers
             lines.Add(Line("Review:", string.Create(CultureInfo.InvariantCulture, $"every {seconds} s")));
         }
 
+        if (campaign.AudienceThreshold is { } threshold)
+        {
+            lines.Add(Line("Reserve:", string.Create(CultureInfo.InvariantCulture, $"threshold {threshold} untouched")));
+        }
+
         // Only for a campaign created under a key: the key its creator chose, which a repeat of that create sends again.
         if (campaign.IdempotencyKey is { } key)
         {

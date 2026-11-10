@@ -2,7 +2,7 @@
   "kind": "campaign_updated",
   "version": 1,
   "since": "0.1.0",
-  "summary": "One setting of a campaign changed: its name, its execution profile, its review cadence or the project it is in; a change of several settings writes one line for each.",
+  "summary": "One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold or the project it is in; a change of several settings writes one line for each.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -15,7 +15,7 @@
     "required": ["key", "old", "new"],
     "properties": {
       "key": {
-        "enum": ["name", "execution_profile", "review_seconds", "project_id"],
+        "enum": ["name", "execution_profile", "review_seconds", "audience_threshold", "project_id"],
         "description": "The setting that changed."
       },
       "old": { "type": ["string", "integer", "null"], "description": "The setting's value before the change." },
@@ -41,6 +41,13 @@
           "key": { "const": "review_seconds" },
           "old": { "type": ["integer", "null"], "description": "Seconds between the campaign's reviews, or null for the installation's cadence." },
           "new": { "type": ["integer", "null"], "description": "Seconds between the campaign's reviews, or null for the installation's cadence." }
+        }
+      },
+      {
+        "properties": {
+          "key": { "const": "audience_threshold" },
+          "old": { "type": ["integer", "null"], "description": "The number of untouched members under which the manager is told the reserve is low, or null for no counting." },
+          "new": { "type": ["integer", "null"], "description": "The number of untouched members under which the manager is told the reserve is low, or null for no counting." }
         }
       },
       {

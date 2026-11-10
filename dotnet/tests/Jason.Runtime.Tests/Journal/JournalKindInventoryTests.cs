@@ -101,6 +101,8 @@ public sealed class JournalKindInventoryTests
         JournalKinds.EventsGapObserved,
         JournalKinds.EventsBackfillRequested,
         JournalKinds.ProviderBlockCleared,
+        JournalKinds.AudienceReserveLow,
+        JournalKinds.AudienceReserveRecovered,
         JournalKinds.PreferenceSet,
         JournalKinds.PreferenceUnset,
         JournalKinds.SubscriptionFailed,

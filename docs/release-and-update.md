@@ -696,7 +696,8 @@ with a key it does not know. A package problem rejects the whole load, and at a 
 ([plugins](plugins.md), "Two kinds of problem"), so the runtime starts with **no plugin loaded at all**, Reply's included.
 What you see is a runtime that answers, work that fails because no plugin is there to perform it, and `jason plugin list`
 naming the package and the manifest key it refused. The same holds for a copy of the forwarder 1.2.0 on a runtime older
-than 0.32.0, which refuses `capabilities.files` in the same way.
+than 0.32.0, which refuses `capabilities.files` in the same way, and for the forwarder 1.3.0 on a runtime older than 0.34.0,
+which refuses the two reserve kinds it declares as kinds it does not write.
 
 To go back cleanly, put the package the older release published in its place, which depends on whether that release
 published it. `jason plugin install` places the package of the release the running executable is, so it only works for a

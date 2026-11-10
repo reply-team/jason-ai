@@ -15,16 +15,16 @@ namespace Jason.Runtime.Tests.Documentation;
 public partial class InboundSyncDocTests
 {
     [Fact]
-    public void The_page_and_the_work_execution_contract_name_the_scan_s_nine_steps_in_the_order_the_scan_runs_them()
+    public void The_page_and_the_work_execution_contract_name_the_scan_s_ten_steps_in_the_order_the_scan_runs_them()
     {
-        const string steps = "nine short steps: **expire**, **enforce**, **events**, **sync**, **respond**, **summon**, **resume**, **claim**, **notify**";
+        const string steps = "ten short steps: **expire**, **enforce**, **events**, **sync**, **respond**, **reserve**, **summon**, **resume**, **claim**, **notify**";
 
         Assert.Contains(steps, Flattened(Read("inbound-sync.md")), StringComparison.Ordinal);
         Assert.Contains(steps, Flattened(Read("work-execution.md")), StringComparison.Ordinal);
 
         // And the order the page states is the order the scan runs them in.
         var scan = File.ReadAllText(Path.Combine(SourceDirectory(), "Dispatch", "ScanRunner.cs"));
-        var order = new[] { "<Expirer,", "<LeaseEnforcer,", "<EventScan,", "<InboundSync,", "<Responder,", "<Summoner,", "<Resumer,", "<Claimer,", "<Notifier," }
+        var order = new[] { "<Expirer,", "<LeaseEnforcer,", "<EventScan,", "<InboundSync,", "<Responder,", "<ReserveCounter,", "<Summoner,", "<Resumer,", "<Claimer,", "<Notifier," }
             .Select(step => scan.IndexOf(step, StringComparison.Ordinal))
             .ToList();
         Assert.All(order, at => Assert.True(at >= 0));
