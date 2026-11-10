@@ -185,4 +185,76 @@ public partial class ReleaseWorkflowTests
             Assert.Contains(said, guide, StringComparison.Ordinal);
         }
     }
+
+    /// <summary>
+    /// The desktop's files leave manifest.json as it was: the release's own line, run over a folder that holds them and
+    /// again over one that does not with their names taken off <c>-Plugins</c>, writes the same manifest but for the time
+    /// it was written. So an updater reads a release with the desktop exactly as it read the one before it, from 0.19.0
+    /// on, the manifest's platforms stay the three a <c>jason update</c> applies, and no desktop file is named in it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_files_leave_the_manifest_an_updater_reads_as_it_was()
+    {
+        var line = Assert.Single(Read(Release).Split('\n'), text => text.Contains("./.github/scripts/Write-Manifest.ps1", StringComparison.Ordinal)).Trim();
+        var invocation = line[line.IndexOf("./.github/scripts/Write-Manifest.ps1", StringComparison.Ordinal)..];
+        using var first = new TempTree();
+        using var second = new TempTree();
+
+        var with = Staged(first);
+        var (exit, _, stderr) = Pwsh(NoEnvironment, "-Command", ExpandForThisMachine(invocation, with));
+        Assert.True(exit == 0, stderr);
+
+        var without = Staged(second);
+        foreach (var desktop in ReleaseAssets.Desktop)
+        {
+            File.Delete(Path.Combine(without, desktop));
+        }
+
+        var stripped = invocation.Replace("," + string.Join(',', ReleaseAssets.Desktop) + " ", " ", StringComparison.Ordinal);
+        Assert.NotEqual(invocation, stripped);
+        (exit, _, stderr) = Pwsh(NoEnvironment, "-Command", ExpandForThisMachine(stripped, without));
+        Assert.True(exit == 0, stderr);
+
+        var written = File.ReadAllText(Path.Combine(with, ReleaseAssets.Manifest));
+        Assert.Equal(WithoutTheMoment(File.ReadAllText(Path.Combine(without, ReleaseAssets.Manifest))), WithoutTheMoment(written));
+        Assert.All(ReleaseAssets.Desktop, desktop => Assert.DoesNotContain(desktop, written, StringComparison.Ordinal));
+
+        var manifest = UpdateManifest.Read(written);
+        Assert.Equal(1, manifest.Schema);
+        Assert.Equal(["linux-x64", "osx-arm64", "win-x64"], manifest.Artifacts.Keys.Order(StringComparer.Ordinal));
+
+        static string WithoutTheMoment(string json) =>
+            Regex.Replace(json, "\"published_at\": \"[^\"]+\"", "\"published_at\": \"\"");
+    }
+
+    /// <summary>
+    /// One version across what a desktop package carries: each bundle is prepared at the release's version from the
+    /// executable the call signed, which writes that version into its <c>version.json</c>; the package is built at the
+    /// same version, which the configuration refuses to build unless <c>version.json</c> says it too
+    /// (<c>checkBundle</c>, held by the desktop's own rows); and the executable itself is made to say it, by the smoke
+    /// test of each call that publishes one and by the start under Rosetta for osx-x64, before any of it is published.
+    /// </summary>
+    [Fact]
+    public void A_desktop_package_its_version_json_and_the_jason_it_carries_are_one_version()
+    {
+        var windows = Scalar(ActionStep("Build the desktop's Windows installer, each file signed as it is made"), "run")!;
+        Assert.Equal("${{ inputs.version }}", Scalar(Mapping(ActionStep("Build the desktop's Windows installer, each file signed as it is made"), "env"), "VERSION"));
+        Assert.Contains("node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version $env:VERSION --executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)", windows, StringComparison.Ordinal);
+        Assert.Contains("$env:JASON_VERSION = $env:VERSION", windows, StringComparison.Ordinal);
+
+        var mac = Scalar(ActionStep("Build the desktop's Mac packages, signed and notarized"), "run")!;
+        Assert.Equal("${{ inputs.version }}", Scalar(Mapping(ActionStep("Build the desktop's Mac packages, signed and notarized"), "env"), "VERSION"));
+        Assert.Contains("node scripts/prepare.mjs --rid osx-arm64 --output bundles/arm64 --version \"$VERSION\" --executable \"$arm64\"", mac, StringComparison.Ordinal);
+        Assert.Contains("node scripts/prepare.mjs --rid osx-x64 --output bundles/x64 --version \"$VERSION\" --executable \"$GITHUB_WORKSPACE/$EXECUTABLE\"", mac, StringComparison.Ordinal);
+        Assert.Contains("JASON_VERSION=\"$VERSION\"", mac, StringComparison.Ordinal);
+
+        var configuration = Read(["desktop", "electron-builder.config.mjs"]);
+        Assert.Contains("beforePack: async (context) => checkBundle(bundleFolder(context.arch), version, context.electronPlatformName),", configuration, StringComparison.Ordinal);
+        Assert.Contains("return configuration({ version: releaseVersion(process.env['JASON_VERSION']), sign });", configuration, StringComparison.Ordinal);
+
+        // The executable says the version itself: each call's smoke test refuses another, and so does the Rosetta start.
+        var release = Read(Release);
+        Assert.Equal(3, Regex.Count(release, Regex.Escape("if (($version -split '\\+')[0] -ne $env:VERSION) { throw \"jason --version says '$version', and the tag says $env:VERSION\" }")));
+        Assert.Contains("[ \"${said%%+*}\" = \"$VERSION\" ] || { echo \"::error title=osx-x64::The osx-x64 executable says '$said', and the tag says $VERSION.\"; exit 1; }", release, StringComparison.Ordinal);
+    }
 }
