@@ -39,14 +39,18 @@ test('with no runtime up, the desktop starts one through jason runtime start and
         ['runtime', 'status'],
         ['ui', 'install', '--feed', 'http://127.0.0.1:9/manifest.json'],
         ['skills', 'install', '--roles-only', '--source', bundle],
-        ['skills', 'install', '--root', b.paths.chat, '--host', 'claude_code', '--source', bundle],
+        ['skills', 'install', '--root', join(b.paths.chat, '.claude', 'skills'), '--host', 'claude_code', '--source', bundle],
         ['ui', 'open', '--no-open'],
     ]);
     assert.equal(started.origin, 'http://127.0.0.1:41234');
     assert.equal(started.link, 'http://127.0.0.1:41234/ui/#pair=planted-pair-code');
     assert.equal(started.versionsDiffer, false);
     assert.ok(existsSync(b.paths.chat));
-    assert.deepEqual(readdirSync(b.paths.chat), []);
+    // The CLI deploys into the directory --root names, so the skills sit where Claude Code started in the chat folder
+    // with project settings reads them, and nothing of them at the folder's top level.
+    assert.deepEqual(readdirSync(b.paths.chat), ['.claude']);
+    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude')), ['skills']);
+    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')).sort(), ['.jason-skills.json', 'campaign-launch']);
     assert.deepEqual(saved, [{ feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: bundleVersion }]);
 });
 

@@ -5,6 +5,7 @@
  */
 
 import { mkdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
 import { pairingLink, runtimeOrigin } from './descriptor.ts';
 import type { Logger } from './log.ts';
@@ -120,7 +121,9 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         } else {
             deployed = false;
         }
-        const chat = await cli.run(['skills', 'install', '--root', paths.chat, '--host', 'claude_code', '--source', deps.bundle], { timeoutMs: 300_000 });
+        // --root names the directory the skills are deployed into, and Claude Code started in the chat folder with project
+        // settings reads them from .claude/skills there; the Reply skills are copied into the same folder.
+        const chat = await cli.run(['skills', 'install', '--root', join(paths.chat, '.claude', 'skills'), '--host', 'claude_code', '--source', deps.bundle], { timeoutMs: 300_000 });
         log.info('skills_deployed', { Target: 'chat', Exit: chat.exit });
         if (deployed && chat.exit === 0) deps.saveSettings({ ...deps.settings, skillsDeployedFor: deps.bundleVersion });
     }

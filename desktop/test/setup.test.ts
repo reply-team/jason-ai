@@ -287,6 +287,8 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
         }
     };
 
+    // The desktop deploys Jason's skills for the chat through the CLI, into the folder Claude Code reads them from.
+    const jasonSkills = /^desktop\/chat\/\.claude\/skills\/(?:\.jason-skills\.json|[a-z-]+\/SKILL\.md)$/;
     let desktopSettings: DesktopSettings = readSettings(b.paths.settings);
     await act('the start', () => startInstallation({
         cli: loggedCli(b.cli, log),
@@ -299,7 +301,7 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
             desktopSettings = next;
             writeSettings(b.paths.settings, next);
         },
-    }), ['run/runtime.json', 'desktop/settings.json'], []);
+    }), ['run/runtime.json', 'desktop/settings.json', jasonSkills], []);
 
     const setup = setupOn(b, log, desktopSettings);
     const replySkills = /^desktop\/chat\/\.claude\/skills\/reply-[a-z-]+\/SKILL\.md$/;
@@ -347,6 +349,13 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     assert.equal(during.length, 1, `while the turn waited: ${during.join(', ')}`);
     assert.match(during[0] ?? '', turnFile);
     assert.ok(![...snapshot(b.paths.data).keys()].some((path) => turnFile.test(path)), 'the turn file is gone once the turn is over');
+
+    // Jason's skills and the Reply ones sit in one folder, .claude/skills, and nothing of them at the chat folder's top.
+    assert.deepEqual(readdirSync(b.paths.chat), ['.claude']);
+    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude')), ['skills']);
+    const skills = readdirSync(join(b.paths.chat, '.claude', 'skills')).sort();
+    assert.deepEqual(skills.filter((name) => !name.startsWith('reply-')), ['.jason-skills.json', 'campaign-launch']);
+    assert.ok(skills.some((name) => name.startsWith('reply-')), `the Reply skills beside Jason's: ${skills.join(', ')}`);
 
     assert.deepEqual(readInstallationSettings(b), {
         Plugins: {

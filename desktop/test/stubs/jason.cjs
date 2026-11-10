@@ -85,6 +85,13 @@ if (args[0] === 'status') {
     print({ id: args[2], name: 'Spring', status: 'active', project_id: 'prj_01STUB', project_slug: 'default', folder_path: process.env.STUB_CAMPAIGN_FOLDER || null });
 } else if (verb === 'project get') {
     print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
+} else if (verb === 'skills install' && args.includes('--root')) {
+    // As the CLI deploys: into the very directory --root names, a record of the deployment and one folder per skill.
+    const root = args[args.indexOf('--root') + 1];
+    mkdirSync(join(root, 'campaign-launch'), { recursive: true });
+    writeFileSync(join(root, 'campaign-launch', 'SKILL.md'), '# campaign-launch\n');
+    writeFileSync(join(root, '.jason-skills.json'), '{}\n');
+    print({});
 } else if (['ui install', 'skills install', 'plugin install', 'plugin reload'].includes(verb)) {
     print({});
 } else {
