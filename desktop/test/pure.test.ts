@@ -182,8 +182,8 @@ test('the PATH is one entry, whatever case Windows wrote its name in', () => {
 });
 
 test('the login shell is killed outright at its time limit, since an interactive shell may ignore a polite signal', () => {
-    assert.equal(loginShellOptions.killSignal, 'SIGKILL');
-    assert.equal(loginShellOptions.timeout, 5000);
+    assert.equal(loginShellOptions({}).killSignal, 'SIGKILL');
+    assert.equal(loginShellOptions({}).timeout, 5000);
 });
 
 test('the login shell’s PATH is read between its two markers, and the usual places are added once', () => {

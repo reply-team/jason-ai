@@ -2,7 +2,8 @@
 // inherits them, and every process the desktop starts would carry them on: an agent host would take itself for that
 // session's child, run bare or at its effort, and the session's messaging token would ride down through jason to the
 // runtime and its plugins. So no process the desktop starts is given them: the chat's host (chat-hosts.ts), the programs
-// (programs.ts) and the bundled jason (cli.ts) all take their environment through this one list.
+// (programs.ts), the bundled jason (cli.ts) and the login shell on macOS (shell-path.ts), whose rc files are the
+// person's, all take their environment through this one list.
 
 /**
  * The markers, a closed list. The rest of `CLAUDE_CODE_*` is a person's configuration (a cloud provider, the Git Bash
