@@ -13,6 +13,11 @@ export interface DesktopPaths {
     chat: string;
     /** `<data>/desktop/provider-keys`: the AI providers' keys, encrypted by the operating system. */
     providerKeys: string;
+    /**
+     * `<data>/desktop/profile/`: Electron's own profile (its `userData`), where the page's storage, the single-instance lock
+     * and, on Windows, the key the operating system's encryption of `provider-keys` is made with are kept.
+     */
+    profile: string;
     /** `<data>/logs/`, shared with the runtime; the desktop writes only `desktop-*.jsonl` there. */
     logs: string;
     /** `<data>/config/settings.json`, the installation's settings, which a Connect card edits as a person would. */
@@ -35,6 +40,7 @@ export function desktopPaths(data: string): DesktopPaths {
         settings: join(desktop, 'settings.json'),
         chat: join(desktop, 'chat'),
         providerKeys: join(desktop, 'provider-keys'),
+        profile: join(desktop, 'profile'),
         logs: join(data, 'logs'),
         installationSettings: join(data, 'config', 'settings.json'),
         runFile: join(data, 'run', 'runtime.json'),

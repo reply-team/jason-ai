@@ -198,6 +198,10 @@ async function run(): Promise<void> {
     }
 }
 
+// Electron's profile follows the data directory, so the desktop's whole state is under <data>/desktop and a second
+// installation, one JASON_DATA_DIR names, is a second desktop with its own lock.
+app.setPath('userData', desktopPaths(dataDirectory(process.env, homedir())).profile);
+
 if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {

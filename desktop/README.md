@@ -24,6 +24,8 @@ and names `jason update`. A `feed` in the desktop's settings is passed to every 
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, and the version whose skills were last deployed).
 - `<data>/desktop/chat/`: the chat's working folder, where the skills for it are deployed.
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`).
+- `<data>/desktop/profile/`: Electron's own profile, set before anything else, so a second data directory is a second
+  desktop and nothing of it lands outside `<data>`.
 - `<data>/logs/desktop-YYYYMMDD[_NNN].jsonl`: its log, in the runtime log's shape and under the same limits
   (`Logging:RetainedFileCountLimit`, `Logging:FileSizeLimitBytes`). `jason logs --source desktop` reads it.
 

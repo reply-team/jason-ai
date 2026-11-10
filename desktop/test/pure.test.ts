@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { delimiter, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { nextCheckDelay, updateCheckInterval } from '../src/backoff.ts';
@@ -32,6 +33,14 @@ test('the desktop’s own files are under <data>/desktop and its log beside the 
     assert.equal(paths.logs, join(data, 'logs'));
     assert.equal(paths.installationSettings, join(data, 'config', 'settings.json'));
     assert.equal(paths.runFile, join(data, 'run', 'runtime.json'));
+});
+
+test('Electron keeps its own profile under <data>/desktop, set before the single-instance lock, so a second installation is a second desktop', () => {
+    assert.equal(desktopPaths(resolve('/d')).profile, join(resolve('/d'), 'desktop', 'profile'));
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    const set = main.indexOf("app.setPath('userData', ");
+    assert.ok(set > 0, 'main.ts sets the userData path');
+    assert.ok(set < main.indexOf('app.requestSingleInstanceLock()'), 'before the lock, which lives in that folder');
 });
 
 // ---- The run file and the pairing link -----------------------------------------------------------------------------
