@@ -65,7 +65,8 @@ const deviceRefusal = 'That path names a device or a volume, not a file in a fol
 const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat never writes there. Nothing was done.';
 const climbRefusal = 'That pattern climbs out of its folder with ..: the chat does not take it. Name the folder as the path instead. Nothing was done.';
 const ownToolRefusal = 'That tool answers the chat\'s own permission requests: only the person answers them. Nothing was done.';
-const lengthRefusal = 'That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
+const searchRefusal = 'That folder holds the installation\'s own data, so a search or a listing of it would walk that data: the chat does not take it. Name a narrower folder, one that does not hold the data directory. Nothing was done.';
+const lengthRefusal ='That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
 /** The longest path each platform takes: the `\\?\` form's limit on Windows, `PATH_MAX` on macOS and Linux. */
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
 const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
@@ -164,16 +165,27 @@ function judgePath(value: string, scope: ChatScope, writes: boolean): Judgement 
     };
 }
 
+/**
+ * A folder a search or a listing walks: one that holds the data directory is refused, since the walk would read what the
+ * chat never reads; any other is judged as a read of it.
+ */
+function judgeFolder(value: string, scope: ChatScope): Judgement {
+    const judged = judgePath(value, scope, false);
+    if (judged.verdict === 'deny' || judgeSpelling(value, scope) !== null) return judged;
+    if (inside(scope, located(value, scope), located(scope.data, scope))) return { verdict: 'deny', message: searchRefusal };
+    return judged;
+}
+
 /** The worse of two judgements: a refusal over a card, a card over an allowance. */
 function worse(one: Judgement, other: Judgement): Judgement {
     const rank = (judged: Judgement) => (judged.verdict === 'deny' ? 2 : judged.verdict === 'ask' ? 1 : 0);
     return rank(other) > rank(one) ? other : one;
 }
 
-/** Glob also reaches where its pattern climbs or points: the pattern's fixed leading folders are judged too. */
+/** Glob also reaches where its pattern climbs or points: the pattern's fixed leading folders are walked too. */
 function judgeGlob(input: Record<string, unknown>, scope: ChatScope): Judgement {
     const folder = named(input['path']) ? input['path'] : scope.cwd;
-    const judged = judgePath(folder, scope, false);
+    const judged = judgeFolder(folder, scope);
     const pattern = typeof input['pattern'] === 'string' ? input['pattern'] : '';
     // A .. anywhere, a brace's alternative included, climbs where the fixed leading folders do not show.
     if (pattern.split(/[\\/{},]/).includes('..')) return { verdict: 'deny', message: climbRefusal };
@@ -187,7 +199,7 @@ function judgeGlob(input: Record<string, unknown>, scope: ChatScope): Judgement 
     if (fixed.length === 0) return judged;
     const separator = pathsOf(scope.platform).sep;
     const leading = pattern.startsWith('/') && fixed[0] === '' ? `${separator}${fixed.slice(1).join(separator)}` : fixed.join(separator);
-    return worse(judged, judgePath(pathsOf(scope.platform).resolve(spelled(folder, scope), leading || '.'), scope, false));
+    return worse(judged, judgeFolder(pathsOf(scope.platform).resolve(spelled(folder, scope), leading || '.'), scope));
 }
 
 /** True when a shell could make the command more than one command, or send its output somewhere. */
@@ -371,8 +383,8 @@ export function judge(tool: string, input: Record<string, unknown>, scope: ChatS
     const reader = readers[tool];
     if (reader !== undefined) {
         const value = input[reader];
-        if (named(value)) return judgePath(value, scope, false);
-        return tool === 'Read' ? unnamed(tool, input) : judgePath('.', scope, false);
+        if (tool === 'Read') return named(value) ? judgePath(value, scope, false) : unnamed(tool, input);
+        return judgeFolder(named(value) ? value : '.', scope);
     }
     const writer = writers[tool];
     if (writer !== undefined) {

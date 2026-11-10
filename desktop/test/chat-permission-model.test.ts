@@ -202,6 +202,24 @@ test('anything under the data directory outside the chat folder is refused witho
     assert.equal(read(mac(), '/Users/someone/.jason/logs/runtime-20261110.jsonl').verdict, 'deny');
 });
 
+test('a search or a listing of a folder that holds the data directory is refused, with word to name a narrower folder', () => {
+    const narrower = (judged: ReturnType<typeof judge>) => judged.verdict === 'deny' && /narrower folder/.test(judged.message);
+    for (const [tool, input] of [['Grep', { pattern: 'token', path: 'C:\\Users\\someone' }], ['LS', { path: 'C:\\Users' }], ['Grep', { pattern: 'x', path: 'C:\\' }],
+        ['Glob', { pattern: '**/*.json', path: 'C:\\Users\\someone' }], ['Glob', { pattern: 'C:/Users/someone/**/*.json' }], ['Grep', { pattern: 'x', path: 'C:\\Users\\SOMEON~1' }],
+        ['Glob', { pattern: '**/*.json', path: 'C:/Users' }]] as const) {
+        assert.ok(narrower(judge(tool, input, windows())), `${tool} ${JSON.stringify(input)}`);
+    }
+    for (const [tool, input] of [['Grep', { pattern: 'token', path: '/Users/someone' }], ['LS', { path: '/' }], ['Glob', { pattern: '/Users/someone/**/*' }],
+        ['Glob', { pattern: '*', path: '/Users' }]] as const) {
+        assert.ok(narrower(judge(tool, input, mac())), `${tool} ${JSON.stringify(input)}`);
+    }
+    // A folder beside the data directory is the outside-read card, and a file in a folder that holds it is a Read's.
+    assert.equal(judge('Grep', { pattern: 'x', path: 'C:\\Users\\someone\\Jason\\..\\Documents' }, windows()).verdict, 'ask');
+    assert.equal(judge('Grep', { pattern: 'x', path: 'C:\\elsewhere' }, windows()).verdict, 'ask');
+    assert.equal(read(windows(), 'C:\\Users\\someone\\notes.md').verdict, 'ask');
+    assert.equal(judge('LS', { path: '/Users/someone/Documents' }, mac()).verdict, 'ask');
+});
+
 test('a relative path with .. that climbs out of the chat folder is judged where it lands', () => {
     assert.equal(read(windows(), '..\\..\\run\\runtime.json').verdict, 'deny');
     assert.equal(read(windows(), 'sub\\..\\..\\..\\config\\settings.json').verdict, 'deny');
