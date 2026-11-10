@@ -90,9 +90,19 @@ export function CampaignsScreen() {
 
     // The dialog open, with the campaign it belongs to: it never shows over another one.
     const [act, setAct] = useState<{ id: string | null; what: Act } | null>(null);
-    // The person opened from this campaign's People, shown in place of the panel until closed or the tab is left.
-    const [person, setPerson] = useState<{ id: string; tab: CampaignTab; contactId: string } | null>(null);
-    const personShown = person && selected && person.id === selected && person.tab === at.tab ? person.contactId : null;
+    // The person opened from this campaign's People, shown in place of the panel. They are let go when closed, and when
+    // the campaign, the tab or the count in the address changes; the guard keeps them off any frame before that.
+    const [person, setPerson] = useState<{
+        id: string;
+        tab: CampaignTab;
+        filter: string | undefined;
+        contactId: string;
+    } | null>(null);
+    useEffect(() => setPerson(null), [selected, at.tab, at.filter]);
+    const personShown =
+        person && selected && person.id === selected && person.tab === at.tab && person.filter === at.filter
+            ? person.contactId
+            : null;
     const acting = act && act.id === selected ? act.what : null;
     const setActing = (what: Act | null) => setAct(what ? { id: selected, what } : null);
     /** The open campaign as it is now: its numbers, and what its tab shows. A People list reads the numbers with itself. */
@@ -349,7 +359,9 @@ export function CampaignsScreen() {
                                         const what = person.why ? store.waitingOf(person.why) : null;
                                         if (what) void store.openWaiting(api, selected!, what);
                                     }}
-                                    onPerson={(contactId) => setPerson({ id: selected!, tab: at.tab, contactId })}
+                                    onPerson={(contactId) =>
+                                        setPerson({ id: selected!, tab: at.tab, filter: at.filter, contactId })
+                                    }
                                 />
                             )}
                             {at.tab === 'inbox' && (

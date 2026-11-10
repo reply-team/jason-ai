@@ -620,6 +620,62 @@ describe('A campaign’s people', () => {
         expect(screen.getByRole('heading', { level: 2, name: 'Spring' })).toBeTruthy();
     });
 
+    /** The People tab under Failed with Cleo opened in the person panel, and what each test goes on to read. */
+    async function cleoOpen(api: FakeApi): Promise<void> {
+        api.answer('contact.get', 'contact.get/imported')
+            .answer('workitem.list', 'workitem.list/by-contact-open-imported')
+            .answer('journal.list', 'journal.list/by-contact-empty');
+        open(api, people('failed'));
+        fireEvent.click(await row('Cleo Example'));
+        await waitFor(() => expect(document.querySelector('.person-panel .panel-header h2')).toBeTruthy());
+    }
+
+    it('a person opened in place is let go when another count of the campaign is clicked in the table', async () => {
+        const api = peopleApi('campaign.list_contacts/summary-failed', 'campaign.list_contacts/summary-waiting');
+        await cleoOpen(api);
+
+        const spring = (await screen.findByRole('cell', { name: 'Spring' })).closest('tr')!;
+        const waiting = within(spring)
+            .getAllByRole('link')
+            .find((link) => link.getAttribute('href') === '#/campaigns/cmp_1/people?filter=waiting')!;
+        fireEvent.click(waiting);
+
+        expect(await row('Ben Example')).toBeTruthy();
+        expect(document.querySelector('.person-panel')).toBeNull();
+    });
+
+    it('a person opened in place is not shown again when the campaign is left and opened again', async () => {
+        const autumn = fixtures['campaign.get/unlinked'].response.id;
+        const api = peopleApi(
+            'campaign.list_contacts/summary-failed',
+            'campaign.list_contacts/unlinked',
+            'campaign.list_contacts/summary-failed',
+        )
+            .answer('campaign.get', 'campaign.get/details', 'campaign.get/unlinked')
+            .answer(
+                'campaign.summary',
+                'campaign.summary/some',
+                'campaign.summary/all',
+                'campaign.summary/unlinked',
+                'campaign.summary/some',
+            );
+        await cleoOpen(api);
+
+        const away = { ...table, id: autumn, tab: 'people' as const };
+        location.hash = href(away);
+        route.value = away;
+        await screen.findByRole('heading', { level: 2, name: 'Autumn' });
+        expect(document.querySelector('.person-panel')).toBeNull();
+
+        const back = people('failed');
+        location.hash = href(back);
+        route.value = back;
+
+        await screen.findByRole('heading', { level: 2, name: 'Spring' });
+        expect(await row('Cleo Example')).toBeTruthy();
+        expect(document.querySelector('.person-panel')).toBeNull();
+    });
+
     it('a number opened after the world moved shows the list as it is now', async () => {
         // The table was read when Waiting was 3; the panel asks again and the runtime now says 2.
         const api = peopleApi('campaign.list_contacts/summary-waiting-after').answer(
