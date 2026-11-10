@@ -20,6 +20,8 @@ export interface ChatScope {
     protectedFiles: readonly string[];
     /** The deny list's commands. */
     denied: readonly string[];
+    /** The deny list's operations: a command whose text names one is refused, however it would reach the runtime. */
+    deniedOperations: readonly string[];
     /** The real path of an existing path, links, junctions and short names followed; null when nothing is there. */
     real: (path: string) => string | null;
 }
@@ -173,12 +175,8 @@ function deniedCommand(command: string, scope: ChatScope): boolean {
             }
         });
     }
-    for (const entry of scope.denied) {
-        const [noun, verb] = entry.split(' ');
-        const operation = verb === undefined ? `/v1/${noun}\\.` : `/v1/${noun}\\.${verb.replace(/-/g, '_')}\\b`;
-        if (new RegExp(operation, 'i').test(command)) return true;
-    }
-    return false;
+    const text = command.toLowerCase();
+    return scope.deniedOperations.some((operation) => new RegExp(`(?<![a-z0-9_])${operation.replace('.', '\\.')}(?![a-z0-9_])`).test(text));
 }
 
 const denial = new Error('denied');

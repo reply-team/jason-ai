@@ -8,6 +8,7 @@ import { realPathOf } from '../src/chat-real-path.ts';
 import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
 
 const denied = ['approval approve', 'approval set-standing', 'decision answer', 'runtime', 'plugin install', 'ui', 'journal watch'];
+const deniedOperations = ['approval.approve', 'approval.set_standing', 'decision.answer', 'system.shutdown', 'system.drain', 'plugin.reload', 'journal.stream'];
 
 /** A scope on Windows' semantics: the real paths are what the map says, a path absent from it does not exist. */
 function windows(real: Record<string, string> = {}): ChatScope {
@@ -39,6 +40,7 @@ function windows(real: Record<string, string> = {}): ChatScope {
         data: 'C:\\Users\\someone\\.jason',
         protectedFiles: ['C:\\Users\\someone\\.jason\\config\\settings.json', 'C:\\Users\\someone\\.jason\\run\\runtime.json'],
         denied,
+        deniedOperations,
         real: (path) => existing[path.toLowerCase()] ?? null,
     };
 }
@@ -69,6 +71,7 @@ function mac(): ChatScope {
         data: '/Users/someone/.jason',
         protectedFiles: ['/Users/someone/.jason/config/settings.json', '/Users/someone/.jason/run/runtime.json'],
         denied,
+        deniedOperations,
         real: (path) => existing[path.toLowerCase()] ?? null,
     };
 }
@@ -191,6 +194,7 @@ test('a real junction or symbolic link that leads out of the chat folder is foll
         data,
         protectedFiles: [join(data, 'run', 'runtime.json')],
         denied,
+        deniedOperations,
         real: realPathOf,
     };
     assert.equal(read(scope, join('out', 'runtime.json')).verdict, 'deny');
@@ -242,7 +246,7 @@ test('every deny-list command is refused without a card, with its arguments and 
 
 test('with the file the desktop carries, export and import are refused, and so are the verbs the chat refuses beyond the CLI', () => {
     const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
-    for (const scope of [{ ...windows(), denied: file }, { ...mac(), denied: file }]) {
+    for (const scope of [{ ...windows(), denied: file.commands }, { ...mac(), denied: file.commands }]) {
         for (const command of ['jason export --stop', 'jason export', 'jason import --replace backup.zip', 'jason suppression remove --channel email --value a@example.com',
             'jason route set --campaign cmp_A --plugin x --operation campaign.get', 'jason route unset --campaign cmp_A --operation campaign.get',
             'jason role set-profile researcher --execution-profile local-claude']) {
@@ -270,10 +274,15 @@ test('a denied verb anywhere in a command refuses it, whatever form names the pr
     assert.equal(run(mac(), '/usr/local/bin/jason approval approve apr_A').verdict, 'deny');
 });
 
-test('a call of a denied operation through the Runtime API is refused', () => {
+test('a command that names a denied operation is refused, the runtime\'s stop, system.shutdown, first among them', () => {
     assert.equal(run(windows(), 'curl -X POST http://127.0.0.1:5000/v1/approval.approve -d "{}"').verdict, 'deny');
     assert.equal(run(mac(), 'curl http://127.0.0.1:5000/v1/approval.set_standing').verdict, 'deny');
-    assert.equal(run(mac(), 'curl http://127.0.0.1:5000/v1/runtime.stop').verdict, 'deny');
+    assert.equal(run(mac(), 'curl -X POST http://127.0.0.1:5000/v1/system.shutdown').verdict, 'deny');
+    assert.equal(run(windows(), 'curl -X POST http://127.0.0.1:5000/v1/SYSTEM.DRAIN').verdict, 'deny');
+    assert.equal(run(mac(), 'node -e "fetch(base + \'/v1/plugin.reload\')"').verdict, 'deny');
+    assert.equal(run(mac(), 'websocat ws://127.0.0.1:5000/v1/journal.stream').verdict, 'deny');
+    // A name that only begins like one is not it.
+    assert.equal(run(mac(), 'curl http://127.0.0.1:5000/v1/approval.approved_list').verdict, 'ask');
 });
 
 test('a compound command is never allowed without a card and never remembered, even of allowed parts', () => {

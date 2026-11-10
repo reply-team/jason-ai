@@ -8,7 +8,7 @@ import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArgum
 import { markersIn, plantedConfiguration, plantedMarkers } from './planted-session.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const entries = parseDenyList(readFileSync(join(here, '..', denyListFile), 'utf8'));
+const entries = parseDenyList(readFileSync(join(here, '..', denyListFile), 'utf8')).commands;
 const fixture = (name: string) => readFileSync(join(here, 'fixtures', name), 'utf8').split(/\r?\n/).filter((line) => line !== '');
 
 const turn = { mcpConfig: '/data/desktop/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: entries, dataRules: [] };

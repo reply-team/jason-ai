@@ -1,13 +1,15 @@
 using System.CommandLine;
+using System.Reflection;
 using Jason.Cli;
+using Jason.Contracts.Api;
 
 namespace Jason.Cli.Tests;
 
 /// <summary>
 /// The desktop's chat drives an agent host that may run <c>jason</c>, fenced by one file, <c>desktop/chat-deny-list.txt</c>:
-/// the listed commands are refused by the host's tool fence, and the listed operations are not callable through the
-/// allowed tools. The file is held here to the CLI's own tables, so a verb that becomes a person's own word, or a line
-/// taken out of the file, is red in this class before an agent can run it.
+/// the listed commands are refused by the host's tool fence, and a command naming a listed operation is refused by the
+/// desktop. The file is held here to the CLI's own tables and to the Runtime API's names, so a verb that becomes a
+/// person's own word, or a line taken out of the file, is red in this class before an agent can run it.
 /// </summary>
 public class DesktopDenyListTests
 {
@@ -92,7 +94,48 @@ public class DesktopDenyListTests
         }
     }
 
-    private static HashSet<string> DenyList()
+    /// <summary>Every operation line names an operation the Runtime API has, or its journal stream.</summary>
+    [Fact]
+    public void Every_operation_line_of_the_deny_list_names_an_operation_of_the_runtime_api()
+    {
+        var known = typeof(Operations).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => field.IsLiteral && field.FieldType == typeof(string))
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .Append(Streams.Journal)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var unknown = DeniedOperations().Where(operation => !known.Contains(operation)).ToList();
+
+        Assert.Empty(unknown);
+    }
+
+    /// <summary>
+    /// The operations section names what each denied verb of a person's own word, and of the chat's own word, calls, and
+    /// what the runtime's stop, drain and resume, the plugin reload and the journal's follow call: a program other than
+    /// <c>jason</c> reaching one of them is refused as the verb is.
+    /// </summary>
+    [Fact]
+    public void The_deny_list_names_the_operations_its_verbs_call()
+    {
+        var listed = DeniedOperations();
+        var called = DefaultActorTests.TheEleven.Select(DefaultActorTests.VerbOf)
+            .Concat(TheChatsOwnWord)
+            .Select(verb => verb.Replace(' ', '.').Replace('-', '_'))
+            .Concat([Operations.SystemShutdown, Operations.SystemDrain, Operations.SystemResume, Operations.PluginReload, Streams.Journal]);
+
+        var missing = called.Where(operation => !listed.Contains(operation)).ToList();
+
+        Assert.Empty(missing);
+    }
+
+    /// <summary>The file's command lines: an operation line is told by its dot.</summary>
+    private static HashSet<string> DenyList() =>
+        Lines().Where(line => !line.Contains('.')).ToHashSet(StringComparer.Ordinal);
+
+    private static HashSet<string> DeniedOperations() =>
+        Lines().Where(line => line.Contains('.')).ToHashSet(StringComparer.Ordinal);
+
+    private static IEnumerable<string> Lines()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
@@ -103,7 +146,6 @@ public class DesktopDenyListTests
         Assert.NotNull(root);
         return File.ReadAllLines(Path.Combine(root.FullName, "desktop", "chat-deny-list.txt"))
             .Select(line => line.Trim())
-            .Where(line => line.Length > 0 && !line.StartsWith('#'))
-            .ToHashSet(StringComparer.Ordinal);
+            .Where(line => line.Length > 0 && !line.StartsWith('#'));
     }
 }

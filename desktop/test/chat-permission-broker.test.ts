@@ -12,6 +12,7 @@ const scope: ChatScope = {
     data: '/Users/someone/.jason',
     protectedFiles: ['/Users/someone/.jason/config/settings.json'],
     denied: ['approval approve', 'runtime'],
+    deniedOperations: ['approval.approve'],
     real: (path) => path,
 };
 

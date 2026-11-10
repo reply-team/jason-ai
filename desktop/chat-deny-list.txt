@@ -1,7 +1,7 @@
 # The jason commands the desktop's chat never runs, one per line.
 #
-# The listed commands are refused by the host's tool fence, and the listed operations are not callable through the
-# allowed tools. A person runs them, in the page or in a terminal.
+# The listed commands are refused by the host's tool fence, and a command that names a listed operation is refused by
+# the desktop. A person runs them, in the page or in a terminal. An operation is told from a command by its dot.
 #
 # The verbs that are a person's own word (no default actor applies to them):
 approval approve
@@ -36,3 +36,25 @@ suppression remove
 route set
 route unset
 role set-profile
+#
+# The Runtime API operations the verbs above call, so that no other program reaches them on the agent's behalf:
+approval.approve
+approval.reject
+approval.set_standing
+approval.unset_standing
+decision.answer
+preference.set
+preference.unset
+block.clear
+workitem.resume
+report.submit
+subscription.rewind
+system.shutdown
+system.drain
+system.resume
+plugin.reload
+journal.stream
+suppression.remove
+route.set
+route.unset
+role.set_profile

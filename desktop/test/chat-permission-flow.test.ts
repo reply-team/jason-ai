@@ -24,7 +24,7 @@ async function turn(t: { after: (fn: () => void | Promise<void>) => void }) {
     const broker = new PermissionBroker({ emit: (chat, event) => cards.push({ chat, event }) });
     const platform = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
     const id = newTurnId();
-    broker.openTurn('chat_a', id, { platform, cwd: paths.chat, chat: paths.chat, added: [], data: root, protectedFiles: [paths.installationSettings], denied: ['runtime'], real: realPathOf });
+    broker.openTurn('chat_a', id, { platform, cwd: paths.chat, chat: paths.chat, added: [], data: root, protectedFiles: [paths.installationSettings], denied: ['runtime'], deniedOperations: [], real: realPathOf });
     const secret = newSecret();
     const endpoint = await openEndpoint({ secret, decide: (tool, input) => broker.ask(id, tool, input) });
     const config = writeTurnConfig(paths.desktop, id, endpoint.url, secret);

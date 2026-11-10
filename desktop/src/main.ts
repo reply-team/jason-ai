@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
-import { denyListFile, parseDenyList } from './chat-deny.ts';
+import { denyListFile, parseDenyList, type DenyList } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedTurns } from './chat-log.ts';
 import { cliAt } from './cli.ts';
@@ -42,7 +42,7 @@ function readText(file: string): string | null {
 }
 
 /** The deny list the application carries, read at every turn; a list that cannot be read starts no turn. */
-function deniedCommands(): readonly string[] {
+function deniedCommands(): DenyList {
     const text = readText(join(app.getAppPath(), denyListFile));
     if (text === null) throw new Error('The chat’s deny list could not be read.');
     return parseDenyList(text);
