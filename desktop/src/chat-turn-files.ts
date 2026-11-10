@@ -3,7 +3,7 @@
 // model refuses the agent a read of it; the secret is never on argv and never in a log.
 
 import { randomBytes } from 'node:crypto';
-import { rmSync, writeFileSync } from 'node:fs';
+import { readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serverName } from './chat-permission-endpoint.ts';
 
@@ -46,4 +46,28 @@ export function writeTurnConfig(desktop: string, turnId: string, url: string, se
 
 export function removeTurnFiles(desktop: string, turnId: string): void {
     rmSync(turnConfigPath(desktop, turnId), { force: true });
+}
+
+const turnFileShape = /^turn-[0-9a-f]{24}\.mcp\.json$/;
+
+/**
+ * Removes every turn file under `<data>/desktop`, at the desktop's start: a desktop that ended mid-turn, or a removal a
+ * scanner held, leaves one behind with its secret. Only names of the turn file's own shape are touched, and a file
+ * that cannot be removed is left.
+ */
+export function sweepTurnFiles(desktop: string): void {
+    let names: string[];
+    try {
+        names = readdirSync(desktop);
+    } catch {
+        return;
+    }
+    for (const name of names) {
+        if (!turnFileShape.test(name)) continue;
+        try {
+            rmSync(join(desktop, name), { force: true });
+        } catch {
+            // Left for the next start.
+        }
+    }
 }

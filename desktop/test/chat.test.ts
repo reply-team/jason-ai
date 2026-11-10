@@ -3,7 +3,7 @@
 // their answers, a stop, a card nobody answers, Codex, and the hosts that are refused before anything starts.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/chat.ts';
@@ -466,6 +466,30 @@ test('closing the window stops every turn', async (t) => {
     r.chat.closeAll();
     assert.deepEqual(await done, { kind: 'done', error: null });
     assert.ok(await settle(() => gone(Number(readFileSync(pidFile, 'utf8')))));
+});
+
+test('closing the window removes every running turn\'s file before it returns, since the desktop may quit at once', async (t) => {
+    const r = rig(t);
+    const pidFile = join(r.b.root, 'grandchild.pid');
+    plan(r, [{ wait: pidFile }]);
+    const done = r.until('c1', (event) => event.kind === 'done');
+    await r.chat.send('c1', words, { host: 'claude' });
+    assert.ok(await settle(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8') !== ''));
+    const turnFiles = () => readdirSync(r.b.paths.desktop).filter((name) => name.startsWith('turn-'));
+    assert.equal(turnFiles().length, 1);
+    r.chat.closeAll();
+    assert.deepEqual(turnFiles(), []);
+    await done;
+});
+
+test('a start removes the turn files a desktop that ended mid-turn left behind, and nothing else', (t) => {
+    const r = rig(t);
+    const left = ['turn-0123456789abcdef01234567.mcp.json', 'turn-fedcba9876543210fedcba98.mcp.json'];
+    const kept = ['turn-notes.txt', 'turn-0123.mcp.json', 'settings.json'];
+    mkdirSync(r.b.paths.desktop, { recursive: true });
+    for (const name of [...left, ...kept]) writeFileSync(join(r.b.paths.desktop, name), '{}');
+    new Chat({ paths: r.b.paths, env: r.b.env, bundle: r.bundle, dataNamed: true, cli: r.b.cli, keyFor: () => undefined, denied: () => denied, emit: () => undefined });
+    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'chat').sort(), [...kept].sort());
 });
 
 test('a deny list that cannot be read starts no turn, and leaves nothing open', async (t) => {

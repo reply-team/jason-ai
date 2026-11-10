@@ -14,7 +14,7 @@ import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
-import { newSecret, newTurnId, removeTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
+import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
 import type { Cli } from './cli.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch } from './programs.ts';
@@ -66,6 +66,8 @@ export interface ChatOptions {
 interface Running {
     stopped: boolean;
     process: HostProcess | null;
+    /** The turn's id while it has a file under `<data>/desktop`; a Codex turn has none. */
+    turnId: string | null;
 }
 
 interface Resolved {
@@ -141,6 +143,7 @@ export class Chat {
     constructor(options: ChatOptions) {
         this.#options = options;
         this.#platform = options.platform ?? currentPlatform();
+        sweepTurnFiles(options.paths.desktop);
         this.#broker = new PermissionBroker({
             emit: (chatId, event) => options.emit(chatId, event),
             ...(options.decided ? { decided: options.decided } : {}),
@@ -171,7 +174,7 @@ export class Chat {
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
 
-        const running: Running = { stopped: false, process: null };
+        const running: Running = { stopped: false, process: null, turnId: null };
         this.#running.set(chatId, running);
         try {
             await this.#turn(chatId, text, resolved, launch, given.campaignId as string | undefined, running);
@@ -197,9 +200,15 @@ export class Chat {
         this.#broker.answer(chatId, requestId, { allow: given.allow === true, always: given.always === true });
     }
 
-    /** The window closed: every turn is stopped, every waiting request refused, every "always" forgotten. */
+    /**
+     * The window closed: every turn is stopped, every waiting request refused, every "always" forgotten, and every
+     * running turn's file removed before this returns, since the desktop may quit before a host's exit is seen.
+     */
     closeAll(): void {
-        for (const chatId of [...this.#running.keys()]) this.stop(chatId);
+        for (const [chatId, running] of [...this.#running.entries()]) {
+            this.stop(chatId);
+            if (running.turnId !== null) removeQuietly(this.#options.paths.desktop, running.turnId);
+        }
         this.#broker.endAll();
     }
 
@@ -278,6 +287,7 @@ export class Chat {
                 const id = newTurnId();
                 const denied = this.#options.denied();
                 turnId = id;
+                running.turnId = id;
                 const scope: ChatScope = {
                     platform: this.#platform,
                     cwd: paths.chat,
