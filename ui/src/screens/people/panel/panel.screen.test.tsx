@@ -564,6 +564,28 @@ describe('Move', () => {
             'Moved from Nordic pilot to Q4 follow-ups.',
         );
     });
+
+    it('says an add the runtime refused as a failed call, that nothing changed, and takes nobody out', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-after-half-move')
+            .answer('campaign.list', 'campaign.list/move-targets')
+            .answer('campaign.add_contacts', 'campaign.add_contacts/archived-campaign');
+        open(api, ingrid.id, 'sequences');
+        await within(await shown()).findByText('Q4 follow-ups', { selector: 'a' });
+        const row = membership('Q4 follow-ups');
+        fireEvent.click(within(row).getByRole('button', { name: 'Move' }));
+        fireEvent.click(within(row).getByRole('button', { name: /Choose a campaign/ }));
+        fireEvent.click(await within(row).findByRole('option', { name: /Nordic pilot/ }));
+        fireEvent.click(within(row).getByRole('button', { name: 'Move to Nordic pilot' }));
+
+        const refused = await within(row).findByRole('alert');
+        expect(asked(api, 'campaign.add_contacts')).toEqual([recorded('campaign.add_contacts/archived-campaign')]);
+        expect(refused.textContent).toBe(
+            "Adding to Nordic pilot was refused: Campaign 'cmp_2' is archived; only journal entries can still be appended. Nothing changed.",
+        );
+        expect(asked(api, 'campaign.remove_contacts')).toHaveLength(0);
+        expect(asked(api, 'contact.get')).toHaveLength(1);
+    });
 });
 
 describe('Research', () => {

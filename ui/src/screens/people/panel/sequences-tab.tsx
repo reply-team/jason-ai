@@ -35,6 +35,16 @@ function message(error: unknown): string {
     return error instanceof ApiError ? error.message : String(error);
 }
 
+/** The runtime's words as one sentence, ending with its own stop when it has one. */
+function sentence(text: string): string {
+    return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+/** An add to the campaign a move goes to that was refused, whether its item or the call itself. */
+function notAdded(to: string, why: string): string {
+    return `Adding to ${to} was refused: ${sentence(why)} Nothing changed.`;
+}
+
 /** Sequences: the campaigns the person is in, with their state in each and since when, and the acts on each. */
 export function SequencesTab({ person, now, zone }: Props) {
     const [said, setSaid] = useState<string | null>(null);
@@ -153,9 +163,16 @@ function MembershipActs({ person, campaign, onSaid, onHalf }: ActsProps) {
                 onSaid(excluded(await panel.exclude(api, from.id, person.id, why), from.name));
                 setAsking(null);
             } else if (target) {
-                const outcome = await panel.move(api, person.id, from.id, target.id, why);
+                let outcome: panel.MoveOutcome;
+                try {
+                    outcome = await panel.move(api, person.id, from.id, target.id, why);
+                } catch (error) {
+                    // Only the add can fail as a call: a refused step out comes back as half done.
+                    setFailure(notAdded(target.name, message(error)));
+                    return;
+                }
                 if ('notAdded' in outcome) {
-                    setFailure(`Adding to ${target.name} was refused: ${outcome.notAdded}. Nothing changed.`);
+                    setFailure(notAdded(target.name, outcome.notAdded));
                     return;
                 }
                 setAsking(null);
