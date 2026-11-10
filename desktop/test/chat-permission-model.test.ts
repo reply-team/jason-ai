@@ -102,10 +102,72 @@ test('a write to the host\'s own settings folder inside a working folder gets a 
     assert.equal(write(mac(), '/Users/someone/Jason/Northwind/.claude/settings.json').verdict, 'ask');
 });
 
-test('a file tool with no path works in the chat folder, and Glob and Grep are judged by their folder', () => {
+test('Grep, Glob and LS with no path work in the chat folder, and are judged by their folder', () => {
     assert.deepEqual(judge('Grep', { pattern: 'x' }, windows()), { verdict: 'allow' });
     assert.deepEqual(judge('Glob', { pattern: '**/*.md' }, mac()), { verdict: 'allow' });
+    assert.deepEqual(judge('LS', {}, mac()), { verdict: 'allow' });
     assert.equal(judge('Grep', { pattern: 'x', path: 'C:\\elsewhere' }, windows()).verdict, 'ask');
+});
+
+test('Read and the writers with a missing, empty or non-string path get a card, never the chat folder', () => {
+    for (const scope of [windows(), mac()]) {
+        for (const [tool, input] of [['Read', {}], ['Read', { file_path: '' }], ['Write', { file_path: 42, content: 'x' }], ['Edit', { file_path: '' }],
+            ['MultiEdit', {}], ['NotebookEdit', { notebook_path: ['a.ipynb'] }]] as const) {
+            const card = judge(tool, input, scope);
+            assert.equal(card.verdict, 'ask', `${tool} ${JSON.stringify(input)}`);
+            assert.ok(card.verdict === 'ask' && card.remember === null);
+        }
+    }
+});
+
+// ---- The path's own spelling, read before any lookup ------------------------------------------------------------------
+
+test('on Windows, after \\\\?\\ or \\\\.\\ only a drive or UNC follows; any other device form is refused', () => {
+    for (const path of ['\\\\?\\GLOBALROOT\\Device\\HarddiskVolume3\\Users\\someone\\.jason\\config\\settings.json',
+        '\\\\?\\Volume{0b1c2d3e-0000-0000-0000-100000000000}\\Users\\someone\\.jason\\run\\runtime.json',
+        '\\\\.\\pipe\\jason', '//./PhysicalDrive0', '\\\\?\\c:x']) {
+        assert.equal(read(windows(), path).verdict, 'deny', path);
+        assert.equal(write(windows(), path).verdict, 'deny', path);
+    }
+    assert.deepEqual(read(windows(), '\\\\?\\C:\\Users\\someone\\.jason\\desktop\\chat\\a.md'), { verdict: 'allow' });
+    assert.deepEqual(read(windows(), '\\\\.\\C:\\Users\\someone\\.jason\\desktop\\chat\\a.md'), { verdict: 'allow' });
+});
+
+test('a write to a network path is refused, this machine\'s admin share included; a read of one stays a card', () => {
+    for (const path of ['\\\\server\\share\\file.txt', '\\\\?\\UNC\\server\\share\\file.txt', '\\\\localhost\\C$\\Users\\someone\\Jason\\Northwind\\AGENTS.md',
+        '//127.0.0.1/c$/Users/someone/.jason/desktop/chat/a.md']) {
+        assert.equal(write(windows(), path).verdict, 'deny', path);
+        assert.equal(read(windows(), path).verdict, 'ask', path);
+    }
+    assert.equal(write(mac(), '/net/server/share/file.txt').verdict, 'deny');
+    assert.equal(read(mac(), '/net/server/share/file.txt').verdict, 'ask');
+});
+
+test('on Windows, a component that ends in a dot or a space, or carries a colon, is a card wherever it lies', () => {
+    for (const path of ['C:\\Users\\someone\\Jason\\Northwind\\.claude.\\settings.json', 'C:\\Users\\someone\\Jason\\Northwind\\.claude \\settings.json',
+        'C:\\Users\\someone\\Jason\\Northwind\\.claude::$INDEX_ALLOCATION\\settings.json', 'notes.md:hidden', 'notes.', 'C:notes.md', 'sub \\a.md']) {
+        const card = write(windows(), path);
+        assert.equal(card.verdict, 'ask', path);
+        assert.ok(card.verdict === 'ask' && card.remember === null, path);
+        assert.equal(read(windows(), path).verdict, 'ask', path);
+    }
+    assert.deepEqual(write(windows(), '..\\chat\\a.md'), { verdict: 'allow' });
+    assert.deepEqual(write(mac(), '/Users/someone/Jason/Northwind/notes.'), { verdict: 'allow' });
+});
+
+test('a path that begins with ~ is a card, never an allowance', () => {
+    for (const [scope, path] of [[windows(), '~\\notes.md'], [windows(), '~/notes.md'], [mac(), '~/notes.md'], [mac(), '~'], [mac(), '~someone/.ssh/id_ed25519']] as const) {
+        assert.equal(read(scope, path).verdict, 'ask', path);
+        assert.equal(write(scope, path).verdict, 'ask', path);
+    }
+    assert.equal(judge('Grep', { pattern: 'x', path: '~/Jason' }, mac()).verdict, 'ask');
+});
+
+test('a path longer than the platform takes is refused before any lookup', () => {
+    const looked = (scope: ChatScope): ChatScope => ({ ...scope, real: () => assert.fail('looked up') });
+    assert.equal(read(looked(windows()), `C:\\${'a'.repeat(32_767)}`).verdict, 'deny');
+    assert.equal(write(looked(mac()), `/${'a'.repeat(4_096)}`).verdict, 'deny');
+    assert.equal(judge('Grep', { pattern: 'x', path: `/${'a'.repeat(4_096)}` }, looked(mac())).verdict, 'deny');
 });
 
 // ---- The data directory -----------------------------------------------------------------------------------------------

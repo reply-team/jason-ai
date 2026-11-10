@@ -42,6 +42,11 @@ const hostSettings = '.claude';
 const allowedReply = [['auth', 'status'], ['account', 'list']];
 
 const dataRefusal = 'That path is the installation\'s own data, outside the chat\'s folder: the chat neither reads nor writes it. Nothing was done.';
+const deviceRefusal = 'That path names a device or a volume, not a file in a folder: the chat neither reads nor writes it. Nothing was done.';
+const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat never writes there. Nothing was done.';
+const lengthRefusal = 'That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
+/** The longest path each platform takes: the `\\?\` form's limit on Windows, `PATH_MAX` on macOS and Linux. */
+const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
 const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
 
 const pathsOf = (platform: Platform) => (platform === 'win32' ? win32 : posix);
@@ -91,9 +96,33 @@ function inside(scope: ChatScope, root: string, path: string): boolean {
     return key === folder || key.startsWith(folder.endsWith(separator) ? folder : `${folder}${separator}`);
 }
 
-function judgePath(value: unknown, scope: ChatScope, writes: boolean): Judgement {
+/**
+ * What the spelling alone says, before anything is looked up; null when the path may be looked up. A path too long for
+ * the platform is refused. One that begins with `~` is a card, since the shell and the host may expand it where this
+ * cannot follow. On Windows, after `\\?\` or `\\.\` only a drive or `UNC\` may follow: any other device form is refused.
+ * A component that ends in a dot or a space, or carries a colon (a stream), is a card wherever it lies, since Windows
+ * reads it as another name than the one spelled.
+ */
+function judgeSpelling(value: string, scope: ChatScope): Judgement | null {
+    if (value.length > pathLimit(scope.platform)) return { verdict: 'deny', message: lengthRefusal };
+    if (value.startsWith('~')) return { verdict: 'ask', title: 'Use a path that begins with ~', detail: shorten(value), remember: null };
+    if (scope.platform !== 'win32') return null;
+    let rest = value.replace(/\//g, '\\');
+    if (/^\\\\[?.]\\/.test(rest)) {
+        rest = rest.slice(4);
+        if (!/^[a-z]:\\/i.test(rest) && !/^unc\\/i.test(rest)) return { verdict: 'deny', message: deviceRefusal };
+    }
+    if (/^[a-z]:\\/i.test(rest)) rest = rest.slice(2);
+    const differs = rest.split('\\').some((part) => part !== '.' && part !== '..' && (/[. ]$/.test(part) || part.includes(':')));
+    return differs ? { verdict: 'ask', title: 'Use a path Windows reads as another name', detail: shorten(value), remember: null } : null;
+}
+
+function judgePath(value: string, scope: ChatScope, writes: boolean): Judgement {
+    const spelling = judgeSpelling(value, scope);
+    if (spelling !== null) return spelling;
+    if (writes && network(scope.platform, spelled(value, scope))) return { verdict: 'deny', message: networkRefusal };
     const paths = pathsOf(scope.platform);
-    const path = located(typeof value === 'string' && value !== '' ? value : '.', scope);
+    const path = located(value, scope);
     const key = keyOf(scope.platform, path);
     if (scope.protectedFiles.some((file) => keyOf(scope.platform, located(file, scope)) === key)) return { verdict: 'deny', message: dataRefusal };
     const chat = located(scope.chat, scope);
@@ -116,7 +145,7 @@ function worse(one: Judgement, other: Judgement): Judgement {
 
 /** Glob also reaches where its pattern climbs or points: the pattern's fixed leading folders are judged too. */
 function judgeGlob(input: Record<string, unknown>, scope: ChatScope): Judgement {
-    const folder = typeof input['path'] === 'string' && input['path'] !== '' ? input['path'] : scope.cwd;
+    const folder = named(input['path']) ? input['path'] : scope.cwd;
     const judged = judgePath(folder, scope, false);
     const pattern = typeof input['pattern'] === 'string' ? input['pattern'] : '';
     const parts = pattern.split(/[\\/]/);
@@ -217,13 +246,29 @@ function hostOf(url: string): string | null {
     }
 }
 
+function named(value: unknown): value is string {
+    return typeof value === 'string' && value !== '';
+}
+
+/** Read and the writers name the file they act on; one that names none is a card, never the chat folder by default. */
+function unnamed(tool: string, input: Record<string, unknown>): Judgement {
+    return { verdict: 'ask', title: `Use ${tool} with no file named`, detail: shorten(JSON.stringify(input)), remember: null };
+}
+
 /** Decides without a person where the answer is already known, and otherwise says what to put in front of them. */
 export function judge(tool: string, input: Record<string, unknown>, scope: ChatScope): Judgement {
     if (tool === 'Glob') return judgeGlob(input, scope);
     const reader = readers[tool];
-    if (reader !== undefined) return judgePath(input[reader], scope, false);
+    if (reader !== undefined) {
+        const value = input[reader];
+        if (named(value)) return judgePath(value, scope, false);
+        return tool === 'Read' ? unnamed(tool, input) : judgePath('.', scope, false);
+    }
     const writer = writers[tool];
-    if (writer !== undefined) return judgePath(input[writer], scope, true);
+    if (writer !== undefined) {
+        const value = input[writer];
+        return named(value) ? judgePath(value, scope, true) : unnamed(tool, input);
+    }
     if (shells.has(tool)) return judgeCommand(tool, typeof input['command'] === 'string' ? input['command'] : '', scope);
     if (tool === 'WebFetch') {
         const url = typeof input['url'] === 'string' ? input['url'] : '';
