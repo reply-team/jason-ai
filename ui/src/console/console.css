@@ -548,6 +548,13 @@
 .jc-console .chat-md-link {
     overflow-wrap: anywhere;
 }
+.jc-console .chat-step-detail {
+    font-family: var(--m);
+    font-size: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    opacity: 0.85;
+}
 .jc-console .vsteps {
     margin: -6px 0 16px;
     border-left: 2px solid var(--line);

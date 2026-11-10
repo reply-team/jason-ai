@@ -203,13 +203,29 @@ describe('the console', () => {
         expect(sent.args.slice(1)).toEqual(['What waits?', { host: 'claude' }]);
         const id = sent.args[0] as string;
         flush(() => {
-            desktop.emit(id, { kind: 'step', text: 'Ran jason approval list' });
+            desktop.emit(id, { kind: 'step', text: 'Ran a jason command', detail: `jason approval list ${hostile}` });
+            desktop.emit(id, {
+                kind: 'step',
+                text: 'Used a tool',
+                detail: '<b onclick="window.hit=1">constructor</b>',
+            });
             desktop.emit(id, { kind: 'text', text: hostile });
             desktop.emit(id, { kind: 'done', error: null });
         });
         await waitFor(() => screen.getByText(hostile));
         expect(document.querySelector('.thread img')).toBeNull();
-        expect(screen.getByText('1 action')).toBeTruthy();
+        expect(screen.getByText('2 actions')).toBeTruthy();
+        // Each step is its plain words, with what it acted on beneath them as text.
+        const steps = [...document.querySelectorAll('.vstep')];
+        expect(steps.map((step) => step.querySelector('.chat-step-text')?.textContent)).toEqual([
+            'Ran a jason command',
+            'Used a tool',
+        ]);
+        expect(steps.map((step) => step.querySelector('.chat-step-detail')?.textContent)).toEqual([
+            `jason approval list ${hostile}`,
+            '<b onclick="window.hit=1">constructor</b>',
+        ]);
+        expect(document.querySelector('.vsteps b, .vsteps img, .vsteps [onclick]')).toBeNull();
     });
 
     it("draws the agent's Markdown as its subset, and everything else in it as text", async () => {

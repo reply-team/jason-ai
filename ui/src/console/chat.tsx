@@ -151,7 +151,15 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                     <summary>
                         ${entry.open ? 'Working…' : entry.steps.length === 1 ? '1 action' : `${entry.steps.length} actions`}
                     </summary>
-                    ${entry.steps.map((step) => html`<div class="vstep">${step}</div>`)}
+                    ${entry.steps.map(
+                        (step) =>
+                            html`<div class="vstep">
+                                <div>
+                                    <div class="chat-step-text">${step.text}</div>
+                                    ${step.detail !== undefined ? html`<div class="chat-step-detail">${step.detail}</div>` : null}
+                                </div>
+                            </div>`,
+                    )}
                 </details>`;
             case 'user':
                 return html`<div class="m user"><div class="bub said">${entry.text}</div></div>`;

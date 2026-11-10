@@ -9,7 +9,7 @@
 import { mkdirSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute } from 'node:path';
-import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine } from './chat-hosts.ts';
+import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type Step } from './chat-hosts.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
@@ -25,7 +25,7 @@ import { hosts, keyProvider, providerEnvironment } from './providers-model.ts';
 
 /** What the page is told, by the chat it belongs to: U2's `DesktopChatEvent`. */
 export type ChatEvent =
-    | { kind: 'step'; text: string }
+    | ({ kind: 'step' } & Step)
     | { kind: 'text'; text: string }
     | BrokerEvent
     | { kind: 'done'; error: string | null };

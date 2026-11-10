@@ -7,10 +7,16 @@ import type { DesktopChatEvent } from '../platform/desktop';
 
 export type Answer = 'allow' | 'always' | 'deny' | 'gone';
 
+/** A step of the agent's: the desktop's plain words for it, and what it acted on, when it said. */
+export interface Step {
+    text: string;
+    detail?: string;
+}
+
 export type Entry =
     | { kind: 'user'; text: string }
     | { kind: 'text'; text: string }
-    | { kind: 'step'; text: string }
+    | { kind: 'step'; step: Step }
     | {
           kind: 'permission';
           request: string;
@@ -83,9 +89,13 @@ export function said(chat: Chat, text: string, resent = false): Chat {
 /** What an event of the desktop's does to the chat it belongs to. */
 export function received(chat: Chat, event: DesktopChatEvent): Chat {
     switch (event.kind) {
-        case 'step':
+        case 'step': {
+            const step: Step =
+                event.detail === undefined ? { text: event.text } : { text: event.text, detail: event.detail };
+            return { ...chat, entries: [...chat.entries, { kind: 'step', step }] };
+        }
         case 'text':
-            return { ...chat, entries: [...chat.entries, { kind: event.kind, text: event.text }] };
+            return { ...chat, entries: [...chat.entries, { kind: 'text', text: event.text }] };
         case 'permission':
             return {
                 ...chat,
@@ -221,18 +231,18 @@ export function failed(chat: Chat, error: string): Chat {
 }
 
 /** The steps between two messages fold into one line; the last group stays open while the turn runs. */
-export type Shown = { kind: 'steps'; steps: string[]; open: boolean } | Exclude<Entry, { kind: 'step' }>;
+export type Shown = { kind: 'steps'; steps: Step[]; open: boolean } | Exclude<Entry, { kind: 'step' }>;
 
 export function shown(chat: Chat): Shown[] {
     const out: Shown[] = [];
-    let steps: string[] = [];
+    let steps: Step[] = [];
     const flush = (open: boolean) => {
         if (steps.length) out.push({ kind: 'steps', steps, open });
         steps = [];
     };
     for (const entry of chat.entries) {
         if (entry.kind === 'step') {
-            steps.push(entry.text);
+            steps.push(entry.step);
             continue;
         }
         flush(false);

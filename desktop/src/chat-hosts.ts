@@ -255,46 +255,76 @@ export function hostEnvironment(
 /** What one line a host prints means. */
 export type HostLine =
     | { kind: 'session'; id: string }
-    | { kind: 'step'; text: string }
+    | ({ kind: 'step' } & Step)
     | { kind: 'text'; text: string }
     /** The host said the turn is over: `error` null when it succeeded, else the host's own words. */
     | { kind: 'result'; error: string | null };
 
-const verbWord = /^[a-z][a-z-]*$/;
-
-/** A command as one step line: `jason <noun> <verb>` for a jason command, never any command's arguments. */
-function commandStep(command: unknown): string {
-    if (typeof command !== 'string') return 'Ran a command';
-    const words = command.trim().split(/\s+/);
-    if (words[0] === 'jason' && words.length >= 3 && verbWord.test(words[1] ?? '') && verbWord.test(words[2] ?? '')) return `jason ${words[1]} ${words[2]}`;
-    if (words[0] === 'jason' && words.length === 2 && verbWord.test(words[1] ?? '')) return `jason ${words[1]}`;
-    return 'Ran a command';
+/**
+ * One tool use as the page shows it: `text`, fixed words of the desktop's own for what the host did, and `detail`, the
+ * command, path, query or tool name it acted on, which the page draws as text beneath them. A tool the tables below do
+ * not name is "Used a tool", with its name as the detail.
+ */
+export interface Step {
+    text: string;
+    detail?: string;
 }
 
-const claudeSteps: Readonly<Record<string, string>> = {
-    Read: 'Read a file',
-    Write: 'Wrote a file',
-    Edit: 'Changed a file',
-    MultiEdit: 'Changed a file',
-    NotebookEdit: 'Changed a notebook',
-    Glob: 'Looked through files',
-    Grep: 'Looked through files',
-    LS: 'Looked through files',
-    Skill: 'Used a skill',
-    WebSearch: 'Searched the web',
-    WebFetch: 'Read a web page',
-    Agent: 'Started a subagent',
-    Task: 'Started a subagent',
-    TodoWrite: 'Updated its task list',
-    TaskCreate: 'Updated its task list',
-    TaskUpdate: 'Updated its task list',
-};
+/** The longest detail a step carries; a longer one is cut and ends with an ellipsis. */
+const detailLimit = 300;
 
-/** A tool use as one step line, in the host's words for what it did. */
-export function claudeStep(name: unknown, input: unknown): string {
-    if (name === 'Bash' || name === 'PowerShell') return commandStep((input as { command?: unknown } | null)?.command);
-    if (typeof name === 'string' && name in claudeSteps) return claudeSteps[name] ?? 'Used a tool';
-    return 'Used a tool';
+/** A value a step can show beneath its words: a non-blank string, cut to the limit; anything else is no detail. */
+function detailOf(value: unknown): string | undefined {
+    if (typeof value !== 'string' || value.trim() === '') return undefined;
+    const text = value.trim();
+    return text.length > detailLimit ? `${text.slice(0, detailLimit - 1)}…` : text;
+}
+
+function step(text: string, detail: unknown): Step {
+    const shown = detailOf(detail);
+    return shown === undefined ? { text } : { text, detail: shown };
+}
+
+/** A command as a step: a jason command says so, and the command itself is the detail. */
+function commandStep(command: unknown): Step {
+    const first = typeof command === 'string' ? command.trim().split(/\s+/)[0] : undefined;
+    return step(first === 'jason' ? 'Ran a jason command' : 'Ran a command', command);
+}
+
+type Field = (input: Record<string, unknown>) => unknown;
+const field = (name: string): Field => (input) => input[name];
+
+/**
+ * Claude Code's tools other than its two shells, by name: the words for what each did, and the input field shown
+ * beneath them. A Map, so a name
+ * that only an object inherits (`constructor`, `__proto__`) is a tool it does not know.
+ */
+const claudeSteps: ReadonlyMap<string, { text: string; detail?: Field }> = new Map([
+    ['Read', { text: 'Read a file', detail: field('file_path') }],
+    ['Write', { text: 'Wrote a file', detail: field('file_path') }],
+    ['Edit', { text: 'Changed a file', detail: field('file_path') }],
+    ['MultiEdit', { text: 'Changed a file', detail: field('file_path') }],
+    ['NotebookEdit', { text: 'Changed a notebook', detail: field('notebook_path') }],
+    ['Glob', { text: 'Looked through files', detail: field('pattern') }],
+    ['Grep', { text: 'Looked through files', detail: field('pattern') }],
+    ['LS', { text: 'Looked through files', detail: field('path') }],
+    ['Skill', { text: 'Used a skill', detail: field('skill') }],
+    ['WebSearch', { text: 'Searched the web', detail: field('query') }],
+    ['WebFetch', { text: 'Read a web page', detail: field('url') }],
+    ['Agent', { text: 'Started a subagent', detail: field('description') }],
+    ['Task', { text: 'Started a subagent', detail: field('description') }],
+    ['TodoWrite', { text: 'Updated its task list' }],
+    ['TaskCreate', { text: 'Updated its task list' }],
+    ['TaskUpdate', { text: 'Updated its task list' }],
+]);
+
+/** A tool use as a step, in the desktop's words for what it did. */
+export function claudeStep(name: unknown, input: unknown): Step {
+    const fields = input !== null && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+    if (name === 'Bash' || name === 'PowerShell') return commandStep(fields.command);
+    const known = typeof name === 'string' ? claudeSteps.get(name) : undefined;
+    if (known === undefined) return step('Used a tool', name);
+    return step(known.text, known.detail?.(fields));
 }
 
 function parsed(line: string): Record<string, unknown> | null {
@@ -324,7 +354,7 @@ export function claudeLine(line: string): HostLine[] {
         const out: HostLine[] = [];
         for (const block of content as { type?: unknown; text?: unknown; name?: unknown; input?: unknown }[]) {
             if (block?.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') out.push({ kind: 'text', text: block.text });
-            else if (block?.type === 'tool_use') out.push({ kind: 'step', text: claudeStep(block.name, block.input) });
+            else if (block?.type === 'tool_use') out.push({ kind: 'step', ...claudeStep(block.name, block.input) });
         }
         return out;
     }
@@ -337,12 +367,23 @@ export function claudeLine(line: string): HostLine[] {
     return [];
 }
 
-const codexSteps: Readonly<Record<string, string>> = {
-    file_change: 'Changed files',
-    web_search: 'Searched the web',
-    mcp_tool_call: 'Used a tool',
-    todo_list: 'Updated its task list',
-};
+/** Codex's tool items, by type, as steps: a Map, like Claude Code's, so an inherited name is an item it does not know. */
+const codexSteps: ReadonlyMap<string, (item: Record<string, unknown>) => Step> = new Map([
+    ['command_execution', (item: Record<string, unknown>) => commandStep(item.command)],
+    ['file_change', (item: Record<string, unknown>) => step('Changed files', pathsOf(item.changes))],
+    ['web_search', (item: Record<string, unknown>) => step('Searched the web', item.query)],
+    ['mcp_tool_call', (item: Record<string, unknown>) => step('Used a tool', item.tool)],
+    ['todo_list', () => step('Updated its task list', undefined)],
+]);
+
+function pathsOf(changes: unknown): string | undefined {
+    if (!Array.isArray(changes)) return undefined;
+    const paths = changes.flatMap((change: unknown) => {
+        const path = (change as { path?: unknown } | null)?.path;
+        return typeof path === 'string' && path !== '' ? [path] : [];
+    });
+    return paths.length ? paths.join(', ') : undefined;
+}
 
 /**
  * One line of `codex exec --json`: the thread it runs as (`thread.started`), the agent's message and its tool items
@@ -356,17 +397,17 @@ export function codexLine(line: string, seen: Set<string>): HostLine[] {
         return typeof event.thread_id === 'string' && sessionShape.test(event.thread_id) ? [{ kind: 'session', id: event.thread_id }] : [];
     }
     if (event.type === 'item.started' || event.type === 'item.completed') {
-        const item = event.item as { id?: unknown; type?: unknown; text?: unknown; command?: unknown } | null;
+        const item = event.item as ({ id?: unknown; type?: unknown; text?: unknown } & Record<string, unknown>) | null;
         if (!item || typeof item.type !== 'string') return [];
         if (item.type === 'agent_message') {
             return event.type === 'item.completed' && typeof item.text === 'string' && item.text.trim() !== '' ? [{ kind: 'text', text: item.text }] : [];
         }
-        const step = item.type === 'command_execution' ? commandStep(item.command) : codexSteps[item.type];
-        if (step === undefined) return [];
+        const stepOf = codexSteps.get(item.type);
+        if (stepOf === undefined) return [];
         const id = typeof item.id === 'string' ? item.id : null;
         if (id !== null && seen.has(id)) return [];
         if (id !== null) seen.add(id);
-        return [{ kind: 'step', text: step }];
+        return [{ kind: 'step', ...stepOf(item) }];
     }
     if (event.type === 'turn.completed') return [{ kind: 'result', error: null }];
     if (event.type === 'turn.failed') {

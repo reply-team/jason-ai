@@ -37,15 +37,19 @@ describe('a chat as the page keeps it', () => {
 
     it('folds the steps between two messages, and keeps the last ones open while the turn runs', () => {
         let chat = said(newChat('c1', 'claude'), 'Go');
-        chat = received(chat, { kind: 'step', text: 'Ran jason status' });
-        chat = received(chat, { kind: 'step', text: 'Ran jason campaign list' });
+        chat = received(chat, { kind: 'step', text: 'Ran a jason command', detail: 'jason status' });
+        chat = received(chat, { kind: 'step', text: 'Updated its task list' });
         chat = received(chat, { kind: 'text', text: 'Two campaigns.' });
-        chat = received(chat, { kind: 'step', text: 'Ran jason approval list' });
+        chat = received(chat, { kind: 'step', text: 'Ran a jason command', detail: 'jason approval list' });
         expect(shown(chat)).toEqual([
             { kind: 'user', text: 'Go' },
-            { kind: 'steps', steps: ['Ran jason status', 'Ran jason campaign list'], open: false },
+            {
+                kind: 'steps',
+                steps: [{ text: 'Ran a jason command', detail: 'jason status' }, { text: 'Updated its task list' }],
+                open: false,
+            },
             { kind: 'text', text: 'Two campaigns.' },
-            { kind: 'steps', steps: ['Ran jason approval list'], open: true },
+            { kind: 'steps', steps: [{ text: 'Ran a jason command', detail: 'jason approval list' }], open: true },
         ]);
     });
 
