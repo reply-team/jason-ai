@@ -42,16 +42,16 @@ test('the folder is %LOCALAPPDATA%\\Microsoft\\WindowsApps on Windows, ~/.local/
 test('on Windows, with the folder on the PATH and no jason anywhere, the shim is offered and nothing is placed until the person says so', (t) => {
     const { folder, command } = windows(t);
     const status = command.status();
-    assert.deepEqual(status, { state: 'absent', name: 'jason', file: join(folder, 'jason.cmd'), folderOnPath: true, shadows: null, executable: windowsExe });
+    assert.deepEqual(status, { state: 'absent', name: 'jason', files: [join(folder, 'jason.cmd'), join(folder, 'jason')], folderOnPath: true, shadows: null, executable: windowsExe });
     assert.deepEqual(readdirSync(folder), [], 'a look places nothing');
 });
 
 test('placing the shim writes one line that runs the bundled executable by its full path with every argument, and reads back as placed', (t) => {
     const { folder, command, log } = windows(t);
-    assert.deepEqual(command.place(), { state: 'placed', name: 'jason', file: join(folder, 'jason.cmd'), executable: windowsExe });
-    assert.deepEqual(readdirSync(folder), ['jason.cmd']);
+    assert.deepEqual(command.place(), { state: 'placed', name: 'jason', files: [join(folder, 'jason.cmd'), join(folder, 'jason')], executable: windowsExe });
+    assert.deepEqual(readdirSync(folder).sort(), ['jason', 'jason.cmd']);
     assert.equal(readFileSync(join(folder, 'jason.cmd'), 'utf8'), `@echo off\r\n"${windowsExe}" %*\r\n`);
-    assert.deepEqual(command.status(), { state: 'placed', name: 'jason', file: join(folder, 'jason.cmd'), executable: windowsExe });
+    assert.deepEqual(command.status(), { state: 'placed', name: 'jason', files: [join(folder, 'jason.cmd'), join(folder, 'jason')], executable: windowsExe });
     assert.deepEqual(log.lines, [{ level: 'info', name: 'path_command_set', fields: { On: true, Name: 'jason', Platform: 'win32' } }]);
 
     assert.deepEqual(command.remove(), command.status());
@@ -60,9 +60,42 @@ test('placing the shim writes one line that runs the bundled executable by its f
     assert.deepEqual(log.lines.at(-1), { level: 'info', name: 'path_command_set', fields: { On: false, Name: 'jason', Platform: 'win32' } });
 });
 
+test('on Windows a Git Bash wrapper goes beside the shim: placed and removed with it, read back with it, and named by the same rule', (t) => {
+    const { folder, command } = windows(t);
+    const shim = join(folder, 'jason.cmd');
+    const wrapper = join(folder, 'jason');
+    const forward = windowsExe.replaceAll('\\', '/');
+    const wrapperText = `#!/bin/sh\n# Written by the Jason desktop application.\nexec '${forward}' "$@"\n`;
+    assert.deepEqual(command.status(), { state: 'absent', name: 'jason', files: [shim, wrapper], folderOnPath: true, shadows: null, executable: windowsExe });
+    command.place();
+    assert.deepEqual(readdirSync(folder).sort(), ['jason', 'jason.cmd']);
+    assert.equal(readFileSync(wrapper, 'utf8'), wrapperText, 'the macOS wrapper’s text, the path in forward slashes');
+    assert.equal(command.status().state, 'placed');
+    const menu = commandMenuOf(command.status());
+    assert.ok(menu.lines.some((line) => line.includes('Command Prompt, PowerShell and Git Bash') && line.includes(shim) && line.includes(wrapper)), 'the line names the shells it serves');
+
+    // Either file differing is pointing elsewhere: another executable, or the wrapper gone.
+    writeFileSync(wrapper, wrapperText.replace(forward, 'D:/Old/jason.exe'));
+    assert.deepEqual(command.status(), { state: 'elsewhere', name: 'jason', files: [shim, wrapper], why: `${wrapper} runs D:/Old/jason.exe`, executable: windowsExe });
+    rmSync(wrapper);
+    assert.deepEqual(command.status(), { state: 'elsewhere', name: 'jason', files: [shim, wrapper], why: `${wrapper} is missing`, executable: windowsExe });
+    command.place();
+    assert.equal(command.status().state, 'placed', 'placed again on the word, both files');
+    command.remove();
+    assert.deepEqual(readdirSync(folder), [], 'removed together');
+
+    // A wrapper the desktop did not write is never replaced or removed, and the command is then jason-desktop, both files.
+    writeFileSync(wrapper, '#!/bin/sh\necho mine\n');
+    assert.deepEqual(command.status(), { state: 'absent', name: 'jason-desktop', files: [join(folder, 'jason-desktop.cmd'), join(folder, 'jason-desktop')], folderOnPath: true, shadows: wrapper, executable: windowsExe });
+    command.place();
+    command.remove();
+    assert.deepEqual(readdirSync(folder), ['jason']);
+    assert.equal(readFileSync(wrapper, 'utf8'), '#!/bin/sh\necho mine\n');
+});
+
 test('on Windows, with the folder not on the PATH, nothing is placed and the bundled executable’s path is what is shown', (t) => {
     const { folder, command, log } = windows(t, { onPath: false });
-    assert.deepEqual(command.status(), { state: 'absent', name: 'jason', file: join(folder, 'jason.cmd'), folderOnPath: false, shadows: null, executable: windowsExe });
+    assert.deepEqual(command.status(), { state: 'absent', name: 'jason', files: [join(folder, 'jason.cmd'), join(folder, 'jason')], folderOnPath: false, shadows: null, executable: windowsExe });
     assert.throws(() => command.place(), /not on the PATH/);
     assert.deepEqual(readdirSync(folder), []);
     assert.deepEqual(log.lines, []);
@@ -86,10 +119,10 @@ test('a jason on the PATH that is not ours is never shadowed: the shim is named 
     const other = 'C:\\Tools\\Jason\\jason.exe';
     const { folder, command } = windows(t, { others: ['C:\\Tools\\Jason'], isProgram: (file) => file === other || existsSync(file) });
     const status = command.status();
-    assert.deepEqual(status, { state: 'absent', name: 'jason-desktop', file: join(folder, 'jason-desktop.cmd'), folderOnPath: true, shadows: other, executable: windowsExe });
+    assert.deepEqual(status, { state: 'absent', name: 'jason-desktop', files: [join(folder, 'jason-desktop.cmd'), join(folder, 'jason-desktop')], folderOnPath: true, shadows: other, executable: windowsExe });
     command.place();
-    assert.deepEqual(readdirSync(folder), ['jason-desktop.cmd']);
-    assert.deepEqual(command.status(), { state: 'placed', name: 'jason-desktop', file: join(folder, 'jason-desktop.cmd'), executable: windowsExe });
+    assert.deepEqual(readdirSync(folder).sort(), ['jason-desktop', 'jason-desktop.cmd']);
+    assert.deepEqual(command.status(), { state: 'placed', name: 'jason-desktop', files: [join(folder, 'jason-desktop.cmd'), join(folder, 'jason-desktop')], executable: windowsExe });
 });
 
 test('a jason.cmd in the folder that the desktop did not write is never replaced, and never removed', (t) => {
@@ -115,7 +148,7 @@ test('a shim of ours that runs another executable is shown as pointing elsewhere
     const { folder, command } = windows(t);
     const older = 'D:\\Old\\Jason\\resources\\bundle\\jason.exe';
     writeFileSync(join(folder, 'jason.cmd'), `@echo off\r\n"${older}" %*\r\n`);
-    assert.deepEqual(command.status(), { state: 'elsewhere', name: 'jason', file: join(folder, 'jason.cmd'), target: older, executable: windowsExe });
+    assert.deepEqual(command.status(), { state: 'elsewhere', name: 'jason', files: [join(folder, 'jason.cmd'), join(folder, 'jason')], why: `${join(folder, 'jason.cmd')} runs ${older}`, executable: windowsExe });
     command.status();
     assert.equal(readFileSync(join(folder, 'jason.cmd'), 'utf8'), `@echo off\r\n"${older}" %*\r\n`, 'a look rewrites nothing');
     const menu = commandMenuOf(command.status());
@@ -141,7 +174,7 @@ test('on macOS the wrapper is ~/.local/bin/jason, executable, made with its fold
     const log = memoryLog();
     const make = (dataDirectory: string | null) => new PathCommand({ platform: 'darwin', folder, executable: macExe, dataDirectory, path: () => '/usr/bin:/bin', isProgram: (file) => existsSync(file), log });
     const command = make(null);
-    assert.deepEqual(command.status(), { state: 'absent', name: 'jason', file: join(folder, 'jason'), folderOnPath: false, shadows: null, executable: macExe });
+    assert.deepEqual(command.status(), { state: 'absent', name: 'jason', files: [join(folder, 'jason')], folderOnPath: false, shadows: null, executable: macExe });
     assert.equal(existsSync(folder), false, 'a look makes no folder');
     command.place();
     assert.equal(readFileSync(join(folder, 'jason'), 'utf8'), `#!/bin/sh\n# Written by the Jason desktop application.\nexec '${macExe}' "$@"\n`);
@@ -176,11 +209,11 @@ test('the menu always shows the bundled executable’s full path and offers only
     const exe = 'C:\\J\\jason.exe';
     const file = 'C:\\W\\jason.cmd';
     const cases = [
-        [{ state: 'absent', name: 'jason', file, folderOnPath: true, shadows: null, executable: exe }, ['place']],
-        [{ state: 'absent', name: 'jason', file, folderOnPath: false, shadows: null, executable: exe }, []],
-        [{ state: 'placed', name: 'jason', file, executable: exe }, ['remove']],
-        [{ state: 'elsewhere', name: 'jason', file, target: 'D:\\x.exe', executable: exe }, ['place', 'remove']],
-        [{ state: 'taken', file, executable: exe }, []],
+        [{ state: 'absent', name: 'jason', files: [file], folderOnPath: true, shadows: null, executable: exe }, ['place']],
+        [{ state: 'absent', name: 'jason', files: [file], folderOnPath: false, shadows: null, executable: exe }, []],
+        [{ state: 'placed', name: 'jason', files: [file], executable: exe }, ['remove']],
+        [{ state: 'elsewhere', name: 'jason', files: [file], why: 'D:\\x.exe', executable: exe }, ['place', 'remove']],
+        [{ state: 'taken', files: [file], executable: exe }, []],
         [{ state: 'unsupported', executable: exe }, []],
     ] as const;
     for (const [status, acts] of cases) {
@@ -188,7 +221,7 @@ test('the menu always shows the bundled executable’s full path and offers only
         assert.ok(menu.lines.some((line) => line.includes(exe)), `${status.state} shows the executable`);
         assert.deepEqual(menu.acts.map((act) => act.act), acts, status.state);
     }
-    const shadowing = commandMenuOf({ state: 'absent', name: 'jason-desktop', file: 'C:\\W\\jason-desktop.cmd', folderOnPath: true, shadows: 'C:\\other\\jason.exe', executable: exe });
+    const shadowing = commandMenuOf({ state: 'absent', name: 'jason-desktop', files: ['C:\\W\\jason-desktop.cmd'], folderOnPath: true, shadows: 'C:\\other\\jason.exe', executable: exe });
     assert.ok(shadowing.lines.some((line) => line.includes('C:\\other\\jason.exe')));
     assert.equal(shadowing.acts[0]?.label, 'Put jason-desktop on the PATH…');
 });

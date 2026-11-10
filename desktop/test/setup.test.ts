@@ -374,14 +374,15 @@ test('each act of the desk’s menu writes what it names and nothing else: under
     await act('Start the runtime at logon, on', () => autostart.set(true), []);
     await act('Start the runtime at logon, off', () => autostart.set(false), []);
 
-    // The PATH command's folders, injected under the test's home: %LOCALAPPDATA%\Microsoft\WindowsApps and ~/.local/bin.
+    // The PATH command's folders, injected under the test's home: %LOCALAPPDATA%\Microsoft\WindowsApps (the shim and its
+    // Git Bash wrapper) and ~/.local/bin.
     const windowsApps = join(home, 'AppData', 'Local', 'Microsoft', 'WindowsApps');
     mkdirSync(windowsApps, { recursive: true });
     const command = (platform: NodeJS.Platform, folder: string) =>
         new PathCommand({ platform, folder, executable: platform === 'win32' ? 'C:\\J\\jason.exe' : '/J/jason', dataDirectory: null, path: () => folder, isProgram: () => false, log });
     await act('The PATH command, read, Windows', async () => command('win32', windowsApps).status(), []);
-    await act('The PATH command, placed, Windows', async () => command('win32', windowsApps).place(), ['AppData/Local/Microsoft/WindowsApps/jason.cmd']);
-    await act('The PATH command, removed, Windows', async () => command('win32', windowsApps).remove(), ['AppData/Local/Microsoft/WindowsApps/jason.cmd']);
+    await act('The PATH command, placed, Windows', async () => command('win32', windowsApps).place(), ['AppData/Local/Microsoft/WindowsApps/jason', 'AppData/Local/Microsoft/WindowsApps/jason.cmd']);
+    await act('The PATH command, removed, Windows', async () => command('win32', windowsApps).remove(), ['AppData/Local/Microsoft/WindowsApps/jason', 'AppData/Local/Microsoft/WindowsApps/jason.cmd']);
     await act('The PATH command, placed, macOS', async () => command('darwin', join(home, '.local', 'bin')).place(), ['.local/bin/jason']);
     await act('The PATH command, removed, macOS', async () => command('darwin', join(home, '.local', 'bin')).remove(), ['.local/bin/jason']);
 

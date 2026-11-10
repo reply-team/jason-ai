@@ -44,9 +44,23 @@ function batchSafe(value: string, what: string): string {
 }
 
 /**
+ * The Git Bash wrapper on Windows, placed beside the shim. Git Bash, the shell Claude Code's Bash tool runs on Windows,
+ * finds `jason` and `jason.exe` but never `jason.cmd`, so with the shim alone `jason` is "command not found" there. It
+ * is the macOS wrapper's text with the executable's path in forward slashes, and `"$@"` hands every argument over whole.
+ */
+export function gitBashWrapper(executable: string, dataDirectory: string | null = null): string {
+    return wrapperScript(executable.replaceAll('\\', '/'), dataDirectory);
+}
+
+/**
  * The shim on Windows, a batch file that hands its arguments to the executable the application carries, so its exit
  * code is the CLI's. When the desktop runs with a data directory of its own the shim names it, inside `setlocal`, so
  * the terminal it is typed in keeps its own environment.
+ *
+ * `%*` hands the caller's arguments to cmd.exe's parser a second time, so a quoted argument beside `&`, `|`, `<`, `>`
+ * or `^` (JSON passed from PowerShell 7.3 or later, which hands a `.cmd` its arguments in its legacy way) can be split,
+ * or run as a command of its own. The shim is for a person typing; a script or an agent passes such arguments to the
+ * executable's full path, or runs `jason` from Git Bash, where the wrapper beside the shim passes them whole.
  */
 export function windowsShim(executable: string, dataDirectory: string | null = null): string {
     batchSafe(executable, 'executable path');

@@ -169,8 +169,8 @@ export class Desk {
 
     /** Asks, then places or removes the command; what went wrong is said in a box of its own. */
     private async commandAct(act: 'place' | 'remove', status: CommandStatus): Promise<void> {
-        const file = 'file' in status ? status.file : '';
-        const detail = act === 'place' ? `This writes ${file}, which runs ${status.executable}.` : `This removes ${file}.`;
+        const files = 'files' in status ? status.files.join(' and ') : '';
+        const detail = act === 'place' ? `This writes ${files}, which run ${status.executable}.` : `This removes ${files}.`;
         const window = this.deps.window();
         const options = { type: 'question' as const, buttons: [act === 'place' ? 'Place It' : 'Remove It', 'Cancel'], defaultId: 0, cancelId: 1, message: act === 'place' ? 'Put the jason command on the PATH?' : 'Remove the jason command from the PATH?', detail };
         const answer = window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options);

@@ -1,20 +1,23 @@
 /**
  * The PATH command: a `jason` the person's terminal finds, which runs the executable the application carries.
  *
- * - On Windows it is a one-line `jason.cmd` shim in `%LOCALAPPDATA%\Microsoft\WindowsApps\`. That folder is the one
- *   user-writable folder every Windows 10 and 11 user PATH holds by default; the app-alias machinery there manages its
- *   own zero-byte alias files and ignores a foreign `.cmd`. The shim is placed only when that folder is on the PATH,
- *   so no PATH entry is ever written, and it is removed by deleting the file.
+ * - On Windows it is a one-line `jason.cmd` shim in `%LOCALAPPDATA%\Microsoft\WindowsApps\`, for Command Prompt and
+ *   PowerShell, and beside it an extensionless `jason`, a `#!/bin/sh` wrapper for Git Bash, which never finds a `.cmd`
+ *   by its bare name. That folder is the one user-writable folder every Windows 10 and 11 user PATH holds by default;
+ *   the app-alias machinery there manages its own zero-byte alias files and ignores files it did not make. The two files
+ *   are placed only when that folder is on the PATH, so no PATH entry is ever written, and they are removed by deleting
+ *   them.
  * - On macOS it is a wrapper script in `~/.local/bin/`.
  *
- * Both are placed and removed only on the person's word, read back on every look (a shim of ours that runs another
- * executable is shown as pointing elsewhere and never rewritten silently), and never put in the place of a `jason` that
- * is not ours: the command is then named `jason-desktop` (`planCommand`). Nothing here starts a process.
+ * The files of a command are placed and removed together, only on the person's word, and read back together on every
+ * look: a command of ours with any file that runs another executable, or that is missing, is shown as pointing
+ * elsewhere and never rewritten silently. A command is never put in the place of a `jason` that is not ours: it is then
+ * named `jason-desktop`, every file of it (`planCommand`). Nothing here starts a process.
  */
 
 import { accessSync, chmodSync, constants, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, posix, win32 } from 'node:path';
-import { planCommand, shimTarget, windowsShim, wrapperScript, wrapperTarget } from './command-line.ts';
+import { gitBashWrapper, planCommand, shimTarget, windowsShim, wrapperScript, wrapperTarget } from './command-line.ts';
 import type { Logger } from './log.ts';
 import { findOnPath } from './program-path.ts';
 
@@ -22,13 +25,13 @@ type Name = 'jason' | 'jason-desktop';
 
 export type CommandStatus =
     | { state: 'unsupported'; executable: string }
-    /** Not placed: `name` and `file` are what placing it would write; `shadows` the other `jason` that made it jason-desktop. */
-    | { state: 'absent'; name: Name; file: string; folderOnPath: boolean; shadows: string | null; executable: string }
-    | { state: 'placed'; name: Name; file: string; executable: string }
-    /** A shim of ours that runs another executable: an older installation folder, or another installation. */
-    | { state: 'elsewhere'; name: Name; file: string; target: string; executable: string }
+    /** Not placed: `name` and `files` are what placing it would write; `shadows` the other `jason` that made it jason-desktop. */
+    | { state: 'absent'; name: Name; files: readonly string[]; folderOnPath: boolean; shadows: string | null; executable: string }
+    | { state: 'placed'; name: Name; files: readonly string[]; executable: string }
+    /** A command of ours one of whose files differs: `why` says which and how. */
+    | { state: 'elsewhere'; name: Name; files: readonly string[]; why: string; executable: string }
     /** Both names are taken in the folder by files the desktop did not write. */
-    | { state: 'taken'; file: string; executable: string };
+    | { state: 'taken'; files: readonly string[]; executable: string };
 
 /** The folder the command goes in, or null where none is offered. */
 export function commandFolder(platform: NodeJS.Platform, env: Readonly<Record<string, string | undefined>>, home: string): string | null {
@@ -63,6 +66,21 @@ export interface PathCommandDeps {
     log: Logger;
 }
 
+/** One file of a command: where it goes, what it holds, and the executable a file of ours there must run. */
+interface CommandFile {
+    file: string;
+    /** The file's text, made only when it is placed: a path a batch file would read is refused then. */
+    text(): string;
+    runs: string;
+    read(text: string): { executable: string; dataDirectory: string | null } | null;
+}
+
+/** One file as a look finds it. */
+interface Look extends CommandFile {
+    exists: boolean;
+    target: { executable: string; dataDirectory: string | null } | null;
+}
+
 export class PathCommand {
     private readonly deps: PathCommandDeps;
 
@@ -70,20 +88,31 @@ export class PathCommand {
         this.deps = deps;
     }
 
-    private fileOf(name: Name): string {
+    /** The files a command of this name is: the shim and the Git Bash wrapper on Windows, the wrapper on macOS. */
+    private filesOf(name: Name): CommandFile[] {
+        const { executable, dataDirectory } = this.deps;
         // The folder is a path of the machine the desktop runs on, so it is joined as that machine joins it.
-        return join(this.deps.folder ?? '', this.deps.platform === 'win32' ? `${name}.cmd` : name);
+        const at = (file: string) => join(this.deps.folder ?? '', file);
+        if (this.deps.platform !== 'win32') return [{ file: at(name), text: () => wrapperScript(executable, dataDirectory), runs: executable, read: wrapperTarget }];
+        return [
+            { file: at(`${name}.cmd`), text: () => windowsShim(executable, dataDirectory), runs: executable, read: shimTarget },
+            { file: at(name), text: () => gitBashWrapper(executable, dataDirectory), runs: executable.replaceAll('\\', '/'), read: wrapperTarget },
+        ];
     }
 
-    private read(file: string): { exists: boolean; target: string | null } {
+    private look(file: CommandFile): Look {
         let text: string;
         try {
-            text = readFileSync(file, 'utf8');
+            text = readFileSync(file.file, 'utf8');
         } catch {
-            return { exists: false, target: null };
+            return { ...file, exists: false, target: null };
         }
-        const target = this.deps.platform === 'win32' ? shimTarget(text) : wrapperTarget(text);
-        return { exists: true, target: target?.executable ?? null };
+        return { ...file, exists: true, target: file.read(text) };
+    }
+
+    /** The files of a name as they are; a look writes nothing. */
+    private looksOf(name: Name): Look[] {
+        return this.filesOf(name).map((file) => this.look(file));
     }
 
     private folderOnPath(): boolean {
@@ -102,48 +131,62 @@ export class PathCommand {
         if (this.deps.folder === null || (this.deps.platform !== 'win32' && this.deps.platform !== 'darwin')) return { state: 'unsupported', executable };
         const names: Name[] = ['jason', 'jason-desktop'];
         for (const name of names) {
-            const file = this.fileOf(name);
-            const { target } = this.read(file);
-            if (target === null) continue;
-            return target === executable ? { state: 'placed', name, file, executable } : { state: 'elsewhere', name, file, target, executable };
+            const looks = this.looksOf(name);
+            if (!looks.some((look) => look.target !== null)) continue;
+            const files = looks.map((look) => look.file);
+            const foreign = looks.find((look) => look.exists && look.target === null);
+            if (foreign) return { state: 'elsewhere', name, files, why: `${foreign.file} is another program’s`, executable };
+            const differs = looks.find((look) => look.target !== null && look.target.executable !== look.runs);
+            if (differs?.target) return { state: 'elsewhere', name, files, why: `${differs.file} runs ${differs.target.executable}`, executable };
+            const missing = looks.find((look) => !look.exists);
+            if (missing) return { state: 'elsewhere', name, files, why: `${missing.file} is missing`, executable };
+            return { state: 'placed', name, files, executable };
         }
         // No command of ours is placed, so whatever `jason` the PATH or the folder holds is another program's.
-        const jasonFile = this.fileOf('jason');
-        const found = this.read(jasonFile).exists ? jasonFile : findOnPath('jason', { platform: this.deps.platform, path: this.deps.path(), pathext: this.deps.pathext, isProgram: (file) => this.deps.isProgram(file) });
+        const inFolder = this.looksOf('jason').find((look) => look.exists)?.file ?? null;
+        const found = inFolder ?? findOnPath('jason', { platform: this.deps.platform, path: this.deps.path(), pathext: this.deps.pathext, isProgram: (file) => this.deps.isProgram(file) });
         const plan = planCommand(found, null);
-        const file = this.fileOf(plan.name);
-        if (this.read(file).exists) return { state: 'taken', file, executable };
-        return { state: 'absent', name: plan.name, file, folderOnPath: this.folderOnPath(), shadows: plan.shadows ?? null, executable };
+        const looks = this.looksOf(plan.name);
+        const files = looks.map((look) => look.file);
+        if (looks.some((look) => look.exists)) return { state: 'taken', files, executable };
+        return { state: 'absent', name: plan.name, files, folderOnPath: this.folderOnPath(), shadows: plan.shadows ?? null, executable };
     }
 
-    /** Places the command, or places it again over a shim of ours that points elsewhere: only on the person's word. */
+    /** Places the command, or places it again over a command of ours that points elsewhere: only on the person's word. */
     place(): CommandStatus {
         const status = this.status();
         if (status.state === 'unsupported') throw new Error('The PATH command is offered on Windows and macOS only.');
-        if (status.state === 'taken') throw new Error(`${status.file} is there and is not the desktop’s; nothing was placed.`);
+        if (status.state === 'taken') throw new Error(`${status.files.join(' and ')} are there and are not the desktop’s; nothing was placed.`);
         if (status.state === 'placed') return status;
         if (status.state === 'absent' && this.deps.platform === 'win32' && !status.folderOnPath) {
             throw new Error(`${this.deps.folder} is not on the PATH, so a command placed there would not be found; nothing was placed.`);
         }
-        const text = this.deps.platform === 'win32' ? windowsShim(this.deps.executable, this.deps.dataDirectory) : wrapperScript(this.deps.executable, this.deps.dataDirectory);
+        const looks = this.looksOf(status.name);
+        const foreign = looks.find((look) => look.exists && look.target === null);
+        if (foreign) throw new Error(`${foreign.file} is there and is not the desktop’s; nothing was placed.`);
+        const files = this.filesOf(status.name);
+        const texts = files.map((file) => file.text());
         mkdirSync(this.deps.folder ?? '', { recursive: true });
-        const temporary = `${status.file}.jason-desktop.tmp`;
+        const temporaries = files.map((file) => `${file.file}.jason-desktop.tmp`);
         try {
-            writeFileSync(temporary, text, { mode: 0o755 });
-            if (this.deps.platform !== 'win32') chmodSync(temporary, 0o755);
-            renameSync(temporary, status.file);
+            files.forEach((_file, index) => {
+                const temporary = temporaries[index] ?? '';
+                writeFileSync(temporary, texts[index] ?? '', { mode: 0o755 });
+                if (this.deps.platform !== 'win32') chmodSync(temporary, 0o755);
+            });
+            files.forEach((file, index) => renameSync(temporaries[index] ?? '', file.file));
         } finally {
-            rmSync(temporary, { force: true });
+            for (const temporary of temporaries) rmSync(temporary, { force: true });
         }
         this.deps.log.info('path_command_set', { On: true, Name: status.name, Platform: this.deps.platform });
         return this.status();
     }
 
-    /** Removes the command of ours, whatever it points at; a file the desktop did not write is never removed. */
+    /** Removes every file of the command that is ours, whatever it points at; a file the desktop did not write stays. */
     remove(): CommandStatus {
         const status = this.status();
         if (status.state === 'placed' || status.state === 'elsewhere') {
-            rmSync(status.file, { force: true });
+            for (const look of this.looksOf(status.name)) if (look.target !== null) rmSync(look.file, { force: true });
             this.deps.log.info('path_command_set', { On: false, Name: status.name, Platform: this.deps.platform });
         }
         return this.status();
@@ -156,6 +199,8 @@ export interface CommandMenu {
     acts: { label: string; act: 'place' | 'remove' }[];
 }
 
+const isWindows = (files: readonly string[]) => files.some((file) => file.endsWith('.cmd'));
+
 /** The PATH command's part of the Jason menu: what it shows and the acts the state allows. */
 export function commandMenuOf(status: CommandStatus): CommandMenu {
     const runs = `The jason executable: ${status.executable}`;
@@ -163,12 +208,14 @@ export function commandMenuOf(status: CommandStatus): CommandMenu {
         case 'unsupported':
             return { lines: [runs, 'A jason command on the PATH is offered on Windows and macOS.'], acts: [] };
         case 'taken':
-            return { lines: [runs, `${status.file} is another program’s; nothing is placed.`], acts: [] };
-        case 'placed':
-            return { lines: [runs, `${status.name} on the PATH runs it: ${status.file}`], acts: [{ label: `Remove ${status.name} from the PATH…`, act: 'remove' }] };
+            return { lines: [runs, `${status.files.join(' and ')} are another program’s; nothing is placed.`], acts: [] };
+        case 'placed': {
+            const shells = isWindows(status.files) ? ' in Command Prompt, PowerShell and Git Bash' : '';
+            return { lines: [runs, `${status.name} on the PATH runs it${shells}: ${status.files.join(' and ')}`], acts: [{ label: `Remove ${status.name} from the PATH…`, act: 'remove' }] };
+        }
         case 'elsewhere':
             return {
-                lines: [runs, `${status.name} on the PATH points elsewhere: ${status.file} runs ${status.target}`],
+                lines: [runs, `${status.name} on the PATH points elsewhere: ${status.why}`],
                 acts: [
                     { label: `Point ${status.name} at This Jason…`, act: 'place' },
                     { label: `Remove ${status.name} from the PATH…`, act: 'remove' },
@@ -177,15 +224,12 @@ export function commandMenuOf(status: CommandStatus): CommandMenu {
         case 'absent': {
             const lines = [runs];
             if (status.shadows !== null) lines.push(`Another jason is on the PATH (${status.shadows}); this one would be ${status.name}.`);
+            const windows = isWindows(status.files);
             if (!status.folderOnPath) {
-                const folder = status.file.replace(/[\\/][^\\/]*$/, '');
-                lines.push(
-                    status.file.endsWith('.cmd')
-                        ? `${folder} is not on the PATH, so nothing is placed; run the executable by its full path.`
-                        : `${folder} is not on the PATH yet; a terminal finds ${status.name} once it is.`,
-                );
+                const folder = (status.files[0] ?? '').replace(/[\\/][^\\/]*$/, '');
+                lines.push(windows ? `${folder} is not on the PATH, so nothing is placed; run the executable by its full path.` : `${folder} is not on the PATH yet; a terminal finds ${status.name} once it is.`);
             }
-            const placeable = status.folderOnPath || !status.file.endsWith('.cmd');
+            const placeable = status.folderOnPath || !windows;
             return { lines, acts: placeable ? [{ label: `Put ${status.name} on the PATH…`, act: 'place' }] : [] };
         }
     }
