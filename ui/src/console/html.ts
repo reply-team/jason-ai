@@ -33,11 +33,47 @@ function piece(value: Value): string {
     return esc(String(value));
 }
 
-/** Markup from a template: each interpolated value is escaped text, markup this tag made, a list of either, or nothing. */
+/** Where the literal text leaves a value: between elements, inside a tag, or inside a quoted attribute. */
+type Position = { in: 'text' } | { in: 'tag' } | { in: 'quoted'; quote: '"' | "'" };
+
+/** The position after `literal`, read from `from`. Only the template's literal strings move it, never a value. */
+function after(literal: string, from: Position): Position {
+    let at = from;
+    for (const char of literal) {
+        if (at.in === 'text') {
+            if (char === '<') at = { in: 'tag' };
+        } else if (at.in === 'tag') {
+            if (char === '>') at = { in: 'text' };
+            else if (char === '"' || char === "'") at = { in: 'quoted', quote: char };
+        } else if (char === at.quote) {
+            at = { in: 'tag' };
+        }
+    }
+    return at;
+}
+
+/** Whether a value may stand inside a tag: markup this tag made, nothing, or a list of such. */
+function attributeLike(value: Value): boolean {
+    if (value instanceof Html || value === null || value === undefined || typeof value === 'boolean') return true;
+    return Array.isArray(value) && (value as readonly Value[]).every(attributeLike);
+}
+
+/**
+ * Markup from a template: each interpolated value is escaped text, markup this tag made, a list of either, or nothing.
+ * Escaping keeps text from ending an element or a quoted attribute, but text inside a tag, `<b ${x}>` or an unquoted
+ * `title=${x}`, could still add an attribute of its own; so there the tag takes only markup it made, or nothing.
+ */
 export function html(strings: TemplateStringsArray, ...values: Value[]): Html {
     let markup = strings[0] ?? '';
+    let position = after(markup, { in: 'text' });
     values.forEach((value, at) => {
-        markup += piece(value) + (strings[at + 1] ?? '');
+        if (position.in === 'tag' && !attributeLike(value))
+            throw new TypeError(
+                `A value inside a tag must be markup: quote the attribute or make it with the html tag (after "${strings[at]}").`,
+            );
+        const literal = strings[at + 1] ?? '';
+        markup += piece(value) + literal;
+        position = after(literal, position);
     });
     return Html.made(markup);
 }
