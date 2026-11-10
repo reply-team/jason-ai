@@ -137,6 +137,27 @@ test('a pairing that fails is logged by its exit and tried again on a later look
     ]);
 });
 
+test('a load that rejects is a failed pairing: logged with exit -1, answered as failed, and not tried again before half a minute', async (t) => {
+    const s = scratch(t);
+    s.write(first, 100);
+    const cli = pairingCli(s.read);
+    let now = 0;
+    const log = memoryLog();
+    const repairer = new Repairer({ readRunFile: s.read, cli, load: async () => Promise.reject(new Error('ERR_CONNECTION_REFUSED (-102) loading planted-url')), log, clock: () => now });
+    repairer.pairedWith(s.read());
+
+    s.write(second, 101);
+    assert.equal(await repairer.check(), 'failed');
+    now += repairCadenceMs;
+    assert.equal(await repairer.check(), 'waiting');
+    assert.equal(await repairer.reload(), 'failed', 'Reload answers too, and never rejects');
+    assert.equal(cli.asked.length, 2);
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [
+        ['repair_failed', { Origin: second, Exit: -1 }],
+        ['repair_failed', { Origin: second, Exit: -1 }],
+    ]);
+});
+
 test('Reload pairs again at the runtime’s current origin even when nothing changed', async (t) => {
     const s = scratch(t);
     s.write(first, 100);

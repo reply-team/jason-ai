@@ -90,12 +90,15 @@ export class Repairer {
         try {
             const open = await this.deps.cli.run(['ui', 'open', '--no-open']);
             const link = open.exit === 0 ? pairingLink(open.stdout, now.origin) : null;
-            if (link === null) {
-                this.failedAt = this.clock();
-                this.deps.log.warn('repair_failed', { Origin: now.origin, Exit: open.exit });
-                return 'failed';
+            if (link === null) return this.failed(now, open.exit);
+            try {
+                await this.deps.load(link);
+            } catch {
+                // The navigation failed (the runtime went between the run file and the load): the window keeps what it
+                // shows, and the pairing waits half a minute like one the CLI refused. -1 is the start's own word for
+                // a load that failed.
+                return this.failed(now, -1);
             }
-            await this.deps.load(link);
             this.deps.log.info('window_repaired', { From: this.paired?.origin ?? 'none', Origin: now.origin });
             this.paired = now;
             this.failedAt = null;
@@ -103,6 +106,12 @@ export class Repairer {
         } finally {
             this.busy = false;
         }
+    }
+
+    private failed(now: RunIdentity, exit: number): Look {
+        this.failedAt = this.clock();
+        this.deps.log.warn('repair_failed', { Origin: now.origin, Exit: exit });
+        return 'failed';
     }
 
     /** Looks at the run file on the cadence until stopped. */
