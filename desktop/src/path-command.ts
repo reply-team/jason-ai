@@ -42,6 +42,17 @@ export function commandFolder(platform: NodeJS.Platform, env: Readonly<Record<st
     return null;
 }
 
+/**
+ * Whether two paths name the same file as the platform reads them: normalized by its own path rules, and on Windows
+ * without regard to case. The lookup joins as the platform does, while a command's files are joined where they were
+ * made, so the two may differ in shape alone.
+ */
+export function sameFile(platform: NodeJS.Platform, a: string, b: string): boolean {
+    const paths = platform === 'win32' ? win32 : posix;
+    const shape = (file: string) => (platform === 'win32' ? paths.normalize(file).toLowerCase() : paths.normalize(file));
+    return shape(a) === shape(b);
+}
+
 /** Whether a file the PATH names is a program: a file and, on macOS, one that may be executed. */
 export function isProgramFile(file: string, platform: NodeJS.Platform): boolean {
     try {
@@ -133,8 +144,7 @@ export class PathCommand {
         const { platform } = this.deps;
         const found = findOnPath(name, { platform, path: this.deps.path(), pathext: this.deps.pathext, isProgram: (file) => this.deps.isProgram(file) });
         if (found === null) return null;
-        const same = (a: string, b: string) => (platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
-        return files.some((file) => same(file, found)) ? null : found;
+        return files.some((file) => sameFile(platform, file, found)) ? null : found;
     }
 
     status(): CommandStatus {

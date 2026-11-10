@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { fileLogger } from '../src/log.ts';
-import { commandFolder, commandMenuOf, commandQuestion, PathCommand, type PathCommandDeps } from '../src/path-command.ts';
+import { commandFolder, commandMenuOf, commandQuestion, PathCommand, sameFile, type PathCommandDeps } from '../src/path-command.ts';
 import { memoryLog } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }): string {
@@ -188,9 +188,21 @@ test('a jason earlier on the PATH than the one placed is said: the placed line n
     const other = 'C:\\Tools\\Jason\\jason.exe';
     let path = folder;
     let installed = false;
-    const command = new PathCommand({ platform: 'win32', folder, executable: windowsExe, dataDirectory: null, path: () => path, isProgram: (file) => (installed && file === other) || existsSync(file), log: memoryLog() });
+    // The folder is the host's (POSIX on Linux), while the lookup joins as Windows does; so the folder's files are known by
+    // a Windows comparison of the paths, not by asking the host's file system for a path in the other shape.
+    const windowsShape = (file: string) => win32.normalize(file).toLowerCase();
+    const inFolder = (file: string) => existsSync(folder) && readdirSync(folder).some((name) => windowsShape(join(folder, name)) === windowsShape(file));
+    const found: string[] = [];
+    const isProgram = (file: string) => {
+        const program = (installed && file === other) || inFolder(file);
+        if (program) found.push(file);
+        return program;
+    };
+    const command = new PathCommand({ platform: 'win32', folder, executable: windowsExe, dataDirectory: null, path: () => path, isProgram, log: memoryLog() });
     command.place();
+    found.length = 0;
     assert.equal((command.status() as { shadowedBy: string | null }).shadowedBy, null, 'ours is the one found');
+    assert.deepEqual(found.map(windowsShape), [windowsShape(join(folder, 'jason.cmd'))], 'the lookup found our shim, not nothing');
     // Another installation is put on the PATH ahead of the folder after the command was placed.
     installed = true;
     path = `C:\\Tools\\Jason;${folder}`;
@@ -200,6 +212,15 @@ test('a jason earlier on the PATH than the one placed is said: the placed line n
     // Behind ours, it shadows nothing.
     path = `${folder};C:\\Tools\\Jason`;
     assert.equal((command.status() as { shadowedBy: string | null }).shadowedBy, null);
+});
+
+test('a file the PATH finds is told from ours as the platform tells paths apart: separators and case on Windows, exactly on macOS', () => {
+    // What the lookup joins against what the host joined: the same file, in two shapes.
+    assert.equal(sameFile('win32', '/tmp/x/WindowsApps/jason.cmd', '\\tmp\\x\\WindowsApps\\jason.cmd'), true);
+    assert.equal(sameFile('win32', 'C:\\Users\\A\\WindowsApps\\jason.cmd', 'c:/users/a/windowsapps/JASON.CMD'), true);
+    assert.equal(sameFile('win32', 'C:\\W\\jason.cmd', 'C:\\W\\jason'), false);
+    assert.equal(sameFile('darwin', '/Users/a/.local/bin/jason', '/Users/a/.local//bin/jason'), true);
+    assert.equal(sameFile('darwin', '/Users/a/.local/bin/jason', '/users/a/.local/bin/jason'), false);
 });
 
 test('the confirmation names the command it places or removes, and every file it writes', () => {
