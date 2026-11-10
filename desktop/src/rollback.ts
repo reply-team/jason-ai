@@ -160,12 +160,14 @@ export async function keepPrevious(rollback: string, application: string, fromVe
  * copy back by itself: the runtime has no guard against a data directory a newer version migrated, so going back is the
  * person's act alone.
  */
-export function keptNotice(said: string, kept: string): string {
+export function keptNotice(said: string, kept: string, installed: string, platform: NodeJS.Platform): string {
     return [
         said,
-        `The version of Jason this one was updated from is kept at ${kept}.`,
-        'To go back, quit Jason and put that folder back in the place of the installed one, by hand: nothing does it for you.',
+        `If this version is the cause, the version of Jason it was updated from is kept at ${kept}.`,
+        `To go back, quit Jason and put that folder back in the place of the installed one, ${installed}, by hand: nothing does it for you.`,
         'This puts back the previous application and the Jason it carried; the data directory stays as the newer version left it.',
+        // The installer registered the newer version with Windows; a folder put back by hand does not change that entry.
+        ...(platform === 'win32' ? ['The system’s list of installed programs keeps showing the newer version’s number after that.'] : []),
     ].join(' ');
 }
 

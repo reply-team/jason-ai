@@ -270,7 +270,8 @@ async function run(): Promise<void> {
         log.error('window_load_failed', { Step: step, Exit: exit });
         const kept = settleStart(rollback, app.getVersion(), false, log);
         const said = error instanceof Error ? error.message : String(error);
-        if (current !== null) await showStarting(current, kept === null ? said : keptNotice(said, kept), true);
+        const notice = kept === null ? said : keptNotice(said, kept, applicationFolder(process.platform, process.execPath), process.platform);
+        if (current !== null) await showStarting(current, notice, true);
     }
 }
 

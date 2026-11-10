@@ -288,12 +288,23 @@ test('the copy holds no file of <data>, even when <data> lies inside the install
     assert.deepEqual(Object.keys(JSON.parse(record)).sort(), ['pending', 'rejected']);
 });
 
-test('the starting page, when an update did not start, names the kept copy and says what putting it back does', () => {
-    const notice = keptNotice('The runtime did not start.', 'C:/data/desktop/rollback/0.34.0/Jason');
-    assert.ok(notice.startsWith('The runtime did not start. '));
-    assert.ok(notice.includes('C:/data/desktop/rollback/0.34.0/Jason'));
-    assert.ok(notice.includes('This puts back the previous application and the Jason it carried; the data directory stays as the newer version left it.'));
-    assert.match(notice, /by hand/);
+test('the starting page, when an update did not start, names the kept copy and the installed folder, and says what putting it back does', () => {
+    const ruled = 'This puts back the previous application and the Jason it carried; the data directory stays as the newer version left it.';
+    const programs = 'The system’s list of installed programs keeps showing the newer version’s number after that.';
+    const windows = keptNotice('The runtime did not start.', 'C:/data/desktop/rollback/0.34.0/Jason', 'C:/Users/someone/AppData/Local/Programs/Jason', 'win32');
+    assert.equal(
+        windows,
+        [
+            'The runtime did not start.',
+            'If this version is the cause, the version of Jason it was updated from is kept at C:/data/desktop/rollback/0.34.0/Jason.',
+            'To go back, quit Jason and put that folder back in the place of the installed one, C:/Users/someone/AppData/Local/Programs/Jason, by hand: nothing does it for you.',
+            ruled,
+            programs,
+        ].join(' '),
+    );
+    const mac = keptNotice('The runtime did not start.', '/data/desktop/rollback/0.34.0/Jason.app', '/Applications/Jason.app', 'darwin');
+    assert.ok(mac.includes('in the place of the installed one, /Applications/Jason.app, by hand'));
+    assert.ok(mac.endsWith(ruled), 'only Windows keeps a list of programs with a version number');
 });
 
 test('the new version’s first start settles the record: a start that worked keeps the copy and says so, one that failed keeps it and refuses that version', (t) => {
