@@ -48,6 +48,28 @@ public class PersonPanelExchangesTests
         Assert.Equal(3, targets.Items.Count);
     }
 
+    /// <summary>
+    /// The register read for the addresses of the people the People screen's other recordings hold, none of them on it: a
+    /// request names a channel and a value and nothing else, so the read stands beside those recordings as it is.
+    /// </summary>
+    [Fact]
+    public async Task The_register_read_for_the_people_screen_s_people()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+
+        (string Case, string Channel, string Value)[] reads =
+        [
+            ("mateo-email-clear", "email", "mateo@soluna.example"),
+            ("mateo-linkedin-clear", "linkedin", "https://www.linkedin.com/in/mateo-ruiz-example"),
+            ("mateo-phone-clear", "phone", "+525512345678"),
+            ("aguilar-email-clear", "email", "aguilar@andina.example"),
+        ];
+        foreach (var (@case, channel, value) in reads)
+        {
+            Assert.Empty((await api.RecordAsync<Page<SuppressionDto>>(Operations.SuppressionList, @case, new { channel, value }, Ct)).Items);
+        }
+    }
+
     /// <summary>Saving the record with a reason, a value the runtime refuses, and the provider's own update queued as work.</summary>
     [Fact]
     public async Task Save_and_the_provider_update()
