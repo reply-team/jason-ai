@@ -43,7 +43,8 @@
         "20261029150321_SentFacts",
         "20261102051342_ResponderWatermark",
         "20261105002401_SubscriptionRunner",
-        "20261109215725_AudienceReserve"
+        "20261109215725_AudienceReserve",
+        "20261110155310_Audiences"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -77,7 +78,8 @@
         "20261029150321_SentFacts",
         "20261102051342_ResponderWatermark",
         "20261105002401_SubscriptionRunner",
-        "20261109215725_AudienceReserve"
+        "20261109215725_AudienceReserve",
+        "20261110155310_Audiences"
       ],
       "backup_file": null
     },
