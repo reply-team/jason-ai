@@ -6,10 +6,10 @@ import { Notice } from '../../../layout/notice';
 import type { PersonTab, Route } from '../../../router';
 import { AddDialog } from '../add-dialog';
 import { PersonCard } from '../card';
-import { Details } from '../details';
 import * as people from '../store';
 import { linked, ThreadsTab } from '../threads';
 import { Timeline } from '../timeline';
+import { DetailsTab } from './details-tab';
 import { NextTab } from './next-tab';
 import { SequencesTab } from './sequences-tab';
 
@@ -59,7 +59,7 @@ export type PersonPanelProps = {
  * One person beside whatever list opened them: who they are, their tabs and what can be done for them. It reads the
  * person itself and assumes nothing of the screen it is mounted on.
  */
-export function PersonPanel({ contactId, onClose, tab, to }: PersonPanelProps) {
+export function PersonPanel({ contactId, campaignId, onClose, tab, to }: PersonPanelProps) {
     const api = useApi();
     const [own, setOwn] = useState<PersonTab>('timeline');
     const [adding, setAdding] = useState(false);
@@ -88,7 +88,14 @@ export function PersonPanel({ contactId, onClose, tab, to }: PersonPanelProps) {
                         onClose={onClose}
                         tabs={panelTabs(person)}
                     />
-                    <PanelTab person={person} tab={shown} me={session.actorId.value ?? ''} now={now} zone={zone} />
+                    <PanelTab
+                        person={person}
+                        tab={shown}
+                        campaignId={campaignId}
+                        me={session.actorId.value ?? ''}
+                        now={now}
+                        zone={zone}
+                    />
                     {adding && <AddDialog person={person} onClose={() => setAdding(false)} />}
                 </>
             )}
@@ -96,13 +103,20 @@ export function PersonPanel({ contactId, onClose, tab, to }: PersonPanelProps) {
     );
 }
 
-type Props = { person: Contact; tab: PersonTab; me: string; now: Date; zone: string };
+type Props = {
+    person: Contact;
+    tab: PersonTab;
+    campaignId: string | undefined;
+    me: string;
+    now: Date;
+    zone: string;
+};
 
 /** What the person panel shows under its tabs. */
-function PanelTab({ person, tab, me, now, zone }: Props) {
+function PanelTab({ person, tab, campaignId, me, now, zone }: Props) {
     switch (tab) {
         case 'details':
-            return <Details person={person} now={now} zone={zone} />;
+            return <DetailsTab person={person} campaignId={campaignId} now={now} zone={zone} />;
         case 'sequences':
             return <SequencesTab person={person} now={now} zone={zone} />;
         case 'threads':
