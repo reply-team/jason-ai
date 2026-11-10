@@ -8,7 +8,7 @@ description: Publish one platform of Jason and archive it under its release name
 
 inputs:
   rid:
-    description: 'The platform to publish for: one of win-x64, linux-x64, osx-arm64.'
+    description: 'The platform to publish for: one of win-x64, linux-x64, osx-arm64, and osx-x64, which a release builds for the desktop alone and never publishes.'
     required: true
   version:
     description: 'The version to stamp, without a leading v (0.2.0, 1.0.0-rc.1). It reaches the build as -p:Version=.'
@@ -40,7 +40,7 @@ inputs:
 
   sign-macos:
     description: >
-      'true' signs the osx-arm64 executable with the Developer ID the apple-* inputs carry, has Apple notarize it and
+      'true' signs a macOS executable, osx-arm64's or osx-x64's, with the Developer ID the apple-* inputs carry, has Apple notarize it and
       Gatekeeper assess it, between the publish and the staging, so that the archive and the caller's smoke test carry
       the signed file. Any other platform ignores it. The default, 'false', keeps the ad hoc signature the SDK writes at
       publish, which is what a pull request's build wants: ci.yml never signs, and never holds the identity.
@@ -107,6 +107,18 @@ inputs:
     required: false
     default: ''
 
+  desktop:
+    description: >
+      'true' also builds the desktop's packages with electron-builder from desktop/ of the same tree, carrying the
+      executables the release signed, and signs them as those are signed, while the identity is held: on win-x64 the nsis
+      installer, whose Jason.exe, uninstaller and installer are signed through Artifact Signing; on osx-x64, after the
+      osx-arm64 call of the same job, a dmg and a zip for each Mac architecture, signed with the Developer ID and
+      notarized. Each is read back and uploaded as jason-desktop-<rid>, which the release publishes. It needs the
+      platform's signing inputs; without them, and on any other platform, it is ignored. The default, 'false', builds no
+      desktop, which is what a pull request's build wants: ci.yml never builds one.
+    required: false
+    default: 'false'
+
 outputs:
   executable:
     description: The published executable, for the caller's smoke test.
@@ -134,6 +146,7 @@ runs:
           'win-x64'   { 'jason-win-x64.zip' }
           'linux-x64' { 'jason-linux-x64.tar.gz' }
           'osx-arm64' { 'jason-osx-arm64.tar.gz' }
+          'osx-x64'   { 'jason-osx-x64.tar.gz' }
           default     { throw "No release is built for '$env:RID'." }
         }
         $executable = if ($env:RID -like 'win-*') { 'jason.exe' } else { 'jason' }
@@ -150,7 +163,7 @@ runs:
         VERSION: ${{ inputs.version }}
         RUNTIME_VERSION: ${{ inputs.runtime-version }}
         EXECUTABLE: ${{ steps.name.outputs.executable }}
-        SIGN_MACOS: ${{ inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true' }}
+        SIGN_MACOS: ${{ startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true' }}
       run: |
         $publish = "artifacts/publish/$env:RID"
         $runtime = @(if ($env:RUNTIME_VERSION) { "-p:RuntimeFrameworkVersion=$env:RUNTIME_VERSION" })
@@ -259,6 +272,133 @@ runs:
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
       run: ./.github/scripts/Assert-WindowsSignature.ps1 -Executable $env:EXECUTABLE -Publisher 'ReplyApp Inc.'
 
+    # The desktop's Windows installer, built on a release's Windows call once its executable is signed and verified, while
+    # the sign-in still holds: the installer carries that very jason.exe, and electron-builder's sign hook
+    # (desktop/scripts/sign-windows.mjs) signs Jason.exe, the uninstaller and the installer as each is made, with signtool
+    # and the Trusted Signing client, whose one credential is the Azure CLI's sign-in above. The client is a pinned
+    # version, refused unless its package hashes to the pinned digest; the runner's own newest x64 signtool runs it. The
+    # build tooling is desktop/package-lock.json's, installed by npm ci without a package's scripts; none of it is a test.
+    - name: Fetch the Trusted Signing client and name the account it signs with
+      id: desktop-signing
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
+      shell: pwsh
+      env:
+        SIGNING_ENDPOINT: ${{ inputs.azure-signing-endpoint }}
+        SIGNING_ACCOUNT: ${{ inputs.azure-signing-account }}
+        SIGNING_PROFILE: ${{ inputs.azure-signing-profile }}
+      run: |
+        $version = '1.0.128'
+        $pinned = '74bd7d27e6ce1051409c38d9b46bc8df0400ecd643d51ffbf2ac00869061e40b'
+        $package = Join-Path $env:RUNNER_TEMP 'jason-signing-client.zip'
+        Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.artifactsigning.client/$version/microsoft.artifactsigning.client.$version.nupkg" -OutFile $package
+        $digest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($digest -ne $pinned) { throw "The Trusted Signing client $version hashes to $digest, not the pinned $pinned." }
+
+        $client = Join-Path $env:RUNNER_TEMP 'jason-signing-client'
+        if (Test-Path -LiteralPath $client) { Remove-Item -LiteralPath $client -Recurse -Force }
+        Expand-Archive -LiteralPath $package -DestinationPath $client
+        $dlib = Join-Path $client 'bin/x64/Azure.CodeSigning.Dlib.dll'
+        if (-not (Test-Path -LiteralPath $dlib -PathType Leaf)) { throw "The Trusted Signing client $version holds no bin/x64/Azure.CodeSigning.Dlib.dll." }
+
+        # The account and the profile, and the Azure CLI's sign-in as the one credential the client tries.
+        $metadata = Join-Path $env:RUNNER_TEMP 'jason-signing-metadata.json'
+        $excluded = @('EnvironmentCredential', 'WorkloadIdentityCredential', 'ManagedIdentityCredential', 'SharedTokenCacheCredential', 'VisualStudioCredential', 'VisualStudioCodeCredential', 'AzurePowerShellCredential', 'AzureDeveloperCliCredential', 'InteractiveBrowserCredential')
+        $named = [ordered]@{ Endpoint = $env:SIGNING_ENDPOINT; CodeSigningAccountName = $env:SIGNING_ACCOUNT; CertificateProfileName = $env:SIGNING_PROFILE; ExcludeCredentials = $excluded }
+        Set-Content -LiteralPath $metadata -Value ($named | ConvertTo-Json) -NoNewline
+
+        $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+        $signtool = Get-ChildItem -LiteralPath $kits -Directory |
+            Where-Object { $_.Name -match '^\d+(\.\d+){3}$' } |
+            Sort-Object { [version] $_.Name } -Descending |
+            ForEach-Object { Join-Path $_.FullName 'x64/signtool.exe' } |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+            Select-Object -First 1
+        if (-not $signtool) { throw "No Windows SDK signtool is on this runner." }
+
+        "signtool=$signtool" >> $env:GITHUB_OUTPUT
+        "dlib=$dlib" >> $env:GITHUB_OUTPUT
+        "metadata=$metadata" >> $env:GITHUB_OUTPUT
+
+    - uses: actions/setup-node@v5
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
+      with:
+        node-version: 24
+
+    - name: Build the desktop's Windows installer, each file signed as it is made
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
+      shell: pwsh
+      working-directory: desktop
+      env:
+        VERSION: ${{ inputs.version }}
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+        JASON_SIGNTOOL: ${{ steps.desktop-signing.outputs.signtool }}
+        JASON_SIGNING_DLIB: ${{ steps.desktop-signing.outputs.dlib }}
+        JASON_SIGNING_METADATA: ${{ steps.desktop-signing.outputs.metadata }}
+      run: |
+        npm ci --ignore-scripts
+        if ($LASTEXITCODE -ne 0) { throw "npm ci exited with $LASTEXITCODE" }
+        node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version $env:VERSION --executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
+        if ($LASTEXITCODE -ne 0) { throw "prepare.mjs exited with $LASTEXITCODE" }
+        $env:JASON_VERSION = $env:VERSION
+        $env:JASON_WINDOWS_SIGN = '1'
+        npm run package -- --win --x64
+        if ($LASTEXITCODE -ne 0) { throw "electron-builder exited with $LASTEXITCODE" }
+
+    # Each of the four files read back out of the installer, as a person's machine unpacks it: the installer itself, the
+    # uninstaller it writes (electron-builder removes its own copy once the installer holds it), and, from the application
+    # archive it carries, Jason.exe and the bundled jason.exe, which is the executable this call signed byte for byte. The
+    # feed's digest is computed again from the installer as it will be published, and the feed and Jason.exe name the
+    # release's version. 7-Zip, which the runner carries, opens the installer; nothing of it runs.
+    - name: Verify the desktop's Windows installer and what it carries
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
+      shell: pwsh
+      env:
+        VERSION: ${{ inputs.version }}
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+      run: |
+        $dist = 'desktop/dist'
+        $installer = "$dist/jason-desktop-windows-x64-setup.exe"
+        $opened = Join-Path $env:RUNNER_TEMP 'jason-desktop-installer'
+        $app = Join-Path $env:RUNNER_TEMP 'jason-desktop-app'
+        foreach ($folder in @($opened, $app)) { if (Test-Path -LiteralPath $folder) { Remove-Item -LiteralPath $folder -Recurse -Force } }
+        $sevenZip = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+        if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) { throw "This runner has no 7-Zip at $sevenZip." }
+        & $sevenZip x $installer "-o$opened" -y | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "7-Zip could not open the installer: exit $LASTEXITCODE" }
+        & $sevenZip x (Join-Path $opened '$PLUGINSDIR/app-64.7z') "-o$app" -y | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "7-Zip could not open the application archive the installer carries: exit $LASTEXITCODE" }
+
+        $signed = @($installer, (Join-Path $opened '$R0/Uninstall Jason.exe'), (Join-Path $app 'Jason.exe'), (Join-Path $app 'resources/bundle/jason.exe'))
+        foreach ($file in $signed) {
+          if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "The installer carries no $file." }
+          ./.github/scripts/Assert-WindowsSignature.ps1 -Executable $file -Publisher 'ReplyApp Inc.'
+          if ($LASTEXITCODE -ne 0) { throw "$file is not signed by ReplyApp Inc." }
+        }
+
+        $bundled = (Get-FileHash -LiteralPath (Join-Path $app 'resources/bundle/jason.exe') -Algorithm SHA256).Hash
+        if ($bundled -ne (Get-FileHash -LiteralPath $env:EXECUTABLE -Algorithm SHA256).Hash) { throw "The bundled jason.exe is not the executable this call signed." }
+
+        # The file version is the package's version as it is; the product version is Windows' four numbers.
+        $said = (Get-Item -LiteralPath (Join-Path $app 'Jason.exe')).VersionInfo.FileVersion
+        if ($said -ne $env:VERSION) { throw "Jason.exe says it is $said, and the release is $env:VERSION." }
+
+        $feed = Get-Content -LiteralPath "$dist/latest.yml" -Raw
+        Write-Host $feed
+        $sha512 = [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $installer).Path)))
+        if ($feed -notmatch "(?m)^version: $([regex]::Escape($env:VERSION))\s*$") { throw "latest.yml does not name $env:VERSION." }
+        if (-not $feed.Contains("sha512: $sha512")) { throw "latest.yml does not carry the installer's digest as it will be published." }
+
+    - uses: actions/upload-artifact@v7
+      if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
+      with:
+        name: jason-desktop-win-x64
+        path: |
+          desktop/dist/jason-desktop-windows-x64-setup.exe
+          desktop/dist/jason-desktop-windows-x64-setup.exe.blockmap
+          desktop/dist/latest.yml
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+
     - name: Forget the Azure sign-in
       if: always() && inputs.rid == 'win-x64' && inputs.sign-windows == 'true'
       shell: pwsh
@@ -286,7 +426,7 @@ runs:
     # a secret: each reaches its step through env, never written into the script.
     - name: Import the Developer ID identity into a keychain of this job's own
       id: identity
-      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      if: startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'
       shell: bash
       env:
         P12_BASE64: ${{ inputs.apple-developer-id-p12-base64 }}
@@ -418,7 +558,7 @@ runs:
     # The native libraries the publish copied out of the bundle, signed in place before the executable is: what the
     # bundle unpacks is then what our team signed, and library validation loads it.
     - name: Sign the native libraries the bundle carries
-      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      if: startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'
       shell: pwsh
       env:
         NATIVES: ${{ steps.publish.outputs.natives }}
@@ -429,7 +569,7 @@ runs:
     # The publish above, again, building and restoring nothing: it bundles the very build the first one made, with each
     # native library taken from the signed copies instead of from where the first publish found it.
     - name: Bundle the signed native libraries into the executable
-      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      if: startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'
       shell: pwsh
       env:
         RID: ${{ inputs.rid }}
@@ -443,7 +583,7 @@ runs:
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish exited with $LASTEXITCODE" }
 
     - name: Sign the macOS executable with the hardened runtime
-      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      if: startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'
       shell: bash
       env:
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
@@ -476,13 +616,15 @@ runs:
         fi
 
     - name: Notarize the macOS executable
-      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      if: startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'
       shell: bash
       env:
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
         NOTARY_KEY: ${{ inputs.apple-notary-key-p8 }}
         NOTARY_KEY_ID: ${{ inputs.apple-notary-key-id }}
         NOTARY_ISSUER: ${{ inputs.apple-notary-issuer-id }}
+        KEYCHAIN: ${{ steps.identity.outputs.keychain }}
+        DESKTOP: ${{ inputs.rid == 'osx-x64' && inputs.desktop == 'true' }}
       run: |
         # The key is written to a file for the runner's own user alone.
         umask 077
@@ -510,6 +652,11 @@ runs:
         status="$(sed -n 's/.*"status" *: *"\([^"]*\)".*/\1/p' "$answer")"
         if [ "$status" = "Accepted" ]; then
           echo "The notary accepted the executable."
+          # The desktop's packages are notarized later in this call with the same key, kept for them in this job's
+          # keychain under a profile name rather than in a file; the keychain is deleted with the identity.
+          if [ "$DESKTOP" = "true" ]; then
+            xcrun notarytool store-credentials jason-notary --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --keychain "$KEYCHAIN"
+          fi
         else
           cat "$answer"
           echo "notarytool exited $submitted: submission ${id:-(none)}, status ${status:-(none)}"
@@ -521,7 +668,7 @@ runs:
         fi
 
     - name: Assess the macOS executable as Gatekeeper does
-      if: inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      if: startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'
       shell: bash
       env:
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
@@ -558,8 +705,121 @@ runs:
         echo "::error title=Gatekeeper::The executable was not accepted as Notarized Developer ID, asked three times twenty seconds apart."
         exit 1
 
+    # The desktop's Mac packages, built on a release's osx-x64 call once the osx-arm64 call of the same job signed that
+    # architecture's executable and this call signed, notarized and assessed its own, while the identity is still held:
+    # each architecture's application carries its own signed jason, the very bytes, which keeps that signature and its
+    # entitlements, and electron-builder signs the application around it with the same Developer ID, hardened, and has the
+    # notary accept it with the key the notarization above kept in this job's keychain. The build tooling is
+    # desktop/package-lock.json's, installed by npm ci without a package's scripts; none of it is a test.
+    - uses: actions/setup-node@v5
+      if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
+      with:
+        node-version: 24
+
+    - name: Build the desktop's Mac packages, signed and notarized
+      if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
+      shell: bash
+      working-directory: desktop
+      env:
+        VERSION: ${{ inputs.version }}
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+        IDENTITY: ${{ steps.identity.outputs.identity }}
+        KEYCHAIN: ${{ steps.identity.outputs.keychain }}
+      run: |
+        arm64="$GITHUB_WORKSPACE/artifacts/publish/osx-arm64/jason"
+        if [ ! -f "$arm64" ]; then
+          echo "::error title=Desktop::$arm64 is not here: the osx-arm64 call of this job signs it before this one."
+          exit 1
+        fi
+        npm ci --ignore-scripts
+        node scripts/prepare.mjs --rid osx-arm64 --output bundles/arm64 --version "$VERSION" --executable "$arm64"
+        node scripts/prepare.mjs --rid osx-x64 --output bundles/x64 --version "$VERSION" --executable "$GITHUB_WORKSPACE/$EXECUTABLE"
+        JASON_VERSION="$VERSION" CSC_NAME="$IDENTITY" CSC_KEYCHAIN="$KEYCHAIN" CSC_IDENTITY_AUTO_DISCOVERY=false \
+          APPLE_KEYCHAIN_PROFILE=jason-notary APPLE_KEYCHAIN="$KEYCHAIN" npm run package -- --mac --arm64 --x64
+
+    # Each architecture read back: the application signed, accepted by Gatekeeper as notarized and stapled; its bundled
+    # jason the executable that architecture's call signed, byte for byte, with its own entitlements and of that
+    # architecture alone; the application inside the zip the same; the dmg notarized and stapled in turn, since a person
+    # opens it before the application. The feed's digests are computed again from the zips as they will be published, and
+    # the feed and each application name the release's version.
+    - name: Verify the desktop's Mac packages and what they carry
+      if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        KEYCHAIN: ${{ steps.identity.outputs.keychain }}
+      run: |
+        dist=desktop/dist
+        entitlements=dotnet/src/Jason.App/jason.entitlements
+        expected="$RUNNER_TEMP/jason-desktop-expected.entitlements"
+        plutil -convert xml1 -o "$expected" "$entitlements"
+        feed="$dist/latest-mac.yml"
+        cat "$feed"
+        grep -qx "version: $VERSION" "$feed" || { echo "::error title=Desktop::latest-mac.yml does not name $VERSION."; exit 1; }
+
+        notarized() {
+          said="$RUNNER_TEMP/jason-desktop-assessment.txt"
+          spctl --assess --verbose=2 "$@" > "$said" 2>&1 || { cat "$said"; return 1; }
+          cat "$said"
+          grep -q 'source=Notarized Developer ID' "$said"
+        }
+
+        for arch in arm64 x64; do
+          case "$arch" in
+            arm64) app="$dist/mac-arm64/Jason.app"; lipo=arm64; rid=osx-arm64 ;;
+            x64) app="$dist/mac/Jason.app"; lipo=x86_64; rid=osx-x64 ;;
+          esac
+          zip="$dist/jason-desktop-macos-$arch.zip"
+          dmg="$dist/jason-desktop-macos-$arch.dmg"
+          nested="$app/Contents/Resources/bundle/jason"
+
+          codesign --verify --deep --strict --verbose=2 "$app"
+          notarized --type execute "$app" || { echo "::error title=Desktop::The $arch application is not accepted as Notarized Developer ID."; exit 1; }
+          xcrun stapler validate "$app"
+          shipped="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
+          [ "$shipped" = "$VERSION" ] || { echo "::error title=Desktop::The $arch application says it is $shipped, and the release is $VERSION."; exit 1; }
+
+          cmp "$nested" "$GITHUB_WORKSPACE/artifacts/publish/$rid/jason" || { echo "::error title=Desktop::The $arch application's jason is not the executable its call signed."; exit 1; }
+          codesign --verify --strict --verbose=2 "$nested"
+          [ "$(lipo -archs "$nested")" = "$lipo" ] || { echo "::error title=Desktop::The $arch application's jason is not $lipo alone."; exit 1; }
+          carried="$RUNNER_TEMP/jason-desktop-$arch.entitlements"
+          codesign --display --entitlements - --xml "$nested" > "$carried.raw"
+          plutil -convert xml1 -o "$carried" "$carried.raw"
+          diff "$expected" "$carried" || { echo "::error title=Desktop::The $arch application's jason carries entitlements other than $entitlements."; exit 1; }
+
+          unzipped="$RUNNER_TEMP/jason-desktop-$arch-zip"
+          rm -rf "$unzipped"
+          ditto -x -k "$zip" "$unzipped"
+          codesign --verify --deep --strict --verbose=2 "$unzipped/Jason.app"
+          xcrun stapler validate "$unzipped/Jason.app"
+          cmp "$unzipped/Jason.app/Contents/Resources/bundle/jason" "$nested"
+          digest="$(openssl dgst -sha512 -binary "$zip" | openssl base64 -A)"
+          grep -qF "sha512: $digest" "$feed" || { echo "::error title=Desktop::latest-mac.yml does not carry the $arch zip's digest as it will be published."; exit 1; }
+
+          codesign --verify --strict --verbose=2 "$dmg"
+          xcrun notarytool submit "$dmg" --keychain-profile jason-notary --keychain "$KEYCHAIN" --wait --timeout 30m
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+          notarized --type open --context context:primary-signature "$dmg" || { echo "::error title=Desktop::The $arch dmg is not accepted as Notarized Developer ID."; exit 1; }
+        done
+
+    - uses: actions/upload-artifact@v7
+      if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
+      with:
+        name: jason-desktop-osx-x64
+        path: |
+          desktop/dist/jason-desktop-macos-arm64.dmg
+          desktop/dist/jason-desktop-macos-arm64.zip
+          desktop/dist/jason-desktop-macos-arm64.zip.blockmap
+          desktop/dist/jason-desktop-macos-x64.dmg
+          desktop/dist/jason-desktop-macos-x64.zip
+          desktop/dist/jason-desktop-macos-x64.zip.blockmap
+          desktop/dist/latest-mac.yml
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+
     - name: Forget the Developer ID identity
-      if: always() && inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'
+      if: always() && startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'
       shell: bash
       run: |
         # Whatever happened above: every file a secret was written to removed first, then the search list as it was

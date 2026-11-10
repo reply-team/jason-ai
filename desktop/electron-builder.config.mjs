@@ -19,8 +19,9 @@ export const signer = 'ReplyApp Inc.';
 
 /**
  * Electron's fuses, flipped in the packaged binary before it is signed. Off: running as plain Node, NODE_OPTIONS, the
- * inspector's command-line switches, an app folder beside app.asar and file: pages' extra privileges. On: cookies
- * encrypted with the operating system's key and app.asar held to the digest the binary carries.
+ * inspector's command-line switches and an app folder beside app.asar. On: cookies encrypted with the operating
+ * system's key, app.asar held to the digest the binary carries, and file: pages' extra privileges, without which the
+ * starting page, a file: page inside app.asar, is served by Chromium's own file: handler, which cannot read the archive.
  */
 export const fuses = Object.freeze({
     runAsNode: false,
@@ -30,7 +31,7 @@ export const fuses = Object.freeze({
     enableEmbeddedAsarIntegrityValidation: true,
     onlyLoadAppFromAsar: true,
     loadBrowserProcessSpecificV8Snapshot: false,
-    grantFileProtocolExtraPrivileges: false,
+    grantFileProtocolExtraPrivileges: true,
 });
 
 /** The files the chat's fence reads, packaged inside the application beside package.json. */
@@ -119,6 +120,10 @@ export function configuration({ version, sign = null }) {
         ],
         electronFuses: { ...fuses },
         publish: [{ provider: 'github', owner: 'reply-team', repo: 'jason-ai', releaseType: 'release' }],
+        // A candidate writes latest.yml and latest-mac.yml as a release does, never a channel of its own: the release's
+        // prerelease flag is what keeps it from a stable installation, which asks for no pre-release.
+        detectUpdateChannel: false,
+        generateUpdatesFilesForAllChannels: false,
         beforePack: async (context) => checkBundle(bundleFolder(context.arch), version, context.electronPlatformName),
         afterPack: async (context) => copyChromiumNotices(context.appOutDir, resourcesOf(context)),
         win: {
@@ -153,7 +158,8 @@ export function configuration({ version, sign = null }) {
             forceCodeSigning: true,
             artifactName: 'jason-desktop-macos-${arch}.${ext}',
         },
-        dmg: { sign: true, artifactName: 'jason-desktop-macos-${arch}.${ext}' },
+        // A dmg is installed by hand and is never an update: no feed entry and no blockmap.
+        dmg: { sign: true, writeUpdateInfo: false, artifactName: 'jason-desktop-macos-${arch}.${ext}' },
     };
 }
 

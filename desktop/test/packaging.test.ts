@@ -44,7 +44,9 @@ test('the fuses: no plain Node, no NODE_OPTIONS, no inspector, only app.asar and
         enableEmbeddedAsarIntegrityValidation: true,
         onlyLoadAppFromAsar: true,
         loadBrowserProcessSpecificV8Snapshot: false,
-        grantFileProtocolExtraPrivileges: false,
+        // On: the starting page is a file: page inside app.asar, and with this fuse off Chromium's own file: handler
+        // serves it, which cannot read the archive - a packaged start showed ERR_FILE_NOT_FOUND and went no further.
+        grantFileProtocolExtraPrivileges: true,
     });
     assert.equal(built.asar, true);
     assert.ok(Object.isFrozen(fuses));
@@ -66,6 +68,14 @@ test('app-update.yml names this repository’s releases, and an update must carr
     assert.deepEqual(built.win.signtoolOptions.publisherName, ['ReplyApp Inc.']);
     assert.equal(built.win.verifyUpdateCodeSignature, true);
     assert.deepEqual(built.win.signtoolOptions.signingHashAlgorithms, ['sha256']);
+});
+
+test('a candidate writes the feed files a stable release does: latest.yml and latest-mac.yml, never rc.yml', () => {
+    // The release's prerelease flag is what keeps a candidate from a stable installation, never a channel of its own; a
+    // dmg is installed by hand and never an update, so it writes no feed entry and no blockmap.
+    assert.equal(built.detectUpdateChannel, false);
+    assert.equal(built.generateUpdatesFilesForAllChannels, false);
+    assert.equal(built.dmg.writeUpdateInfo, false);
 });
 
 test('Windows gets one per-user nsis installer; each Mac architecture a dmg and a zip; no name carries a version', () => {

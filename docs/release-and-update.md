@@ -59,6 +59,16 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at the tag, at the archive's root |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
 | `jason-skills.zip` | the skills' package: `skills/` at the tag, under `skills/`, and a `source.json` naming the repository, the tag and its commit; `jason skills install` deploys from it when it is given no `--source` |
+| `jason-desktop-windows-x64-setup.exe` | the desktop's Windows installer, signed, carrying this release's signed `jason.exe` |
+| `jason-desktop-windows-x64-setup.exe.blockmap` | the installer's block map, from which the Windows desktop's updater downloads only what changed |
+| `latest.yml` | the Windows desktop's update feed: the version, the installer's name and its SHA-512 |
+| `jason-desktop-macos-arm64.dmg` | the desktop for Apple silicon, signed, notarized and stapled, carrying the osx-arm64 executable |
+| `jason-desktop-macos-arm64.zip` | the same application, as the Mac desktop's updater downloads it |
+| `jason-desktop-macos-arm64.zip.blockmap` | that zip's block map |
+| `jason-desktop-macos-x64.dmg` | the desktop for Intel Macs, signed, notarized and stapled, carrying an osx-x64 executable built for it alone |
+| `jason-desktop-macos-x64.zip` | the same application, as the Mac desktop's updater downloads it |
+| `jason-desktop-macos-x64.zip.blockmap` | that zip's block map |
+| `latest-mac.yml` | the Mac desktop's update feed: the version, each zip's name and its SHA-512 |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
@@ -98,6 +108,16 @@ it downloads the package from the release this build was published as, holds it 
 this build's version and to the runtime's API, and swaps it in as `ui/default/` whole or not at all. The install
 guide runs it after the role skills, `jason update apply` runs it at its end, and `jason status` names it where the
 default UI is missing or another release's (DEC-UI-003).
+
+**The desktop's files are published beside them, from 0.34.0 on,** and listed in `checksums.txt` but not in the
+manifest: an installed desktop updates itself through electron-updater, which reads `latest.yml` or `latest-mac.yml`
+of the latest release and checks the download against the SHA-512 the feed gives, so the runtime's updater never reads
+them. Each package carries the executable its platform's release job signed, at the release's version, with `LICENSE`
+and `THIRD-PARTY-NOTICES`. The Windows job builds the installer while its sign-in holds: the installer, its
+uninstaller and `Jason.exe` are signed there, and verified with the `jason.exe` they carry. The macOS job builds an
+osx-x64 executable for the Intel package alone, signed, notarized and assessed as the osx-arm64 one is, and never
+published as an archive. A candidate writes the same two feed names a release does, and its release is marked a
+pre-release, which the latest release never is, so no installed desktop reads a candidate's feed.
 
 ## 3. The manifest
 

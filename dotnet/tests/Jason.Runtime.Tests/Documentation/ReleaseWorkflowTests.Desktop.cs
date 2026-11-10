@@ -1,0 +1,149 @@
+using System.Text.RegularExpressions;
+using Jason.Contracts.Update;
+using YamlDotNet.RepresentationModel;
+using static Jason.Runtime.Tests.Documentation.Workflows;
+
+namespace Jason.Runtime.Tests.Documentation;
+
+/// <summary>
+/// The desktop's packages in a release: which package calls build them, under which conditions, from which tooling, signed
+/// with which client, and uploaded as exactly the files the release publishes.
+/// </summary>
+public partial class ReleaseWorkflowTests
+{
+    private const string WindowsDesktop = "inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'";
+    private const string MacDesktop = "inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'";
+
+    /// <summary>
+    /// The action builds no desktop unless a call asks, and only the release asks, on the two calls that hold a signing
+    /// identity the desktop is signed with: win-x64 and osx-x64. A pull request's build never builds one.
+    /// </summary>
+    [Fact]
+    public void Only_the_release_s_win_x64_and_osx_x64_calls_build_the_desktop()
+    {
+        var input = Mapping(Mapping(Parse(Read(Action)), "inputs"), "desktop");
+        Assert.Equal("false", Scalar(input, "default"));
+        Assert.Equal("false", Scalar(input, "required"));
+
+        var asking = PackagingCalls(Release)
+            .Where(call => Scalar(Mapping(call, "with"), "desktop") is { } said && said != "false")
+            .Select(call => (Rid: Scalar(Mapping(call, "with"), "rid"), Said: Scalar(Mapping(call, "with"), "desktop")))
+            .OrderBy(call => call.Rid, StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal([("osx-x64", "true"), ("win-x64", "true")], asking);
+
+        Assert.All(PackagingCalls(Ci), call => Assert.Null(Node(Mapping(call, "with"), "desktop")));
+    }
+
+    /// <summary>
+    /// Every step of the action that builds, checks or uploads a desktop runs only on its platform's call, with that
+    /// platform's signing asked for and the desktop asked for, and stands while the identity is still held: after the
+    /// last check of the call's own executable and before the step that forgets the identity.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_steps_run_only_where_they_are_signed_and_before_the_identity_is_forgotten()
+    {
+        var steps = ActionSteps();
+        var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses") ?? "").ToList();
+
+        // Every step that reads the desktop input runs under one of the two whole conditions, nothing looser.
+        Assert.All(steps.Where(step => (Scalar(step, "if") ?? "").Contains("inputs.desktop", StringComparison.Ordinal)),
+            step => Assert.Contains(Scalar(step, "if"), new[] { WindowsDesktop, MacDesktop }));
+        // And so is every step that works in desktop/ or reads what it built.
+        Assert.All(steps.Where(step => Scalar(step, "working-directory") == "desktop"
+                || (Scalar(step, "run") ?? "").Contains("desktop/", StringComparison.Ordinal)
+                || (Scalar(Node(step, "with") as YamlMappingNode ?? new YamlMappingNode(), "path") ?? "").Contains("desktop/", StringComparison.Ordinal)),
+            step => Assert.Contains(Scalar(step, "if"), new[] { WindowsDesktop, MacDesktop }));
+
+        foreach (var (condition, after, forget) in new[]
+        {
+            (WindowsDesktop, "Verify the signature of the Windows executable", "Forget the Azure sign-in"),
+            (MacDesktop, "Assess the macOS executable as Gatekeeper does", "Forget the Developer ID identity"),
+        })
+        {
+            var held = steps.Select((step, index) => (Step: step, Index: index)).Where(each => Scalar(each.Step, "if") == condition).ToList();
+            Assert.True(held.Count >= 4, $"Fewer than four steps run under '{condition}'.");
+
+            var last = names.IndexOf(after);
+            var forgotten = names.IndexOf(forget);
+            Assert.True(last >= 0, $"The action has no step named '{after}'.");
+            Assert.True(forgotten >= 0, $"The action has no step named '{forget}'.");
+            Assert.All(held, each => Assert.InRange(each.Index, last + 1, forgotten - 1));
+            Assert.Equal(held.Count, held[^1].Index - held[0].Index + 1);
+        }
+    }
+
+    /// <summary>
+    /// The build tooling is the lockfile's, installed without any package's install scripts, and only the Windows build
+    /// names the sign hook; the Mac build is signed by electron-builder's own signing with the identity the call holds.
+    /// </summary>
+    [Fact]
+    public void The_desktop_is_built_from_the_lockfile_without_install_scripts()
+    {
+        var windows = ActionStep("Build the desktop's Windows installer, each file signed as it is made");
+        var mac = ActionStep("Build the desktop's Mac packages, signed and notarized");
+        foreach (var build in new[] { windows, mac })
+        {
+            var run = Scalar(build, "run") ?? "";
+            Assert.Equal("desktop", Scalar(build, "working-directory"));
+            Assert.Contains("npm ci --ignore-scripts\n", run, StringComparison.Ordinal);
+            Assert.DoesNotContain("npm install", run, StringComparison.Ordinal);
+            Assert.True(run.IndexOf("npm ci", StringComparison.Ordinal) < run.IndexOf("npm run package", StringComparison.Ordinal),
+                "The desktop is packaged before its tooling is installed.");
+        }
+
+        Assert.Contains("$env:JASON_WINDOWS_SIGN = '1'", Scalar(windows, "run"), StringComparison.Ordinal);
+        Assert.DoesNotContain("JASON_WINDOWS_SIGN", Scalar(mac, "run"), StringComparison.Ordinal);
+        Assert.All(ActionSteps().Where(step => Scalar(step, "uses") == "actions/setup-node@v5"),
+            step => Assert.Equal("24", Scalar(Mapping(step, "with"), "node-version")));
+    }
+
+    /// <summary>
+    /// The Trusted Signing client is one pinned version, refused unless the package downloaded hashes to the pinned
+    /// digest, and that check stands before the package is unpacked, so nothing of a different package is ever read.
+    /// </summary>
+    [Fact]
+    public void The_signing_client_is_a_pinned_version_checked_before_it_is_unpacked()
+    {
+        var run = Scalar(Assert.Single(ActionSteps(), step => Scalar(step, "id") == "desktop-signing"), "run") ?? "";
+
+        Assert.Matches(new Regex(@"^\$version = '\d+\.\d+\.\d+'$", RegexOptions.Multiline), run);
+        Assert.Matches(new Regex("^\\$pinned = '[0-9a-f]{64}'$", RegexOptions.Multiline), run);
+        Assert.Contains("$digest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()", run, StringComparison.Ordinal);
+
+        var check = run.IndexOf("if ($digest -ne $pinned) { throw", StringComparison.Ordinal);
+        var unpack = run.IndexOf("Expand-Archive", StringComparison.Ordinal);
+        Assert.True(check >= 0, "The client's digest is never compared with the pinned one.");
+        Assert.True(unpack > check, "The client is unpacked before its digest is checked.");
+        Assert.Equal(1, Regex.Count(run, "Expand-Archive"));
+    }
+
+    /// <summary>
+    /// What the two desktop uploads carry is exactly the desktop's part of what a release publishes, each under an
+    /// artifact the release's download collects; the osx-x64 executable, which a release never publishes, is uploaded
+    /// under a name that download does not collect.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_uploads_are_exactly_the_desktop_files_a_release_publishes()
+    {
+        var uploads = ActionSteps()
+            .Where(step => Scalar(step, "uses") == "actions/upload-artifact@v7" && (Scalar(step, "if") ?? "").Contains("inputs.desktop == 'true'", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(["jason-desktop-osx-x64", "jason-desktop-win-x64"], uploads.Select(step => Scalar(Mapping(step, "with"), "name")).Order(StringComparer.Ordinal));
+
+        var files = uploads
+            .SelectMany(step => (Scalar(Mapping(step, "with"), "path") ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .ToList();
+        Assert.All(files, file => Assert.StartsWith("desktop/dist/", file, StringComparison.Ordinal));
+        Assert.Equal(ReleaseAssets.Desktop.Order(StringComparer.Ordinal), files.Select(file => file["desktop/dist/".Length..]).Order(StringComparer.Ordinal));
+        Assert.All(uploads, step => Assert.Equal("error", Scalar(Mapping(step, "with"), "if-no-files-found")));
+
+        var download = Assert.Single(Read(Release).Split('\n'), line => line.Trim().StartsWith("pattern:", StringComparison.Ordinal)).Trim()["pattern:".Length..].Trim();
+        Assert.Equal("jason-*", download);
+        var collected = new Regex("^" + Regex.Escape(download).Replace(@"\*", ".*", StringComparison.Ordinal) + "$");
+        Assert.All(uploads, step => Assert.Matches(collected, Scalar(Mapping(step, "with"), "name") ?? ""));
+
+        var x64 = Assert.Single(PackagingCalls(Release), call => Scalar(Mapping(call, "with"), "rid") == "osx-x64");
+        Assert.DoesNotMatch(collected, Scalar(Mapping(x64, "with"), "artifact") ?? "");
+    }
+}

@@ -93,9 +93,28 @@ public static class ReleaseAssets
     /// </remarks>
     public const string Skills = "jason-skills.zip";
 
+    /// <summary>
+    /// The desktop's files, which electron-builder writes in the release's two signing jobs: the Windows installer, signed
+    /// as its executable and its uninstaller are, with its blockmap and the feed the installed desktop's updater reads;
+    /// for each Mac architecture a dmg to install by hand and a zip the updater installs, with the zip's blockmap; and the
+    /// Mac feed, which names both zips.
+    /// </summary>
+    /// <remarks>
+    /// Listed in <see cref="Checksums"/> and never in the <see cref="Manifest"/>, which names platforms and plugins; the
+    /// runtime never reads them. The names carry no version, so a latest-download URL resolves for every release, and the
+    /// feeds carry the stable names <c>latest.yml</c> and <c>latest-mac.yml</c> for a candidate too: a candidate is kept
+    /// from stable installations by the release's prerelease flag, never by a channel of its own.
+    /// </remarks>
+    public static IReadOnlyList<string> Desktop { get; } =
+    [
+        "jason-desktop-windows-x64-setup.exe", "jason-desktop-windows-x64-setup.exe.blockmap", "latest.yml",
+        "jason-desktop-macos-arm64.dmg", "jason-desktop-macos-arm64.zip", "jason-desktop-macos-arm64.zip.blockmap",
+        "jason-desktop-macos-x64.dmg", "jason-desktop-macos-x64.zip", "jason-desktop-macos-x64.zip.blockmap", "latest-mac.yml",
+    ];
+
     /// <summary>Every file a release carries, in the order the release workflow attaches them.</summary>
     public static IReadOnlyList<string> Published { get; } =
-        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, JournalForwarderPlugin, NtfyPlugin, SlackPlugin, TelegramPlugin, Ui, Skills];
+        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, JournalForwarderPlugin, NtfyPlugin, SlackPlugin, TelegramPlugin, Ui, Skills, .. Desktop];
 
     /// <summary>The archive a platform's release is published as.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The platform is not one this build publishes for.</exception>

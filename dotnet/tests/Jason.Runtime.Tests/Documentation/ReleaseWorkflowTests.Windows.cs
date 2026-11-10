@@ -101,6 +101,8 @@ public partial class ReleaseWorkflowTests
         var text = Read(Release).ReplaceLineEndings("\n");
         const string ClientId = "          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}\n";
         const string TeamId = "          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}\n";
+        // The osx-arm64 call's team id, told from the osx-x64 call's by the step that follows it.
+        const string MacosTail = "\n      # The archive is what a person downloads";
         const string Archive = "      - name: " + ArchivedWindows + "\n        shell: pwsh\n        env:\n          ARCHIVE: ${{ steps.package.outputs.archive }}\n";
         const string PluginSteps = "  plugin:\n    name: The plugins' packages\n    needs: version\n    runs-on: ubuntu-latest\n";
         const string WindowsPackage = "      - name: Package\n        id: package\n        uses: ./.github/actions/package\n        with:\n          rid: win-x64\n";
@@ -121,7 +123,7 @@ public partial class ReleaseWorkflowTests
             "a sixth name" => Moved(ClientId, ClientId + "          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}\n"),
             "two swapped" => Moved(ClientId, "          azure-client-id: ${{ secrets.AZURE_TENANT_ID }}\n"),
             "an Apple secret in the windows call" => Moved(ClientId, ClientId + TeamId),
-            "an Azure secret in the macOS call" => Moved(TeamId, TeamId + ClientId),
+            "an Azure secret in the macOS call" => Moved(TeamId + MacosTail, TeamId + ClientId + MacosTail),
             "another step of the windows job" => Moved(Archive, Archive + "          CLIENT: ${{ secrets.AZURE_CLIENT_ID }}\n"),
             "the matrix's package call" => Moved(MatrixPackage, MatrixPackage + five, Moved(five, string.Empty)),
             "a test in the windows job" => Moved(WindowsPackage, "      - run: dotnet test --solution dotnet/Jason.slnx\n\n" + WindowsPackage),
@@ -420,8 +422,9 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The five inputs reach the two steps that take them, the sign-in and the signature, as their inputs and nowhere
     /// else in the action. The check before them is handed only an expression that names the inputs that are empty, so
-    /// it never holds a value at all. <c>release.yml</c> names each secret once, where it calls the action, and no script
-    /// of its names one.
+    /// it never holds a value at all. The desktop's signing client is told the endpoint, the account and the profile, none
+    /// of them a credential, through its step's environment alone. <c>release.yml</c> names each secret once, where it
+    /// calls the action, and no script of its names one.
     /// </summary>
     [Fact]
     public void The_azure_secrets_reach_only_the_sign_in_and_the_signing_step()
@@ -430,10 +433,23 @@ public partial class ReleaseWorkflowTests
         var signIn = Assert.Single(steps, step => Scalar(step, "name") == SignIn);
         var sign = Assert.Single(steps, step => Scalar(step, "name") == SignWindows);
         var check = Assert.Single(steps, step => Scalar(step, "id") == "signable");
+        var desktop = Assert.Single(steps, step => Scalar(step, "id") == "desktop-signing");
+
+        // The desktop's signing client is told the account it signs with, the three names that are not credentials, as
+        // its step's environment and nowhere else; its one credential is the sign-in above.
+        Assert.Equal(
+            ["SIGNING_ENDPOINT=${{ inputs.azure-signing-endpoint }}", "SIGNING_ACCOUNT=${{ inputs.azure-signing-account }}", "SIGNING_PROFILE=${{ inputs.azure-signing-profile }}"],
+            Mapping(desktop, "env").Children.Select(pair => $"{pair.Key}={pair.Value}"));
+        Assert.DoesNotContain("inputs.azure-", Scalar(desktop, "run"), StringComparison.Ordinal);
 
         var given = new List<string>();
         foreach (var step in steps)
         {
+            if (ReferenceEquals(step, desktop))
+            {
+                continue;
+            }
+
             if (ReferenceEquals(step, signIn) || ReferenceEquals(step, sign))
             {
                 Assert.All(

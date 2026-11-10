@@ -33,6 +33,16 @@ at this version and released only after its tests passed.
 | `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at `v{{version}}`, which `jason plugin install telegram` places in `~/.jason/plugins/telegram` |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |
 | `jason-skills.zip` | the skills' package: `skills/` at `v{{version}}` and a `source.json` naming the tag and its commit, which `jason skills install` deploys when it is given no `--source` |
+| `jason-desktop-windows-x64-setup.exe` | Jason Desktop for Windows on x64: the installer, signed |
+| `jason-desktop-windows-x64-setup.exe.blockmap` | what the Windows desktop's updater reads to download only the parts of the installer that changed |
+| `latest.yml` | the Windows desktop's update feed: this version, the installer's name and its SHA-512 |
+| `jason-desktop-macos-arm64.dmg` | Jason Desktop for macOS on Apple silicon, to drag into Applications: signed, notarized and stapled |
+| `jason-desktop-macos-arm64.zip` | the same application for Apple silicon, as the Mac desktop's updater downloads it |
+| `jason-desktop-macos-arm64.zip.blockmap` | what the Mac desktop's updater reads to download only the parts of the Apple silicon zip that changed |
+| `jason-desktop-macos-x64.dmg` | Jason Desktop for macOS on Intel, to drag into Applications: signed, notarized and stapled |
+| `jason-desktop-macos-x64.zip` | the same application for Intel, as the Mac desktop's updater downloads it |
+| `jason-desktop-macos-x64.zip.blockmap` | what the Mac desktop's updater reads to download only the parts of the Intel zip that changed |
+| `latest-mac.yml` | the Mac desktop's update feed: this version, each zip's name and its SHA-512 |
 
 Each archive holds the executable, `LICENSE` (the MIT licence, which covers the whole repository, the runtime
 included) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by
@@ -47,6 +57,23 @@ notification channel. The UI's package is placed by `jason ui install`, which th
 On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry and minimal
 images may not; the install script stops, with the runtime's own message, rather than install a program that does
 not start.
+
+## Desktop
+
+Jason Desktop is a window onto this same Jason: each package carries this release's executable, signed as the
+archive's is, with `LICENSE` and `THIRD-PARTY-NOTICES` beside it, and talks to it as the CLI does. On Windows, run
+`jason-desktop-windows-x64-setup.exe`; the installer, its uninstaller, `Jason.exe` and the `jason.exe` it carries are
+each signed with Reply's certificate and timestamped. On macOS, open the dmg for your Mac and drag Jason into
+Applications; the application, the `jason` it carries and the dmg are signed with Reply's Developer ID, notarized and
+stapled. The Intel application's `jason` is built and signed as the Apple silicon one is, and started once under
+Rosetta where the release's runner has it; the test suite does not run on an Intel Mac.
+
+The desktop updates itself from the latest release's `latest.yml` or `latest-mac.yml`, on your word. A candidate's
+feed files stay on the candidate's own page, which never becomes the latest release, so an installed desktop never
+moves to a candidate. Uninstalling it on Windows takes off what it put there - the `jason` command it placed on the
+PATH, Open Jason at login, and the runtime's logon start when that start names the application's own folder - and
+leaves the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache,
+`%LOCALAPPDATA%\jason-desktop-updater`, saying so.
 
 ## Installing
 
@@ -130,7 +157,8 @@ SmartScreen looks at the executable unpacked from it the first time it runs. Sma
 publisher builds over downloads, so in the first weeks of signed releases a download may still show its dialog;
 `install.ps1` clears that mark from what it unpacks.
 
-The Linux executable is not signed, and nothing else a release carries is either.
+The Linux executable is not signed, and nothing else a release carries is either, but the desktop's packages, as
+"Desktop" above says.
 
 Both scripts check the archive against `checksums.txt` before unpacking. On Linux that check is the only provenance
 there is; on macOS and Windows the signature says who built the executable as well.

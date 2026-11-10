@@ -11,6 +11,7 @@ export const processModules: Readonly<Record<string, string>> = {
     'src/chat-process.ts': "an agent host for one turn of the chat, streamed, and on Windows taskkill from the system folder to end that turn's process tree",
     'src/shell-path.ts': "the login shell, on macOS only, for the PATH a program started from the Finder lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
+    'scripts/sign-windows.mjs': 'signtool, to sign each file of the Windows package through the Trusted Signing client',
 };
 
 /** The one module allowed to register an IPC handler, because it checks every sender's origin first. */

@@ -25,6 +25,8 @@ export interface Configuration {
     extraResources: { from: string; to: string }[];
     electronFuses: Record<string, boolean>;
     publish: { provider: string; owner: string; repo: string; releaseType: string }[];
+    detectUpdateChannel: boolean;
+    generateUpdatesFilesForAllChannels: boolean;
     beforePack: (context: unknown) => Promise<void>;
     afterPack: (context: unknown) => Promise<void>;
     win: {
@@ -48,7 +50,7 @@ export interface Configuration {
         forceCodeSigning: boolean;
         artifactName: string;
     };
-    dmg: { sign: boolean; artifactName: string };
+    dmg: { sign: boolean; writeUpdateInfo: boolean; artifactName: string };
 }
 
 export function configuration(options: { version: string; sign?: string | null }): Configuration;
