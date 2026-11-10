@@ -404,7 +404,7 @@ describe('People', () => {
         expect(screen.queryByText('Planned')).toBeNull();
         expect(screen.queryByText('Nothing planned.')).toBeNull();
     });
-    it('Details shows the record in one grid, and there is no Threads tab without a provider id', async () => {
+    it('Details shows the record in one grid, and there is no Messages tab without a provider id', async () => {
         const aguilar = fixtures['contact.get/no-first-name'].response;
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/by-activity')
@@ -416,22 +416,28 @@ describe('People', () => {
         expect(within(details).getByText('primary')).toBeTruthy();
         expect(within(details).getByText('Email')).toBeTruthy();
         expect(Array.from(details.querySelectorAll('dl')).map((dl) => dl.className)).toEqual(['facts', 'facts']);
-        expect(screen.queryByRole('tab', { name: 'Threads' })).toBeNull();
+        expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
         expect(within(details).getByText('Andina Tech')).toBeTruthy();
         expect(within(details.querySelectorAll('.facts')[1] as HTMLElement).getByText(/America\/Lima/)).toBeTruthy();
         expect(within(details).queryByText(/Threads at/)).toBeNull();
         expect(api.calls.some((c) => c.operation === 'contact.threads')).toBe(false);
     });
 
-    it('the Threads tab reads the threads when shown, a thread only when opened, more from where a page ended, cleaned', async () => {
+    it('the Messages tab reads the threads when shown, a thread only when opened, more from where a page ended, cleaned', async () => {
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/by-activity')
             .answer('contact.get', 'contact.get/with-campaigns')
             .answer('contact.threads', 'contact.threads/has-more', 'contact.threads/next')
             .answer('contact.thread', 'contact.thread/has-more', 'contact.thread/next');
         open(api, {}, mateo.id, 'details');
-        const tab = await screen.findByRole('tab', { name: 'Threads' });
-        expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Timeline', 'Details', 'Threads']);
+        const tab = await screen.findByRole('tab', { name: 'Messages' });
+        expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+            'Details',
+            'Activity',
+            'Sequences',
+            'Messages',
+            'Next',
+        ]);
         expect(api.calls.some((c) => c.operation === 'contact.threads')).toBe(false);
         // A click that asks for a new browser tab is left to the browser.
         expect(fireEvent.click(tab, { ctrlKey: true })).toBe(true);
@@ -652,7 +658,7 @@ describe('People', () => {
         expect(screen.getByText(/Happy to connect\./)).toBeTruthy();
     });
 
-    it('an address on Threads for a person linked nowhere shows their timeline', async () => {
+    it('an address on Messages for a person linked nowhere shows their activity', async () => {
         const grace = fixtures['contact.get/imported'].response;
         const api = timeline(
             new FakeApi()
@@ -664,7 +670,7 @@ describe('People', () => {
         open(api, {}, grace.id, 'threads');
 
         await screen.findByRole('heading', { level: 2, name: 'Grace Hopper' });
-        expect(screen.getByRole('tab', { name: 'Timeline' }).getAttribute('aria-selected')).toBe('true');
+        expect(screen.getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true');
         expect(await screen.findByText('Nothing here yet.')).toBeTruthy();
     });
 

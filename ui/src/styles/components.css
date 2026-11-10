@@ -592,3 +592,8 @@ button.row:hover .what .cue { text-decoration: underline; }
   .listing .head { padding: var(--space-3) var(--space-3) 0; }
   .listing .rows .row, .listing .group { padding-left: var(--space-3); padding-right: var(--space-3); }
 }
+
+/* The person panel, beside People's list: its Sequences rows, its forms and its acts. */
+.person-panel .sequences { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.person-panel .sequences li { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.person-panel .sequences li .name { font-weight: 500; }

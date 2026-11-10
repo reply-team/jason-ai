@@ -47,6 +47,16 @@ import type {
     ContactThread,
     CampaignActivityByPeriodRequest,
     CampaignActivityByPeriodResponse,
+    ContactUpdateRequest,
+    Suppression,
+    SuppressionListRequest,
+    SuppressionRequest,
+    SuppressionRemoved,
+    RemoveContactsRequest,
+    RemoveContactsResult,
+    WorkItemCreateRequest,
+    WorkItemGetRequest,
+    WorkItemWithResult,
 } from '../api/types';
 
 import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.approve/already-decided.json';
@@ -276,6 +286,31 @@ import workitemListTomasNow from '../../../docs/api/fixtures/workitem.list/tomas
 import workitemListUnknownCampaign from '../../../docs/api/fixtures/workitem.list/unknown-campaign.json';
 import workitemUpdateDates from '../../../docs/api/fixtures/workitem.update/dates.json';
 import workitemUpdateFinishedMeanwhile from '../../../docs/api/fixtures/workitem.update/finished-meanwhile.json';
+// The person panel's recordings.
+import personCampaignAddContactsMoveIn from '../../../docs/api/fixtures/campaign.add_contacts/move-in.json';
+import personCampaignListMoveTargets from '../../../docs/api/fixtures/campaign.list/move-targets.json';
+import personCampaignRemoveContactsExcludeOne from '../../../docs/api/fixtures/campaign.remove_contacts/exclude-one.json';
+import personCampaignRemoveContactsMoveOut from '../../../docs/api/fixtures/campaign.remove_contacts/move-out.json';
+import personCampaignRemoveContactsMoveOutArchived from '../../../docs/api/fixtures/campaign.remove_contacts/move-out-archived.json';
+import personContactGetPersonAfterExclude from '../../../docs/api/fixtures/contact.get/person-after-exclude.json';
+import personContactGetPersonAfterHalfMove from '../../../docs/api/fixtures/contact.get/person-after-half-move.json';
+import personContactGetPersonAfterMove from '../../../docs/api/fixtures/contact.get/person-after-move.json';
+import personContactGetPersonPanel from '../../../docs/api/fixtures/contact.get/person-panel.json';
+import personContactUpdatePersonRefused from '../../../docs/api/fixtures/contact.update/person-refused.json';
+import personContactUpdatePersonSaved from '../../../docs/api/fixtures/contact.update/person-saved.json';
+import personSuppressionAddPersonEmail from '../../../docs/api/fixtures/suppression.add/person-email.json';
+import personSuppressionListAguilarEmailClear from '../../../docs/api/fixtures/suppression.list/aguilar-email-clear.json';
+import personSuppressionListMateoEmailClear from '../../../docs/api/fixtures/suppression.list/mateo-email-clear.json';
+import personSuppressionListMateoLinkedinClear from '../../../docs/api/fixtures/suppression.list/mateo-linkedin-clear.json';
+import personSuppressionListMateoPhoneClear from '../../../docs/api/fixtures/suppression.list/mateo-phone-clear.json';
+import personSuppressionListPersonEmailClear from '../../../docs/api/fixtures/suppression.list/person-email-clear.json';
+import personSuppressionListPersonLinkedinClear from '../../../docs/api/fixtures/suppression.list/person-linkedin-clear.json';
+import personSuppressionRemovePersonEmail from '../../../docs/api/fixtures/suppression.remove/person-email.json';
+import personWorkitemCreateProviderContactUpdate from '../../../docs/api/fixtures/workitem.create/provider-contact-update.json';
+import personWorkitemCreateResearcherAsked from '../../../docs/api/fixtures/workitem.create/researcher-asked.json';
+import personWorkitemCreateResearcherAskedPlain from '../../../docs/api/fixtures/workitem.create/researcher-asked-plain.json';
+import personWorkitemGetResearcherFinding from '../../../docs/api/fixtures/workitem.get/researcher-finding.json';
+import personWorkitemListResearcherFindings from '../../../docs/api/fixtures/workitem.list/researcher-findings.json';
 
 export type Exchange<Req, Res> = { operation: string; case: string; request: Req; status: number; response: Res };
 
@@ -794,6 +829,94 @@ export const fixtures = {
     'workitem.update/finished-meanwhile': workitemUpdateFinishedMeanwhile satisfies Exchange<
         WorkItemUpdateRequest,
         ErrorEnvelope
+    >,
+    // The person panel's recordings.
+    'campaign.add_contacts/move-in': personCampaignAddContactsMoveIn satisfies Exchange<
+        AddContactsRequest,
+        AddContactsResult
+    >,
+    'campaign.list/move-targets': personCampaignListMoveTargets satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
+    'campaign.remove_contacts/exclude-one': personCampaignRemoveContactsExcludeOne satisfies Exchange<
+        RemoveContactsRequest,
+        RemoveContactsResult
+    >,
+    'campaign.remove_contacts/move-out': personCampaignRemoveContactsMoveOut satisfies Exchange<
+        RemoveContactsRequest,
+        RemoveContactsResult
+    >,
+    'campaign.remove_contacts/move-out-archived': personCampaignRemoveContactsMoveOutArchived satisfies Exchange<
+        RemoveContactsRequest,
+        ErrorEnvelope
+    >,
+    'contact.get/person-after-exclude': personContactGetPersonAfterExclude satisfies Exchange<
+        { contact_id: string },
+        Contact
+    >,
+    'contact.get/person-after-half-move': personContactGetPersonAfterHalfMove satisfies Exchange<
+        { contact_id: string },
+        Contact
+    >,
+    'contact.get/person-after-move': personContactGetPersonAfterMove satisfies Exchange<
+        { contact_id: string },
+        Contact
+    >,
+    'contact.get/person-panel': personContactGetPersonPanel satisfies Exchange<{ contact_id: string }, Contact>,
+    'contact.update/person-refused': personContactUpdatePersonRefused satisfies Exchange<
+        ContactUpdateRequest,
+        ErrorEnvelope
+    >,
+    'contact.update/person-saved': personContactUpdatePersonSaved satisfies Exchange<ContactUpdateRequest, Contact>,
+    'suppression.add/person-email': personSuppressionAddPersonEmail satisfies Exchange<SuppressionRequest, Suppression>,
+    'suppression.list/aguilar-email-clear': personSuppressionListAguilarEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/mateo-email-clear': personSuppressionListMateoEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/mateo-linkedin-clear': personSuppressionListMateoLinkedinClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/mateo-phone-clear': personSuppressionListMateoPhoneClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/person-email-clear': personSuppressionListPersonEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/person-linkedin-clear': personSuppressionListPersonLinkedinClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.remove/person-email': personSuppressionRemovePersonEmail satisfies Exchange<
+        SuppressionRequest,
+        SuppressionRemoved
+    >,
+    'workitem.create/provider-contact-update': personWorkitemCreateProviderContactUpdate satisfies Exchange<
+        WorkItemCreateRequest,
+        WorkItem
+    >,
+    'workitem.create/researcher-asked': personWorkitemCreateResearcherAsked satisfies Exchange<
+        WorkItemCreateRequest,
+        WorkItem
+    >,
+    'workitem.create/researcher-asked-plain': personWorkitemCreateResearcherAskedPlain satisfies Exchange<
+        WorkItemCreateRequest,
+        WorkItem
+    >,
+    'workitem.get/researcher-finding': personWorkitemGetResearcherFinding satisfies Exchange<
+        WorkItemGetRequest,
+        WorkItemWithResult
+    >,
+    'workitem.list/researcher-findings': personWorkitemListResearcherFindings satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
     >,
 } as const;
 

@@ -412,3 +412,45 @@ export type AddContactsResult = {
         error: { code: string; message: string } | null;
     }[];
 };
+// The person panel: what it reads and what its acts send, as the runtime takes and answers them.
+export type ContactChannel = Channel & { label?: string | null; data?: unknown };
+export type ChannelInput = { channel: string; value: string; label?: string | null; primary?: boolean; data?: unknown };
+export type ContactUpdateRequest = {
+    contact_id: string;
+    first_name?: string | null;
+    last_name?: string | null;
+    company?: string | null;
+    title?: string | null;
+    time_zone?: string | null;
+    channels?: ChannelInput[];
+    reason?: string;
+    actor?: ActorRef;
+};
+export type Suppression = { id: string; channel: string; value: string; reason: string | null; created_at: string };
+export type SuppressionListRequest = { channel: string; value?: string; limit?: number; cursor?: string };
+export type SuppressionRequest = { channel: string; value: string; reason?: string; actor?: ActorRef };
+export type SuppressionRemoved = { channel: string; value: string; removed: boolean };
+export type RemoveContactsRequest = { campaign_id: string; contact_ids: string[]; reason?: string; actor?: ActorRef };
+export type RemoveContactsResult = {
+    campaign_id: string;
+    summary: { removed: number; not_member: number; already_excluded: number; rejected: number };
+    items: {
+        index: number;
+        status: string;
+        contact_id: string | null;
+        error: { code: string; message: string } | null;
+    }[];
+};
+export type WorkItemCreateRequest = {
+    campaign_id: string;
+    kind: string;
+    role?: string;
+    operation?: string;
+    contact_id?: string;
+    context?: Record<string, unknown>;
+    reason?: string;
+    actor?: ActorRef;
+};
+export type WorkItemGetRequest = { work_item_id: string };
+/** A work item as workitem.get answers it, with what it produced once it finished. */
+export type WorkItemWithResult = WorkItem & { result: unknown };

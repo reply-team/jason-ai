@@ -8,10 +8,8 @@ import { CampaignPicker } from '../../pickers/campaign-picker';
 import { href, navigate, replace, route, type PeopleFilters } from '../../router';
 import { AddDialog } from './add-dialog';
 import { PersonCard } from './card';
-import { Details } from './details';
 import { PeopleList } from './list';
-import { linked, ThreadsTab } from './threads';
-import { Timeline } from './timeline';
+import { PanelTab, panelTabs, shownTab } from './panel/panel';
 import * as store from './store';
 import { Notice } from '../../layout/notice';
 
@@ -58,8 +56,8 @@ export function PeopleScreen() {
     }, [api, selected]);
 
     const person = store.person.value;
-    // An address on Threads for a person linked nowhere shows their timeline: the tab is not there to show.
-    const tab = asked === 'threads' && person && !linked(person) ? 'timeline' : asked;
+    // An address on a tab this person's panel does not have, Messages for a person linked nowhere, shows their activity.
+    const tab = shownTab(person, asked);
     const now = new Date();
     const people = store.people.value;
     const filtered = Boolean(filters.q || filters.campaign || filters.archived);
@@ -121,7 +119,7 @@ export function PeopleScreen() {
                 )}
             </div>
             {selected && (
-                <div className="panel">
+                <div className="panel person-panel">
                     {store.personFailure.value && <Notice danger>{store.personFailure.value}</Notice>}
                     {person && person.id === selected && (
                         <>
@@ -133,12 +131,15 @@ export function PeopleScreen() {
                                 zone={zone}
                                 onAdd={() => setAdding(true)}
                                 onClose={close}
+                                tabs={panelTabs(person)}
                             />
-                            {tab === 'timeline' && (
-                                <Timeline person={person} me={session.actorId.value ?? ''} now={now} zone={zone} />
-                            )}
-                            {tab === 'threads' && <ThreadsTab person={person} zone={zone} />}
-                            {tab === 'details' && <Details person={person} now={now} zone={zone} />}
+                            <PanelTab
+                                person={person}
+                                tab={tab}
+                                me={session.actorId.value ?? ''}
+                                now={now}
+                                zone={zone}
+                            />
                             {adding && <AddDialog person={person} onClose={() => setAdding(false)} />}
                         </>
                     )}
