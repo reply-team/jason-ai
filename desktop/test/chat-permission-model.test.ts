@@ -330,6 +330,27 @@ test('a read outside every folder gets a card that may be remembered by its fold
     assert.ok(change.verdict === 'ask' && change.remember === null);
 });
 
+test('a search or a listing outside every folder is remembered by the folder it names and its own kind, and a Read grant covers no folder reader', () => {
+    const key = (judged: ReturnType<typeof judge>) => (judged.verdict === 'ask' ? judged.remember : `not a card: ${JSON.stringify(judged)}`);
+    const readGrant = key(read(mac(), '/opt/notes/plan.txt'));
+    const search = judge('Grep', { pattern: 'x', path: '/opt/notes' }, mac());
+    assert.ok(search.verdict === 'ask' && search.remember !== null && search.covers === 'everything under /opt/notes', JSON.stringify(search));
+    // A Read grant covers no search of the same folder, nor of a folder under it.
+    for (const [tool, input] of [['Grep', { pattern: 'x', path: '/opt/notes' }], ['Grep', { pattern: 'x', path: '/opt/notes/sub' }], ['LS', { path: '/opt/notes' }],
+        ['LS', { path: '/opt/notes/sub' }], ['Glob', { pattern: '*', path: '/opt/notes' }], ['Glob', { pattern: '*', path: '/opt/notes/sub' }]] as const) {
+        assert.notEqual(key(judge(tool, input, mac())), readGrant, `${tool} ${JSON.stringify(input)}`);
+    }
+    // A search grant covers that folder only: neither a sibling, nor a folder under it, nor another kind's walk of it.
+    assert.notEqual(key(judge('Grep', { pattern: 'x', path: '/opt/other' }, mac())), search.remember);
+    assert.notEqual(key(judge('Grep', { pattern: 'x', path: '/opt/notes/sub' }, mac())), search.remember);
+    assert.notEqual(key(judge('LS', { path: '/opt/notes' }, mac())), search.remember);
+    assert.notEqual(key(judge('Glob', { pattern: '*', path: '/opt/notes' }, mac())), search.remember);
+    assert.equal(key(judge('Grep', { pattern: 'y', path: '/OPT/notes' }, mac())), search.remember);
+    // A Glob is remembered by the folder it walks: its pattern's fixed leading folders, not the path it was given.
+    assert.equal(key(judge('Glob', { pattern: '/opt/notes/**', path: '/opt/other' }, mac())), key(judge('Glob', { pattern: '**', path: '/opt/notes' }, mac())));
+    assert.notEqual(key(judge('Glob', { pattern: '/opt/notes/**', path: '/opt/other' }, mac())), key(judge('Glob', { pattern: '**', path: '/opt/other' }, mac())));
+});
+
 // ---- Commands ---------------------------------------------------------------------------------------------------------
 
 test('a jason command that reaches the model gets a card that covers only itself, never an allowance', () => {

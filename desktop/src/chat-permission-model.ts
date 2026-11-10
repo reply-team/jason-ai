@@ -166,15 +166,31 @@ function judgePath(value: string, scope: ChatScope, writes: boolean): Judgement 
     };
 }
 
+const walkTitles: Readonly<Record<string, string>> = {
+    Grep: 'Search a folder outside the chat\'s folders',
+    Glob: 'Find files in a folder outside the chat\'s folders',
+    LS: 'List a folder outside the chat\'s folders',
+};
+
 /**
  * A folder a search or a listing walks: one that holds the data directory is refused, since the walk would read what the
- * chat never reads; any other is judged as a read of it.
+ * chat never reads; any other is judged as a read of it. Its card is remembered by the folder it names and by the tool's
+ * own kind, so a grant covers that tool's walks of that folder only: never a Read, a sibling, a folder under it or
+ * another tool's walk, and a Read's grant never covers it.
  */
-function judgeFolder(value: string, scope: ChatScope): Judgement {
+function judgeFolder(tool: string, value: string, scope: ChatScope): Judgement {
     const judged = judgePath(value, scope, false);
     if (judged.verdict === 'deny' || judgeSpelling(value, scope) !== null) return judged;
-    if (inside(scope, located(value, scope), located(scope.data, scope))) return { verdict: 'deny', message: searchRefusal };
-    return judged;
+    const folder = located(value, scope);
+    if (inside(scope, folder, located(scope.data, scope))) return { verdict: 'deny', message: searchRefusal };
+    if (judged.verdict !== 'ask' || judged.remember === null) return judged;
+    return {
+        verdict: 'ask',
+        title: walkTitles[tool] ?? judged.title,
+        detail: shorten(folder),
+        remember: `${tool.toLowerCase()}:${keyOf(scope.platform, folder)}`,
+        covers: `everything under ${shorten(folder)}`,
+    };
 }
 
 /** The worse of two judgements: a refusal over a card, a card over an allowance. */
@@ -183,10 +199,13 @@ function worse(one: Judgement, other: Judgement): Judgement {
     return rank(other) > rank(one) ? other : one;
 }
 
-/** Glob also reaches where its pattern climbs or points: the pattern's fixed leading folders are walked too. */
+/**
+ * Glob also reaches where its pattern climbs or points: the pattern's fixed leading folders are walked too, and its card
+ * is remembered by the folder it walks.
+ */
 function judgeGlob(input: Record<string, unknown>, scope: ChatScope): Judgement {
     const folder = named(input['path']) ? input['path'] : scope.cwd;
-    const judged = judgeFolder(folder, scope);
+    const judged = judgeFolder('Glob', folder, scope);
     const pattern = typeof input['pattern'] === 'string' ? input['pattern'] : '';
     // A .. anywhere, a brace's alternative included, climbs where the fixed leading folders do not show.
     if (pattern.split(/[\\/{},]/).includes('..')) return { verdict: 'deny', message: climbRefusal };
@@ -200,7 +219,8 @@ function judgeGlob(input: Record<string, unknown>, scope: ChatScope): Judgement 
     if (fixed.length === 0) return judged;
     const separator = pathsOf(scope.platform).sep;
     const leading = pattern.startsWith('/') && fixed[0] === '' ? `${separator}${fixed.slice(1).join(separator)}` : fixed.join(separator);
-    return worse(judged, judgeFolder(pathsOf(scope.platform).resolve(spelled(folder, scope), leading || '.'), scope));
+    // The walked folder's card comes first, so that a tie keeps its key rather than the path's.
+    return worse(judgeFolder('Glob', pathsOf(scope.platform).resolve(spelled(folder, scope), leading || '.'), scope), judged);
 }
 
 /** True when a shell could make the command more than one command, or send its output somewhere. */
@@ -402,7 +422,7 @@ export function judge(tool: string, input: Record<string, unknown>, scope: ChatS
     if (reader !== undefined) {
         const value = input[reader];
         if (tool === 'Read') return named(value) ? judgePath(value, scope, false) : unnamed(tool, input);
-        return judgeFolder(named(value) ? value : '.', scope);
+        return judgeFolder(tool, named(value) ? value : '.', scope);
     }
     const writer = writers[tool];
     if (writer !== undefined) {
