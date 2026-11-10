@@ -319,7 +319,8 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     await act('Reload', () => setup.configurePlugin('slack', {}), [], []);
 
     // A chat turn writes one file, its MCP configuration in desktop/turns/ beside the chat folder, and removes it when
-    // the turn is over.
+    // the turn is over; the chat writes the instruction text into the chat folder as the hosts' two memory files.
+    const instructionFiles = ['desktop/chat/CLAUDE.md', 'desktop/chat/AGENTS.md'];
     const turnFile = /^desktop\/turns\/turn-[0-9a-f]{24}\.mcp\.json$/;
     let during: string[] = [];
     await act('a chat turn', async () => {
@@ -346,14 +347,15 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
         });
         await chat.send('c1', 'hello', { host: 'claude' });
         await done;
-    }, [], []);
-    assert.equal(during.length, 1, `while the turn waited: ${during.join(', ')}`);
-    assert.match(during[0] ?? '', turnFile);
+    }, instructionFiles, []);
+    const turnFiles = during.filter((path) => !instructionFiles.includes(path));
+    assert.equal(turnFiles.length, 1, `while the turn waited: ${during.join(', ')}`);
+    assert.match(turnFiles[0] ?? '', turnFile);
     assert.ok(![...snapshot(b.paths.data).keys()].some((path) => turnFile.test(path)), 'the turn file is gone once the turn is over');
 
     // Jason's skills and the Reply ones sit in one folder per host, .claude/skills for Claude Code and .agents/skills for
-    // Codex, and nothing of them at the chat folder's top.
-    assert.deepEqual(readdirSync(b.paths.chat).sort(), ['.agents', '.claude']);
+    // Codex, and nothing of them at the chat folder's top, where the two memory files are.
+    assert.deepEqual(readdirSync(b.paths.chat).sort(), ['.agents', '.claude', 'AGENTS.md', 'CLAUDE.md']);
     for (const host of ['.claude', '.agents']) {
         assert.deepEqual(readdirSync(join(b.paths.chat, host)), ['skills']);
         const skills = readdirSync(join(b.paths.chat, host, 'skills')).sort();
