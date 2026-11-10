@@ -83,6 +83,10 @@ export function toApprovalRow(row: ApprovalSummary, now: number, preview?: Recor
 export interface ApprovalDetail {
     intent: string | null;
     to: string | null;
+    /** The account the message goes from, as the preview highlights it: its address, else its identifier. */
+    from: string | null;
+    /** The channel it goes on, in words. */
+    channel: string | null;
     subject: string | null;
     body: string | null;
     facts: string[];
@@ -92,16 +96,29 @@ const record = (value: unknown): Record<string, unknown> | null =>
     value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
 
+const channels: Readonly<Record<string, string>> = {
+    email: 'Email',
+    linkedin: 'LinkedIn',
+};
+
+/** A channel's code in words; a code with no words here is shown as it was given. */
+export const channelWords = (code: string): string => channels[code] ?? code;
+
 const factNames: readonly [string, string][] = [
     ['reach', 'Reach'],
     ['reversibility', 'Reversibility'],
     ['cost', 'Cost'],
 ];
 
-/** What an approval's preview says the act would do: its intent, its recipient, its message and its properties. */
+/**
+ * What an approval's preview says the act would do: its intent, its recipient, the account and the channel it goes
+ * by, its message and its properties. A value the preview does not carry is null, never a word in its place.
+ */
 export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDetail {
     const highlights = record(preview['highlights']);
     const message = record(highlights?.['/args/message']);
+    const sender = record(highlights?.['/args/sender']);
+    const channel = text(highlights?.['/args/channel']);
     const contact = record(preview['contact']);
     const value = text(contact?.['value']) ?? text(highlights?.['/contacts/0/channels/0/value']);
     const name = text(contact?.['name']);
@@ -116,6 +133,8 @@ export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDeta
     return {
         intent: text(preview['intent']),
         to: value ? (name ? `${name}, ${value}` : value) : null,
+        from: text(sender?.['address']) ?? text(sender?.['external_id']),
+        channel: channel ? channelWords(channel) : null,
         subject: text(message?.['subject']),
         body: text(message?.['body']),
         facts,

@@ -66,6 +66,8 @@ function approvalDetail(id: string): Html {
     return html`<div class="ask-w">
         ${detail.intent ? html`<div>${detail.intent}</div>` : null}
         ${detail.to ? html`<div class="meta">To ${detail.to}</div>` : null}
+        ${detail.from ? html`<div class="meta needs-from">From <span>${detail.from}</span></div>` : null}
+        ${detail.channel ? html`<div class="meta needs-channel">Channel <span>${detail.channel}</span></div>` : null}
         ${detail.subject ? html`<div><b>${detail.subject}</b></div>` : null}
         ${detail.body ? html`<div class="said">${detail.body}</div>` : null}
         ${detail.facts.map((fact) => html`<div class="meta">${fact}</div>`)}

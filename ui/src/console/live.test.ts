@@ -110,6 +110,8 @@ describe('what the console draws from the runtime', () => {
         ).toEqual({
             intent: 'Put a person into the campaign at the provider.',
             to: 'A Person, person@example.test',
+            from: null,
+            channel: null,
             subject: null,
             body: null,
             facts: ['Reach: act (bookkeeping until the campaign is live)', 'Reversibility: irreversible'],

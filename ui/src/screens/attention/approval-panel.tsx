@@ -7,6 +7,7 @@ import { ActionsRow } from '../../layout/actions-row';
 import { CopyPromptButton } from './copy-prompt-button';
 import { SessionLink } from './session-link';
 import { PanelHeader } from '../../layout/panel-header';
+import { toApprovalDetail } from '../../console/live';
 
 type Props = {
     approval: Approval;
@@ -38,6 +39,7 @@ export function ApprovalPanel({
     const preview = approval.preview as { intent?: unknown; contact?: { name?: string; value?: string } };
     const intent = typeof preview.intent === 'string' ? preview.intent : null;
     const person = preview.contact?.name ?? approval.contact_name;
+    const { from, channel } = toApprovalDetail(approval.preview);
     const pending = approval.status === 'pending';
     const heading = title(approval.operation, approval.contact_name);
     return (
@@ -90,6 +92,18 @@ export function ApprovalPanel({
                                 {person}
                                 {preview.contact?.value ? ` · ${preview.contact.value}` : ''}
                             </dd>
+                        </>
+                    )}
+                    {from && (
+                        <>
+                            <dt>From</dt>
+                            <dd>{from}</dd>
+                        </>
+                    )}
+                    {channel && (
+                        <>
+                            <dt>Channel</dt>
+                            <dd>{channel}</dd>
                         </>
                     )}
                     <dt>Provider</dt>

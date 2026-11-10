@@ -13,6 +13,11 @@ function pendingFake() {
         .answer('decision.get', 'decision.get/pending-with-options');
 }
 
+/** The fact a panel states under a term, or undefined where it states none. */
+const fact = (term: string) =>
+    Array.from(document.querySelectorAll('.facts dt')).find((dt) => dt.textContent === term)?.nextElementSibling
+        ?.textContent;
+
 describe('Attention', () => {
     it('says nothing needs you when both lists are empty', async () => {
         renderApp(
@@ -60,6 +65,28 @@ describe('Attention', () => {
         expect(fake.sent('approval.approve')).toEqual({ approval_id: expected.approval_id });
         await waitFor(() => expect(fake.calls.filter((c) => c.operation === 'approval.list').length).toBe(2));
         await waitFor(() => expect(route.value).toEqual({ screen: 'attention', kind: 'approvals', id: 'apr_2' }));
+    });
+
+    it("shows a message's sender and its channel in words among the facts", async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/messages-pending')
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/email-message');
+        renderApp(fake);
+        await waitFor(() => screen.getByText('message.send Ines Duarte'));
+        fireEvent.click(screen.getByText('message.send Ines Duarte'));
+        await waitFor(() => screen.getByText('owner@example.test'));
+        expect(fact('From')).toBe('owner@example.test');
+        expect(fact('Channel')).toBe('Email');
+    });
+
+    it('shows no sender and no channel where the preview carries none', async () => {
+        renderApp(pendingFake());
+        await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
+        fireEvent.click(screen.getByText('Enroll Ada Lovelace'));
+        await waitFor(() => screen.getByText('Put Ada Lovelace into the campaign at the provider.'));
+        expect(fact('From')).toBeUndefined();
+        expect(fact('Channel')).toBeUndefined();
     });
 
     it("shows the runtime's refusal and reloads when a decision is no longer pending", async () => {

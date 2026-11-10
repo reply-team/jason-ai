@@ -1,8 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { fixtures } from '../test/fixtures';
-import { toApprovalDetail, toApprovalRow } from './live';
+import { channelWords, toApprovalDetail, toApprovalRow } from './live';
 
 describe('what Needs you reads from an approval', () => {
+    it('names the account a message goes from and the channel it goes on, from the preview the runtime recorded', () => {
+        const email = toApprovalDetail(fixtures['approval.get/email-message'].response.preview);
+        expect(email).toMatchObject({
+            to: 'Ines Duarte, ines@example.test',
+            from: 'owner@example.test',
+            channel: 'Email',
+        });
+        const linkedIn = toApprovalDetail(fixtures['approval.get/linkedin-message'].response.preview);
+        expect(linkedIn).toMatchObject({ from: 'https://www.linkedin.com/in/owner-example', channel: 'LinkedIn' });
+    });
+
+    it('says nothing of a sender or a channel a preview does not highlight', () => {
+        const enrol = toApprovalDetail(fixtures['approval.get/pending-with-preview'].response.preview);
+        expect(enrol).toMatchObject({ from: null, channel: null });
+    });
+
+    it('names a sender the provider holds no address for by its identifier', () => {
+        expect(toApprovalDetail({ highlights: { '/args/sender': { external_id: 's_9', address: null } } }).from).toBe(
+            's_9',
+        );
+        expect(toApprovalDetail({ highlights: { '/args/sender': { external_id: '', address: '' } } }).from).toBeNull();
+    });
+
     it('takes the recipient from the highlighted address when the preview names no contact', () => {
         expect(toApprovalDetail({ highlights: { '/contacts/0/channels/0/value': 'someone@example.test' } }).to).toBe(
             'someone@example.test',
@@ -16,5 +39,12 @@ describe('what Needs you reads from an approval', () => {
         expect(toApprovalRow(listed, now).who).toBe('Ines Duarte');
         expect(toApprovalRow({ ...listed, contact_name: null }, now).who).toBeNull();
         expect(toApprovalRow({ ...listed, contact_name: null }, now, opened).who).toBe('ines@example.test');
+    });
+
+    it('says a channel in words, and a code it has no words for as the code itself', () => {
+        expect(channelWords('email')).toBe('Email');
+        expect(channelWords('linkedin')).toBe('LinkedIn');
+        expect(channelWords('<b>sms</b>')).toBe('<b>sms</b>');
+        expect(toApprovalDetail({ highlights: { '/args/channel': 'whatsapp' } }).channel).toBe('whatsapp');
     });
 });
