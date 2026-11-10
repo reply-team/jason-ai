@@ -116,8 +116,19 @@ them. Each package carries the executable its platform's release job signed, at 
 and `THIRD-PARTY-NOTICES`. The Windows job builds the installer while its sign-in holds: the installer, its
 uninstaller and `Jason.exe` are signed there, and verified with the `jason.exe` they carry. The macOS job builds an
 osx-x64 executable for the Intel package alone, signed, notarized and assessed as the osx-arm64 one is, and never
-published as an archive. A candidate writes the same two feed names a release does, and its release is marked a
-pre-release, which the latest release never is, so no installed desktop reads a candidate's feed.
+published as an archive, so on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason`
+the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.
+A candidate writes the same two feed names a release does, and its release is marked a pre-release, which the latest
+release never is, so no installed desktop reads a candidate's feed: the desktop updates to stable releases only.
+
+Installing a desktop update restarts the runtime. The desktop stops the runtime its own `jason` runs as, with
+`jason runtime stop`, before the installer replaces that file, and the new version starts it again when it opens; it
+knows the runtime is its own when `jason runtime status` answers for the instance the run file names and the
+descriptor's `installed_image` is the application's own `jason` (`docs/runtime-api.md`). A runtime that does not stop
+leaves the update uninstalled, and one started from another executable is never stopped. Before the update installs,
+the application as it was is copied under `<data>/desktop/rollback/<version>/`, kept until the next update replaces
+it and named in the Jason menu; nothing puts it back by itself, so going back is quitting Jason and putting that folder
+back in the place of the installed application by hand, which leaves the data directory as the newer version left it.
 
 ## 3. The manifest
 

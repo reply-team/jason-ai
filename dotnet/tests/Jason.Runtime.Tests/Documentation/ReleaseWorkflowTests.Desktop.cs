@@ -146,4 +146,43 @@ public partial class ReleaseWorkflowTests
         var x64 = Assert.Single(PackagingCalls(Release), call => Scalar(Mapping(call, "with"), "rid") == "osx-x64");
         Assert.DoesNotMatch(collected, Scalar(Mapping(x64, "with"), "artifact") ?? "");
     }
+
+    /// <summary>
+    /// What the notes and the release guide tell a person about the desktop beyond its files: the three platforms, that the
+    /// test suite does not run on an Intel Mac, that it updates to stable releases only, that an update restarts the runtime
+    /// the application carries and leaves another alone, how the copy an update keeps is used to go back, and that an
+    /// uninstall stops that runtime first or removes nothing.
+    /// </summary>
+    [Fact]
+    public void The_notes_and_the_guide_say_how_the_desktop_updates_goes_back_and_where_it_is_tested()
+    {
+        var notes = Regex.Replace(Read(Notes), @"\s+", " ");
+        foreach (var said in (string[])
+        [
+            "in three packages: Windows on x64, macOS on Apple silicon and macOS on Intel.",
+            "the test suite does not run on an Intel Mac.",
+            "on your word, and to stable releases only.",
+            "Installing an update restarts the runtime: the runtime the application carries is stopped first, with `jason runtime stop`, as the menu's Restart Jason and Its Runtime to Install says, and the new version starts it again when it opens.",
+            "A runtime that does not stop leaves the update uninstalled, saying why, and a runtime started from another `jason` is never stopped.",
+            "the application as it was is copied under `~/.jason/desktop/rollback/<version>/`, and the Jason menu names that copy until the next update replaces it.",
+            "to go back, quit Jason and put that folder back in the place of the installed application by hand.",
+            "Uninstalling the desktop on Windows stops the runtime the application carries first, and removes nothing when that runtime does not stop.",
+        ])
+        {
+            Assert.Contains(said, notes, StringComparison.Ordinal);
+        }
+
+        var guide = Regex.Replace(Read(["docs", "release-and-update.md"]), @"\s+", " ");
+        foreach (var said in (string[])
+        [
+            "on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason` the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.",
+            "the desktop updates to stable releases only.",
+            "Installing a desktop update restarts the runtime.",
+            "the descriptor's `installed_image` is the application's own `jason`",
+            "going back is quitting Jason and putting that folder back in the place of the installed application by hand",
+        ])
+        {
+            Assert.Contains(said, guide, StringComparison.Ordinal);
+        }
+    }
 }

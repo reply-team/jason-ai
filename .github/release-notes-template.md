@@ -60,20 +60,33 @@ not start.
 
 ## Desktop
 
-Jason Desktop is a window onto this same Jason: each package carries this release's executable, signed as the
-archive's is, with `LICENSE` and `THIRD-PARTY-NOTICES` beside it, and talks to it as the CLI does. On Windows, run
+Jason Desktop is a window onto this same Jason, in three packages: Windows on x64, macOS on Apple silicon and macOS
+on Intel. Each carries this release's executable, signed as the archive's is, with `LICENSE` and `THIRD-PARTY-NOTICES`
+beside it, and talks to it as the CLI does. On Windows, run
 `jason-desktop-windows-x64-setup.exe`; the installer, its uninstaller, `Jason.exe` and the `jason.exe` it carries are
 each signed with Reply's certificate and timestamped. On macOS, open the dmg for your Mac and drag Jason into
 Applications; the application, the `jason` it carries and the dmg are signed with Reply's Developer ID, notarized and
 stapled. The Intel application's `jason` is built and signed as the Apple silicon one is, and started once under
 Rosetta where the release's runner has it; the test suite does not run on an Intel Mac.
 
-The desktop updates itself from the latest release's `latest.yml` or `latest-mac.yml`, on your word. A candidate's
-feed files stay on the candidate's own page, which never becomes the latest release, so an installed desktop never
-moves to a candidate. Uninstalling it on Windows takes off what it put there - the `jason` command it placed on the
-PATH, Open Jason at login, and the runtime's logon start when that start names the application's own folder - and
-leaves the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache,
-`%LOCALAPPDATA%\jason-desktop-updater`, saying so.
+The desktop updates itself from the latest release's `latest.yml` or `latest-mac.yml`, on your word, and to stable
+releases only. A candidate's feed files stay on the candidate's own page, which never becomes the latest release, so an
+installed desktop, a candidate included, never moves to a candidate.
+
+Installing an update restarts the runtime: the runtime the application carries is stopped first, with
+`jason runtime stop`, as the menu's Restart Jason and Its Runtime to Install says, and the new version starts it again
+when it opens. A runtime that does not stop leaves the update uninstalled, saying why, and a runtime started from
+another `jason` is never stopped. Before the update installs, the application as it was is copied under
+`~/.jason/desktop/rollback/<version>/`, and the Jason menu names that copy until the next update replaces it. Nothing
+puts it back by itself: to go back, quit Jason and put that folder back in the place of the installed application by
+hand. That puts back the previous application and the `jason` it carried; the data directory stays as the newer
+version left it.
+
+Uninstalling the desktop on Windows stops the runtime the application carries first, and removes nothing when that
+runtime does not stop. It then takes off what it put there - the `jason` command it placed on the PATH, Open Jason at
+login, and the runtime's logon start when that start names the application's own folder - and leaves the data
+directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `%LOCALAPPDATA%\jason-desktop-updater`,
+saying so.
 
 ## Installing
 
