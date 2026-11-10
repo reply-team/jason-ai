@@ -7,7 +7,11 @@
 
 /**
  * The markers, a closed list. The rest of `CLAUDE_CODE_*` is a person's configuration (a cloud provider, the Git Bash
- * path Windows needs, a token, the configuration folder) and is kept.
+ * path Windows needs, a token, the configuration folder) and is kept. `CLAUDE_JOB_DIR` is a background session's job
+ * folder, where Write and Edit go without a prompt; `CLAUDE_CODE_SAFE_MODE` keeps skills, CLAUDE.md and MCP servers
+ * from loading, the permission tool among them. Four names Claude Code's documentation does not list
+ * (`CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_EXECPATH`, `CLAUDE_CODE_SSE_PORT`, `CLAUDE_CODE_SESSION_ATTENDED`) were read
+ * from the environment an installed host gives the commands it runs.
  */
 export const sessionMarkers: readonly string[] = [
     'CLAUDECODE',
@@ -25,6 +29,8 @@ export const sessionMarkers: readonly string[] = [
     'CLAUDE_CODE_REMOTE',
     'CLAUDE_CODE_REMOTE_SESSION_ID',
     'CLAUDE_CODE_SIMPLE',
+    'CLAUDE_JOB_DIR',
+    'CLAUDE_CODE_SAFE_MODE',
 ];
 
 const markers: ReadonlySet<string> = new Set(sessionMarkers);

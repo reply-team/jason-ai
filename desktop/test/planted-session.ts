@@ -18,6 +18,8 @@ export const plantedMarkers: Readonly<Record<string, string>> = {
     CLAUDE_CODE_REMOTE: 'true',
     CLAUDE_CODE_REMOTE_SESSION_ID: 'planted-remote',
     CLAUDE_CODE_SIMPLE: '1',
+    CLAUDE_JOB_DIR: '/h/.claude/jobs/planted',
+    CLAUDE_CODE_SAFE_MODE: '1',
 };
 
 export const plantedConfiguration: Readonly<Record<string, string>> = {
