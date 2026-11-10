@@ -55,6 +55,14 @@ const operations: Readonly<Record<string, string>> = {
 
 export const operationWords = (operation: string): string => operations[operation] ?? operation;
 
+const channels: Readonly<Record<string, string>> = {
+    email: 'Email',
+    linkedin: 'LinkedIn',
+};
+
+/** A channel's code in words; a code with no words here is shown as it was given. */
+export const channelWords = (code: string): string => channels[code] ?? code;
+
 export interface ApprovalRow {
     id: string;
     what: string;
@@ -95,14 +103,6 @@ export interface ApprovalDetail {
 const record = (value: unknown): Record<string, unknown> | null =>
     value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
-
-const channels: Readonly<Record<string, string>> = {
-    email: 'Email',
-    linkedin: 'LinkedIn',
-};
-
-/** A channel's code in words; a code with no words here is shown as it was given. */
-export const channelWords = (code: string): string => channels[code] ?? code;
 
 const factNames: readonly [string, string][] = [
     ['reach', 'Reach'],
