@@ -20,6 +20,14 @@ function scratch(t: { after(fn: () => void): void }): string {
 const windowsExe = 'C:\\Users\\someone\\AppData\\Local\\Programs\\Jason\\resources\\bundle\\jason.exe';
 const macExe = '/Applications/Jason.app/Contents/Resources/bundle/jason';
 
+/**
+ * Whether a file a Windows lookup names is there, on any host. The rows run platform win32 over a folder of the host's
+ * own, and the lookup joins as Windows does: on Linux it names `\tmp\...\jason.cmd`, which the host's file system knows
+ * as `/tmp/.../jason.cmd`. A path of another drive (`C:\Tools\...`) is then never there, as on a Windows machine
+ * without it.
+ */
+const present = (file: string) => existsSync(process.platform === 'win32' ? file : file.replaceAll('\\', '/'));
+
 /** A Windows desk over a folder of the test's own, which stands for %LOCALAPPDATA%\Microsoft\WindowsApps. */
 function windows(t: { after(fn: () => void): void }, options: Partial<PathCommandDeps> & { onPath?: boolean; others?: string[] } = {}) {
     const root = scratch(t);
@@ -28,7 +36,7 @@ function windows(t: { after(fn: () => void): void }, options: Partial<PathComman
     const others = options.others ?? [];
     const path = [...(options.onPath === false ? [] : [folder]), ...others].join(';');
     const log = memoryLog();
-    const command = new PathCommand({ platform: 'win32', folder, executable: windowsExe, dataDirectory: null, path: () => path, isProgram: (file) => existsSync(file), log, ...options });
+    const command = new PathCommand({ platform: 'win32', folder, executable: windowsExe, dataDirectory: null, path: () => path, isProgram: present, log, ...options });
     return { root, folder, command, log };
 }
 
@@ -108,7 +116,7 @@ test('the folder on the PATH is matched as Windows matches it: any case, a trail
     const root = scratch(t);
     const folder = join(root, 'WindowsApps');
     mkdirSync(folder);
-    const make = (path: string) => new PathCommand({ platform: 'win32', folder, executable: windowsExe, dataDirectory: null, path: () => path, isProgram: (file) => existsSync(file), log: memoryLog() });
+    const make = (path: string) => new PathCommand({ platform: 'win32', folder, executable: windowsExe, dataDirectory: null, path: () => path, isProgram: present, log: memoryLog() });
     for (const entry of [folder.toUpperCase(), `${folder}\\`, `"${folder}"`]) assert.equal((make(`C:\\Windows;${entry}`).status() as { folderOnPath: boolean }).folderOnPath, true, entry);
     assert.equal((make(`C:\\Windows;${folder}x`).status() as { folderOnPath: boolean }).folderOnPath, false);
 });
@@ -117,7 +125,7 @@ test('a jason on the PATH that is not ours is never shadowed: the shim is named 
     // Another installation's jason, found by the PATH as Windows would find it (the lookup is injected, so the row holds on
     // any machine the tests run on).
     const other = 'C:\\Tools\\Jason\\jason.exe';
-    const { folder, command } = windows(t, { others: ['C:\\Tools\\Jason'], isProgram: (file) => file === other || existsSync(file) });
+    const { folder, command } = windows(t, { others: ['C:\\Tools\\Jason'], isProgram: (file) => file === other || present(file) });
     const status = command.status();
     assert.deepEqual(status, { state: 'absent', name: 'jason-desktop', files: [join(folder, 'jason-desktop.cmd'), join(folder, 'jason-desktop')], folderOnPath: true, shadows: other, executable: windowsExe });
     command.place();
@@ -173,7 +181,7 @@ test('a command of ours that names another data directory, or none where the des
     const shim = join(folder, 'jason.cmd');
     const wrapper = join(folder, 'jason');
     command.place();
-    const withData = (dataDirectory: string | null) => new PathCommand({ platform: 'win32', folder, executable: windowsExe, dataDirectory, path: () => folder, isProgram: (file) => existsSync(file), log: memoryLog() });
+    const withData = (dataDirectory: string | null) => new PathCommand({ platform: 'win32', folder, executable: windowsExe, dataDirectory, path: () => folder, isProgram: present, log: memoryLog() });
     assert.deepEqual(withData('D:\\Jason data').status(), { state: 'elsewhere', name: 'jason', files: [shim, wrapper], why: `${shim} names no data directory`, executable: windowsExe });
     withData('D:\\Jason data').place();
     assert.equal(withData('D:\\Jason data').status().state, 'placed', 'placed again on the word, with the data directory');
@@ -188,30 +196,26 @@ test('a jason earlier on the PATH than the one placed is said: the placed line n
     const other = 'C:\\Tools\\Jason\\jason.exe';
     let path = folder;
     let installed = false;
-    // The folder is the host's (POSIX on Linux), while the lookup joins as Windows does; so the folder's files are known by
-    // a Windows comparison of the paths, not by asking the host's file system for a path in the other shape.
-    const windowsShape = (file: string) => win32.normalize(file).toLowerCase();
-    const inFolder = (file: string) => existsSync(folder) && readdirSync(folder).some((name) => windowsShape(join(folder, name)) === windowsShape(file));
     const found: string[] = [];
     const isProgram = (file: string) => {
-        const program = (installed && file === other) || inFolder(file);
+        const program = (installed && file === other) || present(file);
         if (program) found.push(file);
         return program;
     };
     const command = new PathCommand({ platform: 'win32', folder, executable: windowsExe, dataDirectory: null, path: () => path, isProgram, log: memoryLog() });
     command.place();
+    // Another installation is put on the PATH after the command was placed: first behind the folder, where a lookup that
+    // missed our shim would find it, so "nothing is shadowed" holds only when ours is the one found.
+    installed = true;
+    path = `${folder};C:\\Tools\\Jason`;
     found.length = 0;
     assert.equal((command.status() as { shadowedBy: string | null }).shadowedBy, null, 'ours is the one found');
-    assert.deepEqual(found.map(windowsShape), [windowsShape(join(folder, 'jason.cmd'))], 'the lookup found our shim, not nothing');
-    // Another installation is put on the PATH ahead of the folder after the command was placed.
-    installed = true;
+    assert.deepEqual(found.map((file) => win32.normalize(file).toLowerCase()), [win32.normalize(join(folder, 'jason.cmd')).toLowerCase()], 'the lookup found our shim, not the other');
+    // Then ahead of it.
     path = `C:\\Tools\\Jason;${folder}`;
     const status = command.status();
     assert.deepEqual(status, { state: 'placed', name: 'jason', files: [join(folder, 'jason.cmd'), join(folder, 'jason')], shadowedBy: other, executable: windowsExe });
     assert.ok(commandMenuOf(status).lines.includes(`Another jason earlier on the PATH is found first: ${other}.`));
-    // Behind ours, it shadows nothing.
-    path = `${folder};C:\\Tools\\Jason`;
-    assert.equal((command.status() as { shadowedBy: string | null }).shadowedBy, null);
 });
 
 test('a file the PATH finds is told from ours as the platform tells paths apart: separators and case on Windows, exactly on macOS', () => {
@@ -302,7 +306,7 @@ test('the PATH command’s log lines carry no path: only the act, the name and t
     mkdirSync(folder);
     const logs = join(root, 'logs');
     const log = fileLogger(logs);
-    const command = new PathCommand({ platform: 'win32', folder, executable: 'C:\\planted-exe\\jason.exe', dataDirectory: 'C:\\planted-data', path: () => folder, isProgram: (file) => existsSync(file), log });
+    const command = new PathCommand({ platform: 'win32', folder, executable: 'C:\\planted-exe\\jason.exe', dataDirectory: 'C:\\planted-data', path: () => folder, isProgram: present, log });
     command.place();
     command.remove();
     const text = readdirSync(logs).map((name) => readFileSync(join(logs, name), 'utf8')).join('');
