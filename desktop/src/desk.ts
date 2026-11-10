@@ -12,7 +12,7 @@ import { eventChannels } from './ipc.ts';
 import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
 import type { Logger } from './log.ts';
 import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
-import { commandMenuOf, type CommandStatus, type PathCommand } from './path-command.ts';
+import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
 import { menuItemOf, type Updater } from './updates.ts';
 
 export interface DeskDeps {
@@ -181,10 +181,9 @@ export class Desk {
 
     /** Asks, then places or removes the command; what went wrong is said in a box of its own. */
     private async commandAct(act: 'place' | 'remove', status: CommandStatus): Promise<void> {
-        const files = 'files' in status ? status.files.join(' and ') : '';
-        const detail = act === 'place' ? `This writes ${files}, which run ${status.executable}.` : `This removes ${files}.`;
+        const question = commandQuestion(act, status);
         const window = this.deps.window();
-        const options = { type: 'question' as const, buttons: [act === 'place' ? 'Place It' : 'Remove It', 'Cancel'], defaultId: 0, cancelId: 1, message: act === 'place' ? 'Put the jason command on the PATH?' : 'Remove the jason command from the PATH?', detail };
+        const options = { type: 'question' as const, buttons: [question.button, 'Cancel'], defaultId: 0, cancelId: 1, message: question.message, detail: question.detail };
         const answer = window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options);
         if (answer.response !== 0) return;
         try {

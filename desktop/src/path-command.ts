@@ -10,8 +10,9 @@
  * - On macOS it is a wrapper script in `~/.local/bin/`.
  *
  * The files of a command are placed and removed together, only on the person's word, and read back together on every
- * look: a command of ours with any file that runs another executable, or that is missing, is shown as pointing
- * elsewhere and never rewritten silently. A command is never put in the place of a `jason` that is not ours: it is then
+ * look: a command of ours with any file that runs another executable, names another data directory than the desktop
+ * runs with, or is missing, is shown as pointing elsewhere and never rewritten silently. A placed command that another
+ * `jason` earlier on the PATH shadows is said to be. A command is never put in the place of a `jason` that is not ours: it is then
  * named `jason-desktop`, every file of it (`planCommand`). Nothing here starts a process.
  */
 
@@ -27,7 +28,8 @@ export type CommandStatus =
     | { state: 'unsupported'; executable: string }
     /** Not placed: `name` and `files` are what placing it would write; `shadows` the other `jason` that made it jason-desktop. */
     | { state: 'absent'; name: Name; files: readonly string[]; folderOnPath: boolean; shadows: string | null; executable: string }
-    | { state: 'placed'; name: Name; files: readonly string[]; executable: string }
+    /** Placed and read back; `shadowedBy` is what the PATH finds first for the name when that is not ours. */
+    | { state: 'placed'; name: Name; files: readonly string[]; shadowedBy: string | null; executable: string }
     /** A command of ours one of whose files differs: `why` says which and how. */
     | { state: 'elsewhere'; name: Name; files: readonly string[]; why: string; executable: string }
     /** Both names are taken in the folder by files the desktop did not write. */
@@ -126,8 +128,17 @@ export class PathCommand {
         return this.deps.path().split(windows ? ';' : ':').some((entry) => entry.trim() !== '' && normal(entry) === normal(folder));
     }
 
+    /** What the PATH finds first for the name, when that is not one of the command's own files. */
+    private shadowing(name: Name, files: readonly string[]): string | null {
+        const { platform } = this.deps;
+        const found = findOnPath(name, { platform, path: this.deps.path(), pathext: this.deps.pathext, isProgram: (file) => this.deps.isProgram(file) });
+        if (found === null) return null;
+        const same = (a: string, b: string) => (platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+        return files.some((file) => same(file, found)) ? null : found;
+    }
+
     status(): CommandStatus {
-        const { executable } = this.deps;
+        const { executable, dataDirectory } = this.deps;
         if (this.deps.folder === null || (this.deps.platform !== 'win32' && this.deps.platform !== 'darwin')) return { state: 'unsupported', executable };
         const names: Name[] = ['jason', 'jason-desktop'];
         for (const name of names) {
@@ -138,9 +149,14 @@ export class PathCommand {
             if (foreign) return { state: 'elsewhere', name, files, why: `${foreign.file} is another program’s`, executable };
             const differs = looks.find((look) => look.target !== null && look.target.executable !== look.runs);
             if (differs?.target) return { state: 'elsewhere', name, files, why: `${differs.file} runs ${differs.target.executable}`, executable };
+            const otherData = looks.find((look) => look.target !== null && look.target.dataDirectory !== dataDirectory);
+            if (otherData?.target) {
+                const named = otherData.target.dataDirectory;
+                return { state: 'elsewhere', name, files, why: named === null ? `${otherData.file} names no data directory` : `${otherData.file} names the data directory ${named}`, executable };
+            }
             const missing = looks.find((look) => !look.exists);
             if (missing) return { state: 'elsewhere', name, files, why: `${missing.file} is missing`, executable };
-            return { state: 'placed', name, files, executable };
+            return { state: 'placed', name, files, shadowedBy: this.shadowing(name, files), executable };
         }
         // No command of ours is placed, so whatever `jason` the PATH or the folder holds is another program's.
         const inFolder = this.looksOf('jason').find((look) => look.exists)?.file ?? null;
@@ -211,7 +227,9 @@ export function commandMenuOf(status: CommandStatus): CommandMenu {
             return { lines: [runs, `${status.files.join(' and ')} are another program’s; nothing is placed.`], acts: [] };
         case 'placed': {
             const shells = isWindows(status.files) ? ' in Command Prompt, PowerShell and Git Bash' : '';
-            return { lines: [runs, `${status.name} on the PATH runs it${shells}: ${status.files.join(' and ')}`], acts: [{ label: `Remove ${status.name} from the PATH…`, act: 'remove' }] };
+            const lines = [runs, `${status.name} on the PATH runs it${shells}: ${status.files.join(' and ')}`];
+            if (status.shadowedBy !== null) lines.push(`Another ${status.name} earlier on the PATH is found first: ${status.shadowedBy}.`);
+            return { lines, acts: [{ label: `Remove ${status.name} from the PATH…`, act: 'remove' }] };
         }
         case 'elsewhere':
             return {
@@ -233,4 +251,12 @@ export function commandMenuOf(status: CommandStatus): CommandMenu {
             return { lines, acts: placeable ? [{ label: `Put ${status.name} on the PATH…`, act: 'place' }] : [] };
         }
     }
+}
+
+/** The confirmation an act asks for: the command by its name, and every file the act writes or removes. */
+export function commandQuestion(act: 'place' | 'remove', status: CommandStatus): { message: string; detail: string; button: string } {
+    const name = 'name' in status ? status.name : 'jason';
+    const files = 'files' in status ? status.files.join(' and ') : '';
+    if (act === 'place') return { message: `Put the ${name} command on the PATH?`, detail: `This writes ${files}, which run ${status.executable}.`, button: 'Place It' };
+    return { message: `Remove the ${name} command from the PATH?`, detail: `This removes ${files}.`, button: 'Remove It' };
 }
