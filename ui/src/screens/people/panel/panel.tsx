@@ -68,11 +68,13 @@ export function PersonPanel({ contactId, campaignId, onClose, tab, to }: PersonP
     const [adding, setAdding] = useState(false);
     useEffect(() => {
         setAdding(false);
+        panel.show(contactId);
         panel.forget();
         void people.open(api, contactId);
     }, [api, contactId]);
     useEffect(
         () => () => {
+            panel.show(null);
             people.close();
             panel.forget();
         },

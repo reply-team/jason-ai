@@ -17,6 +17,16 @@ import type {
 import * as people from '../store';
 import { fail, openStatuses } from '../store';
 
+/**
+ * The one person the panel shows, set while it is mounted. An act's answer that comes after another person was opened,
+ * or after the panel closed, changes nothing on show: the call still finishes, and nothing is undone.
+ */
+let onShow: string | null = null;
+
+export function show(contactId: string | null): void {
+    onShow = contactId;
+}
+
 /** The work open for the person whose Next tab is shown, as workitem.list answers it, soonest due first. */
 export const next = signal<{ contactId: string; items: WorkItemSummary[]; more: boolean } | null>(null);
 export const nextFailure = signal<string | null>(null);
@@ -98,6 +108,7 @@ export function addressKey(channel: string, value: string): string {
 }
 
 function note(contactId: string, channel: string, value: string, entry: Suppression | null): void {
+    if (contactId !== onShow) return;
     const was = register.value?.contactId === contactId ? register.value.entries : {};
     register.value = { contactId, entries: { ...was, [addressKey(channel, value)]: entry } };
 }
@@ -107,6 +118,7 @@ function note(contactId: string, channel: string, value: string, entry: Suppress
  * again when asked to, what was read standing until the new answer comes.
  */
 export async function loadRegister(api: Api, person: Contact, again = false): Promise<void> {
+    if (person.id !== onShow) return;
     if (register.value?.contactId !== person.id) register.value = { contactId: person.id, entries: {} };
     registerFailure.value = null;
     const unread = again
@@ -156,7 +168,7 @@ export async function setWholePerson(api: Api, person: Contact, on: boolean, rea
         }
     }
     await loadRegister(api, person, true);
-    if (failed !== null) fail(failed, registerFailure);
+    if (failed !== null && person.id === onShow) fail(failed, registerFailure);
 }
 
 /** Forgets what the panel read about a person: another person, or the same one opened again, is read afresh. */
@@ -179,7 +191,7 @@ export async function exclude(
     const body: Record<string, unknown> = { campaign_id: campaignId, contact_ids: [contactId] };
     if (reason) body['reason'] = reason;
     const result = await api.call<RemoveContactsResult>('campaign.remove_contacts', body, 'write');
-    if (reread) await people.open(api, contactId);
+    if (reread && contactId === onShow) await people.open(api, contactId);
     return result.items.find((each) => each.contact_id === contactId) ?? result.items[0];
 }
 
@@ -217,7 +229,7 @@ export async function move(
     } catch (error) {
         outcome = { notRemoved: error };
     }
-    await people.open(api, contactId);
+    if (contactId === onShow) await people.open(api, contactId);
     return outcome;
 }
 

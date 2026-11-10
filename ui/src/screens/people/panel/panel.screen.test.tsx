@@ -757,3 +757,103 @@ describe('Do not contact, for the whole person', () => {
         expect(within(panel()).getByRole('alert').textContent).toContain('Failed to fetch');
     });
 });
+
+describe('An answer that comes after another person was opened', () => {
+    const membership = (name: string) =>
+        within(panel()).getByText(name, { selector: 'a' }).closest('li') as HTMLElement;
+    /** Opens another person in the panel, the way picking them in the list does. */
+    function switchTo(id: string, tab: PersonTab) {
+        const to = { screen: 'people' as const, id, tab, filters: {} };
+        location.hash = href(to);
+        route.value = to;
+    }
+    /** Lets every answer released settle, and whatever it starts be sent. */
+    const settled = async () => {
+        for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    /** Starts an Exclude from the Nordic pilot for Ingrid, held until the test releases it. */
+    async function excludeHeld(api: FakeApi): Promise<() => void> {
+        await within(await shown()).findByText('Nordic pilot', { selector: 'a' });
+        fireEvent.click(within(membership('Nordic pilot')).getByRole('button', { name: 'Exclude' }));
+        fireEvent.input(
+            within(membership('Nordic pilot')).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' }),
+            { target: { value: 'Not a fit for the pilot.' } },
+        );
+        const release = api.hold('campaign.remove_contacts');
+        fireEvent.click(within(membership('Nordic pilot')).getByRole('button', { name: 'Exclude from Nordic pilot' }));
+        await waitFor(() => expect(asked(api, 'campaign.remove_contacts')).toHaveLength(1));
+        return release;
+    }
+
+    it('to an Exclude leaves the person now on show where they are, and reads nobody again', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel', 'contact.get/no-first-name')
+            .answer('suppression.list', 'suppression.list/aguilar-email-clear')
+            .answer('campaign.remove_contacts', 'campaign.remove_contacts/exclude-one');
+        open(api, ingrid.id, 'sequences');
+        const release = await excludeHeld(api);
+        switchTo(aguilar.id, 'details');
+        await within(panel()).findByText(aguilar.channels[0]!.value);
+        await waitFor(() => expect(within(panel()).getByRole('switch', { name: 'Do not contact' })).toBeTruthy());
+
+        release();
+        await settled();
+        expect(asked(api, 'contact.get')).toEqual([{ contact_id: ingrid.id }, { contact_id: aguilar.id }]);
+        expect(within(panel()).getByText(aguilar.channels[0]!.value)).toBeTruthy();
+        expect(within(panel()).getByRole('switch', { name: 'Do not contact' })).toBeTruthy();
+        expect(within(panel()).queryByRole('status')).toBeNull();
+    });
+
+    it("to Do not contact for the whole person says nothing of the earlier person's in the next one's Details", async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel', 'contact.get/no-first-name')
+            .answer(
+                'suppression.list',
+                'suppression.list/person-email-listed',
+                'suppression.list/person-linkedin-listed',
+                'suppression.list/aguilar-email-clear',
+            )
+            .answer('suppression.remove', 'suppression.remove/person-email');
+        open(api, ingrid.id, 'details');
+        const toggle = () => within(panel()).getByRole<HTMLInputElement>('switch', { name: 'Do not contact' });
+        await waitFor(() => expect(toggle().checked).toBe(true));
+        fireEvent.click(toggle());
+        fireEvent.input(within(panel()).getByRole('textbox', { name: 'Reason (required, kept in the journal)' }), {
+            target: { value: 'Asked to hear from us again.' },
+        });
+        const release = api.hold('suppression.remove');
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Take every address off the register' }));
+        await waitFor(() => expect(asked(api, 'suppression.remove')).toHaveLength(1));
+        api.unreachable('suppression.remove');
+        switchTo(aguilar.id, 'details');
+        await within(panel()).findByText(aguilar.channels[0]!.value);
+        await waitFor(() => expect(toggle().checked).toBe(false));
+
+        release();
+        await settled();
+        expect(asked(api, 'suppression.remove')).toHaveLength(2);
+        expect(within(panel()).queryByRole('alert')).toBeNull();
+        expect(toggle().checked).toBe(false);
+        expect(toggle().disabled).toBe(false);
+        expect(
+            asked(api, 'suppression.list').filter(
+                (body) => 'value' in body && body.value !== aguilar.channels[0]!.value,
+            ),
+        ).toHaveLength(2);
+    });
+
+    it('to an act for a person whose panel was closed reads nobody again', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('campaign.remove_contacts', 'campaign.remove_contacts/exclude-one');
+        open(api, ingrid.id, 'sequences');
+        const release = await excludeHeld(api);
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Close' }));
+        await waitFor(() => expect(document.querySelector('.person-panel')).toBeNull());
+
+        release();
+        await settled();
+        expect(asked(api, 'contact.get')).toEqual([{ contact_id: ingrid.id }]);
+        expect(store.person.value).toBeNull();
+    });
+});
