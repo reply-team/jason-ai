@@ -420,3 +420,42 @@ describe('Do not contact', () => {
         expect(row(email).textContent).not.toContain('Jason will not contact');
     });
 });
+
+describe('Exclude', () => {
+    /** A campaign's row on Sequences. */
+    const membership = (name: string) =>
+        within(panel()).getByText(name, { selector: 'a' }).closest('li') as HTMLElement;
+
+    it('excludes the person from a campaign they are in, with the reason given, and shows them excluded there', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel', 'contact.get/person-after-exclude')
+            .answer('campaign.remove_contacts', 'campaign.remove_contacts/exclude-one');
+        open(api, ingrid.id, 'sequences');
+        await within(await shown()).findByText('Nordic pilot', { selector: 'a' });
+        // A campaign the person already left offers nothing.
+        expect(within(membership('Spring webinar')).queryByRole('button', { name: 'Exclude' })).toBeNull();
+
+        fireEvent.click(within(membership('Nordic pilot')).getByRole('button', { name: 'Exclude' }));
+        fireEvent.input(
+            within(membership('Nordic pilot')).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' }),
+            { target: { value: 'Not a fit for the pilot.' } },
+        );
+        fireEvent.click(within(membership('Nordic pilot')).getByRole('button', { name: 'Exclude from Nordic pilot' }));
+
+        await waitFor(() => expect(asked(api, 'contact.get')).toHaveLength(2));
+        expect(asked(api, 'campaign.remove_contacts')).toEqual([recorded('campaign.remove_contacts/exclude-one')]);
+        await waitFor(() => expect(membership('Nordic pilot').textContent).toContain('Excluded'));
+        expect((await within(panel()).findByRole('status')).textContent).toContain('Excluded from Nordic pilot.');
+        expect(within(membership('Nordic pilot')).queryByRole('button', { name: 'Exclude' })).toBeNull();
+    });
+
+    it('Cancel leaves the person where they are', async () => {
+        const api = people().answer('contact.get', 'contact.get/person-panel');
+        open(api, ingrid.id, 'sequences');
+        await within(await shown()).findByText('Nordic pilot', { selector: 'a' });
+        fireEvent.click(within(membership('Nordic pilot')).getByRole('button', { name: 'Exclude' }));
+        fireEvent.click(within(membership('Nordic pilot')).getByRole('button', { name: 'Cancel' }));
+        expect(within(membership('Nordic pilot')).getByRole('button', { name: 'Exclude' })).toBeTruthy();
+        expect(asked(api, 'campaign.remove_contacts')).toHaveLength(0);
+    });
+});

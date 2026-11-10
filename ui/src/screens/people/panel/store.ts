@@ -5,6 +5,7 @@ import type {
     ContactCampaign,
     ContactUpdateRequest,
     Page,
+    RemoveContactsResult,
     Suppression,
     SuppressionRemoved,
     WorkItem,
@@ -133,4 +134,21 @@ export async function contactAgain(api: Api, contactId: string, channel: string,
 export function forget(): void {
     register.value = null;
     registerFailure.value = null;
+}
+
+/**
+ * Excludes the person from a campaign as the paired person, and reads them again so Sequences shows where they now
+ * stand. What remove_contacts answered for the person is returned whole: the caller says what happened.
+ */
+export async function exclude(
+    api: Api,
+    campaignId: string,
+    contactId: string,
+    reason?: string,
+): Promise<RemoveContactsResult['items'][number] | undefined> {
+    const body: Record<string, unknown> = { campaign_id: campaignId, contact_ids: [contactId] };
+    if (reason) body['reason'] = reason;
+    const result = await api.call<RemoveContactsResult>('campaign.remove_contacts', body, 'write');
+    await people.open(api, contactId);
+    return result.items.find((each) => each.contact_id === contactId) ?? result.items[0];
 }
