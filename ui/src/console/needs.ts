@@ -1,3 +1,4 @@
+import { signal } from '@preact/signals-react';
 import { attentionStore } from '../screens/attention/store';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
@@ -10,6 +11,9 @@ import { clock, here } from './state';
 
 /** The panel's own approvals and questions. */
 export const attention = attentionStore();
+
+/** Which of what waits the panel shows: everything, the approvals only or the questions only. Kept to the panel. */
+export const filter = signal<'all' | 'approvals' | 'questions'>('all');
 
 /** What the person typed into a field of the panel, kept while the panel is painted again around it. */
 const typed = new Map<string, string>();
@@ -33,6 +37,17 @@ export function reload(): Promise<void> {
 
 define('needs.type', (args, element) => {
     if (typeof args[0] === 'string' && element instanceof HTMLInputElement) typed.set(args[0], element.value);
+});
+
+const filters: readonly [typeof filter.value, string][] = [
+    ['all', 'All'],
+    ['approvals', 'Approvals'],
+    ['questions', 'Questions'],
+];
+
+define('needs.filter', ([value]) => {
+    const chosen = filters.find(([each]) => each === value);
+    if (chosen) filter.value = chosen[0];
 });
 
 define('needs.open', ([kind, id]) => {
@@ -152,6 +167,49 @@ function questions(now: number, busy: boolean): Html {
     })}`;
 }
 
+function filterRow(): Html {
+    return html`<div class="needs-filter" role="group" aria-label="Show">
+        ${filters.map(
+            ([value, label]) =>
+                html`<button
+                    class="btn sm"
+                    type="button"
+                    aria-pressed="${filter.value === value ? 'true' : 'false'}"
+                    ${act('needs.filter', value)}
+                >
+                    ${label}
+                </button>`,
+        )}
+    </div>`;
+}
+
+/** What waits, under the filter: a group with its rows, or under its own filter a line that says it holds nothing. */
+function waiting(now: number, busy: boolean): Html {
+    const shown = filter.value;
+    const approvalCount = attention.approvals.value.length;
+    const questionCount = attention.questions.value.length;
+    return html`${
+        shown === 'questions'
+            ? null
+            : approvalCount
+              ? html`<div class="lab">Approvals</div>
+                    ${approvals(now, busy)}`
+              : shown === 'approvals'
+                ? html`<div class="empty needs-none">No approval is waiting.</div>`
+                : null
+    }
+    ${
+        shown === 'approvals'
+            ? null
+            : questionCount
+              ? html`<div class="lab">Questions</div>
+                    ${questions(now, busy)}`
+              : shown === 'questions'
+                ? html`<div class="empty needs-none">No question is open.</div>`
+                : null
+    }`;
+}
+
 export function needsView(): Html {
     const now = clock.value;
     const busy = attention.busy.value;
@@ -169,19 +227,8 @@ export function needsView(): Html {
             !attention.loaded.value
                 ? html`<div class="empty">Reading what waits…</div>`
                 : none
-                  ? html`<div class="empty">Nothing is waiting for you.</div>`
-                  : html`${
-                        attention.approvals.value.length
-                            ? html`<div class="lab">Approvals</div>
-                                  ${approvals(now, busy)}`
-                            : null
-                    }
-                    ${
-                        attention.questions.value.length
-                            ? html`<div class="lab">Questions</div>
-                                  ${questions(now, busy)}`
-                            : null
-                    }`
+                  ? html`<div class="card needs-empty"><div class="bd">Nothing is waiting for you.</div></div>`
+                  : html`${filterRow()} ${waiting(now, busy)}`
         }
     </div>`;
 }

@@ -9,7 +9,7 @@ import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
-import { attention } from './needs';
+import { attention, filter } from './needs';
 import { chats, lines } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
@@ -43,6 +43,7 @@ beforeEach(() => {
     attention.detail.value = null;
     attention.approvals.value = [];
     attention.questions.value = [];
+    filter.value = 'all';
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
 });
@@ -52,6 +53,56 @@ afterEach(() => {
 });
 
 describe('Needs you', () => {
+    const show = (name: 'All' | 'Approvals' | 'Questions') =>
+        fireEvent.click(within(needs()).getByRole('button', { name }));
+    const pressed = () =>
+        within(needs())
+            .getAllByRole('button', { pressed: true })
+            .map((each) => each.textContent?.trim());
+
+    it('says so in a card when nothing is waiting', async () => {
+        renderConsole(
+            new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
+        );
+        await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
+        expect(words(needs().querySelector('.card.needs-empty')!)).toBe('Nothing is waiting for you.');
+        expect(needs().querySelector('.ask')).toBeNull();
+    });
+
+    it('filters to approvals or to questions, and says in a line of its own when a filter holds nothing', async () => {
+        renderConsole(
+            new FakeApi()
+                .answer('approval.list', 'approval.list/messages-pending')
+                .answer('decision.list', 'decision.list/empty'),
+        );
+        await waitFor(() => expect(row('apr_1')).toBeTruthy());
+        expect(pressed()).toEqual(['All']);
+
+        show('Questions');
+        await waitFor(() => expect(words(needs().querySelector('.needs-none')!)).toBe('No question is open.'));
+        expect(pressed()).toEqual(['Questions']);
+        expect(needs().querySelector('[data-id="apr_1"]')).toBeNull();
+        expect(needs().querySelector('.needs-empty')).toBeNull();
+
+        show('Approvals');
+        await waitFor(() => expect(row('apr_1')).toBeTruthy());
+        expect(needs().querySelector('.needs-none')).toBeNull();
+    });
+
+    it('says no approval is waiting under Approvals while a question is open', async () => {
+        renderConsole(
+            new FakeApi()
+                .answer('approval.list', 'approval.list/empty')
+                .answer('decision.list', 'decision.list/pending'),
+        );
+        await waitFor(() => expect(row('dec_1')).toBeTruthy());
+        show('Approvals');
+        await waitFor(() => expect(words(needs().querySelector('.needs-none')!)).toBe('No approval is waiting.'));
+        expect(needs().querySelector('[data-id="dec_1"]')).toBeNull();
+        show('All');
+        await waitFor(() => expect(row('dec_1')).toBeTruthy());
+    });
+
     it('says on each row who the message goes to, from what the row carries and with no read per row', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
