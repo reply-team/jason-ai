@@ -16,6 +16,7 @@ import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { registry } from '../platform/slots';
 import { resolvedTheme } from '../platform/theme';
 import { navigate, parseRoute, type Route } from '../router';
+import { CampaignChat } from '../screens/campaigns/campaign-chat';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
@@ -27,7 +28,7 @@ import * as connect from './connect';
 import * as needs from './needs';
 import { Painted } from './painted';
 import { sideView } from './side';
-import { bind, changeChat, chats, clock, keepLine, streamState, type Dock, type PanelName } from './state';
+import { bind, changeChat, chats, clock, here, keepLine, streamState, type Dock, type PanelName } from './state';
 
 // The desktop's shell: a sidebar and a dock. Home is the Live chat; beside it the panels the console draws itself from
 // the Runtime API, and a page panel that shows the browser shell's screens. The dock's layout is not kept: every
@@ -54,7 +55,9 @@ function PagePanel() {
         <div className="harness">
             <div className="app chromeless">
                 <div className="content">
-                    <CurrentPage />
+                    <CampaignChat.Provider value={(campaign) => here().dock.chat(campaign)}>
+                        <CurrentPage />
+                    </CampaignChat.Provider>
                 </div>
             </div>
         </div>

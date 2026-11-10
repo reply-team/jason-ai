@@ -86,7 +86,8 @@ it and what each provider calls it, with the moves its status allows. **Pause** 
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
 `jason campaign start`, with your reason). An address naming a campaign's Details opens its Settings, and one naming
-any other tab it no longer has opens its Sequence.
+any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
+opens a chat about the campaign and moves nowhere; the browser has no chat, and no Chat tab.
 
 ## Performance
 

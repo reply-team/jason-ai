@@ -448,8 +448,12 @@ details.fold pre {
 .pfilters .chip.on .n { color: var(--text-secondary); }
 .pfilters .check { margin-left: auto; font-size: var(--text-sm); }
 
-/* A campaign's tabs: a narrow panel scrolls them rather than wrapping; Sequence ends with What happened, its journal; Inbox lists each person who replied with their threads; Results draws its four figures as tiles; Settings puts the status moves above the record. */
-.campaign-tabs .tabs { overflow-x: auto; scrollbar-width: thin; }
+/* A campaign's tabs: a narrow panel scrolls them rather than wrapping, and inside the desktop Chat comes first, drawn as a tab; Sequence ends with What happened, its journal; Inbox lists each person who replied with their threads; Results draws its four figures as tiles; Settings puts the status moves above the record. */
+.campaign-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.campaign-tabs .tabs { flex: 1; min-width: 0; border-bottom: 0; overflow-x: auto; scrollbar-width: thin; }
+.campaign-tabs-chat { flex: none; height: 36px; margin-left: var(--space-5); padding: 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-secondary); font: inherit; font-weight: 500; cursor: pointer; }
+.campaign-tabs-chat:hover { color: var(--text); }
+.campaign-tabs-chat + .tabs { padding-left: var(--space-4); }
 .campaign-tabs .tabs a { flex: none; white-space: nowrap; }
 .campaign-tabs-happened > .group:first-child { color: var(--text); font-weight: 600; }
 .campaign-tabs-settings { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-5) 0; }

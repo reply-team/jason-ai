@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
+import { App } from '../../app';
+import { CampaignChat } from './campaign-chat';
 import { href, parseRoute, route, type Route } from '../../router';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock, in UTC here.
@@ -241,6 +243,28 @@ describe('The campaign panel', () => {
             'Results',
             'Settings',
         ]);
+        // The browser hands no way to open a chat, so there is no Chat tab.
+        expect(screen.queryByRole('button', { name: 'Chat' })).toBeNull();
+    });
+
+    it('inside the desktop has a Chat tab, which opens a chat about the campaign and moves nowhere', async () => {
+        const api = panelApi();
+        const chat = vi.fn();
+        const { rerender } = renderApp(api);
+        rerender(
+            <CampaignChat.Provider value={chat}>
+                <App api={api} uiApiVersion="v1" />
+            </CampaignChat.Provider>,
+        );
+        location.hash = href(spring);
+        route.value = spring;
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Chat' }));
+
+        expect(chat).toHaveBeenCalledTimes(1);
+        expect(chat).toHaveBeenCalledWith({ id: 'cmp_1', name: 'Spring' });
+        expect(location.hash).toBe('#/campaigns/cmp_1/settings');
+        expect(screen.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected')).toBe('true');
     });
 
     it('closes back to the table', async () => {
