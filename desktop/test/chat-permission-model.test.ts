@@ -559,9 +559,13 @@ test('a command whose text names the data directory outside the chat folder is r
     for (const command of ['type C:\\Users\\someone\\.jason\\config\\settings.json', 'cat C:/Users/someone/.jason/run/runtime.json',
         'cat /c/Users/someone/.jason/run/runtime.json', 'ls //c/users/someone/.JASON', 'cat ~/.jason/config/settings.json', 'ls $HOME/.jason',
         'cat "C:\\\\Users\\\\someone\\\\.jason\\\\plugins\\\\x\\\\main.js"', 'cat ~/.jason/desktop/chat/../../config/settings.json', 'ls ~/.jason/desktop',
-        'python -c "open(r\'C:\\Users\\someone\\.jason\\config\\settings.json\')"']) {
+        'python -c "open(r\'C:\\Users\\someone\\.jason\\config\\settings.json\')"',
+        // Git Bash, the Windows shell, takes the home folder's variable in its own spellings.
+        'cat $USERPROFILE/.jason/config/settings.json', 'ls ${USERPROFILE}/.jason', 'cat ${USERPROFILE}\\.jason\\run\\runtime.json']) {
         assert.equal(run(windows(), command).verdict, 'deny', command);
     }
+    // Only when the data directory is the default one.
+    assert.equal(run({ ...windows(), data: 'D:\\jason-data', protectedFiles: [] }, 'ls $USERPROFILE/.jason').verdict, 'ask');
     for (const command of ['cat /Users/someone/.jason/config/settings.json', 'ls ~/.jason', 'cat ~/.jason/logs/x.jsonl', 'cat //Users/someone/.jason/run/runtime.json',
         'ls /users/SOMEONE/.jason/plugins']) {
         assert.equal(run(mac(), command).verdict, 'deny', command);

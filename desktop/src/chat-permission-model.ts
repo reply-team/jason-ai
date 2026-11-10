@@ -385,7 +385,9 @@ function namesDataVariable(command: string, scope: ChatScope): boolean {
 /**
  * True when the command's text names the data directory, or anything in it outside the chat folder, in any literal
  * spelling a shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows,
- * and `~/.jason` or `$HOME/.jason` when the data directory is the default one. A name that only begins like it is not it.
+ * and `~/.jason`, `$HOME/.jason` or `.jason` under the home folder's variable in any shell's spelling (`$USERPROFILE`
+ * among them, since Git Bash is the Windows shell) when the data directory is the default one. A name that only begins
+ * like it is not it.
  */
 function namesData(command: string, scope: ChatScope): boolean {
     const paths = pathsOf(scope.platform);
@@ -397,7 +399,7 @@ function namesData(command: string, scope: ChatScope): boolean {
     const drive = /^([a-z]):\//i.exec(data);
     if (drive) spellings.push(`/${drive[1]}${data.slice(2)}`);
     if (data === `${pathText(scope.platform, paths.resolve(scope.home)).replace(/\/$/, '')}/.jason`) {
-        for (const home of ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE']) spellings.push(pathText(scope.platform, `${home}/.jason`));
+        for (const home of ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE', '$USERPROFILE', '${USERPROFILE}']) spellings.push(pathText(scope.platform, `${home}/.jason`));
     }
     for (const spelling of spellings) {
         for (let at = text.indexOf(spelling); at >= 0; at = text.indexOf(spelling, at + 1)) {
