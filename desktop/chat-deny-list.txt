@@ -1,0 +1,29 @@
+# The jason commands the desktop's chat never runs, one per line.
+#
+# The listed commands are refused by the host's tool fence, and the listed operations are not callable through the
+# allowed tools. A person runs them, in the page or in a terminal.
+#
+# The verbs that are a person's own word (no default actor applies to them):
+approval approve
+approval reject
+approval set-standing
+approval unset-standing
+decision answer
+preference set
+preference unset
+block clear
+workitem resume
+report submit
+subscription rewind
+#
+# The verbs that change the installation, or follow it without end:
+runtime
+plugin install
+plugin reload
+profile
+skills
+update
+uninstall
+ui
+session
+journal watch

@@ -253,7 +253,7 @@ public class DefaultActorTests
     public static TheoryData<string[]> PersonsWord() => [.. TheEleven];
 
     /// <summary>The verbs that are a person's own word: no default actor applies to any of them.</summary>
-    private static readonly string[][] TheEleven =
+    internal static readonly string[][] TheEleven =
     [
         ["approval", "approve", "apr_A"],
         ["approval", "reject", "apr_A"],
@@ -442,7 +442,7 @@ public class DefaultActorTests
     }
 
     /// <summary>The verb an invocation names: the words the command tree reads as commands, before its first argument or option.</summary>
-    private static string VerbOf(string[] args) => string.Join(' ', Walked(args).Words);
+    internal static string VerbOf(string[] args) => string.Join(' ', Walked(args).Words);
 
     private static Command Find(string[] verb) => Walked(verb).Command;
 
