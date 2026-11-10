@@ -2265,7 +2265,9 @@ public partial class ReleaseWorkflowTests
     /// The six secrets reach the package action by name, as inputs, and inside it only the steps that use them, through
     /// their <c>env</c>: never interpolated into a script, which GitHub prints into the log before it runs it. No step that
     /// holds one prints its environment or traces its commands, and none echoes a secret's variable anywhere but into a
-    /// pipe or a file that is not one of the runner's own. <c>release.yml</c> names them only where it calls the action.
+    /// pipe or a file that is not one of the runner's own. Those steps are the identity's import, the executable's
+    /// notarization and the desktop's Mac check, which is given the team id alone. <c>release.yml</c> names them only
+    /// where it calls the action.
     /// </summary>
     [Fact]
     public void The_apple_secrets_reach_only_the_steps_that_use_them_and_none_of_those_prints_them()
@@ -2274,7 +2276,7 @@ public partial class ReleaseWorkflowTests
         var inputs = Mapping(Parse(action), "inputs").Children.Keys.Select(key => key.ToString()).ToList();
         Assert.All(AppleSecrets, secret => Assert.Contains(secret.Input, inputs));
 
-        var holding = 0;
+        var holding = new List<string>();
         foreach (var step in ActionSteps())
         {
             var run = Scalar(step, "run") ?? string.Empty;
@@ -2293,8 +2295,8 @@ public partial class ReleaseWorkflowTests
                 continue;
             }
 
-            holding++;
             var name = Scalar(step, "name");
+            holding.Add(name!);
             var lines = run.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
             Assert.DoesNotContain(lines, line => PrintsTheEnvironment().IsMatch(line));
             foreach (var line in lines.Where(line => Regex.IsMatch(line, @"^(echo|printf|cat)\b")))
@@ -2311,7 +2313,11 @@ public partial class ReleaseWorkflowTests
             }
         }
 
-        Assert.Equal(2, holding);
+        // The team id alone reaches the desktop's Mac check, which holds each package's signatures to that team.
+        Assert.Equal(
+            ["Import the Developer ID identity into a keychain of this job's own", "Notarize the macOS executable", MacDesktopVerify],
+            holding);
+        Assert.Equal(["TEAM_ID"], Mapping(ActionStep(MacDesktopVerify), "env").Children.Where(pair => pair.Value.ToString().Contains("inputs.apple-", StringComparison.Ordinal)).Select(pair => pair.Key.ToString()));
 
         // Once in each of the macOS job's two package calls, osx-arm64's and osx-x64's.
         var release = Read(Release);

@@ -773,10 +773,11 @@ runs:
         JASON_VERSION="$VERSION" CSC_NAME="$IDENTITY" CSC_KEYCHAIN="$KEYCHAIN" CSC_IDENTITY_AUTO_DISCOVERY=false \
           APPLE_KEYCHAIN_PROFILE=jason-notary APPLE_KEYCHAIN="$KEYCHAIN" npm run package -- --mac --arm64 --x64
 
-    # Each architecture read back: the application signed, accepted by Gatekeeper as notarized and stapled; its bundled
-    # jason the executable that architecture's call signed, byte for byte, with its own entitlements and of that
-    # architecture alone; the application inside the zip the same; the dmg notarized and stapled in turn, since a person
-    # opens it before the application. The feed's digest and size of each file it names are computed again from the files
+    # Each architecture read back: the application signed by the release's team, the one the identity was found by,
+    # accepted by Gatekeeper as notarized and stapled; its bundled jason the executable that architecture's call signed,
+    # byte for byte, signed by the same team, with its own entitlements and of that architecture alone; the application
+    # inside the zip the same; the dmg signed by the team, notarized and stapled in turn, since a person opens it before
+    # the application. The feed's digest and size of each file it names are computed again from the files
     # as they will be published, and the feed and each application name the release's version. Each application's
     # app-update.yml and its fuses, and those of the application inside its zip, are read back against the configuration
     # they were built from.
@@ -786,7 +787,9 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
         KEYCHAIN: ${{ steps.identity.outputs.keychain }}
+        TEAM_ID: ${{ inputs.apple-team-id }}
       run: |
+        [ -n "$TEAM_ID" ] || { echo "::error title=Desktop::TEAM_ID is empty: the packages cannot be held to the release's team."; exit 1; }
         dist=desktop/dist
         entitlements=dotnet/src/Jason.App/jason.entitlements
         expected="$RUNNER_TEMP/jason-desktop-expected.entitlements"
@@ -802,6 +805,9 @@ runs:
           grep -q 'source=Notarized Developer ID' "$said"
         }
 
+        # The team a signature names, as codesign reads it.
+        team() { codesign --display --verbose=2 "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p'; }
+
         for arch in arm64 x64; do
           case "$arch" in
             arm64) app="$dist/mac-arm64/Jason.app"; lipo=arm64; rid=osx-arm64 ;;
@@ -812,6 +818,7 @@ runs:
           nested="$app/Contents/Resources/bundle/jason"
 
           codesign --verify --deep --strict --verbose=2 "$app"
+          [ "$(team "$app")" = "$TEAM_ID" ] || { echo "::error title=Desktop::The $arch application is not signed by the release's team."; exit 1; }
           notarized --type execute "$app" || { echo "::error title=Desktop::The $arch application is not accepted as Notarized Developer ID."; exit 1; }
           xcrun stapler validate "$app"
           shipped="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
@@ -820,6 +827,7 @@ runs:
 
           cmp "$nested" "$GITHUB_WORKSPACE/artifacts/publish/$rid/jason" || { echo "::error title=Desktop::The $arch application's jason is not the executable its call signed."; exit 1; }
           codesign --verify --strict --verbose=2 "$nested"
+          [ "$(team "$nested")" = "$TEAM_ID" ] || { echo "::error title=Desktop::The $arch application's jason is not signed by the release's team."; exit 1; }
           [ "$(lipo -archs "$nested")" = "$lipo" ] || { echo "::error title=Desktop::The $arch application's jason is not $lipo alone."; exit 1; }
           carried="$RUNNER_TEMP/jason-desktop-$arch.entitlements"
           codesign --display --entitlements - --xml "$nested" > "$carried.raw"
@@ -835,6 +843,7 @@ runs:
           node desktop/scripts/check-package.mjs --app "$unzipped/Jason.app" --platform darwin || { echo "::error title=Desktop::The $arch application inside the zip is not what it was configured to be: its feed or its fuses."; exit 1; }
 
           codesign --verify --strict --verbose=2 "$dmg"
+          [ "$(team "$dmg")" = "$TEAM_ID" ] || { echo "::error title=Desktop::The $arch dmg is not signed by the release's team."; exit 1; }
           xcrun notarytool submit "$dmg" --keychain-profile jason-notary --keychain "$KEYCHAIN" --wait --timeout 30m
           xcrun stapler staple "$dmg"
           xcrun stapler validate "$dmg"
