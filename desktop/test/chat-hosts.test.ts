@@ -61,12 +61,14 @@ test('the person\'s words are never on a host\'s command line: every argument is
     assert.deepEqual(codexArguments({}), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-']);
 });
 
-test('the allowed tools are the skills, web search and fetch, subagents, the task list, two reply reads, and each allowed jason verb', () => {
+test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, and each allowed jason verb', () => {
     assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [...claudeAllowedTools, ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`)]);
     assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), ['Bash(reply auth status:*)', 'Bash(reply account list:*)']);
     assert.ok(!claudeArguments(turn).includes('Bash(jason:*)'));
-    for (const tool of ['Skill', 'WebSearch', 'WebFetch', 'Task', 'TodoWrite']) assert.ok(claudeAllowedTools.includes(tool), tool);
-    for (const tool of ['Bash', 'Read', 'Write', 'Edit', 'PowerShell', 'Bash(reply:*)', 'Bash(reply --version:*)', 'Bash(reply schedule list:*)']) {
+    for (const tool of ['Skill', 'WebSearch', 'Task', 'TodoWrite']) assert.ok(claudeAllowedTools.includes(tool), tool);
+    // A web page is opened by a card: the agent reads text outsiders wrote, and a fetch could carry what it sees out in a URL.
+    assert.ok(!valuesOf(claudeArguments(turn), '--allowedTools').some((rule) => rule.startsWith('WebFetch')), 'WebFetch must ask');
+    for (const tool of ['Bash', 'Read', 'Write', 'Edit', 'PowerShell', 'WebFetch', 'Bash(reply:*)', 'Bash(reply --version:*)', 'Bash(reply schedule list:*)']) {
         assert.ok(!claudeAllowedTools.includes(tool), `${tool} must ask`);
     }
 });

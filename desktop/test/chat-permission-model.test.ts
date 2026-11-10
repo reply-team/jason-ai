@@ -547,9 +547,17 @@ test('any tool whose input carries a command is judged as a command: Monitor wit
 
 test('a web page gets a card remembered by its host; any other tool gets a card for this request alone', () => {
     const page = judge('WebFetch', { url: 'https://example.com/a', prompt: 'p' }, mac());
-    const same = judge('WebFetch', { url: 'https://example.com/b', prompt: 'p' }, mac());
+    const same = judge('WebFetch', { url: 'https://Example.COM/b', prompt: 'p' }, mac());
     assert.ok(page.verdict === 'ask' && same.verdict === 'ask' && page.remember === same.remember && page.remember !== null);
-    assert.equal(page.covers, 'pages on example.com');
+    assert.deepEqual([page.title, page.remember, page.covers], ['Open a web page', 'web:example.com', 'pages on example.com']);
+    const other = judge('WebFetch', { url: 'https://example.org/a', prompt: 'p' }, mac());
+    assert.ok(other.verdict === 'ask' && other.remember === 'web:example.org');
+    // A URL with no host is a card nothing remembers.
+    for (const url of ['not a url', 'file:///etc/passwd', '', 'data:text/plain,x']) {
+        const card = judge('WebFetch', { url, prompt: 'p' }, mac());
+        assert.ok(card.verdict === 'ask' && card.title === 'Open a web page' && card.remember === null, url);
+    }
+    assert.ok(judge('WebFetch', { prompt: 'p' }, mac()).verdict === 'ask');
     for (const [tool, input] of [['NotATool', { x: 1 }], ['Monitor', {}], ['Monitor', { command: 42 }]] as const) {
         const other = judge(tool, input, mac());
         assert.ok(other.verdict === 'ask' && other.remember === null, tool);

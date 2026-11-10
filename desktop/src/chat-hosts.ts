@@ -10,14 +10,14 @@ import { isSessionMarker } from './session-markers.ts';
 
 /**
  * What Claude Code runs without asking anyone, beside what its own rules already let run and the allow list's jason verbs
- * (`allowRules`): the skills, web search and fetch, subagents (`Agent`, `Task` before the tool was renamed), the task list
+ * (`allowRules`): the skills, web search, subagents (`Agent`, `Task` before the tool was renamed), the task list
  * (`TodoWrite`, and the `Task*` tools that replace it on newer models), and of `reply` exactly two read commands. Every
- * other tool use the host would ask about goes to the permission tool, a jason command none of the verbs begins included.
+ * other tool use the host would ask about goes to the permission tool, a jason command none of the verbs begins included,
+ * and so does opening a web page: the agent reads text outsiders wrote, and a fetch could carry what it sees out in a URL.
  */
 export const claudeAllowedTools: readonly string[] = [
     'Skill',
     'WebSearch',
-    'WebFetch',
     'Agent',
     'Task',
     'TodoWrite',

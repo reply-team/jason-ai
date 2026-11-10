@@ -153,6 +153,23 @@ test('"always" holds for the chat: the same kind of request is settled without a
     assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'person' });
 });
 
+test('"always" on a web page holds for its host: a second page of it opens without a card, another host asks again', async () => {
+    const { broker, sent, decided, turn } = bench();
+    turn('chat_a', 'turn_1');
+    const first = broker.ask('turn_1', 'WebFetch', { url: 'https://example.com/a', prompt: 'p' });
+    await settle();
+    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_1', title: 'Open a web page', detail: 'https://example.com/a', remember: 'pages on example.com' });
+    broker.answer('chat_a', 'req_1', { allow: true, always: true });
+    await first;
+    const cards = sent.length;
+    assert.deepEqual(await within(broker.ask('turn_1', 'WebFetch', { url: 'https://example.com/b', prompt: 'p' })), { behavior: 'allow', updatedInput: { url: 'https://example.com/b', prompt: 'p' } });
+    assert.equal(sent.length, cards);
+    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'person' });
+    void broker.ask('turn_1', 'WebFetch', { url: 'https://example.org/a', prompt: 'p' });
+    await settle();
+    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Open a web page', detail: 'https://example.org/a', remember: 'pages on example.org' });
+});
+
 test('"always" holds for that chat only', async () => {
     const { broker, sent, turn } = bench();
     turn('chat_a', 'turn_1');
