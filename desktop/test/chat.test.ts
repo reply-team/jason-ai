@@ -394,8 +394,11 @@ test('a second send while the chat answers is refused, and the first turn goes o
     const pidFile = join(r.b.root, 'grandchild.pid');
     plan(r, [{ wait: pidFile }]);
     await r.chat.send('c1', words, { host: 'claude' });
+    // The stand-in records what it was asked before it writes the pid file, so the host is started and recorded once the
+    // file is there; a stop before that would kill it unrecorded.
+    assert.ok(await settle(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8') !== ''), 'the host started its own process');
     await r.chat.send('c1', words, { host: 'claude' });
-    assert.deepEqual(r.events.get('c1'), [{ kind: 'done', error: 'This chat is still answering. Wait for it to finish, or stop it, then send again.' }]);
+    assert.deepEqual(r.events.get('c1')?.filter((event) => event.kind === 'done'), [{ kind: 'done', error: 'This chat is still answering. Wait for it to finish, or stop it, then send again.' }]);
     assert.equal(r.chat.isRunning('c1'), true);
     const done = r.until('c1', (event) => event.kind === 'done' && event.error === null);
     r.chat.stop('c1');
