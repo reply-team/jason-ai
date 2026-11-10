@@ -195,6 +195,56 @@ test('a remembered grant never allows what the model refuses: the refusal is the
     assert.equal((await within(broker.ask('turn_1', 'Read', { file_path: '/Users/someone/other.md' }))).behavior, 'allow');
 });
 
+test('a remembered command covers no later word the shell would rewrite: each is a card or a refusal, never allowed', async () => {
+    const windows: ChatScope = {
+        ...scope,
+        platform: 'win32',
+        cwd: 'C:\\Users\\someone\\.jason\\desktop\\chat',
+        chat: 'C:\\Users\\someone\\.jason\\desktop\\chat',
+        data: 'C:\\Users\\someone\\.jason',
+        protectedFiles: ['C:\\Users\\someone\\.jason\\config\\settings.json'],
+        home: 'C:\\Users\\someone',
+    };
+    for (const [where, forms] of [
+        [scope, ['cat README.md /Users/someone/.jaso?/config/settings.json', 'cat README.md /Users/someone/.ja"so"n/run/runtime.json',
+            'cat README.md /Users/someone/.ja\\son/run/runtime.json', 'cat README.md ${JASON_DATA_DIR:-}/config/settings.json']],
+        [windows, ['cat README.md $USERPROFILE/.jason/config/settings.json']],
+    ] as const) {
+        const { broker, sent, decided } = bench();
+        broker.openTurn('chat_a', 'turn_1', where);
+        const first = broker.ask('turn_1', 'Bash', { command: 'cat README.md' });
+        await settle();
+        assert.equal(sent.at(-1)?.event.remember, 'cat README.md \u2026');
+        broker.answer('chat_a', 'req_1', { allow: true, always: true });
+        assert.equal((await first).behavior, 'allow');
+        assert.equal((await within(broker.ask('turn_1', 'Bash', { command: 'cat README.md' }))).behavior, 'allow');
+        for (const command of forms) {
+            const cards = sent.length;
+            const answer = broker.ask('turn_1', 'Bash', { command });
+            await settle();
+            if (sent.length > cards) {
+                const event = sent.at(-1)?.event;
+                assert.ok(event?.kind === 'permission' && event.detail === command && event.remember === null, command);
+                broker.answer('chat_a', event.request ?? '', { allow: false, always: false });
+            }
+            assert.equal((await within(answer)).behavior, 'deny', command);
+            assert.notEqual(decided.at(-1)?.outcome, 'allowed', command);
+        }
+    }
+    // Plain words are still remembered.
+    for (const command of ['git log --oneline -5', 'rg TODO src']) {
+        const { broker, sent } = bench();
+        broker.openTurn('chat_a', 'turn_1', scope);
+        const first = broker.ask('turn_1', 'Bash', { command });
+        await settle();
+        broker.answer('chat_a', 'req_1', { allow: true, always: true });
+        await first;
+        const cards = sent.length;
+        assert.equal((await within(broker.ask('turn_1', 'Bash', { command: `${command} more` }))).behavior, 'allow', command);
+        assert.equal(sent.length, cards, command);
+    }
+});
+
 test('"always" holds for that chat only', async () => {
     const { broker, sent, turn } = bench();
     turn('chat_a', 'turn_1');

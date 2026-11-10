@@ -242,13 +242,16 @@ const runsAnother = new Set(
 
 /**
  * What "always, in this chat" covers of a command: the program and its first word. Nothing for a compound command, a
- * program named by a path, or a shell or exec wrapper, whose card covers its one request.
+ * program named by a path, or a shell or exec wrapper, whose card covers its one request; and nothing for a command any
+ * of whose words the shell would rewrite before it runs (a quote, a backslash, a variable, a `~`, a glob or a brace),
+ * because a later word is covered unread: such a command is a card each time, and the person sees its text.
  */
 export function commandPrefix(command: string): string | null {
     if (isCompound(command)) return null;
-    const [program, first] = command.trim().split(/\s+/);
-    const plain = /^[A-Za-z0-9._/\\:@+-]+$/;
-    if (program === undefined || first === undefined || !plain.test(program) || !plain.test(first) || first.startsWith('-')) return null;
+    const words = command.trim().split(/\s+/);
+    if (!words.every((word) => /^[A-Za-z0-9._/:@+=,%-]+$/.test(word))) return null;
+    const [program, first] = words;
+    if (program === undefined || first === undefined || first.startsWith('-')) return null;
     if (/[\\/:]/.test(program) || runsAnother.has(program.toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, ''))) return null;
     return `${program} ${first}`;
 }

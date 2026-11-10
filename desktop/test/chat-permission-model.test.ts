@@ -600,6 +600,25 @@ test('any other command gets a card, remembered by the program and its first wor
     assert.equal(commandPrefix('git status; rm -rf x'), null);
 });
 
+test('a command with a word the shell would rewrite is never remembered: every word is plain letters, digits and . _ / : @ + = , % -', () => {
+    const rewritten = ['cat README.md /Users/someone/.jaso?/config/settings.json', 'cat README.md /Users/someone/.ja*', 'cat README.md /Users/someone/.[j]ason',
+        'cat README.md /Users/someone/.ja"so"n/run/runtime.json', "cat README.md /Users/someone/.ja'so'n", 'cat README.md /Users/someone/.ja\\son/run',
+        'cat README.md ${JASON_DATA_DIR:-}/config', 'cat README.md $USERPROFILE/.jason/config/settings.json', 'cat README.md ~/notes.md',
+        'cat README.md /Users/someone/{.jason,x}', 'git log "--format=%H"', 'cat README.md C:\\Users\\someone\\notes.md', 'cat README.md !x!'];
+    for (const command of rewritten) {
+        assert.equal(commandPrefix(command), null, command);
+        for (const scope of [windows(), mac()]) {
+            const judged = run(scope, command);
+            assert.ok(judged.verdict === 'deny' || (judged.verdict === 'ask' && judged.remember === null && !('covers' in judged)), `${scope.platform} ${command}`);
+        }
+    }
+    // Plain words are remembered as before, the program and its first word.
+    for (const [command, prefix] of [['git log --oneline -5', 'git log'], ['rg TODO src', 'rg TODO'], ['cat README.md', 'cat README.md'],
+        ['git log --format=%h,%s @{u}..', null], ['git commit -m=fix:a+b', 'git commit'], ['curl https://example.com/a?b', null]] as const) {
+        assert.equal(commandPrefix(command), prefix, command);
+    }
+});
+
 test('a shell, an exec wrapper or a program named by a path is never remembered: its card covers that request alone', () => {
     const once = ['cmd /c dir', 'CMD.EXE /c dir', 'sh build.sh', 'bash build.sh', 'zsh build.zsh', 'pwsh build.ps1',
         'powershell.exe Get-ChildItem', 'env node', 'sudo rm', 'xargs rm', 'npx some-package', 'wsl ls', 'start notepad',
