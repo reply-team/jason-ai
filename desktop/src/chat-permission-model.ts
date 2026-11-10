@@ -156,41 +156,53 @@ function programOf(platform: Platform, token: string): string {
     return keyOf(platform, bare);
 }
 
-/** True when any jason command inside the text, in any part, form or nesting, is one the deny list names. */
-function deniedCommand(command: string, scope: ChatScope): boolean {
-    for (const part of command.split(/&&|\|\||\$\(|[;|&`\n\r<>(){}]/)) {
-        const tokens = part.trim().split(/\s+/).map(unquoted).filter((token) => token !== '');
-        tokens.forEach((token, at) => {
-            if (programOf(scope.platform, token) !== 'jason') return;
-            const words = tokens.slice(at + 1);
-            if (words[0]?.startsWith('-')) throw denial;
-            const leading: string[] = [];
-            for (const word of words) {
-                if (word.startsWith('-')) break;
-                leading.push(word);
-            }
-            for (const entry of scope.denied) {
-                const verb = entry.split(' ');
-                if (verb.every((word, index) => leading[index] === word)) throw denial;
-            }
-        });
+/**
+ * True when a jason command's words hold a deny-list entry: its first word is the command's first, and its other words
+ * follow in order with anything between, so options before a verb (`approval --actor human:x approve`) do not hide it.
+ * The first word is held in place, so `contact update ... update` is not the `update` entry.
+ */
+function holdsEntry(words: readonly string[], entry: string): boolean {
+    const [first, ...rest] = entry.split(' ');
+    if (words[0] !== first) return false;
+    let at = 1;
+    for (const word of rest) {
+        while (at < words.length && words[at] !== word) at++;
+        if (at === words.length) return false;
+        at++;
     }
-    const text = command.toLowerCase();
-    return scope.deniedOperations.some((operation) => new RegExp(`(?<![a-z0-9_])${operation.replace('.', '\\.')}(?![a-z0-9_])`).test(text));
+    return true;
 }
 
-const denial = new Error('denied');
+/**
+ * What the text holds of jason: `deny` when any jason command inside it, in any part, form or nesting, starts with an
+ * option, carries a word that begins with `@` (a file of words), or holds a deny-list entry, or when the text names a
+ * denied operation however it would reach the runtime; `jason` when it runs jason otherwise; null when it does not.
+ */
+function jasonIn(command: string, scope: ChatScope): 'deny' | 'jason' | null {
+    let found: 'jason' | null = null;
+    for (const part of command.split(/&&|\|\||\$\(|[;|&`\n\r<>(){}]/)) {
+        const tokens = part.trim().split(/\s+/).map(unquoted).filter((token) => token !== '');
+        for (const [at, token] of tokens.entries()) {
+            if (programOf(scope.platform, token) !== 'jason') continue;
+            found = 'jason';
+            const words = tokens.slice(at + 1);
+            if (words[0]?.startsWith('-') || words.some((word) => word.startsWith('@'))) return 'deny';
+            if (scope.denied.some((entry) => holdsEntry(words, entry))) return 'deny';
+        }
+    }
+    const text = command.toLowerCase();
+    if (scope.deniedOperations.some((operation) => new RegExp(`(?<![a-z0-9_])${operation.replace('.', '\\.')}(?![a-z0-9_])`).test(text))) return 'deny';
+    return found;
+}
 
 function judgeCommand(tool: string, command: string, scope: ChatScope): Judgement {
-    try {
-        if (deniedCommand(command, scope)) return { verdict: 'deny', message: commandRefusal };
-    } catch (error) {
-        if (error === denial) return { verdict: 'deny', message: commandRefusal };
-        throw error;
-    }
+    const jason = jasonIn(command, scope);
+    if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
+    // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
+    // person's to answer, each time.
+    if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     if (!isCompound(command)) {
         const tokens = command.trim().split(/\s+/);
-        if (tokens[0] === 'jason') return allow;
         if (tokens[0] === 'reply' && allowedReply.some((words) => words.every((word, index) => tokens[index + 1] === word))) return allow;
     }
     const prefix = commandPrefix(command);

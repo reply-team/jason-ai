@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent } from '../src/chat.ts';
-import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
+import { readFence } from '../src/chat-deny.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
@@ -333,7 +333,7 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
             dataNamed: true,
             cli: loggedCli(b.cli, log),
             keyFor: () => undefined,
-            denied: () => parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8')),
+            fence: () => readFence(join(import.meta.dirname, '..')),
             emit(_chatId, event: ChatEvent) {
                 if (event.kind === 'permission') {
                     during = written(before, snapshot(b.paths.data)).filter((path) => !isLog(path));

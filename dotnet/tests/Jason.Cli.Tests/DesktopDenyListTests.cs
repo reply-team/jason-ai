@@ -6,10 +6,13 @@ using Jason.Contracts.Api;
 namespace Jason.Cli.Tests;
 
 /// <summary>
-/// The desktop's chat drives an agent host that may run <c>jason</c>, fenced by one file, <c>desktop/chat-deny-list.txt</c>:
-/// the listed commands are refused by the host's tool fence, and a command naming a listed operation is refused by the
-/// desktop. The file is held here to the CLI's own tables and to the Runtime API's names, so a verb that becomes a
-/// person's own word, or a line taken out of the file, is red in this class before an agent can run it.
+/// The desktop's chat drives an agent host that may run <c>jason</c>, fenced by two files. In
+/// <c>desktop/chat-deny-list.txt</c>, the listed commands are refused by the host's tool fence and by the desktop, and a
+/// command naming a listed operation is refused by the desktop. <c>desktop/chat-allow-list.txt</c> names the verbs the
+/// host runs without asking, and any other jason command goes to the person's card. The deny list is held here to the
+/// CLI's own tables and to the Runtime API's names, and the allow list is written here from the CLI's command tree, so a
+/// verb that becomes a person's own word, a new verb, or a line taken out of either file is red in this class before an
+/// agent can run it.
 /// </summary>
 public class DesktopDenyListTests
 {
@@ -25,6 +28,79 @@ public class DesktopDenyListTests
     /// plugin performs an operation, and changing which profile a role runs on.
     /// </summary>
     private static readonly string[] TheChatsOwnWord = ["suppression remove", "route set", "route unset", "role set-profile"];
+
+    /// <summary>
+    /// The verbs the deny list leaves to the agent that still go to a person's card at every use: <c>doctor</c> writes its
+    /// bundle to any path it is given.
+    /// </summary>
+    private static readonly string[] AskedEachTime = ["doctor"];
+
+    private const string UpdateVariable = "JASON_UPDATE_FIXTURES";
+
+    private const string AllowListHeader =
+        "# The jason commands the desktop's chat runs without asking, one per line: every verb of the CLI that the deny list\n" +
+        "# does not cover, but doctor, which writes its bundle to any path and so goes to the person's card at every use.\n" +
+        "#\n" +
+        "# Written from the CLI's command tree and chat-deny-list.txt by DesktopDenyListTests; a verb added to the CLI is red\n" +
+        "# there until JASON_UPDATE_FIXTURES=1 writes this file again. Do not edit it by hand.\n";
+
+    /// <summary>
+    /// The allow list is the CLI's verbs, every leaf of its command tree, less what the deny list covers and less the verbs
+    /// asked each time: the host lets the agent run these and only these, so a new verb is red here until the file is
+    /// written again, and the deny list's word decides whether it is on it.
+    /// </summary>
+    [Fact]
+    public void The_allow_list_is_every_verb_of_the_cli_the_deny_list_does_not_cover()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var denied = DenyList();
+
+        var allowed = Verbs(root, [])
+            .Where(verb => !denied.Any(entry => Covers(entry, verb)) && !AskedEachTime.Contains(verb))
+            .Order(StringComparer.Ordinal);
+        var text = AllowListHeader + string.Concat(allowed.Select(verb => verb + "\n"));
+
+        var file = Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt");
+        if (Environment.GetEnvironmentVariable(UpdateVariable) == "1")
+        {
+            File.WriteAllText(file, text);
+            return;
+        }
+
+        Assert.True(File.Exists(file), $"desktop/chat-allow-list.txt is not there. Rerun this test with {UpdateVariable}=1 and commit the file.");
+        Assert.Equal(text, File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal));
+
+        static IEnumerable<string> Verbs(Command command, string[] words)
+        {
+            foreach (var sub in command.Subcommands.Where(sub => !sub.Hidden))
+            {
+                string[] path = [.. words, sub.Name];
+                if (sub.Subcommands.Count == 0)
+                {
+                    yield return string.Join(' ', path);
+                }
+                else
+                {
+                    foreach (var verb in Verbs(sub, path))
+                    {
+                        yield return verb;
+                    }
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void The_allow_list_names_no_verb_that_is_a_person_s_own_word_and_not_doctor()
+    {
+        var file = Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt");
+        var allowed = File.ReadAllLines(file).Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
+
+        Assert.NotEmpty(allowed);
+        Assert.DoesNotContain("doctor", allowed);
+        Assert.Empty(allowed.Where(verb => DefaultActorTests.TheEleven.Select(DefaultActorTests.VerbOf).Contains(verb)).ToList());
+    }
 
     [Fact]
     public void The_deny_list_holds_every_verb_that_is_a_person_s_own_word()
@@ -135,7 +211,12 @@ public class DesktopDenyListTests
     private static HashSet<string> DeniedOperations() =>
         Lines().Where(line => line.Contains('.')).ToHashSet(StringComparer.Ordinal);
 
-    private static IEnumerable<string> Lines()
+    private static IEnumerable<string> Lines() =>
+        File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-deny-list.txt"))
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith('#'));
+
+    private static string RepositoryRoot()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
@@ -144,8 +225,6 @@ public class DesktopDenyListTests
         }
 
         Assert.NotNull(root);
-        return File.ReadAllLines(Path.Combine(root.FullName, "desktop", "chat-deny-list.txt"))
-            .Select(line => line.Trim())
-            .Where(line => line.Length > 0 && !line.StartsWith('#'));
+        return root.FullName;
     }
 }

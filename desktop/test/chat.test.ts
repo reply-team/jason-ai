@@ -7,11 +7,11 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFi
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/chat.ts';
-import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
+import { readFence } from '../src/chat-deny.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
 
-const denied = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+const fence = readFence(join(import.meta.dirname, '..'));
 const words = 'Which campaigns are waiting on me?';
 
 interface Rig {
@@ -51,7 +51,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
         dataNamed: true,
         cli: b.cli,
         keyFor: (id) => keys[id],
-        denied: () => denied,
+        fence: () => fence,
         emit(chatId, event) {
             const said = events.get(chatId) ?? [];
             said.push(event);
@@ -496,14 +496,14 @@ test('a start removes the turn files a desktop that ended mid-turn left behind, 
     const kept = ['turn-notes.txt', 'turn-0123.mcp.json', 'settings.json'];
     mkdirSync(r.b.paths.desktop, { recursive: true });
     for (const name of [...left, ...kept]) writeFileSync(join(r.b.paths.desktop, name), '{}');
-    new Chat({ paths: r.b.paths, env: r.b.env, bundle: r.bundle, dataNamed: true, cli: r.b.cli, keyFor: () => undefined, denied: () => denied, emit: () => undefined });
+    new Chat({ paths: r.b.paths, env: r.b.env, bundle: r.bundle, dataNamed: true, cli: r.b.cli, keyFor: () => undefined, fence: () => fence, emit: () => undefined });
     assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'chat').sort(), [...kept].sort());
 });
 
 test('a deny list that cannot be read starts no turn, and leaves nothing open', async (t) => {
     const r = rig(t, {
         chat: {
-            denied: () => {
+            fence: () => {
                 throw new Error('The deny list could not be read.');
             },
         },

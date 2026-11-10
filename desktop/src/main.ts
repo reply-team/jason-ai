@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
-import { denyListFile, parseDenyList, type DenyList } from './chat-deny.ts';
+import { readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedTurns } from './chat-log.ts';
 import { cliAt } from './cli.ts';
@@ -41,11 +41,13 @@ function readText(file: string): string | null {
     }
 }
 
-/** The deny list the application carries, read at every turn; a list that cannot be read starts no turn. */
-function deniedCommands(): DenyList {
-    const text = readText(join(app.getAppPath(), denyListFile));
-    if (text === null) throw new Error('The chat’s deny list could not be read.');
-    return parseDenyList(text);
+/** The chat's fence the application carries, read at every turn; a list that cannot be read starts no turn. */
+function chatFence(): ChatFence {
+    try {
+        return readFence(app.getAppPath());
+    } catch {
+        throw new Error('The chat’s allow and deny lists could not be read.');
+    }
 }
 
 /** The folder the application carries `jason` and the skills package in: beside the app when packaged, else `bundle/`. */
@@ -255,7 +257,7 @@ async function run(): Promise<void> {
         dataNamed: Boolean(process.env.JASON_DATA_DIR?.trim()),
         cli,
         keyFor: (id) => keys.keyFor(id),
-        denied: deniedCommands,
+        fence: chatFence,
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
         ...loggedTurns(log),
     });

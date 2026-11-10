@@ -6,14 +6,14 @@ import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent } from '../src/chat.ts';
-import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
+import { readFence } from '../src/chat-deny.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { loggedCli } from '../src/installation.ts';
 import { fileLogger } from '../src/log.ts';
 import { bench } from './harness.ts';
 
 const lines0 = (text: string) => text.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
-const denied = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+const fence = readFence(join(import.meta.dirname, '..'));
 
 test('the chat’s log carries none of a turn’s words, commands, paths or keys', async (t) => {
     const removals: (() => void)[] = [];
@@ -46,7 +46,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         dataNamed: true,
         cli: loggedCli(b.cli, log),
         keyFor: (id) => (id === 'deepseek' ? planted.key : undefined),
-        denied: () => denied,
+        fence: () => fence,
         emit(_chatId, event) {
             events.push(event);
             // Every card is answered yes, so each request is settled by the person or the model and logged.

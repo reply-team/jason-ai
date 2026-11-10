@@ -214,11 +214,32 @@ test('a read outside every folder gets a card that may be remembered by its fold
 
 // ---- Commands ---------------------------------------------------------------------------------------------------------
 
-test('a jason command the deny list does not name is allowed without a card', () => {
+test('a jason command that reaches the model gets a card that covers only itself, never an allowance', () => {
     for (const scope of [windows(), mac()]) {
-        assert.deepEqual(run(scope, 'jason campaign list'), { verdict: 'allow' });
-        assert.deepEqual(run(scope, 'jason campaign create --name "Spring outreach"'), { verdict: 'allow' });
-        assert.deepEqual(run(scope, 'jason'), { verdict: 'allow' });
+        for (const command of ['jason campaign list', 'jason campaign create --name "Spring outreach"', 'jason', 'jason doctor --output C:\\elsewhere\\bundle.zip', 'jason doctor']) {
+            const card = run(scope, command);
+            assert.equal(card.verdict, 'ask', command);
+            assert.ok(card.verdict === 'ask' && card.remember === null, command);
+        }
+    }
+});
+
+test('a denied verb is refused with options between its words, and a word only shared with one is not', () => {
+    for (const scope of [windows(), mac()]) {
+        assert.equal(run(scope, 'jason approval --actor human:x approve apr_A').verdict, 'deny');
+        assert.equal(run(scope, 'jason approval --actor human:x set-standing cmp_A').verdict, 'deny');
+        assert.equal(run(scope, 'jason plugin --human install slack').verdict, 'deny');
+        assert.equal(run(scope, 'jason decision --human answer dec_A --answer Yes').verdict, 'deny');
+        // The entry's first word is the command's: contact update is not the denied update.
+        assert.equal(run(scope, 'jason contact update ct_A --title update').verdict, 'ask');
+    }
+});
+
+test('a jason command with a word that begins with @ is refused, since it would name a file of words', () => {
+    for (const scope of [windows(), mac()]) {
+        assert.equal(run(scope, 'jason @args.txt').verdict, 'deny');
+        assert.equal(run(scope, 'jason campaign list @more.txt').verdict, 'deny');
+        assert.equal(run(scope, 'jason "@args.txt"').verdict, 'deny');
     }
 });
 
@@ -240,8 +261,8 @@ test('every deny-list command is refused without a card, with its arguments and 
         assert.equal(run(scope, 'jason ui').verdict, 'deny');
         assert.equal(run(scope, 'jason journal watch cmp_A').verdict, 'deny');
     }
-    assert.deepEqual(run(windows(), 'jason plugin list'), { verdict: 'allow' });
-    assert.deepEqual(run(windows(), 'jason journal read cmp_A'), { verdict: 'allow' });
+    assert.equal(run(windows(), 'jason plugin list').verdict, 'ask');
+    assert.equal(run(windows(), 'jason journal read cmp_A').verdict, 'ask');
 });
 
 test('with the file the desktop carries, export and import are refused, and so are the verbs the chat refuses beyond the CLI', () => {
@@ -344,7 +365,7 @@ test('the shell operators that make a command compound are each recognised', () 
 
 test('PowerShell commands are judged as shell commands', () => {
     assert.equal(judge('PowerShell', { command: 'jason approval approve apr_A' }, windows()).verdict, 'deny');
-    assert.deepEqual(judge('PowerShell', { command: 'jason campaign list' }, windows()), { verdict: 'allow' });
+    assert.equal(judge('PowerShell', { command: 'jason campaign list' }, windows()).verdict, 'ask');
     assert.equal(judge('PowerShell', { command: 'Get-ChildItem' }, windows()).verdict, 'ask');
 });
 

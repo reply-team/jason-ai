@@ -3,15 +3,16 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
+import { readFence } from '../src/chat-deny.ts';
 import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexLine, dataRules, hostEnvironment, rulePath, type HostLine } from '../src/chat-hosts.ts';
 import { markersIn, plantedConfiguration, plantedMarkers } from './planted-session.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const entries = parseDenyList(readFileSync(join(here, '..', denyListFile), 'utf8')).commands;
+const fence = readFence(join(here, '..'));
+const entries = fence.commands;
 const fixture = (name: string) => readFileSync(join(here, 'fixtures', name), 'utf8').split(/\r?\n/).filter((line) => line !== '');
 
-const turn = { mcpConfig: '/data/desktop/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: entries, dataRules: [] };
+const turn = { mcpConfig: '/data/desktop/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: entries, allowed: fence.allowed, dataRules: [] };
 
 /** The value that follows a flag, once. */
 function valueOf(args: readonly string[], flag: string): string | undefined {
@@ -59,16 +60,24 @@ test('the person\'s words are never on a host\'s command line: every argument is
     assert.deepEqual(codexArguments({}), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-']);
 });
 
-test('the allowed tools are the skills, web search and fetch, subagents, the task list, jason, and two reply reads', () => {
-    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [...claudeAllowedTools]);
-    assert.deepEqual(
-        claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')),
-        ['Bash(jason:*)', 'Bash(reply auth status:*)', 'Bash(reply account list:*)'],
-    );
+test('the allowed tools are the skills, web search and fetch, subagents, the task list, two reply reads, and each allowed jason verb', () => {
+    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [...claudeAllowedTools, ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`)]);
+    assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), ['Bash(reply auth status:*)', 'Bash(reply account list:*)']);
+    assert.ok(!claudeArguments(turn).includes('Bash(jason:*)'));
     for (const tool of ['Skill', 'WebSearch', 'WebFetch', 'Task', 'TodoWrite']) assert.ok(claudeAllowedTools.includes(tool), tool);
     for (const tool of ['Bash', 'Read', 'Write', 'Edit', 'PowerShell', 'Bash(reply:*)', 'Bash(reply --version:*)', 'Bash(reply schedule list:*)']) {
         assert.ok(!claudeAllowedTools.includes(tool), `${tool} must ask`);
     }
+});
+
+test('no allowed rule begins the spellings that ran with no prompt under one rule for all of jason', () => {
+    const prefixes = valuesOf(claudeArguments(turn), '--allowedTools')
+        .filter((rule) => rule.startsWith('Bash(jason'))
+        .map((rule) => rule.slice('Bash('.length, -':*)'.length));
+    for (const spelling of ['jason  runtime stop', 'jason runtime\tstop', 'jason approval --actor human:x approve apr_A', 'jason @args.txt', 'jason export --stop', 'jason import --replace backup.zip']) {
+        assert.ok(!prefixes.some((prefix) => spelling.startsWith(prefix)), spelling);
+    }
+    assert.ok(prefixes.every((prefix) => prefix.startsWith('jason ') && prefix.length > 'jason '.length), 'a rule for all of jason');
 });
 
 test('the host\'s argv carries every deny-list entry as a disallowed tool, and a jason command that starts with an option', () => {
@@ -97,7 +106,7 @@ test('each allowed and disallowed rule is an argument of its own, so a comma in 
     const args = claudeArguments({ ...turn, dataRules: rules });
     assert.equal(args.filter((arg) => arg === '--allowedTools').length, 1);
     assert.equal(args.filter((arg) => arg === '--disallowedTools').length, 1);
-    for (const rule of [...claudeAllowedTools, ...rules]) assert.equal(args.filter((arg) => arg === rule).length, 1, rule);
+    for (const rule of [...claudeAllowedTools, ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`), ...rules]) assert.equal(args.filter((arg) => arg === rule).length, 1, rule);
     assert.deepEqual(valuesOf(args, '--disallowedTools').slice(-2), rules);
 });
 

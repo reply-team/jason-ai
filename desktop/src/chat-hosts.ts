@@ -3,16 +3,16 @@
 // prints means for the page. Nothing here starts a process or reads a file.
 
 import { posix, win32 } from 'node:path';
-import { denyRules } from './chat-deny.ts';
+import { allowRules, denyRules } from './chat-deny.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
 import type { Platform } from './chat-permission-model.ts';
 import { isSessionMarker } from './session-markers.ts';
 
 /**
- * What Claude Code runs without asking anyone, beside what its own rules already let run: the skills, web search and
- * fetch, subagents (`Agent`, `Task` before the tool was renamed), the task list (`TodoWrite`, and the `Task*` tools that
- * replace it on newer models), every `jason` command the deny list does not name, and of `reply` exactly two read
- * commands. Every other tool use the host would ask about goes to the permission tool.
+ * What Claude Code runs without asking anyone, beside what its own rules already let run and the allow list's jason verbs
+ * (`allowRules`): the skills, web search and fetch, subagents (`Agent`, `Task` before the tool was renamed), the task list
+ * (`TodoWrite`, and the `Task*` tools that replace it on newer models), and of `reply` exactly two read commands. Every
+ * other tool use the host would ask about goes to the permission tool, a jason command none of the verbs begins included.
  */
 export const claudeAllowedTools: readonly string[] = [
     'Skill',
@@ -25,7 +25,6 @@ export const claudeAllowedTools: readonly string[] = [
     'TaskGet',
     'TaskList',
     'TaskUpdate',
-    'Bash(jason:*)',
     'Bash(reply auth status:*)',
     'Bash(reply account list:*)',
 ];
@@ -45,6 +44,8 @@ export interface ClaudeTurn {
     addDirs: readonly string[];
     /** The deny list's commands. */
     denied: readonly string[];
+    /** The allow list's verbs. */
+    allowed: readonly string[];
     /** The host's file rules for the installation's data outside the chat folder (`dataRules`). */
     dataRules: readonly string[];
     model?: string | undefined;
@@ -69,7 +70,7 @@ export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDire
  */
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    args.push('--allowedTools', ...claudeAllowedTools);
+    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(turn.allowed));
     args.push('--disallowedTools', ...claudeRemovedTools, ...denyRules(turn.denied), ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', claudeTurnSettings);

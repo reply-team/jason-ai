@@ -15,7 +15,7 @@ import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
-import type { DenyList } from './chat-deny.ts';
+import type { ChatFence } from './chat-deny.ts';
 import type { Cli } from './cli.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch } from './programs.ts';
@@ -53,8 +53,8 @@ export interface ChatOptions {
     dataNamed: boolean;
     cli: Cli;
     keyFor(providerId: string): string | undefined;
-    /** The deny list's commands and operations, read at each turn. */
-    denied(): DenyList;
+    /** The deny list's commands and operations and the allow list's verbs, read at each turn. */
+    fence(): ChatFence;
     emit(chatId: string, event: ChatEvent): void;
     started?(host: string, resumed: boolean): void;
     ended?(turn: TurnEnded): void;
@@ -287,7 +287,7 @@ export class Chat {
         try {
             if (resolved.program === 'claude') {
                 const id = newTurnId();
-                const denied = this.#options.denied();
+                const fence = this.#options.fence();
                 turnId = id;
                 running.turnId = id;
                 const scope: ChatScope = {
@@ -297,8 +297,8 @@ export class Chat {
                     added,
                     data: paths.data,
                     protectedFiles: [paths.installationSettings, paths.runFile],
-                    denied: denied.commands,
-                    deniedOperations: denied.operations,
+                    denied: fence.commands,
+                    deniedOperations: fence.operations,
                     real: realPathOf,
                 };
                 this.#broker.openTurn(chatId, id, scope);
@@ -312,7 +312,7 @@ export class Chat {
                 });
                 const mcpConfig = writeTurnConfig(paths.desktop, id, endpoint.url, secret);
                 const rules = dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop));
-                args = claudeArguments({ mcpConfig, addDirs: added, denied: denied.commands, dataRules: rules, model: resolved.model, resume });
+                args = claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, dataRules: rules, model: resolved.model, resume });
             } else {
                 args = codexArguments({ model: resolved.model, resume });
             }

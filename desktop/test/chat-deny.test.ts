@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { denyListFile, denyRules, parseDenyList } from '../src/chat-deny.ts';
+import { allowListFile, allowRules, denyListFile, denyRules, parseAllowList, parseDenyList, readFence } from '../src/chat-deny.ts';
 
 const desktop = join(import.meta.dirname, '..');
 const list = parseDenyList(readFileSync(join(desktop, denyListFile), 'utf8'));
@@ -42,4 +42,27 @@ test('the file\'s second section names the operations the denied verbs call, eac
         assert.ok(list.operations.includes(operation), operation);
     }
     assert.ok(!list.operations.some((operation) => operation.startsWith('runtime.')));
+});
+
+test('the allow list is one file of jason verbs, none of them covered by the deny list, and not doctor', () => {
+    const allowed = parseAllowList(readFileSync(join(desktop, allowListFile), 'utf8'));
+    assert.ok(allowed.length > 40);
+    for (const verb of ['campaign list', 'approval list', 'decision get', 'status', 'logs']) assert.ok(allowed.includes(verb), verb);
+    for (const verb of allowed) {
+        assert.ok(!entries.some((entry) => verb === entry || verb.startsWith(`${entry} `)), `${verb} is denied`);
+    }
+    assert.ok(!allowed.includes('doctor'));
+    assert.throws(() => parseAllowList('campaign list\ncampaign list\n'), /twice/);
+    assert.throws(() => parseAllowList('system.shutdown\n'), /line 1/);
+});
+
+test('the host is allowed each verb of the allow list by a rule of its own, and nothing of jason beyond them', () => {
+    assert.deepEqual(allowRules(['campaign list', 'status']), ['Bash(jason campaign list:*)', 'Bash(jason status:*)']);
+});
+
+test('the fence is read from the two files beside the desktop\'s package', () => {
+    const fence = readFence(desktop);
+    assert.deepEqual(fence.commands, entries);
+    assert.deepEqual(fence.operations, list.operations);
+    assert.deepEqual(fence.allowed, parseAllowList(readFileSync(join(desktop, allowListFile), 'utf8')));
 });
