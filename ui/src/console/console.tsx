@@ -13,6 +13,7 @@ import { session } from '../api/session';
 import { CurrentPage } from '../app';
 import type { DesktopCommand, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
+import { registry } from '../platform/slots';
 import { resolvedTheme } from '../platform/theme';
 import { navigate, parseRoute, type Route } from '../router';
 import { PairAgain } from '../shell/pair-again';
@@ -69,17 +70,28 @@ const components = {
     page: PagePanel,
 };
 
-const commands: Partial<Record<DesktopCommand, PanelName | Route>> = {
-    'navigate.attention': 'needs',
-    'navigate.campaigns': 'campaigns',
-    'navigate.activity': 'activity',
-    'navigate.connect': 'connect',
-    'navigate.performance': { screen: 'performance' } as Route,
-    'navigate.workitems': parseRoute('#/workitems'),
-    'navigate.people': parseRoute('#/people'),
+// A command names a panel of the console's own, or a screen of the browser shell by its id. A screen's address is the
+// one its registered entry gives, read when the command comes, so each screen's route is defined in one place.
+const commands: Partial<Record<DesktopCommand, { panel: PanelName } | { screen: Route['screen'] }>> = {
+    'navigate.attention': { panel: 'needs' },
+    'navigate.campaigns': { panel: 'campaigns' },
+    'navigate.activity': { panel: 'activity' },
+    'navigate.connect': { panel: 'connect' },
+    'navigate.performance': { screen: 'performance' },
+    'navigate.workitems': { screen: 'workitems' },
+    'navigate.people': { screen: 'people' },
     'navigate.system': { screen: 'system' },
     'navigate.settings': { screen: 'settings' },
 };
+
+/** Where a desktop command goes: a panel's name, the registered screen's own route, or nothing. */
+export function commandTarget(command: DesktopCommand): PanelName | Route | null {
+    const to = commands[command];
+    if (!to) return null;
+    if ('panel' in to) return to.panel;
+    const entry = registry.list('screen').find((each) => each.id === to.screen);
+    return entry ? parseRoute(entry.href()) : null;
+}
 
 /** How long the console waits after a journal line before it reads what waits and the campaigns again. */
 export const reloadDelay = 400;
@@ -143,7 +155,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             desktop.setup.onChanged(() => void connect.reload()),
             desktop.onCommand((command) => {
                 if (command === 'chat.new' || command === 'navigate.chat') return dock.chat();
-                const to = commands[command];
+                const to = commandTarget(command);
                 if (typeof to === 'string') dock.show(to);
                 else if (to) dock.page(to);
             }),

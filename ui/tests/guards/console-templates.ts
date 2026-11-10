@@ -8,8 +8,10 @@ import ts from 'typescript';
 /** The file that is the console's one way to markup: it alone may write markup into the page. */
 export const markupFile = 'html.ts';
 
-const handler = /\bon[a-z]+\s*=\s*["'`]/i;
-const styleAttribute = /\bstyle\s*=\s*["'`]/i;
+// An attribute name, its value quoted or not: `onclick=${x}` is as much a handler as `onclick="x"`. A name begins
+// after neither a word character nor a hyphen, so `data-onward=` and `data-style=` are data attributes, not these.
+const handler = /(?<![\w-])on[a-z]+\s*=/i;
+const styleAttribute = /(?<![\w-])style\s*=/i;
 const tag = /<\/?[a-z!][^<>]*>?/i;
 const sinks = new Set(['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'dangerouslySetInnerHTML', 'write', 'writeln']);
 

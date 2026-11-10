@@ -1,15 +1,17 @@
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
+import type { DesktopCommand } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
+import { registry } from '../platform/slots';
 import { browserPlugins } from '../plugins';
-import { route } from '../router';
+import { parseRoute, route } from '../router';
 import * as attention from '../screens/attention/store';
 import * as campaignStore from '../screens/campaigns/store';
 import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
-import { Console } from './console';
-import { chats, lines } from './state';
+import { commandTarget, Console } from './console';
+import { chats, lines, setupBusy } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -342,6 +344,87 @@ describe('the console', () => {
             ['ntfy', { target: 'alerts', server: 'https://ntfy.example.test' }],
             ['ntfy', { target: 'alerts' }],
             ['ntfy', { server: '' }],
+        ]);
+    });
+
+    it('sends each screen command to the address its registered screen gives', async () => {
+        renderConsole(pending(new FakeApi()));
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        const screens: [DesktopCommand, string][] = [
+            ['navigate.performance', 'performance'],
+            ['navigate.workitems', 'workitems'],
+            ['navigate.people', 'people'],
+            ['navigate.system', 'system'],
+            ['navigate.settings', 'settings'],
+        ];
+        for (const [command, id] of screens) {
+            const entry = registry.list('screen').find((each) => each.id === id)!;
+            expect(commandTarget(command)).toEqual(parseRoute(entry.href()));
+        }
+        expect(commandTarget('navigate.attention')).toBe('needs');
+        expect(commandTarget('navigate.connect')).toBe('connect');
+    });
+
+    it('opens Performance from the desktop command, drawn from the runtime', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-16T09:00:00Z'));
+        try {
+            const fake = pending(new FakeApi())
+                .answer('campaign.activity', 'campaign.activity/all-7-days')
+                .answer(
+                    'campaign.activity_by_period',
+                    'campaign.activity_by_period/contacted-7-days',
+                    'campaign.activity_by_period/replied-7-days',
+                );
+            const { desktop } = renderConsole(fake);
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            flush(() => desktop.command('navigate.performance'));
+            await waitFor(() => expect(route.value.screen).toBe('performance'));
+            await waitFor(() => expect(fake.sent('campaign.activity_by_period')).toBeTruthy());
+            await waitFor(() => expect(document.querySelector('.harness .content')!.textContent).toContain('People'));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('keeps what is typed into a plugin card through a repaint and a refusal, and forgets it once accepted', async () => {
+        const { desktop } = renderConsole(pending(new FakeApi()));
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        show('Connect');
+        await waitFor(() => within(panel('Connect')).getByLabelText('Chat id'));
+        const input = (label: string) => within(panel('Connect')).getByLabelText<HTMLInputElement>(label);
+        fireEvent.input(input('Chat id'), { target: { value: '-1001' } });
+        fireEvent.input(input('Bot token'), { target: { value: '123:abc' } });
+
+        flush(() => {
+            setupBusy.value = 'Installing codex…';
+        });
+        flush(() => {
+            setupBusy.value = null;
+        });
+        flush(() => desktop.changed());
+        await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(2));
+        expect(input('Chat id').value).toBe('-1001');
+        expect(input('Bot token').value).toBe('123:abc');
+
+        desktop.refuse.set('setup.configurePlugin', 'The chat id is not one Telegram takes.');
+        const telegram = () => panel('Connect').querySelector<HTMLElement>('.plugin[data-id="telegram"]')!;
+        fireEvent.click(within(telegram()).getByRole('button', { name: 'Configure' }));
+        await waitFor(() => expect(panel('Connect').textContent).toContain('The chat id is not one Telegram takes.'));
+        expect(input('Chat id').value).toBe('-1001');
+        expect(input('Bot token').value).toBe('123:abc');
+
+        desktop.refuse.delete('setup.configurePlugin');
+        await waitFor(() => expect(telegram().querySelector('button[disabled]')).toBeNull());
+        fireEvent.click(within(telegram()).getByRole('button', { name: 'Configure' }));
+        await waitFor(() =>
+            expect(desktop.calls.filter((each) => each.name === 'setup.configurePlugin')).toHaveLength(2),
+        );
+        await waitFor(() => expect(input('Chat id').value).toBe(''));
+        expect(input('Bot token').value).toBe('');
+        expect(desktop.calls.filter((each) => each.name === 'setup.configurePlugin').map((each) => each.args)).toEqual([
+            ['telegram', { token: '123:abc', target: '-1001' }],
+            ['telegram', { token: '123:abc', target: '-1001' }],
         ]);
     });
 });

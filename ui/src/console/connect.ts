@@ -32,10 +32,12 @@ async function doing(what: string, run: () => Promise<void>): Promise<void> {
     await reload();
 }
 
-function take(key: string): string {
-    const value = typed.get(key) ?? '';
-    typed.delete(key);
-    return value.trim();
+/** What is typed under `key`, trimmed. It stays typed until the desktop accepts the act, so a refusal is corrected. */
+const typedOf = (key: string): string => (typed.get(key) ?? '').trim();
+
+/** Forgets what was typed under `keys`, once the desktop has accepted what it was typed for. */
+function forget(...keys: string[]): void {
+    for (const key of keys) typed.delete(key);
 }
 
 define('connect.type', (args, element) => {
@@ -50,27 +52,37 @@ define('connect.install', ([program]) => {
 define('connect.reply', () => void doing('Signing in to Reply…', () => here().desktop.setup.connectReply()));
 
 define('connect.replyKey', () => {
-    const key = take('reply');
-    if (key) void doing('Connecting Reply with the key…', () => here().desktop.setup.connectReplyWithKey(key));
+    const key = typedOf('reply');
+    if (key)
+        void doing('Connecting Reply with the key…', async () => {
+            await here().desktop.setup.connectReplyWithKey(key);
+            forget('reply');
+        });
 });
 
 define('connect.providerKey', ([provider, remove]) => {
     if (typeof provider !== 'string') return;
-    const key = remove === true ? '' : take(`provider:${provider}`);
+    const key = remove === true ? '' : typedOf(`provider:${provider}`);
     if (key || remove === true)
-        void doing('Keeping the key…', () => here().desktop.setup.setProviderKey(provider, key));
+        void doing('Keeping the key…', async () => {
+            await here().desktop.setup.setProviderKey(provider, key);
+            forget(`provider:${provider}`);
+        });
 });
 
 define('connect.plugin', ([id]) => {
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     if (!plugin) return;
-    const token = take(`plugin:${plugin.id}:token`);
-    const target = take(`plugin:${plugin.id}:target`);
-    const server = plugin.serverLabel ? take(`plugin:${plugin.id}:server`) : '';
+    const keys = ['token', 'target', 'server'].map((name) => `plugin:${plugin.id}:${name}`);
+    const [token, target, typedServer] = keys.map(typedOf);
+    const server = plugin.serverLabel ? typedServer : '';
     // A blank field is left out, which keeps what the file holds; removing a server is a button of its own.
     const values = { ...(token ? { token } : {}), ...(target ? { target } : {}), ...(server ? { server } : {}) };
     if (Object.keys(values).length === 0) return;
-    void doing(`Configuring ${plugin.label}…`, () => here().desktop.setup.configurePlugin(plugin.id, values));
+    void doing(`Configuring ${plugin.label}…`, async () => {
+        await here().desktop.setup.configurePlugin(plugin.id, values);
+        forget(...keys);
+    });
 });
 
 define('connect.pluginServerClear', ([id]) => {
@@ -95,6 +107,7 @@ const field = (key: string, label: string, kind: 'text' | 'password'): Html =>
         autocomplete="off"
         aria-label="${label}"
         placeholder="${label}"
+        value="${typed.get(key) ?? ''}"
         data-input="connect.type"
         ${argsOf(key)}
     />`;

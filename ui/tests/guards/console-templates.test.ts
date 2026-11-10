@@ -27,6 +27,12 @@ describe('the guard over it', () => {
         expect(problems('a.ts', 'const a = html`<div style="color:red">${name}</div>`;')).toEqual([
             'a.ts:1 a style attribute in markup',
         ]);
+        expect(problems('a.ts', 'const a = html`<button onclick=${go}>Go</button>`;')).toEqual([
+            'a.ts:1 an inline handler in markup',
+        ]);
+        expect(problems('a.ts', 'const a = html`<div style=${look}>${name}</div>`;')).toEqual([
+            'a.ts:1 a style attribute in markup',
+        ]);
         expect(problems('a.ts', 'const a = `<b>${name}</b>`;')).toEqual([
             'a.ts:1 markup outside the html tag, where nothing escapes what it interpolates',
         ]);
@@ -54,5 +60,8 @@ describe('the guard over it', () => {
             [],
         );
         expect(problems('a.ts', "const words = 'a < b and c > d';")).toEqual([]);
+        expect(problems('a.ts', 'const a = html`<i data-onward="1" data-style="2" data-action="x">${n}</i>`;')).toEqual(
+            [],
+        );
     });
 });

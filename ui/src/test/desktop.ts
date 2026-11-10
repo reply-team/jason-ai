@@ -1,5 +1,5 @@
 import type { JournalEntry } from '../api/types';
-import type { DesktopChatEvent, DesktopSetup, JasonDesktop } from '../platform/desktop';
+import type { DesktopChatEvent, DesktopCommand, DesktopSetup, JasonDesktop } from '../platform/desktop';
 import { JournalStream, type StreamSocket } from '../platform/journal-stream';
 
 // A stand-in for Jason Desktop's seam, and for the journal stream, as the console's screen tests want them: every call
@@ -99,6 +99,8 @@ export const setupFound: DesktopSetup = {
 export interface StubDesktop extends JasonDesktop {
     calls: { name: string; args: unknown[] }[];
     emit(chatId: string, event: DesktopChatEvent): void;
+    /** Sends a command from the desktop's menu or shortcuts, as the main process does. */
+    command(name: DesktopCommand): void;
     changed(): void;
     status: DesktopSetup;
     /** Calls whose promise the test settles: by name, the reason they reject with. */
@@ -108,6 +110,7 @@ export interface StubDesktop extends JasonDesktop {
 export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
     const chatHandlers = new Set<(chatId: string, event: DesktopChatEvent) => void>();
     const changeHandlers = new Set<() => void>();
+    const commandHandlers = new Set<(command: DesktopCommand) => void>();
     const calls: { name: string; args: unknown[] }[] = [];
     const refuse = new Map<string, string>();
     const call =
@@ -122,7 +125,10 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         calls,
         refuse,
         status,
-        onCommand: () => () => undefined,
+        onCommand(handler) {
+            commandHandlers.add(handler);
+            return () => commandHandlers.delete(handler);
+        },
         chat: {
             send: call('chat.send'),
             stop: call('chat.stop'),
@@ -149,6 +155,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         },
         emit: (chatId, event) => chatHandlers.forEach((handler) => handler(chatId, event)),
         changed: () => changeHandlers.forEach((handler) => handler()),
+        command: (name) => commandHandlers.forEach((handler) => handler(name)),
     };
     return stub;
 }
