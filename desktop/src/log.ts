@@ -36,6 +36,25 @@ export const templates = {
     reply_connected: 'Reply sign-in by {Method} exited {Exit}',
     reply_wired: 'Jason’s Reply plugin was placed and granted reply; global default written {RouteWritten}; jason plugin reload exited {Exit}',
     program_installed: 'npm install of {Program} exited {Exit}',
+    // The desk: the tray, its notifications.
+    tray_state: 'The tray shows the state {State}',
+    attention_notified: 'A notification said that {Approvals} approvals and {Questions} questions wait on the person',
+    // The restart re-pair.
+    runtime_gone: 'The run file names no runtime; the window waits for one',
+    window_repaired: 'The runtime moved from {From} to {Origin}; the window was paired again and reloaded',
+    repair_failed: 'Pairing the window again at {Origin} failed: jason ui open exited {Exit}',
+    // The login items.
+    login_item_set: 'Open Jason at login was set to {On} on {Platform}',
+    autostart_set: 'Start the runtime at logon was set to {On}: jason runtime autostart exited {Exit}',
+    // The PATH command.
+    path_command_set: 'The {Name} command on the PATH was set to {On} on {Platform}',
+    // The updater.
+    update_checked: 'The releases were read; a newer one to offer: {Available}',
+    update_offered: 'Jason {Version} is offered',
+    update_downloaded: 'Jason {Version} was downloaded',
+    update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
+    update_failed: 'The updater step {Step} failed, {Failures} times running',
+    update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

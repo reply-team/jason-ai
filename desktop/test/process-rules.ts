@@ -1,7 +1,10 @@
 // The rules the process guard holds the desktop's sources to, as one function over a file's path and text, so a test
 // can show each rule refusing a planted line as well as passing the tree.
 
-/** The modules allowed to start a process, each with the one thing it starts. */
+/**
+ * The modules allowed to start a process, each with the one thing it starts. One start is not here: `quitAndInstall`
+ * starts the installer from inside `node_modules` (electron-updater's own spawn), the one start the guard cannot see.
+ */
 export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
     'src/programs.ts': 'the programs a Connect card runs: reply, npm, and the version of an agent host or of node',

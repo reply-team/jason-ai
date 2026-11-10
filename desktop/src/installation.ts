@@ -13,7 +13,7 @@ import type { DesktopSettings } from './settings.ts';
 import { runtimeVersionIn, statusFacts } from './setup-model.ts';
 
 /** The verbs the desktop runs, by the words that name them; the log names a verb by these and nothing else. */
-const verbs = ['status', 'runtime start', 'runtime status', 'ui install', 'ui open', 'skills install', 'plugin install', 'plugin reload', 'plugin list', 'route list', '--version'] as const;
+const verbs = ['status', 'runtime start', 'runtime status', 'runtime autostart', 'ui install', 'ui open', 'skills install', 'plugin install', 'plugin reload', 'plugin list', 'route list', '--version'] as const;
 
 export function verbOf(args: readonly string[]): string {
     const two = args.slice(0, 2).join(' ');

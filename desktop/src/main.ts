@@ -6,10 +6,17 @@
  */
 
 import { app, BrowserWindow, ipcMain, safeStorage, shell, type WebContents } from 'electron';
-import { readFileSync } from 'node:fs';
+import { autoUpdater } from 'electron-updater';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliAt } from './cli.ts';
+import { Desk } from './desk.ts';
+import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart } from './login-item.ts';
+import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
+import { atFirstPairing, Repairer } from './repair.ts';
+import { applicationFolder, keptLine, keptNotice, readRollback, settleStart } from './rollback.ts';
+import { Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
@@ -112,11 +119,15 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
     setup.onChanged(() => window()?.webContents.send(eventChannels['setup.changed']));
 }
 
+/** Brings the window forward; the desk's own once it is open. */
+let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
+
 async function run(): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
-    process.env.PATH = await loginPath(pathOf(process.env), home);
+    const pathRead = loginPath(pathOf(process.env), home);
+    process.env.PATH = await pathRead;
     const env = withPath(process.env, process.env.PATH);
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
@@ -131,6 +142,8 @@ async function run(): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: 'Jason',
+        // A start the computer made at sign-in stays in the tray until the person opens the window.
+        show: !openedAtLogin(process.argv),
         backgroundColor: '#f7f7f5',
         webPreferences: {
             preload: join(__dirname, 'preload.js'),
@@ -146,13 +159,67 @@ async function run(): Promise<void> {
         current = null;
     });
     window.setMenuBarVisibility(false);
+    // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it.
+    let quitting = false;
+    app.on('before-quit', () => {
+        quitting = true;
+    });
+    window.on('close', (event) => {
+        if (quitting) return;
+        event.preventDefault();
+        window.hide();
+    });
 
     // The origin is read from the run file on every check, because the runtime may come back on another port.
     const origin = () => runtimeOrigin(readText(paths.runFile) ?? '');
     lockNavigation(window.webContents, origin, log);
 
     let settings: DesktopSettings = readSettings(paths.settings);
-    const cli = loggedCli(cliAt(join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason'), env), log);
+    const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
+    const jason = cliAt(executable, env);
+    const cli = loggedCli(jason, log);
+    // The count and the re-pair loop begin at the first pairing that succeeds: the start's, or a Reload's after a start
+    // that failed.
+    const begin = atFirstPairing(() => {
+        desk.watch();
+        repairer.start();
+    });
+    const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)), paired: begin });
+    const login = new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead, log });
+    const autostart = version === null ? null : new RuntimeAutostart({ cli, log });
+    // The updater runs only in an installed build: a development build has no installer to hand an update to.
+    const rollback = join(paths.desktop, 'rollback');
+    const updates = app.isPackaged
+        ? new Updater({
+              updater: autoUpdater,
+              version: app.getVersion(),
+              application: applicationFolder(process.platform, process.execPath),
+              rollback,
+              log,
+              async beforeInstall() {
+                  quitting = true;
+                  repairer.stop();
+                  desk.close();
+              },
+              changed: () => desk.renderMenu(),
+          })
+        : null;
+    const command = new PathCommand({
+        platform: process.platform,
+        folder: commandFolder(process.platform, process.env, home),
+        executable,
+        dataDirectory: process.env['JASON_DATA_DIR'] || null,
+        path: () => process.env.PATH ?? '',
+        pathext: process.env['PATHEXT'],
+        isProgram: (file) => isProgramFile(file, process.platform),
+        log,
+    });
+    const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command });
+    desk.open();
+    showWindow = () => desk.show();
+    void desk.readAutostart();
+    updates?.start();
     let runtimeVersion: string | null = null;
     registerSetup(
         new Setup({
@@ -172,6 +239,7 @@ async function run(): Promise<void> {
 
     await showStarting(window, 'Starting Jason…', false);
     if (version === null) {
+        desk.notStarted();
         await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
         return;
     }
@@ -192,11 +260,18 @@ async function run(): Promise<void> {
         runtimeVersion = started.runtimeVersion;
         await window.loadURL(started.link);
         log.info('window_loaded', { Origin: started.origin });
+        settleStart(rollback, app.getVersion(), true, log);
+        repairer.pairedWith(readText(paths.runFile));
+        begin();
     } catch (error) {
+        desk.notStarted();
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
         log.error('window_load_failed', { Step: step, Exit: exit });
-        if (current !== null) await showStarting(current, error instanceof Error ? error.message : String(error), true);
+        const kept = settleStart(rollback, app.getVersion(), false, log);
+        const said = error instanceof Error ? error.message : String(error);
+        const notice = kept === null ? said : keptNotice(said, kept, applicationFolder(process.platform, process.execPath), process.platform);
+        if (current !== null) await showStarting(current, notice, true);
     }
 }
 
@@ -211,13 +286,11 @@ app.setAppLogsPath(early.electronLogs);
 if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {
-    app.on('second-instance', () => {
-        const [window] = BrowserWindow.getAllWindows();
-        if (window) {
-            if (window.isMinimized()) window.restore();
-            window.focus();
-        }
+    // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray.
+    app.on('second-instance', (_event, argv) => {
+        if (showsOnSecondStart(argv)) showWindow();
     });
+    app.on('activate', () => showWindow());
     app.on('window-all-closed', () => app.quit());
     void app.whenReady().then(run);
 }

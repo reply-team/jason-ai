@@ -15,11 +15,15 @@
     "check": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test \"test/*.test.ts\"",
     "prepare:bundle": "node scripts/prepare.mjs",
+    "notices": "node scripts/notices.mjs",
     "dev": "npm run build && electron ."
   },
   "devDependencies": {
     "@types/node": "24.10.1",
-    "electron": "44.7.0",
+    "electron": "44.10.2",
     "typescript": "6.0.3"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
   }
 }

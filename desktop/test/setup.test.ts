@@ -5,6 +5,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
+import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
+import { PathCommand } from '../src/path-command.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import { Setup, writeAtomically } from '../src/setup.ts';
@@ -338,6 +340,55 @@ test('each act of the Connect cards writes under <data> what it names and nothin
 
     assert.deepEqual(outside(), outsideBefore, 'nothing is written beside <data>');
     assert.equal(replyLeftovers(), leftoversBefore, 'the folder the Reply skills are written to is removed');
+});
+
+test('each act of the desk’s menu writes what it names and nothing else: under the home only the LaunchAgent and the PATH command, under <data> nothing', async (t) => {
+    const b = bench(t);
+    const home = join(b.root, 'home');
+    mkdirSync(home);
+    const log = fileLogger(b.paths.logs);
+    const isLog = (path: string) => /^logs\/desktop-\d{8}(?:_\d{3,9})?\.jsonl$/.test(path);
+    const outside = () => readdirSync(b.root).filter((name) => name !== 'record.jsonl' && name !== 'home').sort();
+    const outsideBefore = outside();
+    const act = async (name: string, run: () => Promise<unknown>, inHome: readonly string[]) => {
+        const data = snapshot(b.paths.data);
+        const before = snapshot(home);
+        await run();
+        assert.deepEqual(written(data, snapshot(b.paths.data)).filter((path) => !isLog(path)), [], `${name} wrote under <data>`);
+        const after = snapshot(home);
+        const changed = [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).sort();
+        assert.deepEqual(changed, inHome, `${name} changed in the home`);
+    };
+
+    const registered: unknown[] = [];
+    const electron = { getLoginItemSettings: () => ({ openAtLogin: false }), setLoginItemSettings: (settings: unknown) => void registered.push(settings) };
+    const login = (platform: NodeJS.Platform) => new LoginItem({ platform, home, executable: '/Applications/Jason.app/Contents/MacOS/Jason', electron, pathRead: Promise.resolve(), log });
+    const autostart = new RuntimeAutostart({ cli: loggedCli(b.cli, log), log });
+    const agent = 'Library/LaunchAgents/ai.jasonharness.desktop.plist';
+
+    await act('Open Jason at login, on, macOS', () => login('darwin').set(true), [agent]);
+    await act('Open Jason at login, off, macOS', () => login('darwin').set(false), [agent]);
+    await act('Open Jason at login, on, Windows', () => login('win32').set(true), []);
+    await act('Open Jason at login, off, Windows', () => login('win32').set(false), []);
+    await act('Start the runtime at logon, read', () => autostart.registered(), []);
+    await act('Start the runtime at logon, on', () => autostart.set(true), []);
+    await act('Start the runtime at logon, off', () => autostart.set(false), []);
+
+    // The PATH command's folders, injected under the test's home: %LOCALAPPDATA%\Microsoft\WindowsApps (the shim and its
+    // Git Bash wrapper) and ~/.local/bin.
+    const windowsApps = join(home, 'AppData', 'Local', 'Microsoft', 'WindowsApps');
+    mkdirSync(windowsApps, { recursive: true });
+    const command = (platform: NodeJS.Platform, folder: string) =>
+        new PathCommand({ platform, folder, executable: platform === 'win32' ? 'C:\\J\\jason.exe' : '/J/jason', dataDirectory: null, path: () => folder, isProgram: () => false, log });
+    await act('The PATH command, read, Windows', async () => command('win32', windowsApps).status(), []);
+    await act('The PATH command, placed, Windows', async () => command('win32', windowsApps).place(), ['AppData/Local/Microsoft/WindowsApps/jason', 'AppData/Local/Microsoft/WindowsApps/jason.cmd']);
+    await act('The PATH command, removed, Windows', async () => command('win32', windowsApps).remove(), ['AppData/Local/Microsoft/WindowsApps/jason', 'AppData/Local/Microsoft/WindowsApps/jason.cmd']);
+    await act('The PATH command, placed, macOS', async () => command('darwin', join(home, '.local', 'bin')).place(), ['.local/bin/jason']);
+    await act('The PATH command, removed, macOS', async () => command('darwin', join(home, '.local', 'bin')).remove(), ['.local/bin/jason']);
+
+    assert.deepEqual(registered, [{ openAtLogin: true, args: [loginFlag] }, { openAtLogin: false, args: [loginFlag] }]);
+    assert.deepEqual(b.record().map((run) => run.args), [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'disable']]);
+    assert.deepEqual(outside(), outsideBefore, 'nothing is written beside <data> and the home');
 });
 
 test('the settings file is written whole or not at all, and a write that cannot be renamed into place leaves no file beside it', (t) => {
