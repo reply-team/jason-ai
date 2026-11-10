@@ -141,7 +141,9 @@ runs:
       run: |
         # The names carry no version, which is what makes the latest-download URL resolve for every release
         # there will ever be. The same table is ReleaseAssets.cs, and a test reads it from there to hold this
-        # file to it; a platform that is not in the table is refused rather than given a made-up name.
+        # file to it; a platform that is not in the table is refused rather than given a made-up name. osx-x64 is
+        # this action's alone, and ReleaseAssets.cs refuses it: its call builds the executable the Intel Mac's
+        # desktop package carries, and its archive is never published.
         $asset = switch ($env:RID) {
           'win-x64'   { 'jason-win-x64.zip' }
           'linux-x64' { 'jason-linux-x64.tar.gz' }

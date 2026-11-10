@@ -65,8 +65,8 @@ on Intel. Each carries this release's executable, signed as the archive's is, wi
 beside it, and talks to it as the CLI does. On Windows, run
 `jason-desktop-windows-x64-setup.exe`; the installer, its uninstaller, `Jason.exe` and the `jason.exe` it carries are
 each signed with Reply's certificate and timestamped. On macOS, open the dmg for your Mac and drag Jason into
-Applications; the application, the `jason` it carries and the dmg are signed with Reply's Developer ID, notarized and
-stapled. The Intel application's `jason` is built and signed as the Apple silicon one is, and started once under
+Applications; the application, the `jason` it carries and the dmg are signed with Reply's Developer ID and notarized,
+and the application and the dmg are stapled. The Intel application's `jason` is built and signed as the Apple silicon one is, and started once under
 Rosetta where the release's runner has it; the test suite does not run on an Intel Mac.
 
 The desktop updates itself from the latest release's `latest.yml` or `latest-mac.yml`, on your word, and to stable
@@ -170,8 +170,8 @@ SmartScreen looks at the executable unpacked from it the first time it runs. Sma
 publisher builds over downloads, so in the first weeks of signed releases a download may still show its dialog;
 `install.ps1` clears that mark from what it unpacks.
 
-The Linux executable is not signed, and nothing else a release carries is either, but the desktop's packages, as
-"Desktop" above says.
+The Linux executable is not signed, and nothing else a release carries is either, apart from the desktop's installer
+and Mac packages, as "Desktop" above says.
 
 Both scripts check the archive against `checksums.txt` before unpacking. On Linux that check is the only provenance
 there is; on macOS and Windows the signature says who built the executable as well.

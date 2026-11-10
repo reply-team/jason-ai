@@ -3143,7 +3143,10 @@ public partial class ReleaseWorkflowTests
         }
         Assert.Contains("The Windows executable is signed with Reply's certificate through Azure Artifact Signing, and timestamped under RFC 3161, so the signature stays valid after the certificate expires.", notes, StringComparison.Ordinal);
         Assert.Contains("SmartScreen's reputation for a new publisher builds over downloads, so in the first weeks of signed releases a download may still show its dialog", notes, StringComparison.Ordinal);
-        Assert.Contains("The Linux executable is not signed, and nothing else a release carries is either, but the desktop's packages, as \"Desktop\" above says.", notes, StringComparison.Ordinal);
+        Assert.Contains("The Linux executable is not signed, and nothing else a release carries is either, apart from the desktop's installer and Mac packages, as \"Desktop\" above says.", notes, StringComparison.Ordinal);
+        // The desktop's carried jason is signed and notarized like the archive's, and, a bare executable, never stapled.
+        Assert.Contains("the application, the `jason` it carries and the dmg are signed with Reply's Developer ID and notarized, and the application and the dmg are stapled.", notes, StringComparison.Ordinal);
+        Assert.DoesNotContain("Developer ID, notarized and stapled", notes, StringComparison.Ordinal);
         Assert.Contains("On Linux that check is the only provenance there is; on macOS and Windows the signature says who built the executable as well.", notes, StringComparison.Ordinal);
         foreach (var checkable in (string[])["`codesign -dv --verbose=2`", "`Authority=Developer ID Application:`", "`TeamIdentifier=`", "`Get-AuthenticodeSignature`", "`Valid`", "`CN=ReplyApp Inc.`", "`signtool verify /pa /v`"])
         {
