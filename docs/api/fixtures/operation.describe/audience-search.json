@@ -33,9 +33,6 @@
           "maximum": 1000,
           "description": "At most this many people to find and take: an upper bound, never a promise. The search stops at it, or sooner where the source runs out."
         },
-        "exclude": {
-          "$ref": "#/$defs/exclude"
-        },
         "people_per_company": {
           "type": "integer",
           "minimum": 1,
@@ -77,46 +74,6 @@
         "definition": {
           "type": "object",
           "description": "The audience in the provider's own words: the filters its search takes, in the shape the routed plugin declares under `audience_definition` in its manifest. This document holds it to being an object; the plugin's declared schema is applied at the claim, never when the work item is written. The runtime composes it at the root from `args.definition`, or from the audience `args.audience` names, and a plugin reads it there and nowhere else."
-        },
-        "exclude": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "People already known, who are not to come back: by the provider's own identifier, by email address or by LinkedIn profile. Each list may be left out.",
-          "properties": {
-            "provider_ids": {
-              "type": "array",
-              "maxItems": 500,
-              "uniqueItems": true,
-              "items": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 500
-              },
-              "description": "The provider's identifiers for people it found before."
-            },
-            "emails": {
-              "type": "array",
-              "maxItems": 500,
-              "uniqueItems": true,
-              "items": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 500
-              },
-              "description": "Email addresses of people already known."
-            },
-            "linkedin_urls": {
-              "type": "array",
-              "maxItems": 500,
-              "uniqueItems": true,
-              "items": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 500
-              },
-              "description": "LinkedIn profile links of people already known."
-            }
-          }
         },
         "campaign": {
           "type": "object",

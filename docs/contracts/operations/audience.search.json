@@ -28,14 +28,14 @@
   "precondition": "none",
   "preview": {
     "summary": "Search the provider for up to {/args/count} people matching the definition below, for Jason's campaign {/campaign/name}: a metered search, charged per person found.",
-    "highlights": ["/args/count", "/definition", "/args/audience", "/args/people_per_company", "/args/include_without_email", "/args/find_phones", "/args/exclude"]
+    "highlights": ["/args/count", "/definition", "/args/audience", "/args/people_per_company", "/args/include_without_email", "/args/find_phones"]
   },
 
   "input_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "urn:jason:operation:audience.search:1:input",
     "title": "audience.search input",
-    "description": "One search of the provider's database for people matching a definition — a new audience, or more of an audience this campaign already searched under — bounded by a count, with the people already known left out.",
+    "description": "One search of the provider's database for people matching a definition — a new audience, or more of an audience this campaign already searched under — bounded by a count.",
     "type": "object",
     "additionalProperties": false,
     "required": ["args", "definition", "campaign", "idempotency_key"],
@@ -58,7 +58,6 @@
             "maximum": 1000,
             "description": "At most this many people to find and take: an upper bound, never a promise. The search stops at it, or sooner where the source runs out."
           },
-          "exclude": { "$ref": "#/$defs/exclude" },
           "people_per_company": {
             "type": "integer",
             "minimum": 1,
@@ -91,34 +90,6 @@
       "definition": {
         "type": "object",
         "description": "The audience in the provider's own words: the filters its search takes, in the shape the routed plugin declares under `audience_definition` in its manifest. This document holds it to being an object; the plugin's declared schema is applied at the claim, never when the work item is written. The runtime composes it at the root from `args.definition`, or from the audience `args.audience` names, and a plugin reads it there and nowhere else."
-      },
-      "exclude": {
-        "type": "object",
-        "additionalProperties": false,
-        "description": "People already known, who are not to come back: by the provider's own identifier, by email address or by LinkedIn profile. Each list may be left out.",
-        "properties": {
-          "provider_ids": {
-            "type": "array",
-            "maxItems": 500,
-            "uniqueItems": true,
-            "items": { "type": "string", "minLength": 1, "maxLength": 500 },
-            "description": "The provider's identifiers for people it found before."
-          },
-          "emails": {
-            "type": "array",
-            "maxItems": 500,
-            "uniqueItems": true,
-            "items": { "type": "string", "minLength": 1, "maxLength": 500 },
-            "description": "Email addresses of people already known."
-          },
-          "linkedin_urls": {
-            "type": "array",
-            "maxItems": 500,
-            "uniqueItems": true,
-            "items": { "type": "string", "minLength": 1, "maxLength": 500 },
-            "description": "LinkedIn profile links of people already known."
-          }
-        }
       },
       "campaign": {
         "type": "object",
@@ -275,7 +246,6 @@
     "An attempt starts at most one search, under the work item's key where the provider keeps one for a search.",
     "The result says `finished` only where the search ended inside the call and every person it found fits the result, under `people`; otherwise it says `accepted` with the provider's `reference` and `people` empty, and the people are read by `audience.search_status`. The `reference` is the one under `external_ids.search`: both on `accepted`, neither on `finished`.",
     "Where the provider finds people first and reveals them after, both happen inside the plugin: nobody picks among the candidates, and every person the search returns is revealed.",
-    "Nobody `args.exclude` names comes back: the provider leaves them out where it can, and the plugin drops them where it cannot.",
     "`count` bounds the search: it stops at that many people, or sooner where the source runs out. `people_per_company`, `include_without_email` and `find_phones` read as 1, false and false where they are absent.",
     "A repeat after `provider_answer_lost` reads the provider's searches started since `context.unsettled_since` first, and answers the one that is this request's as `accepted` with its reference; a new search is started only where none is.",
     "Each person comes back in the one shape every provider answers in, the provider's own record beside it under `raw` as JSON text. A person found is pinned to nothing by this operation."

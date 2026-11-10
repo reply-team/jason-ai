@@ -34,7 +34,7 @@ Thirty operations — the whole set this build publishes: eighteen that write an
 | `message.status` | Reads one direct send by the reference Reply gave it when it took it, which the runtime keeps for the send: whether Reply still holds it, it went or it failed, and whether a cancel can still stop it. Reply lists no pending sends, so one send is all it reads. |
 | `message.cancel` | Takes back one direct send Reply still holds for its moment, by that same reference. One cancelled before answers the same; one that went, that Reply is sending or that failed is refused, and nothing changes. |
 | `audience.preview` | Asks Reply's Live Data how many people and companies a definition matches, and shows up to ten of them with no way to reach them. Reply saves and charges nothing. |
-| `audience.search` | Starts a Live Data search for up to the count asked, on a contact list of its own that Reply puts the people it finds on, once a person approves it. Reply charges per person found. A person Reply already holds is skipped by Reply, never put on the list. **It reads no `exclude`:** Reply leaves out everyone the account holds — every person an earlier search found among them — and nobody else, so a person named there whom Reply does not hold can come back and is charged for; and a person Reply holds is never found. See [What it cannot do](#what-it-cannot-do). |
+| `audience.search` | Starts a Live Data search for up to the count asked, on a contact list of its own that Reply puts the people it finds on, once a person approves it. Reply charges per person found. **A person Reply already holds is never found:** Reply skips everyone the account holds — every person an earlier search found among them — and never puts them on the list. See [What it cannot do](#what-it-cannot-do). |
 | `audience.search_status` | Reads a search's status and a page of the people on its list from where the last read stopped, each with Reply's contact id. The read that returns the last person of a search that ended deletes the list. |
 | `audience.search_cancel` | Stops a search running or paused by deleting it at Reply, and deletes its list; the people it already added stay Reply's contacts. A search that ended answers how it ended. |
 | `audience.filter_values` | Reads the values Reply suggests for one of its five typeaheads — industries, departments, seniorities, locations, job titles — containing some text. |
@@ -1126,20 +1126,16 @@ answer is `available: true` and every other member null. The gates are the searc
 
 ## What it cannot do
 
-- **`audience.search` reads no `exclude`, and so does not do all its contract says of it.** The contract says nobody
-  `args.exclude` names comes back: the provider leaves them out where it can, and the plugin drops them where it cannot.
-  Reply's start takes no list of people to leave out, and the status read, which returns the people, is not handed the
-  search's `exclude`, so this package does neither. What Reply does is skip every person the account already holds, by
-  email, free: not added, not put on the search's list, not counted, not charged. Every person an earlier search found
-  became such a contact, so a search of the same audience again never brings them back. A person `exclude` names and
-  Reply does not hold — someone a campaign took from a file or from another provider — can be found, added to Reply as a
-  new contact and **charged for**, and comes back in the status read; the runtime recognises them when they land and
-  does not add them twice.
-- **A person Reply already holds is never found.** The same skip leaves out every contact of the team — the account's
-  own earlier work, a teammate's contacts, the people of another campaign's search — however well they match:
-  `audience.search` finds only people new to Reply. `audience.preview` counts and samples everyone matching, the people
-  Reply holds included, so a search may find fewer than the preview's count, and may never return a person its sample
-  showed. No operation of this package reads the account's existing contacts by a definition.
+- **A person Reply already holds is never found.** Reply skips every person the account already holds, by email, free:
+  not added, not put on the search's list, not counted, not charged. That leaves out every contact of the team — the
+  account's own earlier work, every person an earlier search found, a teammate's contacts, the people of another
+  campaign's search — however well they match: `audience.search` finds only people new to Reply, and a search of the
+  same audience again never brings back the people the first one found. Reply's start takes no list of people to leave
+  out, so a person the campaign has and Reply does not hold — someone it took from a file or from another provider — can
+  be found, added to Reply as a new contact and **charged for**, though the campaign already has them.
+  `audience.preview` counts and samples everyone matching, the people Reply holds included, so a search may find fewer
+  than the preview's count, and may never return a person its sample showed. No operation of this package reads the
+  account's existing contacts by a definition.
 - **No people without an email.** reply-cli's `live-data start` takes no flag for Reply's `addContactsWithoutEmails`, so
   a search asking for them is refused `capability_not_offered` before anything is made.
 - **The search in the way is not named by its id.** Reply's 409 says a search of the same filters is unfinished, not

@@ -88,8 +88,7 @@
       "/args/audience": 1,
       "/args/people_per_company": null,
       "/args/include_without_email": null,
-      "/args/find_phones": null,
-      "/args/exclude": null
+      "/args/find_phones": null
     }
   }
 }
