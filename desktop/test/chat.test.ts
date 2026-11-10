@@ -295,6 +295,14 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat'], 'a Codex turn writes no turn file');
 });
 
+test('a Codex turn that reported an error and then completed ends with no error', async (t) => {
+    const r = rig(t);
+    plan(r, [{ recover: 'Reconnecting... 1/5' }, { say: 'back' }, { recover: 'Reconnecting... 2/5' }]);
+    const said = await r.turn('c1', words, { host: 'codex' });
+    assert.deepEqual(doneOf(said), { kind: 'done', error: null });
+    assert.ok(texts(said).includes('back'));
+});
+
 test('a turn resumes only on the host that named the session', async (t) => {
     const r = rig(t);
     await r.turn('c1', words, { host: 'claude' });

@@ -7,6 +7,7 @@
 //   { "fail": { "stderr": "words", "code": 3 } }      write to stderr and exit with the code, with no result
 //   { "end": "no_result" }                            exit 0 with no result
 //   { "end": "error", "text": "words" }               end with a failed result
+//   { "recover": "words" }                            Codex only: report an error that its turn then completes past
 // With no plan the turn says one line and ends well.
 const { spawn } = require('node:child_process');
 const { writeFileSync } = require('node:fs');
@@ -76,6 +77,7 @@ function codex(args, stdin) {
     for (const step of plan()) {
         if (step.say !== undefined) print({ type: 'item.completed', item: { id: `item_say_${step.say.length}`, type: 'agent_message', text: step.say } });
         else if (step.wait !== undefined) return wait(step.wait);
+        else if (step.recover !== undefined) print({ type: 'error', message: step.recover });
         else if (step.end === 'error') {
             print({ type: 'error', message: 'Reconnecting... 1/5' });
             print({ type: 'turn.failed', error: { message: step.text } });
