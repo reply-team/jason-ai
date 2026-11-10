@@ -120,6 +120,44 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// Both checks read the built package back against the configuration it was built from, rather than trust the
+    /// configuration: <c>desktop/scripts/check-package.mjs</c> reads the app-update.yml electron-builder wrote into the
+    /// package (the feed it asks, and on Windows the publisher an update must be signed by, without which electron-updater
+    /// checks no signature) and the fuse wire of the binary Electron reads its fuses from. The Windows check reads the
+    /// application the installer carries; the Mac check reads each architecture's application and the one inside its zip,
+    /// which is what an update installs. Each call fails its step on a refusal. The script's own rows are
+    /// <c>desktop/test/check-package.test.ts</c>.
+    /// </summary>
+    [Fact]
+    public void Both_desktop_checks_read_the_feed_and_the_fuses_back_from_the_built_package()
+    {
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "desktop", "scripts", "check-package.mjs")), "desktop/scripts/check-package.mjs is not in the tree.");
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "desktop", "test", "check-package.test.ts")), "desktop/test/check-package.test.ts is not in the tree.");
+
+        var windows = Scalar(ActionStep(WindowsDesktopVerify), "run")!.Split('\n').Select(line => line.Trim()).ToList();
+        var call = windows.IndexOf("node desktop/scripts/check-package.mjs --app $app --platform win32");
+        Assert.True(call >= 0, "The Windows check never reads the feed and the fuses back from the application the installer carries.");
+        Assert.Equal("if ($LASTEXITCODE -ne 0) { throw \"The application the installer carries is not what it was configured to be: its feed or its fuses.\" }", windows[call + 1]);
+        Assert.True(call > windows.IndexOf("& $sevenZip x (Join-Path $opened '$PLUGINSDIR/app-64.7z') \"-o$app\" -y | Out-Null"), "The Windows check reads the application before the installer is opened.");
+
+        var mac = Scalar(ActionStep(MacDesktopVerify), "run")!.Split('\n').Select(line => line.Trim()).ToList();
+        var loop = mac.IndexOf("for arch in arm64 x64; do");
+        var end = mac.IndexOf("done");
+        Assert.True(loop >= 0 && end > loop, "The Mac check has no loop over both architectures.");
+        foreach (var (app, what) in new[] { ("\"$app\"", "application"), ("\"$unzipped/Jason.app\"", "application inside the zip") })
+        {
+            var line = $"node desktop/scripts/check-package.mjs --app {app} --platform darwin || {{ echo \"::error title=Desktop::The $arch {what} is not what it was configured to be: its feed or its fuses.\"; exit 1; }}";
+            var at = mac.IndexOf(line);
+            Assert.True(at > loop && at < end, $"The Mac check never reads the feed and the fuses back from each architecture's {what}.");
+        }
+
+        Assert.True(
+            mac.IndexOf("node desktop/scripts/check-package.mjs --app \"$unzipped/Jason.app\" --platform darwin || { echo \"::error title=Desktop::The $arch application inside the zip is not what it was configured to be: its feed or its fuses.\"; exit 1; }")
+                > mac.IndexOf("ditto -x -k \"$zip\" \"$unzipped\""),
+            "The Mac check reads the application inside the zip before the zip is opened.");
+    }
+
+    /// <summary>
     /// Beyond the four files held to the release's signer by name, the Windows check reads the application manifest out
     /// of the bundled jason.exe as the job read it out of the executable it archives, and holds every program and library
     /// the application carries to a signature signtool and Windows accept: the release's signer's, or, for a library that

@@ -132,5 +132,12 @@ file, and signs the package itself: a Mac package is never built unsigned. Insid
 folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package carries no UI: `jason ui install`
 places the UI of the runtime's own release.
 
+`scripts/check-package.mjs` reads a built package back against this configuration: the feed and, on Windows, the
+publisher its `app-update.yml` names, and the fuses its binary carries. The release runs it on every package it builds:
+
+```sh
+node scripts/check-package.mjs --app dist/win-unpacked --platform win32
+```
+
 To run it against an installation other than your own, set `JASON_DATA_DIR` and `JASON_Harness__Root` in the environment
 it is started from.

@@ -354,7 +354,8 @@ runs:
     # the sign hook leaves as it came, Microsoft's, verified as strictly. The libraries the installer loads from its own
     # archive, the nsis plugins electron-builder brings, are listed with their signers. The feed's digest and size of
     # each file it names are computed again from the files as they will be published, and the feed and Jason.exe name
-    # the release's version. 7-Zip, which the runner carries, opens the installer; nothing of it runs.
+    # the release's version. The application's app-update.yml and its fuses are read back against the configuration it
+    # was built from. 7-Zip, which the runner carries, opens the installer; nothing of it runs.
     - name: Verify the desktop's Windows installer and what it carries
       if: inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'
       shell: pwsh
@@ -406,6 +407,11 @@ runs:
         # The file version is the package's version as it is; the product version is Windows' four numbers.
         $said = (Get-Item -LiteralPath (Join-Path $app 'Jason.exe')).VersionInfo.FileVersion
         if ($said -ne $env:VERSION) { throw "Jason.exe says it is $said, and the release is $env:VERSION." }
+
+        # The package read back against the configuration it was built from: the feed app-update.yml asks and the
+        # publisher an update must be signed by, and the fuses as Jason.exe carries them.
+        node desktop/scripts/check-package.mjs --app $app --platform win32
+        if ($LASTEXITCODE -ne 0) { throw "The application the installer carries is not what it was configured to be: its feed or its fuses." }
 
         Write-Host (Get-Content -LiteralPath "$dist/latest.yml" -Raw)
         ./.github/scripts/Assert-UpdateFeed.ps1 -Feed "$dist/latest.yml" -Version $env:VERSION -Expect 'jason-desktop-windows-x64-setup.exe'
@@ -771,7 +777,9 @@ runs:
     # jason the executable that architecture's call signed, byte for byte, with its own entitlements and of that
     # architecture alone; the application inside the zip the same; the dmg notarized and stapled in turn, since a person
     # opens it before the application. The feed's digest and size of each file it names are computed again from the files
-    # as they will be published, and the feed and each application name the release's version.
+    # as they will be published, and the feed and each application name the release's version. Each application's
+    # app-update.yml and its fuses, and those of the application inside its zip, are read back against the configuration
+    # they were built from.
     - name: Verify the desktop's Mac packages and what they carry
       if: inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'
       shell: bash
@@ -808,6 +816,7 @@ runs:
           xcrun stapler validate "$app"
           shipped="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
           [ "$shipped" = "$VERSION" ] || { echo "::error title=Desktop::The $arch application says it is $shipped, and the release is $VERSION."; exit 1; }
+          node desktop/scripts/check-package.mjs --app "$app" --platform darwin || { echo "::error title=Desktop::The $arch application is not what it was configured to be: its feed or its fuses."; exit 1; }
 
           cmp "$nested" "$GITHUB_WORKSPACE/artifacts/publish/$rid/jason" || { echo "::error title=Desktop::The $arch application's jason is not the executable its call signed."; exit 1; }
           codesign --verify --strict --verbose=2 "$nested"
@@ -823,6 +832,7 @@ runs:
           codesign --verify --deep --strict --verbose=2 "$unzipped/Jason.app"
           xcrun stapler validate "$unzipped/Jason.app"
           cmp "$unzipped/Jason.app/Contents/Resources/bundle/jason" "$nested"
+          node desktop/scripts/check-package.mjs --app "$unzipped/Jason.app" --platform darwin || { echo "::error title=Desktop::The $arch application inside the zip is not what it was configured to be: its feed or its fuses."; exit 1; }
 
           codesign --verify --strict --verbose=2 "$dmg"
           xcrun notarytool submit "$dmg" --keychain-profile jason-notary --keychain "$KEYCHAIN" --wait --timeout 30m
