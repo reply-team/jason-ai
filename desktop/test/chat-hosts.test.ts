@@ -223,7 +223,7 @@ test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE
 test('a desktop started from inside a Claude Code session hands the host none of that session\'s markers, and keeps a person\'s configuration', () => {
     const env = hostEnvironment({ PATH: '/x', ...plantedMarkers, claudecode: '1', ...plantedConfiguration }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed: false, provider: {} });
     assert.deepEqual(markersIn(Object.keys(env)), []);
-    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', ...Object.keys(plantedConfiguration)].sort());
+    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', ...Object.keys(plantedConfiguration)].sort());
     for (const [name, value] of Object.entries(plantedConfiguration)) assert.equal(env[name], value, name);
     assert.ok(!JSON.stringify(env).includes('planted-messaging-token'));
 });
@@ -277,6 +277,14 @@ test('every Claude Code turn asks the host to scrub credentials from the command
     for (const keyed of [false, true]) {
         const env = hostEnvironment({ PATH: '/x', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0', claude_code_subprocess_env_scrub: '0' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
         assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'), [['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', '1']]);
+    }
+});
+
+test('every Claude Code turn asks the host to run each command in the chat folder, so a cd does not carry to the next one', () => {
+    const name = 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR';
+    for (const keyed of [false, true]) {
+        const env = hostEnvironment({ PATH: '/x', [name]: '0', [name.toLowerCase()]: '0' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
+        assert.deepEqual(Object.entries(env).filter(([each]) => each.toUpperCase() === name), [[name, '1']]);
     }
 });
 

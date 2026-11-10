@@ -193,12 +193,19 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
 const scrub = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB';
 
 /**
+ * Set on every Claude Code turn: the host returns to the folder the turn started in, the chat folder, after each Bash
+ * command, so a `cd` in one command does not move the next, and the permission model reads a relative word where the
+ * command really runs.
+ */
+const maintainFolder = 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR';
+
+/**
  * The host's environment: the desktop's own, with the bundled `jason`'s folder first on PATH, the data directory named
  * when the desktop runs with one, and a key provider's variables. Nothing of a plugin's configuration is passed on, and
  * `CLAUDE_AUTO_BACKGROUND_TASKS`, which would let the host move a waiting permission call to the background, is removed,
  * as are the markers of a Claude Code session the desktop itself was started from. A key provider's turn is started
  * without the provider and credentials the desktop inherited (`inheritedProvider`); a Claude Code turn always carries
- * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`.
+ * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` and `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1`.
  */
 export function hostEnvironment(
     base: Readonly<Record<string, string | undefined>>,
@@ -218,7 +225,7 @@ export function hostEnvironment(
     for (const [name, value] of Object.entries(base)) {
         if (value === undefined || withheld(name)) continue;
         const upper = name.toUpperCase();
-        if (replaced.has(upper) || upper === scrub) continue;
+        if (replaced.has(upper) || upper === scrub || upper === maintainFolder) continue;
         if (name.toUpperCase() === 'PATH') {
             path = value;
             continue;
@@ -230,7 +237,10 @@ export function hostEnvironment(
     env.PATH = path === '' ? options.bundle : `${options.bundle}${separator}${path}`;
     if (options.data !== null) env.JASON_DATA_DIR = options.data;
     for (const [name, value] of Object.entries(options.provider)) env[name] = value;
-    if (options.program === 'claude') env[scrub] = '1';
+    if (options.program === 'claude') {
+        env[scrub] = '1';
+        env[maintainFolder] = '1';
+    }
     return env;
 }
 
