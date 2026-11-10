@@ -187,6 +187,35 @@ export function runOrHeld(context, request) {
 }
 
 /**
+ * `run`, for a write that follows one of this package's own making: `undo` runs first wherever the command ended in a
+ * refusal that says it did nothing — a program that never started, a refusal before anything was sent (exit 2), or a
+ * failure the CLI explained (exit 1, the main effect not done) — and then the ending is `run`'s. A lost answer (exit 3, a
+ * timeout, an exit nobody explained) may have done the write, which may need what came before it, so nothing is undone.
+ */
+export function runOrUndo(context, request, undo) {
+  const answer = call(context, request);
+  const said = answer.timed_out === true ? null : verdict(answer.stderr);
+  const nothingDone = answer.timed_out !== true
+    && (answer.exit_code === NEVER_STARTED || answer.exit_code === REFUSED_THE_CALL || (answer.exit_code === FAILED && said !== null));
+  if (nothingDone) {
+    undo();
+  }
+
+  return ended(answer, request);
+}
+
+/**
+ * A clean-up whose ending decides nothing: its result object when it exits 0 with an answer read whole, and null for
+ * every other ending, a refusal for want of a credential included. It runs after the operation's answer is in hand, and
+ * nothing it could say would change that answer: the exec line records how it ended.
+ */
+export function tidy(context, request) {
+  const answer = call(context, request);
+  const cut = answer.truncated !== null && typeof answer.truncated === "object" && answer.truncated.stdout === true;
+  return answer.timed_out !== true && answer.exit_code === DONE && !cut ? resultOf(answer.stdout) : null;
+}
+
+/**
  * One read whose every ending other than an answer is taken as no answer at all: its result object when it exits 0
  * with an answer read whole, and null for every other ending — a refusal, a timeout, a program that never started, an
  * answer cut off or one that does not parse — but one. A refusal for want of a working credential (`auth.*`, exit 2)

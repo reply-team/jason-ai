@@ -245,8 +245,7 @@ public sealed partial class CanonicalReadsDocTests
     /// A page that counts the published operations counts them right: the number word is the catalog's own count, so
     /// the next operation added fails here until every page says so, and any other number in a count phrase fails
     /// whatever it is. The five pages that count say it at least once; the divergence file may not count at all. The Reply
-    /// package's own README counts the operations the package performs, which is the catalog less what it does not
-    /// perform yet.
+    /// package's own README counts the operations the package performs, which is the whole catalog.
     /// </summary>
     [Theory]
     [InlineData("README.md", false)]
@@ -258,9 +257,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("plugins/reply/README.md", true)]
     public void A_page_that_counts_the_published_operations_says_the_catalog_s_number(string page, bool counts)
     {
-        var expected = NumberWords[page.StartsWith("plugins/reply/", StringComparison.Ordinal)
-            ? Plugins.Reply.ReplyPlugins.PublishedItPerforms.Count
-            : OperationCatalog.All.Count];
+        var expected = NumberWords[OperationCatalog.All.Count];
         var said = CountPhrase().Matches(Flat(Source(page))).Select(match => match.Groups["n"].Value.ToLowerInvariant()).ToList();
 
         Assert.True(!counts || said.Count > 0, $"{page} no longer counts the published operations.");
@@ -280,7 +277,7 @@ public sealed partial class CanonicalReadsDocTests
         var index = Source("plugins/README.md");
         var row = index.Split('\n').Single(line => line.StartsWith("| [`reply/`]", StringComparison.Ordinal));
 
-        Assert.All(Plugins.Reply.ReplyPlugins.PublishedItPerforms, id => Assert.Contains($"`{id}`", row, StringComparison.Ordinal));
+        Assert.All(OperationCatalog.All, contract => Assert.Contains($"`{contract.Id}`", row, StringComparison.Ordinal));
     }
 
     /// <summary>

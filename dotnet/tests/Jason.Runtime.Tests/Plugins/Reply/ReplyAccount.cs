@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -82,6 +83,9 @@ public sealed class ReplyAccount : IDisposable
     public const string KeysFile = "keys.json";
     public const string DirectSendsFile = "direct-sends.json";
     public const string FeedFile = "feed.json";
+    public const string SearchesFile = "searches.json";
+    public const string PreviewFile = "preview.json";
+    public const string FilterValuesFile = "filter-values.json";
 
     /// <summary>The Reply user the stand-in's credential signs in as, unless a test plants another.</summary>
     public const int Caller = 501;
@@ -636,6 +640,148 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// A Live Data search the account holds, started <paramref name="startedAt"/> with <paramref name="filters"/>, filling the
+    /// list <paramref name="list"/>, which is planted first under its own name. <c>Finds</c> gives it people.
+    /// </summary>
+    public ReplyAccount WithSearch(int id, string status, int list, JsonObject? filters = null, string startedAt = "2026-11-10T08:00:00Z")
+    {
+        var named = Lists.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == list)
+            ?? throw new InvalidOperationException($"no list {list} has been planted for search {id} to fill.");
+        return Replace(SearchesFile, id, new JsonObject
+        {
+            ["id"] = id,
+            ["status"] = status,
+            ["startedAt"] = startedAt,
+            ["contactsFound"] = 0,
+            ["usedCredits"] = 0,
+            ["userId"] = Caller,
+            ["sequenceId"] = null,
+            ["sequenceName"] = null,
+            ["lists"] = new JsonArray(new JsonObject { ["id"] = list, ["name"] = named["name"]!.DeepClone() }),
+            ["filters"] = (filters ?? new JsonObject { ["jobTitles"] = new JsonArray(new JsonObject { ["value"] = "CTO", ["type"] = "include" }) }).DeepClone(),
+        });
+    }
+
+    /// <summary>
+    /// People a search found, as Reply adds a batch: each a contact Live Data created, added at the end of every list the
+    /// search fills, oldest first, and counted on the search. A person is Reply's own contact record (<see cref="Person"/>).
+    /// </summary>
+    public ReplyAccount Finds(int search, params JsonObject[] people)
+    {
+        ArgumentNullException.ThrowIfNull(people);
+        var searches = ReadArray(SearchesFile);
+        var found = searches.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == search)
+            ?? throw new InvalidOperationException($"no search {search} has been planted to find people for.");
+        var lists = ReadArray(ListsFile);
+        var contacts = ReadArray(ContactsFile);
+        foreach (var person in people)
+        {
+            var contact = (JsonObject)person.DeepClone();
+            contact["creationSource"] = "liveData";
+            contact["addingDate"] ??= string.Create(CultureInfo.InvariantCulture, $"2026-11-10T09:{contacts.Count % 60:00}:00.00Z");
+            contacts.Add(contact);
+            foreach (var target in found["lists"]!.AsArray())
+            {
+                var list = lists.OfType<JsonObject>().Single(existing => existing["id"]!.GetValue<int>() == target!["id"]!.GetValue<int>());
+                list["members"]!.AsArray().Add(contact["id"]!.GetValue<int>());
+            }
+        }
+
+        found["contactsFound"] = found["contactsFound"]!.GetValue<int>() + people.Length;
+        Write(ContactsFile, contacts);
+        Write(ListsFile, lists);
+        Write(SearchesFile, searches);
+        return this;
+    }
+
+    /// <summary>A planted search's status, as Reply moves it.</summary>
+    public ReplyAccount Moves(int search, string status)
+    {
+        var searches = ReadArray(SearchesFile);
+        var found = searches.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == search)
+            ?? throw new InvalidOperationException($"no search {search} has been planted to move.");
+        found["status"] = status;
+        Write(SearchesFile, searches);
+        return this;
+    }
+
+    /// <summary>One person as Reply's v3 contact model gives them, with the fields a Live Data search fills.</summary>
+    public static JsonObject Person(
+        int id,
+        string? firstName,
+        string? lastName,
+        string? email = null,
+        string? title = null,
+        string? company = null,
+        string? domain = null,
+        string? companySize = null,
+        string? industry = null,
+        string? city = null,
+        string? country = null,
+        string? phone = null,
+        string? linkedIn = null) => new()
+    {
+        ["id"] = id,
+        ["email"] = email,
+        ["firstName"] = firstName,
+        ["lastName"] = lastName,
+        ["title"] = title,
+        ["company"] = company,
+        ["domain"] = domain,
+        ["companySize"] = companySize,
+        ["industry"] = industry,
+        ["city"] = city,
+        ["state"] = null,
+        ["country"] = country,
+        ["phone"] = phone,
+        ["linkedInUrl"] = linkedIn,
+    };
+
+    /// <summary>
+    /// What a preview of any filters answers once Reply's background job is done: <c>preview.json</c>, Reply's counts and
+    /// its sample in the shape reply-cli prints them. A preview never planted is done with nothing counted.
+    /// </summary>
+    public ReplyAccount WithPreview(long? contacts, long? companies, params JsonObject[] sample)
+    {
+        Write(PreviewFile, new JsonObject
+        {
+            ["kind"] = "done",
+            ["contacts_count"] = contacts,
+            ["companies_count"] = companies,
+            ["sample_contacts"] = new JsonArray([.. sample.Select(person => (JsonNode)person.DeepClone())]),
+        });
+        return this;
+    }
+
+    /// <summary>A preview whose background job is still running when the wait runs out.</summary>
+    public ReplyAccount WithPendingPreview()
+    {
+        Write(PreviewFile, new JsonObject { ["kind"] = "pending" });
+        return this;
+    }
+
+    /// <summary>One person of a preview's sample, as reply-cli prints one.</summary>
+    public static JsonObject Sampled(string? firstName, string? lastName, string? title, string? location, string? linkedIn, string? company, string? domain) => new()
+    {
+        ["first_name"] = firstName,
+        ["last_name"] = lastName,
+        ["job_title"] = title,
+        ["location"] = location,
+        ["linkedin_url"] = linkedIn,
+        ["company_name"] = company,
+        ["company_domain"] = domain,
+    };
+
+    /// <summary>The values Reply suggests for one kind of filter, in its own order.</summary>
+    public ReplyAccount WithFilterValues(string kind, params string[] values)
+    {
+        var planted = Read(FilterValuesFile) as JsonObject ?? [];
+        planted[kind] = new JsonArray([.. values.Select(value => (JsonNode)JsonValue.Create(value))]);
+        Write(FilterValuesFile, planted);
+        return this;
+    }
+
     /// <summary>The change feed hands back an empty cursor on every page, which reply-cli passes on as Reply wrote it.</summary>
     public ReplyAccount WithEmptyFeedCursors()
     {
@@ -923,6 +1069,9 @@ public sealed class ReplyAccount : IDisposable
         Contacts.OfType<JsonObject>().SingleOrDefault(contact => contact["id"]!.GetValue<int>() == id);
 
     public JsonArray Lists => ReadArray(ListsFile);
+
+    /// <summary>The Live Data searches the account holds.</summary>
+    public JsonArray Searches => ReadArray(SearchesFile);
 
     public JsonArray Sequences => ReadArray(SequencesFile);
 

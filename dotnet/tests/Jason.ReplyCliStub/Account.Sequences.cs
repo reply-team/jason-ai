@@ -116,9 +116,9 @@ internal static partial class Account
     /// The name as reply-cli reads it: <c>--name -</c> and nothing else, then <c>{name}</c> as JSON on stdin, a string
     /// that is not blank, with no other field. A refusal never repeats the text.
     /// </summary>
-    private static (string? Name, Ending? Refusal) NameOf(Parsed line, string? stdin, string verb)
+    private static (string? Name, Ending? Refusal) NameOf(Parsed line, string? stdin, string verb, string noun = "sequence")
     {
-        var hint = $"Pipe it in: echo '{{\"name\":\"…\"}}' | reply sequence {verb} --name -";
+        var hint = $"Pipe it in: echo '{{\"name\":\"…\"}}' | reply {noun} {verb} --name -";
         if (line.Option("--name") != "-")
         {
             return (null, Refused("usage.name", "--name takes only -: the name is read from stdin.", exit: 2, detail: hint));

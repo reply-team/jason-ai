@@ -2,7 +2,7 @@
 
 /// <summary>
 /// The grammar reply-cli documents, as of the release <see cref="Jason.ReplyCliStub.ReplyCliRelease"/> names, for the
-/// thirty-two work commands the official package runs, and for <c>auth whoami</c>, the one command it runs that is not
+/// forty-two work commands the official package runs, and for <c>auth whoami</c>, the one command it runs that is not
 /// a work command: how many ids each takes, which options take a value, and which are switches. An option outside a
 /// command's own list is commander's usage error, exit 2. <c>contact update</c> takes its id as an optional argument, or
 /// the contact by the contact options instead.
@@ -34,6 +34,10 @@ internal static class Commands
             ["sequence pause"] = (1, [], []),
             ["sequence start"] = (1, ["--expect-contacts"], []),
             ["contact-list add-contact"] = (1, ContactOptions, ["--refuse-opted-out"]),
+            ["contact-list create"] = (0, ["--name"], ["--shared"]),
+            ["contact-list get"] = (1, [], []),
+            ["contact-list delete"] = (1, [], []),
+            ["contact-list contacts"] = (1, ["--limit", "--offset"], ["--live-data-only"]),
             ["contact find"] = (0, ["--contact"], []),
             ["contact get"] = (1, [], []),
             ["contact update"] = (OptionalId, [.. ContactOptions, "--fields"], []),
@@ -56,15 +60,21 @@ internal static class Commands
             ["direct-send cancel"] = (1, [], []),
             ["account list"] = (0, ["--channel"], []),
             ["schedule list"] = (0, [], []),
+            ["live-data preview"] = (0, ["--filters", "--job-id", "--max-per-company", "--wait-seconds"], []),
+            ["live-data start"] = (0, ["--filters", "--count", "--list-id", "--max-per-company"], ["--with-phones"]),
+            ["live-data get"] = (1, [], []),
+            ["live-data list"] = (0, ["--limit", "--offset"], []),
+            ["live-data delete"] = (1, [], []),
+            ["live-data filter-values"] = (1, ["--search", "--limit", "--offset"], []),
             ["auth whoami"] = (0, [], []),
         };
 
     /// <summary>The options that name stdin as their value, which are the only things a command ever reads from there.</summary>
-    private static readonly string[] StdinOptions = ["--contact", "--message", "--name", "--fields"];
+    private static readonly string[] StdinOptions = ["--contact", "--message", "--name", "--fields", "--filters"];
 
     public static bool IsKnown(string command) => Grammar.ContainsKey(command);
 
-    /// <summary>Whether the command line names stdin as the contact, the message, the name or the fields, the four things ever read from there.</summary>
+    /// <summary>Whether the command line names stdin as the contact, the message, the name, the fields or the filters, the five things ever read from there.</summary>
     public static bool ReadsStdin(IReadOnlyList<string> rest)
     {
         for (var at = 0; at < rest.Count - 1; at++)
