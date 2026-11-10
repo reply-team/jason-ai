@@ -466,6 +466,28 @@ test('reply auth status and reply account list are allowed without a card, and a
     assert.equal(run(mac(), 'reply auth status && ls').verdict, 'ask');
 });
 
+test('a command holding reply as a whole word is never remembered for the chat, so an always given to it never covers a reply command', () => {
+    for (const scope of [windows(), mac()]) {
+        // A program the chat does not know as a runner, with reply after it: a card, and no "Allow for this chat".
+        for (const command of ['caffeinate reply auth status', 'caffeinate reply contacts delete', 'grep -i reply notes.md', 'grep reply notes.md',
+            'cat reply', 'caffeinate reply-cli contacts list', 'caffeinate reply-cli@0.19.0 contacts list', 'caffeinate /usr/local/bin/reply contacts list',
+            'caffeinate REPLY.EXE contacts list']) {
+            assert.equal(commandPrefix(command), null, command);
+            const judged = run(scope, command);
+            assert.ok(judged.verdict === 'ask' && judged.remember === null && !('covers' in judged), `${scope.platform} ${command}`);
+            const again = run(scope, command);
+            assert.ok(again.verdict === 'ask' && again.remember === null, `a card each time: ${command}`);
+        }
+        // The two reply commands the chat runs still run without a card.
+        assert.deepEqual(run(scope, 'reply auth status'), { verdict: 'allow' });
+        assert.deepEqual(run(scope, 'reply account list'), { verdict: 'allow' });
+    }
+    // A word that only holds the letters is not reply.
+    for (const [command, prefix] of [['grep replying notes.md', 'grep replying'], ['cat replies.md', 'cat replies.md'], ['git log reply-later', 'git log']] as const) {
+        assert.equal(commandPrefix(command), prefix, command);
+    }
+});
+
 test('every deny-list command is refused without a card, with its arguments and whatever follows', () => {
     for (const scope of [windows(), mac()]) {
         assert.equal(run(scope, 'jason approval approve apr_01J').verdict, 'deny');

@@ -272,16 +272,28 @@ function runsAnotherProgram(name: string): boolean {
  * program named by a path, or a shell or exec wrapper, whose card covers its one request; and nothing for a command any
  * of whose words the shell would rewrite before it runs (a quote, a backslash, a variable, a `~`, a glob or a brace),
  * or that climbs by a `..` segment, because a later word is covered unread: such a command is a card each time, and the
- * person sees its text. Two dots that are not a segment (`main..feature`, `./...`) are not a climb.
+ * person sees its text. Two dots that are not a segment (`main..feature`, `./...`) are not a climb. Nothing either for a
+ * command any of whose words is reply (`namesReply`): reply after a program the chat does not know as a runner is not
+ * refused, so an "always" for `caffeinate reply` would cover every reply command after it.
  */
 export function commandPrefix(command: string): string | null {
     if (isCompound(command)) return null;
     const words = command.trim().split(/\s+/);
     if (!words.every((word) => /^[A-Za-z0-9._/:@+=,%-]+$/.test(word) && !/(^|[^.])\.\.([\\/]|$)/.test(word))) return null;
+    if (words.some(namesReply)) return null;
     const [program, first] = words;
     if (program === undefined || first === undefined || first.startsWith('-')) return null;
     if (/[\\/:]/.test(program) || runsAnotherProgram(program.toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, ''))) return null;
     return `${program} ${first}`;
+}
+
+/**
+ * True when a word, wherever it stands, is reply or its package `reply-cli` as a whole: by any folder, with any version,
+ * executable extension or case. A word that only holds the letters (`replies.md`, `reply-later`) is not.
+ */
+function namesReply(word: string): boolean {
+    const name = (word.split(/[\\/]/).pop() ?? '').toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, '');
+    return name === 'reply' || /^reply-cli(@.*)?$/.test(name);
 }
 
 function unquoted(token: string): string {
