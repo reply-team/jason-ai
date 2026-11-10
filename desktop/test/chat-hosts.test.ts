@@ -121,6 +121,35 @@ test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE
     assert.ok(!JSON.stringify(env).includes('xoxb-planted'));
 });
 
+test('a desktop started from inside a Claude Code session hands the host none of that session\'s markers, and keeps a person\'s configuration', () => {
+    const markers = {
+        CLAUDECODE: '1',
+        CLAUDE_CODE_ENTRYPOINT: 'cli',
+        CLAUDE_CODE_SSE_PORT: '41000',
+        CLAUDE_CODE_SESSION_ID: 'planted-session',
+        CLAUDE_CODE_CHILD_SESSION: '1',
+        CLAUDE_CODE_BRIDGE_SESSION_ID: 'planted-bridge',
+        CLAUDE_CODE_SESSION_ATTENDED: '1',
+        CLAUDE_CODE_MESSAGING_SOCKET: '/tmp/planted.sock',
+        CLAUDE_CODE_MESSAGING_TOKEN: 'planted-messaging-token',
+        CLAUDE_CODE_EXECPATH: '/opt/claude/planted',
+        CLAUDE_PID: '4242',
+        claudecode: '1',
+    };
+    const configuration = {
+        CLAUDE_CODE_USE_BEDROCK: '1',
+        CLAUDE_CODE_USE_VERTEX: '1',
+        CLAUDE_CODE_GIT_BASH_PATH: 'C:\\Git\\bin\\bash.exe',
+        CLAUDE_CODE_OAUTH_TOKEN: 'planted-oauth',
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW: '100000',
+        CLAUDE_EFFORT: 'high',
+    };
+    const env = hostEnvironment({ PATH: '/x', ...markers, ...configuration }, { platform: 'darwin', bundle: '/b', data: null, provider: {} });
+    assert.deepEqual(Object.keys(env).sort(), ['PATH', ...Object.keys(configuration)].sort());
+    for (const [name, value] of Object.entries(configuration)) assert.equal(env[name], value, name);
+    assert.ok(!JSON.stringify(env).includes('planted-messaging-token'));
+});
+
 test('a key provider\'s variables are added to the host\'s environment over the desktop\'s own', () => {
     const env = hostEnvironment({ PATH: '/x', ANTHROPIC_BASE_URL: 'https://elsewhere' }, { platform: 'darwin', bundle: '/b', data: null, provider: { ANTHROPIC_AUTH_TOKEN: 'k', ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic' } });
     assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'k');

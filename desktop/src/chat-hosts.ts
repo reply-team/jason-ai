@@ -107,16 +107,39 @@ export function dataRules(platform: Platform, data: string, dataEntries: readonl
     });
 }
 
-/** The variables a host never inherits from the desktop: a plugin's configuration, and backgrounding of tool calls. */
+/**
+ * The markers a Claude Code session sets for the processes it starts, a closed list. A desktop started from inside such a
+ * session would otherwise hand them to the host, which would then take itself for that session's child. The rest of
+ * `CLAUDE_CODE_*` is a person's configuration (a cloud provider, the Git Bash path on Windows, a token) and is kept.
+ */
+const sessionMarkers: ReadonlySet<string> = new Set([
+    'CLAUDECODE',
+    'CLAUDE_CODE_ENTRYPOINT',
+    'CLAUDE_CODE_SSE_PORT',
+    'CLAUDE_CODE_SESSION_ID',
+    'CLAUDE_CODE_CHILD_SESSION',
+    'CLAUDE_CODE_BRIDGE_SESSION_ID',
+    'CLAUDE_CODE_SESSION_ATTENDED',
+    'CLAUDE_CODE_MESSAGING_SOCKET',
+    'CLAUDE_CODE_MESSAGING_TOKEN',
+    'CLAUDE_CODE_EXECPATH',
+    'CLAUDE_PID',
+]);
+
+/**
+ * The variables a host never inherits from the desktop: a plugin's configuration, backgrounding of tool calls, and a
+ * parent Claude Code session's markers.
+ */
 function withheld(name: string): boolean {
     const upper = name.toUpperCase();
-    return upper.startsWith('JASON_PLUGINS__') || upper === 'CLAUDE_AUTO_BACKGROUND_TASKS';
+    return upper.startsWith('JASON_PLUGINS__') || upper === 'CLAUDE_AUTO_BACKGROUND_TASKS' || sessionMarkers.has(upper);
 }
 
 /**
  * The host's environment: the desktop's own, with the bundled `jason`'s folder first on PATH, the data directory named
  * when the desktop runs with one, and a key provider's variables. Nothing of a plugin's configuration is passed on, and
- * `CLAUDE_AUTO_BACKGROUND_TASKS`, which would let the host move a waiting permission call to the background, is removed.
+ * `CLAUDE_AUTO_BACKGROUND_TASKS`, which would let the host move a waiting permission call to the background, is removed,
+ * as are the markers of a Claude Code session the desktop itself was started from.
  */
 export function hostEnvironment(
     base: Readonly<Record<string, string | undefined>>,
