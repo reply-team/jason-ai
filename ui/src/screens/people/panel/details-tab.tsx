@@ -135,6 +135,21 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
     const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
     const setRow = (index: number, patch: Partial<Row>) =>
         set({ channels: draft.channels.map((row, at) => (at === index ? { ...row, ...patch } : row)) });
+    // The runtime keeps one primary per kind: a row moved onto a kind that has its primary is not primary.
+    const setKind = (index: number, kind: string) =>
+        setRow(index, {
+            channel: kind,
+            primary:
+                draft.channels[index]!.primary &&
+                !draft.channels.some((row, at) => at !== index && row.channel === kind && row.primary),
+        });
+    // A primary is picked among the rows of its own kind; the other kinds keep theirs.
+    const pick = (index: number) => {
+        const kind = draft.channels[index]!.channel;
+        set({
+            channels: draft.channels.map((row, at) => (row.channel === kind ? { ...row, primary: at === index } : row)),
+        });
+    };
 
     async function submit(event: FormEvent) {
         event.preventDefault();
@@ -188,7 +203,7 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
                                 className="select"
                                 aria-label="Kind"
                                 value={row.channel}
-                                onChange={(event) => setRow(index, { channel: event.target.value })}
+                                onChange={(event) => setKind(index, event.target.value)}
                             >
                                 {[...new Set([...kinds, row.channel])].map((kind) => (
                                     <option key={kind} value={kind}>
@@ -205,16 +220,9 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
                             <label className="check">
                                 <input
                                     type="radio"
-                                    name={`primary-${person.id}`}
+                                    name={`primary-${person.id}-${row.channel}`}
                                     checked={row.primary}
-                                    onChange={() =>
-                                        set({
-                                            channels: draft.channels.map((each, at) => ({
-                                                ...each,
-                                                primary: at === index,
-                                            })),
-                                        })
-                                    }
+                                    onChange={() => pick(index)}
                                 />
                                 Primary
                             </label>

@@ -295,6 +295,46 @@ describe('Saving the person', () => {
         expect(await within(panel()).findByText('+4791234567')).toBeTruthy();
     });
 
+    it('picks a primary per kind: a pick changes its own kind only, and a row moved onto a kind with one is not primary', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('suppression.list', ...registerClear, 'suppression.list/person-second-email-clear')
+            .answer('contact.update', 'contact.update/person-primaries');
+        open(api, ingrid.id, 'details');
+        fireEvent.click(await within(await shown()).findByRole('button', { name: 'Edit' }));
+        const primaries = () =>
+            within(panel())
+                .getAllByRole<HTMLInputElement>('radio', { name: 'Primary' })
+                .map((radio) => radio.checked);
+        const kinds = () => within(panel()).getAllByRole<HTMLSelectElement>('combobox', { name: 'Kind' });
+        expect(kinds().map((kind) => kind.value)).toEqual(['email', 'linkedin']);
+        expect(primaries()).toEqual([true, false]);
+
+        // LinkedIn's address picked as its primary keeps the email's.
+        const radio = (at: number) => within(panel()).getAllByRole('radio', { name: 'Primary' })[at]!;
+        fireEvent.click(radio(1));
+        expect(primaries()).toEqual([true, true]);
+
+        // Moved onto email, which has its primary, it is not primary; moved back, it is picked again.
+        fireEvent.change(kinds()[1]!, { target: { value: 'email' } });
+        expect(primaries()).toEqual([true, false]);
+        fireEvent.change(kinds()[1]!, { target: { value: 'linkedin' } });
+        fireEvent.click(radio(1));
+        expect(primaries()).toEqual([true, true]);
+
+        // A second email picked as the primary email leaves LinkedIn's primary where it is.
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Add a channel' }));
+        const values = within(panel()).getAllByRole<HTMLInputElement>('textbox', { name: 'Address' });
+        fireEvent.input(values.at(-1)!, { target: { value: 'ingrid.solberg@fjordline.example' } });
+        fireEvent.click(radio(2));
+        expect(primaries()).toEqual([false, true, true]);
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(asked(api, 'contact.update')).toHaveLength(1));
+        expect(asked(api, 'contact.update')).toEqual([recorded('contact.update/person-primaries')]);
+        expect(await within(panel()).findByText('ingrid.solberg@fjordline.example')).toBeTruthy();
+    });
+
     it('a person in no campaign has no box for the provider, and Cancel leaves the record as it was', async () => {
         const api = people()
             .answer('contact.get', 'contact.get/imported')
