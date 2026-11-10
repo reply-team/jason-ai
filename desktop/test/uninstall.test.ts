@@ -299,7 +299,7 @@ test('inside the application’s folder is decided by the platform’s own path 
     assert.ok(!inside('darwin', '/Applications/Jason.app', posix.join('/Applications/jason.app', 'Contents', 'jason')));
 });
 
-test('the nsis uninstaller starts the application before it removes the files, on a person’s uninstall only', () => {
+test('the nsis uninstaller starts the application before it removes the files, on a person’s uninstall only, and goes no further only when the start says so', () => {
     assert.equal(configuration({ version: '0.34.0' }).nsis.include, 'installer/uninstall.nsh');
     const script = readFileSync(join(desktop, 'installer', 'uninstall.nsh'), 'utf8');
     // From the uninstall's own macro on; the check that closes running programs comes before it, with rows of its own
@@ -312,20 +312,28 @@ test('the nsis uninstaller starts the application before it removes the files, o
         'ClearErrors',
         '${GetOptions} $R0 "/S" $R1',
         '${if} ${Errors}',
+        'StrCpy $R3 ""',
         'StrCpy $R2 "0"',
         'ClearErrors',
         `ExecWait '"$INSTDIR\\\${APP_EXECUTABLE_FILENAME}" --uninstall' $R2`,
         '${else}',
+        'StrCpy $R3 "quiet"',
         'StrCpy $R2 "0"',
         'ClearErrors',
         `ExecWait '"$INSTDIR\\\${APP_EXECUTABLE_FILENAME}" --uninstall --quiet' $R2`,
         '${endIf}',
-        // A start that said to go no further ends the uninstaller before it removes a file.
-        '${ifNot} ${Errors}',
-        '${if} $R2 != "0"',
+        '${if} ${Errors}',
+        'StrCpy $R2 "none"',
+        '${endIf}',
+        // Only the start's own word, exit 1, ends the uninstaller before it removes a file.
+        '${if} $R2 == "1"',
         'SetErrorLevel 1',
         'Quit',
         '${endIf}',
+        // A start that crashed, or could not be made, never blocks the uninstall; a person is told what may be left.
+        '${if} $R2 != "0"',
+        '${andIf} $R3 == ""',
+        'MessageBox MB_OK|MB_ICONEXCLAMATION "Jason could not take off what it placed outside its folder, so the jason command on the PATH, Open Jason at login and the runtime\'s start at logon may be left. The uninstall goes on."',
         '${endIf}',
         '${endIf}',
         '!macroend',

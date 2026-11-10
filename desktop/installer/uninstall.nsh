@@ -15,8 +15,15 @@
 ; no character of it is read as PowerShell's. Without PowerShell nothing is closed, and a person is asked to close Jason.
 !define JASON_OWN_APP `Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and [string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_APP, [StringComparison]::OrdinalIgnoreCase) }`
 
+; A runtime started from the jason executable this application carries, by whichever data directory or run file, is
+; looked for by that executable's exact path in the same way, and never closed: it may hold work, and jason runtime stop
+; is what stops it. An update and a silent run end before a file is replaced, with error level 1; a person is told, and
+; asked to stop it and look again. Without PowerShell a person is asked to stop it too, and nothing can be looked for.
+!define JASON_OWN_RUNTIME `Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and [string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) }`
+
 !macro customCheckAppRunning
   System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_APP", t "$INSTDIR\${APP_EXECUTABLE_FILENAME}")'
+  System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_RUNTIME", t "$INSTDIR\resources\bundle\jason.exe")'
   !insertmacro IS_POWERSHELL_AVAILABLE
   ${if} $IsPowerShellAvailable == 0
     ${if} ${isUpdated}
@@ -36,36 +43,64 @@
       ; So that the files it held are let go of before they are replaced or removed.
       Sleep 1000
     ${endIf}
+    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 }"`
+    Pop $R0
+    ${if} $R0 == 0
+      ${if} ${isUpdated}
+      ${orIf} ${Silent}
+        SetErrorLevel 1
+        Quit
+      ${endIf}
+      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "A Jason runtime is running from this application's folder. Stop it with jason runtime stop, then choose OK." IDOK +3
+      SetErrorLevel 1
+      Quit
+      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 }"`
+      Pop $R0
+      ${if} $R0 == 0
+        MessageBox MB_OK|MB_ICONSTOP "A Jason runtime is still running from this application's folder, so nothing was changed. Stop it with jason runtime stop, then run this again."
+        SetErrorLevel 1
+        Quit
+      ${endIf}
+    ${endIf}
   ${else}
     ${ifNot} ${isUpdated}
-      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Close Jason if it is open, then choose OK." /SD IDOK IDOK +2
+      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Close Jason if it is open, and stop its runtime with jason runtime stop if it runs, then choose OK." /SD IDOK IDOK +2
       Quit
     ${endIf}
   ${endIf}
 !macroend
 
-; The start's exit code says whether to go on: 1 when the runtime this application carries is running and did not
-; stop, which the start has already said unless the uninstall is silent. The uninstaller then quits before it removes a
-; file, so no folder is left half removed. A start that could not be made at all says nothing, and the uninstall goes on.
+; The start's exit code says whether to go on: 1 when the runtime this application carries did not stop, or a runtime
+; did not answer, which the start has already said unless the uninstall is silent. The uninstaller then quits before it
+; removes a file, so no folder is left half removed. Any other code - a start that crashed, or one that could not be
+; made at all - never blocks the uninstall: it goes on, and a person is told that what the application placed outside
+; its folder may be left.
 !macro customUnInstall
   ${ifNot} ${isUpdated}
     ${GetParameters} $R0
     ClearErrors
     ${GetOptions} $R0 "/S" $R1
     ${if} ${Errors}
+      StrCpy $R3 ""
       StrCpy $R2 "0"
       ClearErrors
       ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall' $R2
     ${else}
+      StrCpy $R3 "quiet"
       StrCpy $R2 "0"
       ClearErrors
       ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall --quiet' $R2
     ${endIf}
-    ${ifNot} ${Errors}
-      ${if} $R2 != "0"
-        SetErrorLevel 1
-        Quit
-      ${endIf}
+    ${if} ${Errors}
+      StrCpy $R2 "none"
+    ${endIf}
+    ${if} $R2 == "1"
+      SetErrorLevel 1
+      Quit
+    ${endIf}
+    ${if} $R2 != "0"
+    ${andIf} $R3 == ""
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Jason could not take off what it placed outside its folder, so the jason command on the PATH, Open Jason at login and the runtime's start at logon may be left. The uninstall goes on."
     ${endIf}
   ${endIf}
 !macroend

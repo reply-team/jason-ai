@@ -125,7 +125,11 @@ Installing a desktop update restarts the runtime. The desktop stops the runtime 
 `jason runtime stop`, before the installer replaces that file, and the new version starts it again when it opens; it
 knows the runtime is its own when `jason runtime status` answers for the instance the run file names and the
 descriptor's `installed_image` is the application's own `jason` (`docs/runtime-api.md`). A runtime that does not stop
-leaves the update uninstalled, and one started from another executable is never stopped. Before the update installs,
+leaves the update uninstalled, and so does a run file whose runtime did not answer while the process it names still
+runs, or names none; one started from another executable is never stopped. The Windows installer and uninstaller look
+for any process running from the carried `jason.exe` by its exact path, whichever data directory started it, and never
+close one: an update or a silent run ends before a file is replaced, and a person is asked to stop it with
+`jason runtime stop` and look again. Once the runtime has stopped and before the update installs,
 the application as it was is copied under `<data>/desktop/rollback/<version>/`, kept until the next update replaces
 it and named in the Jason menu; nothing puts it back by itself, so going back is quitting Jason and putting that folder
 back in the place of the installed application by hand, which leaves the data directory as the newer version left it.
