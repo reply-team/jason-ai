@@ -195,7 +195,7 @@ function waiting(now: number, busy: boolean): Html {
               ? html`<div class="lab">Approvals</div>
                     ${approvals(now, busy)}`
               : shown === 'approvals'
-                ? html`<div class="empty needs-none">No approval is waiting.</div>`
+                ? html`<div class="empty needs-none">No approvals waiting.</div>`
                 : null
     }
     ${
@@ -205,7 +205,7 @@ function waiting(now: number, busy: boolean): Html {
               ? html`<div class="lab">Questions</div>
                     ${questions(now, busy)}`
               : shown === 'questions'
-                ? html`<div class="empty needs-none">No question is open.</div>`
+                ? html`<div class="empty needs-none">No questions for you.</div>`
                 : null
     }`;
 }
@@ -227,7 +227,7 @@ export function needsView(): Html {
             !attention.loaded.value
                 ? html`<div class="empty">Reading what waits…</div>`
                 : none
-                  ? html`<div class="card needs-empty"><div class="bd">Nothing is waiting for you.</div></div>`
+                  ? html`<div class="card needs-empty"><div class="bd">You're all caught up</div></div>`
                   : html`${filterRow()} ${waiting(now, busy)}`
         }
     </div>`;

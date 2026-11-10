@@ -65,7 +65,7 @@ describe('Needs you', () => {
             new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
         );
         await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
-        expect(words(needs().querySelector('.card.needs-empty')!)).toBe('Nothing is waiting for you.');
+        expect(words(needs().querySelector('.card.needs-empty')!)).toBe("You're all caught up");
         expect(needs().querySelector('.ask')).toBeNull();
     });
 
@@ -79,7 +79,7 @@ describe('Needs you', () => {
         expect(pressed()).toEqual(['All']);
 
         show('Questions');
-        await waitFor(() => expect(words(needs().querySelector('.needs-none')!)).toBe('No question is open.'));
+        await waitFor(() => expect(words(needs().querySelector('.needs-none')!)).toBe('No questions for you.'));
         expect(pressed()).toEqual(['Questions']);
         expect(needs().querySelector('[data-id="apr_1"]')).toBeNull();
         expect(needs().querySelector('.needs-empty')).toBeNull();
@@ -97,7 +97,7 @@ describe('Needs you', () => {
         );
         await waitFor(() => expect(row('dec_1')).toBeTruthy());
         show('Approvals');
-        await waitFor(() => expect(words(needs().querySelector('.needs-none')!)).toBe('No approval is waiting.'));
+        await waitFor(() => expect(words(needs().querySelector('.needs-none')!)).toBe('No approvals waiting.'));
         expect(needs().querySelector('[data-id="dec_1"]')).toBeNull();
         show('All');
         await waitFor(() => expect(row('dec_1')).toBeTruthy());
