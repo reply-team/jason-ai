@@ -70,13 +70,14 @@ describe('Needs you', () => {
     });
 
     it('filters to approvals or to questions, and says in a line of its own when a filter holds nothing', async () => {
-        renderConsole(
-            new FakeApi()
-                .answer('approval.list', 'approval.list/messages-pending')
-                .answer('decision.list', 'decision.list/empty'),
-        );
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/messages-pending')
+            .answer('decision.list', 'decision.list/empty');
+        renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         expect(pressed()).toEqual(['All']);
+        const asked = fake.calls.length;
+        const hash = location.hash;
 
         show('Questions');
         await waitFor(() => expect(words(needs().querySelector('.needs-none')!)).toBe('No questions for you.'));
@@ -87,6 +88,8 @@ describe('Needs you', () => {
         show('Approvals');
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         expect(needs().querySelector('.needs-none')).toBeNull();
+        expect(fake.calls).toHaveLength(asked);
+        expect(location.hash).toBe(hash);
     });
 
     it('shows everything again once nothing waited, so an approval that arrives then is drawn', async () => {
