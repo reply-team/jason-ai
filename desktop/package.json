@@ -15,6 +15,7 @@
     "check": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test \"test/*.test.ts\"",
     "prepare:bundle": "node scripts/prepare.mjs",
+    "notices": "node scripts/notices.mjs",
     "dev": "npm run build && electron ."
   },
   "devDependencies": {
