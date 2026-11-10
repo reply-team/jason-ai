@@ -38,14 +38,15 @@ public class CampaignInboxExchangesTests
         var seed = await Seed.PeopleAsync(api);
         string[] replied = ["inbound_reply_observed"];
 
-        // Paula answers in the pilot as well, through the account no route binds; and, last, a reply arrives on a thread the
-        // provider ties to nobody Jason knows.
+        // Paula answers in the pilot as well, through the account no route binds, and her line is written at 08:50 for a move
+        // the provider made at 07:35: a late read writes an old move later. Last, a reply arrives on a thread the provider
+        // ties to nobody Jason knows.
         using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
             var person = await db.Contacts.SingleAsync(c => c.PublicId == seed.Paula, Ct);
             var pilot = await db.Campaigns.SingleAsync(c => c.PublicId == seed.LatAm, Ct);
-            db.Journal.Add(Observed("jrn_01K7QN00000000000000000197", 8, 50, pilot.Id, person.Id, "t_601", "email", seed.Paula));
+            db.Journal.Add(Observed("jrn_01K7QN00000000000000000197", 8, 50, pilot.Id, person.Id, "t_601", "email", seed.Paula, moved: (7, 35)));
             db.Journal.Add(Observed("jrn_01K7QN00000000000000000198", 8, 55, pilot.Id, null, "t_701", "linkedin", null));
             await db.SaveChangesAsync(Ct);
         }
@@ -59,6 +60,7 @@ public class CampaignInboxExchangesTests
         var lines = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-campaign-replies", new { campaign_id = seed.LatAm, kinds = replied, limit = 50 }, Ct);
         Assert.Equal([null, seed.Paula, seed.Mateo], lines.Items.Select(e => e.ContactId));
         Assert.All(lines.Items, e => Assert.Equal("reply", e.New!["plugin"]!.GetValue<string>()));
+        Assert.Equal("2026-10-16T07:35:00.000Z", lines.Items[1].New!["last_activity_at"]!.GetValue<string>());
         Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.ContactThreads, "inbox-paula", new { contact_id = seed.Paula, plugin_id = "reply", limit = 100 }, HttpStatusCode.NotFound, Ct)).Code);
         reads.Answer(FakeProviderReads.Result(Seed.Threads(more: false)));
         Assert.Equal(2, (await api.RecordAsync<ContactThreadsResponse>(Operations.ContactThreads, "inbox-mateo", new { contact_id = seed.Mateo, plugin_id = "reply", limit = 100 }, Ct)).Items.Count);
@@ -69,11 +71,15 @@ public class CampaignInboxExchangesTests
         Assert.Empty((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-campaign-replies-none", new { campaign_id = seed.ReEngage, kinds = replied, limit = 50 }, Ct)).Items);
     }
 
-    /// <summary>A reply line written the way inbound sync writes it, at a moment on 16 October.</summary>
-    private static JournalEntry Observed(string id, int hour, int minute, int campaign, int? contact, string thread, string channel, string? contactId)
+    /// <summary>
+    /// A reply line written the way inbound sync writes it, at a moment on 16 October, for the thread's move at that moment
+    /// or at the earlier one <paramref name="moved"/> names.
+    /// </summary>
+    private static JournalEntry Observed(string id, int hour, int minute, int campaign, int? contact, string thread, string channel, string? contactId, (int Hour, int Minute)? moved = null)
     {
         var at = new DateTime(2026, 10, 16, hour, minute, 0, DateTimeKind.Utc);
-        var moment = at.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
+        var move = moved is { } m ? new DateTime(2026, 10, 16, m.Hour, m.Minute, 0, DateTimeKind.Utc) : at;
+        var moment = move.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
         return new JournalEntry
         {
             PublicId = id,

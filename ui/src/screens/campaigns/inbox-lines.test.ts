@@ -60,6 +60,20 @@ describe('inboxEntriesOf', () => {
         expect(left).toBe(3);
     });
 
+    it('draws the moment the provider says the thread moved, not the moment Jason wrote the line', () => {
+        const late = line('cnt_1', 'reply', 'email', 'Paula');
+        const untied = line(null, 'reply', 'linkedin');
+        (late.new as Record<string, unknown>)['last_activity_at'] = '2026-10-16T07:35:00.000Z';
+        (untied.new as Record<string, unknown>)['last_activity_at'] = '2026-10-15T22:10:00.000Z';
+        const bare = line('cnt_2', 'reply');
+        delete (bare.new as Record<string, unknown>)['last_activity_at'];
+        expect(inboxEntriesOf([late, untied, bare]).entries.map((e) => e.at)).toEqual([
+            '2026-10-16T07:35:00.000Z',
+            '2026-10-15T22:10:00.000Z',
+            bare.ts,
+        ]);
+    });
+
     it('a line that names no plugin is drawn without a read', () => {
         const lines = [line('cnt_1', undefined, 'email', 'Paula')];
         expect(inboxEntriesOf(lines).entries).toEqual([

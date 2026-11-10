@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApi } from '../../api/context';
 import { FiltersBar } from '../../layout/filters-bar';
 import { PeriodSwitch } from '../../layout/period-switch';
@@ -96,6 +96,7 @@ export function CampaignsScreen() {
         if (at.tab === 'people') void store.listMembers(api, selected, table, query, new Date(), zone);
         else void store.count(api, selected, table, new Date(), zone);
         if (at.tab === 'results') void store.loadResults(api, selected, at.period, new Date(), zone);
+        if (at.tab === 'inbox') void store.loadInbox(api, selected);
         if (at.tab === 'sequence') {
             void store.loadPending(api, selected);
             void timeline.loadTimeline(api, { campaign_id: selected }, timeline.chip.value, false);
@@ -129,14 +130,18 @@ export function CampaignsScreen() {
     useEffect(() => {
         if (selected && resulting) void store.loadResults(api, selected, at.period, new Date(), zone);
     }, [api, resulting]);
-    // The Inbox reads its lines when it opens and when the person asks, never with the panel, and shows nothing read
-    // before it opened.
+    // The Inbox reads its lines when it opens and when the person asks, from its own Refresh or the toolbar's, never in
+    // the background; leaving it lets go of what it showed and of every read on its way.
     const inboxOf = selected && at.tab === 'inbox' ? selected : null;
-    const inboxFrom = useMemo(() => store.inboxReads(), [api, inboxOf]);
     const inboxShown = store.inbox.value;
     useEffect(() => {
-        if (inboxOf) void store.loadInbox(api, inboxOf);
+        if (!inboxOf) return;
+        void store.loadInbox(api, inboxOf);
+        return () => store.leaveInbox();
     }, [api, inboxOf]);
+    // What failed on a tab is said over that campaign and that tab only, and leaving the tab lets it go.
+    useEffect(() => () => store.leaveTab(), [selected, at.tab]);
+    const tabFailure = store.failedOver(selected, at.tab);
 
     /** Decides what waits on a person, then reads the table's row and the panel again: the person may have left a count. */
     const decide = async (operation: string, body: Record<string, unknown>) => {
@@ -286,6 +291,7 @@ export function CampaignsScreen() {
             {selected && !waiting && (
                 <div className="panel">
                     {store.panelFailure.value && <Notice danger>{store.panelFailure.value}</Notice>}
+                    {tabFailure && <Notice danger>{tabFailure}</Notice>}
                     {campaign && campaign.id === selected && (
                         <>
                             <CampaignPanel
@@ -339,17 +345,18 @@ export function CampaignsScreen() {
                             )}
                             {at.tab === 'inbox' && (
                                 <CampaignInbox
-                                    shown={
-                                        inboxShown && inboxShown.id === selected && inboxShown.read > inboxFrom
-                                            ? inboxShown
-                                            : null
-                                    }
+                                    shown={inboxShown && inboxShown.id === selected ? inboxShown : null}
+                                    failed={tabFailure !== null}
                                     zone={zone}
                                     onRefresh={() => void store.loadInbox(api, selected!)}
                                 />
                             )}
                             {at.tab === 'results' && (
-                                <CampaignResults period={at.period} shown={store.resultsFor(selected, at.period)} />
+                                <CampaignResults
+                                    period={at.period}
+                                    shown={store.resultsFor(selected, at.period)}
+                                    failed={tabFailure !== null}
+                                />
                             )}
                             {at.tab === 'settings' && (
                                 <CampaignSettings campaign={campaign} now={new Date()} zone={zone} onAct={setActing} />

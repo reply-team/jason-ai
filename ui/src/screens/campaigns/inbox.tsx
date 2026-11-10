@@ -5,11 +5,13 @@ import { when } from '../../time/format';
 import { channelName } from '../people/labels';
 import { ThreadMessages } from '../people/threads';
 import * as threadsStore from '../people/threads-store';
-import type { InboxEntry } from './inbox-lines';
+import { inboxLines, type InboxEntry } from './inbox-lines';
 
 type Props = {
     /** The entries of the latest lines and how many people were left out, or none while they are on their way. */
     shown: { read: number; entries: InboxEntry[]; left: number } | null;
+    /** The read failed; why is said above the tab, and nothing here says it is loading. */
+    failed: boolean;
     zone: string;
     /** Reads the lines again, and with them every person's threads. */
     onRefresh: () => void;
@@ -87,27 +89,32 @@ function PersonThreads({ contactId, pluginId, zone }: { contactId: string; plugi
 }
 
 /**
- * The Inbox: what the campaign's latest reply lines say, newest first. Each person is shown with their threads asked of
- * the plugin their line names; a reply the provider tied to nobody is its channel and moment. What a thread says is the
- * provider's, shown as text.
+ * The Inbox: what the campaign's latest reply lines say, in the order Jason observed the replies. Each person is shown
+ * with their threads asked of the plugin their line names; a reply the provider tied to nobody is its channel and
+ * moment. Every moment is the provider's. What a thread says is the provider's, shown as text. Its Refresh is there
+ * whatever the tab shows: on its way, empty, or failed.
  */
-export function CampaignInbox({ shown, zone, onRefresh }: Props) {
+export function CampaignInbox({ shown, failed, zone, onRefresh }: Props) {
     const now = new Date();
-    if (shown === null) return <div className="end loading">loading…</div>;
-    if (shown.entries.length === 0)
-        return <div className="empty">No reply has been observed in this campaign yet.</div>;
+    const entries = shown?.entries ?? [];
     return (
         <div className="campaign-tabs-inbox">
             <div className="campaign-tabs-inbox-head">
                 <span className="hint">
-                    The latest replies, newest first
-                    {shown.left > 0 && `; ${shown.left} more not shown here`}
+                    {entries.length > 0 && 'The latest replies, in the order Jason observed them'}
+                    {shown &&
+                        shown.left > 0 &&
+                        `; ${shown.left} more ${shown.left === 1 ? 'person' : 'people'} among the latest ${inboxLines} lines not shown here`}
                 </span>
                 <button className="btn ghost" type="button" aria-label="Refresh the inbox" onClick={onRefresh}>
                     Refresh
                 </button>
             </div>
-            {shown.entries.map((entry, i) =>
+            {shown === null && !failed && <div className="end loading">loading…</div>}
+            {shown !== null && entries.length === 0 && (
+                <div className="empty">No reply has been observed in this campaign yet.</div>
+            )}
+            {entries.map((entry, i) =>
                 entry.kind === 'untied' ? (
                     <div key={`untied-${i}`} className="campaign-tabs-inbox-untied">
                         <span className="ch">{entry.channel && channelName(entry.channel)}</span>
@@ -128,7 +135,7 @@ export function CampaignInbox({ shown, zone, onRefresh }: Props) {
                         </div>
                         {entry.pluginId ? (
                             <PersonThreads
-                                key={shown.read}
+                                key={shown?.read}
                                 contactId={entry.contactId}
                                 pluginId={entry.pluginId}
                                 zone={zone}

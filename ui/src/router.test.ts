@@ -135,6 +135,10 @@ describe('parseRoute', () => {
             { screen: 'campaigns', id: 'cmp_1', tab: 'settings', view: 'summary', period: '7d', filters: {} },
         ],
         [
+            '#/campaigns/cmp_1/chat',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
             '#/campaigns/cmp_1/elsewhere',
             { screen: 'campaigns', id: 'cmp_1', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
         ],
@@ -298,6 +302,28 @@ describe('href', () => {
                 filters: {},
             },
             '#/campaigns/cmp_1/settings',
+        ],
+        [
+            {
+                screen: 'campaigns' as const,
+                id: 'cmp_1',
+                tab: 'inbox' as const,
+                view: 'summary' as const,
+                period: '7d' as const,
+                filters: {},
+            },
+            '#/campaigns/cmp_1/inbox',
+        ],
+        [
+            {
+                screen: 'campaigns' as const,
+                id: 'cmp_1',
+                tab: 'results' as const,
+                view: 'activity' as const,
+                period: '30d' as const,
+                filters: {},
+            },
+            '#/campaigns/cmp_1/results?view=activity&period=30d',
         ],
         [
             { screen: 'performance' as const, tab: 'timeline' as const, period: '7d' as const, campaigns: [] },

@@ -737,7 +737,7 @@ describe('A campaign’s Inbox', () => {
     const person = (name: string) =>
         screen.getByRole('heading', { level: 3, name }).closest('.campaign-tabs-inbox-person') as HTMLElement;
 
-    it('lists who replied, newest first, each with their threads asked of the plugin their line names', async () => {
+    it('lists who replied in the order Jason observed it, each with their threads asked of the plugin their line names', async () => {
         const api = inboxApi().answer('contact.threads', 'contact.threads/inbox-paula', 'contact.threads/inbox-mateo');
         open(api, pilot);
 
@@ -750,6 +750,12 @@ describe('A campaign’s Inbox', () => {
         // Paula is linked through an account no route reaches: the threads view says so in its own words, once.
         expect(within(person('Paula Mendes')).getByText(/no route reaches the reply account/)).toBeTruthy();
         expect(within(person('Paula Mendes')).queryByRole('button', { name: 'Try again' })).toBeNull();
+        // Paula's line was written at 08:50 for a move the provider made at 07:35: the reply's moment is the provider's,
+        // and the line keeps its place in the order Jason observed the replies.
+        expect(within(person('Paula Mendes')).getByText(/^replied 07:35/)).toBeTruthy();
+        expect(within(person('Paula Mendes')).queryByText(/08:50/)).toBeNull();
+        expect(within(person('Mateo Ruiz')).getByText(/^replied 08:41/)).toBeTruthy();
+        expect(screen.getByText(/in the order Jason observed them/)).toBeTruthy();
         // The newest line is tied to nobody: its channel and moment, and no read for it.
         const untied = document.querySelector('.campaign-tabs-inbox-untied') as HTMLElement;
         expect(untied.textContent).toMatch(/LinkedIn/);
@@ -793,6 +799,46 @@ describe('A campaign’s Inbox', () => {
         expect(sent(api, 'journal.list')).toEqual([fixtures['journal.list/by-campaign-replies-none'].request]);
         expect(sent(api, 'route.resolve')).toEqual([]);
         expect(sent(api, 'contact.threads')).toEqual([]);
+    });
+
+    it('asks again from an empty Inbox, which has its Refresh as every Inbox does', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/inbox')
+            .answer('campaign.summary', 'campaign.summary/inbox-all', 'campaign.summary/inbox-quiet')
+            .answer('campaign.get', 'campaign.get/inbox-quiet')
+            .answer('journal.list', 'journal.list/by-campaign-replies-none');
+        open(api, { ...pilot, id: fixtures['campaign.get/inbox-quiet'].request.campaign_id });
+        expect(await screen.findByText('No reply has been observed in this campaign yet.')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh the inbox' }));
+
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(2));
+        expect(sent(api, 'journal.list')[1]).toEqual(fixtures['journal.list/by-campaign-replies-none'].request);
+    });
+
+    it('a read that failed says why, does not claim to load, and can be asked again', async () => {
+        const api = inboxApi().answer('contact.threads', 'contact.threads/inbox-paula', 'contact.threads/inbox-mateo');
+        const reachable = api.unreachable('journal.list');
+        open(api, pilot);
+
+        expect((await screen.findByText(/Failed to fetch/)).closest('.notice')).toBeTruthy();
+        expect(screen.queryByText('loading…')).toBeNull();
+
+        reachable();
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh the inbox' }));
+        expect(await screen.findByText(/Re: Soluna's next quarter/)).toBeTruthy();
+        expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+    });
+
+    it('is read again by the toolbar’s Refresh while it is open', async () => {
+        const api = inboxApi().answer('contact.threads', 'contact.threads/inbox-paula', 'contact.threads/inbox-mateo');
+        open(api, pilot);
+        expect(await screen.findByText(/Re: Soluna's next quarter/)).toBeTruthy();
+
+        fireEvent.click(screen.getByTitle('Refresh'));
+
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(2));
+        await waitFor(() => expect(sent(api, 'contact.threads')).toHaveLength(4));
     });
 });
 
@@ -845,6 +891,67 @@ describe('A campaign’s Results', () => {
             'Opted out in the last 7 days, 0',
         ]);
         expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/summer'].request]);
+    });
+
+    function resultsApi() {
+        return new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.activity', 'campaign.activity/one');
+    }
+
+    it('a read that failed says why, and is neither busy nor shows a figure', async () => {
+        const api = resultsApi();
+        api.unreachable('campaign.activity');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+
+        expect((await screen.findByText(/Failed to fetch/)).closest('.notice')).toBeTruthy();
+        expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+        expect(screen.queryAllByRole('figure')).toEqual([]);
+        expect(screen.queryByText('…')).toBeNull();
+    });
+
+    it('a failure is said over its own tab only: going to Sequence leaves it behind', async () => {
+        const api = resultsApi()
+            .answer('workitem.list', 'workitem.list/by-campaign-planned', 'workitem.list/by-campaign-running')
+            .answer('approval.list', 'approval.list/by-campaign-pending')
+            .answer('decision.list', 'decision.list/by-campaign-pending')
+            .answer('journal.list', 'journal.list/by-campaign');
+        api.unreachable('campaign.activity');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        expect(await screen.findByText(/Failed to fetch/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Sequence' }));
+
+        expect(await screen.findByRole('region', { name: 'What happened' })).toBeTruthy();
+        expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+    });
+
+    it('a late failure of one campaign’s read is never said over another campaign', async () => {
+        const api = resultsApi()
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some', 'campaign.summary/summer')
+            .answer('campaign.get', 'campaign.get/details', 'campaign.get/summer');
+        // Spring's period counts fail, but only once Summer is open.
+        const asked = api.call.bind(api);
+        let refuse = () => {};
+        const late = new Promise<void>((resolve) => (refuse = resolve));
+        api.call = (async (operation: string, body?: object, kind?: 'read' | 'write') => {
+            if (operation !== 'campaign.activity') return asked(operation, body, kind);
+            await late;
+            throw new TypeError('Failed to fetch');
+        }) as typeof api.call;
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await screen.findByRole('heading', { level: 2, name: 'Spring' });
+
+        const summer = { ...table, id: fixtures['campaign.get/summer'].request.campaign_id, tab: 'settings' as const };
+        location.hash = href(summer);
+        route.value = summer;
+        await screen.findByRole('heading', { level: 2, name: fixtures['campaign.get/summer'].response.name });
+        refuse();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(screen.queryByText(/Failed to fetch/)).toBeNull();
     });
 });
 

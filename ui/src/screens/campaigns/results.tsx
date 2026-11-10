@@ -8,6 +8,8 @@ type Props = {
     period: Period;
     /** Both answers, or none while they are on their way. */
     shown: { now: CampaignSummaryRow; counts: CampaignActivityRow } | null;
+    /** The read failed; why is said above the tab, and no figure is drawn. */
+    failed: boolean;
 };
 
 const column = (columns: readonly Column[], key: string): Column => columns.find((c) => c.key === key)!;
@@ -30,7 +32,8 @@ const over = (period: Period) => (period === 'today' ? 'today' : `in the ${perio
  * The campaign's Results: four tiles, which keep their places, empty, while the numbers are on their way. Each says what
  * it measures over beside its figure, the people now and the other three in the period, so none reads as one measure.
  */
-export function CampaignResults({ period, shown }: Props) {
+export function CampaignResults({ period, shown, failed }: Props) {
+    if (failed) return null;
     return (
         <div className="campaign-tabs-results">
             <div className="tiles" role="group" aria-label="The campaign’s results" aria-busy={shown === null}>
