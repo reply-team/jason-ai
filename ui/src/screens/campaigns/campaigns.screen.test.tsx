@@ -785,9 +785,16 @@ describe('A campaign’s Results', () => {
             .answer('campaign.activity', 'campaign.activity/one');
         open(api, { ...table, id: 'cmp_1', tab: 'results' });
 
-        expect(await figures()).toEqual(['People, 22', 'Contacted, 4', 'Replied, 2', 'Opted out, 2']);
+        // Each figure says what it measures over: the people now, the other three in the period, so none reads as one measure.
+        expect(await figures()).toEqual([
+            'People now, 22',
+            'Contacted in the last 7 days, 4',
+            'Replied in the last 7 days, 2',
+            'Opted out in the last 7 days, 2',
+        ]);
         expect(screen.getByRole('tab', { name: 'Results' }).getAttribute('aria-selected')).toBe('true');
-        expect(screen.getByText('Contacted, replied and opted out: Last 7 days')).toBeTruthy();
+        expect(screen.getAllByText('in the last 7 days')).toHaveLength(3);
+        expect(screen.getAllByText('now')).toHaveLength(1);
         // Two reads, each the runtime's answer: nothing on the page divides one figure by another.
         expect(sent(api, 'campaign.summary')).toContainEqual(fixtures['campaign.summary/some'].request);
         expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/one'].request]);
@@ -802,7 +809,12 @@ describe('A campaign’s Results', () => {
             .answer('campaign.activity', 'campaign.activity/summer');
         open(api, { ...table, id: fixtures['campaign.get/summer'].request.campaign_id, tab: 'results' });
 
-        expect(await figures()).toEqual(['People, 2', 'Contacted, 0', 'Replied, 0', 'Opted out, 0']);
+        expect(await figures()).toEqual([
+            'People now, 2',
+            'Contacted in the last 7 days, 0',
+            'Replied in the last 7 days, 0',
+            'Opted out in the last 7 days, 0',
+        ]);
         expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/summer'].request]);
     });
 });

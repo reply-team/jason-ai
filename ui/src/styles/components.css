@@ -460,7 +460,6 @@ details.fold pre {
 .campaign-tabs-results { padding: var(--space-4) var(--space-5); }
 .campaign-tabs-results .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .campaign-tabs-results .tile, .campaign-tabs-results .tile:hover { cursor: default; background: var(--bg); }
-.campaign-tabs-results .hint { margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--text-sm); }
 @media (max-width: 640px) { .campaign-tabs-results .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* The people an Add people dialog will add, each with its way out. */
