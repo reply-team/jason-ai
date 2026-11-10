@@ -47,6 +47,7 @@ public static class ApiFixtures
         "audience.filter_values/industries",
         "audience.preview/audience-unknown",
         "audience.preview/by-definition",
+        "audience.preview/by-number",
         "audience.preview/definition-invalid",
         "block.clear/cleared",
         "block.clear/not-open",

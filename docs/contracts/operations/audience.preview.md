@@ -33,9 +33,9 @@ schemas for a campaign — the operation's arguments and the routed plugin's def
 definition the provider takes.
 
 Exactly one of `args.audience` and `args.definition` is given: both at once are refused, and so is neither. A number
-names an audience the campaign already searched under; no audience is numbered in this version yet, so a preview by
-number is refused `audience_unknown`. Either way the runtime composes the definition under `definition` at the root of
-the input, and the plugin reads it there and nowhere else.
+names one of the campaign's audiences, and is previewed by the definition that audience was made from; a number the
+campaign holds no audience under is refused `audience_unknown`. Either way the runtime composes the definition under
+`definition` at the root of the input, and the plugin reads it there and nowhere else. A preview makes no audience.
 
 ## The input you receive
 

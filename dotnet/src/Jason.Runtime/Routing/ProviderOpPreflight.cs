@@ -265,7 +265,7 @@ public static class ProviderOpPreflight
             return Refused(
                 resolution,
                 AttemptErrors.AudienceUnknown,
-                string.Create(CultureInfo.InvariantCulture, $"This campaign holds no audience under {number} for '{operation}': this build numbers no audience yet, so name the audience by its definition."));
+                string.Create(CultureInfo.InvariantCulture, $"This campaign holds no audience under {number} for '{operation}': a campaign numbers its audiences from 1, in the order their first searches were claimed, so name one it holds, or the audience by its definition."));
         }
 
         var input = CanonicalInput.Compose(contract, facts);
