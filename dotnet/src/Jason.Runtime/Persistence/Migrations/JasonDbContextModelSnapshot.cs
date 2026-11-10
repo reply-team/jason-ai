@@ -260,6 +260,63 @@ namespace Jason.Runtime.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.Audience", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("definition_json");
+
+                    b.Property<string>("DefinitionHash")
+                        .IsRequired()
+                        .HasMaxLength(71)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("definition_hash");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("number");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audiences");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_audiences_public_id");
+
+                    b.HasIndex("CampaignId", "DefinitionHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_audiences_campaign_id_definition_hash");
+
+                    b.HasIndex("CampaignId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_audiences_campaign_id_number");
+
+                    b.ToTable("audiences", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_audiences_definition_json", "json_valid(definition_json)");
+                        });
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
                 {
                     b.Property<int>("Id")
@@ -2530,6 +2587,18 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasConstraintName("fk_attempts_work_items_work_item_id");
 
                     b.Navigation("WorkItem");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Audience", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audiences_campaigns_campaign_id");
+
+                    b.Navigation("Campaign");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>

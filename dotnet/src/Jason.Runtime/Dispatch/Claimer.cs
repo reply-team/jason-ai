@@ -7,6 +7,7 @@ using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -131,6 +132,13 @@ public sealed class Claimer(
             var verdict = item.Kind == WorkItemKind.ProviderOp
                 ? ProviderOpPreflight.Check(await FactsAsync(db, item, routing, ct).ConfigureAwait(false), packages, routing, _timing)
                 : null;
+
+            // A search the claim lets through, to run now or to wait for a person, runs under one of the campaign's audiences
+            // from here on: its definition passed the routed plugin's schema. One the claim refuses becomes no audience.
+            if (verdict is { Refused: false, Plan: { } searching } && CampaignAudiences.Recorded(searching.Contract.Id))
+            {
+                await AudienceAsync(db, item, searching, now, ct).ConfigureAwait(false);
+            }
 
             // A role its campaign has started enough of today is held, not refused: a failure would wake the manager, and a
             // responder's reply would reach it by a second path. It waits, with no attempt, for the next 00:00Z.
@@ -646,10 +654,42 @@ public sealed class Claimer(
     }
 
     /// <summary>
+    /// The campaign's audience for the definition the search is composed with — found by its content, or made — and the
+    /// search's record of it under its context's reserved key, written and said in the chronicle only where it changes: a
+    /// search claimed again after a person approved it runs under the audience it was parked under and says nothing more.
+    /// It is saved with the claim, so a claim that loses its save to another writer leaves no audience behind.
+    /// </summary>
+    private async Task AudienceAsync(JasonDbContext db, WorkItem item, ProviderOpPlan plan, DateTime now, CancellationToken ct)
+    {
+        // The twentieth check held the composed definition to the routed plugin's schema, and that schema is an object's.
+        var definition = (JsonObject)plan.Input[CanonicalInput.DefinitionKey]!;
+        var audience = await CampaignAudiences.FindOrMakeAsync(db, item.CampaignId, definition, now, ct).ConfigureAwait(false);
+        var carried = CampaignAudiences.Carried(audience, definition);
+        var recorded = item.Context[CampaignAudiences.ContextKey];
+        if (JsonNode.DeepEquals(recorded, carried))
+        {
+            return;
+        }
+
+        var context = item.Context.DeepClone().AsObject();
+        context[CampaignAudiences.ContextKey] = carried;
+        item.Context = context;
+        journal.Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.WorkItemContextUpdated,
+            campaign: null,
+            key: CampaignAudiences.ContextKey,
+            old: recorded?.DeepClone(),
+            updated: carried.DeepClone(),
+            workItem: item);
+    }
+
+    /// <summary>
     /// What the pre-flight decides on, read inside the claim transaction and nowhere else. The route is resolved
     /// first — a pure lookup over the snapshot the decision itself will use again — because whose identifiers to
-    /// read is the routed plugin's question, and an item nothing routes needs no reads at all. No audience is read: this
-    /// build numbers none, so an audience named by its number is found nowhere, and the claim says so.
+    /// read is the routed plugin's question, and an item nothing routes needs no reads at all. An audience the work names
+    /// by its number is read by that number, in the work's own campaign.
     /// </summary>
     private async Task<PreflightFacts> FactsAsync(JasonDbContext db, WorkItem item, RouteSnapshot routing, CancellationToken ct)
     {
@@ -696,9 +736,14 @@ public sealed class Claimer(
                 ct).ConfigureAwait(false)
             : null;
 
+        var audience = CanonicalInput.CarriesADefinition(contract) && CanonicalInput.NamedAudience(item) is { } number
+            && await CampaignAudiences.ByNumber(db, campaign.Id, number).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false) is { } held
+            ? new NamedAudience(held.Number, held.Definition)
+            : null;
+
         if (item.Contact is not { } contact)
         {
-            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled), search);
+            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled), search, audience);
         }
 
         if (contract.Preflight.Channel == ChannelRequirement.FromArgs)
@@ -719,7 +764,8 @@ public sealed class Claimer(
             unsettled,
             send,
             Learned(contact.ExternalIds, campaign.ExternalIds, pluginId, item, unsettled),
-            search);
+            search,
+            audience);
     }
 
     /// <summary>

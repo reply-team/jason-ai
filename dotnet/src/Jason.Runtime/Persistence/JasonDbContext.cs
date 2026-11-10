@@ -66,6 +66,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<SubscriptionRun> SubscriptionRuns => Set<SubscriptionRun>();
 
+    public DbSet<Audience> Audiences => Set<Audience>();
+
     /// <summary>
     /// The one connection string for a database file. Spelled once because the provider pools connections per
     /// connection string: anything that wants to release a file's pooled connections must name it exactly.
@@ -835,6 +837,22 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             preference.ToTable(t => t.HasCheckConstraint("ck_preferences_value_json", "json_valid(value_json)"));
             preference.Property(p => p.ValueHash).HasMaxLength(80);
             preference.Property(p => p.UpdatedById).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<Audience>(audience =>
+        {
+            audience.ToTable("audiences", t => t.HasCheckConstraint("ck_audiences_definition_json", "json_valid(definition_json)"));
+            audience.HasKey(a => a.Id);
+            audience.Property(a => a.PublicId).HasMaxLength(40);
+            audience.HasIndex(a => a.PublicId).IsUnique();
+            audience.Property(a => a.Definition).HasColumnName("definition_json").IsRequired();
+            audience.Property(a => a.DefinitionHash).HasMaxLength(71);
+
+            // A campaign's audience is found by its number and by its content, one row for each: the database says so, and
+            // the latest number is read off the same index the next one is made from.
+            audience.HasIndex(a => new { a.CampaignId, a.Number }).IsUnique();
+            audience.HasIndex(a => new { a.CampaignId, a.DefinitionHash }).IsUnique();
+            audience.HasOne(a => a.Campaign).WithMany().HasForeignKey(a => a.CampaignId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<SubscriptionCursor>(cursor =>

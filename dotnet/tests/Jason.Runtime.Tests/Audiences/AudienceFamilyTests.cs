@@ -7,11 +7,13 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Tests.Notifications;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.Tests.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Audiences;
@@ -75,8 +77,8 @@ public sealed class AudienceFamilyTests
     /// The reads first: what <c>audience.search</c> takes for the campaign, the plugin's half beside the contract's, and
     /// nothing of a plugin's for an operation that carries no definition, and a refusal for one the routed plugin does
     /// not perform; an audience's size and sample; a filter's values; whether the account may search. A definition off the
-    /// plugin's schema, and an audience by a number this build holds none under, are refused before the provider is
-    /// asked. Each exchange is recorded for the clients that render it.
+    /// plugin's schema, and an audience by a number the campaign holds none under, are refused before the provider is
+    /// asked. Each exchange is recorded for the clients that render it, and none of them makes an audience.
     /// </summary>
     [Fact]
     public async Task A_campaign_s_reads_answer_through_its_route_and_describe_what_the_routed_plugin_takes()
@@ -118,15 +120,19 @@ public sealed class AudienceFamilyTests
         Assert.True(availability.Available);
         Assert.Null(availability.Reason);
 
-        // Reads are asked of the provider and recorded nowhere: not one search was started by any of them.
+        // Reads are asked of the provider and recorded nowhere: not one search was started by any of them, and the campaign
+        // holds no audience.
         Assert.Empty(account.Started);
+        Assert.Equal(0, await AudiencesAsync(api));
     }
 
     /// <summary>
     /// A search a person approves: parked before the provider hears of it, started once approved under the definition the
     /// person read, and answered with the provider's reference, which the status read and the stop then act by. The
     /// status follows the provider until it finishes; a stop of a running search cancels it, and a second stop finds it
-    /// ended, which is a success too.
+    /// ended, which is a success too. The two searches run under two definitions, the campaign's audiences 1 and 2, and a
+    /// preview that names the second by its number is answered: it is composed with the definition that audience was made
+    /// from, without which the plugin's schema refuses it.
     /// </summary>
     [Fact]
     public async Task A_search_runs_once_approved_and_is_read_and_stopped_by_its_reference()
@@ -148,7 +154,8 @@ public sealed class AudienceFamilyTests
         var finished = await RunAsync(api, campaign, "audience.search_status", new JsonObject { ["search"] = first.Id, ["limit"] = 100 });
         Assert.Equal(("finished", 3, false), ((string?)finished.Result!["state"], finished.Result["people"]!.AsArray().Count, (bool)finished.Result["has_more"]!));
 
-        var second = await ApprovedSearchAsync(api, account, campaign);
+        var second = await ApprovedSearchAsync(api, account, campaign, new JsonObject { ["industries"] = new JsonArray("Logistics") });
+        await api.RecordAsync<AudiencePreviewResponse>(Operations.AudiencePreview, "by-number", new { campaign_id = campaign, audience = 2 }, Ct);
         var stopped = await RunAsync(api, campaign, "audience.search_cancel", new JsonObject { ["search"] = second.Id });
         Assert.Equal("""{"items":[{"status":"cancelled","ended_as":null}]}""", stopped.Result!.ToJsonString());
         var again = await RunAsync(api, campaign, "audience.search_cancel", new JsonObject { ["search"] = second.Id });
@@ -222,20 +229,21 @@ public sealed class AudienceFamilyTests
     }
 
     /// <summary>
-    /// A search for fifty people in software, parked for a person before the provider hears of it, approved, and run: the
-    /// item as it ended.
+    /// A search for fifty people in software, or under <paramref name="definition"/>, parked for a person before the
+    /// provider hears of it, approved, and run: the item as it ended.
     /// </summary>
-    private static async Task<WorkItemDto> ApprovedSearchAsync(RuntimeApiFixture api, StandInAccount account, string campaign)
+    private static async Task<WorkItemDto> ApprovedSearchAsync(RuntimeApiFixture api, StandInAccount account, string campaign, JsonObject? definition = null)
     {
+        definition ??= Software;
         var started = account.Started.Count;
-        var item = await CreateAsync(api, campaign, "audience.search", new JsonObject { ["definition"] = Software, ["count"] = 50 });
+        var item = await CreateAsync(api, campaign, "audience.search", new JsonObject { ["definition"] = definition.DeepClone(), ["count"] = 50 });
         Assert.Equal(0, (await api.Resolve<ScanRunner>().ScanOnceAsync(Ct)).Claimed);
         Assert.Equal(WorkItemStatus.AwaitingApproval, (await ReadAsync(api, item)).Status);
         Assert.Equal(started, account.Started.Count);
 
         var approval = (await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { }, Ct)).Items.Single(waiting => waiting.WorkItemId == item);
         var subject = (await api.PostOkAsync<ApprovalDto>(Operations.ApprovalGet, new { approval_id = approval.Id }, Ct)).Subject;
-        Assert.True(JsonNode.DeepEquals(Software, subject["input"]!["definition"]));
+        Assert.True(JsonNode.DeepEquals(definition, subject["input"]!["definition"]));
         await api.PostOkAsync<ApprovalDto>(Operations.ApprovalApprove, new { approval_id = approval.Id, actor = new { type = "human", id = "ada" } }, Ct);
 
         await ScanAsync(api);
@@ -261,6 +269,13 @@ public sealed class AudienceFamilyTests
     {
         await api.Resolve<ScanRunner>().ScanOnceAsync(Ct);
         Assert.True(await api.Resolve<HandlerPool>().DrainAsync(TimeSpan.FromSeconds(30)));
+    }
+
+    /// <summary>How many audiences the runtime holds, every campaign's.</summary>
+    private static async Task<int> AudiencesAsync(RuntimeApiFixture api)
+    {
+        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<JasonDbContext>().Audiences.CountAsync(Ct);
     }
 
     private static Task<WorkItemDto> ReadAsync(RuntimeApiFixture api, string item) =>

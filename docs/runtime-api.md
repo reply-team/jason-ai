@@ -114,7 +114,7 @@ so in one line on stderr, naming the variable and never its value.
 - **Timestamps are ISO-8601 in UTC**, as `2026-10-26T09:00:00.000Z`.
 - **Ids are prefixed ULIDs**, and the prefix says what an id names. Among them: `cmp_` a campaign, `cnt_` a contact,
   `wi_` a work item, `att_` an attempt, `apr_` an approval, `dec_` a question, `blk_` a block, `jrn_` a journal entry,
-  `rpt_` a report, `prj_` a project, `rol_` a role, `prf_` an execution profile, `sup_` a do-not-contact entry, `uit_` a
+  `rpt_` a report, `prj_` a project, `aud_` a campaign's audience, `rol_` a role, `prf_` an execution profile, `sup_` a do-not-contact entry, `uit_` a
   UI token, `evs_` an event source, `evb_` a backfill, `sbr_` a subscription chain's record, `rt_` a run of the runtime,
   and `rts_` and `snp_` the routing and plugin snapshots a route and an approval name.
 - **Success is `200`** with the answer as it is, in no envelope.
@@ -237,7 +237,8 @@ or an agent asks, outside any work item: nothing is recorded, journaled or pinne
 
 - `audience.preview`: how many people an audience holds, and a sample of them without contact details. It takes the
   audience's `definition`, held first to the schema the routed plugin declares, or an audience the campaign holds by its
-  number, and answers `count`, `companies` and `sample`.
+  number, previewed by the definition it was made from, and answers `count`, `companies` and `sample`. It makes no
+  audience.
 - `audience.filter_values`: the values one of the provider's filters takes, starting with `query`, in the provider's
   order.
 - `audience.availability`: whether the campaign's account may search now, why not, and its credits and headroom where

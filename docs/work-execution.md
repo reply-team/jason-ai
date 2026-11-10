@@ -874,7 +874,9 @@ take-back of a send, the send the arguments name with its reference, for a statu
 with its reference, and for a search, the audience's `definition` at the root
 ([docs/contracts/README.md](contracts/README.md)) — and validates the whole composed document against the operation's
 input schema at the claim, and a definition, which is the provider's own shape, against the schema the routed plugin
-declares for one. A plugin never sees a work item's context.
+declares for one. A plugin never sees a work item's context. A search the claim does not refuse runs under one of the
+campaign's audiences, which the claim finds or makes and records on the item under `context.audience`
+([campaign manager](campaign-manager.md) §10).
 
 **Everything that can stop it is decided at the claim, before a child process exists.** Twenty-five checks,
 in this order, and the first that answers is the one that decides:
