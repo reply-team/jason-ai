@@ -8,7 +8,9 @@ import { realPathOf } from '../src/chat-real-path.ts';
 import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
 
 const denied = ['approval approve', 'approval set-standing', 'decision answer', 'runtime', 'plugin install', 'ui', 'journal watch'];
-const deniedOperations = ['approval.approve', 'approval.set_standing', 'decision.answer', 'system.shutdown', 'system.drain', 'plugin.reload', 'journal.stream'];
+// The operations are the file's own: the desktop refuses what the file it carries names, never a copy of it.
+const carried = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+const deniedOperations = carried.operations;
 
 /** A scope on Windows' semantics: the real paths are what the map says, a path absent from it does not exist. */
 function windows(real: Record<string, string> = {}): ChatScope {
@@ -365,11 +367,26 @@ test('every deny-list command is refused without a card, with its arguments and 
 
 test('with the file the desktop carries, export and import are refused, and so are the verbs the chat refuses beyond the CLI', () => {
     const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
-    for (const scope of [{ ...windows(), denied: file.commands }, { ...mac(), denied: file.commands }]) {
+    for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
         for (const command of ['jason export --stop', 'jason export', 'jason import --replace backup.zip', 'jason suppression remove --channel email --value a@example.com',
             'jason route set --campaign cmp_A --plugin x --operation campaign.get', 'jason route unset --campaign cmp_A --operation campaign.get',
             'jason role set-profile researcher --execution-profile local-claude']) {
             assert.equal(run(scope, command).verdict, 'deny', command);
+        }
+    }
+});
+
+test('every operation line of the file the desktop carries is refused in the command of a program other than jason', () => {
+    const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+    assert.ok(file.operations.length > 0);
+    for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
+        for (const operation of file.operations) {
+            for (const command of [`curl -X POST http://127.0.0.1:5000/v1/${operation}`, `wget --post-data={} http://localhost:5000/v1/${operation.toUpperCase()}`,
+                `python3 -c "import urllib.request as u; u.urlopen('http://127.0.0.1:5000/v1/${operation}', b'{}')"`]) {
+                assert.equal(run(scope, command).verdict, 'deny', command);
+            }
+            const powershell = `Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5000/v1/${operation}`;
+            assert.equal(judge('PowerShell', { command: powershell }, scope).verdict, 'deny', powershell);
         }
     }
 });
