@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Jason.Contracts.Update;
 using static Jason.Runtime.Tests.Documentation.Workflows;
 
 namespace Jason.Runtime.Tests.Documentation;
@@ -21,7 +22,8 @@ public partial class ReleaseWorkflowTests
     /// electron-builder writes it, printing each file with its digest and its size, and refuses, saying so, a feed whose
     /// size or digest for a file differs from the bytes beside it, whose path names a digest other than its file's, that
     /// names a file that is not there or one outside its folder, that names no file, a file without its size, or a
-    /// version other than the release's.
+    /// version other than the release's, and one that does not list exactly the files the release expects in it: a Mac
+    /// feed that names one architecture's zip alone, or a third file.
     /// </summary>
     [Theory]
     [InlineData("as built", 0, null)]
@@ -33,6 +35,8 @@ public partial class ReleaseWorkflowTests
     [InlineData("no file named", 1, "names no file")]
     [InlineData("a file without its size", 1, "without its sha512 and its size")]
     [InlineData("another version", 1, "does not name 0.34.0")]
+    [InlineData("one architecture alone", 1, "lists jason-desktop-macos-arm64.zip, and it must list exactly jason-desktop-macos-arm64.zip, jason-desktop-macos-x64.zip.")]
+    [InlineData("a third file", 1, "lists jason-desktop-macos-arm64.zip, jason-desktop-macos-universal.zip, jason-desktop-macos-x64.zip, and it must list exactly jason-desktop-macos-arm64.zip, jason-desktop-macos-x64.zip.")]
     public void The_feed_check_passes_a_feed_whose_every_file_is_the_one_beside_it_alone(string row, int exit, string? said)
     {
         using var tree = new TempTree();
@@ -40,6 +44,8 @@ public partial class ReleaseWorkflowTests
         var second = Path.Combine(tree.Root, "jason-desktop-macos-x64.zip");
         File.WriteAllBytes(first, Enumerable.Repeat((byte)'a', 1000).ToArray());
         File.WriteAllBytes(second, Enumerable.Repeat((byte)'b', 2000).ToArray());
+        var third = Path.Combine(tree.Root, "jason-desktop-macos-universal.zip");
+        File.WriteAllBytes(third, Enumerable.Repeat((byte)'c', 3000).ToArray());
         string Digest(string file) => Convert.ToBase64String(SHA512.HashData(File.ReadAllBytes(file)));
         var other = Convert.ToBase64String(SHA512.HashData(Encoding.UTF8.GetBytes("other bytes")));
 
@@ -51,10 +57,20 @@ public partial class ReleaseWorkflowTests
             feed.Append($"  - url: {(row == "a file outside its folder" ? "../jason-desktop-macos-arm64.zip" : "jason-desktop-macos-arm64.zip")}\n");
             feed.Append($"    sha512: {(row == "a digest of other bytes" ? other : Digest(first))}\n");
             if (row != "a file without its size") feed.Append($"    size: {(row == "a size off by one" ? 1001 : 1000)}\n");
-            feed.Append($"  - url: {(row == "a file it names is not there" ? "jason-desktop-macos-x86.zip" : "jason-desktop-macos-x64.zip")}\n");
-            feed.Append($"    sha512: {Digest(second)}\n");
-            feed.Append("    size: 2000\n");
-            feed.Append("    blockMapSize: 312\n");
+            if (row != "one architecture alone")
+            {
+                feed.Append($"  - url: {(row == "a file it names is not there" ? "jason-desktop-macos-x86.zip" : "jason-desktop-macos-x64.zip")}\n");
+                feed.Append($"    sha512: {Digest(second)}\n");
+                feed.Append("    size: 2000\n");
+                feed.Append("    blockMapSize: 312\n");
+            }
+
+            if (row == "a third file")
+            {
+                feed.Append("  - url: jason-desktop-macos-universal.zip\n");
+                feed.Append($"    sha512: {Digest(third)}\n");
+                feed.Append("    size: 3000\n");
+            }
         }
 
         feed.Append("path: jason-desktop-macos-arm64.zip\n");
@@ -63,7 +79,7 @@ public partial class ReleaseWorkflowTests
         var written = Path.Combine(tree.Root, "latest-mac.yml");
         File.WriteAllText(written, feed.ToString());
 
-        var ran = Script(NoEnvironment, Path.Combine([RepositoryRoot(), .. FeedCheck]), "-Feed", written, "-Version", "0.34.0");
+        var ran = Script(NoEnvironment, Path.Combine([RepositoryRoot(), .. FeedCheck]), "-Feed", written, "-Version", "0.34.0", "-Expect", "jason-desktop-macos-x64.zip,jason-desktop-macos-arm64.zip");
 
         Assert.True(ran.Exit == exit, $"{row}: exit {ran.Exit}\n{ran.Stdout}\n{ran.Stderr}");
         if (said is null)
@@ -81,21 +97,26 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// Both desktop checks hold their feed to the files beside it through the one script, as the feed's last check, and
     /// a refusal fails the step: the Windows step's call is followed by its exit code's check, and the Mac step, a bash
-    /// one, fails on the script's exit through <c>||</c>.
+    /// one, fails on the script's exit through <c>||</c>. Each expects in its feed exactly the files of its platform a
+    /// release publishes and electron-updater downloads: the Windows installer, and both Mac zips.
     /// </summary>
     [Fact]
     public void Both_desktop_checks_hold_their_feed_to_every_file_it_names()
     {
         var windows = Scalar(ActionStep(WindowsDesktopVerify), "run")!.Split('\n').Select(line => line.Trim()).ToList();
-        var call = windows.IndexOf("./.github/scripts/Assert-UpdateFeed.ps1 -Feed \"$dist/latest.yml\" -Version $env:VERSION");
+        var call = windows.IndexOf("./.github/scripts/Assert-UpdateFeed.ps1 -Feed \"$dist/latest.yml\" -Version $env:VERSION -Expect 'jason-desktop-windows-x64-setup.exe'");
         Assert.True(call >= 0, "The Windows check never holds latest.yml to the files it names.");
         Assert.Equal("if ($LASTEXITCODE -ne 0) { throw \"latest.yml does not describe the files beside it as they will be published.\" }", windows[call + 1]);
 
         var mac = Scalar(ActionStep(MacDesktopVerify), "run")!;
         Assert.Contains(
-            "pwsh -NoProfile -File .github/scripts/Assert-UpdateFeed.ps1 -Feed \"$feed\" -Version \"$VERSION\" || { echo \"::error title=Desktop::latest-mac.yml does not describe the files beside it as they will be published.\"; exit 1; }",
+            "pwsh -NoProfile -File .github/scripts/Assert-UpdateFeed.ps1 -Feed \"$feed\" -Version \"$VERSION\" -Expect jason-desktop-macos-arm64.zip,jason-desktop-macos-x64.zip || { echo \"::error title=Desktop::latest-mac.yml does not describe the files beside it as they will be published.\"; exit 1; }",
             mac,
             StringComparison.Ordinal);
+
+        // What the two calls expect is the release's own list of desktop files, by the kind electron-updater downloads.
+        Assert.Equal(["jason-desktop-windows-x64-setup.exe"], ReleaseAssets.Desktop.Where(name => name.EndsWith(".exe", StringComparison.Ordinal)));
+        Assert.Equal(["jason-desktop-macos-arm64.zip", "jason-desktop-macos-x64.zip"], ReleaseAssets.Desktop.Where(name => name.EndsWith(".zip", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
     }
 
     /// <summary>

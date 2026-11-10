@@ -1,21 +1,29 @@
 <#
 .SYNOPSIS
-Refuses a desktop update feed, latest.yml or latest-mac.yml, that names a version other than -Version, names no file, or
-names a file whose bytes beside it have a digest or a size other than the feed says.
+Refuses a desktop update feed, latest.yml or latest-mac.yml, that names a version other than -Version, names no file,
+lists files other than exactly -Expect, or names a file whose bytes beside it have a digest or a size other than the feed
+says.
 
 .DESCRIPTION
 electron-updater downloads the file a feed names and installs it only when its SHA-512 is the one the feed gives, and it
 reads the size for its download. So every file the feed lists under files:, and the one its path: names, is read again
 from the folder the feed is in, as it will be published, and its SHA-512 (base64) and its size in bytes are held to what
 the feed says. A file the feed names must be beside it: a name with a folder in it is refused. Each file is printed with
-its digest and its size.
+its digest and its size. The files it lists are exactly -Expect, in any order, given as names or as one comma-separated
+argument: a Mac feed lists both architectures' zips, and a feed that names one alone is refused.
+
+The blockmap beside each file is not read. electron-updater uses it only to download the part of a file that changed,
+and falls back to the whole file when the part it built does not match; what it installs is decided by the SHA-512 this
+script holds.
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Feed,
-    [Parameter(Mandatory)] [string] $Version
+    [Parameter(Mandatory)] [string] $Version,
+    [Parameter(Mandatory)] [string[]] $Expect
 )
 $ErrorActionPreference = 'Stop'
+$Expect = @($Expect | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 # A refusal is one plain line on standard error and exit 1: what a log, a person and a test all read the same way.
 function Refuse([string] $Why) {
@@ -69,6 +77,10 @@ foreach ($entry in $entries) {
     $entry.Digest = $digest
     Write-Host "${url}: sha512 $digest, $size bytes, as $name says"
 }
+
+$lists = @($entries | ForEach-Object { $_.Url } | Sort-Object -CaseSensitive)
+$expected = @($Expect | Sort-Object -CaseSensitive)
+if (($lists -join ', ') -cne ($expected -join ', ')) { Refuse "$name lists $($lists -join ', '), and it must list exactly $($expected -join ', ')." }
 
 if (-not $named -or -not $namedDigest) { Refuse "$name has no path: and sha512: for the file an older updater reads." }
 $listed = @($entries | Where-Object { $_.Url -ceq $named })

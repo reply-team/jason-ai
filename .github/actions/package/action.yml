@@ -408,7 +408,7 @@ runs:
         if ($said -ne $env:VERSION) { throw "Jason.exe says it is $said, and the release is $env:VERSION." }
 
         Write-Host (Get-Content -LiteralPath "$dist/latest.yml" -Raw)
-        ./.github/scripts/Assert-UpdateFeed.ps1 -Feed "$dist/latest.yml" -Version $env:VERSION
+        ./.github/scripts/Assert-UpdateFeed.ps1 -Feed "$dist/latest.yml" -Version $env:VERSION -Expect 'jason-desktop-windows-x64-setup.exe'
         if ($LASTEXITCODE -ne 0) { throw "latest.yml does not describe the files beside it as they will be published." }
 
     - name: Forget the Azure sign-in
@@ -831,7 +831,7 @@ runs:
           notarized --type open --context context:primary-signature "$dmg" || { echo "::error title=Desktop::The $arch dmg is not accepted as Notarized Developer ID."; exit 1; }
         done
 
-        pwsh -NoProfile -File .github/scripts/Assert-UpdateFeed.ps1 -Feed "$feed" -Version "$VERSION" || { echo "::error title=Desktop::latest-mac.yml does not describe the files beside it as they will be published."; exit 1; }
+        pwsh -NoProfile -File .github/scripts/Assert-UpdateFeed.ps1 -Feed "$feed" -Version "$VERSION" -Expect jason-desktop-macos-arm64.zip,jason-desktop-macos-x64.zip || { echo "::error title=Desktop::latest-mac.yml does not describe the files beside it as they will be published."; exit 1; }
 
     - name: Forget the Developer ID identity
       if: always() && startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'
