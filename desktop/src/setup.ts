@@ -134,7 +134,9 @@ export function settingsUnreadable(stdout: string): string | null {
 
 /** Pure: what the system screen says when the runtime and the desktop are two versions. */
 export function versionsDifferSentence(runtimeVersion: string | null, bundleVersion: string): string | null {
-    if (runtimeVersion === null || runtimeVersion === bundleVersion) return null;
+    // A build after a plus names the commit, not another version.
+    const bare = (version: string) => version.split('+')[0];
+    if (runtimeVersion === null || bare(runtimeVersion) === bare(bundleVersion)) return null;
     return `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is. Run \`jason update\` to bring them to one version.`;
 }
 

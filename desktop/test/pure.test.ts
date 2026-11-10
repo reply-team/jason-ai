@@ -84,6 +84,9 @@ test('jason status is read by its checks: the runtime up, and whether it is the 
 test('the system screen’s sentence names jason update when the versions differ, and nothing when they agree', () => {
     assert.equal(versionsDifferSentence('0.34.0-rc.1', '0.34.0-rc.1'), null);
     assert.equal(versionsDifferSentence(null, '0.34.0-rc.1'), null);
+    // The runtime reports its build after a plus, as the executable the desktop carries does; that is the one version.
+    assert.equal(versionsDifferSentence('0.34.0-rc.1+14315ba2bcc0ac52ba8eeebbd1b52d9306913d5e', '0.34.0-rc.1'), null);
+    assert.notEqual(versionsDifferSentence('0.34.0-rc.2+14315ba2', '0.34.0-rc.1'), null);
     const sentence = versionsDifferSentence('0.33.0', '0.34.0-rc.1') ?? '';
     assert.match(sentence, /0\.33\.0/);
     assert.match(sentence, /0\.34\.0-rc\.1/);
