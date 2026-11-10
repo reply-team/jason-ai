@@ -210,6 +210,17 @@ test('wiring Reply grants it its executable and names it the global default, onl
     assert.deepEqual((operations.settings as { Routes: unknown }).Routes, { Operations: { 'contact.find': { Plugin: 'other' } }, Default: { Plugin: 'reply', Binding: { profile: 'default' } } });
 });
 
+test('wiring Reply keeps an Exec grant that already holds reply, and writes ["reply"] only where none does', () => {
+    const widened = { Plugins: { Grants: { reply: { Exec: ['reply', 'x'] } } }, Routes: { Default: { Plugin: 'other' } } };
+    assert.deepEqual(withReplyWired(widened, 'default').settings, widened);
+    const lowerCase = { plugins: { grants: { reply: { exec: ['x', 'reply'] } } }, Routes: { Default: { Plugin: 'other' } } };
+    assert.deepEqual(withReplyWired(lowerCase, 'default').settings, lowerCase);
+    for (const exec of [['x'], [], 'reply', null]) {
+        const wired = withReplyWired({ Plugins: { Grants: { reply: { Exec: exec } } }, Routes: { Default: { Plugin: 'other' } } }, 'default');
+        assert.deepEqual((wired.settings as { Plugins: unknown }).Plugins, { Grants: { reply: { Exec: ['reply'] } } }, JSON.stringify(exec));
+    }
+});
+
 test('Reply’s answers are read in the shapes reply-cli prints, and the route list by its global default', () => {
     assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', source: 'store', method: 'api_key', user: { id: 7, username: 'someone@example.com', team_id: 3 } })), {
         signedIn: true,

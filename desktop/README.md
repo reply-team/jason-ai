@@ -36,7 +36,8 @@ A Connect card also writes, into `<data>/config/settings.json`, the keys of the 
 `Plugins:Config:<id>`, `Plugins:Grants:<id>:Http` and `Notifications:Plugins:<id>:Binding`, each section made only when
 a value is written into it. The `Http` grant is written only where there is none, or where the server or receiver it
 derives from changed, so a grant you wrote yourself (a server of your own for ntfy, say) outlives a new token or topic.
-The Reply card writes `Plugins:Grants:reply:Exec` (`["reply"]`) and, only where the file names no `Routes:Default` at
+The Reply card writes `Plugins:Grants:reply:Exec` (`["reply"]`, only where the grant does not already hold
+`reply`, so one you widened is kept) and, only where the file names no `Routes:Default` at
 all, `Routes:Default` with the profile signed in (`{"Plugin": "reply", "Binding": {"profile": "default"}}` unless
 `reply auth status` names another), as the golden path writes them by hand; a default you set is kept. No other
 `Routes` key is ever written, and every other key is kept as it was.

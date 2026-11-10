@@ -244,15 +244,19 @@ export interface ReplyWiring {
 }
 
 /**
- * The installation's settings with Jason's Reply plugin granted its one executable (`Plugins:Grants:reply:Exec`) and,
+ * The installation's settings with Jason's Reply plugin granted its one executable (`Plugins:Grants:reply:Exec`, written
+ * as `["reply"]` only where the grant does not already hold `reply`, so one a person widened is kept) and,
  * where the file names no global default at all, named the global default with the signed-in profile
  * (`Routes:Default`), as the golden path writes both by hand. A default a person set is never replaced; every other key
  * stays as it was, and the input is not changed.
  */
 export function withReplyWired(settings: Json, profile: string): ReplyWiring {
     const next = structuredClone(settings);
-    const grant = section(next, ['Plugins', 'Grants', 'reply']);
-    grant[keyOf(grant, 'Exec')] = ['reply'];
+    const exec = at(next, ['Plugins', 'Grants', 'reply', 'Exec']);
+    if (!(Array.isArray(exec) && exec.includes('reply'))) {
+        const grant = section(next, ['Plugins', 'Grants', 'reply']);
+        grant[keyOf(grant, 'Exec')] = ['reply'];
+    }
     const routes = existing(next, ['Routes']);
     const routeWritten = routes === undefined || routes[keyOf(routes, 'Default')] === undefined;
     if (routeWritten) section(next, ['Routes'])[keyOf(routes ?? {}, 'Default')] = { Plugin: 'reply', Binding: { profile } };

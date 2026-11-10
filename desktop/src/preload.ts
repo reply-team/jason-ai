@@ -14,9 +14,9 @@ function subscribe(channel: string, handler: Handler): () => void {
     };
 }
 
-const platform = process.platform === 'darwin' || process.platform === 'win32' ? process.platform : 'linux';
+const platform: 'darwin' | 'win32' | 'linux' = process.platform === 'darwin' || process.platform === 'win32' ? process.platform : 'linux';
 
-contextBridge.exposeInMainWorld('jasonDesktop', {
+const desktop = {
     platform,
     onCommand: (handler: Handler) => subscribe('jason:command', handler),
     chat: {
@@ -34,4 +34,9 @@ contextBridge.exposeInMainWorld('jasonDesktop', {
         configurePlugin: (pluginId: string, values: unknown) => ipcRenderer.invoke('jason:setup.configurePlugin', pluginId, values),
         onChanged: (handler: Handler) => subscribe('jason:setup.changed', handler),
     },
-});
+};
+
+/** What the preload exposes, for the test that holds it to the page's declaration; a type only, so nothing is exported. */
+export type DesktopPreload = typeof desktop;
+
+contextBridge.exposeInMainWorld('jasonDesktop', desktop);
