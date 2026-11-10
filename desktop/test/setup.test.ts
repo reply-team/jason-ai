@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
+import { Chat, type ChatEvent } from '../src/chat.ts';
+import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
+import { loggedTurns } from '../src/chat-log.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
@@ -260,8 +263,8 @@ function settingsLeaves(b: Bench): Map<string, string> {
 
 const replyLeftovers = () => readdirSync(tmpdir()).filter((name) => name.startsWith('jason-reply-skills-')).length;
 
-test('each act of the Connect cards writes under <data> what it names and nothing else, and nothing outside <data>', async (t) => {
-    const b = bench(t, { programs: ['reply', 'npm'] });
+test('each act of the Connect cards and a chat turn writes under <data> what it names and nothing else, and nothing outside <data>', async (t) => {
+    const b = bench(t, { programs: ['reply', 'npm', 'claude'] });
     writeInstallationSettings(b, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Harness: { Root: 'kept' } });
     // The bench's root holds the data directory, the stubs' PATH and Node, and the stubs' own record of what they ran.
     const outside = () => ({ top: readdirSync(b.root).filter((name) => name !== 'record.jsonl').sort(), bin: [...snapshot(join(b.root, 'bin'))] });
@@ -312,6 +315,38 @@ test('each act of the Connect cards writes under <data> what it names and nothin
     await act('configurePlugin ntfy', () => setup.configurePlugin('ntfy', { target: 'jason-topic', server: 'https://ntfy.example.com' }), ['config/settings.json'], pluginKeys('ntfy'));
     await act('configurePlugin journal-forwarder', () => setup.configurePlugin('journal-forwarder', { token: 'b', target: 'https://hooks.example.com/in' }), ['config/settings.json'], pluginKeys('journal-forwarder'));
     await act('Reload', () => setup.configurePlugin('slack', {}), [], []);
+
+    // A chat turn writes one file, its MCP configuration beside the chat folder, and removes it when the turn is over.
+    const turnFile = /^desktop\/turn-[0-9a-f]{24}\.mcp\.json$/;
+    let during: string[] = [];
+    await act('a chat turn', async () => {
+        b.env.STUB_HOST_PLAN = JSON.stringify([{ ask: { tool: 'Bash', input: { command: 'git status' } } }]);
+        const before = snapshot(b.paths.data);
+        let finished: () => void = () => undefined;
+        const done = new Promise<void>((resolve) => (finished = resolve));
+        const chat: Chat = new Chat({
+            paths: b.paths,
+            env: b.env,
+            bundle: join(b.root, 'bin'),
+            dataNamed: true,
+            cli: loggedCli(b.cli, log),
+            keyFor: () => undefined,
+            denied: () => parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8')),
+            emit(_chatId, event: ChatEvent) {
+                if (event.kind === 'permission') {
+                    during = written(before, snapshot(b.paths.data)).filter((path) => !isLog(path));
+                    chat.answer('c1', event.request, { allow: true, always: false });
+                }
+                if (event.kind === 'done') finished();
+            },
+            ...loggedTurns(log),
+        });
+        await chat.send('c1', 'hello', { host: 'claude' });
+        await done;
+    }, [], []);
+    assert.equal(during.length, 1, `while the turn waited: ${during.join(', ')}`);
+    assert.match(during[0] ?? '', turnFile);
+    assert.ok(![...snapshot(b.paths.data).keys()].some((path) => turnFile.test(path)), 'the turn file is gone once the turn is over');
 
     assert.deepEqual(readInstallationSettings(b), {
         Plugins: {

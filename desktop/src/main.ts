@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { Chat } from './chat.ts';
 import { denyListFile, parseDenyList } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
+import { loggedTurns } from './chat-log.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart } from './login-item.ts';
@@ -256,6 +257,7 @@ async function run(): Promise<void> {
         keyFor: (id) => keys.keyFor(id),
         denied: deniedCommands,
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
+        ...loggedTurns(log),
     });
     registerChat(ipcMain, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     // A turn never outlives the window: closing it stops every host and forgets every "always".

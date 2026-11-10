@@ -2,6 +2,7 @@
 // events, by the name it was started as. What the turn does comes from STUB_HOST_PLAN, a JSON array of steps:
 //   { "ask": { "tool": "Bash", "input": { ... } } }  ask the permission prompt tool, then say what it decided
 //   { "say": "text" }                                 say a line of text
+//   { "use": { "tool": "Read", "input": { ... } } }  use a tool without asking, as one the allowed tools let through
 //   { "wait": "<file>" }                              start a process of its own, write that process's id to the file, and hang
 //   { "fail": { "stderr": "words", "code": 3 } }      write to stderr and exit with the code, with no result
 //   { "end": "no_result" }                            exit 0 with no result
@@ -40,6 +41,7 @@ async function claude(args, stdin) {
     let n = 0;
     for (const step of plan()) {
         if (step.say !== undefined) print({ type: 'assistant', message: { content: [{ type: 'text', text: step.say }] } });
+        else if (step.use !== undefined) print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_use_${++n}`, name: step.use.tool, input: step.use.input }] } });
         else if (step.ask !== undefined) {
             n++;
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_${n}`, name: step.ask.tool, input: step.ask.input }] } });

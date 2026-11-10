@@ -55,6 +55,10 @@ export const templates = {
     update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
     update_failed: 'The updater step {Step} failed, {Failures} times running',
     update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',
+    // The chat.
+    chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}',
+    chat_turn_ended: 'A chat turn on {Host} ended with exit {Exit} after {DurationMs} ms: {Steps} steps, {Requests} permission requests',
+    chat_request_decided: 'A permission request of the chat was {Outcome} by the {By}',
 } as const;
 
 export type TemplateName = keyof typeof templates;
