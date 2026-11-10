@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { problems } from './console-templates';
 
@@ -15,6 +15,28 @@ describe('the console source', () => {
 
     it('makes markup only with the html tag, writes it only through paint, and carries no handler or style', () => {
         const found = sources.flatMap((name) => problems(name, readFileSync(join(consoleDir, name), 'utf8')));
+        expect(found).toEqual([]);
+    });
+});
+
+const sourceDir = join(import.meta.dirname, '..', '..', 'src');
+/** Every source outside the console that draws with the console's html tag, by its path under src. */
+const borrowers = readdirSync(sourceDir, { recursive: true, encoding: 'utf8' })
+    .map((name) => name.split(sep).join('/'))
+    .filter((name) => /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) && !name.startsWith('console/'))
+    .filter((name) =>
+        /(from|import)\s*\(?\s*['"][./]*\/?console\/html(\.[jt]sx?)?['"]/.test(
+            readFileSync(join(sourceDir, name), 'utf8'),
+        ),
+    );
+
+describe('a source outside the console that draws with its html tag', () => {
+    it('is found', () => {
+        expect(borrowers).toContain('screens/settings/screen.tsx');
+    });
+
+    it('is held to the same rules as the console', () => {
+        const found = borrowers.flatMap((name) => problems(name, readFileSync(join(sourceDir, name), 'utf8')));
         expect(found).toEqual([]);
     });
 });
