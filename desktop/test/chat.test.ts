@@ -405,6 +405,25 @@ test('a second send while the chat answers is refused, and the first turn goes o
     assert.equal(r.hosts().length, 1);
 });
 
+test('a send made the moment a turn says it is done starts the next turn, so the page\'s waiting message is never refused as busy', async (t) => {
+    const r = rig(t);
+    let next: Promise<void> | null = null;
+    // The page sends its waiting message when it hears the end; here it does so inside the very call that says it.
+    const handed = r.until('c1', (event) => {
+        if (event.kind !== 'done' || next !== null) return false;
+        next = r.chat.send('c1', 'And then?', { host: 'claude' });
+        return true;
+    });
+    let ends = 0;
+    const second = r.until('c1', (event) => event.kind === 'done' && ++ends === 2);
+    await r.chat.send('c1', words, { host: 'claude' });
+    await handed;
+    await next;
+    await second;
+    assert.deepEqual(r.events.get('c1')?.filter((event) => event.kind === 'done'), [{ kind: 'done', error: null }, { kind: 'done', error: null }]);
+    assert.deepEqual(r.hosts().map((host) => host.stdin), [words, 'And then?']);
+});
+
 test('a campaign turn adds the campaign\'s and its project\'s folders when they are recorded and on this disk', async (t) => {
     const r = rig(t);
     const campaign = join(r.b.root, 'harness-copy', 'campaign');
