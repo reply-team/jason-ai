@@ -114,6 +114,23 @@ describe('Needs you', () => {
         expect(fake.calls.filter((each) => each.operation === 'approval.get')).toHaveLength(0);
     });
 
+    it('names a row that carries no contact by the address its own preview highlights, once its details are open', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/messages-pending')
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/email-message');
+        renderConsole(fake);
+        await waitFor(() => expect(row('apr_1')).toBeTruthy());
+        attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: null }));
+        await waitFor(() => expect(needs().querySelector('.needs-who')).toBeNull());
+
+        fireEvent.click(within(row('apr_1')).getByRole('button', { name: 'Details' }));
+        await waitFor(() => within(row('apr_1')).getByText('Notes from the meetup'));
+        expect(words(row('apr_1').querySelector('.needs-who')!)).toBe('to ines@example.test');
+        expect(row('apr_2').querySelector('.needs-who')).toBeNull();
+        expect(needs().querySelectorAll('.needs-who')).toHaveLength(1);
+    });
+
     it('names the person an approval that sends nothing is about, with no word before the name', async () => {
         renderConsole(
             new FakeApi()
