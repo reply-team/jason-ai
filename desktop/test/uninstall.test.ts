@@ -13,8 +13,8 @@ import type { Cli } from '../src/cli.ts';
 import { gitBashWrapper, windowsShim } from '../src/command-line.ts';
 import { RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
-import type { Whose } from '../src/own-runtime.ts';
-import { harnessRoot, inside, uninstall, uninstallExit, uninstallStart, uninstallText, updaterCache, type UninstallDeps } from '../src/uninstall.ts';
+import type { StopOutcome } from '../src/own-runtime.ts';
+import { harnessRoot, inside, runtimeRefusal, uninstall, uninstallExit, uninstallStart, uninstallText, updaterCache, type UninstallDeps } from '../src/uninstall.ts';
 import { memoryLog } from './harness.ts';
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -36,7 +36,7 @@ interface Bench {
 
 function bench(
     t: { after(fn: () => void): void },
-    options: { loginOn?: boolean; registration?: { registered: boolean; executable: string | null } | null; disabled?: boolean | null; whose?: Whose; stop?: () => Promise<{ exit: number } | null> } = {},
+    options: { loginOn?: boolean; registration?: { registered: boolean; executable: string | null } | null; disabled?: boolean | null; stop?: () => Promise<StopOutcome> } = {},
 ): Bench {
     const folder = join(scratch(t), 'WindowsApps');
     mkdirSync(folder);
@@ -46,10 +46,11 @@ function bench(
         platform: 'win32',
         folder,
         runtime: {
-            whose: async () => options.whose ?? 'none',
+            // stopOwnRuntime asks jason runtime stop only of a runtime it confirmed as this application's.
             stop: async () => {
-                acts.push('runtime stop');
-                return options.stop ? options.stop() : null;
+                const outcome = await (options.stop ? options.stop() : Promise.resolve<StopOutcome>({ kind: 'none' }));
+                if (outcome.kind === 'stopped' || outcome.kind === 'failed') acts.push('runtime stop');
+                return outcome;
             },
         },
         command: new PathCommand({ platform: 'win32', folder, executable, dataDirectory: null, path: () => folder, isProgram: () => false, log: memoryLog() }),
@@ -161,7 +162,7 @@ test('the runtime’s logon registration is taken off only when it starts this a
 });
 
 test('what stays is said by name: the data directory, the harness root, the updater’s cache and a running runtime', async (t) => {
-    const { deps } = bench(t, { whose: 'another' });
+    const { deps } = bench(t, { stop: async () => ({ kind: 'another' }) });
     const report = await uninstall(deps);
     const { message, detail } = uninstallText(report);
     assert.equal(message, 'Jason is being removed from this computer.');
@@ -180,7 +181,7 @@ test('what stays is said by name: the data directory, the harness root, the upda
 });
 
 test('the runtime this application carries is stopped through jason runtime stop before anything is taken off', async (t) => {
-    const { folder, deps, acts } = bench(t, { whose: 'ours', loginOn: true });
+    const { folder, deps, acts } = bench(t, { stop: async () => ({ kind: 'stopped' }), loginOn: true });
     writeFileSync(join(folder, 'jason.cmd'), windowsShim(executable));
     const report = await uninstall(deps);
     assert.deepEqual(acts, ['runtime stop', 'login false']);
@@ -190,29 +191,47 @@ test('the runtime this application carries is stopped through jason runtime stop
     assert.equal(uninstallExit(report), 0);
 });
 
-test('a runtime of another executable is never stopped by the uninstall', async (t) => {
-    const { deps, acts } = bench(t, { whose: 'another' });
-    await uninstall(deps);
-    assert.ok(!acts.includes('runtime stop'));
+test('a runtime of another executable is never stopped by the uninstall, and the uninstall goes on', async (t) => {
+    const { deps, acts } = bench(t, { stop: async () => ({ kind: 'another' }), loginOn: true });
+    const report = await uninstall(deps);
+    assert.deepEqual(acts, ['login false']);
+    assert.equal(uninstallExit(report), 0);
 });
 
-test('when the runtime this application carries does not stop, nothing is taken off and the uninstall goes no further', async (t) => {
-    const stops = [async () => ({ exit: 1 }), async () => ({ exit: -1 }), async (): Promise<{ exit: number } | null> => Promise.reject(new Error('planted-stop-error'))];
-    for (const stop of stops) {
-        const { folder, deps, acts } = bench(t, { whose: 'ours', loginOn: true, registration: { registered: true, executable }, stop });
+test('when the runtime this application carries does not stop, or a runtime did not answer, nothing is taken off and the uninstall goes no further', async (t) => {
+    const stops: { stop: () => Promise<StopOutcome>; acts: string[] }[] = [
+        { stop: async () => ({ kind: 'failed', exit: 1 }), acts: ['runtime stop'] },
+        { stop: async () => ({ kind: 'failed', exit: -1 }), acts: ['runtime stop'] },
+        { stop: async () => Promise.reject(new Error('planted-stop-error')), acts: [] },
+        { stop: async () => ({ kind: 'unanswered', pid: 4242 }), acts: [] },
+        { stop: async () => ({ kind: 'unanswered', pid: null }), acts: [] },
+    ];
+    for (const { stop, acts: asked } of stops) {
+        const { folder, deps, acts } = bench(t, { loginOn: true, registration: { registered: true, executable }, stop });
         writeFileSync(join(folder, 'jason.cmd'), windowsShim(executable));
         writeFileSync(join(folder, 'jason'), gitBashWrapper(executable));
         const report = await uninstall(deps);
-        assert.deepEqual(acts, ['runtime stop'], 'nothing else was done');
+        assert.deepEqual(acts, asked, 'nothing else was done');
         assert.deepEqual(readdirSync(folder).sort(), ['jason', 'jason.cmd'], 'the PATH command stays');
         assert.equal(deps.login.isOn(), true, 'Open Jason at login stays');
         assert.deepEqual([report.removed, report.left], [[], []]);
         assert.equal(uninstallExit(report), 1, 'the uninstaller is told to go no further');
         const { message, detail } = uninstallText(report);
         assert.equal(message, 'Jason was not removed.');
-        assert.match(detail, /^Nothing was removed, because the runtime this application carries is running and did not stop \(jason runtime stop (exited 1|did not finish)\)\. Stop it with jason runtime stop, then uninstall Jason again\.$/);
+        assert.match(
+            detail,
+            /^Nothing was removed, because (the runtime this application carries is running and did not stop \(jason runtime stop (exited 1|did not finish)\)\. Stop it with jason runtime stop, then uninstall Jason again|a runtime may be running that did not answer(: its run file names process 4242, which is running|, and its run file names no process)\. jason runtime status answers once the runtime does[^]*\. Then uninstall Jason again)\.$/,
+        );
         assert.doesNotMatch(detail, /planted/);
     }
+    assert.equal(
+        runtimeRefusal({ kind: 'unanswered', pid: 4242 }),
+        'Nothing was removed, because a runtime may be running that did not answer: its run file names process 4242, which is running. jason runtime status answers once the runtime does; if it never does, end process 4242. If process 4242 is not a Jason runtime, jason runtime start starts one in place of the run file it left. Then uninstall Jason again.',
+    );
+    assert.equal(
+        runtimeRefusal({ kind: 'unanswered', pid: null }),
+        'Nothing was removed, because a runtime may be running that did not answer, and its run file names no process. jason runtime status answers once the runtime does, and jason runtime start starts one in place of a run file left behind. Then uninstall Jason again.',
+    );
 });
 
 test('the harness root and the updater’s cache are found as the runtime and electron-updater find them', (t) => {

@@ -6,13 +6,13 @@
  */
 
 import { app, dialog } from 'electron';
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliAt } from './cli.ts';
 import { loggedCli } from './installation.ts';
 import { LoginItem, RuntimeAutostart } from './login-item.ts';
-import { stopOwnRuntime, whoseRuntime, type OwnRuntimeDeps } from './own-runtime.ts';
+import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { fileLogger, limitsFrom } from './log.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { dataDirectory, desktopPaths } from './paths.ts';
@@ -37,10 +37,10 @@ export async function runUninstall(quiet: boolean): Promise<number> {
     const cli = loggedCli(cliAt(executable, withPath(process.env, pathOf(process.env))), log);
     const folder = commandFolder(process.platform, process.env, home);
     const autostart = new RuntimeAutostart({ cli, log });
-    const own: OwnRuntimeDeps = { platform: process.platform, executable, readRunFile: () => readText(paths.runFile), cli, realpath: (file) => realpathSync.native(file) };
+    const own = ownRuntimeDeps(process.platform, executable, () => readText(paths.runFile), cli);
     const report = await uninstall({
         platform: process.platform,
-        runtime: { whose: () => whoseRuntime(own), stop: () => stopOwnRuntime(own) },
+        runtime: { stop: () => stopOwnRuntime(own) },
         folder,
         command: new PathCommand({
             platform: process.platform,
