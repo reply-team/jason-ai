@@ -15,8 +15,8 @@ at the root of the Jason repository, which every Jason release carries.
 1. Electron and Chromium
 ========================
 
-electron 44.7.0: MIT
---------------------
+electron 44.10.2: MIT
+---------------------
 https://github.com/electron/electron
 
 Copyright (c) Electron contributors
