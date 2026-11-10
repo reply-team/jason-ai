@@ -25,7 +25,8 @@ export function activityView(): Html {
         ${
             state.fresh
                 ? html`<div class="note">
-                      The runtime no longer holds the last line this window saw, so the list starts again.
+                      The runtime no longer holds the last line this window saw, so lines written in between are not
+                      shown.
                   </div>`
                 : null
         }

@@ -2,8 +2,11 @@
 .jc-console a:hover {
     text-decoration: none;
 }
+/* The browser shell draws its focus ring as a shadow from its own tokens; the console takes it off and draws its own. */
 .jc-console :focus-visible {
     box-shadow: none;
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
 }
 .jc-console,
 .jc-console * {
@@ -707,7 +710,7 @@
 .jc-console [hidden] {
     display: none;
 }
-html.desktop-mac .jc-console .side {
+.jc-console.desktop-mac .side {
     padding-top: 26px;
 }
 .jc-console .hero {

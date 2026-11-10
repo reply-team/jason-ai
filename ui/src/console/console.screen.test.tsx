@@ -9,12 +9,13 @@ import { navigate, parseRoute, route } from '../router';
 import * as classicAttention from '../screens/attention/store';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
+import { readFileSync } from 'node:fs';
 import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention } from './needs';
-import { chats, clock, lines, setupBusy } from './state';
+import { chats, clock, lines, setupBusy, streamState } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -60,6 +61,18 @@ beforeEach(() => {
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
 });
+
+/** The stylesheet's rules, selector and declarations, with its comments taken out. */
+// Read from the file: the test run hands a stylesheet import back empty. The run starts in ui/.
+const stylesheet = readFileSync('src/console/console.css', 'utf8');
+const rules = (): { selector: string; body: string }[] =>
+    Array.from(stylesheet.replace(/[/][*][^]*?[*][/]/g, '').matchAll(/([^{}]+)[{]([^{}]*)[}]/g), (rule) => ({
+        selector: rule[1]!.trim(),
+        body: rule[2]!,
+    }));
+
+/** An element's text with its runs of white space made one space, as a person reads it. */
+const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ');
 
 const asked = (fake: FakeApi, operation: string) => fake.calls.filter((each) => each.operation === operation).length;
 
@@ -560,5 +573,44 @@ describe('the console', () => {
         expect(document.activeElement).toBe(reason());
         expect(reason().value).toBe('not this quarter');
         expect([reason().selectionStart, reason().selectionEnd]).toEqual([4, 8]);
+    });
+
+    it('gives the sidebar room for the macOS window buttons, and every control the console draws a focus ring', async () => {
+        const desktop = Object.assign(stubDesktop(), { platform: 'darwin' as const });
+        renderConsole(pending(new FakeApi()), desktop);
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        const side = document.querySelector('.jc-console .side')!;
+        const mac = rules().filter((rule) => rule.selector.includes('desktop-mac'));
+        expect(mac.length).toBeGreaterThan(0);
+        for (const rule of mac) expect(side.matches(rule.selector)).toBe(true);
+
+        const focus = rules().filter((rule) => rule.selector === '.jc-console :focus-visible');
+        expect(focus.map((rule) => /outline:\s*(?!none|0)[^;]+;/.test(rule.body))).toContain(true);
+        const send = screen.getByRole('button', { name: 'Send' });
+        expect(send.matches('.jc-console *')).toBe(true);
+    });
+
+    it('says after a fresh start that lines written in between are not shown, and keeps the lines it has', async () => {
+        const { journal } = renderConsole(pending(new FakeApi()));
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_501' }));
+        });
+        show('Activity');
+        const activity = await waitFor(() => panel('Activity'));
+        await waitFor(() => expect(lines.value.map((each) => each.id)).toEqual(['jrn_501']));
+        const shown = activity.querySelectorAll('.ev').length;
+        flush(() => {
+            streamState.value = { ...streamState.value, fresh: true };
+        });
+        await waitFor(() =>
+            expect(words(panel('Activity'))).toContain(
+                'The runtime no longer holds the last line this window saw, so lines written in between are not shown.',
+            ),
+        );
+        expect(words(panel('Activity'))).not.toContain('starts again');
+        expect(panel('Activity').querySelectorAll('.ev').length).toBe(shown);
+        expect(shown).toBe(1);
     });
 });
