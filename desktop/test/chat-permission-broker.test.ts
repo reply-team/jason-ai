@@ -270,6 +270,24 @@ test('a remembered command covers no joined value that climbs: each is a refusal
     assert.equal((await within(broker.ask('turn_1', 'Bash', { command: 'curl https://example.com -o out.html' }))).behavior, 'allow');
 });
 
+test('a remembered command covers no command that names a folder holding the data directory: it is a card each time', async () => {
+    const { broker, sent } = bench();
+    broker.openTurn('chat_a', 'turn_1', scope);
+    const first = broker.ask('turn_1', 'Bash', { command: 'rg token' });
+    await settle();
+    broker.answer('chat_a', 'req_1', { allow: true, always: true });
+    assert.equal((await first).behavior, 'allow');
+    const cards = sent.length;
+    const answer = broker.ask('turn_1', 'Bash', { command: 'rg token /Users/someone --hidden' });
+    await settle();
+    assert.equal(sent.length, cards + 1);
+    const event = sent.at(-1)?.event;
+    assert.ok(event?.kind === 'permission' && event.remember === null);
+    broker.answer('chat_a', event.request ?? '', { allow: false, always: false });
+    assert.equal((await within(answer)).behavior, 'deny');
+    assert.equal((await within(broker.ask('turn_1', 'Bash', { command: 'rg token src' }))).behavior, 'allow');
+});
+
 test('"always" holds for that chat only', async () => {
     const { broker, sent, turn } = bench();
     turn('chat_a', 'turn_1');

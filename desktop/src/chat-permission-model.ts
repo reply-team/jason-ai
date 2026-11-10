@@ -415,7 +415,9 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
         const tokens = command.trim().split(/\s+/);
         if (tokens[0] === 'reply' && allowedReply.some((words) => words.every((word, index) => tokens[index + 1] === word))) return allow;
     }
-    const prefix = commandPrefix(command);
+    // A command that names a folder holding the data directory may walk it: a card each time, never covered by a grant.
+    const data = located(scope.data, scope);
+    const prefix = places.some((path) => inside(scope, path, data)) ? null : commandPrefix(command);
     if (prefix === null) return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: `${tool}:${prefix}`, covers: `${prefix} \u2026` };
 }

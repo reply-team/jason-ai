@@ -666,6 +666,19 @@ test('a value joined to @, = or , or to a one-dash option is located on its own,
     }
 });
 
+test('a command that names a folder holding the data directory is a card each time, never covered by a grant', () => {
+    for (const [scope, command] of [[windows(), 'rg token C:/Users/someone --hidden'], [windows(), 'rg token C:\\Users'],
+        [windows(), 'rg token --glob=C:/Users/someone'], [mac(), 'rg token /Users/someone --hidden'], [mac(), 'rg token /'],
+        [mac(), 'rg token --path=/Users']] as const) {
+        const judged = run(scope, command);
+        assert.ok(judged.verdict === 'ask' && judged.remember === null, `${scope.platform} ${command}`);
+    }
+    for (const scope of [windows(), mac()]) {
+        const judged = run(scope, 'rg token src');
+        assert.ok(judged.verdict === 'ask' && judged.remember === 'Bash:rg token', `${scope.platform} rg token src`);
+    }
+});
+
 test('a shell, an exec wrapper or a program named by a path is never remembered: its card covers that request alone', () => {
     const once = ['cmd /c dir', 'CMD.EXE /c dir', 'sh build.sh', 'bash build.sh', 'zsh build.zsh', 'pwsh build.ps1',
         'powershell.exe Get-ChildItem', 'env node', 'sudo rm', 'xargs rm', 'npx some-package', 'wsl ls', 'start notepad',
