@@ -3,11 +3,12 @@
 // never started here: these rows hold the run each file is given and the files it refuses to sign.
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, win32 } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { signRun, signs } from '../scripts/sign-windows.mjs';
+import { carriesSignature, signRun, signs } from '../scripts/sign-windows.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const at = (...parts: string[]) => win32.join('D:', 'a', ...parts);
@@ -35,6 +36,49 @@ test('the bundled jason.exe keeps the signature its own job gave it; every other
         at('dist', 'jason-desktop-windows-x64-setup.__uninstaller.exe'), at('dist', 'win-unpacked', 'resources', 'jason.exe')]) {
         assert.equal(signs(file), true, file);
     }
+});
+
+/**
+ * A made-up program image's headers, up to its data directories: a PE32 or PE32+ optional header whose certificate table
+ * holds `certificate` bytes, which is how an image carries an Authenticode signature of its own.
+ */
+function image(magic: 0x10b | 0x20b, certificate: number): Buffer {
+    const pe = 0x80;
+    const optional = pe + 24;
+    const directories = optional + (magic === 0x20b ? 112 : 96);
+    const bytes = Buffer.alloc(directories + 16 * 8);
+    bytes.write('MZ', 0, 'latin1');
+    bytes.writeUInt32LE(pe, 0x3c);
+    bytes.write('PE\0\0', pe, 'latin1');
+    bytes.writeUInt16LE(magic, optional);
+    bytes.writeUInt32LE(16, directories - 4);
+    bytes.writeUInt32LE(certificate === 0 ? 0 : bytes.length, directories + 4 * 8);
+    bytes.writeUInt32LE(certificate, directories + 4 * 8 + 4);
+    return bytes;
+}
+
+test('a library that came signed keeps its own signature: one whose image carries a certificate table is not signed again', (t) => {
+    const folder = mkdtempSync(join(tmpdir(), 'jason-desktop-sign-'));
+    t.after(() => rmSync(folder, { recursive: true, force: true }));
+    const planted = (name: string, bytes: Buffer | string) => {
+        const file = join(folder, name);
+        writeFileSync(file, bytes);
+        return file;
+    };
+
+    for (const [name, magic] of [['d3dcompiler_47.dll', 0x20b], ['old-style.dll', 0x10b]] as const) {
+        const file = planted(name, image(magic, 0x2a00));
+        assert.equal(carriesSignature(file), true, name);
+        assert.equal(signRun(file, env), null, name);
+    }
+    for (const [name, bytes] of [['ffmpeg.dll', image(0x20b, 0)], ['Jason.exe', image(0x10b, 0)], ['no-image.dll', 'made up'],
+        ['cut-short.dll', image(0x20b, 0x2a00).subarray(0, 0x100)]] as const) {
+        const file = planted(name, bytes);
+        assert.equal(carriesSignature(file), false, name);
+        assert.equal(signRun(file, env)?.args.at(-1), file, name);
+    }
+    // A file that is not there carries nothing: signtool is asked, and its refusal fails the package.
+    assert.equal(carriesSignature(join(folder, 'missing.dll')), false);
 });
 
 test('a run without signtool, the client or its metadata is refused by the name it lacks, never by a value', () => {

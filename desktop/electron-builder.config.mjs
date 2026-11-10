@@ -131,6 +131,8 @@ export function configuration({ version, sign = null }) {
             icon: 'resources/icon.png',
             requestedExecutionLevel: 'asInvoker',
             verifyUpdateCodeSignature: true,
+            // The libraries beside Jason.exe are signed as the programs are; the hook leaves one that came signed.
+            signExts: ['.dll'],
             signtoolOptions: { publisherName: [signer], signingHashAlgorithms: ['sha256'], ...(sign === null ? {} : { sign }) },
             ...(sign === null ? {} : { forceCodeSigning: true }),
         },

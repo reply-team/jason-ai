@@ -102,6 +102,9 @@ test('a Windows package is signed when a signing module is given, and every Mac 
     const signed = configuration({ version: '0.34.0', sign: '/x/sign-windows.mjs' });
     assert.equal(signed.win.signtoolOptions.sign, '/x/sign-windows.mjs');
     assert.equal(signed.win.forceCodeSigning, true);
+    // The libraries beside Jason.exe are signed as the programs are, so the package carries no unsigned library; the
+    // hook leaves one that came signed with its own signature.
+    assert.deepEqual(built.win.signExts, ['.dll']);
     assert.equal(built.mac.forceCodeSigning, true);
     assert.equal(built.mac.hardenedRuntime, true);
     assert.equal(built.mac.notarize, true);

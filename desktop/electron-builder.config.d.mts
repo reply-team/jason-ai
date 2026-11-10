@@ -34,6 +34,7 @@ export interface Configuration {
         icon: string;
         requestedExecutionLevel: string;
         verifyUpdateCodeSignature: boolean;
+        signExts: string[];
         signtoolOptions: { publisherName: string[]; signingHashAlgorithms: string[]; sign?: string };
         forceCodeSigning?: boolean;
     };
