@@ -41,6 +41,8 @@ const day = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 export type Route =
     | { screen: 'attention'; kind?: 'approvals' | 'questions'; id?: string; decided?: true }
     | { screen: 'system' }
+    | { screen: 'settings' }
+    | { screen: 'chat' }
     | { screen: 'workitems'; tab: Tab; id?: string; filters: WorkItemFilters }
     | { screen: 'people'; id?: string; tab: PersonTab; filters: PeopleFilters }
     | {
@@ -76,6 +78,8 @@ export function parseRoute(hash: string): Route {
     const [path = '', query = ''] = hash.replace(/^#/, '').split('?');
     const segments = path.split('/').filter((s) => s.length > 0);
     if (segments[0] === 'system') return { screen: 'system' };
+    if (segments[0] === 'settings') return { screen: 'settings' };
+    if (segments[0] === 'chat') return { screen: 'chat' };
     if (segments[0] === 'workitems') return workItems(segments.slice(1), query);
     if (segments[0] === 'people') return people(segments.slice(1), query);
     if (segments[0] === 'campaigns') return campaigns(segments.slice(1), query);
@@ -228,6 +232,8 @@ function decode(segment: string): string | null {
 
 export function href(route: Route): string {
     if (route.screen === 'system') return '#/system';
+    if (route.screen === 'settings') return '#/settings';
+    if (route.screen === 'chat') return '#/chat';
     if (route.screen === 'workitems') {
         const tab = route.tab !== 'now' || route.id ? `/${route.tab}` : '';
         const id = route.id ? `/${encodeURIComponent(route.id)}` : '';

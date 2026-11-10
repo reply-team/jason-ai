@@ -15,6 +15,8 @@ describe('parseRoute', () => {
         ],
         ['#/attention?decided=yes', { screen: 'attention' }],
         ['#/system', { screen: 'system' }],
+        ['#/settings', { screen: 'settings' }],
+        ['#/chat?t=abc', { screen: 'chat' }],
         ['#/nowhere/else', { screen: 'attention' }],
         ['#/attention/approvals/', { screen: 'attention' }],
         ['#/attention/approvals/%E0%A4%A', { screen: 'attention' }],
@@ -187,6 +189,8 @@ describe('href', () => {
             '#/attention/approvals/apr_1?decided=1',
         ],
         [{ screen: 'system' as const }, '#/system'],
+        [{ screen: 'settings' as const }, '#/settings'],
+        [{ screen: 'chat' as const }, '#/chat'],
         [{ screen: 'workitems' as const, tab: 'now' as const, filters: {} }, '#/workitems'],
         [
             {

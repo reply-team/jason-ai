@@ -4,20 +4,37 @@ import { HttpApi, type Api } from './api/client';
 import { ApiProvider } from './api/context';
 import { session } from './api/session';
 import { API_VERSION } from './api/version';
+import { t } from './platform/i18n';
+import { registry } from './platform/slots';
 import { route } from './router';
 import { PairAgain } from './shell/pair-again';
 import { Sidebar } from './shell/sidebar';
 import * as shell from './shell/shell';
-import { AttentionScreen } from './screens/attention/screen';
-import { CampaignsScreen } from './screens/campaigns/screen';
-import { PerformanceScreen } from './screens/performance/screen';
-import { PeopleScreen } from './screens/people/screen';
-import { SystemScreen } from './screens/system/screen';
-import { WorkItemsScreen } from './screens/workitems/screen';
 
 const ready = signal(false);
 
-export function App({ api, uiApiVersion = API_VERSION }: { api?: Api; uiApiVersion?: string }) {
+/** The screen the address names, among the screens registered; Attention when it names none of them. */
+export function CurrentPage() {
+    const screens = registry.list('screen');
+    const Page = (
+        screens.find((each) => each.id === route.value.screen) ?? screens.find((each) => each.id === 'attention')
+    )?.component;
+    return Page ? <Page /> : null;
+}
+
+/**
+ * The harness: paired, its screens and the version notice. `chromeless` leaves its sidebar out, where a shell around it
+ * has a navigation of its own.
+ */
+export function App({
+    api,
+    uiApiVersion = API_VERSION,
+    chromeless = false,
+}: {
+    api?: Api;
+    uiApiVersion?: string;
+    chromeless?: boolean;
+}) {
     const client = useMemo(() => api ?? new HttpApi(session), [api]);
     useEffect(() => {
         ready.value = false;
@@ -34,28 +51,15 @@ export function App({ api, uiApiVersion = API_VERSION }: { api?: Api; uiApiVersi
     const runtimeApi = shell.info.value?.api_version;
     return (
         <ApiProvider api={client}>
-            <div className="app">
-                <Sidebar />
+            <div className={chromeless ? 'app chromeless' : 'app'}>
+                {!chromeless && <Sidebar />}
                 <div className="content">
                     {runtimeApi && runtimeApi !== uiApiVersion && (
                         <div className="notice danger">
-                            This UI was built for API {uiApiVersion}; the runtime speaks {runtimeApi}. Reinstall the UI
-                            from a release that matches.
+                            {t('shell.version', { ui: uiApiVersion, runtime: runtimeApi })}
                         </div>
                     )}
-                    {route.value.screen === 'system' ? (
-                        <SystemScreen />
-                    ) : route.value.screen === 'workitems' ? (
-                        <WorkItemsScreen />
-                    ) : route.value.screen === 'people' ? (
-                        <PeopleScreen />
-                    ) : route.value.screen === 'campaigns' ? (
-                        <CampaignsScreen />
-                    ) : route.value.screen === 'performance' ? (
-                        <PerformanceScreen />
-                    ) : (
-                        <AttentionScreen />
-                    )}
+                    <CurrentPage />
                 </div>
             </div>
         </ApiProvider>

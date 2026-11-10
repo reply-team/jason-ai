@@ -1,0 +1,178 @@
+import { attentionStore } from '../screens/attention/store';
+import { act, argsOf, define } from './actions';
+import { html, type Html } from './html';
+import { toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
+import { clock, here } from './state';
+
+// Needs you: the approvals and the questions waiting on a person, read and decided the way the browser's Attention
+// screen reads and decides them, in a holder of the panel's own: the page panel can show that screen beside this one,
+// and neither replaces the other's list.
+
+/** The panel's own approvals and questions. */
+export const attention = attentionStore();
+
+/** What the person typed into a field of the panel, kept while the panel is painted again around it. */
+const typed = new Map<string, string>();
+
+const field = (key: string, label: string): Html =>
+    html`<input
+        class="inp"
+        type="text"
+        aria-label="${label}"
+        placeholder="${label}"
+        value="${typed.get(key) ?? ''}"
+        data-input="needs.type"
+        ${argsOf(key)}
+    />`;
+
+const optional = (key: string): string | undefined => typed.get(key)?.trim() || undefined;
+
+export function reload(): Promise<void> {
+    return attention.load(here().api, false);
+}
+
+define('needs.type', (args, element) => {
+    if (typeof args[0] === 'string' && element instanceof HTMLInputElement) typed.set(args[0], element.value);
+});
+
+define('needs.open', ([kind, id]) => {
+    if ((kind === 'approvals' || kind === 'questions') && typeof id === 'string')
+        void attention.open(here().api, kind, id);
+});
+
+define('needs.approve', ([id]) => {
+    if (typeof id === 'string') void attention.approve(here().api, id);
+});
+
+define('needs.reject', ([id]) => {
+    if (typeof id === 'string') void attention.reject(here().api, id, optional(`${id}:reason`));
+});
+
+define('needs.option', ([id, option]) => {
+    if (typeof id === 'string' && typeof option === 'string')
+        void attention.answer(here().api, id, { option }, optional(`${id}:reason`));
+});
+
+define('needs.answer', ([id]) => {
+    if (typeof id !== 'string') return;
+    const text = optional(`${id}:text`);
+    if (text) void attention.answer(here().api, id, { text }, optional(`${id}:reason`));
+});
+
+function approvalDetail(id: string): Html {
+    const shown = attention.detail.value;
+    if (shown?.kind !== 'approvals' || shown.item.id !== id) return html``;
+    const detail = toApprovalDetail(shown.item.preview);
+    return html`<div class="ask-w">
+        ${detail.intent ? html`<div>${detail.intent}</div>` : null}
+        ${detail.to ? html`<div class="meta">To ${detail.to}</div>` : null}
+        ${detail.subject ? html`<div><b>${detail.subject}</b></div>` : null}
+        ${detail.body ? html`<div class="said">${detail.body}</div>` : null}
+        ${detail.facts.map((fact) => html`<div class="meta">${fact}</div>`)}
+    </div>`;
+}
+
+function approvals(now: number, busy: boolean): Html {
+    const rows = attention.approvals.value.map((row) => toApprovalRow(row, now));
+    return html`${rows.map(
+        (row) =>
+            html`<div class="ask" data-id="${row.id}">
+                <div class="ask-h">
+                    <span class="b amber">${row.what}</span>
+                    <span>${row.who ?? 'No one named'}</span>
+                    <span class="meta">${row.campaign} · ${row.via} · ${row.age}</span>
+                </div>
+                ${approvalDetail(row.id)}
+                <div class="ask-a">
+                    <button class="btn sm" type="button" ${act('needs.open', 'approvals', row.id)}>Details</button>
+                    <button
+                        class="btn sm p"
+                        type="button"
+                        ${busy ? html`disabled` : null}
+                        ${act('needs.approve', row.id)}
+                    >
+                        Approve
+                    </button>
+                    <button class="btn sm" type="button" ${busy ? html`disabled` : null} ${act('needs.reject', row.id)}>
+                        Reject
+                    </button>
+                    ${field(`${row.id}:reason`, 'Reason (optional)')}
+                </div>
+            </div>`,
+    )}`;
+}
+
+function questionDetail(id: string, busy: boolean): Html {
+    const shown = attention.detail.value;
+    if (shown?.kind !== 'questions' || shown.item.id !== id)
+        return html`<div class="ask-a">
+            <button class="btn sm" type="button" ${act('needs.open', 'questions', id)}>Answer</button>
+        </div>`;
+    const disabled = busy ? html`disabled` : null;
+    return html`<div class="ask-a">
+            ${(shown.item.options ?? []).map(
+                (option) =>
+                    html`<button
+                        class="btn sm"
+                        type="button"
+                        title="${option.detail ?? ''}"
+                        ${disabled}
+                        ${act('needs.option', id, option.label)}
+                    >
+                        ${option.label}
+                    </button>`,
+            )}
+        </div>
+        <div class="ask-a">
+            ${field(`${id}:text`, 'Your answer')}
+            <button class="btn sm p" type="button" ${disabled} ${act('needs.answer', id)}>Answer</button>
+            ${field(`${id}:reason`, 'Reason (optional)')}
+        </div>`;
+}
+
+function questions(now: number, busy: boolean): Html {
+    return html`${attention.questions.value.map((summary) => {
+        const row = toQuestionRow(summary, now);
+        return html`<div class="ask q" data-id="${row.id}">
+            <div class="ask-h">
+                <span class="b violet">Question</span><span class="meta">${row.campaign} · ${row.age}</span>
+            </div>
+            <div class="ask-s">${row.question}</div>
+            ${questionDetail(row.id, busy)}
+        </div>`;
+    })}`;
+}
+
+export function needsView(): Html {
+    const now = clock.value;
+    const busy = attention.busy.value;
+    const failure = attention.failure.value;
+    const none = attention.approvals.value.length === 0 && attention.questions.value.length === 0;
+    return html`<div class="panel-body needs-panel">
+        <div class="ph">
+            <div>
+                <h1>Needs you</h1>
+                <p>Approvals and questions waiting on a person.</p>
+            </div>
+        </div>
+        ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
+        ${
+            !attention.loaded.value
+                ? html`<div class="empty">Reading what waits…</div>`
+                : none
+                  ? html`<div class="empty">Nothing is waiting for you.</div>`
+                  : html`${
+                        attention.approvals.value.length
+                            ? html`<div class="lab">Approvals</div>
+                                  ${approvals(now, busy)}`
+                            : null
+                    }
+                    ${
+                        attention.questions.value.length
+                            ? html`<div class="lab">Questions</div>
+                                  ${questions(now, busy)}`
+                            : null
+                    }`
+        }
+    </div>`;
+}
