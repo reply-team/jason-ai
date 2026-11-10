@@ -330,6 +330,24 @@ test('a read outside every folder gets a card that may be remembered by its fold
     assert.ok(change.verdict === 'ask' && change.remember === null);
 });
 
+test('a card whose "always" label would print longer than 80 characters is not rememberable; one that fits is', () => {
+    const label = (covers: string) => `Allow for this chat: ${covers}`;
+    const deep = `/opt/${'a'.repeat(40)}/${'b'.repeat(20)}`;
+    for (const judged of [read(mac(), `${deep}/plan.txt`), judge('Grep', { pattern: 'x', path: deep }, mac()), judge('LS', { path: deep }, mac()),
+        judge('WebFetch', { url: `https://${'c'.repeat(60)}.example.com/a`, prompt: 'p' }, mac()), run(mac(), `git ${'d'.repeat(60)} x`)]) {
+        assert.ok(judged.verdict === 'ask' && judged.remember === null, JSON.stringify(judged));
+    }
+    for (const judged of [read(mac(), '/opt/notes/plan.txt'), judge('Grep', { pattern: 'x', path: '/opt/notes' }, mac()), run(mac(), 'git status'),
+        judge('WebFetch', { url: 'https://example.com/a', prompt: 'p' }, mac())]) {
+        assert.ok(judged.verdict === 'ask' && judged.remember !== null && label(judged.covers).length <= 80, JSON.stringify(judged));
+    }
+    // At the bound: a label of exactly 80 characters is offered, one of 81 is not.
+    const at = (length: number) => judge('WebFetch', { url: `https://${'e'.repeat(length - label('pages on .io').length)}.io/`, prompt: 'p' }, mac());
+    const fits = at(80);
+    assert.ok(fits.verdict === 'ask' && fits.remember !== null && label(fits.covers).length === 80, JSON.stringify(fits));
+    assert.ok(at(81).verdict === 'ask' && (at(81) as { remember: string | null }).remember === null);
+});
+
 test('a search or a listing outside every folder is remembered by the folder it names and its own kind, and a Read grant covers no folder reader', () => {
     const key = (judged: ReturnType<typeof judge>) => (judged.verdict === 'ask' ? judged.remember : `not a card: ${JSON.stringify(judged)}`);
     const readGrant = key(read(mac(), '/opt/notes/plan.txt'));

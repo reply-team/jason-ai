@@ -414,8 +414,21 @@ function unnamed(tool: string, input: Record<string, unknown>): Judgement {
     return { verdict: 'ask', title: `Use ${tool} with no file named`, detail: shorten(JSON.stringify(input)), remember: null };
 }
 
-/** Decides without a person where the answer is already known, and otherwise says what to put in front of them. */
+/** The page prints "always" as this label on a button that does not wrap, so a label longer than it can show is not offered. */
+const alwaysLabel = (covers: string) => `Allow for this chat: ${covers}`;
+const alwaysLabelLimit = 80;
+
+/**
+ * Decides without a person where the answer is already known, and otherwise says what to put in front of them. A card
+ * whose "always" label would print longer than the button shows covers its one request.
+ */
 export function judge(tool: string, input: Record<string, unknown>, scope: ChatScope): Judgement {
+    const judged = judgeAsked(tool, input, scope);
+    if (judged.verdict !== 'ask' || judged.remember === null || alwaysLabel(judged.covers).length <= alwaysLabelLimit) return judged;
+    return { verdict: 'ask', title: judged.title, detail: judged.detail, remember: null };
+}
+
+function judgeAsked(tool: string, input: Record<string, unknown>, scope: ChatScope): Judgement {
     if (tool.startsWith(`mcp__${serverName}__`)) return { verdict: 'deny', message: ownToolRefusal };
     if (tool === 'Glob') return judgeGlob(input, scope);
     const reader = readers[tool];
