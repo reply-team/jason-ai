@@ -3,13 +3,14 @@ import type { DesktopHost } from '../platform/desktop';
 import { act, define } from './actions';
 import { answered, lost, newChat, said, shown, failed, type Answer, type Chat } from './chat-model';
 import { html, type Html } from './html';
+import { markdownView } from './markdown-view';
 import { svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
 import { changeChat, chats, here, messageOf, setup } from './state';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
-// back as events. The agent's words are drawn as text, never as markup.
+// back as events. The agent's words are drawn as a fixed subset of Markdown, every word of them as text.
 
 const suggestions = ['What is waiting for me?', 'How are my campaigns doing?', 'Help me start a new campaign.'];
 
@@ -116,7 +117,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             case 'user':
                 return html`<div class="m user"><div class="bub said">${entry.text}</div></div>`;
             case 'text':
-                return html`<div class="m ai"><div class="bub said">${entry.text}</div></div>`;
+                return html`<div class="m ai"><div class="bub">${markdownView(entry.text)}</div></div>`;
             case 'permission':
                 return permission(chat, entry);
             case 'error':
