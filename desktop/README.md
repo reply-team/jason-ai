@@ -12,7 +12,7 @@ person would edit.
 | Know whether a runtime is up and whether it is this build | `jason status` |
 | Start one when none is up | `jason runtime start` (never `jason runtime run` as a child of its own) |
 | Install the UI | `jason ui install`, only when the runtime is the version the desktop carries and the `ui_module` check of `jason status` is not ok; an install that fails stops the start only when no UI is served at all |
-| Deploy the skills | `jason skills install --roles-only` and `jason skills install --root <data>/desktop/chat/.claude/skills --host claude_code`, both from the skills package the desktop carries |
+| Deploy the skills | `jason skills install --roles-only`, `jason skills install --root <data>/desktop/chat/.claude/skills --host claude_code` and `jason skills install --root <data>/desktop/chat/.agents/skills --host codex`, all from the skills package the desktop carries |
 | Load the window | the link `jason ui open --no-open` prints |
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
@@ -24,7 +24,8 @@ and names `jason update`. A `feed` in the desktop's settings is passed to every 
 ## Its own files
 
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, and the version whose skills were last deployed).
-- `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/`.
+- `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
+  Claude Code and in `.agents/skills/` for Codex.
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`).
 - `<data>/desktop/electron/`: Electron's own files (its profile, the page's storage, and in `logs/` what Electron itself
   logs), set before anything else, so a second data directory is a second desktop and nothing of it lands outside

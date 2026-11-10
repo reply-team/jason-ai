@@ -287,8 +287,8 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
         }
     };
 
-    // The desktop deploys Jason's skills for the chat through the CLI, into the folder Claude Code reads them from.
-    const jasonSkills = /^desktop\/chat\/\.claude\/skills\/(?:\.jason-skills\.json|[a-z-]+\/SKILL\.md)$/;
+    // The desktop deploys Jason's skills for the chat through the CLI, into the folders Claude Code and Codex read them from.
+    const jasonSkills = /^desktop\/chat\/\.(?:claude|agents)\/skills\/(?:\.jason-skills\.json|[a-z-]+\/SKILL\.md)$/;
     let desktopSettings: DesktopSettings = readSettings(b.paths.settings);
     await act('the start', () => startInstallation({
         cli: loggedCli(b.cli, log),
@@ -304,7 +304,7 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     }), ['run/runtime.json', 'desktop/settings.json', jasonSkills], []);
 
     const setup = setupOn(b, log, desktopSettings);
-    const replySkills = /^desktop\/chat\/\.claude\/skills\/reply-[a-z-]+\/SKILL\.md$/;
+    const replySkills = /^desktop\/chat\/\.(?:claude|agents)\/skills\/reply-[a-z-]+\/SKILL\.md$/;
     const replyKeys = ['Plugins:Grants:reply:Exec', 'Routes:Default'];
     const pluginKeys = (id: string) => [`Plugins:Config:${id}`, `Plugins:Grants:${id}:Http`, `Notifications:Plugins:${id}:Binding`];
     await act('status', () => setup.status(), [], []);
@@ -350,12 +350,15 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     assert.match(during[0] ?? '', turnFile);
     assert.ok(![...snapshot(b.paths.data).keys()].some((path) => turnFile.test(path)), 'the turn file is gone once the turn is over');
 
-    // Jason's skills and the Reply ones sit in one folder, .claude/skills, and nothing of them at the chat folder's top.
-    assert.deepEqual(readdirSync(b.paths.chat), ['.claude']);
-    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude')), ['skills']);
-    const skills = readdirSync(join(b.paths.chat, '.claude', 'skills')).sort();
-    assert.deepEqual(skills.filter((name) => !name.startsWith('reply-')), ['.jason-skills.json', 'campaign-launch']);
-    assert.ok(skills.some((name) => name.startsWith('reply-')), `the Reply skills beside Jason's: ${skills.join(', ')}`);
+    // Jason's skills and the Reply ones sit in one folder per host, .claude/skills for Claude Code and .agents/skills for
+    // Codex, and nothing of them at the chat folder's top.
+    assert.deepEqual(readdirSync(b.paths.chat).sort(), ['.agents', '.claude']);
+    for (const host of ['.claude', '.agents']) {
+        assert.deepEqual(readdirSync(join(b.paths.chat, host)), ['skills']);
+        const skills = readdirSync(join(b.paths.chat, host, 'skills')).sort();
+        assert.deepEqual(skills.filter((name) => !name.startsWith('reply-')), ['.jason-skills.json', 'campaign-launch'], host);
+        assert.ok(skills.some((name) => name.startsWith('reply-')), `the Reply skills beside Jason's in ${host}: ${skills.join(', ')}`);
+    }
 
     assert.deepEqual(readInstallationSettings(b), {
         Plugins: {
@@ -553,8 +556,10 @@ test('the Reply card signs in with the key on standard input, and the Reply CLI 
     assert.deepEqual(login?.args, ['auth', 'login', '--with-token']);
     assert.equal(login?.stdin, 'planted-reply-key');
     for (const entry of b.record()) assert.equal(JSON.stringify(entry.args).includes('planted-reply-key'), false);
-    assert.equal(existsSync(join(b.paths.chat, '.claude', 'skills', 'reply-cli', 'SKILL.md')), true);
-    assert.equal(existsSync(join(b.paths.chat, '.claude', 'skills', 'campaign-launch')), false);
+    for (const host of ['.claude', '.agents']) {
+        assert.equal(existsSync(join(b.paths.chat, host, 'skills', 'reply-cli', 'SKILL.md')), true, host);
+        assert.equal(existsSync(join(b.paths.chat, host, 'skills', 'campaign-launch')), false, host);
+    }
     await assert.rejects(setupOn(b).connectReplyWithKey('   '), Refused);
 });
 

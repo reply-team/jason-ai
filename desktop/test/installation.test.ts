@@ -40,6 +40,7 @@ test('with no runtime up, the desktop starts one through jason runtime start and
         ['ui', 'install', '--feed', 'http://127.0.0.1:9/manifest.json'],
         ['skills', 'install', '--roles-only', '--source', bundle],
         ['skills', 'install', '--root', join(b.paths.chat, '.claude', 'skills'), '--host', 'claude_code', '--source', bundle],
+        ['skills', 'install', '--root', join(b.paths.chat, '.agents', 'skills'), '--host', 'codex', '--source', bundle],
         ['ui', 'open', '--no-open'],
     ]);
     assert.equal(started.origin, 'http://127.0.0.1:41234');
@@ -47,11 +48,20 @@ test('with no runtime up, the desktop starts one through jason runtime start and
     assert.equal(started.versionsDiffer, false);
     assert.ok(existsSync(b.paths.chat));
     // The CLI deploys into the directory --root names, so the skills sit where Claude Code started in the chat folder
-    // with project settings reads them, and nothing of them at the folder's top level.
-    assert.deepEqual(readdirSync(b.paths.chat), ['.claude']);
-    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude')), ['skills']);
-    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')).sort(), ['.jason-skills.json', 'campaign-launch']);
+    // with project settings reads them, and where Codex reads them from the folder it runs in, and nothing of them at the
+    // folder's top level.
+    assert.deepEqual(readdirSync(b.paths.chat).sort(), ['.agents', '.claude']);
+    for (const host of ['.claude', '.agents']) {
+        assert.deepEqual(readdirSync(join(b.paths.chat, host)), ['skills']);
+        assert.deepEqual(readdirSync(join(b.paths.chat, host, 'skills')).sort(), ['.jason-skills.json', 'campaign-launch'], host);
+    }
     assert.deepEqual(saved, [{ feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: bundleVersion }]);
+});
+
+test('a chat folder whose Codex skills could not be deployed is deployed again at the next start', async (t) => {
+    const b = bench(t, { env: { STUB_SKILLS_FAIL_HOST: 'codex' } });
+    const { saved } = await start(b, { feed: null, skillsDeployedFor: null });
+    assert.deepEqual(saved, []);
 });
 
 test('a runtime already up is used as it is: no start, and never runtime run', async (t) => {
@@ -131,7 +141,7 @@ test('every CLI run is logged by its verb, exit and time, never by its arguments
     const b = bench(t);
     const { log } = await start(b, { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null });
     const runs = log.lines.filter((line) => line.name === 'cli_exited');
-    assert.equal(runs.length, 8);
+    assert.equal(runs.length, 9);
     for (const run of runs) assert.deepEqual(Object.keys(run.fields).sort(), ['ElapsedMs', 'Exit', 'Verb']);
     assert.equal(JSON.stringify(log.lines).includes('manifest.json'), false);
 });

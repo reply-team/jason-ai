@@ -87,6 +87,11 @@ if (args[0] === 'status') {
     print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
 } else if (verb === 'skills install' && args.includes('--root')) {
     // As the CLI deploys: into the very directory --root names, a record of the deployment and one folder per skill.
+    // STUB_SKILLS_FAIL_HOST names a host whose deployment fails.
+    if (process.env.STUB_SKILLS_FAIL_HOST && args[args.indexOf('--host') + 1] === process.env.STUB_SKILLS_FAIL_HOST) {
+        print({ error: { code: 'skills_not_deployed', message: 'The stub refused this host.', retryable: false } });
+        process.exit(1);
+    }
     const root = args[args.indexOf('--root') + 1];
     mkdirSync(join(root, 'campaign-launch'), { recursive: true });
     writeFileSync(join(root, 'campaign-launch', 'SKILL.md'), '# campaign-launch\n');

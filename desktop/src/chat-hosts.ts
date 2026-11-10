@@ -83,6 +83,11 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
 /**
  * The command line of one Codex turn: `codex exec` in its read-only sandbox, emitting JSON events, the prompt read from
  * standard input (`-`), resumed as `codex exec resume <thread>` from the chat's second turn on.
+ *
+ * Codex is this release's reading host. A Codex turn runs `exec --json --sandbox read-only` and asks no permission, so no
+ * card and no fence of the desktop's applies to it: it reads the chat folder, the folders added to it and its skills in
+ * `.agents/skills`, and answers. Its sandbox has no network by default and so may keep it from the runtime's loopback
+ * address, so a Codex turn reads and advises and acts through nothing.
  */
 export function codexArguments(turn: { model?: string | undefined; resume?: string | undefined }): string[] {
     const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check'];

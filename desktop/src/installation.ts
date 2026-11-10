@@ -121,11 +121,14 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         } else {
             deployed = false;
         }
-        // --root names the directory the skills are deployed into, and Claude Code started in the chat folder with project
-        // settings reads them from .claude/skills there; the Reply skills are copied into the same folder.
+        // --root names the directory the skills are deployed into. Claude Code started in the chat folder with project
+        // settings reads them from .claude/skills there, and Codex from .agents/skills; the Reply skills are copied into
+        // both folders.
         const chat = await cli.run(['skills', 'install', '--root', join(paths.chat, '.claude', 'skills'), '--host', 'claude_code', '--source', deps.bundle], { timeoutMs: 300_000 });
-        log.info('skills_deployed', { Target: 'chat', Exit: chat.exit });
-        if (deployed && chat.exit === 0) deps.saveSettings({ ...deps.settings, skillsDeployedFor: deps.bundleVersion });
+        log.info('skills_deployed', { Target: 'chat_claude_code', Exit: chat.exit });
+        const codex = await cli.run(['skills', 'install', '--root', join(paths.chat, '.agents', 'skills'), '--host', 'codex', '--source', deps.bundle], { timeoutMs: 300_000 });
+        log.info('skills_deployed', { Target: 'chat_codex', Exit: codex.exit });
+        if (deployed && chat.exit === 0 && codex.exit === 0) deps.saveSettings({ ...deps.settings, skillsDeployedFor: deps.bundleVersion });
     }
 
     const open = await cli.run(['ui', 'open', '--no-open']);
