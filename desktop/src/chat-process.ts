@@ -32,6 +32,31 @@ export interface HostProcess {
 const stderrKept = 2000;
 const graceMs = 2000;
 
+/**
+ * How a stop ends a POSIX host's process group: SIGTERM to the group, then after the grace period SIGKILL to the group
+ * whether or not the host itself has exited by then, since a process it started may ignore SIGTERM and outlive it. A
+ * group already empty throws, and the throw is caught. `kill` and `later` are the system's, given here so a row can
+ * record them.
+ */
+export function signalGroup(
+    pid: number,
+    kill: (pid: number, signal: NodeJS.Signals) => void,
+    later: (run: () => void, ms: number) => void,
+): void {
+    try {
+        kill(-pid, 'SIGTERM');
+    } catch {
+        return;
+    }
+    later(() => {
+        try {
+            kill(-pid, 'SIGKILL');
+        } catch {
+            // The group is empty.
+        }
+    }, graceMs);
+}
+
 export function startHost(
     launch: Exclude<Launch, { refused: string }>,
     args: readonly string[],
@@ -78,19 +103,11 @@ export function startHost(
             execFile(taskkill, ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => undefined);
             return;
         }
-        try {
-            process.kill(-pid, 'SIGTERM');
-        } catch {
-            return;
-        }
-        setTimeout(() => {
-            if (done) return;
-            try {
-                process.kill(-pid, 'SIGKILL');
-            } catch {
-                // Gone already.
-            }
-        }, graceMs).unref();
+        signalGroup(
+            pid,
+            (target, signal) => process.kill(target, signal),
+            (run, ms) => setTimeout(run, ms).unref(),
+        );
     }
 
     return {
