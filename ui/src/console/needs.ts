@@ -73,13 +73,20 @@ function approvalDetail(id: string): Html {
 }
 
 function approvals(now: number, busy: boolean): Html {
-    const rows = attention.approvals.value.map((row) => toApprovalRow(row, now));
+    const shown = attention.detail.value;
+    const rows = attention.approvals.value.map((row) =>
+        toApprovalRow(
+            row,
+            now,
+            shown?.kind === 'approvals' && shown.item.id === row.id ? shown.item.preview : undefined,
+        ),
+    );
     return html`${rows.map(
         (row) =>
             html`<div class="ask" data-id="${row.id}">
                 <div class="ask-h">
                     <span class="b amber">${row.what}</span>
-                    <span>${row.who ?? 'No one named'}</span>
+                    ${row.who ? html`<span class="needs-to">to <span>${row.who}</span></span>` : null}
                     <span class="meta">${row.campaign} · ${row.via} · ${row.age}</span>
                 </div>
                 ${approvalDetail(row.id)}

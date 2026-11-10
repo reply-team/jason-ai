@@ -53,13 +53,16 @@ import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.a
 import approvalApproveApproved from '../../../docs/api/fixtures/approval.approve/approved.json';
 import approvalApproveFromCampaignRow from '../../../docs/api/fixtures/approval.approve/from-campaign-row.json';
 import approvalApproveFromCampaignRowAgain from '../../../docs/api/fixtures/approval.approve/from-campaign-row-again.json';
+import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/email-message.json';
 import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
+import approvalGetLinkedinMessage from '../../../docs/api/fixtures/approval.get/linkedin-message.json';
 import approvalGetOtherPending from '../../../docs/api/fixtures/approval.get/other-pending.json';
 import approvalGetPendingWithPreview from '../../../docs/api/fixtures/approval.get/pending-with-preview.json';
 import approvalListByCampaignPending from '../../../docs/api/fixtures/approval.list/by-campaign-pending.json';
 import approvalListByWorkItem from '../../../docs/api/fixtures/approval.list/by-work-item.json';
 import approvalListDecided from '../../../docs/api/fixtures/approval.list/decided.json';
 import approvalListEmpty from '../../../docs/api/fixtures/approval.list/empty.json';
+import approvalListMessagesPending from '../../../docs/api/fixtures/approval.list/messages-pending.json';
 import approvalListPending from '../../../docs/api/fixtures/approval.list/pending.json';
 import approvalListSummerPending from '../../../docs/api/fixtures/approval.list/summer-pending.json';
 import approvalListUnauthorized from '../../../docs/api/fixtures/approval.list/unauthorized.json';
@@ -290,7 +293,9 @@ export const fixtures = {
         ApprovalDecisionRequest,
         ErrorEnvelope
     >,
+    'approval.get/email-message': approvalGetEmailMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/linkedin-message': approvalGetLinkedinMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/other-pending': approvalGetOtherPending satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/pending-with-preview': approvalGetPendingWithPreview satisfies Exchange<
         { approval_id: string },
@@ -303,6 +308,10 @@ export const fixtures = {
     'approval.list/by-work-item': approvalListByWorkItem satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/decided': approvalListDecided satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/empty': approvalListEmpty satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
+    'approval.list/messages-pending': approvalListMessagesPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
     'approval.list/pending': approvalListPending satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/summer-pending': approvalListSummerPending satisfies Exchange<
         ApprovalListRequest,

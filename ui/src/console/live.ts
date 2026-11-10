@@ -64,11 +64,16 @@ export interface ApprovalRow {
     age: string;
 }
 
-export function toApprovalRow(row: ApprovalSummary, now: number): ApprovalRow {
+/**
+ * One row of what waits: who it reaches is the contact the row carries, else the address the preview highlights when
+ * that approval is already open; a row is never read again for it.
+ */
+export function toApprovalRow(row: ApprovalSummary, now: number, preview?: Record<string, unknown>): ApprovalRow {
+    const highlighted = preview ? text(record(preview['highlights'])?.['/contacts/0/channels/0/value']) : null;
     return {
         id: row.id,
         what: operationWords(row.operation),
-        who: row.contact_name,
+        who: row.contact_name ?? highlighted,
         campaign: row.campaign_name,
         via: row.plugin_id,
         age: ageOf(row.requested_at, now),
@@ -95,9 +100,10 @@ const factNames: readonly [string, string][] = [
 
 /** What an approval's preview says the act would do: its intent, its recipient, its message and its properties. */
 export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDetail {
-    const message = record(record(preview['highlights'])?.['/args/message']);
+    const highlights = record(preview['highlights']);
+    const message = record(highlights?.['/args/message']);
     const contact = record(preview['contact']);
-    const value = text(contact?.['value']);
+    const value = text(contact?.['value']) ?? text(highlights?.['/contacts/0/channels/0/value']);
     const name = text(contact?.['name']);
     const facts: string[] = [];
     for (const [key, label] of factNames) {
