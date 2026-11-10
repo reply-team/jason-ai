@@ -614,6 +614,22 @@ test('a shell, an exec wrapper or a program named by a path is never remembered:
     assert.equal(commandPrefix('starter run'), 'starter run');
 });
 
+test('a program that runs a file the agent may write with no card is never remembered: the closed list names each', () => {
+    // The chat writes in its folders with no card, so "python build.py" remembered would run whatever build.py says next.
+    const once = ['python build.py', 'python3 build.py', 'py build.py', 'node build.js', 'deno run build.ts', 'bun build.ts', 'ruby build.rb',
+        'perl build.pl', 'php build.php', 'npm run build', 'pnpm run build', 'yarn build', 'make all', 'PYTHON.EXE build.py', 'node.exe build.js',
+        'npm.cmd run build'];
+    for (const command of once) {
+        assert.equal(commandPrefix(command), null, command);
+        const card = run(windows(), command);
+        assert.ok(card.verdict === 'ask' && card.remember === null, command);
+    }
+    // The list is closed: a program it does not name is remembered as any other, one whose name only begins like one too.
+    assert.equal(commandPrefix('git status'), 'git status');
+    assert.equal(commandPrefix('makefile-lint check'), 'makefile-lint check');
+    assert.equal(commandPrefix('nodemon app'), 'nodemon app');
+});
+
 test('a read-only command naming a path outside the chat\'s folders gets a card, never an allowance', () => {
     // The host asks for these only because every turn blocks reads outside its working folders (claudeArguments);
     // once asked, the answer is the person's, whatever the program.

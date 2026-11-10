@@ -230,11 +230,15 @@ export function isCompound(command: string): boolean {
 
 /**
  * The programs whose first word is another program or a whole script, so that "the program and its first word" would
- * cover anything: shells and the wrappers that run a command they are given. They are names to recognise, never to run,
- * and are written as one string so the process guard, which refuses a quoted shell name in any module but the login-shell
- * lookup, keeps holding this one as it holds the others.
+ * cover anything: shells and the wrappers that run a command they are given, and the interpreters, package scripts and
+ * build tools that run a file the agent may write with no card. It is a closed list: a program it does not name is
+ * remembered by its first word. They are names to recognise, never to run, and are written as one string so the process
+ * guard, which refuses a quoted shell name in any module but the login-shell lookup, keeps holding this one as it holds
+ * the others.
  */
-const runsAnother = new Set('cmd sh bash zsh pwsh powershell env sudo xargs npx wsl start'.split(' '));
+const runsAnother = new Set(
+    'cmd sh bash zsh pwsh powershell env sudo xargs npx wsl start python python3 py node deno bun ruby perl php npm pnpm yarn make'.split(' '),
+);
 
 /**
  * What "always, in this chat" covers of a command: the program and its first word. Nothing for a compound command, a
