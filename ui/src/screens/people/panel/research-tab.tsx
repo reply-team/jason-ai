@@ -119,7 +119,9 @@ export function ResearchTab({ person, campaignId, now, zone }: Props) {
                 </Notice>
             )}
             {panel.findingsFailure.value && <Notice danger>{panel.findingsFailure.value}</Notice>}
-            {shown && shown.items.length === 0 && <div className="empty">Nothing found about this person yet.</div>}
+            {shown && shown.items.length === 0 && !panel.findingsFailure.value && (
+                <div className="empty">Nothing found about this person yet.</div>
+            )}
             {shown?.items.map((item) => (
                 <article key={item.id} className="finding">
                     <header className="muted">

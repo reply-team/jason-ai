@@ -806,6 +806,21 @@ describe('Research', () => {
         expect(failed.compareDocumentPosition(read) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
+    it('when no finding could be read says the failure, and not that nothing was found', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('workitem.list', 'workitem.list/researcher-findings-two');
+        api.unreachable('workitem.get');
+        open(api, ingrid.id, 'research');
+        const failed = await within(await shown()).findByRole('alert');
+        expect(failed.textContent).toContain('Failed to fetch');
+        expect(asked(api, 'workitem.get')).toEqual([
+            recorded('workitem.get/researcher-finding'),
+            recorded('workitem.get/researcher-finding-second'),
+        ]);
+        expect(within(panel()).queryByText('Nothing found about this person yet.')).toBeNull();
+    });
+
     it('asks the researcher about the person in the campaign the control names, with the question given', async () => {
         const api = findings(people().answer('contact.get', 'contact.get/person-panel')).answer(
             'workitem.create',

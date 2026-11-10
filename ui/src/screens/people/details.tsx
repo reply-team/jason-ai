@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import type { Channel, Contact } from '../../api/types';
 import { place, shortDate } from '../../time/format';
 import { channelName } from './labels';
@@ -26,9 +26,9 @@ export function Details({ person, now, zone, aside }: Props) {
                 <h3>Channels</h3>
                 <dl className="facts">
                     {person.channels.map((c) => (
-                        <>
-                            <dt key={`${c.channel}-${c.value}-k`}>{channelName(c.channel)}</dt>
-                            <dd key={`${c.channel}-${c.value}-v`}>
+                        <Fragment key={`${c.channel}-${c.value}`}>
+                            <dt>{channelName(c.channel)}</dt>
+                            <dd>
                                 {c.value}
                                 {c.primary && (
                                     <>
@@ -38,7 +38,7 @@ export function Details({ person, now, zone, aside }: Props) {
                                 )}
                                 {aside?.(c)}
                             </dd>
-                        </>
+                        </Fragment>
                     ))}
                 </dl>
             </div>
