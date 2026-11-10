@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"7c2e9a40-1b3d-4e5f-8a6b-9c0d1e2f3a4b","model":"sonnet"}
+{"type":"result","subtype":"success","is_error":true,"duration_ms":120,"result":"Not logged in. Please run /login.","session_id":"7c2e9a40-1b3d-4e5f-8a6b-9c0d1e2f3a4b"}

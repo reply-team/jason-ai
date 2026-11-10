@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
-import { findOnPath, launchOf } from './program-path.ts';
+import { findOnPath, launchOf, type Launch } from './program-path.ts';
 
 /**
  * The programs a Connect card may start, and nothing else: the agent hosts the chat or a role can run on, the Reply CLI,
@@ -90,6 +90,18 @@ export function runFile(file: string, args: readonly string[], env: Record<strin
         child.stdin?.on('error', () => undefined);
         child.stdin?.end(options.stdin ?? '');
     });
+}
+
+/**
+ * How to start a program the PATH finds with no shell, as the file and the arguments before the program's own (the
+ * script an npm batch file hands to Node, on Windows), or why it cannot be. The chat's turn starts a host from this.
+ */
+export function programLaunch(env: Readonly<Record<string, string | undefined>>, name: ProgramName): Launch {
+    if (!isProgramName(name)) return { refused: 'That is not a program the desktop starts.' };
+    const lookup = { platform: process.platform, path: pathOf(env), pathext: env.PATHEXT ?? env.PathExt, isProgram };
+    const found = findOnPath(name, lookup);
+    if (found === null) return { refused: `${name} is not on the PATH.` };
+    return launchOf(found, process.platform, readText, findOnPath('node', lookup), isFile);
 }
 
 /** The programs on a PATH. The environment is the desktop's own with that PATH; nothing is added to it. */

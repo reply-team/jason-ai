@@ -5,7 +5,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { judge } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
-import { newSecret, newTurnId, removeTurnFiles, turnConfig, turnConfigPath, writeTurnConfig } from '../src/chat-turn-files.ts';
+import { PermissionBroker } from '../src/chat-permission-broker.ts';
+import { hostCallLimitMs, newSecret, newTurnId, removeTurnFiles, turnConfig, turnConfigPath, writeTurnConfig } from '../src/chat-turn-files.ts';
 import { desktopPaths } from '../src/paths.ts';
 
 function data(): string {
@@ -14,10 +15,11 @@ function data(): string {
     return root;
 }
 
-test('the turn\'s MCP configuration names one HTTP server with the turn\'s secret as a bearer token, and nothing else', () => {
+test('the turn\'s MCP configuration names one HTTP server with the turn\'s secret as a bearer token and a time limit above the broker\'s, and nothing else', () => {
     assert.deepEqual(turnConfig('http://127.0.0.1:50123/mcp', 's3cret'), {
-        mcpServers: { jason_desktop: { type: 'http', url: 'http://127.0.0.1:50123/mcp', headers: { Authorization: 'Bearer s3cret' } } },
+        mcpServers: { jason_desktop: { type: 'http', url: 'http://127.0.0.1:50123/mcp', headers: { Authorization: 'Bearer s3cret' }, timeout: 2_100_000 } },
     });
+    assert.ok(hostCallLimitMs > PermissionBroker.unanswered, 'the host must never give up on a call before the broker answers it');
 });
 
 test('a turn\'s id and secret are fresh and long enough that nobody guesses them', () => {

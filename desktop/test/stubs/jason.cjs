@@ -76,6 +76,15 @@ if (args[0] === 'status') {
     const route = settings.Routes && settings.Routes.Default;
     const global = route ? { plugin_id: route.Plugin, binding: route.Binding || null, binding_identity: null } : null;
     print({ routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations: {} }, campaigns: [] });
+} else if (verb === 'campaign get') {
+    // The fields of the campaign DTO the chat reads; the folder is the one a test names, or none.
+    if (process.env.STUB_CAMPAIGN_MISSING === 'yes') {
+        print({ error: { code: 'campaign_not_found', message: 'No campaign has that id.', retryable: false } });
+        process.exit(1);
+    }
+    print({ id: args[2], name: 'Spring', status: 'active', project_id: 'prj_01STUB', project_slug: 'default', folder_path: process.env.STUB_CAMPAIGN_FOLDER || null });
+} else if (verb === 'project get') {
+    print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
 } else if (['ui install', 'skills install', 'plugin install', 'plugin reload'].includes(verb)) {
     print({});
 } else {

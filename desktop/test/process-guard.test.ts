@@ -91,3 +91,12 @@ test('an IPC handler registered outside the module that checks the sender is ref
     assert.notDeepEqual(processViolations('src/setup.ts', "ipcMain.on('x', () => {});"), []);
     assert.deepEqual(processViolations('src/ipc.ts', "ipcMain.handle(channel, guarded);"), []);
 });
+
+test('the chat\'s host module is named, and the shell and whole-module rules hold it as they hold the others', () => {
+    assert.ok('src/chat-process.ts' in processModules);
+    assert.deepEqual(processViolations('src/chat-process.ts', "import { execFile, spawn } from 'node:child_process';\nspawn(file, args, { detached: true });\n"), []);
+    assert.notDeepEqual(processViolations('src/chat-process.ts', "import { spawn } from 'node:child_process';\nspawn(file, args, { shell: true });\n"), []);
+    assert.notDeepEqual(processViolations('src/chat-process.ts', "import { exec } from 'node:child_process';"), []);
+    assert.notDeepEqual(processViolations('src/chat-process.ts', "execFile('cmd.exe', ['/c', 'taskkill']);"), []);
+    assert.notDeepEqual(processViolations('src/chat.ts', "import { spawn } from 'node:child_process';"), []);
+});

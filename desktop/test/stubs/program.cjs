@@ -1,4 +1,4 @@
-// A stand-in for a program on the PATH: the Reply CLI or npm, by the name it was started as.
+// A stand-in for a program on the PATH: the Reply CLI, npm or an agent host, by the name it was started as.
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { basename, dirname, join } = require('node:path');
 const record = require('./record.cjs');
@@ -29,6 +29,8 @@ if (said === '--version') {
         mkdirSync(join(process.cwd(), '.agents', 'skills', skill), { recursive: true });
         writeFileSync(join(process.cwd(), '.agents', 'skills', skill, 'SKILL.md'), `# ${skill}\n`);
     }
+} else if (name === 'claude' || name === 'codex') {
+    require('./host.cjs')(name, args, stdin);
 } else if (name === 'npm' && args[0] === 'install' && args[1] === '-g') {
     process.exit(process.env.STUB_NPM_FAILS === 'yes' ? 1 : 0);
 } else {
