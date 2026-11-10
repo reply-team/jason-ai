@@ -1,16 +1,16 @@
 /**
  * The two things that can happen at the person's sign-in, each off until the person turns it on in the menu.
  *
- * "Open Jason at login" is the desktop's own: on macOS a LaunchAgent under the person's home (the system's own
- * login-item call is refused to an application without a Developer ID), on Windows Electron's login item. Either way
- * the start carries a flag, so a start the computer made stays in the background. Its state is read from the system
- * every time, never kept in a setting of the desktop's.
+ * "Open Jason at login" is the desktop's own: on macOS a LaunchAgent under the person's home, kept as the desktop's
+ * first version wrote it, on Windows Electron's login item. Either way the start carries a flag, so a start the
+ * computer made stays in the background. Its state is read from the system every time, never kept in a setting of the
+ * desktop's: on macOS it is on only when the LaunchAgent starts this application's own executable.
  *
  * "Start the runtime at logon" is the CLI's: `jason runtime autostart status|enable|disable`. The desktop writes nothing
  * of its own for it.
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Cli } from './cli.ts';
 import type { Logger } from './log.ts';
@@ -26,6 +26,13 @@ export function launchAgentFile(home: string): string {
 
 function escaped(text: string): string {
     return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+/** The program a LaunchAgent starts, its first ProgramArguments string, or null for a file that names none. */
+export function launchAgentProgram(text: string): string | null {
+    const match = /<key>ProgramArguments<\/key>\s*<array>\s*<string>([^<]*)<\/string>/.exec(text);
+    if (match === null || match[1] === undefined) return null;
+    return match[1].replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
 }
 
 /** What starts the application when this person signs in. */
@@ -103,7 +110,13 @@ export class LoginItem {
     }
 
     isOn(): boolean {
-        if (this.deps.platform === 'darwin') return existsSync(launchAgentFile(this.deps.home));
+        if (this.deps.platform === 'darwin') {
+            try {
+                return launchAgentProgram(readFileSync(launchAgentFile(this.deps.home), 'utf8')) === this.deps.executable;
+            } catch {
+                return false;
+            }
+        }
         if (this.deps.platform === 'win32') return this.deps.electron.getLoginItemSettings({ args: [loginFlag] }).openAtLogin;
         return false;
     }
@@ -150,10 +163,14 @@ export class RuntimeAutostart {
         return status.exit === 0 ? registeredIn(status.stdout) : null;
     }
 
-    /** Registers or unregisters it, on the person's word; what the CLI says is there afterwards, or null. */
+    /**
+     * Registers or unregisters it, on the person's word; what the CLI says is there afterwards. An answer that does not
+     * say is followed by a read of what is registered, so the menu shows the system's state rather than an unknown.
+     */
     async set(on: boolean): Promise<boolean | null> {
         const result = await this.deps.cli.run(['runtime', 'autostart', on ? 'enable' : 'disable']);
         this.deps.log.info('autostart_set', { On: on, Exit: result.exit });
-        return result.exit === 0 ? registeredIn(result.stdout) : null;
+        const said = result.exit === 0 ? registeredIn(result.stdout) : null;
+        return said ?? (await this.registered());
     }
 }

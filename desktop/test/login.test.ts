@@ -2,9 +2,9 @@
 // Windows), and "Start the runtime at logon", which is the CLI's `jason runtime autostart` and nothing of the desktop's.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { verbOf } from '../src/installation.ts';
@@ -103,6 +103,22 @@ test('on macOS turning it on writes the LaunchAgent under the person’s home an
     ]);
 });
 
+test('on macOS the item is on only when the LaunchAgent starts this application: one that starts another reads as off', (t) => {
+    const home = scratch(t);
+    const file = launchAgentFile(home);
+    mkdirSync(dirname(file), { recursive: true });
+    const item = (exe: string) => new LoginItem({ platform: 'darwin', home, executable: exe, electron: electronLogin(), pathRead, log: memoryLog() });
+    writeFileSync(file, launchAgent('/Applications/Old Jason.app/Contents/MacOS/Jason'));
+    assert.equal(item(executable).isOn(), false, 'a LaunchAgent of another copy of the application');
+    writeFileSync(file, launchAgent(executable));
+    assert.equal(item(executable).isOn(), true);
+    const ampersand = '/Applications/R&D/Jason.app/Contents/MacOS/Jason';
+    writeFileSync(file, launchAgent(ampersand));
+    assert.equal(item(ampersand).isOn(), true, 'the executable is read as the plist escapes it');
+    writeFileSync(file, 'not a plist');
+    assert.equal(item(executable).isOn(), false);
+});
+
 test('on Windows turning it on sets Electron’s login item with the flag, and writes no file', async (t) => {
     const home = scratch(t);
     const electron = electronLogin();
@@ -174,12 +190,27 @@ test('Start the runtime at logon is read and set through jason runtime autostart
 
 test('an autostart the CLI refused or did not answer is unknown, and logged by its exit alone', async () => {
     const log = memoryLog();
-    const autostart = new RuntimeAutostart({ cli: autostartCli(() => true, 1), log });
+    const refusing = autostartCli(() => true, 1);
+    const autostart = new RuntimeAutostart({ cli: refusing, log });
     assert.equal(await autostart.registered(), null);
     assert.equal(await autostart.set(true), null);
     assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_set', { On: true, Exit: 1 }]]);
+    assert.deepEqual(refusing.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'status']], 'a set that said nothing is followed by a read');
     const garbled: Cli = { run: async () => ({ exit: 0, stdout: 'not json', stderr: '' }) };
     assert.equal(await new RuntimeAutostart({ cli: garbled, log: memoryLog() }).registered(), null);
+});
+
+test('a set the CLI answered without saying what is registered is followed by a read of what is', async () => {
+    const asked: string[][] = [];
+    const cli: Cli = {
+        async run(args) {
+            asked.push([...args]);
+            if (args[2] === 'status') return { exit: 0, stdout: '{"registered":true}\n', stderr: '' };
+            return { exit: 0, stdout: 'done\n', stderr: '' };
+        },
+    };
+    assert.equal(await new RuntimeAutostart({ cli, log: memoryLog() }).set(true), true);
+    assert.deepEqual(asked, [['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'status']]);
 });
 
 test('the login items’ log lines, read back, carry the setting and the platform, never a path the CLI printed', async (t) => {
