@@ -53,15 +53,17 @@ const operations: Readonly<Record<string, string>> = {
     'enrollment.stop': 'Stop sequence',
 };
 
-export const operationWords = (operation: string): string => operations[operation] ?? operation;
+/** An operation's code in words; a code with no words here, the names every object has included, is shown as given. */
+export const operationWords = (operation: string): string =>
+    Object.hasOwn(operations, operation) ? operations[operation]! : operation;
 
 const channels: Readonly<Record<string, string>> = {
     email: 'Email',
     linkedin: 'LinkedIn',
 };
 
-/** A channel's code in words; a code with no words here is shown as it was given. */
-export const channelWords = (code: string): string => channels[code] ?? code;
+/** A channel's code in words; a code with no words here, the names every object has included, is shown as given. */
+export const channelWords = (code: string): string => (Object.hasOwn(channels, code) ? channels[code]! : code);
 
 export interface ApprovalRow {
     id: string;

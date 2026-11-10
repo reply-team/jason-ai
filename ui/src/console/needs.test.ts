@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fixtures } from '../test/fixtures';
-import { channelWords, toApprovalDetail, toApprovalRow } from './live';
+import { channelWords, operationWords, toApprovalDetail, toApprovalRow } from './live';
 
 describe('what Needs you reads from an approval', () => {
     it('names the account a message goes from and the channel it goes on, from the preview the runtime recorded', () => {
@@ -46,5 +46,12 @@ describe('what Needs you reads from an approval', () => {
         expect(channelWords('linkedin')).toBe('LinkedIn');
         expect(channelWords('<b>sms</b>')).toBe('<b>sms</b>');
         expect(toApprovalDetail({ highlights: { '/args/channel': 'whatsapp' } }).channel).toBe('whatsapp');
+    });
+
+    it("answers a code that names a property every object has with the code, never the object's property", () => {
+        for (const code of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+            expect(channelWords(code)).toBe(code);
+            expect(operationWords(code)).toBe(code);
+        }
     });
 });
