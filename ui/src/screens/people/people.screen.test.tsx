@@ -447,6 +447,7 @@ describe('People', () => {
             'Sequences',
             'Messages',
             'Next',
+            'Research',
         ]);
         expect(api.calls.some((c) => c.operation === 'contact.threads')).toBe(false);
         // A click that asks for a new browser tab is left to the browser.

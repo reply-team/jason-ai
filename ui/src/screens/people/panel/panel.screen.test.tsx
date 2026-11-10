@@ -68,14 +68,14 @@ const tabNames = () =>
         .map((tab) => tab.textContent);
 
 describe('The person panel', () => {
-    it('has Details, Activity, Sequences and Next, and Messages only for a person a provider knows', async () => {
+    it('has Details, Activity, Sequences, Next and Research, and Messages only for a person a provider knows', async () => {
         const api = people()
             .answer('contact.get', 'contact.get/person-panel')
             .answer('workitem.list', 'workitem.list/by-contact-open')
             .answer('journal.list', 'journal.list/by-contact');
         open(api, ingrid.id);
         await waitFor(() => expect(within(panel()).getByRole('heading', { name: /Ingrid Solberg/ })).toBeTruthy());
-        expect(tabNames()).toEqual(['Details', 'Activity', 'Sequences', 'Next']);
+        expect(tabNames()).toEqual(['Details', 'Activity', 'Sequences', 'Next', 'Research']);
         expect(within(panel()).getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true');
 
         // Each tab is an address of its own.
@@ -90,7 +90,7 @@ describe('The person panel', () => {
             .answer('contact.threads', 'contact.threads/two-threads');
         open(api, mateo.id, 'threads');
         await waitFor(() => expect(within(panel()).getByRole('heading', { name: /Mateo Ruiz/ })).toBeTruthy());
-        expect(tabNames()).toEqual(['Details', 'Activity', 'Sequences', 'Messages', 'Next']);
+        expect(tabNames()).toEqual(['Details', 'Activity', 'Sequences', 'Messages', 'Next', 'Research']);
         expect(within(panel()).getByRole('tab', { name: 'Messages' }).getAttribute('aria-selected')).toBe('true');
         await waitFor(() => expect(asked(api, 'contact.threads')).toHaveLength(1));
     });
@@ -190,7 +190,7 @@ describe('The person panel on a screen of its own', () => {
         );
         await shown();
         expect(asked(api, 'contact.get')).toEqual([{ contact_id: ingrid.id }]);
-        expect(tabNames()).toEqual(['Details', 'Activity', 'Sequences', 'Next']);
+        expect(tabNames()).toEqual(['Details', 'Activity', 'Sequences', 'Next', 'Research']);
         expect(within(panel()).getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true');
 
         fireEvent.click(within(panel()).getByRole('tab', { name: 'Sequences' }));
@@ -552,5 +552,84 @@ describe('Move', () => {
         expect((await within(panel()).findByRole('status')).textContent).toContain(
             'Moved from Nordic pilot to Q4 follow-ups.',
         );
+    });
+});
+
+describe('Research', () => {
+    const findings = (api: FakeApi) =>
+        api
+            .answer('workitem.list', 'workitem.list/researcher-findings')
+            .answer('workitem.get', 'workitem.get/researcher-finding');
+
+    it('shows what the researcher found about the person, as text, with the campaign and the day it was found', async () => {
+        const api = findings(people().answer('contact.get', 'contact.get/person-panel'));
+        open(api, ingrid.id, 'research');
+        const found = await within(await shown()).findByText('Fjordline opened an office in Bergen in September.');
+        expect(asked(api, 'workitem.list')).toEqual([recorded('workitem.list/researcher-findings')]);
+        expect(asked(api, 'workitem.get')).toEqual([recorded('workitem.get/researcher-finding')]);
+        const finding = found.closest('article') as HTMLElement;
+        expect(finding.textContent).toContain('Nordic pilot');
+        // What a role wrote is drawn as the text it is: markup in it stays characters on the page.
+        expect(finding.textContent).toContain('<b>Hiring</b> two account executives; the careers page says so.');
+        expect(finding.querySelector('b')).toBeNull();
+    });
+
+    it('asks the researcher about the person in the campaign the control names, with the question given', async () => {
+        const api = findings(people().answer('contact.get', 'contact.get/person-panel')).answer(
+            'workitem.create',
+            'workitem.create/researcher-asked',
+        );
+        open(api, ingrid.id, 'research');
+        await within(await shown()).findByText('Fjordline opened an office in Bergen in September.');
+        const ask = within(panel()).getByRole('button', { name: 'Ask the researcher' });
+        expect(ask.closest('form')?.textContent).toContain('in Nordic pilot');
+        fireEvent.input(within(panel()).getByRole('textbox', { name: 'Question (optional)' }), {
+            target: { value: 'Who owns the Bergen office?' },
+        });
+        fireEvent.click(ask);
+
+        const said = await within(panel()).findByRole('status');
+        expect(asked(api, 'workitem.create')).toEqual([recorded('workitem.create/researcher-asked')]);
+        expect(said.textContent).toContain('Asked the researcher in Nordic pilot.');
+        expect(within(said).getByRole('link', { name: 'Open the work item' }).getAttribute('href')).toBe(
+            '#/workitems/planned/wi_1',
+        );
+    });
+
+    it('asks without a question, in the campaign the person picks', async () => {
+        const api = findings(new FakeApi().answer('contact.get', 'contact.get/person-after-half-move')).answer(
+            'workitem.create',
+            'workitem.create/researcher-asked-plain',
+        );
+        watch(api);
+        render(
+            <ApiProvider api={api}>
+                <PersonPanel contactId={ingrid.id} campaignId="cmp_3" tab="research" onClose={() => undefined} />
+            </ApiProvider>,
+        );
+        await within(await shown()).findByText('Fjordline opened an office in Bergen in September.');
+        const where = within(panel()).getByRole<HTMLSelectElement>('combobox', {
+            name: 'The campaign the researcher works in',
+        });
+        expect(Array.from(where.options).map((option) => option.textContent)).toEqual([
+            'Nordic pilot',
+            'Q4 follow-ups',
+        ]);
+        expect(where.value).toBe('cmp_3');
+        fireEvent.change(where, { target: { value: 'cmp_2' } });
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Ask the researcher' }));
+
+        expect((await within(panel()).findByRole('status')).textContent).toContain(
+            'Asked the researcher in Nordic pilot.',
+        );
+        expect(asked(api, 'workitem.create')).toEqual([recorded('workitem.create/researcher-asked-plain')]);
+    });
+
+    it('for a person in no campaign shows what was found and offers no ask', async () => {
+        const api = findings(people().answer('contact.get', 'contact.get/person-after-exclude'));
+        open(api, ingrid.id, 'research');
+        await within(await shown()).findByText('Fjordline opened an office in Bergen in September.');
+        expect(within(panel()).queryByRole('button', { name: 'Ask the researcher' })).toBeNull();
+        expect(within(panel()).queryByRole('textbox')).toBeNull();
     });
 });

@@ -11,6 +11,7 @@ import { linked, ThreadsTab } from '../threads';
 import { Timeline } from '../timeline';
 import { DetailsTab } from './details-tab';
 import { NextTab } from './next-tab';
+import { ResearchTab } from './research-tab';
 import { SequencesTab } from './sequences-tab';
 import * as panel from './store';
 
@@ -33,6 +34,7 @@ export function panelTabs(person: Contact): { key: PersonTab; label: string }[] 
         'sequences',
         ...(linked(person) ? ['threads' as const] : []),
         'next',
+        'research',
     ];
     return keys.map((key) => ({ key, label: names[key] }));
 }
@@ -131,6 +133,8 @@ function PanelTab({ person, tab, campaignId, me, now, zone }: Props) {
             return <ThreadsTab person={person} zone={zone} />;
         case 'next':
             return <NextTab person={person} now={now} zone={zone} />;
+        case 'research':
+            return <ResearchTab person={person} campaignId={campaignId} now={now} zone={zone} />;
         default:
             return <Timeline person={person} me={me} now={now} zone={zone} />;
     }

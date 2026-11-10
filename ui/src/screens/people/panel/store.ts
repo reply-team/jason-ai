@@ -12,6 +12,7 @@ import type {
     WorkItem,
     WorkItemCreateRequest,
     WorkItemSummary,
+    WorkItemWithResult,
 } from '../../../api/types';
 import * as people from '../store';
 import { fail, openStatuses } from '../store';
@@ -191,4 +192,51 @@ export async function move(
     }
     await people.open(api, contactId);
     return outcome;
+}
+
+/** What the researcher found about the person: its finished work, newest first, each read whole for its result. */
+export const findings = signal<{ contactId: string; items: WorkItemWithResult[] } | null>(null);
+export const findingsFailure = signal<string | null>(null);
+let findingsGeneration = 0;
+
+export async function loadFindings(api: Api, contactId: string): Promise<void> {
+    const mine = ++findingsGeneration;
+    findingsFailure.value = null;
+    if (findings.value?.contactId !== contactId) findings.value = null;
+    try {
+        const page = await api.call<Page<WorkItemSummary>>('workitem.list', {
+            contact_id: contactId,
+            kind: 'ai_role',
+            role: 'researcher',
+            status: ['succeeded'],
+            order: 'finished',
+            limit: 20,
+        });
+        const items = await Promise.all(
+            page.items.map((each) => api.call<WorkItemWithResult>('workitem.get', { work_item_id: each.id })),
+        );
+        if (mine === findingsGeneration) findings.value = { contactId, items };
+    } catch (error) {
+        if (mine === findingsGeneration) fail(error, findingsFailure);
+    }
+}
+
+/**
+ * Asks the researcher role about the person in a campaign, with the person's question when they gave one. Who asked
+ * is the actor the client adds; nothing in the context names where the ask came from.
+ */
+export async function askResearcher(
+    api: Api,
+    campaignId: string,
+    contactId: string,
+    question: string | undefined,
+): Promise<WorkItem> {
+    const body: Omit<WorkItemCreateRequest, 'actor'> = {
+        campaign_id: campaignId,
+        kind: 'ai_role',
+        role: 'researcher',
+        contact_id: contactId,
+    };
+    if (question) body.context = { question };
+    return api.call<WorkItem>('workitem.create', body, 'write');
 }
