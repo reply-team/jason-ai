@@ -630,6 +630,11 @@ describe('A campaign’s Sequence', () => {
         // The questions about the whole campaign wait here too, though they count for nobody.
         expect(screen.getAllByText('Follow up on LinkedIn?')).toHaveLength(3);
         expect(await screen.findByText(/Holding the sends over the holiday\./)).toBeTruthy();
+        // The journal's lines are the last section, under What happened, below the now line.
+        const happened = screen.getByRole('region', { name: 'What happened' });
+        expect(within(happened).getByText(/Holding the sends over the holiday\./)).toBeTruthy();
+        expect(within(happened).queryByText('Running')).toBeNull();
+        expect(happened.parentElement?.lastElementChild).toBe(happened);
         // The runtime says what is planned and what runs, each in its own read: the page splits nothing itself.
         expect(sent(api, 'workitem.list')).toEqual([
             fixtures['workitem.list/by-campaign-planned'].request,

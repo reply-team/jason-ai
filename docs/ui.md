@@ -73,8 +73,8 @@ each with why: a person waiting for you opens the approval or the question in pl
 shows the reason the runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
 its people and the provider campaign it is linked to; **Add people** finds people and adds them (`jason campaign
 add-contacts`). A campaign opens on its **Sequence**, which puts what is planned, what waits for you and what is running
-above the now line, and the campaign's journal below it (`jason journal list --campaign`), narrowed by chips to replies,
-work, decisions or changes; its **People** are listed by the same counts with a search, Removed among them
+above the now line, and ends with **What happened**, the campaign's journal (`jason journal list --campaign`),
+narrowed by chips to replies, work, decisions or changes; its **People** are listed by the same counts with a search, Removed among them
 (`--summary removed`); in Activity the tab is **People Activity**, and everything it lists is the period's, All being
 everyone something happened to (`--activity people`); its **Inbox** shows its latest reply lines newest first
 (`jason journal list --campaign --kind inbound_reply_observed`), the last ten people who replied each with their
