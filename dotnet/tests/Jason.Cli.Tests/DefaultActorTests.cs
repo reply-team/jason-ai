@@ -253,7 +253,7 @@ public class DefaultActorTests
     public static TheoryData<string[]> PersonsWord() => [.. TheEleven];
 
     /// <summary>The verbs that are a person's own word: no default actor applies to any of them.</summary>
-    private static readonly string[][] TheEleven =
+    internal static readonly string[][] TheEleven =
     [
         ["approval", "approve", "apr_A"],
         ["approval", "reject", "apr_A"],
@@ -269,7 +269,7 @@ public class DefaultActorTests
     ];
 
     /// <summary>One invocation of every other verb that reaches the runtime.</summary>
-    private static readonly string[][] Runs =
+    internal static readonly string[][] Runs =
     [
         ["runtime", "status"],
         ["campaign", "create", "--name", "Spring outreach"],
@@ -355,7 +355,7 @@ public class DefaultActorTests
     ];
 
     /// <summary>The verbs not run above, each with why.</summary>
-    private static readonly Dictionary<string, string> NotRun = new(StringComparer.Ordinal)
+    internal static readonly Dictionary<string, string> NotRun = new(StringComparer.Ordinal)
     {
         ["runtime start"] = "starts the runtime's process",
         ["runtime restart"] = "starts the runtime's process",
@@ -419,7 +419,7 @@ public class DefaultActorTests
             .ToHashSet(StringComparer.Ordinal);
     }
 
-    private static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(string[] args)
+    internal static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(string[] args)
     {
         using var paths = new TempPaths();
         paths.WriteDescriptor(Live);
@@ -442,7 +442,7 @@ public class DefaultActorTests
     }
 
     /// <summary>The verb an invocation names: the words the command tree reads as commands, before its first argument or option.</summary>
-    private static string VerbOf(string[] args) => string.Join(' ', Walked(args).Words);
+    internal static string VerbOf(string[] args) => string.Join(' ', Walked(args).Words);
 
     private static Command Find(string[] verb) => Walked(verb).Command;
 

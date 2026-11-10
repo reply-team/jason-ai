@@ -225,19 +225,21 @@ describe('the console', () => {
                 kind: 'permission',
                 request: 'req_1',
                 title: 'Run a command',
-                detail: 'jason status',
-                remember: true,
+                detail: 'git status',
+                remember: 'git status \u2026',
             });
             desktop.emit(id, {
                 kind: 'permission',
                 request: 'req_2',
                 title: 'Write a file',
                 detail: 'notes.md',
-                remember: false,
+                remember: null,
             });
         });
         await waitFor(() => screen.getByText('Write a file'));
-        fireEvent.click(screen.getByRole('button', { name: 'Allow for this chat' }));
+        // The "always" button says what it grants, and a card that can only cover itself has none.
+        expect(screen.getAllByRole('button', { name: /^Allow for this chat/ })).toHaveLength(1);
+        fireEvent.click(screen.getByRole('button', { name: 'Allow for this chat: git status \u2026' }));
         await waitFor(() => screen.getByText('Allowed for this chat'));
         expect(desktop.calls.find((each) => each.name === 'chat.answer')!.args).toEqual([
             id,

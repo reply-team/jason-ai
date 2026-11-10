@@ -8,6 +8,7 @@
 export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
     'src/programs.ts': 'the programs a Connect card runs: reply, npm, and the version of an agent host or of node',
+    'src/chat-process.ts': "an agent host for one turn of the chat, streamed, and on Windows taskkill from the system folder to end that turn's process tree",
     'src/shell-path.ts': "the login shell, on macOS only, for the PATH a program started from the Finder lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
 };

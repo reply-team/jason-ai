@@ -92,13 +92,20 @@ namespace Jason.Cli;
 /// </remarks>
 public static class CliApp
 {
+    /// <summary>
+    /// The words a command runs are the words on its command line: no response file is read, so <c>@file</c> is a word
+    /// like any other and no verb takes it. A program shown or fenced by a command's words would otherwise run others it
+    /// read from a file.
+    /// </summary>
+    private static readonly ParserConfiguration Words = new() { ResponseFileTokenReplacer = null };
+
     public static async Task<int> RunAsync(string[] args, CliEnvironment env, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(env);
 
         var root = BuildRootCommand(env);
-        var parseResult = root.Parse(args);
+        var parseResult = root.Parse(args, Words);
         var unknown = UnknownOptions(parseResult);
         if (unknown.Count > 0 || parseResult.Errors.Count > 0)
         {

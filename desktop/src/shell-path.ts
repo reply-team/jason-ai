@@ -1,14 +1,18 @@
 import { execFile } from 'node:child_process';
 import { delimiter, join } from 'node:path';
+import { withoutSessionMarkers } from './session-markers.ts';
 
 const marker = '__JASON_PATH__';
 const closing = '__JASON_PATH_END__';
 
 /**
  * How the login shell is started: killed outright at five seconds, since an interactive shell may ignore SIGTERM and a
- * hanging rc file would otherwise hold the desktop before any window exists.
+ * hanging rc file would otherwise hold the desktop before any window exists; and with the desktop's environment less a
+ * parent Claude Code session's markers (`sessionMarkers`), since the person's rc files run there.
  */
-export const loginShellOptions = { timeout: 5000, killSignal: 'SIGKILL', windowsHide: true } as const;
+export function loginShellOptions(env: Readonly<Record<string, string | undefined>>) {
+    return { timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, env: withoutSessionMarkers(env) } as const;
+}
 
 /** Pure: a PATH with the places an agent's command line lands added at its end, which a profile may not name yet. */
 export function withUsualPlaces(path: string, home: string): string {
@@ -42,7 +46,7 @@ export async function loginPath(inherited: string, home: string): Promise<string
     if (process.platform !== 'darwin') return inherited;
     const shell = process.env.SHELL || '/bin/zsh';
     return new Promise((resolve) => {
-        execFile(shell, ['-ilc', `printf '${marker}%s${closing}' "$PATH"`], loginShellOptions, (error, stdout) => {
+        execFile(shell, ['-ilc', `printf '${marker}%s${closing}' "$PATH"`], loginShellOptions(process.env), (error, stdout) => {
             resolve(withUsualPlaces((error ? null : pathFromOutput(String(stdout))) ?? inherited, home));
         });
     });

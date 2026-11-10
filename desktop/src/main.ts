@@ -10,6 +10,10 @@ import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { Chat } from './chat.ts';
+import { readFence, type ChatFence } from './chat-deny.ts';
+import { registerChat } from './chat-ipc.ts';
+import { loggedTurns } from './chat-log.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart } from './login-item.ts';
@@ -34,6 +38,15 @@ function readText(file: string): string | null {
         return readFileSync(file, 'utf8');
     } catch {
         return null;
+    }
+}
+
+/** The chat's fence the application carries, read at every turn; a list that cannot be read starts no turn. */
+function chatFence(): ChatFence {
+    try {
+        return readFence(app.getAppPath());
+    } catch {
+        throw new Error('The chat’s allow and deny lists could not be read.');
     }
 }
 
@@ -188,7 +201,7 @@ async function run(): Promise<void> {
     const login = new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead, log });
     const autostart = version === null ? null : new RuntimeAutostart({ cli, log });
     // The updater runs only in an installed build: a development build has no installer to hand an update to.
-    const rollback = join(paths.desktop, 'rollback');
+    const rollback = paths.rollback;
     const updates = app.isPackaged
         ? new Updater({
               updater: autoUpdater,
@@ -221,12 +234,13 @@ async function run(): Promise<void> {
     void desk.readAutostart();
     updates?.start();
     let runtimeVersion: string | null = null;
+    const keys = new ProviderKeys(paths.providerKeys, safeStorage);
     registerSetup(
         new Setup({
             paths,
             cli,
             programs: programsOn(env),
-            keys: new ProviderKeys(paths.providerKeys, safeStorage),
+            keys,
             log,
             bundleVersion: version ?? 'unprepared',
             runtimeVersion: () => runtimeVersion,
@@ -236,6 +250,21 @@ async function run(): Promise<void> {
         log,
         () => current,
     );
+    const chat = new Chat({
+        paths,
+        env,
+        bundle,
+        dataNamed: Boolean(process.env.JASON_DATA_DIR?.trim()),
+        cli,
+        keyFor: (id) => keys.keyFor(id),
+        fence: chatFence,
+        emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
+        ...loggedTurns(log),
+    });
+    registerChat(ipcMain, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
+    // A turn never outlives the window: closing it stops every host and forgets every "always".
+    window.on('closed', () => chat.closeAll());
+    app.on('before-quit', () => chat.closeAll());
 
     await showStarting(window, 'Starting Jason…', false);
     if (version === null) {

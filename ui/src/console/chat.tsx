@@ -71,13 +71,13 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
                       Allow
                   </button>
                   ${
-                      entry.remember
+                      entry.remember !== null
                           ? html`<button
                                 class="btn sm"
                                 type="button"
                                 ${act('chat.answer', chat.id, entry.request, 'always')}
                             >
-                                Allow for this chat
+                                Allow for this chat: ${entry.remember}
                             </button>`
                           : null
                   }

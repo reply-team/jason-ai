@@ -31,6 +31,8 @@ test('the desktop’s own files are under <data>/desktop and its log beside the 
     assert.equal(paths.settings, join(data, 'desktop', 'settings.json'));
     assert.equal(paths.chat, join(data, 'desktop', 'chat'));
     assert.equal(paths.providerKeys, join(data, 'desktop', 'provider-keys'));
+    assert.equal(paths.turns, join(data, 'desktop', 'turns'));
+    assert.equal(paths.rollback, join(data, 'desktop', 'rollback'));
     assert.equal(paths.logs, join(data, 'logs'));
     assert.equal(paths.installationSettings, join(data, 'config', 'settings.json'));
     assert.equal(paths.runFile, join(data, 'run', 'runtime.json'));
@@ -182,8 +184,8 @@ test('the PATH is one entry, whatever case Windows wrote its name in', () => {
 });
 
 test('the login shell is killed outright at its time limit, since an interactive shell may ignore a polite signal', () => {
-    assert.equal(loginShellOptions.killSignal, 'SIGKILL');
-    assert.equal(loginShellOptions.timeout, 5000);
+    assert.equal(loginShellOptions({}).killSignal, 'SIGKILL');
+    assert.equal(loginShellOptions({}).timeout, 5000);
 });
 
 test('the login shell’s PATH is read between its two markers, and the usual places are added once', () => {

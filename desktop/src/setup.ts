@@ -352,12 +352,13 @@ export class Setup {
     }
 
     /**
-     * The Reply skills beside Jason's, in the chat folder. The Reply CLI writes them as plain folders only for hosts other
-     * than Claude Code, so they are written to a folder of ours for one of those and the Reply ones copied across; the
-     * sales skills it adds with them are an older copy of Jason's own and are left out.
+     * The Reply skills beside Jason's, in the chat folder's two skills folders, Claude Code's and Codex's. The Reply CLI
+     * writes them as plain folders only for hosts other than Claude Code, so they are written to a folder of ours for one
+     * of those and the Reply ones copied across; the sales skills it adds with them are an older copy of Jason's own and
+     * are left out.
      */
     async #deployReplySkills(): Promise<void> {
-        const target = join(this.#deps.paths.chat, '.claude', 'skills');
+        const targets = [join(this.#deps.paths.chat, '.claude', 'skills'), join(this.#deps.paths.chat, '.agents', 'skills')];
         const place = await mkdtemp(join(tmpdir(), 'jason-reply-skills-'));
         try {
             const answer = await this.#run('reply', 'skills install', ['skills', 'install', 'adapter', '--project', '--agent', 'codex'], { cwd: place, timeoutMs: installLimit });
@@ -365,8 +366,10 @@ export class Setup {
             const source = join(place, '.agents', 'skills');
             for (const name of await readdir(source).catch(() => [] as string[])) {
                 if (!name.startsWith('reply-')) continue;
-                await rm(join(target, name), { recursive: true, force: true });
-                await cp(join(source, name), join(target, name), { recursive: true });
+                for (const target of targets) {
+                    await rm(join(target, name), { recursive: true, force: true });
+                    await cp(join(source, name), join(target, name), { recursive: true });
+                }
             }
         } finally {
             await rm(place, { recursive: true, force: true });

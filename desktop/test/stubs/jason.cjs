@@ -76,6 +76,27 @@ if (args[0] === 'status') {
     const route = settings.Routes && settings.Routes.Default;
     const global = route ? { plugin_id: route.Plugin, binding: route.Binding || null, binding_identity: null } : null;
     print({ routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations: {} }, campaigns: [] });
+} else if (verb === 'campaign get') {
+    // The fields of the campaign DTO the chat reads; the folder is the one a test names, or none.
+    if (process.env.STUB_CAMPAIGN_MISSING === 'yes') {
+        print({ error: { code: 'campaign_not_found', message: 'No campaign has that id.', retryable: false } });
+        process.exit(1);
+    }
+    print({ id: args[2], name: 'Spring', status: 'active', project_id: 'prj_01STUB', project_slug: 'default', folder_path: process.env.STUB_CAMPAIGN_FOLDER || null });
+} else if (verb === 'project get') {
+    print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
+} else if (verb === 'skills install' && args.includes('--root')) {
+    // As the CLI deploys: into the very directory --root names, a record of the deployment and one folder per skill.
+    // STUB_SKILLS_FAIL_HOST names a host whose deployment fails.
+    if (process.env.STUB_SKILLS_FAIL_HOST && args[args.indexOf('--host') + 1] === process.env.STUB_SKILLS_FAIL_HOST) {
+        print({ error: { code: 'skills_not_deployed', message: 'The stub refused this host.', retryable: false } });
+        process.exit(1);
+    }
+    const root = args[args.indexOf('--root') + 1];
+    mkdirSync(join(root, 'campaign-launch'), { recursive: true });
+    writeFileSync(join(root, 'campaign-launch', 'SKILL.md'), '# campaign-launch\n');
+    writeFileSync(join(root, '.jason-skills.json'), '{}\n');
+    print({});
 } else if (['ui install', 'skills install', 'plugin install', 'plugin reload'].includes(verb)) {
     print({});
 } else {

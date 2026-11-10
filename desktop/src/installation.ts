@@ -5,6 +5,7 @@
  */
 
 import { mkdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
 import { pairingLink, runtimeOrigin } from './descriptor.ts';
 import type { Logger } from './log.ts';
@@ -13,7 +14,7 @@ import type { DesktopSettings } from './settings.ts';
 import { runtimeVersionIn, statusFacts } from './setup-model.ts';
 
 /** The verbs the desktop runs, by the words that name them; the log names a verb by these and nothing else. */
-const verbs = ['status', 'runtime start', 'runtime status', 'runtime autostart', 'ui install', 'ui open', 'skills install', 'plugin install', 'plugin reload', 'plugin list', 'route list', '--version'] as const;
+const verbs = ['status', 'runtime start', 'runtime status', 'runtime autostart', 'ui install', 'ui open', 'skills install', 'plugin install', 'plugin reload', 'plugin list', 'route list', 'campaign get', 'project get', '--version'] as const;
 
 export function verbOf(args: readonly string[]): string {
     const two = args.slice(0, 2).join(' ');
@@ -120,9 +121,14 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         } else {
             deployed = false;
         }
-        const chat = await cli.run(['skills', 'install', '--root', paths.chat, '--host', 'claude_code', '--source', deps.bundle], { timeoutMs: 300_000 });
-        log.info('skills_deployed', { Target: 'chat', Exit: chat.exit });
-        if (deployed && chat.exit === 0) deps.saveSettings({ ...deps.settings, skillsDeployedFor: deps.bundleVersion });
+        // --root names the directory the skills are deployed into. Claude Code started in the chat folder with project
+        // settings reads them from .claude/skills there, and Codex from .agents/skills; the Reply skills are copied into
+        // both folders.
+        const chat = await cli.run(['skills', 'install', '--root', join(paths.chat, '.claude', 'skills'), '--host', 'claude_code', '--source', deps.bundle], { timeoutMs: 300_000 });
+        log.info('skills_deployed', { Target: 'chat_claude_code', Exit: chat.exit });
+        const codex = await cli.run(['skills', 'install', '--root', join(paths.chat, '.agents', 'skills'), '--host', 'codex', '--source', deps.bundle], { timeoutMs: 300_000 });
+        log.info('skills_deployed', { Target: 'chat_codex', Exit: codex.exit });
+        if (deployed && chat.exit === 0 && codex.exit === 0) deps.saveSettings({ ...deps.settings, skillsDeployedFor: deps.bundleVersion });
     }
 
     const open = await cli.run(['ui', 'open', '--no-open']);
