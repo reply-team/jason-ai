@@ -361,6 +361,143 @@ public sealed class PluginInstallCommandTests : IDisposable
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// After a reload that answered, the body carries the plugin as the runtime answered it — its status, its problems, and
+    /// each capability requested against granted — and the settings file this CLI uses, so an agent reads what is still to
+    /// be granted and where from stdout. The CLI computes nothing and reads no manifest.
+    /// </summary>
+    [Fact]
+    public async Task Install_carries_the_plugin_as_the_reload_answered_it_and_the_settings_file()
+    {
+        var (release, _) = Release();
+        _paths.WriteDescriptor(Live);
+        _reload = () => Answered(PluginStatus.Valid, []);
+
+        var exit = await RunAsync(release, "plugin", "install", "example");
+
+        Assert.True(exit == ExitCodes.Success, _out.ToString() + _error.ToString());
+        using var answer = JsonDocument.Parse(_out.ToString());
+        var root = answer.RootElement;
+        Assert.Equal("valid", root.GetProperty("status").GetString());
+        Assert.Equal(0, root.GetProperty("problems").GetArrayLength());
+        var exec = root.GetProperty("capabilities").GetProperty("exec");
+        Assert.Equal("vendor", exec.GetProperty("requested")[0].GetProperty("name").GetString());
+        Assert.Equal(0, exec.GetProperty("granted").GetArrayLength());
+        Assert.Equal(_paths.Paths.UserSettingsFile, root.GetProperty("settings_file").GetString());
+    }
+
+    /// <summary>
+    /// With <c>--human</c>, a plugin loaded and granted nothing says, in one sentence, what it asks for, the key that grants
+    /// it, the settings file and the reload, after what was placed and loaded.
+    /// </summary>
+    [Fact]
+    public async Task Install_says_for_people_how_to_grant_what_the_plugin_is_granted_nothing_of()
+    {
+        var (release, _) = Release();
+        _paths.WriteDescriptor(Live);
+        _reload = () => Answered(PluginStatus.Valid, []);
+
+        var exit = await RunAsync(release, "plugin", "install", "example", "--human");
+
+        Assert.True(exit == ExitCodes.Success, _out.ToString() + _error.ToString());
+        var lines = _out.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        Assert.EndsWith("The runtime has loaded it.", lines[0], StringComparison.Ordinal);
+        Assert.Equal(
+            $"example is loaded and granted nothing. It asks to run: vendor. Grant it under Plugins:Grants:example:Exec in {_paths.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+            lines[1]);
+    }
+
+    /// <summary>
+    /// A reload that answers the plugin <c>unavailable</c> is said with each problem's code and the runtime's message, and
+    /// what it is granted nothing of is said too: both are what the person does next, and neither waits for the other.
+    /// </summary>
+    [Fact]
+    public async Task Install_says_for_people_each_problem_of_an_unavailable_plugin_with_its_message()
+    {
+        var (release, _) = Release();
+        _paths.WriteDescriptor(Live);
+        _reload = () => Answered(PluginStatus.Unavailable, [new PluginProblemDto("executable_missing", "capabilities.exec.executables[0].name", "'vendor' was not found.")]);
+
+        var exit = await RunAsync(release, "plugin", "install", "example", "--human");
+
+        Assert.True(exit == ExitCodes.Success, _out.ToString() + _error.ToString());
+        var lines = _out.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(3, lines.Length);
+        Assert.Equal("example unavailable: executable_missing — 'vendor' was not found.", lines[1]);
+        Assert.StartsWith("example is loaded and granted nothing. It asks to run: vendor.", lines[2], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// With no runtime answering nothing is known of what the plugin is granted, so the body is what it always was, and the
+    /// line on stderr says where to read it once a runtime runs.
+    /// </summary>
+    [Fact]
+    public async Task Without_a_runtime_install_says_where_to_read_what_the_plugin_is_granted()
+    {
+        var (release, _) = Release();
+
+        var exit = await RunAsync(release, "plugin", "install", "example");
+
+        Assert.True(exit == ExitCodes.Success, _out.ToString() + _error.ToString());
+        Assert.Contains(
+            "loads at the runtime's next start, or at `jason plugin reload` once one runs; then `jason plugin list --human` says what it asks for and what it is granted.",
+            _error.ToString(),
+            StringComparison.Ordinal);
+        using var answer = JsonDocument.Parse(_out.ToString());
+        foreach (var absent in new[] { "status", "problems", "capabilities", "settings_file" })
+        {
+            Assert.False(answer.RootElement.TryGetProperty(absent, out _), absent);
+        }
+    }
+
+    /// <summary>The help says what the body and the human view carry after a reload that answered.</summary>
+    [Fact]
+    public async Task The_help_says_what_the_body_carries_after_a_reload_that_answered()
+    {
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["plugin", "install", "--help"], new CliEnvironment(output, new StringWriter(), _paths.Paths), Ct);
+
+        Assert.Contains(
+            "After a reload that answered, the body also carries the plugin's status, problems and capabilities as the runtime answered them, and the settings file this CLI uses; with --human, each problem is named with the runtime's words and each capability granted nothing of with the key that grants it.",
+            System.Text.RegularExpressions.Regex.Replace(output.ToString(), @"\s+", " "),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>The registry an activated reload answers with the placed package <c>example</c> in it, asking to run <c>vendor</c>.</summary>
+    private static HttpResponseMessage Answered(PluginStatus status, IReadOnlyList<PluginProblemDto> problems)
+    {
+        var registry = new PluginRegistryDto(
+            new SnapshotDto("snp_A", DateTimeOffset.UnixEpoch, SnapshotSource.Reload, 1),
+            "rsn_A",
+            [
+                new PluginDto(
+                    "example",
+                    "1.2.0",
+                    PluginKind.Provider,
+                    null,
+                    null,
+                    null,
+                    "/home/u/.jason/plugins/example",
+                    "sha256:3f2a9c1b4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8",
+                    new PluginContractsDto([1], [1], []),
+                    ["contact.get"],
+                    new PluginEntry("main.js", "invoke"),
+                    new PluginCapabilitiesDto(new ExecCapabilityDto([new ExecutableDto("vendor", null, null, null)], []), null, null),
+                    new PluginLimitsDto(60000, 64),
+                    null,
+                    status,
+                    problems),
+            ],
+            null,
+            Activated: true);
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(registry, Jason.Contracts.Json.JasonJson.Options), Encoding.UTF8, "application/json"),
+        };
+    }
+
     [Fact]
     public async Task A_development_build_asks_nothing_of_the_default_feed()
     {

@@ -85,7 +85,9 @@ public enum PluginLoad
 
 /// <summary>
 /// What <c>jason plugin install</c> prints: the package in place, how it came to be there, whether it is loaded, and, when
-/// the runtime answered and refused the reload, its refusal as it gave it.
+/// the runtime answered and refused the reload, its refusal as it gave it. After a reload that answered, the plugin as the
+/// runtime answered it — its status, its problems and its capabilities, requested against granted — and the settings file
+/// this CLI uses, where a grant is written; with no runtime answering, none of them is known and none is printed.
 /// </summary>
 public sealed record PluginInstallResponse(
     string Id,
@@ -95,7 +97,20 @@ public sealed record PluginInstallResponse(
     int Files,
     PluginPlacement Placed,
     PluginLoad Load,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ErrorBody? Error = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ErrorBody? Error = null)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PluginStatus? Status { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<PluginProblemDto>? Problems { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PluginCapabilitiesDto? Capabilities { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SettingsFile { get; init; }
+}
 
 /// <summary>
 /// A plugin package a release publishes, placed in the plugins directory: <c>jason plugin install</c>'s body, written to be

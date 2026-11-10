@@ -105,7 +105,10 @@ jason runtime autostart disable
 
 `enable` registers **the runtime itself** to start when this account logs on: a logon task on Windows, a
 LaunchAgent on macOS, a `systemd --user` unit on Linux. `disable` takes that registration away, and `status`
-says what is registered and whether the executable it names is still on disk.
+says what is registered and whether the executable it names is still on disk. On macOS the registration also
+carries the `PATH` of the terminal `enable` ran from, which the runtime started at logon then searches, and
+`jason runtime autostart status` says it under `path`; an agent an earlier version registered carries none, and
+launchd's default `/usr/bin:/bin:/usr/sbin:/sbin` holds no program a package manager installed.
 
 **It is registration, not supervision.** Nothing watches the runtime afterwards: a runtime that stops stays
 stopped until somebody starts it. There is no restart policy, and no second process whose job is to keep the
@@ -225,13 +228,37 @@ program it needs is not on the `PATH` this runtime started with, which is why a 
 terminal can be unavailable to a runtime that started at logon. `jason status` names each unavailable plugin
 with its problem codes in its optional `plugin_availability` check, which never makes the installation not
 ready: work routed to such a plugin fails at the claim, and a notification plugin delivers nothing; nothing
-else stops.
+else stops. Beside it, the optional `plugin_grants` check names each plugin, an unavailable one included, that asks
+for a capability and is granted nothing of it, by its id and the capability's key under `Plugins:Grants:<id>`; it
+never decides `ready` either, and `jason plugin list --human` says what the plugin asks for, the key and the
+settings file.
+
+On macOS a runtime started at logon is a LaunchAgent, and launchd's default search path is
+`/usr/bin:/bin:/usr/sbin:/sbin`, which holds no program a package manager installed; the registration records the
+`PATH` of the terminal it was made from, and `jason runtime autostart status` says which it carries. The repair is to
+register again from a terminal whose `PATH` has the program, with `jason runtime autostart enable`, then
+`jason runtime restart`, which is a stop and asked first.
 
 `jason plugin reload` reads every package again and swaps the snapshot, or keeps the old one and says what is
 wrong. It is all or nothing: a package problem rejects the whole reload, and the runtime carries on with the
 plugins it already had.
 
-Those two verbs are the whole plugin vocabulary, and **there is no `jason plugin get`**. One plugin by name is
+A provider on a fresh installation is connected by four acts, in this order, and steps 3 to 5 of
+`docs/golden-path.md` say each in full:
+
+1. Install the package: `jason plugin install reply`, the release's own, placed and loaded and granted nothing yet.
+2. Grant it what it asks for, under `Plugins:Grants:<id>` in the settings file (`~/.jason/config/settings.json`).
+3. Route its work, under `Routes` in the same file: the plugin, and the account its work goes through.
+4. Reload: `jason plugin reload`, which reads the grant and the route together.
+
+`jason plugin install --human` and `jason plugin list --human` name each capability a plugin asks for and is granted
+nothing of, with the key that grants it and the settings file: that sentence is what to ask the person to allow. The
+program a package runs comes first, the Reply CLI section of `docs/golden-path.md`. Where `npm install -g` is refused
+with `EACCES`, npm's global prefix is a directory this account does not own: install it under a prefix of the
+account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the search path the runtime
+sees.
+
+Those three verbs are the whole plugin vocabulary, and **there is no `jason plugin get`**. One plugin by name is
 that listing read down to its row — `--human` for a person, or the default JSON for a session that is going to
 pick the row out itself.
 

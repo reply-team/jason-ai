@@ -238,6 +238,63 @@ public class AutostartArtifactsTests
     }
 
     /// <summary>
+    /// launchd starts a LaunchAgent with a search path of its own, <c>/usr/bin:/bin:/usr/sbin:/sbin</c>, which holds no
+    /// program a package manager installed, so a plugin whose program is on the person's PATH would be unavailable after
+    /// every logon start. The agent carries the search path it was registered with, escaped like every other word in the
+    /// document, and reads it back unchanged.
+    /// </summary>
+    [Fact]
+    public void The_launch_agent_carries_the_search_path_it_was_registered_with_escaped()
+    {
+        const string Searched = "/opt/homebrew/bin:/Users/ada/a&b<c>:/usr/bin";
+
+        var agent = AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/usr/local/bin/jason"], Unix, Home, "ada", Searched);
+
+        Assert.Contains(
+            "<key>EnvironmentVariables</key>\n    <dict>\n      <key>PATH</key>\n      <string>/opt/homebrew/bin:/Users/ada/a&amp;b&lt;c&gt;:/usr/bin</string>\n    </dict>",
+            agent.Artifact.ReplaceLineEndings("\n"),
+            StringComparison.Ordinal);
+        Assert.Equal(Searched, agent.SearchPath);
+        Assert.Equal(Searched, AutostartArtifacts.SearchPathIn(AutostartPlatform.MacOs, agent.Artifact));
+        Assert.Equal(agent.Run, AutostartArtifacts.Read(AutostartPlatform.MacOs, agent.Artifact));
+    }
+
+    /// <summary>With no search path given there is none to carry: the agent has no environment key, and none is read back.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void A_launch_agent_given_no_search_path_carries_no_environment(string? searched)
+    {
+        var agent = AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/usr/local/bin/jason"], Unix, Home, "ada", searched);
+
+        Assert.DoesNotContain("EnvironmentVariables", agent.Artifact, StringComparison.Ordinal);
+        Assert.DoesNotContain("<key>PATH</key>", agent.Artifact, StringComparison.Ordinal);
+        Assert.Null(agent.SearchPath);
+        Assert.Null(AutostartArtifacts.SearchPathIn(AutostartPlatform.MacOs, agent.Artifact));
+        Assert.Equal(
+            AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/usr/local/bin/jason"], Unix, Home, "ada").Artifact,
+            agent.Artifact);
+    }
+
+    /// <summary>
+    /// The logon task and the user unit are composed as they always were, a search path given or not: on Windows the task
+    /// starts with the account's own environment, and the Linux unit's environment is the user manager's, which a later
+    /// change may carry.
+    /// </summary>
+    [Theory]
+    [InlineData(AutostartPlatform.Windows)]
+    [InlineData(AutostartPlatform.Linux)]
+    public void Only_the_launch_agent_carries_a_search_path(AutostartPlatform platform)
+    {
+        var without = AutostartArtifacts.Compose(platform, [Executable], Windows, Home, Sid);
+        var with = AutostartArtifacts.Compose(platform, [Executable], Windows, Home, Sid, "/opt/homebrew/bin:/usr/bin");
+
+        Assert.Equal(without.Artifact, with.Artifact);
+        Assert.Null(with.SearchPath);
+        Assert.Null(AutostartArtifacts.SearchPathIn(platform, with.Artifact));
+    }
+
+    /// <summary>
     /// The user unit is written, the manager is told to re-read its directory, and the unit is enabled into the
     /// account's own default target. Removing it is the same three steps backwards.
     /// </summary>
