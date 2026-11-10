@@ -4,6 +4,9 @@
  * computes, offers what it found, downloads it only when the person says so and installs it only when the person says so
  * again, after the application's own folder has been kept aside (`rollback.ts`). electron-updater is handed in, so
  * nothing here needs Electron to be tested.
+ *
+ * `quitAndInstall` starts the downloaded installer from inside `node_modules` (electron-updater's own spawn), the one
+ * start the desktop makes that the process guard cannot see.
  */
 
 import { nextCheckDelay } from './backoff.ts';
@@ -140,7 +143,15 @@ export class Updater {
         this.schedule(nextCheckDelay(this.failures));
     }
 
-    /** Downloads what was offered: only on the person's word. */
+    /**
+     * Downloads what was offered: only on the person's word.
+     *
+     * electron-updater keeps the download in its own cache under the profile: `%LOCALAPPDATA%\<name>-updater` on
+     * Windows, `~/Library/Caches/<name>-updater` on macOS, `<name>` being the one electron-builder writes into
+     * `app-update.yml`. It is outside `<data>` by electron-updater's construction: its base is the account's cache
+     * folder, not `userData`, so the `setPath` that moves Electron's own files under `<data>` does not move it. The
+     * desktop does not remove it.
+     */
     async download(): Promise<void> {
         if (this.state.step !== 'offered') return;
         const { version } = this.state;

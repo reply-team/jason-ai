@@ -15,7 +15,8 @@ const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as
  * desktop and installs one on the person's word; no other package is shipped inside the application.
  */
 const allowed: Readonly<Record<string, string>> = {
-    'electron-updater': 'the updater: the stable releases of this repository, downloaded and installed on the person’s word',
+    'electron-updater':
+        'the updater: the stable releases of this repository, downloaded and installed on the person’s word; its quitAndInstall starts the installer from inside node_modules, the one start the process guard cannot see',
 };
 
 test('the desktop’s runtime dependencies are the allowed ones, each pinned to one version', () => {
