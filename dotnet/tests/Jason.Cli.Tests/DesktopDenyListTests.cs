@@ -18,10 +18,10 @@ public class DesktopDenyListTests
 {
     /// <summary>
     /// The verbs that ask the runtime nothing, or only to stop and start (<c>DefaultActorTests.NotRun</c>), which the chat's
-    /// agent keeps: reads of this installation that change nothing.
+    /// agent keeps: reads of this installation that change nothing. The reads under <c>runtime</c> and <c>update</c> are
+    /// not among them: the deny list takes those nouns away whole.
     /// </summary>
-    private static readonly string[] ReadsTheAgentKeeps =
-        ["status", "logs", "doctor", "runtime status", "runtime autostart status", "update status", "update check"];
+    private static readonly string[] ReadsTheAgentKeeps = ["status", "logs", "doctor"];
 
     /// <summary>
     /// The verbs the chat refuses beyond the CLI's own table: taking someone off the do-not-contact register, changing which
@@ -128,6 +128,17 @@ public class DesktopDenyListTests
             .ToList();
 
         Assert.Empty(missing);
+    }
+
+    /// <summary>The reads the agent keeps are exactly that: none of them is one a deny-list entry takes away.</summary>
+    [Fact]
+    public void No_read_the_agent_keeps_is_covered_by_the_deny_list()
+    {
+        var listed = DenyList();
+
+        var covered = ReadsTheAgentKeeps.Where(verb => listed.Any(entry => Covers(entry, verb))).ToList();
+
+        Assert.Empty(covered);
     }
 
     [Fact]
