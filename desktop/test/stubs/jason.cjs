@@ -35,6 +35,10 @@ if (args[0] === 'status') {
     print({ started: true });
 } else if (verb === 'runtime status') {
     print({ runtime_version: process.env.STUB_RUNTIME_VERSION || '0.34.0-rc.1' });
+} else if (verb === 'runtime autostart') {
+    // The real verb registers with the machine; the stub only answers as if it had, and registers nothing.
+    const registered = args[2] === 'enable' ? true : args[2] === 'disable' ? false : process.env.STUB_AUTOSTART === 'yes';
+    print({ registered, platform: 'windows', data_directory: registered ? data : null, executable: null, executable_exists: null, artifact_path: null });
 } else if (verb === 'ui open') {
     print({ url: process.env.STUB_LINK || `${origin}/ui/#pair=planted-pair-code` });
 } else if (verb === 'plugin list') {

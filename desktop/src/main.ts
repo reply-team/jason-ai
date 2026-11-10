@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
+import { LoginItem, openedAtLogin, RuntimeAutostart } from './login-item.ts';
 import { Repairer } from './repair.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
@@ -118,7 +119,8 @@ async function run(): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
-    process.env.PATH = await loginPath(pathOf(process.env), home);
+    const pathRead = loginPath(pathOf(process.env), home);
+    process.env.PATH = await pathRead;
     const env = withPath(process.env, process.env.PATH);
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
@@ -133,6 +135,8 @@ async function run(): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: 'Jason',
+        // A start the computer made at sign-in stays in the tray until the person opens the window.
+        show: !openedAtLogin(process.argv),
         backgroundColor: '#f7f7f5',
         webPreferences: {
             preload: join(__dirname, 'preload.js'),
@@ -167,8 +171,11 @@ async function run(): Promise<void> {
     const jason = cliAt(join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason'), env);
     const cli = loggedCli(jason, log);
     const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)) });
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload() });
+    const login = new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead, log });
+    const autostart = version === null ? null : new RuntimeAutostart({ cli, log });
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart });
     desk.open();
+    void desk.readAutostart();
     let runtimeVersion: string | null = null;
     registerSetup(
         new Setup({

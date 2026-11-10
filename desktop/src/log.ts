@@ -43,6 +43,9 @@ export const templates = {
     runtime_gone: 'The run file names no runtime; the window waits for one',
     window_repaired: 'The runtime moved from {From} to {Origin}; the window was paired again and reloaded',
     repair_failed: 'Pairing the window again at {Origin} failed: jason ui open exited {Exit}',
+    // The login items.
+    login_item_set: 'Open Jason at login was set to {On} on {Platform}',
+    autostart_set: 'Start the runtime at logon was set to {On}: jason runtime autostart exited {Exit}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

@@ -11,6 +11,7 @@ import type { Cli } from './cli.ts';
 import { eventChannels } from './ipc.ts';
 import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
 import type { Logger } from './log.ts';
+import type { LoginItem, RuntimeAutostart } from './login-item.ts';
 
 export interface DeskDeps {
     window(): BrowserWindow | null;
@@ -20,7 +21,11 @@ export interface DeskDeps {
     log: Logger;
     /** Pairs the window again and loads the page fresh. */
     reload(): void;
-    /** Items the Jason menu offers beside About and Quit (the login items, the command line, the updates). */
+    /** Open Jason at login: offered only by a packaged application, whose executable is the one to start. */
+    login: LoginItem;
+    /** Start the runtime at logon, through the CLI; offered once the CLI has said what is registered. */
+    autostart: RuntimeAutostart | null;
+    /** Items the Jason menu offers beside About, the login items and Quit (the command line, the updates). */
     jasonMenu?(): MenuItemConstructorOptions[];
 }
 
@@ -42,6 +47,7 @@ export class Desk {
     private readonly deps: DeskDeps;
     private tray: Tray | null = null;
     private attention: Attention = { state: 'reading' };
+    private autostartOn: boolean | null = null;
     private readonly watcher: AttentionWatcher;
 
     constructor(deps: DeskDeps) {
@@ -94,6 +100,39 @@ export class Desk {
         this.renderMenu();
     }
 
+    /** Reads what the CLI says is registered to start at logon, and shows it in the menu. */
+    async readAutostart(): Promise<void> {
+        if (this.deps.autostart === null) return;
+        this.autostartOn = await this.deps.autostart.registered();
+        this.renderMenu();
+    }
+
+    private loginItems(): MenuItemConstructorOptions[] {
+        const { login, autostart } = this.deps;
+        const opens = login.supported && app.isPackaged;
+        return [
+            { type: 'separator' },
+            {
+                label: 'Open Jason at Login',
+                type: 'checkbox',
+                enabled: opens,
+                checked: opens && login.isOn(),
+                click: (item) => void login.set(item.checked).finally(() => this.renderMenu()),
+            },
+            {
+                label: 'Start the Runtime at Logon',
+                type: 'checkbox',
+                enabled: autostart !== null && this.autostartOn !== null,
+                checked: this.autostartOn === true,
+                click: (item) =>
+                    void autostart?.set(item.checked).then((now) => {
+                        this.autostartOn = now;
+                        this.renderMenu();
+                    }),
+            },
+        ];
+    }
+
     /** Starts reading the count; called only after the start found the runtime up. */
     watch(): void {
         this.watcher.start();
@@ -113,6 +152,7 @@ export class Desk {
         }));
         const jason: MenuItemConstructorOptions[] = [
             { role: 'about' },
+            ...this.loginItems(),
             ...(this.deps.jasonMenu?.() ?? []),
             { type: 'separator' },
             ...(process.platform === 'darwin' ? ([{ role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }] as MenuItemConstructorOptions[]) : []),
