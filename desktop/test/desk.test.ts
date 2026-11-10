@@ -12,7 +12,8 @@ import type { Cli, CliResult } from '../src/cli.ts';
 import { AttentionWatcher, attentionCadenceMs, notice, readAttention, trayView, type Attention } from '../src/attention.ts';
 import { fileLogger } from '../src/log.ts';
 import { memoryLog } from './harness.ts';
-import { acceleratorPattern, bindings, bindingsFor, desktopCommands, isDesktopCommand, mayCommand } from '../src/keybindings.ts';
+import { acceleratorPattern, bindings, bindingsFor, desktopCommands, isDesktopCommand, mayCommand, type DesktopCommand } from '../src/keybindings.ts';
+import type { DesktopCommand as PageCommand } from '../../ui/src/platform/desktop.d.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixtures = join(root, '..', 'docs', 'api', 'fixtures');
@@ -247,6 +248,14 @@ function declaredCommands(file: string): string[] {
 
 const pageDeclaration = join(root, '..', 'ui', 'src', 'platform', 'desktop.d.ts');
 
-test('the desktop’s list of commands is the page’s DesktopCommand, member for member', { skip: existsSync(pageDeclaration) ? false : 'the page’s declaration is not in this tree yet' }, () => {
+// The desktop's commands are the page's at the type level, as seam-types.test.ts holds the seam: `npm run check` is red
+// when the page declares a command the desktop's list lacks, or the list names one the page does not declare. The list
+// itself stays, for `isDesktopCommand` to read at run time.
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Holds<Check extends true> = Check;
+export type CommandsAreThePage = Holds<Equal<DesktopCommand, PageCommand>>;
+
+test('the desktop’s list of commands is the page’s DesktopCommand, member for member and in order', () => {
+    assert.ok(existsSync(pageDeclaration), `the page’s declaration ${pageDeclaration} is not in this tree`);
     assert.deepEqual([...desktopCommands], declaredCommands(pageDeclaration));
 });
