@@ -328,16 +328,21 @@ function pathText(platform: Platform, text: string): string {
 }
 
 /**
- * The variable the host's environment carries the data directory in, as each shell spells it. The text is compared case
- * folded where the platform folds it, so on Windows any letter case of the name is the variable.
+ * The variable the host's environment carries the data directory in. It is refused by its name as a whole word anywhere
+ * in the command, whatever wraps it (`$`, `${...:-}`, `%...%`, `!...!`, `$env:`, an assignment, `printenv`), even where
+ * it leads to the chat folder; the text is compared case folded where the platform folds it. A longer name that only
+ * begins or ends like it is not it.
  */
-const dataVariables = ['$JASON_DATA_DIR', '${JASON_DATA_DIR}', '%JASON_DATA_DIR%', '$env:JASON_DATA_DIR'];
+const dataVariable = 'JASON_DATA_DIR';
+
+function namesDataVariable(command: string, scope: ChatScope): boolean {
+    return new RegExp(`(?<![A-Za-z0-9_])${keyOf(scope.platform, dataVariable)}(?![A-Za-z0-9_])`).test(keyOf(scope.platform, command));
+}
 
 /**
- * True when the command's text names the data directory, or anything in it outside the chat folder, in any spelling a
- * shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows, the data
- * directory's variable, and `~/.jason` or `$HOME/.jason` when the data directory is the default one. A name that only
- * begins like it is not it.
+ * True when the command's text names the data directory, or anything in it outside the chat folder, in any literal
+ * spelling a shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows,
+ * and `~/.jason` or `$HOME/.jason` when the data directory is the default one. A name that only begins like it is not it.
  */
 function namesData(command: string, scope: ChatScope): boolean {
     const paths = pathsOf(scope.platform);
@@ -345,7 +350,7 @@ function namesData(command: string, scope: ChatScope): boolean {
     const data = pathText(scope.platform, paths.resolve(scope.data)).replace(/\/$/, '');
     const chat = pathText(scope.platform, paths.resolve(scope.chat));
     const chatRest = chat.startsWith(`${data}/`) ? chat.slice(data.length) : null;
-    const spellings = [data, ...dataVariables.map((variable) => pathText(scope.platform, variable))];
+    const spellings = [data];
     const drive = /^([a-z]):\//i.exec(data);
     if (drive) spellings.push(`/${drive[1]}${data.slice(2)}`);
     if (data === `${pathText(scope.platform, paths.resolve(scope.home)).replace(/\/$/, '')}/.jason`) {
@@ -367,7 +372,7 @@ function namesData(command: string, scope: ChatScope): boolean {
  * True when a word of the command, or an option's value after its `=`, names a place in the data directory outside the
  * chat folder, located as a Read's path is: read against the folder the command runs in, with links, junctions and
  * Windows' short names followed, and Git Bash's `/c/...` read as the drive's path. A word the shell would expand first
- * (a variable, a `~`) is left to the text's spellings.
+ * (a variable, a `~`) is left to the variable's name and the text's spellings.
  */
 function wordNamesData(command: string, scope: ChatScope): boolean {
     const data = located(scope.data, scope);
@@ -385,7 +390,7 @@ function wordNamesData(command: string, scope: ChatScope): boolean {
 }
 
 function judgeCommand(tool: string, command: string, scope: ChatScope): Judgement {
-    if (namesData(command, scope) || wordNamesData(command, scope)) return { verdict: 'deny', message: dataRefusal };
+    if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(command, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
     if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
     // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the

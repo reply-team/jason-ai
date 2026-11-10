@@ -549,8 +549,28 @@ test('a command naming a place in the data directory is refused however it is sp
     for (const command of ['cat $JASON_DATA_DIR/config/settings.json', 'ls ${JASON_DATA_DIR}', 'ls "$JASON_DATA_DIR"']) {
         assert.equal(run(mac(), command).verdict, 'deny', command);
     }
-    // The chat folder stays the chat's, however it is spelled, and a name that only begins like the variable is not it.
-    for (const command of ['cat ../chat/notes.md', 'cat $JASON_DATA_DIR/desktop/chat/notes.md', 'cat notes/../draft.md', 'echo $JASON_DATA_DIRS']) {
+    // The chat folder stays the chat's, however a path spells it, and a name that only begins like the variable is not it.
+    for (const command of ['cat ../chat/notes.md', 'cat notes/../draft.md', 'echo $JASON_DATA_DIRS', 'echo $JASON_DATA_DIR_COPY']) {
+        assert.equal(run(windows(), command).verdict, 'ask', command);
+        assert.equal(run(mac(), command).verdict, 'ask', command);
+    }
+});
+
+test('the data directory\'s variable is refused by its name, whatever wraps it, even where it leads to the chat folder', () => {
+    const wrapped = ['cat ${JASON_DATA_DIR:-}/config/settings.json', 'Get-Content ${env:JASON_DATA_DIR}\\run\\runtime.json',
+        'type !JASON_DATA_DIR!\\run\\runtime.json', 'printenv JASON_DATA_DIR', 'JASON_DATA_DIR=/x jason status',
+        'cat $JASON_DATA_DIR/desktop/chat/notes.md', 'echo "${JASON_DATA_DIR#/}"', 'cat ${JASON_DATA_DIR/x/y}/run/runtime.json'];
+    for (const command of wrapped) {
+        for (const scope of [windows(), mac()]) {
+            const judged = run(scope, command);
+            assert.equal(judged.verdict, 'deny', `${scope.platform} ${command}`);
+            assert.match(judged.verdict === 'deny' ? judged.message : '', /installation's own data/, command);
+        }
+    }
+    // Case folded where the platform folds it.
+    for (const command of ['printenv jason_data_dir', 'type !Jason_Data_Dir!\\run\\runtime.json']) assert.equal(run(windows(), command).verdict, 'deny', command);
+    // A longer name that only begins like it is not it.
+    for (const command of ['echo $JASON_DATA_DIRS', 'printenv JASON_DATA_DIRECTORY', 'echo $MY_JASON_DATA_DIR']) {
         assert.equal(run(windows(), command).verdict, 'ask', command);
         assert.equal(run(mac(), command).verdict, 'ask', command);
     }
