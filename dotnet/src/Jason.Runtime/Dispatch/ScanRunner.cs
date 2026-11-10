@@ -16,13 +16,16 @@ namespace Jason.Runtime.Dispatch;
 /// <paramref name="EventReads"/> the read of an account's events it handed to the reader, one at most, and
 /// <paramref name="Resumed"/> the waiting items it released into the queue, <paramref name="Responded"/> the responders
 /// a reply woke, <paramref name="Subscribed"/> the subscribed kinds it offered the subscription runner, and
-/// <paramref name="Reserved"/> the lines it said about a campaign's reserve of untouched people.
+/// <paramref name="Reserved"/> the lines it said about a campaign's reserve of untouched people, <paramref name="Polled"/>
+/// the reads of searches' people it made, and <paramref name="Stalled"/> the searches it ended because their reads landed
+/// nobody for too long.
 /// </summary>
-public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0, int Responded = 0, int Subscribed = 0, int Reserved = 0);
+public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0, int Responded = 0, int Subscribed = 0, int Reserved = 0, int Polled = 0, int Stalled = 0);
 
 /// <summary>
 /// One pass of the dispatcher: give up what is overdue, take back what is lost, hand the reader the next read of an
-/// account's events, read the live campaigns' conversations, wake a responder for a reply about a campaign's own thread,
+/// account's events, read the live campaigns' conversations, read the people of the searches their audiences are filled
+/// by — or end a search whose reads have landed nobody for too long — wake a responder for a reply about a campaign's own thread,
 /// say once per crossing that a campaign's reserve of untouched people fell under its threshold or is back above it,
 /// summon a manager where a campaign wants one, release the
 /// waiting work whose wait is over, hand out what is ready, say once that something waits for a person — after the
@@ -34,7 +37,8 @@ public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed
 /// responder and the manager in the same scan, and before the claim so that a read it starts is claimed in the same
 /// scan. The respond step comes before the summon, so the responder is queued ahead of the check-in the same reply wakes.
 /// The reserve count comes before the summon too, so a line saying the reserve is low summons the review in the same
-/// scan. The summon comes before the claim
+/// scan, and so does the poll of searches, so a search it ends summons the review and a read it makes is claimed in the
+/// same scan. The summon comes before the claim
 /// because a check-in created now should be claimable now, and after the lease enforcer because a review of a lost
 /// attempt is summoned by the line that lost it. The release comes after the lease enforcer, so an item whose last
 /// attempt was lost for good releases what waits on it in the same scan, and before the claim, so released work is
@@ -86,6 +90,16 @@ public sealed class ScanRunner(
         new EventId(8, nameof(Reserved)),
         "Dispatcher said {Count} times that a campaign's reserve of untouched people crossed its threshold");
 
+    private static readonly Action<ILogger, int, Exception?> Polled = LoggerMessage.Define<int>(
+        LogLevel.Information,
+        new EventId(9, nameof(Polled)),
+        "Dispatcher started {Count} reads of the people searches found");
+
+    private static readonly Action<ILogger, int, Exception?> Stalled = LoggerMessage.Define<int>(
+        LogLevel.Information,
+        new EventId(10, nameof(Stalled)),
+        "Dispatcher ended {Count} searches whose reads had landed nobody for the stall bound");
+
     private static readonly Action<ILogger, string, string, Exception?> Claimed = LoggerMessage.Define<string, string>(
         LogLevel.Information,
         new EventId(4, nameof(Claimed)),
@@ -124,6 +138,7 @@ public sealed class ScanRunner(
         var lost = await InScopeAsync<LeaseEnforcer, int>((step, db) => step.EnforceAsync(db, ct)).ConfigureAwait(false);
         var events = await InScopeAsync<EventScan, int>((step, db) => step.ScanAsync(db, ct)).ConfigureAwait(false);
         var inbound = await InScopeAsync<InboundSync, InboundReport>((step, db) => step.SyncAsync(db, ct)).ConfigureAwait(false);
+        var polled = await InScopeAsync<SearchPoll, SearchPollReport>((step, db) => step.PollAsync(db, ct)).ConfigureAwait(false);
         var responded = await InScopeAsync<Responder, int>((step, db) => step.RespondAsync(db, ct)).ConfigureAwait(false);
         var reserved = await InScopeAsync<ReserveCounter, int>((step, db) => step.CountAsync(db, ct)).ConfigureAwait(false);
         var summoned = await InScopeAsync<Summoner, int>((step, db) => step.SummonAsync(db, ct)).ConfigureAwait(false);
@@ -185,8 +200,18 @@ public sealed class ScanRunner(
             Reserved(logger, reserved, null);
         }
 
+        if (polled.Read > 0)
+        {
+            Polled(logger, polled.Read, null);
+        }
+
+        if (polled.Stalled > 0)
+        {
+            Stalled(logger, polled.Stalled, null);
+        }
+
         Scanned(logger, status.Scans, expired, lost, summoned, claimed.Count, null);
-        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed, responded, subscribed, reserved);
+        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed, responded, subscribed, reserved, polled.Read, polled.Stalled);
     }
 
     private async Task<TResult> InScopeAsync<TStep, TResult>(Func<TStep, JasonDbContext, Task<TResult>> step)

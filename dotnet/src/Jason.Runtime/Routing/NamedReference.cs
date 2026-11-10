@@ -34,8 +34,8 @@ public sealed record NamedSend(
 
 /// <summary>
 /// The search a status read, or a stop, names under <c>args.search</c>. <paramref name="Cursor"/> is where the next status
-/// read starts: the plugin's own, stored and never parsed, and null in a build that keeps no search's cursor, which reads
-/// from the start.
+/// read starts: the plugin's own, as the search's row keeps it from the last read that answered one, never parsed, and null
+/// before any did, which reads from the first person found.
 /// </summary>
 public sealed record NamedSearch(
     string WorkItem,

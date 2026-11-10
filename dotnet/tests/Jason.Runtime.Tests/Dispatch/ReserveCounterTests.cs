@@ -58,6 +58,38 @@ public class ReserveCounterTests
     }
 
     /// <summary>
+    /// People a search landed are untouched members like any others: the page's line is one the reserve recounts on, so a
+    /// low reserve a search filled is said to have recovered at the next scan.
+    /// </summary>
+    [Fact]
+    public async Task A_page_a_search_landed_is_counted_into_the_reserve()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness, people: 3, threshold: 5);
+        harness.Status.State = DispatcherState.Draining;
+        Assert.Equal(1, (await harness.Runner.ScanOnceAsync(Ct)).Reserved);
+        await EndCheckInAsync(harness, campaign);
+
+        // The check-in's own line is behind the step before the page lands, so only the page can make it count again.
+        Assert.Equal(0, (await harness.Runner.ScanOnceAsync(Ct)).Reserved);
+        await using (var db = harness.Open())
+        {
+            var row = await db.Campaigns.SingleAsync(c => c.PublicId == campaign, Ct);
+            var landed = Enumerable.Range(0, 2)
+                .Select(_ => new Contact { PublicId = Jason.Contracts.Ids.PublicId.New("cnt"), FirstName = "Sam", CreatedAt = Noon, UpdatedAt = Noon })
+                .ToList();
+            db.CampaignContacts.AddRange(landed.Select(contact => new CampaignContact { CampaignId = row.Id, Contact = contact, AddedAt = Noon, UpdatedAt = Noon }));
+            var search = WorkItemFactory.NewProviderOp(row, "audience.search", Noon);
+            db.WorkItems.Add(search);
+            new JournalWriter(harness.Clock).AppendDocumented(db, Actors.Dispatcher, JournalKinds.AudiencePeopleLanded, row, workItem: search);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        Assert.Equal(1, (await harness.Runner.ScanOnceAsync(Ct)).Reserved);
+        Assert.Equal(JournalKinds.AudienceReserveRecovered, (await ReserveLinesAsync(harness, campaign))[^1].Kind);
+    }
+
+    /// <summary>
     /// Under is strictly under: a reserve at its threshold is said nothing. A campaign with no threshold, or one that is
     /// not live, is not counted at all.
     /// </summary>

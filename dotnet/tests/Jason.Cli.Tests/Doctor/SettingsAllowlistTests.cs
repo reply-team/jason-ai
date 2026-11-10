@@ -30,7 +30,7 @@ public sealed class SettingsAllowlistTests
         "Runtime:Port",
         "Logging:RetainedFileCountLimit", "Logging:FileSizeLimitBytes",
         "Dispatcher:TickSeconds", "Dispatcher:MaxParallel", "Dispatcher:DrainSeconds", "Dispatcher:RetryDelaySeconds", "Dispatcher:ExitGraceSeconds",
-        "Dispatcher:EventsCadenceSeconds",
+        "Dispatcher:EventsCadenceSeconds", "Dispatcher:SearchCadenceSeconds", "Dispatcher:SearchStallSeconds",
         "Dispatcher:AiRole:TimeoutSeconds", "Dispatcher:AiRole:HeartbeatSeconds", "Dispatcher:AiRole:MaxAttempts",
         "Dispatcher:AiRole:MaxWaitSeconds", "Dispatcher:AiRole:MaxWaits",
         "Dispatcher:Blocks:TrialSeconds",

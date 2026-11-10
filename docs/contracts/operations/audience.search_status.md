@@ -35,9 +35,8 @@ run, each permanent:
 This is the one canonical operation that pages by a cursor rather than an offset: a running search's people arrive
 over time, and only the provider knows where the last read stopped. The cursor is the provider's own words for that
 place, at most 2048 printable characters. The runtime composes `search.cursor`: null on a first read, which reads from
-the first person found, and on a later one the `cursor` an earlier read answered, which the runtime keeps and never
-parses. This version keeps none yet, so every read is composed with a null cursor and starts from the first person
-found.
+the first person found, and on a later one the `cursor` the last read answered, which the runtime keeps in the search's
+row and never parses.
 
 A page holds at most `args.limit` people, at most 100, those found after the cursor in the provider's own order, and
 none of them comes back again after the cursor that follows it. The answer's `cursor` is where the next read starts —
@@ -103,11 +102,22 @@ that stopped moving, is said by whoever stops it or watches it, not by the provi
 ## Repeating after a lost answer
 
 A read changes nothing, and the cursor moves only on an answer, so `repeat_after_ambiguous` is `safe` and the item is
-simply handed out again, reading from the same place. Nothing is pinned. A search the provider no longer holds, or one
-this account may not see, fails `search_not_found`, permanent.
+simply handed out again, reading from the same place. The operation pins nothing: what the runtime makes of the people
+it answers is the next section. A search the provider no longer holds, or one this account may not see, fails
+`search_not_found`, permanent.
 
 An answer longer than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`) is
 `provider_answer_too_large`, permanent: asking again would cut it at the same place.
+
+## What Jason does with the answer
+
+A read that succeeds lands its page in the campaign, whoever made it, in the same change set that records its answer:
+each person becomes a member of the campaign — found among the people Jason holds by the identifier pinned to them, by an
+address, by a LinkedIn profile, or made from what the provider said of them — and the provider's identifier is pinned
+to them under `contact`. The search's row takes the `cursor`, the `state`, `found` and `has_more`, and a read that answers
+`finished` or `exhausted` with nothing more readable ends the search. Jason makes these reads itself, on a cadence, for
+each search it follows, and stops when the search ends or its reads land nobody for a bound
+([`docs/campaign-manager.md`](../../campaign-manager.md) §10).
 
 ## The properties
 

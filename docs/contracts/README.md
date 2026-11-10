@@ -119,7 +119,9 @@ nothing in the runtime reads.
   searches inside one call, or `accepted` with the provider's reference, by which the search is read and stopped. A search reaches nobody, it buys
   records, so it is `reach: control` and runs through a provider block.
 - [`audience.search_status`](operations/audience.search_status.md): how far a search has got, and the people it found
-  from the cursor on. A work item whose search the runtime composes, reference and cursor, and a caller never writes.
+  from the cursor on. A work item whose search the runtime composes, reference and cursor, and a caller never writes;
+  the runtime makes one itself on a cadence for each search it follows, and lands the people of every read that succeeds
+  as the campaign's members, whoever made it ([`docs/campaign-manager.md`](../campaign-manager.md) §10).
   `in_progress` is read again. `finished` (the count asked for was reached) and `exhausted` (the source ran out) are
   terminal, and the search is read no more. `paused` (a person stopped it at the provider), `paused_for_credits` (the
   account ran out of credits) and `paused_for_limit` (the plan's limit of contacts was reached) hold the search until a
@@ -386,8 +388,10 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`approval_requested`](journal/approval_requested.json) | `0.1.0` | yes | campaign, contact, work_item, approval | Work was parked to wait for a person's decision, and the line names the approval that asks for it. |
 | [`approval_standing_applied`](journal/approval_standing_applied.json) | `0.25.0` | yes | campaign, contact, work_item, approval | A standing approval released a drafted reply without asking a person, and the line names the approval that records the release, the standing approval and the verdict the reply answers. |
 | [`approval_superseded`](journal/approval_superseded.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision stopped applying because the subject of the work it was about changed before the work ran, and a new decision is asked in its place. |
+| [`audience_people_landed`](journal/audience_people_landed.json) | `0.34.0` | yes | campaign, contact, work_item, plugin | One page of a search's people landed in its campaign: what the page held, whom it made members, and whom it made contacts of the directory; one line per page that carried anybody. |
 | [`audience_reserve_low`](journal/audience_reserve_low.json) | `0.34.0` | yes | campaign | A campaign's untouched members fell under the threshold the campaign set, said once per crossing; a default manager trigger. |
 | [`audience_reserve_recovered`](journal/audience_reserve_recovered.json) | `0.34.0` | yes | campaign | A campaign's untouched members are back at or above the threshold it set, after a line said they had fallen under it; not a trigger. |
+| [`audience_search_ended`](journal/audience_search_ended.json) | `0.34.0` | yes | campaign, work_item, plugin | A search for a campaign's audience ended — finished, exhausted, stalled or stopped — with what it was asked for, found and landed; said once per search, a default manager trigger. |
 | [`campaign_archived`](journal/campaign_archived.json) | `0.1.0` | yes | campaign | A campaign was archived for good: its open work and its pending questions are cancelled and it never runs again. |
 | [`campaign_created`](journal/campaign_created.json) | `0.1.0` | yes | campaign | A campaign was created as a draft, under the name the line carries. |
 | [`campaign_paused`](journal/campaign_paused.json) | `0.1.0` | yes | campaign | A campaign stopped being active, so none of its work is dispatched until it is started again. |
@@ -547,7 +551,8 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
 - `search` appears the same way — today `audience.search_status` and `audience.search_cancel` — composed from the
   succeeded attempt of the search `args.search` names: that work item and the provider's reference for the search,
   returned under `external_ids.search`, and, for the status read, the `cursor` the next read starts at: the plugin's
-  own, never parsed, and null to read from the start. A caller never writes it.
+  own, as the search's row keeps it from the last read that answered one, never parsed, and null to read from the start.
+  A caller never writes it.
 - `definition` appears at the root of `audience.search` and `audience.preview`: the audience's definition, in the
   provider's own shape, composed from `args.definition`, or, for an audience named by its number, from the audience the
   campaign holds. `args` is the caller's as written and the runtime never rewrites it, so the definition is placed at
@@ -629,8 +634,8 @@ at most a row per channel and is not paged.
   with one item on the page — every string at its longest, twelve bytes a character — is held under 768 KiB by a
   test.
 - One canonical operation pages by a cursor: `audience.search_status`, by the plugin's own cursor, which the runtime
-  composes into the input as `search.cursor` and never parses — null to read from the start, and null in this build,
-  which keeps no search's cursor yet — and which the result answers as `cursor`, the same one back when nothing moved,
+  composes into the input as `search.cursor` and never parses — null to read from the start, otherwise the one the last
+  read answered — and which the result answers as `cursor`, the same one back when nothing moved,
   with `has_more` saying whether more people are readable now. `args.limit` is required and there is no `offset`, and the
   page is held to the same two bounds: `people.maxItems` is the same number as `limit`'s maximum, and one person always
   fits under 768 KiB. The other operations page by offset, as the providers mapped first do, and

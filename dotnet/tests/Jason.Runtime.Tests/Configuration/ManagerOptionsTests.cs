@@ -67,7 +67,7 @@ public class ManagerOptionsTests
     }
 
     [Fact]
-    public void The_defaults_are_the_eight_kinds_this_version_reacts_to()
+    public void The_defaults_are_the_nine_kinds_this_version_reacts_to()
     {
         var options = new ManagerOptions();
 
@@ -81,10 +81,12 @@ public class ManagerOptionsTests
                 "provider_event_observed",
                 "provider_blocked",
                 "audience_reserve_low",
+                "audience_search_ended",
             ],
             options.Triggers);
         Assert.DoesNotContain(JournalKinds.ProviderBlockCleared, options.Triggers);
         Assert.DoesNotContain(JournalKinds.AudienceReserveRecovered, options.Triggers);
+        Assert.DoesNotContain(JournalKinds.AudiencePeopleLanded, options.Triggers);
         Assert.Equal(18_000, options.ReviewSeconds);
         Assert.Equal(900, options.TimeoutSeconds);
         Assert.Equal(1, options.MaxAttempts);

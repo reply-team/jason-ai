@@ -1,0 +1,49 @@
+{
+  "kind": "audience_search_ended",
+  "version": 1,
+  "since": "0.34.0",
+  "summary": "A search for a campaign's audience ended — finished, exhausted, stalled or stopped — with what it was asked for, found and landed; said once per search, a default manager trigger.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^wi_", "description": "The search's work item: one line per search." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["audience", "plugin", "ended_as", "state", "asked", "found", "landed", "ended_by"],
+        "properties": {
+          "audience": { "type": "string", "pattern": "^aud_", "description": "The audience the search ran under." },
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin the search ran at." },
+          "ended_as": {
+            "type": "string",
+            "enum": ["finished", "exhausted", "stalled", "cancelled"],
+            "description": "How it ended: it reached its count, the source ran out, its reads landed nobody for the stall bound, or a stop ended it."
+          },
+          "state": {
+            "type": ["null", "string"],
+            "enum": [null, "in_progress", "finished", "exhausted", "paused", "paused_for_credits", "paused_for_limit"],
+            "description": "The provider's last word for the search, or null where no read answered: after a stall, why it stood still."
+          },
+          "asked": { "type": "integer", "minimum": 1, "description": "How many people the search was asked for." },
+          "found": { "type": ["null", "integer"], "minimum": 0, "description": "How many the provider said it found, or null where it never said." },
+          "landed": { "type": "integer", "minimum": 0, "description": "How many members of the campaign the search made." },
+          "ended_by": {
+            "type": ["null", "string"],
+            "pattern": "^wi_",
+            "description": "The work item whose answer ended it — the last read, the stop, or the search itself — or null for a stall, which the dispatcher decides."
+          }
+        }
+      }
+    }
+  }
+}

@@ -1132,7 +1132,8 @@ answer is `available: true` and every other member null. The gates are the searc
   campaign's search — however well they match: `audience.search` finds only people new to Reply, and a search of the
   same audience again never brings back the people the first one found. Reply's start takes no list of people to leave
   out, so a person the campaign has and Reply does not hold — someone it took from a file or from another provider — can
-  be found, added to Reply as a new contact and **charged for**, though the campaign already has them.
+  be found, added to Reply as a new contact and **charged for**, though the campaign already has them; when the runtime
+  lands the search's people, that person stays the one member of the campaign they already are, never a second contact.
   `audience.preview` counts and samples everyone matching, the people Reply holds included, so a search may find fewer
   than the preview's count, and may never return a person its sample showed. No operation of this package reads the
   account's existing contacts by a definition.

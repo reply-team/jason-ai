@@ -25,8 +25,10 @@ search may find, and be charged for, a person the campaign already holds, and a 
 the people it found before may find them again. A provider whose search can take such a list takes it under
 `args.provider`, the object every operation reserves for the provider and its skills, which the runtime hands to the
 plugin as written ([the input a plugin receives](../README.md#the-input-a-plugin-receives)). That a campaign never
-holds the same person twice is the runtime's to keep, whichever provider searched, when the people a search found
-become the campaign's; in this build they do not yet ([`docs/campaign-manager.md`](../../campaign-manager.md) §11).
+holds the same person twice is the runtime's to keep, whichever provider searched, and it keeps it when the people a
+search found become the campaign's: a person it already holds — by the identifier the provider gave, an address or a
+LinkedIn profile — stays the one member they are, never a second contact
+([`docs/campaign-manager.md`](../../campaign-manager.md) §10).
 
 A search buys records and reaches nobody, so its reach is `control`. It runs through an open provider block of its
 account rather than waiting on it — a block over the account's sends does not hold its searches — and a `blocked`
@@ -135,11 +137,20 @@ is refused at the claim `search_reference_absent`, since there is nothing left t
   company with its name, domain, size and industry, the location as the provider spells it, the channels as present,
   and the provider's own record beside them under `raw` — JSON text, `JSON.stringify` of it, trimmed to fit 16 KiB, or
   null. The schemas bound every value a result may hold, and an object of the provider's own keys has no bound they
-  can state, so the record travels as text. Jason reads none of it.
+  can state, so the record travels as text. Jason reads nothing in it: it keeps it, parsed, beside a person it makes.
 
 A provider already running a search of the same definition for the account fails `search_in_progress`, permanent; an
 account with no credits to start one fails `insufficient_credits`, permanent, where the plugin cannot read the answer
 as a provider block; and a plan or role without searching fails `feature_unavailable`. Nothing is spent by any of them.
+
+## What Jason does with the answer
+
+Either answer gives the search a row Jason follows it by. After `accepted`, Jason reads the search's people itself, on a
+cadence, with [`audience.search_status`](audience.search_status.md), and lands each page as it arrives. After `finished`,
+the people in the answer land at once, as one page, and the search ends there. Landing makes each person a member of the
+campaign — one Jason already holds, found by the identifier pinned to them, an address or a LinkedIn profile, or one made
+from what the provider said of them — and pins the provider's identifier to them under `contact`
+([`docs/campaign-manager.md`](../../campaign-manager.md) §10).
 
 ## Repeating after a lost answer
 

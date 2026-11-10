@@ -1,0 +1,7 @@
+{
+  "kind": "audience_search_ended",
+  "version": 1,
+  "case": "a search the provider still runs has not ended",
+  "body": { "key": "wi_01JC0000000000000000000001", "old": null, "new": { "audience": "aud_01JC0000000000000000000001", "plugin": "fake-provider", "ended_as": "in_progress", "state": "in_progress", "asked": 50, "found": null, "landed": 0, "ended_by": null } },
+  "expect": { "invalid": [{ "pointer": "/new/ended_as", "reason": "enum" }] }
+}

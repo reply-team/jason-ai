@@ -34,6 +34,14 @@ public class DeploymentRaceStressTests
 {
     private const string Role = "researcher";
 
+    /// <summary>
+    /// Enough launches to meet the window every time: with the defect back, nine launches in ten met it (measured on Linux,
+    /// with the temporary directory in memory), so fifty miss it with odds of about one in 10^50; a platform whose renames
+    /// and deletes are slower meets it less often, and still almost surely within fifty. Each launch that meets a replacement waits for it to finish, about a second here, so
+    /// every launch more is time the whole suite spends on this one test.
+    /// </summary>
+    private const int Launches = 50;
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -61,13 +69,20 @@ public class DeploymentRaceStressTests
                 var generation = 0;
                 while (!stop.IsCancellationRequested)
                 {
-                    var next = Path.Combine(staging, $"gen-{generation}", Role);
+                    var staged = Path.Combine(staging, $"gen-{generation}");
+                    var next = Path.Combine(staged, Role);
                     Compose(next, $"GENERATION-{generation}{new string('x', generation % 7)}");
                     var aside = Path.Combine(staging, $"aside-{generation}");
                     try
                     {
                         Directory.Move(live, aside);
                         Directory.Move(next, live);
+
+                        // A launch reads the role by its live path and starts again when the tree moves under it, so the
+                        // copy moved aside is nobody's once the new one is in. Kept, every turn's copies stay until the
+                        // test ends: hundreds of thousands of turns while the launches run, millions of files, which on a
+                        // /tmp kept in memory is gigabytes of it.
+                        Discard(aside);
                     }
                     catch (IOException)
                     {
@@ -76,12 +91,13 @@ public class DeploymentRaceStressTests
                     {
                     }
 
+                    Discard(staged);
                     generation++;
                 }
             },
             CancellationToken.None);
 
-        for (var attempt = 0; attempt < 400; attempt++)
+        for (var attempt = 0; attempt < Launches; attempt++)
         {
             try
             {
@@ -119,7 +135,7 @@ public class DeploymentRaceStressTests
 
         Assert.True(
             untaught == 0,
-            $"{untaught} of 400 launches were recorded as having been taught nothing, while the record in the "
+            $"{untaught} of {Launches} launches were recorded as having been taught nothing, while the record in the "
             + "role root says this role has a skill. A role that was given a skill and did not receive it runs "
             + "untaught at the price of a real launch, which is what this launcher refuses over.");
 
@@ -167,6 +183,24 @@ public class DeploymentRaceStressTests
             Ct);
 
         Assert.True(exit == ExitCodes.Success, $"The deployment failed: {error}");
+    }
+
+    /// <summary>A folder the swap is done with, gone; one a reader still holds open is left for the test's own cleanup.</summary>
+    private static void Discard(string directory)
+    {
+        try
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private static void Compose(string directory, string marker)

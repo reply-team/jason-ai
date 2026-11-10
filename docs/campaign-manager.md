@@ -53,13 +53,15 @@ line. These kinds summon a review:
 | `provider_event_observed` | A provider said something happened that concerns the campaign — a reply it detected, an invitation accepted, a message that bounced — and the runtime found it by an identifier the campaign's own operations pinned, or by the person a member is. What it calls for is the manager's ([events](events.md)). |
 | `provider_blocked` | A provider block holds the campaign's work: the account, or one sending account under it, is refused for its money, plan, allowance, credential or channel, and what reaches people has stopped until it clears. Said once per campaign and block. Whether to tell somebody, or change course, is the manager's; the block's clearing is not a trigger, because the work runs again by itself ([work execution](work-execution.md) §Provider blocks). |
 | `audience_reserve_low` | The campaign's untouched people — the summary's `new` — fell under the threshold the campaign set with `--audience-threshold`. The runtime counts them and says so once per crossing; whether to top the audience up, and how, is the manager's (§9). |
+| `audience_search_ended` | A search for the campaign's audience ended: it reached its count, its source ran out, its reads landed nobody for the stall bound, or a stop ended it. Said once per search. Whether the audience needs more, another search, or a person's word is the manager's (§10). |
 
 **And what is deliberately not in the list.** `workitem_succeeded` is out: a review after every
 successful step is cost without judgment, and the work that needs looking at is the work that did not
 go well. `workitem_expired` and `workitem_cancelled` are out: the cadence catches them soon enough.
 `provider_block_cleared` is out: what the block held runs again by itself, and the manager was told when it began.
 `audience_reserve_recovered` is out: the manager was told when the reserve fell, and a reserve that recovered asks
-nothing of it.
+nothing of it. `audience_people_landed` is out: people a search brings in are the reserve's to count, and the manager is
+told when the reserve runs low and when the search ends.
 `message_sent_observed` is out by default, and a campaign's installation may add it: a send the provider took for later
 going out is the course the campaign planned, and it is worth a review only where the plan waits on that moment.
 Everything about profiles, plugins, routes and roles is operator maintenance, not campaign meaning.
@@ -329,7 +331,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
+| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low`, `audience_search_ended` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
 | `Manager:ReviewSeconds` | `18000` | 300..604800 | the cadence, unless a campaign names its own |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
@@ -352,7 +354,8 @@ defaults; a list written with no kind in it — an empty array, `null`, an empty
 kinds." It used to read as the defaults, the opposite of what whoever wrote it meant, without a word.
 The key is read without regard to case, as every setting is. A list narrowed before
 `inbound_reply_observed` existed does not hold it, so that installation is not woken by replies until
-the kind is added; the same holds for `provider_event_observed`, `provider_blocked` and `audience_reserve_low`.
+the kind is added; the same holds for `provider_event_observed`, `provider_blocked`, `audience_reserve_low` and
+`audience_search_ended`.
 
 **A narrowed list has to keep `decision_answered`.** Dropping any other kind narrows what a manager is
 woken for; dropping this one breaks something, because a question a person has answered is what
@@ -374,7 +377,7 @@ the summary's own definition, so the number it says is the number `jason campaig
 **The reserve step** runs in every scan, for each active campaign that has a threshold, after the respond step and
 before the summon, so a line saying the reserve is low summons a review in the same scan. It counts only when something
 that can change the number was written since its last look: a member added or removed (`contacts_added`,
-`contacts_removed`), work created about somebody (`workitem_created`), or a setting of the campaign changed
+`contacts_removed`), a page of a search's people landed (`audience_people_landed`, §10), work created about somebody (`workitem_created`), or a setting of the campaign changed
 (`campaign_updated`, the threshold among them). It keeps its place in the chronicle as a watermark on the campaign,
 moved at every look that found new lines, so a scan with nothing new costs one read and counts nobody.
 
@@ -430,6 +433,72 @@ either, so the key names the audience of the last claim that let it through. The
 `workitem.update` refuse a search that writes it or removes it (`validation_failed` at `context.audience`). On any other
 work it is the caller's own.
 
+### Following a search, and the people it lands
+
+A search the provider takes ends its work item `accepted` with the provider's reference, and its people are learned
+later ([`audience.search`](contracts/operations/audience.search.md)). From then on the runtime follows it itself, the way
+it follows a campaign's conversations, and makes the people it finds the campaign's as they arrive. A search's live state
+is a row of its own, never a scan step's memory or the search item's frozen result, so a runtime started again repeats
+nothing.
+
+**The search's row**, in the table `audience_searches`, made in the change set that ends the search's work item
+`succeeded`, one per search: the campaign, the audience it ran under, the search's work item, the plugin it ran at, the
+provider's reference, the cursor the next read starts from, the provider's latest word for it, whether the latest read
+said more people are readable now, how many it was asked for, found and landed, when its reads began to land nobody, when
+the dispatcher last read it, and how and when it ended. A search the provider finished inside its call gets its row
+ended at once, and its people land from its own result.
+
+**The poll**, a step of the dispatcher's scan after the inbound read: for each search still followed in an active
+campaign with no read or stop of it under way — the dispatcher's or anybody's — one `audience.search_status` work item
+naming it, by `system:dispatcher`, `Dispatcher:SearchCadenceSeconds` after the dispatcher made its last read of it, or
+after the search began before its first; at once where the last read said more people are readable now. Each of the
+dispatcher's reads in a row that ended without an answer doubles the wait, never past a day, as the inbound read waits;
+each such read is a `workitem_failed` line, which wakes the review. The claim composes the read: the reference from the
+search's own attempt, as for any read of a search ([routing](routing.md) §7), and the cursor the last read answered, from
+the row. A paused campaign's searches are neither read nor ended.
+
+**The landing**, in the change set that ends a read `succeeded` — whoever made the read — and that ends a search
+answered `finished`: each person of the page once, by the provider's identifier. A person is found by the first key
+they carry that finds anybody: that identifier pinned at the plugin under `contact`, then each address, then each
+LinkedIn profile — so a profile the directory holds finds the person even when the address beside it is new; where two
+contacts answer one key, the oldest live one. A person found is never changed, as an import never changes one: an
+address the directory did not hold is not added to them; a person found
+nowhere becomes a contact, with their names, title and company where the contact's rules take them, their channels, and
+what the contact has no field for under `custom`: `location`, `company_domain`, `company_size`, `company_industry` and the
+provider's own record as `provider_record`, left out where it would take the contact over its 64 KiB of `custom`. Each
+is pinned under `contact` by the attempt whose answer carried the page, as any pin is
+([routing](routing.md) §11): a different identifier later is recorded beside the pin. Each becomes a member of the
+campaign, except a person the campaign already holds, who stays as they are, a person removed from it, who stays
+removed, and a person the directory archived, who is never made again. Membership is local: nothing here enrols anyone
+at the provider. For each membership a search made, one row in `audience_landings` — the membership, the audience, the
+search, the read that carried the page, the moment — written once and never changed by a removal or an add-back;
+nothing is added to the membership itself. `jason campaign list-contacts` names it as the member's `source`: the
+audience's id and number, the search and when the person landed.
+
+**What the chronicle says**, by `system:dispatcher`, each kind with its document under
+[`contracts/journal/`](contracts/journal), facts and never a person's words:
+
+- `audience_people_landed`, one for each page that carried anybody, keyed by the read and about the search: the audience,
+  the provider's state, how many the page held, landed, made contacts of, found already members and skipped, and the
+  people landed and made, by id. The reserve recounts on it (§9). Not a trigger. It is the one line that says how a page
+  went; each pin the page writes keeps the line every pin has (`external_id_pinned`, or `external_id_diverged` beside a
+  pin that stood), naming the person.
+- `audience_search_ended`, once per search, keyed by and about the search: how it ended — `finished`, `exhausted`,
+  `stalled` or `cancelled` — the provider's last word for it, what it was asked for, found and landed, and the work item
+  whose answer ended it. A default trigger.
+
+**How a search ends.** A read that answers `finished` or `exhausted` with nothing more readable ends it as that; one that
+answers either with more readable leaves it to the next read. A stop (`audience.search_cancel`) that stopped it, or found
+it stopped by an earlier stop, or gone from the provider, ends it `cancelled`; one that found it ended by itself leaves it
+to the reads, since what it found is still to be read. And a search whose reads have landed nobody for
+`Dispatcher:SearchStallSeconds` — measured from the start of the quiet, the search's start or the last landing that made
+somebody a member, to the moment the dispatcher made its latest read, once that read is over — ends `stalled`, said by
+the dispatcher, and is read no more; never while a stop of it is under way. The bound counts whatever kept the people from coming: a provider still searching, a search held at the
+provider until a person acts there (`paused`, `paused_for_credits`, `paused_for_limit`), a read that failed; the line
+names the provider's last word, so a stall for credits reads as one. A search a person resumes at the provider after it
+stalled is not followed again by the poll: a read anybody makes still lands its page, and a stop still stops it. A search
+that ended stays as it ended: a later read still lands what it carries, and nothing is said twice.
+
 ## 11. Not here yet
 
 - **Notifications.** Nothing tells anybody a review happened. A person finds out by reading the
@@ -440,5 +509,7 @@ work it is the caller's own.
   [inbound sync](inbound-sync.md)), queues the read of the thread and the responder for a thread that is the
   campaign's own, and wakes the manager; it never reads or classifies the reply itself, and nothing tells a person
   one came. Reading it, and answering it, is the responder's; what it means for the campaign is the manager's.
-- **Reading the audiences.** No read lists a campaign's audiences yet, and the people a search finds are answered by
-  its status read without becoming the campaign's members by it.
+- **Reading the audiences.** No read lists a campaign's audiences or their searches yet, and the people reads take no
+  audience: `jason campaign list-contacts` names where each member came from, and nothing filters by it.
+- **One search at a time.** Nothing stops a campaign from running two searches at once; a provider may refuse the
+  second itself (`search_in_progress`).

@@ -237,6 +237,21 @@ public static partial class JournalKinds
     public const string AudienceReserveRecovered = "audience_reserve_recovered";
 
     /// <summary>
+    /// One page of a search's people landed in its campaign: keyed by the work item whose answer carried the page — a read
+    /// of the search, or the search itself where it finished inside its call — and about the search's work item, with the
+    /// audience, the provider's state, the counts and the people it made members of, never a word of theirs. Said by the
+    /// dispatcher once per page that carried anybody. Not a trigger by default: the reserve and the summary count them.
+    /// </summary>
+    public const string AudiencePeopleLanded = "audience_people_landed";
+
+    /// <summary>
+    /// A search ended — finished, exhausted, stalled or stopped — keyed by and about its work item, with what it was asked
+    /// for, found and landed. Said by the dispatcher once per search, which the database holds. A default manager trigger:
+    /// whether the audience needs more, or another search, is the manager's.
+    /// </summary>
+    public const string AudienceSearchEnded = "audience_search_ended";
+
+    /// <summary>
     /// A project was made: keyed by its id, with the name and slug it was made with. It names no campaign. The default
     /// project, made by the migration that brought projects in, was made by nobody and has no line.
     /// </summary>
@@ -343,6 +358,8 @@ public static partial class JournalKinds
         ProviderBlockCleared,
         AudienceReserveLow,
         AudienceReserveRecovered,
+        AudiencePeopleLanded,
+        AudienceSearchEnded,
         ProjectCreated,
         ProjectUpdated,
         ProjectLinked,

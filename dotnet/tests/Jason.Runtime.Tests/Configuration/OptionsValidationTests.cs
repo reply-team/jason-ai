@@ -222,6 +222,27 @@ public class OptionsValidationTests
         Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { EventsCadenceSeconds = 86_400 }).Succeeded);
     }
 
+    /// <summary>
+    /// A search is read every five minutes and called stalled after an hour of reads that landed nobody, unless set: the
+    /// cadence is a minute to a day, as the other cadences, and the bound a minute to a week. Nothing outside is clamped.
+    /// </summary>
+    [Theory]
+    [InlineData(59, 3_600, "Dispatcher:SearchCadenceSeconds must be between 60 and 86400; got 59.")]
+    [InlineData(86_401, 3_600, "Dispatcher:SearchCadenceSeconds must be between 60 and 86400; got 86401.")]
+    [InlineData(300, 59, "Dispatcher:SearchStallSeconds must be between 60 and 604800; got 59.")]
+    [InlineData(300, 604_801, "Dispatcher:SearchStallSeconds must be between 60 and 604800; got 604801.")]
+    public void A_search_is_read_on_a_cadence_and_stalls_after_a_bound(int cadence, int stall, string refusal)
+    {
+        Assert.Equal((300, 3_600), (new DispatcherOptions().SearchCadenceSeconds, new DispatcherOptions().SearchStallSeconds));
+
+        var result = new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { SearchCadenceSeconds = cadence, SearchStallSeconds = stall });
+
+        Assert.True(result.Failed);
+        Assert.Equal([refusal], result.Failures!);
+        Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { SearchCadenceSeconds = 60, SearchStallSeconds = 604_800 }).Succeeded);
+        Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { SearchCadenceSeconds = 86_400, SearchStallSeconds = 60 }).Succeeded);
+    }
+
     /// <summary>A block is tried again every fifteen minutes unless set, and a cadence is a minute to a day; nothing outside is clamped.</summary>
     [Theory]
     [InlineData(59)]

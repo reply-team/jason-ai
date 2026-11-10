@@ -197,7 +197,8 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.add_contacts`: the people Jason's campaign is about; enrolling them at the provider is a `provider_op`
   work item.
 - `campaign.remove_contacts`
-- `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once.
+- `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once;
+  a member a search brought in carries its `source`: the audience, its number, the search and when they landed.
 - `campaign.summary`: for each campaign named, or every campaign not archived, where its people stand now, whole.
 - `campaign.activity`: for the same campaigns, what happened to their people between `since`, included, and `until`,
   not included, whole.
