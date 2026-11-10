@@ -85,7 +85,8 @@ activity`), with nothing divided on the page; its **Settings** are its record, i
 it and what each provider calls it, with the moves its status allows. **Pause** stops Jason releasing an active
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
-`jason campaign start`, with your reason). An address naming a tab the campaign no longer has opens its Sequence.
+`jason campaign start`, with your reason). An address naming a campaign's Details opens its Settings, and one naming
+any other tab it no longer has opens its Sequence.
 
 ## Performance
 

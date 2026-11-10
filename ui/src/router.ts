@@ -140,8 +140,9 @@ function campaigns(segments: string[], query: string): Route {
     if (q) filters.q = q;
     if (params.get('archived') === '1') filters.archived = true;
     if (id === null) return { screen: 'campaigns', tab: 'sequence', view, period, filters };
-    // A tab an older address named, or none, opens the first.
-    const tab: CampaignTab = campaignTabs.find((each) => each === segments[1]) ?? 'sequence';
+    // An older address's Details opens Settings; its Timeline, any other tab or none opens the first.
+    const named = segments[1] === 'details' ? 'settings' : segments[1];
+    const tab: CampaignTab = campaignTabs.find((each) => each === named) ?? 'sequence';
     const at = { screen: 'campaigns' as const, id, tab, view, period, filters };
     if (tab !== 'people') return at;
     const filter = params.get('filter');

@@ -124,14 +124,15 @@ describe('parseRoute', () => {
             '#/campaigns/cmp_1/results?view=activity&period=30d',
             { screen: 'campaigns', id: 'cmp_1', tab: 'results', view: 'activity', period: '30d', filters: {} },
         ],
-        // The tabs an address named before the campaign opened as Sequence, People, Inbox, Results and Settings.
+        // The tabs an address named before the campaign opened as Sequence, People, Inbox, Results and Settings: its
+        // Timeline is now its Sequence and its Details its Settings.
         [
             '#/campaigns/cmp_1/timeline',
             { screen: 'campaigns', id: 'cmp_1', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
         ],
         [
-            '#/campaigns/cmp_1/details',
-            { screen: 'campaigns', id: 'cmp_1', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
+            '#/campaigns/cmp_1/details?filter=failed',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'settings', view: 'summary', period: '7d', filters: {} },
         ],
         [
             '#/campaigns/cmp_1/elsewhere',
