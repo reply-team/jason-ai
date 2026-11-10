@@ -170,6 +170,31 @@ test('"always" on a web page holds for its host: a second page of it opens witho
     assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Open a web page', detail: 'https://example.org/a', remember: 'pages on example.org' });
 });
 
+test('a remembered grant never allows what the model refuses: the refusal is the model\'s, with no card', async () => {
+    const { broker, sent, decided, turn } = bench();
+    turn('chat_a', 'turn_1');
+    // Two grants whose keys a refused request would carry were it a card: files in the home folder, and git status.
+    const home = broker.ask('turn_1', 'Read', { file_path: '/Users/someone/notes.md' });
+    await settle();
+    broker.answer('chat_a', 'req_1', { allow: true, always: true });
+    await home;
+    const git = broker.ask('turn_1', 'Bash', command);
+    await settle();
+    broker.answer('chat_a', 'req_2', { allow: true, always: true });
+    await git;
+    const cards = sent.length;
+    for (const [tool, input] of [['Read', { file_path: '/Users/someone/.jason' }], ['Bash', { command: 'git status /Users/someone/.jason/run' }],
+        ['Bash', { command: 'git status $JASON_DATA_DIR/state' }]] as const) {
+        const answer = await within(broker.ask('turn_1', tool, input));
+        assert.equal(answer.behavior, 'deny', `${tool} ${JSON.stringify(input)}`);
+        assert.match(answer.behavior === 'deny' ? answer.message : '', /installation's own data/);
+        assert.deepEqual(decided.at(-1), { outcome: 'refused', by: 'model' });
+    }
+    assert.equal(sent.length, cards);
+    // The grants still hold for what the model leaves to the person.
+    assert.equal((await within(broker.ask('turn_1', 'Read', { file_path: '/Users/someone/other.md' }))).behavior, 'allow');
+});
+
 test('"always" holds for that chat only', async () => {
     const { broker, sent, turn } = bench();
     turn('chat_a', 'turn_1');
