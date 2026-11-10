@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { LoginItem, openedAtLogin, RuntimeAutostart } from './login-item.ts';
+import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { Repairer } from './repair.ts';
 import { applicationFolder, settleStart } from './rollback.ts';
 import { Updater } from './updates.ts';
@@ -171,7 +172,8 @@ async function run(): Promise<void> {
     lockNavigation(window.webContents, origin, log);
 
     let settings: DesktopSettings = readSettings(paths.settings);
-    const jason = cliAt(join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason'), env);
+    const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
+    const jason = cliAt(executable, env);
     const cli = loggedCli(jason, log);
     const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)) });
     const login = new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead, log });
@@ -193,7 +195,17 @@ async function run(): Promise<void> {
               changed: () => desk.renderMenu(),
           })
         : null;
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates });
+    const command = new PathCommand({
+        platform: process.platform,
+        folder: commandFolder(process.platform, process.env, home),
+        executable,
+        dataDirectory: process.env['JASON_DATA_DIR'] || null,
+        path: () => process.env.PATH ?? '',
+        pathext: process.env['PATHEXT'],
+        isProgram: (file) => isProgramFile(file, process.platform),
+        log,
+    });
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, command });
     desk.open();
     void desk.readAutostart();
     updates?.start();

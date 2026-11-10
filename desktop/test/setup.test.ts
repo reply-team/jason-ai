@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
+import { PathCommand } from '../src/path-command.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import { Setup, writeAtomically } from '../src/setup.ts';
@@ -341,7 +342,7 @@ test('each act of the Connect cards writes under <data> what it names and nothin
     assert.equal(replyLeftovers(), leftoversBefore, 'the folder the Reply skills are written to is removed');
 });
 
-test('each act of the desk’s menu writes what it names and nothing else: under the home only the LaunchAgent, under <data> nothing', async (t) => {
+test('each act of the desk’s menu writes what it names and nothing else: under the home only the LaunchAgent and the PATH command, under <data> nothing', async (t) => {
     const b = bench(t);
     const home = join(b.root, 'home');
     mkdirSync(home);
@@ -372,6 +373,17 @@ test('each act of the desk’s menu writes what it names and nothing else: under
     await act('Start the runtime at logon, read', () => autostart.registered(), []);
     await act('Start the runtime at logon, on', () => autostart.set(true), []);
     await act('Start the runtime at logon, off', () => autostart.set(false), []);
+
+    // The PATH command's folders, injected under the test's home: %LOCALAPPDATA%\Microsoft\WindowsApps and ~/.local/bin.
+    const windowsApps = join(home, 'AppData', 'Local', 'Microsoft', 'WindowsApps');
+    mkdirSync(windowsApps, { recursive: true });
+    const command = (platform: NodeJS.Platform, folder: string) =>
+        new PathCommand({ platform, folder, executable: platform === 'win32' ? 'C:\\J\\jason.exe' : '/J/jason', dataDirectory: null, path: () => folder, isProgram: () => false, log });
+    await act('The PATH command, read, Windows', async () => command('win32', windowsApps).status(), []);
+    await act('The PATH command, placed, Windows', async () => command('win32', windowsApps).place(), ['AppData/Local/Microsoft/WindowsApps/jason.cmd']);
+    await act('The PATH command, removed, Windows', async () => command('win32', windowsApps).remove(), ['AppData/Local/Microsoft/WindowsApps/jason.cmd']);
+    await act('The PATH command, placed, macOS', async () => command('darwin', join(home, '.local', 'bin')).place(), ['.local/bin/jason']);
+    await act('The PATH command, removed, macOS', async () => command('darwin', join(home, '.local', 'bin')).remove(), ['.local/bin/jason']);
 
     assert.deepEqual(registered, [{ openAtLogin: true, args: [loginFlag] }, { openAtLogin: false, args: [loginFlag] }]);
     assert.deepEqual(b.record().map((run) => run.args), [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'disable']]);

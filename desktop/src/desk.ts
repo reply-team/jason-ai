@@ -4,7 +4,7 @@
  * decides is decided and tested there.
  */
 
-import { app, Menu, nativeImage, Notification, Tray, type BrowserWindow, type MenuItemConstructorOptions } from 'electron';
+import { app, clipboard, dialog, Menu, nativeImage, Notification, Tray, type BrowserWindow, type MenuItemConstructorOptions } from 'electron';
 import { join } from 'node:path';
 import { AttentionWatcher, trayView, type Attention } from './attention.ts';
 import type { Cli } from './cli.ts';
@@ -12,6 +12,7 @@ import { eventChannels } from './ipc.ts';
 import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
 import type { Logger } from './log.ts';
 import type { LoginItem, RuntimeAutostart } from './login-item.ts';
+import { commandMenuOf, type CommandStatus, type PathCommand } from './path-command.ts';
 import { menuItemOf, type Updater } from './updates.ts';
 
 export interface DeskDeps {
@@ -28,8 +29,8 @@ export interface DeskDeps {
     autostart: RuntimeAutostart | null;
     /** The updater, in an installed build; null in a development build. */
     updates: Updater | null;
-    /** Items the Jason menu offers beside About, the login items and Quit (the command line, the updates). */
-    jasonMenu?(): MenuItemConstructorOptions[];
+    /** The jason command on the PATH: placed and removed by an installed build only, each on the person's word. */
+    command: PathCommand;
 }
 
 function resource(...parts: string[]): string {
@@ -99,7 +100,6 @@ export class Desk {
         this.tray.on('click', () => {
             if (process.platform !== 'darwin') this.show();
         });
-        this.renderTray();
         this.renderMenu();
     }
 
@@ -150,6 +150,44 @@ export class Desk {
         };
     }
 
+    /**
+     * The Command Line submenu: the bundled executable's full path always, where the command stands, and the act the
+     * state allows. A development build shows it and places nothing: its executable is the checkout's, not an install's.
+     */
+    private commandItem(): MenuItemConstructorOptions {
+        let status: CommandStatus;
+        try {
+            status = this.deps.command.status();
+        } catch {
+            status = { state: 'unsupported', executable: '' };
+        }
+        const menu = commandMenuOf(status);
+        const items: MenuItemConstructorOptions[] = menu.lines.map((line) => ({ label: line, enabled: false }));
+        items.push({ label: 'Copy the Executable’s Path', click: () => clipboard.writeText(status.executable) });
+        if (menu.acts.length > 0) items.push({ type: 'separator' });
+        for (const act of menu.acts) {
+            items.push({ label: act.label, enabled: app.isPackaged, click: () => void this.commandAct(act.act, status) });
+        }
+        return { label: 'Command Line', submenu: items };
+    }
+
+    /** Asks, then places or removes the command; what went wrong is said in a box of its own. */
+    private async commandAct(act: 'place' | 'remove', status: CommandStatus): Promise<void> {
+        const file = 'file' in status ? status.file : '';
+        const detail = act === 'place' ? `This writes ${file}, which runs ${status.executable}.` : `This removes ${file}.`;
+        const window = this.deps.window();
+        const options = { type: 'question' as const, buttons: [act === 'place' ? 'Place It' : 'Remove It', 'Cancel'], defaultId: 0, cancelId: 1, message: act === 'place' ? 'Put the jason command on the PATH?' : 'Remove the jason command from the PATH?', detail };
+        const answer = window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options);
+        if (answer.response !== 0) return;
+        try {
+            if (act === 'place') this.deps.command.place();
+            else this.deps.command.remove();
+        } catch (error) {
+            dialog.showErrorBox('The jason command', error instanceof Error ? error.message : String(error));
+        }
+        this.renderMenu();
+    }
+
     /** Starts reading the count; called only after the start found the runtime up. */
     watch(): void {
         this.watcher.start();
@@ -172,7 +210,7 @@ export class Desk {
             ...this.loginItems(),
             { type: 'separator' },
             this.updateItem(),
-            ...(this.deps.jasonMenu?.() ?? []),
+            this.commandItem(),
             { type: 'separator' },
             ...(process.platform === 'darwin' ? ([{ role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }] as MenuItemConstructorOptions[]) : []),
             { label: 'Quit Jason', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
@@ -185,6 +223,8 @@ export class Desk {
                 { role: 'windowMenu' },
             ]),
         );
+        // The tray carries the same items, since a Windows window shows no menu bar.
+        this.renderTray();
     }
 
     private renderTray(): void {
@@ -199,6 +239,10 @@ export class Desk {
                 { label: 'Open Jason', click: () => this.show() },
                 { label: 'New Chat', click: () => this.send('chat.new') },
                 { label: 'What Needs You', click: () => this.send('navigate.attention') },
+                ...this.loginItems(),
+                { type: 'separator' },
+                this.updateItem(),
+                this.commandItem(),
                 { type: 'separator' },
                 { label: 'Quit Jason', click: () => app.quit() },
             ]),
