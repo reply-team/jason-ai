@@ -1,6 +1,4 @@
 import type { Campaign, CampaignActivityRow, CampaignSummaryRow } from '../../api/types';
-import type { MessageKey } from '../../locale/en';
-import { t } from '../../platform/i18n';
 import { campaignTabs, href, type CampaignTab, type Route } from '../../router';
 import { periodLabels } from '../../time/periods';
 import { activityColumns, summaryColumns } from './labels';
@@ -18,12 +16,12 @@ type Props = {
     onClose: () => void;
 };
 
-const tabNames: Record<CampaignTab, MessageKey> = {
-    sequence: 'campaign.tab.sequence',
-    people: 'campaign.tab.people',
-    inbox: 'campaign.tab.inbox',
-    results: 'campaign.tab.results',
-    settings: 'campaign.tab.settings',
+const tabNames: Record<CampaignTab, string> = {
+    sequence: 'Sequence',
+    people: 'People',
+    inbox: 'Inbox',
+    results: 'Results',
+    settings: 'Settings',
 };
 
 const number = new Intl.NumberFormat('en-US');
@@ -96,11 +94,7 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                 <Tabs
                     tabs={campaignTabs.map((each) => ({
                         key: each,
-                        label: t(
-                            each === 'people' && at.view === 'activity'
-                                ? 'campaign.tab.peopleActivity'
-                                : tabNames[each],
-                        ),
+                        label: each === 'people' && at.view === 'activity' ? 'People Activity' : tabNames[each],
                     }))}
                     active={at.tab}
                     to={to}
