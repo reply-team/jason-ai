@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { allowListFile, denyListFile } from '../src/chat-deny.ts';
 import { bundleFiles, bundleFolder, chatLists, checkBundle, configuration, copyChromiumNotices, fuses, releaseVersion, signer } from '../electron-builder.config.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -248,6 +249,10 @@ test('DevTools are closed in a packaged build, the window’s and the key that w
     assert.match(keys, /binding\.does\.window === 'devtools' && packaged/);
 });
 
-test('both chat list files are packaged where the main process reads them', { skip: 'the chat’s two list files arrive with the chat' }, () => {
+test('both chat list files are packaged where the main process reads them', () => {
+    // The fence's own names, each a file at the application's root, which files puts in app.asar and main.ts reads.
+    assert.deepEqual([...chatLists].sort(), [denyListFile, allowListFile].sort());
     for (const name of chatLists) assert.ok(existsSync(join(root, name)), name);
+    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
+    assert.match(main, /readFence\(app\.getAppPath\(\)\)/);
 });
