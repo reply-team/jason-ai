@@ -53,6 +53,9 @@ const operations: Readonly<Record<string, string>> = {
     'enrollment.stop': 'Stop sequence',
 };
 
+/** The operations that reach their person by a message; a row of any other names its person with no word before. */
+const byMessage: ReadonlySet<string> = new Set(['message.send', 'conversation.reply', 'social_invitation.send']);
+
 /** An operation's code in words; a code with no words here, the names every object has included, is shown as given. */
 export const operationWords = (operation: string): string =>
     Object.hasOwn(operations, operation) ? operations[operation]! : operation;
@@ -69,6 +72,8 @@ export interface ApprovalRow {
     id: string;
     what: string;
     who: string | null;
+    /** Whether the operation reaches that person by a message, so the row says the message goes to them. */
+    byMessage: boolean;
     campaign: string;
     via: string;
     age: string;
@@ -84,6 +89,7 @@ export function toApprovalRow(row: ApprovalSummary, now: number, preview?: Recor
         id: row.id,
         what: operationWords(row.operation),
         who: row.contact_name ?? highlighted,
+        byMessage: byMessage.has(row.operation),
         campaign: row.campaign_name,
         via: row.plugin_id,
         age: ageOf(row.requested_at, now),

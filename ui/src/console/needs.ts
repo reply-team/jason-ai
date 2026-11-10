@@ -2,7 +2,7 @@ import { signal } from '@preact/signals-react';
 import { attentionStore } from '../screens/attention/store';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
-import { toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
+import { toApprovalDetail, toApprovalRow, toQuestionRow, type ApprovalRow } from './live';
 import { clock, here } from './state';
 
 // Needs you: the approvals and the questions waiting on a person, read and decided the way the browser's Attention
@@ -89,6 +89,10 @@ function approvalDetail(id: string): Html {
     </div>`;
 }
 
+/** The person a row is about, with "to" before the name when the operation reaches them by a message. */
+const person = (row: ApprovalRow): Html | null =>
+    row.who ? html`<span class="needs-who">${row.byMessage ? 'to ' : null}<span>${row.who}</span></span>` : null;
+
 function approvals(now: number, busy: boolean): Html {
     const shown = attention.detail.value;
     const rows = attention.approvals.value.map((row) =>
@@ -103,7 +107,7 @@ function approvals(now: number, busy: boolean): Html {
             html`<div class="ask" data-id="${row.id}">
                 <div class="ask-h">
                     <span class="b amber">${row.what}</span>
-                    ${row.who ? html`<span class="needs-to">to <span>${row.who}</span></span>` : null}
+                    ${person(row)}
                     <span class="meta">${row.campaign} · ${row.via} · ${row.age}</span>
                 </div>
                 ${approvalDetail(row.id)}

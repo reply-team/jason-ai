@@ -93,6 +93,7 @@ describe('what the console draws from the runtime', () => {
             id: 'apr_1',
             what: 'Add to sequence',
             who: 'A Person',
+            byMessage: false,
             campaign: 'Autumn outreach',
             via: 'reply',
             age: '21 h',

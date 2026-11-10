@@ -41,6 +41,17 @@ describe('what Needs you reads from an approval', () => {
         expect(toApprovalRow({ ...listed, contact_name: null }, now, opened).who).toBe('ines@example.test');
     });
 
+    it('says a row reaches its person by a message only for the operations that send one', () => {
+        const listed = fixtures['approval.list/messages-pending'].response.items[0]!;
+        const now = Date.parse('2026-10-16T09:00:00.000Z');
+        for (const operation of ['message.send', 'conversation.reply', 'social_invitation.send']) {
+            expect(toApprovalRow({ ...listed, operation }, now).byMessage).toBe(true);
+        }
+        for (const operation of ['campaign.enroll', 'campaign.activate', 'enrollment.stop', 'constructor', 'x.y']) {
+            expect(toApprovalRow({ ...listed, operation }, now).byMessage).toBe(false);
+        }
+    });
+
     it('says a channel in words, and a code it has no words for as the code itself', () => {
         expect(channelWords('email')).toBe('Email');
         expect(channelWords('linkedin')).toBe('LinkedIn');

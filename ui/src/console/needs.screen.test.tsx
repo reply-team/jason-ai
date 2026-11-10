@@ -109,9 +109,22 @@ describe('Needs you', () => {
             .answer('decision.list', 'decision.list/empty');
         renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
-        expect(words(row('apr_1').querySelector('.needs-to')!)).toBe('to Ines Duarte');
-        expect(words(row('apr_2').querySelector('.needs-to')!)).toBe('to Noor Haddad');
+        expect(words(row('apr_1').querySelector('.needs-who')!)).toBe('to Ines Duarte');
+        expect(words(row('apr_2').querySelector('.needs-who')!)).toBe('to Noor Haddad');
         expect(fake.calls.filter((each) => each.operation === 'approval.get')).toHaveLength(0);
+    });
+
+    it('names the person an approval that sends nothing is about, with no word before the name', async () => {
+        renderConsole(
+            new FakeApi()
+                .answer('approval.list', 'approval.list/pending')
+                .answer('decision.list', 'decision.list/empty'),
+        );
+        await waitFor(() => expect(row('apr_1')).toBeTruthy());
+        expect(words(row('apr_1').querySelector('.needs-who')!)).toBe('Ada Lovelace');
+        expect(words(row('apr_2').querySelector('.needs-who')!)).toBe('Grace Hopper');
+        expect(words(row('apr_1').querySelector('.ask-h')!)).toContain('Add to sequence Ada Lovelace');
+        expect(words(row('apr_2').querySelector('.ask-h')!)).not.toContain('to Grace');
     });
 
     it("shows a message's sender and its channel in words beside the recipient, subject and body", async () => {
