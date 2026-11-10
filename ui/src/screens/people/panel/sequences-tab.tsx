@@ -1,16 +1,14 @@
 import type { Contact, ContactCampaign } from '../../../api/types';
-import type { MessageKey } from '../../../locale/en';
-import { t } from '../../../platform/i18n';
 import { href } from '../../../router';
 import { shortDate } from '../../../time/format';
 
 type Props = { person: Contact; now: Date; zone: string };
 
-const stateWords: Record<string, MessageKey> = {
-    enrolled: 'person.state.enrolled',
-    paused: 'person.state.paused',
-    finished: 'person.state.finished',
-    excluded: 'person.state.excluded',
+const stateWords: Record<string, string> = {
+    enrolled: 'Enrolled',
+    paused: 'Paused',
+    finished: 'Finished',
+    excluded: 'Excluded',
 };
 
 /** The campaigns the person is in first, then the ones they left, each as contact.get answered it. */
@@ -26,22 +24,17 @@ export function SequencesTab({ person, now, zone }: Props) {
     if (campaigns.length === 0)
         return (
             <div className="panel-body">
-                <div className="empty">{t('person.sequences.none')}</div>
+                <div className="empty">Not in any campaign.</div>
             </div>
         );
     return (
         <div className="panel-body">
             <ul className="sequences">
                 {campaigns.map((campaign) => {
-                    const word = stateWords[campaign.state];
                     const date =
                         campaign.state === 'enrolled'
-                            ? t('person.sequences.added', {
-                                  date: shortDate(new Date(campaign.added_at), zone, now),
-                              })
-                            : t('person.sequences.changed', {
-                                  date: shortDate(new Date(campaign.updated_at), zone, now),
-                              });
+                            ? `added ${shortDate(new Date(campaign.added_at), zone, now)}`
+                            : `changed ${shortDate(new Date(campaign.updated_at), zone, now)}`;
                     return (
                         <li key={campaign.campaign_id}>
                             <a
@@ -58,7 +51,7 @@ export function SequencesTab({ person, now, zone }: Props) {
                                 {campaign.campaign_name}
                             </a>
                             <span className={`badge ${campaign.state === 'enrolled' ? 'accent' : 'outline'}`}>
-                                {word ? t(word) : campaign.state}
+                                {stateWords[campaign.state] ?? campaign.state}
                             </span>
                             <span className="muted">{date}</span>
                         </li>

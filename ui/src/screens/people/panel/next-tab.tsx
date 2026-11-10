@@ -2,8 +2,6 @@ import { useEffect } from 'react';
 import { useApi } from '../../../api/context';
 import type { Contact, WorkItemSummary } from '../../../api/types';
 import { Notice } from '../../../layout/notice';
-import type { MessageKey } from '../../../locale/en';
-import { t } from '../../../platform/i18n';
 import { href, type Tab } from '../../../router';
 import { when } from '../../../time/format';
 import { mark, what } from '../../workitems/labels';
@@ -12,11 +10,11 @@ import * as panel from './store';
 
 type Props = { person: Contact; now: Date; zone: string };
 
-const statusWords: Record<string, MessageKey> = {
-    created: 'person.next.status.created',
-    awaiting_approval: 'person.next.status.awaiting_approval',
-    scheduled: 'person.next.status.scheduled',
-    processing: 'person.next.status.processing',
+const statusWords: Record<string, string> = {
+    created: 'Planned',
+    awaiting_approval: 'Waiting for approval',
+    scheduled: 'Scheduled',
+    processing: 'Running',
 };
 
 /** Where an open item opens: Planned for what has not started, Now for what is running or waiting. */
@@ -28,9 +26,9 @@ function tabOf(item: WorkItemSummary): Tab {
 function moments(item: WorkItemSummary, now: Date, zone: string): string[] {
     const at = (moment: string) => when(new Date(moment), now, zone);
     return [
-        item.not_before ? t('person.next.notBefore', { time: at(item.not_before) }) : null,
-        item.retry_after ? t('person.next.retryAfter', { time: at(item.retry_after) }) : null,
-        item.due_at ? t('person.next.due', { time: at(item.due_at) }) : null,
+        item.not_before ? `not before ${at(item.not_before)}` : null,
+        item.retry_after ? `retry after ${at(item.retry_after)}` : null,
+        item.due_at ? `due ${at(item.due_at)}` : null,
     ].filter((each): each is string => each !== null);
 }
 
@@ -44,11 +42,10 @@ export function NextTab({ person, now, zone }: Props) {
     return (
         <div className="panel-body">
             {panel.nextFailure.value && <Notice danger>{panel.nextFailure.value}</Notice>}
-            {shown && shown.items.length === 0 && <div className="empty">{t('person.next.none')}</div>}
+            {shown && shown.items.length === 0 && <div className="empty">No open work for this person.</div>}
             {shown && shown.items.length > 0 && (
                 <div className="rows">
                     {shown.items.map((item) => {
-                        const status = statusWords[item.status];
                         return (
                             <a
                                 key={item.id}
@@ -61,7 +58,7 @@ export function NextTab({ person, now, zone }: Props) {
                                     <span className="in">{item.campaign_name}</span>
                                 </span>
                                 <span className="meta">
-                                    <span className="badge outline">{status ? t(status) : item.status}</span>
+                                    <span className="badge outline">{statusWords[item.status] ?? item.status}</span>
                                     {moments(item, now, zone).join(' · ')}
                                 </span>
                             </a>
@@ -72,7 +69,7 @@ export function NextTab({ person, now, zone }: Props) {
                             className="end"
                             href={href({ screen: 'workitems', tab: 'planned', filters: { contact: person.id } })}
                         >
-                            {t('person.next.more', { name: displayName(person).name })} →
+                            All open work for {displayName(person).name} →
                         </a>
                     )}
                 </div>

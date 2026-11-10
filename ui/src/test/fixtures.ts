@@ -296,6 +296,7 @@ import personContactGetPersonAfterExclude from '../../../docs/api/fixtures/conta
 import personContactGetPersonAfterHalfMove from '../../../docs/api/fixtures/contact.get/person-after-half-move.json';
 import personContactGetPersonAfterMove from '../../../docs/api/fixtures/contact.get/person-after-move.json';
 import personContactGetPersonPanel from '../../../docs/api/fixtures/contact.get/person-panel.json';
+import personContactUpdatePersonChannels from '../../../docs/api/fixtures/contact.update/person-channels.json';
 import personContactUpdatePersonRefused from '../../../docs/api/fixtures/contact.update/person-refused.json';
 import personContactUpdatePersonSaved from '../../../docs/api/fixtures/contact.update/person-saved.json';
 import personSuppressionAddPersonEmail from '../../../docs/api/fixtures/suppression.add/person-email.json';
@@ -864,6 +865,10 @@ export const fixtures = {
         Contact
     >,
     'contact.get/person-panel': personContactGetPersonPanel satisfies Exchange<{ contact_id: string }, Contact>,
+    'contact.update/person-channels': personContactUpdatePersonChannels satisfies Exchange<
+        ContactUpdateRequest,
+        Contact
+    >,
     'contact.update/person-refused': personContactUpdatePersonRefused satisfies Exchange<
         ContactUpdateRequest,
         ErrorEnvelope

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useApi } from '../../api/context';
 import { FiltersBar } from '../../layout/filters-bar';
 import { Toolbar } from '../../layout/toolbar';
@@ -6,10 +6,8 @@ import { session } from '../../api/session';
 import { Search } from '../../lists/search';
 import { CampaignPicker } from '../../pickers/campaign-picker';
 import { href, navigate, replace, route, type PeopleFilters } from '../../router';
-import { AddDialog } from './add-dialog';
-import { PersonCard } from './card';
 import { PeopleList } from './list';
-import { PanelTab, panelTabs, shownTab } from './panel/panel';
+import { PersonPanel } from './panel/panel';
 import * as store from './store';
 import { Notice } from '../../layout/notice';
 
@@ -48,17 +46,6 @@ export function PeopleScreen() {
         );
     const close = () => navigate({ screen: 'people', tab: 'timeline', filters });
 
-    const [adding, setAdding] = useState(false);
-    useEffect(() => {
-        setAdding(false);
-        if (selected) void store.open(api, selected);
-        else store.close();
-    }, [api, selected]);
-
-    const person = store.person.value;
-    // An address on a tab this person's panel does not have, Messages for a person linked nowhere, shows their activity.
-    const tab = shownTab(person, asked);
-    const now = new Date();
     const people = store.people.value;
     const filtered = Boolean(filters.q || filters.campaign || filters.archived);
     const campaignLabel = filters.campaign
@@ -119,31 +106,14 @@ export function PeopleScreen() {
                 )}
             </div>
             {selected && (
-                <div className="panel person-panel">
-                    {store.personFailure.value && <Notice danger>{store.personFailure.value}</Notice>}
-                    {person && person.id === selected && (
-                        <>
-                            <PersonCard
-                                person={person}
-                                tab={tab}
-                                to={(next) => ({ screen: 'people', id: person.id, tab: next, filters })}
-                                now={now}
-                                zone={zone}
-                                onAdd={() => setAdding(true)}
-                                onClose={close}
-                                tabs={panelTabs(person)}
-                            />
-                            <PanelTab
-                                person={person}
-                                tab={tab}
-                                me={session.actorId.value ?? ''}
-                                now={now}
-                                zone={zone}
-                            />
-                            {adding && <AddDialog person={person} onClose={() => setAdding(false)} />}
-                        </>
-                    )}
-                </div>
+                // An address on a tab this person's panel does not have, Messages for a person linked nowhere, shows their activity.
+                <PersonPanel
+                    contactId={selected}
+                    campaignId={filters.campaign}
+                    tab={asked}
+                    to={(next) => ({ screen: 'people', id: selected, tab: next, filters })}
+                    onClose={close}
+                />
             )}
         </div>
     );

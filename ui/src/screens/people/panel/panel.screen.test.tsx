@@ -1,10 +1,12 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { ApiProvider } from '../../../api/context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FakeApi } from '../../../test/fake-api';
+import { FakeApi, watch } from '../../../test/fake-api';
 import { fixtures } from '../../../test/fixtures';
 import { renderApp } from '../../../test/render-app';
 import { href, route, type PeopleFilters, type PersonTab } from '../../../router';
 import * as store from '../store';
+import { PersonPanel } from './panel';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock.
 const recordedAt = new Date('2026-10-16T09:00:00Z');
@@ -154,5 +156,35 @@ describe('The person panel', () => {
         await waitFor(() => expect(asked(api, 'contact.list').length).toBe(lists + 1));
         expect(within(panel()).getByRole('heading', { name: /Ingrid Solberg/ })).toBeTruthy();
         expect(route.value).toMatchObject({ id: ingrid.id, tab: 'next' });
+    });
+});
+
+describe('The person panel on a screen of its own', () => {
+    it('is mounted by the person and an opening campaign alone; its tabs have no address there and close is the host', async () => {
+        const api = new FakeApi()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('workitem.list', 'workitem.list/by-contact-open')
+            .answer('journal.list', 'journal.list/by-contact');
+        watch(api);
+        const onClose = vi.fn();
+        location.hash = '#/campaigns/cmp_2/people';
+        render(
+            <ApiProvider api={api}>
+                <PersonPanel contactId={ingrid.id} campaignId="cmp_2" onClose={onClose} />
+            </ApiProvider>,
+        );
+        await shown();
+        expect(asked(api, 'contact.get')).toEqual([{ contact_id: ingrid.id }]);
+        expect(tabNames()).toEqual(['Details', 'Activity', 'Sequences', 'Next']);
+        expect(within(panel()).getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true');
+
+        fireEvent.click(within(panel()).getByRole('tab', { name: 'Sequences' }));
+        expect(await within(panel()).findByText('Nordic pilot', { selector: 'a' })).toBeTruthy();
+        expect(within(panel()).getByRole('tab', { name: 'Sequences' }).getAttribute('aria-selected')).toBe('true');
+        // The host's address is the host's: the panel moved nothing.
+        expect(location.hash).toBe('#/campaigns/cmp_2/people');
+
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Close' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 });
