@@ -200,12 +200,19 @@ const scrub = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB';
 const maintainFolder = 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR';
 
 /**
+ * Set on every Claude Code turn: the host runs nothing in the background. A turn is one process that ends when the agent
+ * answers, so a command left running behind it would outlive the turn, and its answer would reach no one.
+ */
+const noBackground = 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS';
+
+/**
  * The host's environment: the desktop's own, with the bundled `jason`'s folder first on PATH, the data directory named
  * when the desktop runs with one, and a key provider's variables. Nothing of a plugin's configuration is passed on, and
  * `CLAUDE_AUTO_BACKGROUND_TASKS`, which would let the host move a waiting permission call to the background, is removed,
  * as are the markers of a Claude Code session the desktop itself was started from. A key provider's turn is started
  * without the provider and credentials the desktop inherited (`inheritedProvider`); a Claude Code turn always carries
- * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` and `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1`.
+ * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and
+ * `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
  */
 export function hostEnvironment(
     base: Readonly<Record<string, string | undefined>>,
@@ -225,7 +232,7 @@ export function hostEnvironment(
     for (const [name, value] of Object.entries(base)) {
         if (value === undefined || withheld(name)) continue;
         const upper = name.toUpperCase();
-        if (replaced.has(upper) || upper === scrub || upper === maintainFolder) continue;
+        if (replaced.has(upper) || upper === scrub || upper === maintainFolder || upper === noBackground) continue;
         if (name.toUpperCase() === 'PATH') {
             path = value;
             continue;
@@ -240,6 +247,7 @@ export function hostEnvironment(
     if (options.program === 'claude') {
         env[scrub] = '1';
         env[maintainFolder] = '1';
+        env[noBackground] = '1';
     }
     return env;
 }

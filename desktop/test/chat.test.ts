@@ -484,6 +484,7 @@ test('a key provider\'s turn is started without the provider the desktop inherit
     assert.equal(openai?.env.OPENAI_API_KEY, 'sk-planted-openai');
     assert.equal(codex?.env.OPENAI_BASE_URL, 'https://inherited.example/v1');
     for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, '1');
+    for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
 });
 
 test('closing the window stops every turn', async (t) => {
