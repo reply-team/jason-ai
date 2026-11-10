@@ -77,10 +77,17 @@ function bench(
 }
 
 test('only the uninstaller’s start is an uninstall, and a silent one shows nothing', () => {
-    assert.equal(uninstallStart(['Jason.exe']), null);
-    assert.equal(uninstallStart(['Jason.exe', '--opened-at-login']), null);
-    assert.deepEqual(uninstallStart(['Jason.exe', '--uninstall']), { quiet: false });
-    assert.deepEqual(uninstallStart(['Jason.exe', '--uninstall', '--quiet']), { quiet: true });
+    const installed = { packaged: true, platform: 'win32' } as const;
+    assert.equal(uninstallStart(['Jason.exe'], installed), null);
+    assert.equal(uninstallStart(['Jason.exe', '--opened-at-login'], installed), null);
+    assert.deepEqual(uninstallStart(['Jason.exe', '--uninstall'], installed), { quiet: false });
+    assert.deepEqual(uninstallStart(['Jason.exe', '--uninstall', '--quiet'], installed), { quiet: true });
+});
+
+test('the uninstall start is honoured only in a packaged application on Windows, where an uninstaller makes it', () => {
+    for (const where of [{ packaged: false, platform: 'win32' }, { packaged: true, platform: 'darwin' }, { packaged: false, platform: 'darwin' }, { packaged: true, platform: 'linux' }] as const) {
+        assert.equal(uninstallStart(['Jason', '--uninstall'], where), null, JSON.stringify(where));
+    }
 });
 
 test('the PATH command’s two files that are ours are taken off, and nothing else in the folder', async (t) => {
@@ -346,7 +353,7 @@ test('the nsis uninstaller starts the application before it removes the files, o
     assert.doesNotMatch(before, /Delete|RMDir|DeleteReg|WinShell::Unin/);
 
     // The flags the script passes are the ones the application reads.
-    assert.deepEqual(uninstallStart(['x', '--uninstall', '--quiet']), { quiet: true });
+    assert.deepEqual(uninstallStart(['x', '--uninstall', '--quiet'], { packaged: true, platform: 'win32' }), { quiet: true });
 });
 
 test('the logon registration is read from what jason runtime autostart status says it starts', async () => {

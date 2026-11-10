@@ -319,7 +319,7 @@ app.setPath('userData', early.electron);
 app.setPath('sessionData', early.electron);
 app.setAppLogsPath(early.electronLogs);
 
-const uninstalling = uninstallStart(process.argv);
+const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
 if (uninstalling !== null) {
     // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
     // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).

@@ -31,8 +31,12 @@ export const uninstallFlag = '--uninstall';
 /** Beside it when the uninstall was asked to be silent: nothing is shown. */
 export const quietFlag = '--quiet';
 
-/** Whether this start is the uninstaller's, and whether it is to show what it did. */
-export function uninstallStart(argv: readonly string[]): { quiet: boolean } | null {
+/**
+ * Whether this start is the uninstaller's, and whether it is to show what it did: only a packaged application on
+ * Windows has an uninstaller that makes it, so anywhere else the flag is not read.
+ */
+export function uninstallStart(argv: readonly string[], where: { packaged: boolean; platform: NodeJS.Platform }): { quiet: boolean } | null {
+    if (!where.packaged || where.platform !== 'win32') return null;
     return argv.includes(uninstallFlag) ? { quiet: argv.includes(quietFlag) } : null;
 }
 
