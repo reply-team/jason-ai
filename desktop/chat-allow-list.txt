@@ -49,7 +49,6 @@ project update
 reply record
 report get
 report list
-role add
 role list
 rolenote get
 rolenote list

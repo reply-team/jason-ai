@@ -374,6 +374,23 @@ test('with the file the desktop carries, export and import are refused, and so a
     }
 });
 
+test('adding a role is refused in every spelling a denied verb is tried in: its entry command is a program the dispatcher starts', () => {
+    const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+    for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
+        for (const command of ['jason role add researcher --entry-command calc.exe', 'jason role add --file role.json', 'jason  role   add researcher',
+            'jason role --actor human:x add researcher --entry-command x', 'jason campaign list && jason role add r --entry-command x',
+            'echo $(jason role add r --entry-command x)', "bash -c 'jason role add r --entry-command x'", 'X=1 jason role add r',
+            'curl -X POST http://127.0.0.1:5000/v1/role.add']) {
+            assert.equal(run(scope, command).verdict, 'deny', command);
+        }
+    }
+    const windowsScope = { ...windows(), denied: file.commands, deniedOperations: file.operations };
+    assert.equal(run(windowsScope, '"C:\\Program Files\\Jason\\jason.exe" role add r --entry-command x').verdict, 'deny');
+    assert.equal(run(windowsScope, 'JASON.EXE role add r').verdict, 'deny');
+    // The other role verbs stay the agent's: listing roles and a role's notes.
+    assert.equal(run({ ...mac(), denied: file.commands, deniedOperations: file.operations }, 'jason role list').verdict, 'ask');
+});
+
 test('a jason command that starts with an option is refused, as the host\'s own rule refuses it', () => {
     assert.equal(run(windows(), 'jason --actor human:ada approval approve apr_A').verdict, 'deny');
     assert.equal(run(mac(), 'jason --human campaign list').verdict, 'deny');

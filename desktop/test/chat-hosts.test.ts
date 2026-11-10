@@ -88,6 +88,15 @@ test('the host\'s argv carries every deny-list entry as a disallowed tool, and a
     assert.ok(disallowed.includes('Bash(jason -*)'));
 });
 
+test('a Claude turn is denied adding a role and is not allowed it: 67 verbs are allowed', () => {
+    const args = claudeArguments(turn);
+    assert.ok(valuesOf(args, '--disallowedTools').includes('Bash(jason role add:*)'));
+    const allowed = valuesOf(args, '--allowedTools').filter((rule) => rule.startsWith('Bash(jason '));
+    assert.ok(!allowed.includes('Bash(jason role add:*)'));
+    assert.ok(allowed.includes('Bash(jason role list:*)'));
+    assert.equal(allowed.length, 67);
+});
+
 test('the PowerShell and Monitor tools are taken out of every turn by a bare rule, so the one shell is the fenced one', () => {
     for (const args of [claudeArguments(turn), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'], dataRules: ['Read(//d/config)'] })]) {
         const disallowed = valuesOf(args, '--disallowedTools');

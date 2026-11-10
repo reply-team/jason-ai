@@ -31,11 +31,13 @@ export
 import
 #
 # The verbs the chat refuses beyond the CLI's own table: taking someone off the do-not-contact register, changing which
-# plugin performs an operation, and changing which profile a role runs on.
+# plugin performs an operation, changing which profile a role runs on, and adding a role, whose entry command the
+# dispatcher starts when work names the role.
 suppression remove
 route set
 route unset
 role set-profile
+role add
 #
 # The Runtime API operations the verbs above call, so that no other program reaches them on the agent's behalf:
 approval.approve
@@ -58,3 +60,4 @@ suppression.remove
 route.set
 route.unset
 role.set_profile
+role.add

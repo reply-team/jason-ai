@@ -25,9 +25,10 @@ public class DesktopDenyListTests
 
     /// <summary>
     /// The verbs the chat refuses beyond the CLI's own table: taking someone off the do-not-contact register, changing which
-    /// plugin performs an operation, and changing which profile a role runs on.
+    /// plugin performs an operation, changing which profile a role runs on, and adding a role, whose entry command the
+    /// dispatcher starts when work names the role.
     /// </summary>
-    private static readonly string[] TheChatsOwnWord = ["suppression remove", "route set", "route unset", "role set-profile"];
+    private static readonly string[] TheChatsOwnWord = ["suppression remove", "route set", "route unset", "role set-profile", "role add"];
 
     /// <summary>
     /// The verbs the deny list leaves to the agent that still go to a person's card at every use: <c>doctor</c> writes its
