@@ -94,14 +94,16 @@ public class DescriptorPublisherTests
     }
 
     [Fact]
-    public void The_installed_image_written_by_default_is_the_executable_s_own_answer()
+    public void By_default_the_test_host_which_is_no_single_file_image_writes_no_installed_image()
     {
         using var dir = new TempDataDir();
 
         var descriptor = new DescriptorPublisher(dir.Paths).Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t", TestContext.Current.CancellationToken);
 
-        // A test is no single-file image, so the answer here is none; a published release answers its own path.
-        Assert.Equal(SelfExecutable.InstalledImage, descriptor.InstalledImage);
+        // What this holds is the default's answer in a test only: a test host is no single-file image, so it is none.
+        // That a single-file image writes its own path is the seam's row above, and SelfExecutable.Image's rows in
+        // UninstallExecutableTests.
+        Assert.False(SelfExecutable.IsSingleFile);
         Assert.Null(descriptor.InstalledImage);
     }
 }
