@@ -46,6 +46,13 @@ export const templates = {
     // The login items.
     login_item_set: 'Open Jason at login was set to {On} on {Platform}',
     autostart_set: 'Start the runtime at logon was set to {On}: jason runtime autostart exited {Exit}',
+    // The updater.
+    update_checked: 'The releases were read; a newer one to offer: {Available}',
+    update_offered: 'Jason {Version} is offered',
+    update_downloaded: 'Jason {Version} was downloaded',
+    update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
+    update_failed: 'The updater step {Step} failed, {Failures} times running',
+    update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

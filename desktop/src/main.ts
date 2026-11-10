@@ -6,6 +6,7 @@
  */
 
 import { app, BrowserWindow, ipcMain, safeStorage, shell, type WebContents } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -13,6 +14,8 @@ import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { LoginItem, openedAtLogin, RuntimeAutostart } from './login-item.ts';
 import { Repairer } from './repair.ts';
+import { applicationFolder, settleStart } from './rollback.ts';
+import { Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
@@ -173,9 +176,27 @@ async function run(): Promise<void> {
     const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)) });
     const login = new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead, log });
     const autostart = version === null ? null : new RuntimeAutostart({ cli, log });
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart });
+    // The updater runs only in an installed build: a development build has no installer to hand an update to.
+    const rollback = join(paths.desktop, 'rollback');
+    const updates = app.isPackaged
+        ? new Updater({
+              updater: autoUpdater,
+              version: app.getVersion(),
+              application: applicationFolder(process.platform, process.execPath),
+              rollback,
+              log,
+              async beforeInstall() {
+                  quitting = true;
+                  repairer.stop();
+                  desk.close();
+              },
+              changed: () => desk.renderMenu(),
+          })
+        : null;
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates });
     desk.open();
     void desk.readAutostart();
+    updates?.start();
     let runtimeVersion: string | null = null;
     registerSetup(
         new Setup({
@@ -215,6 +236,7 @@ async function run(): Promise<void> {
         runtimeVersion = started.runtimeVersion;
         await window.loadURL(started.link);
         log.info('window_loaded', { Origin: started.origin });
+        settleStart(rollback, app.getVersion(), true, log);
         desk.watch();
         repairer.pairedWith(readText(paths.runFile));
         repairer.start();
@@ -222,7 +244,9 @@ async function run(): Promise<void> {
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
         log.error('window_load_failed', { Step: step, Exit: exit });
-        if (current !== null) await showStarting(current, error instanceof Error ? error.message : String(error), true);
+        const kept = settleStart(rollback, app.getVersion(), false, log);
+        const said = error instanceof Error ? error.message : String(error);
+        if (current !== null) await showStarting(current, kept === null ? said : `${said} The version of Jason this one was updated from is kept at ${kept}.`, true);
     }
 }
 

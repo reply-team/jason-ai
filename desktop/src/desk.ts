@@ -12,6 +12,7 @@ import { eventChannels } from './ipc.ts';
 import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
 import type { Logger } from './log.ts';
 import type { LoginItem, RuntimeAutostart } from './login-item.ts';
+import { menuItemOf, type Updater } from './updates.ts';
 
 export interface DeskDeps {
     window(): BrowserWindow | null;
@@ -25,6 +26,8 @@ export interface DeskDeps {
     login: LoginItem;
     /** Start the runtime at logon, through the CLI; offered once the CLI has said what is registered. */
     autostart: RuntimeAutostart | null;
+    /** The updater, in an installed build; null in a development build. */
+    updates: Updater | null;
     /** Items the Jason menu offers beside About, the login items and Quit (the command line, the updates). */
     jasonMenu?(): MenuItemConstructorOptions[];
 }
@@ -133,6 +136,20 @@ export class Desk {
         ];
     }
 
+    private updateItem(): MenuItemConstructorOptions {
+        const { updates } = this.deps;
+        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null);
+        return {
+            label: item.label,
+            enabled: item.enabled,
+            click: () => {
+                if (item.act === 'check') void updates?.check();
+                else if (item.act === 'download') void updates?.download();
+                else if (item.act === 'install') void updates?.install();
+            },
+        };
+    }
+
     /** Starts reading the count; called only after the start found the runtime up. */
     watch(): void {
         this.watcher.start();
@@ -153,6 +170,8 @@ export class Desk {
         const jason: MenuItemConstructorOptions[] = [
             { role: 'about' },
             ...this.loginItems(),
+            { type: 'separator' },
+            this.updateItem(),
             ...(this.deps.jasonMenu?.() ?? []),
             { type: 'separator' },
             ...(process.platform === 'darwin' ? ([{ role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }] as MenuItemConstructorOptions[]) : []),
