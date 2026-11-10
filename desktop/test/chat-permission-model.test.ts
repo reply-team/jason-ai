@@ -258,6 +258,23 @@ test('a Glob pattern with a .. segment anywhere is refused, and one that begins 
     assert.deepEqual(judge('Glob', { pattern: '**/x..y.md' }, mac()), { verdict: 'allow' });
 });
 
+test('a Glob pattern whose brace group holds a slash, a backslash, a colon or a ~ is refused, with word to name the folder as the path', () => {
+    for (const pattern of ['{C:/Users/someone,x}/**/*.json', '{x,/Users/someone}/**/*', 'src/{a,b\\c}/*.md', '{x,~}/*', '{a,{b,C:x}}/*',
+        'src/**/*.{md,~}']) {
+        for (const scope of [windows(), mac()]) {
+            const judged = judge('Glob', { pattern }, scope);
+            assert.ok(judged.verdict === 'deny' && /folder as the path/.test(judged.message), `${scope.platform} ${pattern}`);
+        }
+    }
+    // A brace group of names alone is judged as before.
+    for (const pattern of ['src/**/*.{ts,tsx}', '{a,b}/*.md']) {
+        assert.deepEqual(judge('Glob', { pattern }, windows()), { verdict: 'allow' }, pattern);
+        assert.deepEqual(judge('Glob', { pattern }, mac()), { verdict: 'allow' }, pattern);
+    }
+    const outside = judge('Glob', { pattern: '{a,b}/*.md', path: '/Users/someone/Documents' }, mac());
+    assert.ok(outside.verdict === 'ask' && outside.remember === 'glob:/users/someone/documents', JSON.stringify(outside));
+});
+
 test('the chat\'s own permission tool is refused by name: the agent never answers its own cards', () => {
     for (const tool of ['mcp__jason_desktop__decide', 'mcp__jason_desktop__other']) {
         assert.equal(judge(tool, { tool_name: 'Bash', input: { command: 'jason runtime stop' } }, mac()).verdict, 'deny', tool);

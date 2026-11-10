@@ -64,6 +64,7 @@ const dataRefusal = 'That path is the installation\'s own data, outside the chat
 const deviceRefusal = 'That path names a device or a volume, not a file in a folder: the chat neither reads nor writes it. Nothing was done.';
 const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat never writes there. Nothing was done.';
 const climbRefusal = 'That pattern climbs out of its folder with ..: the chat does not take it. Name the folder as the path instead. Nothing was done.';
+const braceRefusal = 'That pattern has a brace group that can name another folder: the chat does not take it. Name the folder as the path instead. Nothing was done.';
 const ownToolRefusal = 'That tool answers the chat\'s own permission requests: only the person answers them. Nothing was done.';
 const searchRefusal = 'That folder holds the installation\'s own data, so a search or a listing of it would walk that data: the chat does not take it. Name a narrower folder, one that does not hold the data directory. Nothing was done.';
 const lengthRefusal = 'That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
@@ -220,6 +221,9 @@ function judgeGlob(input: Record<string, unknown>, scope: ChatScope): Judgement 
     const pattern = typeof input['pattern'] === 'string' ? input['pattern'] : '';
     // A .. anywhere, a brace's alternative included, climbs where the fixed leading folders do not show.
     if (pattern.split(/[\\/{},]/).includes('..')) return { verdict: 'deny', message: climbRefusal };
+    // A brace group that can name a place reaches where the fixed leading folders do not show, whether or not the host
+    // expands it.
+    if (/\{[^{}]*[\\/:~][^{}]*\}/.test(pattern)) return { verdict: 'deny', message: braceRefusal };
     const parts = pattern.split(/[\\/]/);
     const fixed: string[] = [];
     for (const part of parts) {
