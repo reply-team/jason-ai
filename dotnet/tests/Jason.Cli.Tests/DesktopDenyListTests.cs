@@ -198,22 +198,41 @@ public class DesktopDenyListTests
     }
 
     /// <summary>
-    /// The operations section names what each denied verb of a person's own word, and of the chat's own word, calls, and
-    /// what the runtime's stop, drain and resume, the plugin reload and the journal's follow call: a program other than
-    /// <c>jason</c> reaching one of them is refused as the verb is.
+    /// The operations section names, by construction, every operation a denied verb posts that no allowed verb posts: each
+    /// verb that reaches the runtime is run against a recording handler, a person's own word with an actor named, and what
+    /// the denied ones post, less what the others post, is in the file, with the journal's stream and the runtime's stop,
+    /// drain and resume, which the verbs that are not run call, so that a command naming one is refused by the desktop.
     /// </summary>
     [Fact]
-    public void The_deny_list_names_the_operations_its_verbs_call()
+    public async Task The_deny_list_names_every_operation_a_denied_verb_posts_and_no_allowed_verb_posts()
     {
-        var listed = DeniedOperations();
-        var called = DefaultActorTests.TheEleven.Select(DefaultActorTests.VerbOf)
-            .Concat(TheChatsOwnWord)
-            .Select(verb => verb.Replace(' ', '.').Replace('-', '_'))
-            .Concat([Operations.SystemShutdown, Operations.SystemDrain, Operations.SystemResume, Operations.PluginReload, Streams.Journal]);
+        var denied = DenyList();
+        var fromDenied = new HashSet<string>(StringComparer.Ordinal);
+        var fromAllowed = new HashSet<string>(StringComparer.Ordinal);
 
-        var missing = called.Where(operation => !listed.Contains(operation)).ToList();
+        foreach (var args in DefaultActorTests.Runs)
+        {
+            var run = await DefaultActorTests.RunEachAsync(args);
+            Assert.True(run.Requests.Count > 0, $"'jason {DefaultActorTests.VerbOf(args)}' sent nothing: exit {run.Exit}, saying:{Environment.NewLine}{run.Error}");
+            var verb = DefaultActorTests.VerbOf(args);
+            (denied.Any(entry => Covers(entry, verb)) ? fromDenied : fromAllowed).UnionWith(run.Requests.Select(request => request.Operation));
+        }
 
-        Assert.Empty(missing);
+        foreach (var args in DefaultActorTests.TheEleven)
+        {
+            var run = await DefaultActorTests.RunEachAsync(["--actor", "human:ada", .. args]);
+            Assert.True(run.Requests.Count > 0, $"'jason {DefaultActorTests.VerbOf(args)}' sent nothing: exit {run.Exit}, saying:{Environment.NewLine}{run.Error}");
+            fromDenied.UnionWith(run.Requests.Select(request => request.Operation));
+        }
+
+        // status and doctor, which the agent keeps and which are not run here, ask the runtime's own report too.
+        fromAllowed.Add(Operations.SystemInfo);
+        var expected = fromDenied.Except(fromAllowed)
+            .Concat([Streams.Journal, Operations.SystemShutdown, Operations.SystemDrain, Operations.SystemResume]);
+
+        var missing = expected.Where(operation => !DeniedOperations().Contains(operation)).Distinct().Order(StringComparer.Ordinal).ToList();
+
+        Assert.True(missing.Count == 0, $"The deny list's operations lack: {string.Join(", ", missing)}");
     }
 
     /// <summary>The file's command lines: an operation line is told by its dot.</summary>

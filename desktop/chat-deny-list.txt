@@ -61,3 +61,12 @@ route.set
 route.unset
 role.set_profile
 role.add
+profile.create
+profile.update
+profile.get
+profile.list
+profile.disable
+profile.enable
+ui.open
+ui.tokens
+ui.revoke

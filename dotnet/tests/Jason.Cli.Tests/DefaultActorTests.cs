@@ -269,7 +269,7 @@ public class DefaultActorTests
     ];
 
     /// <summary>One invocation of every other verb that reaches the runtime.</summary>
-    private static readonly string[][] Runs =
+    internal static readonly string[][] Runs =
     [
         ["runtime", "status"],
         ["campaign", "create", "--name", "Spring outreach"],
@@ -419,7 +419,7 @@ public class DefaultActorTests
             .ToHashSet(StringComparer.Ordinal);
     }
 
-    private static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(string[] args)
+    internal static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(string[] args)
     {
         using var paths = new TempPaths();
         paths.WriteDescriptor(Live);
