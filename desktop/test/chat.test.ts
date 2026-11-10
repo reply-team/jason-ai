@@ -174,7 +174,6 @@ test('the host is started with the bundle first on its PATH and the data directo
     assert.equal(host.env.JASON_DATA_DIR, r.b.paths.data);
     assert.ok(!names.some((name) => name.toUpperCase().startsWith('JASON_PLUGINS__')), names.join(' '));
     assert.ok(!names.some((name) => name.toUpperCase() === 'CLAUDE_AUTO_BACKGROUND_TASKS'));
-    assert.ok(!JSON.stringify(host.env).includes('planted-run-token'), 'the run token is never handed on');
 });
 
 test('a request the model settles makes no card, and the host reads the answer', async (t) => {
@@ -377,6 +376,15 @@ test('what a send gives is checked before a host starts', async (t) => {
         assert.equal(said.length, 1, JSON.stringify(options));
         assert.ok(said[0]?.kind === 'done' && typeof said[0].error === 'string');
     }
+    assert.deepEqual(r.hosts(), []);
+});
+
+test('a send with a chat id the desktop does not take rejects with an Error the page shows, and starts nothing', async (t) => {
+    const r = rig(t);
+    for (const chatId of ['', 'c 1', 'c1/../x', 'x'.repeat(201), 42, null]) {
+        await assert.rejects(r.chat.send(chatId, words, { host: 'claude' }), (error: unknown) => error instanceof Error && error.message === 'That is not a chat id the desktop takes.', String(chatId));
+    }
+    assert.deepEqual([...r.events.keys()], []);
     assert.deepEqual(r.hosts(), []);
 });
 

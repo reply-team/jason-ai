@@ -158,10 +158,11 @@ export class Chat {
 
     /**
      * Starts a turn. It resolves once the host has started, or once the send was refused; a refusal, like every end, is
-     * a `done` with an error in plain words, and nothing was started.
+     * a `done` with an error in plain words, and nothing was started. A chat id the desktop does not take has no chat to
+     * say `done` to, so that send rejects with an Error the page shows.
      */
     async send(chatId: unknown, text: unknown, options: unknown): Promise<void> {
-        if (typeof chatId !== 'string' || !chatIdShape.test(chatId)) return;
+        if (typeof chatId !== 'string' || !chatIdShape.test(chatId)) throw new Error('That is not a chat id the desktop takes.');
         const refuse = (error: string) => this.#options.emit(chatId, { kind: 'done', error });
         if (this.#running.has(chatId)) return refuse(busy);
         if (typeof text !== 'string' || text.trim() === '') return refuse('There is nothing to send.');

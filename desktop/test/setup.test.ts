@@ -263,7 +263,7 @@ function settingsLeaves(b: Bench): Map<string, string> {
 
 const replyLeftovers = () => readdirSync(tmpdir()).filter((name) => name.startsWith('jason-reply-skills-')).length;
 
-test('each act of the Connect cards and a chat turn writes under <data> what it names and nothing else, and nothing outside <data>', async (t) => {
+test('each act of the Connect cards and a chat turn writes under <data> what it names and nothing else, and nothing else under the bench\'s root', async (t) => {
     const b = bench(t, { programs: ['reply', 'npm', 'claude'] });
     writeInstallationSettings(b, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Harness: { Root: 'kept' } });
     // The bench's root holds the data directory, the stubs' PATH and Node, and the stubs' own record of what they ran.
