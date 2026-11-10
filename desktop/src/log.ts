@@ -39,6 +39,10 @@ export const templates = {
     // The desk: the tray, its notifications.
     tray_state: 'The tray shows the state {State}',
     attention_notified: 'A notification said that {Approvals} approvals and {Questions} questions wait on the person',
+    // The restart re-pair.
+    runtime_gone: 'The run file names no runtime; the window waits for one',
+    window_repaired: 'The runtime moved from {From} to {Origin}; the window was paired again and reloaded',
+    repair_failed: 'Pairing the window again at {Origin} failed: jason ui open exited {Exit}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

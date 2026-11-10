@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
+import { Repairer } from './repair.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
@@ -165,7 +166,8 @@ async function run(): Promise<void> {
     let settings: DesktopSettings = readSettings(paths.settings);
     const jason = cliAt(join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason'), env);
     const cli = loggedCli(jason, log);
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => current?.webContents.reload() });
+    const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)) });
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload() });
     desk.open();
     let runtimeVersion: string | null = null;
     registerSetup(
@@ -207,6 +209,8 @@ async function run(): Promise<void> {
         await window.loadURL(started.link);
         log.info('window_loaded', { Origin: started.origin });
         desk.watch();
+        repairer.pairedWith(readText(paths.runFile));
+        repairer.start();
     } catch (error) {
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
