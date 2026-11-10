@@ -1,6 +1,7 @@
 import type { JournalEntry } from '../api/types';
 import type { DesktopChatEvent, DesktopCommand, DesktopSetup, JasonDesktop } from '../platform/desktop';
 import { JournalStream, type StreamSocket } from '../platform/journal-stream';
+import { fixtures } from './fixtures';
 
 // A stand-in for Jason Desktop's seam, and for the journal stream, as the console's screen tests want them: every call
 // recorded, every event the test's to send.
@@ -191,23 +192,11 @@ export function stubStream(): StubStream {
     };
 }
 
+/**
+ * A line as the stream sends it, which is an entry of `journal.list`: a recorded one, with only the fields a row needs
+ * changed.
+ */
 export const journalLine = (fields: Partial<JournalEntry>): JournalEntry => ({
-    id: 'jrn_1',
-    ts: new Date().toISOString(),
-    actor: { type: 'agent', id: 'manager' },
-    kind: 'contact_added',
-    key: null,
-    old: null,
-    new: null,
-    reason: null,
-    campaign_id: 'cmp_1',
-    work_item_id: null,
-    contact_id: 'cnt_1',
-    campaign_name: 'Spring',
-    contact_name: 'A Person',
-    work_item_kind: null,
-    work_item_role: null,
-    work_item_operation: null,
-    actor_role: null,
+    ...fixtures['journal.list/oli'].response.items[0]!,
     ...fields,
 });

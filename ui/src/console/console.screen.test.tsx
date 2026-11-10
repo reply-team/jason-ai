@@ -5,12 +5,15 @@ import type { DesktopCommand } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { registry } from '../platform/slots';
 import { browserPlugins } from '../plugins';
-import { parseRoute, route } from '../router';
-import * as attention from '../screens/attention/store';
-import * as campaignStore from '../screens/campaigns/store';
+import { navigate, parseRoute, route } from '../router';
+import * as classicAttention from '../screens/attention/store';
+import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
-import { commandTarget, Console } from './console';
+import { fixtures } from '../test/fixtures';
+import * as consoleCampaigns from './campaigns';
+import { commandTarget, Console, reloadDelay } from './console';
+import { attention } from './needs';
 import { chats, lines, setupBusy } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
@@ -51,7 +54,14 @@ beforeEach(() => {
     lines.value = [];
     attention.loaded.value = false;
     attention.detail.value = null;
+    attention.approvals.value = [];
+    attention.questions.value = [];
+    consoleCampaigns.campaigns.value = [];
+    consoleCampaigns.read.value = false;
+    classicCampaigns.shown.value = null;
 });
+
+const asked = (fake: FakeApi, operation: string) => fake.calls.filter((each) => each.operation === operation).length;
 
 afterEach(() => {
     delete (window as { hit?: number }).hit;
@@ -132,7 +142,7 @@ describe('the console', () => {
         await waitFor(() => within(panel('Campaigns')).getByText('Spring'));
         // A person may name a campaign anything; the next read brings that name back.
         flush(() => {
-            campaignStore.campaigns.value = campaignStore.campaigns.value.map((each) =>
+            consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.map((each) =>
                 each.id === 'cmp_1' ? { ...each, name: hostile } : each,
             );
         });
@@ -426,5 +436,96 @@ describe('the console', () => {
             ['telegram', { token: '123:abc', target: '-1001' }],
             ['telegram', { token: '123:abc', target: '-1001' }],
         ]);
+    });
+
+    it('draws a hostile question and a hostile contact name in Needs you as text', async () => {
+        renderConsole(pending(new FakeApi()));
+        await waitFor(() => expect(attention.loaded.value).toBe(true));
+        // A prospect may be called anything, and an agent may ask anything; the next read brings it back.
+        flush(() => {
+            attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: hostile }));
+            attention.questions.value = attention.questions.value.map((each) => ({ ...each, question: hostile }));
+        });
+        const needs = panel('Needs you');
+        await waitFor(() => expect(within(needs).getAllByText(hostile).length).toBeGreaterThanOrEqual(2));
+        expect(needs.querySelector('img')).toBeNull();
+        expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
+    it('reads what waits and the campaigns again once, a moment after journal lines arrive', async () => {
+        const fake = pending(new FakeApi());
+        const { journal } = renderConsole(fake);
+        await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+        await waitFor(() => expect(attention.loaded.value).toBe(true));
+        const approvals = asked(fake, 'approval.list');
+        const listed = asked(fake, 'campaign.list');
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_101' }));
+            journal.send(journalLine({ id: 'jrn_102' }));
+            journal.send(journalLine({ id: 'jrn_103' }));
+        });
+        expect(asked(fake, 'approval.list')).toBe(approvals);
+        await waitFor(() => expect(asked(fake, 'campaign.list')).toBe(listed + 1));
+        expect(asked(fake, 'approval.list')).toBe(approvals + 1);
+        await new Promise((resolve) => setTimeout(resolve, 2 * reloadDelay));
+        expect(asked(fake, 'approval.list')).toBe(approvals + 1);
+        expect(asked(fake, 'campaign.list')).toBe(listed + 1);
+    });
+
+    it('keeps the Campaigns page in the page panel at its own table while a journal line re-reads the panel', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-16T09:00:00Z'));
+        try {
+            const fake = pending(new FakeApi()).answer('campaign.activity', 'campaign.activity/last-7-days');
+            const { journal } = renderConsole(fake);
+            await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+            show('Settings');
+            flush(() => navigate(parseRoute('#/campaigns?view=activity')));
+            const week = classicCampaigns.keyOf({ view: 'activity', period: '7d', filters: {} });
+            await waitFor(() => expect(classicCampaigns.shown.value).toBe(week));
+            const page = classicCampaigns.campaigns.value;
+            const counted = classicCampaigns.activity.value;
+            const listed = asked(fake, 'campaign.list');
+            flush(() => {
+                journal.open();
+                journal.send(journalLine({ id: 'jrn_201' }));
+            });
+            await waitFor(() => expect(asked(fake, 'campaign.summary')).toBe(2));
+            expect(asked(fake, 'campaign.list')).toBe(listed + 1);
+            expect(classicCampaigns.shown.value).toBe(week);
+            expect(classicCampaigns.campaigns.value).toBe(page);
+            expect(classicCampaigns.activity.value).toBe(counted);
+            expect(consoleCampaigns.campaigns.value.length).toBeGreaterThan(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('keeps the Attention page at its decided lists while a journal line re-reads Needs you', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/pending', 'approval.list/decided')
+            .answer('decision.list', 'decision.list/pending', 'decision.list/decided')
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all');
+        const { journal } = renderConsole(fake);
+        await waitFor(() => expect(attention.loaded.value).toBe(true));
+        const pendingIds = attention.approvals.value.map((each) => each.id);
+        show('Settings');
+        flush(() => navigate(parseRoute('#/attention?decided=1')));
+        const decided = fixtures['approval.list/decided'].response.items.map((each) => each.id);
+        await waitFor(() => expect(classicAttention.approvals.value.map((each) => each.id)).toEqual(decided));
+        const page = classicAttention.approvals.value;
+        const questions = classicAttention.questions.value;
+        const approvals = asked(fake, 'approval.list');
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_301' }));
+        });
+        await waitFor(() => expect(asked(fake, 'approval.list')).toBe(approvals + 1));
+        await waitFor(() => expect(asked(fake, 'campaign.summary')).toBe(2));
+        expect(classicAttention.approvals.value).toBe(page);
+        expect(classicAttention.questions.value).toBe(questions);
+        expect(attention.approvals.value.map((each) => each.id)).toEqual(pendingIds);
     });
 });

@@ -1,11 +1,15 @@
-import * as attention from '../screens/attention/store';
+import { attentionStore } from '../screens/attention/store';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
 import { toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
 import { clock, here } from './state';
 
-// Needs you: the approvals and the questions waiting on a person, read and decided through the same store as the
-// browser's Attention screen, so both say what the runtime says.
+// Needs you: the approvals and the questions waiting on a person, read and decided the way the browser's Attention
+// screen reads and decides them, in a holder of the panel's own: the page panel can show that screen beside this one,
+// and neither replaces the other's list.
+
+/** The panel's own approvals and questions. */
+export const attention = attentionStore();
 
 /** What the person typed into a field of the panel, kept while the panel is painted again around it. */
 const typed = new Map<string, string>();
