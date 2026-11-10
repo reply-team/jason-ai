@@ -1,0 +1,41 @@
+{
+  "operation": "approval.list",
+  "case": "messages-pending",
+  "request": {},
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "apr_1",
+        "work_item_id": "wi_1",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-1",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte"
+      },
+      {
+        "id": "apr_2",
+        "work_item_id": "wi_2",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-2",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Noor Haddad"
+      }
+    ],
+    "next_cursor": null
+  }
+}
