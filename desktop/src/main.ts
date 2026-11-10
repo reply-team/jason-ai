@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliAt } from './cli.ts';
+import { Desk } from './desk.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
@@ -146,13 +147,26 @@ async function run(): Promise<void> {
         current = null;
     });
     window.setMenuBarVisibility(false);
+    // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it.
+    let quitting = false;
+    app.on('before-quit', () => {
+        quitting = true;
+    });
+    window.on('close', (event) => {
+        if (quitting) return;
+        event.preventDefault();
+        window.hide();
+    });
 
     // The origin is read from the run file on every check, because the runtime may come back on another port.
     const origin = () => runtimeOrigin(readText(paths.runFile) ?? '');
     lockNavigation(window.webContents, origin, log);
 
     let settings: DesktopSettings = readSettings(paths.settings);
-    const cli = loggedCli(cliAt(join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason'), env), log);
+    const jason = cliAt(join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason'), env);
+    const cli = loggedCli(jason, log);
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => current?.webContents.reload() });
+    desk.open();
     let runtimeVersion: string | null = null;
     registerSetup(
         new Setup({
@@ -192,6 +206,7 @@ async function run(): Promise<void> {
         runtimeVersion = started.runtimeVersion;
         await window.loadURL(started.link);
         log.info('window_loaded', { Origin: started.origin });
+        desk.watch();
     } catch (error) {
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;

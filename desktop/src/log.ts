@@ -36,6 +36,9 @@ export const templates = {
     reply_connected: 'Reply sign-in by {Method} exited {Exit}',
     reply_wired: 'Jason’s Reply plugin was placed and granted reply; global default written {RouteWritten}; jason plugin reload exited {Exit}',
     program_installed: 'npm install of {Program} exited {Exit}',
+    // The desk: the tray, its notifications.
+    tray_state: 'The tray shows the state {State}',
+    attention_notified: 'A notification said that {Approvals} approvals and {Questions} questions wait on the person',
 } as const;
 
 export type TemplateName = keyof typeof templates;
