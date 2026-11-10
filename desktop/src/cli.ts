@@ -1,9 +1,12 @@
 import { execFile } from 'node:child_process';
+import { withoutSessionMarkers } from './session-markers.ts';
 
 /**
  * The jason executable the application carries, and the only way the desktop changes the installation: every verb it
  * runs is one a person could type. Started with a file and arguments, never through a shell, with the desktop's own
- * environment and nothing added to it, so the CLI finds the same data directory and harness root a terminal would.
+ * environment and nothing added to it, so the CLI finds the same data directory and harness root a terminal would; only
+ * a parent Claude Code session's markers are taken out (`sessionMarkers`), which would otherwise ride down through the
+ * runtime to its plugins.
  */
 
 export interface CliResult {
@@ -30,7 +33,7 @@ export function cliAt(file: string, env: Record<string, string>, prefix: readonl
                 const child = execFile(
                     file,
                     [...prefix, ...args],
-                    { env, timeout: options?.timeoutMs ?? defaultLimit, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8' },
+                    { env: withoutSessionMarkers(env), timeout: options?.timeoutMs ?? defaultLimit, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8' },
                     (error, stdout, stderr) => {
                         const code = (error as { code?: unknown } | null)?.code;
                         const exit = typeof code === 'number' ? code : error ? -1 : 0;

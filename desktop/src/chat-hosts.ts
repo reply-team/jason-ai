@@ -6,6 +6,7 @@ import { posix, win32 } from 'node:path';
 import { denyRules } from './chat-deny.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
 import type { Platform } from './chat-permission-model.ts';
+import { isSessionMarker } from './session-markers.ts';
 
 /**
  * What Claude Code runs without asking anyone, beside what its own rules already let run: the skills, web search and
@@ -118,31 +119,12 @@ export function dataRules(platform: Platform, data: string, dataEntries: readonl
 }
 
 /**
- * The markers a Claude Code session sets for the processes it starts, a closed list. A desktop started from inside such a
- * session would otherwise hand them to the host, which would then take itself for that session's child. The rest of
- * `CLAUDE_CODE_*` is a person's configuration (a cloud provider, the Git Bash path on Windows, a token) and is kept.
- */
-const sessionMarkers: ReadonlySet<string> = new Set([
-    'CLAUDECODE',
-    'CLAUDE_CODE_ENTRYPOINT',
-    'CLAUDE_CODE_SSE_PORT',
-    'CLAUDE_CODE_SESSION_ID',
-    'CLAUDE_CODE_CHILD_SESSION',
-    'CLAUDE_CODE_BRIDGE_SESSION_ID',
-    'CLAUDE_CODE_SESSION_ATTENDED',
-    'CLAUDE_CODE_MESSAGING_SOCKET',
-    'CLAUDE_CODE_MESSAGING_TOKEN',
-    'CLAUDE_CODE_EXECPATH',
-    'CLAUDE_PID',
-]);
-
-/**
  * The variables a host never inherits from the desktop: a plugin's configuration, backgrounding of tool calls, and a
- * parent Claude Code session's markers.
+ * parent Claude Code session's markers (`sessionMarkers`).
  */
 function withheld(name: string): boolean {
     const upper = name.toUpperCase();
-    return upper.startsWith('JASON_PLUGINS__') || upper === 'CLAUDE_AUTO_BACKGROUND_TASKS' || sessionMarkers.has(upper);
+    return upper.startsWith('JASON_PLUGINS__') || upper === 'CLAUDE_AUTO_BACKGROUND_TASKS' || isSessionMarker(name);
 }
 
 /**

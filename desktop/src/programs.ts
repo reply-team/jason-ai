@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import { findOnPath, launchOf, type Launch } from './program-path.ts';
+import { withoutSessionMarkers } from './session-markers.ts';
 
 /**
  * The programs a Connect card may start, and nothing else: the agent hosts the chat or a role can run on, the Reply CLI,
@@ -104,10 +105,13 @@ export function programLaunch(env: Readonly<Record<string, string | undefined>>,
     return launchOf(found, process.platform, readText, findOnPath('node', lookup), isFile);
 }
 
-/** The programs on a PATH. The environment is the desktop's own with that PATH; nothing is added to it. */
+/**
+ * The programs on a PATH. The environment is the desktop's own with that PATH, less a parent Claude Code session's
+ * markers (`sessionMarkers`); nothing is added to it.
+ */
 export function programsOn(env: Readonly<Record<string, string | undefined>>): Programs {
     const path = pathOf(env);
-    const childEnv = withPath(env, path);
+    const childEnv = withPath(withoutSessionMarkers(env), path);
     const lookup = { platform: process.platform, path, pathext: env.PATHEXT ?? env.PathExt, isProgram };
     const find = (name: ProgramName) => findOnPath(name, lookup);
     return {
