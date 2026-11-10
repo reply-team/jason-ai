@@ -1,0 +1,21 @@
+{
+  "operation": "suppression.list",
+  "case": "person-linkedin-listed",
+  "request": {
+    "channel": "linkedin",
+    "value": "https://www.linkedin.com/in/ingrid-solberg-example"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "sup_1",
+        "channel": "linkedin",
+        "value": "https://www.linkedin.com/in/ingrid-solberg-example",
+        "reason": null,
+        "created_at": "2026-10-16T09:00:00.000Z"
+      }
+    ],
+    "next_cursor": null
+  }
+}

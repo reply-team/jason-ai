@@ -10,15 +10,19 @@ import { Tabs } from '../../layout/tabs';
 type Props = {
     person: Contact;
     tab: PersonTab;
-    /** Where each tab of this person is, on the screen the card is shown on. */
-    to: (tab: PersonTab) => Route;
+    /** Where each tab of this person is, on the screen the card is shown on; without it a tab is picked in place. */
+    to?: ((tab: PersonTab) => Route) | undefined;
+    /** The tab picked, for a card whose tabs have no address. */
+    onTab?: (tab: PersonTab) => void;
     now: Date;
     zone: string;
     onAdd: () => void;
     onClose: () => void;
+    /** The tabs to draw and their names; without them, Timeline, Details and Threads where a provider knows the person. */
+    tabs?: readonly { key: PersonTab; label: string }[];
 };
 
-const tabNames: Record<PersonTab, string> = { timeline: 'Timeline', threads: 'Threads', details: 'Details' };
+const tabNames = { timeline: 'Timeline', threads: 'Threads', details: 'Details' } as const;
 
 function initials(person: Contact): string {
     const first = person.first_name?.trim().charAt(0) ?? '';
@@ -38,9 +42,10 @@ function sub(person: Contact, now: Date): string {
 }
 
 /** Who the person is and the campaigns they are on, what can be done, and the tabs: laid out as Work items' panel is. */
-export function PersonCard({ person, tab, to, now, zone, onAdd, onClose }: Props) {
+export function PersonCard({ person, tab, to, onTab, now, zone, onAdd, onClose, tabs }: Props) {
     const { name, noFirstName } = displayName(person);
-    const tabs: PersonTab[] = linked(person) ? ['timeline', 'details', 'threads'] : ['timeline', 'details'];
+    const keys = linked(person) ? (['timeline', 'details', 'threads'] as const) : (['timeline', 'details'] as const);
+    const shown = tabs ?? keys.map((key) => ({ key, label: tabNames[key] }));
     const campaigns = [...(person.campaigns ?? [])].sort(
         (a, b) => Number(a.state === 'excluded') - Number(b.state === 'excluded'),
     );
@@ -83,7 +88,24 @@ export function PersonCard({ person, tab, to, now, zone, onAdd, onClose }: Props
                     Add to campaign
                 </button>
             </ActionsRow>
-            <Tabs tabs={tabs.map((each) => ({ key: each, label: tabNames[each] }))} active={tab} to={to} />
+            {to ? (
+                <Tabs tabs={shown} active={tab} to={to} />
+            ) : (
+                <div className="tabs" role="tablist">
+                    {shown.map((each) => (
+                        <button
+                            key={each.key}
+                            type="button"
+                            role="tab"
+                            aria-selected={tab === each.key}
+                            className={tab === each.key ? 'active' : ''}
+                            onClick={() => onTab?.(each.key)}
+                        >
+                            {each.label}
+                        </button>
+                    ))}
+                </div>
+            )}
         </>
     );
 }

@@ -44,6 +44,9 @@ describe('parseRoute', () => {
             { screen: 'people', id: 'cnt_7', tab: 'details', filters: { q: 'ada', campaign: 'cmp_1', archived: true } },
         ],
         ['#/people/cnt_7/threads', { screen: 'people', id: 'cnt_7', tab: 'threads', filters: {} }],
+        ['#/people/cnt_7/sequences', { screen: 'people', id: 'cnt_7', tab: 'sequences', filters: {} }],
+        ['#/people/cnt_7/next', { screen: 'people', id: 'cnt_7', tab: 'next', filters: {} }],
+        ['#/people/cnt_7/research', { screen: 'people', id: 'cnt_7', tab: 'research', filters: {} }],
         ['#/people/cnt_7/elsewhere?archived=yes&x=1', { screen: 'people', id: 'cnt_7', tab: 'timeline', filters: {} }],
         ['#/people/%E0%A4%A/details', { screen: 'people', tab: 'timeline', filters: {} }],
         ['#/campaigns', { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} }],
@@ -142,6 +145,11 @@ describe('parseRoute', () => {
                 from: '2026-10-13T00:00:00.000Z',
                 to: '2026-10-14T00:00:00.000Z',
             },
+        ],
+        // Performance's panel has three of the person's tabs; another name is its first.
+        [
+            '#/performance/cnt_1/sequences',
+            { screen: 'performance', id: 'cnt_1', tab: 'timeline', period: '7d', campaigns: [] },
         ],
         [
             '#/performance?count=nope&from=2026-10-13T00:00:00.000Z',

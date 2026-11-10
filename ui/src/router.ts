@@ -12,7 +12,9 @@ export type WorkItemFilters = {
     failed?: boolean;
 };
 
-export type PersonTab = 'timeline' | 'threads' | 'details';
+export type PersonTab = 'timeline' | 'threads' | 'details' | 'sequences' | 'next' | 'research';
+/** The tabs a person's address on People can name; Performance's panel names the first three only. */
+const personTabs: readonly PersonTab[] = ['details', 'threads', 'sequences', 'next', 'research'];
 export type PeopleFilters = {
     /** The search typed into the list: a name, a company, a title or part of a channel value. */
     q?: string;
@@ -121,7 +123,7 @@ function people(segments: string[], query: string): Route {
     if (campaign) filters.campaign = campaign;
     if (params.get('archived') === '1') filters.archived = true;
     if (id === null) return { screen: 'people', tab: 'timeline', filters };
-    const tab = segments[1] === 'details' || segments[1] === 'threads' ? segments[1] : 'timeline';
+    const tab = personTabs.find((each) => each === segments[1]) ?? 'timeline';
     return { screen: 'people', id, tab, filters };
 }
 

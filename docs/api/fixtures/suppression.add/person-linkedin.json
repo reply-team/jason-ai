@@ -1,0 +1,20 @@
+{
+  "operation": "suppression.add",
+  "case": "person-linkedin",
+  "request": {
+    "channel": "linkedin",
+    "value": "https://www.linkedin.com/in/ingrid-solberg-example",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": "sup_1",
+    "channel": "linkedin",
+    "value": "https://www.linkedin.com/in/ingrid-solberg-example",
+    "reason": null,
+    "created_at": "2026-10-16T09:00:00.000Z"
+  }
+}

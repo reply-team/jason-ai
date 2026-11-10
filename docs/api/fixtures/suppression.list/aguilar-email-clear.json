@@ -1,0 +1,13 @@
+{
+  "operation": "suppression.list",
+  "case": "aguilar-email-clear",
+  "request": {
+    "channel": "email",
+    "value": "aguilar@andina.example"
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}
