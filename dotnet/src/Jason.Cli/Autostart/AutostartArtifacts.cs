@@ -93,12 +93,19 @@ public static class AutostartArtifacts
     /// is not what it compares. The other two platforms do not need it, because a file under an account's own
     /// home directory says whose it is by being there.
     /// </param>
+    /// <param name="searchPath">
+    /// The search path of the process that registers, which a LaunchAgent carries: launchd starts an agent on a search
+    /// path of its own, <c>/usr/bin:/bin:/usr/sbin:/sbin</c>, which holds no program a package manager installed. Null or
+    /// empty, the agent carries none. The other two platforms ignore it: a logon task starts with the account's own
+    /// environment, and a user unit's is the user manager's.
+    /// </param>
     public static AutostartRegistration Compose(
         AutostartPlatform platform,
         IReadOnlyList<string> run,
         string dataDirectory,
         string home,
-        string account)
+        string account,
+        string? searchPath = null)
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
@@ -112,7 +119,7 @@ public static class AutostartArtifacts
         return platform switch
         {
             AutostartPlatform.Windows => Windows(line, dataDirectory, account),
-            AutostartPlatform.MacOs => MacOs(line, home),
+            AutostartPlatform.MacOs => MacOs(line, home, string.IsNullOrEmpty(searchPath) ? null : searchPath),
             AutostartPlatform.Linux => Linux(line, home),
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "There is nothing to compose for a platform that cannot register anything."),
         };
@@ -172,6 +179,13 @@ public static class AutostartArtifacts
             AutostartPlatform.Linux => FromUnit(artifact),
             _ => [],
         };
+    }
+
+    /// <summary>The search path a registration carries, read back out of the document a machine holds; null where it carries none.</summary>
+    public static string? SearchPathIn(AutostartPlatform platform, string artifact)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        return platform == AutostartPlatform.MacOs ? PathFromPlist(artifact) : null;
     }
 
     /// <summary>What gets registered, whatever the platform: this program, told to be the runtime.</summary>
@@ -267,12 +281,18 @@ public static class AutostartArtifacts
 
     /// <summary>
     /// A LaunchAgent, which launchd loads at login and starts once. <c>RunAtLoad</c> and no <c>KeepAlive</c>:
-    /// this is registration, not supervision, and a runtime that a person stops must stay stopped.
+    /// this is registration, not supervision, and a runtime that a person stops must stay stopped. Given a search path,
+    /// it carries it as the runtime's <c>PATH</c>, escaped as the arguments are; given none, it has no environment key.
     /// </summary>
-    private static AutostartRegistration MacOs(IReadOnlyList<string> line, string home)
+    private static AutostartRegistration MacOs(IReadOnlyList<string> line, string home, string? searchPath)
     {
         var plistPath = ArtifactPath(AutostartPlatform.MacOs, home, string.Empty);
         var arguments = string.Join("\n", line.Select(word => $"      <string>{Xml(word)}</string>"));
+        var environment = searchPath is null
+            ? string.Empty
+            : "\n    <key>EnvironmentVariables</key>\n    <dict>\n      <key>PATH</key>\n      <string>"
+                + Xml(searchPath)
+                + "</string>\n    </dict>";
         var plist = $"""
             <?xml version="1.0" encoding="UTF-8"?>
             <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -283,7 +303,7 @@ public static class AutostartArtifacts
                 <key>ProgramArguments</key>
                 <array>
             {arguments}
-                </array>
+                </array>{environment}
                 <key>RunAtLoad</key>
                 <true/>
               </dict>
@@ -298,7 +318,8 @@ public static class AutostartArtifacts
             [["launchctl", "load", "-w", plistPath]],
             [["launchctl", "unload", "-w", plistPath]],
             QueryFor(AutostartPlatform.MacOs, string.Empty),
-            line);
+            line,
+            searchPath);
     }
 
     /// <summary>
@@ -432,13 +453,29 @@ public static class AutostartArtifacts
     /// </summary>
     private static IReadOnlyList<string> FromPlist(string artifact)
     {
-        var settings = new System.Xml.XmlReaderSettings { DtdProcessing = System.Xml.DtdProcessing.Ignore, XmlResolver = null };
-        using var reader = System.Xml.XmlReader.Create(new StringReader(artifact), settings);
-        var plist = XDocument.Load(reader);
-
-        var keys = plist.Descendants("key").ToList();
+        var keys = Plist(artifact).Descendants("key").ToList();
         var arguments = keys.FirstOrDefault(key => key.Value == "ProgramArguments")?.ElementsAfterSelf().FirstOrDefault();
         return arguments is null ? [] : [.. arguments.Elements("string").Select(word => word.Value)];
+    }
+
+    /// <summary>The <c>PATH</c> under the plist's <c>EnvironmentVariables</c>, or null where it names none.</summary>
+    private static string? PathFromPlist(string artifact)
+    {
+        var environment = Plist(artifact).Root?.Element("dict")?.Elements("key")
+            .FirstOrDefault(key => key.Value == "EnvironmentVariables")?.ElementsAfterSelf().FirstOrDefault();
+        var path = environment?.Elements("key").FirstOrDefault(key => key.Value == "PATH")?.ElementsAfterSelf().FirstOrDefault();
+        return path?.Name == "string" && path.Value.Length > 0 ? path.Value : null;
+    }
+
+    /// <summary>
+    /// A plist, read with the parser rather than a search, and with its document type declaration ignored: that
+    /// declaration names a URL, and nothing in this product fetches one.
+    /// </summary>
+    private static XDocument Plist(string artifact)
+    {
+        var settings = new System.Xml.XmlReaderSettings { DtdProcessing = System.Xml.DtdProcessing.Ignore, XmlResolver = null };
+        using var reader = System.Xml.XmlReader.Create(new StringReader(artifact), settings);
+        return XDocument.Load(reader);
     }
 
     private static IReadOnlyList<string> FromUnit(string artifact)

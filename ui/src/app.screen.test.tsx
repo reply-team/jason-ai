@@ -12,7 +12,16 @@ describe('the shell', () => {
         renderApp(fake);
         await waitFor(() => expect(screen.getByRole('navigation')).toBeTruthy());
         const links = screen.getAllByRole('link').map((link) => link.textContent?.trim());
-        expect(links).toEqual(['Attention', 'Performance', 'Campaigns', 'Work items', 'People', 'System']);
+        expect(links).toEqual([
+            'Chat',
+            'Attention',
+            'Performance',
+            'Campaigns',
+            'Work items',
+            'People',
+            'System',
+            'Settings',
+        ]);
         await waitFor(() => expect(screen.getByText(/ada · Jason/)).toBeTruthy());
     });
 

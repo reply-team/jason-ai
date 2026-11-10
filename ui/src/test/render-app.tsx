@@ -1,6 +1,8 @@
 import { render } from '@testing-library/react';
 import { App } from '../app';
 import { session } from '../api/session';
+import { activatePlugins } from '../platform/plugin';
+import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { FakeApi, watch } from './fake-api';
 
@@ -12,6 +14,7 @@ export function renderApp(
     { paired = true, actorId = 'ada', tokenId = 'uit_1', apiVersion = 'v1' }: Options = {},
 ) {
     watch(fake);
+    activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
     route.value = { screen: 'attention' };

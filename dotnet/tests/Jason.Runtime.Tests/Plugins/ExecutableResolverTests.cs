@@ -62,6 +62,24 @@ public class ExecutableResolverTests
         Assert.Equal(ProblemCodes.ExecutableMissing, resolver.Resolve(new ExecutableRequest("provider-cli", null, null), 0).Problem!.Code);
     }
 
+    /// <summary>
+    /// A program that is not there is said with its repair, in the runtime's own words: no vendor's install command, which
+    /// the runtime does not know, and the one thing a person reading it is most likely missing, that a runtime started at
+    /// logon was handed a search path of its own.
+    /// </summary>
+    [Fact]
+    public void A_program_nobody_installed_is_said_with_its_repair()
+    {
+        using var programs = new TestPrograms();
+        var resolver = new ExecutableResolver(new TestSearchPath { Path = programs.Root });
+
+        var resolved = resolver.Resolve(new ExecutableRequest("not-installed-anywhere", null, null), 0);
+
+        Assert.Equal(
+            "'not-installed-anywhere' was not found on the runtime's search path. Install the program where the runtime can see it and run `jason plugin reload`; a runtime started at logon reads no shell profile.",
+            resolved.Problem!.Message);
+    }
+
     [Fact]
     public void The_search_path_is_walked_in_order()
     {
@@ -583,7 +601,10 @@ public class ExecutableResolverTests
         Assert.Null(resolved.Path);
         Assert.Equal(ProblemCodes.ExecutableMissing, resolved.Problem!.Code);
         // The file is named as the search path's walk spelled it, with PATHEXT's case, as every refusal here names it.
-        Assert.Equal("'vendor' resolves to 'vendor.cmd', npm's shim, whose executable is not there.", resolved.Problem.Message, ignoreCase: true);
+        Assert.Equal(
+            "'vendor' resolves to 'vendor.cmd', npm's shim, whose executable is not there. Install the program where the runtime can see it and run `jason plugin reload`; a runtime started at logon reads no shell profile.",
+            resolved.Problem.Message,
+            ignoreCase: true);
     }
 
     [Fact]

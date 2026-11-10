@@ -1,0 +1,172 @@
+// Pure: the runtime's answers and the desktop's, in the shape the console's panels draw. Nothing here is a view the
+// runtime knows of, and nothing here is markup: the panels escape what they draw.
+import type { ApprovalSummary, CampaignSummary, CampaignSummaryRow, DecisionSummary, JournalEntry } from '../api/types';
+import type { DesktopHost } from '../platform/desktop';
+
+export type Tone = 'green' | 'amber' | 'gray' | 'blue' | 'red' | 'violet' | 'teal';
+
+export function ageOf(moment: string | null | undefined, now: number): string {
+    if (!moment) return '';
+    const minutes = Math.floor((now - Date.parse(moment)) / 60_000);
+    if (!Number.isFinite(minutes) || minutes < 1) return 'now';
+    if (minutes < 60) return `${minutes} min`;
+    if (minutes < 60 * 24) return `${Math.floor(minutes / 60)} h`;
+    return `${Math.floor(minutes / (60 * 24))} d`;
+}
+
+const states: Readonly<Record<string, [string, Tone]>> = {
+    active: ['Active', 'green'],
+    paused: ['Paused', 'amber'],
+    archived: ['Archived', 'gray'],
+    draft: ['Draft', 'blue'],
+};
+
+export interface CampaignRow {
+    id: string;
+    name: string;
+    state: string;
+    tone: Tone;
+    people: number;
+    waiting: number;
+    failed: number;
+}
+
+export function toCampaignRow(campaign: CampaignSummary, counts: CampaignSummaryRow | undefined): CampaignRow {
+    const [state, tone] = states[campaign.status] ?? states['draft']!;
+    return {
+        id: campaign.id,
+        name: campaign.name,
+        state,
+        tone,
+        people: counts?.people ?? 0,
+        waiting: counts?.waiting ?? 0,
+        failed: counts?.failed ?? 0,
+    };
+}
+
+const operations: Readonly<Record<string, string>> = {
+    'message.send': 'Message',
+    'conversation.reply': 'Reply',
+    'social_invitation.send': 'LinkedIn invite',
+    'campaign.activate': 'Start sequence',
+    'campaign.enroll': 'Add to sequence',
+    'enrollment.stop': 'Stop sequence',
+};
+
+export const operationWords = (operation: string): string => operations[operation] ?? operation;
+
+export interface ApprovalRow {
+    id: string;
+    what: string;
+    who: string | null;
+    campaign: string;
+    via: string;
+    age: string;
+}
+
+export function toApprovalRow(row: ApprovalSummary, now: number): ApprovalRow {
+    return {
+        id: row.id,
+        what: operationWords(row.operation),
+        who: row.contact_name,
+        campaign: row.campaign_name,
+        via: row.plugin_id,
+        age: ageOf(row.requested_at, now),
+    };
+}
+
+export interface ApprovalDetail {
+    intent: string | null;
+    to: string | null;
+    subject: string | null;
+    body: string | null;
+    facts: string[];
+}
+
+const record = (value: unknown): Record<string, unknown> | null =>
+    value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
+
+const factNames: readonly [string, string][] = [
+    ['reach', 'Reach'],
+    ['reversibility', 'Reversibility'],
+    ['cost', 'Cost'],
+];
+
+/** What an approval's preview says the act would do: its intent, its recipient, its message and its properties. */
+export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDetail {
+    const message = record(record(preview['highlights'])?.['/args/message']);
+    const contact = record(preview['contact']);
+    const value = text(contact?.['value']);
+    const name = text(contact?.['name']);
+    const facts: string[] = [];
+    for (const [key, label] of factNames) {
+        const fact = record(preview[key]);
+        const shown = text(fact?.['value']);
+        if (!shown) continue;
+        const detail = text(fact?.['detail']);
+        facts.push(detail ? `${label}: ${shown} (${detail})` : `${label}: ${shown}`);
+    }
+    return {
+        intent: text(preview['intent']),
+        to: value ? (name ? `${name}, ${value}` : value) : null,
+        subject: text(message?.['subject']),
+        body: text(message?.['body']),
+        facts,
+    };
+}
+
+export interface QuestionRow {
+    id: string;
+    question: string;
+    campaign: string;
+    age: string;
+}
+
+export function toQuestionRow(row: DecisionSummary, now: number): QuestionRow {
+    return { id: row.id, question: row.question, campaign: row.campaign_name, age: ageOf(row.raised_at, now) };
+}
+
+export interface ActivityLine {
+    id: string;
+    age: string;
+    what: string;
+    campaign: string | null;
+    contact: string | null;
+    who: string;
+}
+
+const sentence = (kind: string): string => {
+    const words = kind.replace(/_/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+/** One line of the activity list: when, what, the campaign, the person and who wrote it. */
+export function toActivity(line: JournalEntry, now: number): ActivityLine {
+    return {
+        id: line.id,
+        age: ageOf(line.ts, now),
+        what: sentence(line.kind),
+        campaign: line.campaign_name,
+        contact: line.contact_name,
+        who: line.actor.id ?? line.actor.type,
+    };
+}
+
+/** The hosts the chat can run on, and the ones found that run campaign work but not the chat yet. */
+export function chatHosts(hosts: readonly DesktopHost[]): { drive: DesktopHost[]; other: DesktopHost[] } {
+    const found = hosts.filter((each) => each.found);
+    return { drive: found.filter((each) => each.drivesChat), other: found.filter((each) => !each.drivesChat) };
+}
+
+/** How a program found on this machine is signed in to: once, in a terminal, by its own command. */
+export function signInSentence(host: DesktopHost): string | null {
+    if (host.kind !== 'program' || !host.found) return null;
+    return `Sign in once by running \`${host.id}\` in a terminal; the chat uses that sign-in.`;
+}
+
+/** Whether a turn's error, in the host's own words, says the host is not signed in. */
+export const isSignInFailure = (error: string): boolean =>
+    /\b(not logged in|log ?in|sign(ed)? ?in|unauthori[sz]ed|authenticat\w*|api key|credentials?|401)\b|\/login/i.test(
+        error,
+    );

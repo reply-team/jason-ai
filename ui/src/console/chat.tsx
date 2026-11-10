@@ -1,0 +1,209 @@
+import { useCallback, useRef, type FormEvent, type KeyboardEvent } from 'react';
+import type { DesktopHost } from '../platform/desktop';
+import { act, define } from './actions';
+import { answered, lost, newChat, said, shown, failed, type Answer, type Chat } from './chat-model';
+import { html, type Html } from './html';
+import { svg } from './icons';
+import { chatHosts, isSignInFailure, signInSentence } from './live';
+import { Painted } from './painted';
+import { changeChat, chats, here, messageOf, setup } from './state';
+
+// The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
+// back as events. The agent's words are drawn as text, never as markup.
+
+const suggestions = ['What is waiting for me?', 'How are my campaigns doing?', 'Help me start a new campaign.'];
+
+const answerWords: Readonly<Record<Answer, string>> = {
+    allow: 'Allowed',
+    always: 'Allowed for this chat',
+    deny: 'Not allowed',
+    gone: 'This request has ended',
+};
+
+let made = 0;
+
+/** Opens a chat and returns its id: an id the page makes up and keeps for every turn of the chat. */
+export function openChat(campaign?: { id: string; name: string }): string {
+    const id = `chat-${Date.now().toString(36)}-${++made}`;
+    chats.value = { ...chats.value, [id]: newChat(id, null, campaign) };
+    return id;
+}
+
+/** The host a chat's next turn runs on: the one chosen, else the first found that drives the chat. */
+export function hostOf(chat: Chat): DesktopHost | null {
+    const { drive } = chatHosts(setup.value?.hosts ?? []);
+    return drive.find((each) => each.id === chat.host) ?? drive[0] ?? null;
+}
+
+export function sendTurn(id: string, text: string): void {
+    const chat = chats.value[id];
+    const host = chat && hostOf(chat);
+    if (!chat || !host || chat.running || !text.trim()) return;
+    changeChat(id, (each) => said(each, text.trim()));
+    const options = { host: host.id, ...(chat.campaignId ? { campaignId: chat.campaignId } : {}) };
+    here()
+        .desktop.chat.send(id, text.trim(), options)
+        .catch((error: unknown) => changeChat(id, (each) => failed(each, messageOf(error))));
+}
+
+define('chat.suggest', ([id, text]) => {
+    if (typeof id === 'string' && typeof text === 'string') sendTurn(id, text);
+});
+
+define('chat.answer', ([id, request, answer]) => {
+    if (typeof id !== 'string' || typeof request !== 'string') return;
+    if (answer !== 'allow' && answer !== 'always' && answer !== 'deny') return;
+    changeChat(id, (chat) => answered(chat, request, answer));
+    here()
+        .desktop.chat.answer(id, request, { allow: answer !== 'deny', always: answer === 'always' })
+        .catch(() => changeChat(id, (chat) => lost(chat, request)));
+});
+
+/** "Sign in once by running `claude` …", with the command as code. */
+const withCode = (sentence: string): Html[] =>
+    sentence.split('`').map((part, at) => (at % 2 ? html`<code>${part}</code>` : html`${part}`));
+
+function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 'permission' }>): Html {
+    const buttons =
+        entry.answer === null
+            ? html`<div class="ask-a">
+                  <button class="btn sm p" type="button" ${act('chat.answer', chat.id, entry.request, 'allow')}>
+                      Allow
+                  </button>
+                  ${
+                      entry.remember
+                          ? html`<button
+                                class="btn sm"
+                                type="button"
+                                ${act('chat.answer', chat.id, entry.request, 'always')}
+                            >
+                                Allow for this chat
+                            </button>`
+                          : null
+                  }
+                  <button class="btn sm" type="button" ${act('chat.answer', chat.id, entry.request, 'deny')}>
+                      Don't allow
+                  </button>
+              </div>`
+            : html`<div class="perm-done">${answerWords[entry.answer]}</div>`;
+    return html`<div class="ask perm">
+        <div class="ask-h">${svg('shield', 14)}<b>${entry.title}</b></div>
+        <pre class="perm-detail">${entry.detail}</pre>
+        ${buttons}
+    </div>`;
+}
+
+export function threadView(chat: Chat, host: DesktopHost | null): Html {
+    if (chat.entries.length === 0)
+        return html`<div class="hero">
+                <div class="glyph">${svg('chat', 22)}</div>
+                <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
+                <p>Anything that reaches a person waits for your approval.</p>
+            </div>
+            <div class="sugs">
+                ${suggestions.map((text) => html`<button class="sug" type="button" ${act('chat.suggest', chat.id, text)}>${text}</button>`)}
+            </div>`;
+    const sentence = host && signInSentence(host);
+    const parts = shown(chat).map((entry) => {
+        switch (entry.kind) {
+            case 'steps':
+                return html`<details class="vsteps" ${entry.open ? html`open` : null}>
+                    <summary>
+                        ${entry.open ? 'Working…' : entry.steps.length === 1 ? '1 action' : `${entry.steps.length} actions`}
+                    </summary>
+                    ${entry.steps.map((step) => html`<div class="vstep">${step}</div>`)}
+                </details>`;
+            case 'user':
+                return html`<div class="m user"><div class="bub said">${entry.text}</div></div>`;
+            case 'text':
+                return html`<div class="m ai"><div class="bub said">${entry.text}</div></div>`;
+            case 'permission':
+                return permission(chat, entry);
+            case 'error':
+                return html`<div class="note am chat-error">
+                    <div class="said">${entry.text}</div>
+                    ${sentence && isSignInFailure(entry.text) ? html`<div class="sign-in">${withCode(sentence)}</div>` : null}
+                </div>`;
+        }
+    });
+    return html`${parts}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
+}
+
+export function ChatPanel({ chatId }: { chatId: string }) {
+    const box = useRef<HTMLTextAreaElement>(null);
+    const chat = chats.value[chatId];
+    const view = useCallback(() => {
+        const current = chats.value[chatId];
+        return current ? threadView(current, hostOf(current)) : html``;
+    }, [chatId]);
+    if (!chat) return null;
+    const { drive, other } = chatHosts(setup.value?.hosts ?? []);
+    const host = hostOf(chat);
+    const send = (event?: FormEvent) => {
+        event?.preventDefault();
+        const text = box.current?.value ?? '';
+        if (!text.trim() || !host || chat.running) return;
+        if (box.current) box.current.value = '';
+        sendTurn(chatId, text);
+    };
+    const enter = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) send(event);
+    };
+    const stop = () => {
+        here()
+            .desktop.chat.stop(chatId)
+            .catch((error: unknown) => changeChat(chatId, (each) => failed(each, messageOf(error))));
+    };
+    return (
+        <div className="chat-panel">
+            <Painted className="thread" view={view} />
+            <form className="composer" onSubmit={send} aria-label="Message">
+                {setup.value && !host && (
+                    <div className="note am">
+                        No agent host that drives the chat was found on this machine. Connect lists the hosts and
+                        installs one.{' '}
+                        <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
+                            Connect
+                        </button>
+                    </div>
+                )}
+                <textarea
+                    ref={box}
+                    id="box"
+                    rows={2}
+                    placeholder="Ask Jason…"
+                    aria-label="Your message"
+                    onKeyDown={enter}
+                />
+                <div className="crow">
+                    <select
+                        aria-label="Agent host"
+                        value={host?.id ?? ''}
+                        onChange={(event) => changeChat(chatId, (each) => ({ ...each, host: event.target.value }))}
+                    >
+                        {drive.map((each) => (
+                            <option key={each.id} value={each.id}>
+                                {each.label}
+                            </option>
+                        ))}
+                        {other.map((each) => (
+                            <option key={each.id} value={each.id} disabled>
+                                {each.label}: runs campaign work, not the chat yet
+                            </option>
+                        ))}
+                    </select>
+                    <span className="grow" />
+                    {chat.running ? (
+                        <button className="send" type="button" title="Stop" aria-label="Stop" onClick={stop}>
+                            ■
+                        </button>
+                    ) : (
+                        <button className="send" type="submit" title="Send" aria-label="Send" disabled={!host}>
+                            ↑
+                        </button>
+                    )}
+                </div>
+            </form>
+        </div>
+    );
+}

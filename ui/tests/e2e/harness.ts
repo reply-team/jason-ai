@@ -1,5 +1,6 @@
 // The one file of the smoke that starts processes: a scratch runtime, the three ui verbs, and a build placed where the
-// runtime serves it. Nothing here seeds data or reads the runtime's token; the suite drives the CLI as a person would.
+// runtime serves it. Nothing here reads the runtime's token or writes its database; the suite drives the CLI as a person
+// would, and the one thing it creates is a campaign, so the journal has a line for a stream to carry.
 import { execFile } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -32,6 +33,8 @@ export class Jason {
 
     private constructor(
         readonly dataDir: string,
+        /** The runtime's harness root, beside the data directory and never inside it, so no folder lands in a real home. */
+        readonly harnessRoot: string,
         private readonly configuredPort: number,
     ) {}
 
@@ -42,7 +45,7 @@ export class Jason {
             join(dataDir, 'config', 'settings.json'),
             JSON.stringify({ Dispatcher: { Enabled: false }, Runtime: { Port: port } }),
         );
-        const jason = new Jason(dataDir, port);
+        const jason = new Jason(dataDir, mkdtempSync(join(tmpdir(), 'jason-ui-smoke-harness-')), port);
         if (build === 'default' || build === 'both') jason.placeBuild('default', 'default-smoke');
         if (build === 'custom' || build === 'both') jason.placeBuild('custom', 'custom-smoke');
         await jason.up();
@@ -79,6 +82,12 @@ export class Jason {
         return JSON.parse(stdout) as { items: { id: string }[] };
     }
 
+    /** Creates a campaign as a person would, which writes one journal line. */
+    async campaignCreate(name: string): Promise<{ id: string }> {
+        const { stdout } = await this.jason('campaign', 'create', '--name', name);
+        return JSON.parse(stdout) as { id: string };
+    }
+
     async restart(): Promise<void> {
         await this.stop();
         await this.up();
@@ -92,9 +101,10 @@ export class Jason {
         }
     }
 
-    /** Removes the scratch data directory; call after stop(). */
+    /** Removes the scratch data directory and harness root; call after stop(). */
     dispose(): void {
         rmSync(this.dataDir, { recursive: true, force: true });
+        rmSync(this.harnessRoot, { recursive: true, force: true });
     }
 
     private async up(): Promise<void> {
@@ -112,7 +122,12 @@ export class Jason {
     private async jason(...args: string[]): Promise<{ stdout: string; stderr: string }> {
         try {
             return await run(jasonExe, args, {
-                env: { ...process.env, JASON_DATA_DIR: this.dataDir, JASON_Update__CheckEnabled: 'false' },
+                env: {
+                    ...process.env,
+                    JASON_DATA_DIR: this.dataDir,
+                    JASON_Harness__Root: this.harnessRoot,
+                    JASON_Update__CheckEnabled: 'false',
+                },
                 timeout: 30_000,
             });
         } catch (error) {

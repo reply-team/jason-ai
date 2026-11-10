@@ -89,6 +89,27 @@ public class StatusCommandTests
         Assert.Null(check.Fix);
     }
 
+    /// <summary>
+    /// A macOS registration carries the search path it was made from, and only <c>jason runtime autostart</c> says it: a
+    /// PATH names the account's tool folders, so the status body, which a diagnostic bundle carries as it is, never does.
+    /// </summary>
+    [Fact]
+    public async Task Status_at_a_registration_carrying_a_search_path_says_no_search_path()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var registrar = new RecordingRegistrar(AutostartPlatform.MacOs)
+        {
+            State = new AutostartState(true, ["jason", "runtime", "run"], null, "/SENTINEL_TOOL_FOLDER/bin:/usr/bin"),
+        };
+
+        await CliApp.RunAsync(["status"], Machine(dir, output) with { Autostart = registrar }, Ct);
+
+        Assert.Equal(CheckState.Ok, Assert.Single(Read(output).Checks, check => check.Name == "autostart").State);
+        Assert.DoesNotContain("SENTINEL_TOOL_FOLDER", output.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>A ready installation exits 0, and says so in the body as well as in the code.</summary>
     [Fact]
     [Critical(Family.R2, "ready in the body")]
