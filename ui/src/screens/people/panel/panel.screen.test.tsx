@@ -254,6 +254,45 @@ describe('Saving the person', () => {
         expect(within(panel()).getByText(/Nordic pilot · since/)).toBeTruthy();
     });
 
+    it('a queue the runtime refuses is said with the save standing, and the record shows what was saved', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('suppression.list', ...registerClear)
+            .answer('contact.update', 'contact.update/person-saved')
+            .answer('workitem.create', 'workitem.create/provider-archived');
+        open(api, ingrid.id, 'details');
+        fireEvent.click(await within(await shown()).findByRole('button', { name: 'Edit' }));
+        type('Title', 'VP Revenue');
+        reason('Promoted in October.');
+        fireEvent.click(providerBox());
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Save' }));
+
+        const said = await within(panel()).findByRole('status');
+        expect(asked(api, 'contact.update')).toEqual([recorded('contact.update/person-saved')]);
+        expect(asked(api, 'workitem.create')).toEqual([recorded('workitem.create/provider-archived')]);
+        expect(said.textContent).toBe(
+            "Saved in Jason. Queuing the change for the provider was refused: Campaign 'cmp_2' is archived; only journal entries can still be appended.",
+        );
+        expect(within(panel()).getByText(/VP Revenue at Fjordline/)).toBeTruthy();
+        expect(within(panel()).queryByRole('button', { name: 'Save' })).toBeNull();
+    });
+
+    it('a field emptied is sent as null, and no channel is sent when none changed', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('suppression.list', ...registerClear)
+            .answer('contact.update', 'contact.update/person-cleared');
+        open(api, ingrid.id, 'details');
+        fireEvent.click(await within(await shown()).findByRole('button', { name: 'Edit' }));
+        type('Company', '');
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(asked(api, 'contact.update')).toHaveLength(1));
+        expect(asked(api, 'contact.update')).toEqual([recorded('contact.update/person-cleared')]);
+        expect(asked(api, 'contact.update')[0]).not.toHaveProperty('channels');
+        expect(await within(panel()).findByRole('button', { name: 'Edit' })).toBeTruthy();
+    });
+
     it('a save the runtime refuses says why and keeps what was typed; nothing is queued', async () => {
         const api = people()
             .answer('contact.get', 'contact.get/person-panel')
@@ -560,6 +599,28 @@ describe('Exclude', () => {
         expect(within(membership('Nordic pilot')).queryByRole('button', { name: 'Exclude' })).toBeNull();
     });
 
+    it('an Exclude the runtime refuses says so with its message, and the person stays where they are', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('campaign.remove_contacts', 'campaign.remove_contacts/exclude-archived');
+        open(api, ingrid.id, 'sequences');
+        await within(await shown()).findByText('Nordic pilot', { selector: 'a' });
+        fireEvent.click(within(membership('Nordic pilot')).getByRole('button', { name: 'Exclude' }));
+        fireEvent.input(
+            within(membership('Nordic pilot')).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' }),
+            { target: { value: 'Not a fit for the pilot.' } },
+        );
+        fireEvent.click(within(membership('Nordic pilot')).getByRole('button', { name: 'Exclude from Nordic pilot' }));
+
+        const refused = await within(membership('Nordic pilot')).findByRole('alert');
+        expect(asked(api, 'campaign.remove_contacts')).toEqual([recorded('campaign.remove_contacts/exclude-archived')]);
+        expect(refused.textContent).toContain(
+            "Campaign 'cmp_2' is archived; only journal entries can still be appended.",
+        );
+        expect(membership('Nordic pilot').textContent).toContain('Enrolled');
+        expect(asked(api, 'contact.get')).toHaveLength(1);
+    });
+
     it('Cancel leaves the person where they are', async () => {
         const api = people().answer('contact.get', 'contact.get/person-panel');
         open(api, ingrid.id, 'sequences');
@@ -665,6 +726,25 @@ describe('Move', () => {
         );
     });
 
+    it('says an add refused for the person alone, that nothing changed, and takes nobody out', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('campaign.list', 'campaign.list/move-targets')
+            .answer('campaign.add_contacts', 'campaign.add_contacts/move-in-rejected');
+        open(api, ingrid.id, 'sequences');
+        await within(await shown()).findByText('Nordic pilot', { selector: 'a' });
+        const row = await moveTo('Q4 follow-ups');
+        fireEvent.click(within(row).getByRole('button', { name: 'Move to Q4 follow-ups' }));
+
+        const refused = await within(row).findByRole('alert');
+        expect(asked(api, 'campaign.add_contacts')).toEqual([recorded('campaign.add_contacts/move-in-rejected')]);
+        expect(refused.textContent).toBe(
+            "Adding to Q4 follow-ups was refused: Contact 'cnt_1' is archived. Nothing changed.",
+        );
+        expect(asked(api, 'campaign.remove_contacts')).toHaveLength(0);
+        expect(asked(api, 'contact.get')).toHaveLength(1);
+    });
+
     it('says an add the runtime refused as a failed call, that nothing changed, and takes nobody out', async () => {
         const api = people()
             .answer('contact.get', 'contact.get/person-after-half-move')
@@ -727,6 +807,23 @@ describe('Research', () => {
         expect(within(said).getByRole('link', { name: 'Open the work item' }).getAttribute('href')).toBe(
             '#/workitems/planned/wi_1',
         );
+    });
+
+    it('an ask the runtime refuses is said with its message, and nothing is linked', async () => {
+        const api = findings(people().answer('contact.get', 'contact.get/person-panel')).answer(
+            'workitem.create',
+            'workitem.create/researcher-archived',
+        );
+        open(api, ingrid.id, 'research');
+        await within(await shown()).findByText('Fjordline opened an office in Bergen in September.');
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Ask the researcher' }));
+
+        const refused = await within(panel()).findByRole('alert');
+        expect(asked(api, 'workitem.create')).toEqual([recorded('workitem.create/researcher-archived')]);
+        expect(refused.textContent).toBe(
+            "Asking the researcher was refused: Campaign 'cmp_2' is archived; only journal entries can still be appended.",
+        );
+        expect(within(panel()).queryByRole('link', { name: 'Open the work item' })).toBeNull();
     });
 
     it('asks without a question, in the campaign the person picks', async () => {
