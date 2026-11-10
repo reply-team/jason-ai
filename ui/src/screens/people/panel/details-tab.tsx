@@ -8,7 +8,7 @@ import { Notice } from '../../../layout/notice';
 import { href } from '../../../router';
 import { Details } from '../details';
 import { channelName } from '../labels';
-import { RegisterControl } from './register';
+import { RegisterControl, WholePersonSwitch } from './register';
 import * as panel from './store';
 
 type Props = { person: Contact; campaignId: string | undefined; now: Date; zone: string };
@@ -112,6 +112,7 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
                     >
                         Edit
                     </button>
+                    <WholePersonSwitch person={person} />
                 </ActionsRow>
                 {said && <SaidLine said={said} />}
                 {panel.registerFailure.value && <Notice danger>{panel.registerFailure.value}</Notice>}

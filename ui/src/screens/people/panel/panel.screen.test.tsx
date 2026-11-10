@@ -633,3 +633,127 @@ describe('Research', () => {
         expect(within(panel()).queryByRole('textbox')).toBeNull();
     });
 });
+
+describe('Do not contact, for the whole person', () => {
+    const toggle = () => within(panel()).getByRole<HTMLInputElement>('switch', { name: 'Do not contact' });
+    const whole = () => toggle().closest('.whole') as HTMLElement;
+
+    it('is on when every address of the person is on the register', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer(
+                'suppression.list',
+                'suppression.list/person-email-listed',
+                'suppression.list/person-linkedin-listed',
+            );
+        open(api, ingrid.id, 'details');
+        await waitFor(() => expect(toggle().checked).toBe(true));
+        expect(whole().textContent).not.toContain('On for');
+        expect(whole().textContent).toContain("Jason's own register, not the provider's list.");
+    });
+
+    it('is off when none is', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('suppression.list', ...registerClear);
+        open(api, ingrid.id, 'details');
+        await waitFor(() => expect(toggle().checked).toBe(false));
+        expect(whole().textContent).not.toContain('On for');
+    });
+
+    it('reads as not on when only some are, and says how many', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer(
+                'suppression.list',
+                'suppression.list/person-email-listed',
+                'suppression.list/person-linkedin-clear',
+            );
+        open(api, ingrid.id, 'details');
+        await waitFor(() => expect(whole().textContent).toContain('On for 1 of 2 channels'));
+        expect(toggle().checked).toBe(false);
+    });
+
+    it('turned on from some, puts only the addresses not on the register there, then reads the register again', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer(
+                'suppression.list',
+                'suppression.list/person-email-listed',
+                'suppression.list/person-linkedin-clear',
+                'suppression.list/person-linkedin-listed',
+            )
+            .answer('suppression.add', 'suppression.add/person-linkedin');
+        open(api, ingrid.id, 'details');
+        await waitFor(() => expect(whole().textContent).toContain('On for 1 of 2 channels'));
+        fireEvent.click(toggle());
+
+        await waitFor(() => expect(asked(api, 'suppression.list')).toHaveLength(4));
+        expect(asked(api, 'suppression.add')).toEqual([recorded('suppression.add/person-linkedin')]);
+        await waitFor(() => expect(toggle().checked).toBe(true));
+        expect(whole().textContent).not.toContain('On for');
+    });
+
+    it('turned off, asks one reason and takes each address on the register off with it', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer(
+                'suppression.list',
+                'suppression.list/person-email-listed',
+                'suppression.list/person-email-clear',
+                'suppression.list/person-linkedin-listed',
+                'suppression.list/person-linkedin-clear',
+            )
+            .answer('suppression.remove', 'suppression.remove/person-email', 'suppression.remove/person-linkedin');
+        open(api, ingrid.id, 'details');
+        await waitFor(() => expect(toggle().checked).toBe(true));
+        fireEvent.click(toggle());
+        const confirm = within(whole()).getByRole<HTMLButtonElement>('button', {
+            name: 'Take every address off the register',
+        });
+        expect(confirm.disabled).toBe(true);
+        expect(asked(api, 'suppression.remove')).toHaveLength(0);
+        fireEvent.input(within(whole()).getByRole('textbox', { name: 'Reason (required, kept in the journal)' }), {
+            target: { value: 'Asked to hear from us again.' },
+        });
+        fireEvent.click(confirm);
+
+        await waitFor(() => expect(asked(api, 'suppression.list')).toHaveLength(4));
+        expect(asked(api, 'suppression.remove')).toEqual([
+            recorded('suppression.remove/person-email'),
+            recorded('suppression.remove/person-linkedin'),
+        ]);
+        await waitFor(() => expect(toggle().checked).toBe(false));
+        expect(whole().textContent).not.toContain('On for');
+    });
+
+    it('a call that fails ends where the register stands, said as some, with the error; what went through stands', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer(
+                'suppression.list',
+                'suppression.list/person-email-listed',
+                'suppression.list/person-email-clear',
+                'suppression.list/person-linkedin-listed',
+            )
+            .answer('suppression.remove', 'suppression.remove/person-email');
+        open(api, ingrid.id, 'details');
+        await waitFor(() => expect(toggle().checked).toBe(true));
+        fireEvent.click(toggle());
+        fireEvent.input(within(whole()).getByRole('textbox', { name: 'Reason (required, kept in the journal)' }), {
+            target: { value: 'Asked to hear from us again.' },
+        });
+        // The first address is taken off; the runtime is gone before the second.
+        const release = api.hold('suppression.remove');
+        fireEvent.click(within(whole()).getByRole('button', { name: 'Take every address off the register' }));
+        await waitFor(() => expect(asked(api, 'suppression.remove')).toHaveLength(1));
+        api.unreachable('suppression.remove');
+        release();
+
+        await waitFor(() => expect(whole().textContent).toContain('On for 1 of 2 channels'));
+        expect(toggle().checked).toBe(false);
+        expect(asked(api, 'suppression.remove')).toHaveLength(2);
+        expect(asked(api, 'suppression.remove')[0]).toEqual(recorded('suppression.remove/person-email'));
+        expect(within(panel()).getByRole('alert').textContent).toContain('Failed to fetch');
+    });
+});

@@ -102,11 +102,16 @@ function note(contactId: string, channel: string, value: string, entry: Suppress
     register.value = { contactId, entries: { ...was, [addressKey(channel, value)]: entry } };
 }
 
-/** Reads the register for each of the person's addresses not read yet while their panel is open. */
-export async function loadRegister(api: Api, person: Contact): Promise<void> {
+/**
+ * Reads the register for each of the person's addresses not read yet while their panel is open; every address
+ * again when asked to, what was read standing until the new answer comes.
+ */
+export async function loadRegister(api: Api, person: Contact, again = false): Promise<void> {
     if (register.value?.contactId !== person.id) register.value = { contactId: person.id, entries: {} };
     registerFailure.value = null;
-    const unread = person.channels.filter((c) => !(addressKey(c.channel, c.value) in register.value!.entries));
+    const unread = again
+        ? person.channels
+        : person.channels.filter((c) => !(addressKey(c.channel, c.value) in register.value!.entries));
     await Promise.all(
         unread.map(async ({ channel, value }) => {
             try {
@@ -130,6 +135,28 @@ export async function doNotContact(api: Api, contactId: string, channel: string,
 export async function contactAgain(api: Api, contactId: string, channel: string, value: string, reason: string) {
     await api.call<SuppressionRemoved>('suppression.remove', { channel, value, reason }, 'write');
     note(contactId, channel, value, null);
+}
+
+/**
+ * Do not contact for the whole person: puts each of their addresses not on the register there, or takes each that is
+ * off it with the one reason given, one call at a time, then reads the register again. A call that fails does not
+ * stop the others and nothing that went through is undone; the first failure is said where the register's are.
+ */
+export async function setWholePerson(api: Api, person: Contact, on: boolean, reason?: string): Promise<void> {
+    const read = register.value?.contactId === person.id ? register.value.entries : {};
+    let failed: unknown = null;
+    for (const { channel, value } of person.channels) {
+        const listed = (read[addressKey(channel, value)] ?? null) !== null;
+        if (listed === on) continue;
+        try {
+            if (on) await doNotContact(api, person.id, channel, value);
+            else await contactAgain(api, person.id, channel, value, reason ?? '');
+        } catch (error) {
+            failed ??= error;
+        }
+    }
+    await loadRegister(api, person, true);
+    if (failed !== null) fail(failed, registerFailure);
 }
 
 /** Forgets what the panel read about a person: another person, or the same one opened again, is read afresh. */

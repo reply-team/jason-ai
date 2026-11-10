@@ -300,6 +300,7 @@ import personContactUpdatePersonChannels from '../../../docs/api/fixtures/contac
 import personContactUpdatePersonRefused from '../../../docs/api/fixtures/contact.update/person-refused.json';
 import personContactUpdatePersonSaved from '../../../docs/api/fixtures/contact.update/person-saved.json';
 import personSuppressionAddPersonEmail from '../../../docs/api/fixtures/suppression.add/person-email.json';
+import personSuppressionAddPersonLinkedin from '../../../docs/api/fixtures/suppression.add/person-linkedin.json';
 import personSuppressionListAguilarEmailClear from '../../../docs/api/fixtures/suppression.list/aguilar-email-clear.json';
 import personSuppressionListGraceEmailClear from '../../../docs/api/fixtures/suppression.list/grace-email-clear.json';
 import personSuppressionListMateoEmailClear from '../../../docs/api/fixtures/suppression.list/mateo-email-clear.json';
@@ -308,8 +309,10 @@ import personSuppressionListMateoPhoneClear from '../../../docs/api/fixtures/sup
 import personSuppressionListPersonEmailClear from '../../../docs/api/fixtures/suppression.list/person-email-clear.json';
 import personSuppressionListPersonEmailListed from '../../../docs/api/fixtures/suppression.list/person-email-listed.json';
 import personSuppressionListPersonLinkedinClear from '../../../docs/api/fixtures/suppression.list/person-linkedin-clear.json';
+import personSuppressionListPersonLinkedinListed from '../../../docs/api/fixtures/suppression.list/person-linkedin-listed.json';
 import personSuppressionListPersonPhoneClear from '../../../docs/api/fixtures/suppression.list/person-phone-clear.json';
 import personSuppressionRemovePersonEmail from '../../../docs/api/fixtures/suppression.remove/person-email.json';
+import personSuppressionRemovePersonLinkedin from '../../../docs/api/fixtures/suppression.remove/person-linkedin.json';
 import personWorkitemCreateProviderContactUpdate from '../../../docs/api/fixtures/workitem.create/provider-contact-update.json';
 import personWorkitemCreateResearcherAsked from '../../../docs/api/fixtures/workitem.create/researcher-asked.json';
 import personWorkitemCreateResearcherAskedPlain from '../../../docs/api/fixtures/workitem.create/researcher-asked-plain.json';
@@ -878,6 +881,10 @@ export const fixtures = {
     >,
     'contact.update/person-saved': personContactUpdatePersonSaved satisfies Exchange<ContactUpdateRequest, Contact>,
     'suppression.add/person-email': personSuppressionAddPersonEmail satisfies Exchange<SuppressionRequest, Suppression>,
+    'suppression.add/person-linkedin': personSuppressionAddPersonLinkedin satisfies Exchange<
+        SuppressionRequest,
+        Suppression
+    >,
     'suppression.list/aguilar-email-clear': personSuppressionListAguilarEmailClear satisfies Exchange<
         SuppressionListRequest,
         Page<Suppression>
@@ -910,11 +917,19 @@ export const fixtures = {
         SuppressionListRequest,
         Page<Suppression>
     >,
+    'suppression.list/person-linkedin-listed': personSuppressionListPersonLinkedinListed satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
     'suppression.list/person-phone-clear': personSuppressionListPersonPhoneClear satisfies Exchange<
         SuppressionListRequest,
         Page<Suppression>
     >,
     'suppression.remove/person-email': personSuppressionRemovePersonEmail satisfies Exchange<
+        SuppressionRequest,
+        SuppressionRemoved
+    >,
+    'suppression.remove/person-linkedin': personSuppressionRemovePersonLinkedin satisfies Exchange<
         SuppressionRequest,
         SuppressionRemoved
     >,
