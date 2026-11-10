@@ -7,7 +7,7 @@
 
 import { app, BrowserWindow, ipcMain, safeStorage, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliAt } from './cli.ts';
@@ -15,7 +15,7 @@ import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart } from './login-item.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
-import { applicationFolder, keptNotice, settleStart } from './rollback.ts';
+import { applicationFolder, keptLine, keptNotice, readRollback, settleStart } from './rollback.ts';
 import { Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
@@ -214,7 +214,8 @@ async function run(): Promise<void> {
         isProgram: (file) => isProgramFile(file, process.platform),
         log,
     });
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, command });
+    const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command });
     desk.open();
     showWindow = () => desk.show();
     void desk.readAutostart();

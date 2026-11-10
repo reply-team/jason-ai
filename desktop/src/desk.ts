@@ -29,6 +29,8 @@ export interface DeskDeps {
     autostart: RuntimeAutostart | null;
     /** The updater, in an installed build; null in a development build. */
     updates: Updater | null;
+    /** Where the previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
+    kept(): string | null;
     /** The jason command on the PATH: placed and removed by an installed build only, each on the person's word. */
     command: PathCommand;
 }
@@ -132,18 +134,28 @@ export class Desk {
         ];
     }
 
-    private updateItem(): MenuItemConstructorOptions {
+    /** The update item, and under it, unclickable, where the previous version is kept while it is. */
+    private updateItems(): MenuItemConstructorOptions[] {
         const { updates } = this.deps;
         const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null);
-        return {
-            label: item.label,
-            enabled: item.enabled,
-            click: () => {
-                if (item.act === 'check') void updates?.check();
-                else if (item.act === 'download') void updates?.download();
-                else if (item.act === 'install') void updates?.install();
+        let kept: string | null = null;
+        try {
+            kept = this.deps.kept();
+        } catch {
+            // A record that cannot be read names no copy.
+        }
+        return [
+            {
+                label: item.label,
+                enabled: item.enabled,
+                click: () => {
+                    if (item.act === 'check') void updates?.check();
+                    else if (item.act === 'download') void updates?.download();
+                    else if (item.act === 'install') void updates?.install();
+                },
             },
-        };
+            ...(kept === null ? [] : [{ label: kept, enabled: false }]),
+        ];
     }
 
     /**
@@ -210,7 +222,7 @@ export class Desk {
             { role: 'about' },
             ...this.loginItems(),
             { type: 'separator' },
-            this.updateItem(),
+            ...this.updateItems(),
             this.commandItem(),
             { type: 'separator' },
             ...(process.platform === 'darwin' ? ([{ role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }] as MenuItemConstructorOptions[]) : []),
@@ -242,7 +254,7 @@ export class Desk {
                 { label: 'What Needs You', click: () => this.send('navigate.attention') },
                 ...this.loginItems(),
                 { type: 'separator' },
-                this.updateItem(),
+                ...this.updateItems(),
                 this.commandItem(),
                 { type: 'separator' },
                 { label: 'Quit Jason', click: () => app.quit() },

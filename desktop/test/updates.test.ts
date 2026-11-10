@@ -1,5 +1,5 @@
 // The updater: this repository's stable releases, looked at with the back-off, downloaded and installed only on the
-// person's word, and the application's own previous version kept aside until the new one has started once.
+// person's word, and the application's own previous version kept aside until the next update replaces it.
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,6 +14,7 @@ import {
     applicationFolder,
     isFirstLaunchOfUpdate,
     isRejected,
+    keptLine,
     keptNotice,
     parseRollbackState,
     readRollback,
@@ -126,13 +127,15 @@ test('the rollback record: only the first launch of the version an update instal
     assert.equal(isFirstLaunchOfUpdate({ pending, rejected: [] }, '0.35.0'), true);
     assert.equal(isFirstLaunchOfUpdate({ pending, rejected: [] }, '0.34.0'), false);
     assert.equal(isFirstLaunchOfUpdate({ rejected: [] }, '0.35.0'), false);
-    assert.deepEqual(afterSuccessfulStart({ pending, rejected: ['0.33.9'] }), { rejected: ['0.33.9'] });
+    assert.deepEqual(afterSuccessfulStart({ pending, rejected: ['0.33.9'] }), { kept: { version: '0.34.0', directory: pending.directory }, rejected: ['0.33.9'] });
     const failed = afterFailedStart({ pending, rejected: [] });
     assert.equal(isRejected(failed, '0.35.0'), true);
     assert.deepEqual(failed.pending, pending, 'the copy stays recorded');
     assert.deepEqual(parseRollbackState('{'), { rejected: [] });
     assert.deepEqual(parseRollbackState(null), { rejected: [] });
     assert.deepEqual(parseRollbackState(JSON.stringify({ rejected: ['1', 2], pending: { fromVersion: 1 } })), { pending: undefined, rejected: ['1'] });
+    assert.deepEqual(parseRollbackState(JSON.stringify({ rejected: [], kept: { version: '0.34.0', directory: '/d' } })), { pending: undefined, kept: { version: '0.34.0', directory: '/d' }, rejected: [] });
+    assert.deepEqual(parseRollbackState(JSON.stringify({ rejected: [], kept: { version: 1 } })), { pending: undefined, rejected: [] });
 });
 
 test('the application’s own folder is the .app on macOS and the executable’s folder on Windows', () => {
@@ -235,9 +238,10 @@ test('a download that fails goes back to the offer, logged by its step', async (
 
 test('installing copies the application’s own folder aside under <data>/desktop/rollback, records it, then installs', async (t) => {
     const s = scratch(t);
-    // A copy an earlier update left is replaced, not kept beside the new one.
+    // A copy an earlier update left, kept since that update started, is replaced, not kept beside the new one.
     mkdirSync(join(s.rollback, '0.33.0', 'Jason'), { recursive: true });
     writeFileSync(join(s.rollback, '0.33.0', 'Jason', 'Jason.exe'), 'the application 0.33.0');
+    writeRollback(s.rollback, { kept: { version: '0.33.0', directory: join(s.rollback, '0.33.0', 'Jason') }, rejected: [] });
     const updater = fakeUpdater({ latest: '0.35.0' });
     const { updates, timers, order, log } = updaterOn(s, updater);
     updates.start();
@@ -292,7 +296,7 @@ test('the starting page, when an update did not start, names the kept copy and s
     assert.match(notice, /by hand/);
 });
 
-test('the new version’s first start settles the record: a start that worked removes the copy, one that failed keeps it and refuses that version', (t) => {
+test('the new version’s first start settles the record: a start that worked keeps the copy and says so, one that failed keeps it and refuses that version', (t) => {
     const s = scratch(t);
     const copy = join(s.rollback, '0.34.0', 'Jason');
     const pending = { fromVersion: '0.34.0', toVersion: '0.35.0', directory: copy };
@@ -303,18 +307,35 @@ test('the new version’s first start settles the record: a start that worked re
     assert.equal(settleStart(s.rollback, '0.34.0', true, log), null, 'a launch of another version settles nothing');
     assert.equal(existsSync(copy), true);
     assert.equal(settleStart(s.rollback, '0.35.0', true, log), null);
-    assert.equal(existsSync(copy), false);
-    assert.deepEqual(readRollback(s.rollback), { pending: undefined, rejected: [] });
+    assert.equal(existsSync(copy), true, 'the copy stays until the next update replaces it');
+    assert.deepEqual(readRollback(s.rollback), { pending: undefined, kept: { version: '0.34.0', directory: copy }, rejected: [] });
+    assert.equal(settleStart(s.rollback, '0.35.0', true, log), null, 'a later start settles nothing again');
+    assert.equal(existsSync(copy), true);
 
     mkdirSync(copy, { recursive: true });
     writeRollback(s.rollback, { pending, rejected: [] });
     assert.equal(settleStart(s.rollback, '0.35.0', false, log), copy, 'the person is told where the previous version is');
     assert.equal(existsSync(copy), true);
     assert.equal(isRejected(readRollback(s.rollback), '0.35.0'), true);
+    assert.deepEqual(readRollback(s.rollback), { pending, rejected: ['0.35.0'] }, 'a failed start is settled as before');
     assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [
         ['update_settled', { Version: '0.35.0', Started: true }],
         ['update_settled', { Version: '0.35.0', Started: false }],
     ]);
+});
+
+test('while a copy of the previous version is kept, the Jason menu says where, under the update item', () => {
+    const copy = '/data/desktop/rollback/0.34.0/Jason.app';
+    const line = 'The previous version 0.34.0 is kept at /data/desktop/rollback/0.34.0/Jason.app; put it back by hand.';
+    const there = (path: string) => path === copy;
+    assert.equal(keptLine({ kept: { version: '0.34.0', directory: copy }, rejected: [] }, '0.35.0', there), line);
+    // A first start that failed keeps the copy under its pending record.
+    const pending = { fromVersion: '0.34.0', toVersion: '0.35.0', directory: copy };
+    assert.equal(keptLine({ pending, rejected: ['0.35.0'] }, '0.35.0', there), line);
+    assert.equal(keptLine({ kept: { version: '0.34.0', directory: copy }, rejected: [] }, '0.35.0', () => false), null, 'a copy no longer there is not named');
+    assert.equal(keptLine({ kept: { version: '0.34.0', directory: copy }, rejected: [] }, '0.34.0', there), null, 'the copy of the version that runs is not a previous one');
+    assert.equal(keptLine({ pending, rejected: [] }, '0.34.0', there), null, 'before the update has started, nothing is previous yet');
+    assert.equal(keptLine({ rejected: [] }, '0.35.0', there), null);
 });
 
 test('the menu offers one step at a time, and in a build that is not installed none', () => {

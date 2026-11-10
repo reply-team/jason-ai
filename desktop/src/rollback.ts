@@ -2,9 +2,10 @@
  * The record an update leaves, and what a launch makes of it. Before an update installs, the application's own folder
  * as it is installed (the `.app` on macOS, the installation folder on Windows) is copied under
  * `<data>/desktop/rollback/<version>/` and the update is recorded as pending. The first launch of the new version settles
- * it: a start that loads the window removes the copy; one that does not keeps it, says where it is, and refuses that
- * version from then on. Only the application is copied: nothing of the runtime's data, and nothing outside the folder
- * the application is installed in.
+ * it: a start that loads the window records the copy as kept; one that does not keeps it too, says where it is, and
+ * refuses that version from then on. Either way the copy stays until the next update replaces it, and the Jason menu
+ * names it while it is there (`keptLine`). Only the application is copied: nothing of the runtime's data, and nothing
+ * outside the folder the application is installed in.
  */
 
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -19,8 +20,15 @@ export interface PendingUpdate {
     directory: string;
 }
 
+/** The copy of the version an update that started replaced, kept until the next update replaces it. */
+export interface KeptCopy {
+    version: string;
+    directory: string;
+}
+
 export interface RollbackState {
     pending?: PendingUpdate | undefined;
+    kept?: KeptCopy | undefined;
     /** Versions whose first start failed here; the updater does not offer them again. */
     rejected: string[];
 }
@@ -37,7 +45,9 @@ export function parseRollbackState(text: string | null): RollbackState {
             p && typeof p.fromVersion === 'string' && typeof p.toVersion === 'string' && typeof p.directory === 'string'
                 ? { fromVersion: p.fromVersion, toVersion: p.toVersion, directory: p.directory }
                 : undefined;
-        return { pending, rejected };
+        const k = raw.kept;
+        const kept = k && typeof k.version === 'string' && typeof k.directory === 'string' ? { version: k.version, directory: k.directory } : undefined;
+        return kept === undefined ? { pending, rejected } : { pending, kept, rejected };
     } catch {
         return emptyRollbackState;
     }
@@ -48,8 +58,10 @@ export function isFirstLaunchOfUpdate(state: RollbackState, currentVersion: stri
     return state.pending?.toVersion === currentVersion;
 }
 
+/** The update started: its copy of the previous version is kept, and what was refused stays refused. */
 export function afterSuccessfulStart(state: RollbackState): RollbackState {
-    return { rejected: state.rejected };
+    if (!state.pending) return { rejected: state.rejected };
+    return { kept: { version: state.pending.fromVersion, directory: state.pending.directory }, rejected: state.rejected };
 }
 
 export function afterFailedStart(state: RollbackState): RollbackState {
@@ -60,6 +72,17 @@ export function afterFailedStart(state: RollbackState): RollbackState {
 
 export function isRejected(state: RollbackState, version: string): boolean {
     return state.rejected.includes(version);
+}
+
+/**
+ * The Jason menu's line while a copy of the previous version is there: the copy a start that worked recorded as kept, or
+ * the one a first start that failed left pending. Null when no copy is there, or when it is of the version that runs.
+ */
+export function keptLine(state: RollbackState, currentVersion: string, exists: (path: string) => boolean): string | null {
+    const pending = state.pending?.toVersion === currentVersion ? { version: state.pending.fromVersion, directory: state.pending.directory } : undefined;
+    const copy = state.kept ?? pending;
+    if (copy === undefined || copy.version === currentVersion || !exists(copy.directory)) return null;
+    return `The previous version ${copy.version} is kept at ${copy.directory}; put it back by hand.`;
 }
 
 /** The folder the application is installed as: the `.app` around the executable on macOS, its folder elsewhere. */
@@ -111,7 +134,8 @@ async function copyOutside(source: string, target: string, data: string): Promis
 
 /**
  * Copies the installed application under `<rollback>/<fromVersion>/` and records the update as pending; whatever copy an
- * earlier update left is removed first, so one previous version is kept at most. Returns the folder of the copy.
+ * earlier update left, kept or pending, is removed first, so one previous version is kept at most. Returns the folder of
+ * the copy.
  */
 export async function keepPrevious(rollback: string, application: string, fromVersion: string, toVersion: string): Promise<string> {
     const state = readRollback(rollback);
@@ -146,8 +170,8 @@ export function keptNotice(said: string, kept: string): string {
 }
 
 /**
- * Settles an update's first launch with whether the window loaded. Returns the folder of the previous version when that
- * start failed and the copy is kept, null otherwise.
+ * Settles an update's first launch with whether the window loaded; the copy is kept either way. Returns the folder of the
+ * previous version when that start failed, null otherwise.
  */
 export function settleStart(rollback: string, currentVersion: string, started: boolean, log: Logger): string | null {
     const state = readRollback(rollback);
@@ -155,7 +179,5 @@ export function settleStart(rollback: string, currentVersion: string, started: b
     const { directory } = state.pending;
     writeRollback(rollback, started ? afterSuccessfulStart(state) : afterFailedStart(state));
     log.info('update_settled', { Version: currentVersion, Started: started });
-    if (!started) return directory;
-    rmSync(dirname(directory), { recursive: true, force: true });
-    return null;
+    return started ? null : directory;
 }
