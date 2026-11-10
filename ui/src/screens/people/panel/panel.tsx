@@ -50,13 +50,17 @@ export type PersonPanelProps = {
     /** The campaign the panel was opened from, when it was. */
     campaignId?: string | undefined;
     onClose: () => void;
-    /**
-     * The tab on show and where each tab is, for a host that keeps the tab in its address. Without them the panel
-     * keeps its tab itself, opening on Activity.
-     */
-    tab?: PersonTab | undefined;
-    to?: ((tab: PersonTab) => Route) | undefined;
-};
+} & (
+    | {
+          /**
+           * The tab on show and where each tab is, for a host that keeps the tab in its address: both or neither.
+           * Without them the panel keeps its tab itself, opening on Activity.
+           */
+          tab: PersonTab;
+          to: (tab: PersonTab) => Route;
+      }
+    | { tab?: undefined; to?: undefined }
+);
 
 /**
  * One person beside whatever list opened them: who they are, their tabs and what can be done for them. It reads the

@@ -202,6 +202,17 @@ describe('The person panel on a screen of its own', () => {
         fireEvent.click(within(panel()).getByRole('button', { name: 'Close' }));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
+
+    it('takes the tab on show and where each tab is as one pair: both or neither', () => {
+        const to = (tab: PersonTab) => ({ screen: 'people' as const, id: ingrid.id, tab, filters: {} });
+        const both = <PersonPanel contactId={ingrid.id} tab="details" to={to} onClose={() => undefined} />;
+        const neither = <PersonPanel contactId={ingrid.id} onClose={() => undefined} />;
+        // @ts-expect-error A tab without where each tab is would draw tabs that do nothing.
+        const tabAlone = <PersonPanel contactId={ingrid.id} tab="details" onClose={() => undefined} />;
+        // @ts-expect-error Where each tab is without the tab on show would never show the one it went to.
+        const toAlone = <PersonPanel contactId={ingrid.id} to={to} onClose={() => undefined} />;
+        expect([both, neither, tabAlone, toAlone]).toHaveLength(4);
+    });
 });
 
 describe('Saving the person', () => {
@@ -597,17 +608,19 @@ describe('Research', () => {
     });
 
     it('asks without a question, in the campaign the person picks', async () => {
-        const api = findings(new FakeApi().answer('contact.get', 'contact.get/person-after-half-move')).answer(
-            'workitem.create',
-            'workitem.create/researcher-asked-plain',
-        );
+        // The panel opens on Activity, which reads the person's open work and journal, then Research is chosen.
+        const api = findings(new FakeApi().answer('contact.get', 'contact.get/person-after-half-move'))
+            .answer('workitem.list', 'workitem.list/by-contact-open', 'workitem.list/researcher-findings')
+            .answer('journal.list', 'journal.list/by-contact')
+            .answer('workitem.create', 'workitem.create/researcher-asked-plain');
         watch(api);
         render(
             <ApiProvider api={api}>
-                <PersonPanel contactId={ingrid.id} campaignId="cmp_3" tab="research" onClose={() => undefined} />
+                <PersonPanel contactId={ingrid.id} campaignId="cmp_3" onClose={() => undefined} />
             </ApiProvider>,
         );
-        await within(await shown()).findByText('Fjordline opened an office in Bergen in September.');
+        fireEvent.click(within(await shown()).getByRole('tab', { name: 'Research' }));
+        await within(panel()).findByText('Fjordline opened an office in Bergen in September.');
         const where = within(panel()).getByRole<HTMLSelectElement>('combobox', {
             name: 'The campaign the researcher works in',
         });
