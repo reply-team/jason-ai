@@ -29,7 +29,7 @@ export function Details({ person, now, zone, aside }: Props) {
                         <>
                             <dt key={`${c.channel}-${c.value}-k`}>{channelName(c.channel)}</dt>
                             <dd key={`${c.channel}-${c.value}-v`}>
-                                <span className="value">{c.value}</span>
+                                {c.value}
                                 {c.primary && (
                                     <>
                                         {' '}

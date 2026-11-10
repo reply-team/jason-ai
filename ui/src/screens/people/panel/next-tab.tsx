@@ -69,7 +69,7 @@ export function NextTab({ person, now, zone }: Props) {
                             className="end"
                             href={href({ screen: 'workitems', tab: 'planned', filters: { contact: person.id } })}
                         >
-                            All open work for {displayName(person).name} →
+                            All planned work for {displayName(person).name} →
                         </a>
                     )}
                 </div>

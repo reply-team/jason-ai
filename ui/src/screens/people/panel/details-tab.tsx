@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError, Unpaired } from '../../../api/client';
 import { useApi } from '../../../api/context';
 import { session } from '../../../api/session';
-import type { Contact, ContactUpdateRequest, WorkItem } from '../../../api/types';
+import type { Contact, ContactChannel, ContactUpdateRequest, WorkItem } from '../../../api/types';
 import { ActionsRow } from '../../../layout/actions-row';
 import { Notice } from '../../../layout/notice';
 import { href } from '../../../router';
@@ -35,12 +35,13 @@ function draftOf(person: Contact): Draft {
         company: person.company ?? '',
         title: person.title ?? '',
         time_zone: person.time_zone ?? '',
-        channels: person.channels.map((each) => ({
+        // contact.get answers each channel with its label and data, which a save sends back as they were.
+        channels: (person.channels as ContactChannel[]).map((each) => ({
             channel: each.channel,
             value: each.value,
-            label: (each as { label?: string | null }).label ?? null,
+            label: each.label ?? null,
             primary: each.primary,
-            data: (each as { data?: unknown }).data ?? null,
+            data: each.data ?? null,
         })),
     };
 }
