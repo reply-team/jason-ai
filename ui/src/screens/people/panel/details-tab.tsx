@@ -51,8 +51,9 @@ function changes(person: Contact, draft: Draft): Omit<ContactUpdateRequest, 'con
     const was = draftOf(person);
     const changed: Omit<ContactUpdateRequest, 'contact_id' | 'actor'> = {};
     for (const { key } of fields) {
+        // Both sides trimmed: a value stored with outer spaces and left alone is not a change.
         const value = draft[key].trim();
-        if (value !== was[key]) changed[key] = value === '' ? null : value;
+        if (value !== was[key].trim()) changed[key] = value === '' ? null : value;
     }
     const channels = draft.channels
         .filter((row) => row.value.trim() !== '')
