@@ -78,6 +78,29 @@ with Node. `test/process-guard.test.ts` holds this, and also refuses a `require`
 registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`
 outside the navigation lock in `src/main.ts`.
 
+## Updating and taking it off
+
+Before an update installs, the desktop stops the runtime its own `jason` runs as, with `jason runtime stop`, and goes no
+further when that runtime does not stop, or when the run file names a runtime that did not answer while the process it
+names still runs (`src/own-runtime.ts`); it asks only the data directory it was started with.
+
+On Windows the installer and the uninstaller also look for any process running from the carried `jason.exe`, whichever
+data directory started it, and never close one (`installer/uninstall.nsh`). A person's uninstall starts the application
+with `--uninstall`, which stops the runtime it carries, takes off the PATH command's files that are its own, Open Jason
+at Login and the runtime's start at logon when it starts this application's `jason`, and names what it leaves: the data
+directory, the harness root and the updater's cache.
+
+On macOS there is no installer, so nothing looks when Jason.app is moved to the Trash, and the desktop's own look before
+an update is the whole guard. Before removing Jason.app, take off by hand what it placed:
+
+1. In the Jason menu, turn off Open Jason at Login and Start the Runtime at Logon.
+2. Run `jason runtime stop`.
+3. In the same menu, under Command Line, choose Remove jason from the PATH (or Remove jason-desktop from the PATH, by the
+   name it was put there with), then quit Jason.
+
+What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
+`Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`.
+
 ## Building and testing
 
 From `desktop/`:
