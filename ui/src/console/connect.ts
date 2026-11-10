@@ -66,12 +66,27 @@ define('connect.plugin', ([id]) => {
     if (!plugin) return;
     const token = take(`plugin:${plugin.id}:token`);
     const target = take(`plugin:${plugin.id}:target`);
-    if (!token && !target) return;
-    const values = { ...(token ? { token } : {}), ...(target ? { target } : {}) };
+    const server = plugin.serverLabel ? take(`plugin:${plugin.id}:server`) : '';
+    // A blank field is left out, which keeps what the file holds; removing a server is a button of its own.
+    const values = { ...(token ? { token } : {}), ...(target ? { target } : {}), ...(server ? { server } : {}) };
+    if (Object.keys(values).length === 0) return;
     void doing(`Configuring ${plugin.label}…`, () => here().desktop.setup.configurePlugin(plugin.id, values));
 });
 
-define('connect.reload', () => void doing('Reading the settings again…', () => Promise.resolve()));
+define('connect.pluginServerClear', ([id]) => {
+    const plugin = setup.value?.plugins.find((each) => each.id === id);
+    if (plugin?.serverLabel)
+        void doing(`Configuring ${plugin.label}…`, () =>
+            here().desktop.setup.configurePlugin(plugin.id, { server: '' }),
+        );
+});
+
+// Reload is the configure call with no values: it writes nothing, has the runtime read its plugins again, and reads
+// them back. The reload is the installation's, so any of the plugins names it.
+define('connect.reload', () => {
+    const first = setup.value?.plugins[0];
+    if (first) void doing('Reading the settings again…', () => here().desktop.setup.configurePlugin(first.id, {}));
+});
 
 const field = (key: string, label: string, kind: 'text' | 'password'): Html =>
     html`<input
@@ -194,7 +209,20 @@ function plugin(each: DesktopPlugin, busy: Html | null, refused: boolean): Html 
             refused
                 ? null
                 : html`${field(`plugin:${each.id}:target`, each.target.label, 'text')}
+                      ${each.serverLabel ? field(`plugin:${each.id}:server`, each.serverLabel, 'text') : null}
                       ${each.tokenLabel ? secret(`plugin:${each.id}:token`, each.tokenLabel) : null}
+                      ${
+                          each.serverLabel
+                              ? html`<button
+                                    class="btn sm"
+                                    type="button"
+                                    ${busy}
+                                    ${act('connect.pluginServerClear', each.id)}
+                                >
+                                    Use the public server
+                                </button>`
+                              : null
+                      }
                       <button class="btn sm" type="button" ${busy} ${act('connect.plugin', each.id)}>Configure</button>`
         }
     </div>`;

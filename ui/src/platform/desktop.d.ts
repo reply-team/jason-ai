@@ -107,6 +107,8 @@ export interface DesktopPlugin {
     target: { key: 'channel' | 'chat' | 'topic' | 'url'; label: string };
     /** What the token is called on the plugin's side, for the field's label; null where the desktop sets no token. */
     tokenLabel: string | null;
+    /** The label of the server field for the one plugin that takes a server of its own (ntfy); null for the others. */
+    serverLabel: string | null;
     /** A sentence for under the fields: what the desktop does not set for this plugin, and where that is set instead. */
     note: string | null;
     /** Whether the settings file holds the desktop's keys for this plugin. Neither the token nor the target comes back. */
@@ -132,8 +134,9 @@ export interface DesktopSetup {
     /** The plugins the release carries that the desktop can configure. */
     plugins: DesktopPlugin[];
     /**
-     * Why the desktop could not read the settings file, in its own words; null when it could. While it cannot, no
-     * plugin is configured from here: the person edits the file by hand and reads the cards again.
+     * Why the settings file could not be read, in the words of the desktop's parse or of the runtime's reload
+     * (`settings_file_unreadable`); null when it could. While it cannot, no plugin is configured from here: the person
+     * edits the file by hand and presses Reload.
      */
     settingsRefused: string | null;
 }
@@ -171,12 +174,25 @@ export interface JasonDesktop {
          * Configures one of `status().plugins` in one edit of the settings file. It writes `Plugins:Config:<id>` (the
          * token where the plugin reads one from there; the forwarder's `url` from `target`), `Plugins:Grants:<id>:Http`,
          * and for the three notification plugins `Notifications:Plugins:<id>:Binding` with `target` under the plugin's
-         * own key. A field left out keeps what the file holds. Every key the desktop does not own is kept and the file
-         * is written whole beside itself and renamed over; a file the desktop cannot parse is refused, never
-         * overwritten. Then the runtime reads its plugins again and the desktop reads them back; `status()` says what
-         * the runtime answered, which is "configured", never that anything was delivered. No token ever comes back.
+         * own key. Every key the desktop does not own is kept and the file is written whole beside itself and renamed
+         * over; a file the desktop cannot parse is refused, never overwritten.
+         *
+         * A value absent keeps what the file holds; an empty one removes it: `token: ""` removes the token key and
+         * `server: ""` the binding's server, putting the grant back to `["*"]`. `target: ""` is refused, since every
+         * plugin's binding requires its target. `server` is ntfy's alone (the plugin whose `serverLabel` is set; any
+         * other is refused as validation), checked before anything is written against the binding's own pattern and
+         * the host rule, `https`, or `http` only to localhost, 127.0.0.1 or ::1; it goes into the binding beside the
+         * topic, and the grant becomes the URL's host, with its port when that is not the scheme's default.
+         *
+         * Then the runtime reads its plugins again and the desktop reads them back. With no values at all the call
+         * opens the file for nothing and only does that, which is what Reload is; a refusal the reload answers is what
+         * `status().settingsRefused` then says. `status()` says what the runtime answered, which is "configured", never
+         * that anything was delivered. No token ever comes back.
          */
-        configurePlugin(pluginId: string, settings: { token?: string; target?: string }): Promise<void>;
+        configurePlugin(
+            pluginId: string,
+            settings: { token?: string; target?: string; server?: string },
+        ): Promise<void>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

@@ -283,7 +283,7 @@ describe('the console', () => {
         await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1));
     });
 
-    it('refuses to configure a plugin over a settings file it cannot read, and reads it again on Reload', async () => {
+    it('refuses to configure a plugin over a settings file it cannot read, and reloads with no values on Reload', async () => {
         const fake = pending(new FakeApi());
         const reason = `The settings file is not valid JSON at line 3. ${hostile}`;
         const desktop = stubDesktop({ ...setupFound, settingsRefused: reason });
@@ -299,6 +299,49 @@ describe('the console', () => {
         expect(within(connect).queryByLabelText('Bot token')).toBeNull();
         fireEvent.click(within(alert).getByRole('button', { name: 'Reload' }));
         await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(2));
-        expect(desktop.calls.some((each) => each.name === 'setup.configurePlugin')).toBe(false);
+        expect(desktop.calls.filter((each) => each.name === 'setup.configurePlugin').map((each) => each.args)).toEqual([
+            ['telegram', {}],
+        ]);
+    });
+
+    it('draws a server field for ntfy alone, sends it only when filled, and removes it by an act of its own', async () => {
+        const fake = pending(new FakeApi());
+        const desktop = stubDesktop();
+        renderConsole(fake, desktop);
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        show('Connect');
+        await waitFor(() => within(panel('Connect')).getByLabelText('Topic'));
+        const card = (id: string) => panel('Connect').querySelector<HTMLElement>(`.plugin[data-id="${id}"]`)!;
+        expect(within(card('ntfy')).getByLabelText('Server (optional)')).toBeTruthy();
+        expect(within(card('ntfy')).queryByLabelText(/token/i)).toBeNull();
+        expect(card('ntfy').textContent).toContain('A server that needs a token takes it as the plugin README says.');
+        for (const other of ['telegram', 'journal-forwarder']) {
+            expect(within(card(other)).queryByLabelText(/server/i)).toBeNull();
+            expect(within(card(other)).queryByRole('button', { name: 'Use the public server' })).toBeNull();
+        }
+        const configured = () =>
+            desktop.calls.filter((each) => each.name === 'setup.configurePlugin').map((each) => each.args);
+
+        fireEvent.input(within(card('ntfy')).getByLabelText('Topic'), { target: { value: 'alerts' } });
+        fireEvent.input(within(card('ntfy')).getByLabelText('Server (optional)'), {
+            target: { value: ' https://ntfy.example.test ' },
+        });
+        fireEvent.click(within(card('ntfy')).getByRole('button', { name: 'Configure' }));
+        await waitFor(() => expect(configured()).toHaveLength(1));
+        await waitFor(() => expect(card('ntfy').querySelector('button[disabled]')).toBeNull());
+
+        fireEvent.input(within(card('ntfy')).getByLabelText('Topic'), { target: { value: 'alerts' } });
+        fireEvent.input(within(card('ntfy')).getByLabelText('Server (optional)'), { target: { value: '  ' } });
+        fireEvent.click(within(card('ntfy')).getByRole('button', { name: 'Configure' }));
+        await waitFor(() => expect(configured()).toHaveLength(2));
+        await waitFor(() => expect(card('ntfy').querySelector('button[disabled]')).toBeNull());
+
+        fireEvent.click(within(card('ntfy')).getByRole('button', { name: 'Use the public server' }));
+        await waitFor(() => expect(configured()).toHaveLength(3));
+        expect(configured()).toEqual([
+            ['ntfy', { target: 'alerts', server: 'https://ntfy.example.test' }],
+            ['ntfy', { target: 'alerts' }],
+            ['ntfy', { server: '' }],
+        ]);
     });
 });
