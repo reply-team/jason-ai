@@ -29,14 +29,19 @@ and names `jason update`. A `feed` in the desktop's settings is passed to every 
 
 A Connect card also writes, into `<data>/config/settings.json`, the keys of the plugin it configures and no other:
 `Plugins:Config:<id>`, `Plugins:Grants:<id>:Http` and `Notifications:Plugins:<id>:Binding`. Every other key is kept as
-it was, `Routes` is never written, and a file the desktop cannot parse is refused and left as it is.
+it was, `Routes` is never written, and a file the desktop cannot parse is refused and left as it is. A target is checked
+against the pattern the plugin's binding declares before anything is written; a card with no values only runs
+`jason plugin reload`, and a reload that cannot read the settings file is what `setup.status().settingsRefused` says.
 
 | Plugin | Token | Target | Grant |
 | --- | --- | --- | --- |
 | `slack` | `Plugins:Config:slack:token` | `Notifications:Plugins:slack:Binding:channel` | `slack.com` |
 | `telegram` | `Plugins:Config:telegram:token` | `Notifications:Plugins:telegram:Binding:chat` | `api.telegram.org` |
-| `ntfy` | none: a token is read from the runtime's environment only | `Notifications:Plugins:ntfy:Binding:topic` | `ntfy.sh` |
+| `ntfy` | none: `NTFY_TOKEN` is read from the runtime's environment only | `Notifications:Plugins:ntfy:Binding:topic`, and `server` beside it for a server of your own | `*` (the public server alone), or that server's host |
 | `journal-forwarder` | `Plugins:Config:journal-forwarder:token` | `Plugins:Config:journal-forwarder:url` | the receiver's host |
+
+The desktop never writes an `Env` grant (ntfy's `NTFY_TOKEN`) or a `Subscriptions` grant (the journal kinds the
+forwarder is admitted to); each card's note says where those are set.
 
 ## The window
 

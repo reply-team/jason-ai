@@ -30,7 +30,7 @@ export const templates = {
     cli_exited: 'jason {Verb} exited {Exit} after {ElapsedMs} ms',
     program_exited: '{Program} {Verb} exited {Exit} after {ElapsedMs} ms',
     settings_refused: 'The settings file at {Path} could not be read as JSON; nothing was written to it',
-    plugin_configured: 'Plugin {PluginId} was configured; token {TokenChanged}, target {TargetChanged}; jason plugin reload exited {Exit}',
+    plugin_configured: 'Plugin {PluginId} was configured; token {TokenChanged}, target {TargetChanged}, server {ServerChanged}; jason plugin reload exited {Exit}',
     provider_key_stored: 'The key of provider {ProviderId} was stored',
     provider_key_removed: 'The key of provider {ProviderId} was removed',
     reply_connected: 'Reply sign-in by {Method} exited {Exit}',

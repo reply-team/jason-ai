@@ -8,7 +8,7 @@
 // with a file and arguments, never through a shell.
 
 import { execFile } from 'node:child_process';
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { arch, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,7 +59,7 @@ await new Promise((done, fail) => {
 });
 
 // Only the executable is carried: the debug symbols the publish leaves beside it are not.
-for (const name of ['jason.pdb', 'jason.dbg']) rmSync(join(bundle, name), { force: true });
+for (const name of readdirSync(bundle)) if (/\.(pdb|dbg)$/i.test(name)) rmSync(join(bundle, name), { force: true });
 
 cpSync(join(root, 'skills'), join(bundle, 'skills'), { recursive: true });
 writeFileSync(join(bundle, 'version.json'), `${JSON.stringify({ version }, null, 2)}\n`);

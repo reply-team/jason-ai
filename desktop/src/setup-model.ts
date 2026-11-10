@@ -11,16 +11,23 @@ export interface BundledPlugin {
     description: string;
     /** What the card calls the token, or null for a plugin that takes none from the settings file. */
     tokenLabel: string | null;
-    /** What the card calls the target. */
-    targetLabel: string;
+    /** What the card calls the server, for the one plugin whose binding takes a server of its own; null for the others. */
+    serverLabel: string | null;
+    /** What the desktop does not set for this plugin, and where that is set instead. */
+    note: string | null;
     /**
-     * Where the target is written: as the notification binding's field (`Notifications:Plugins:<id>:Binding:<field>`)
-     * or as the plugin's own configuration (`Plugins:Config:<id>:<field>`).
+     * The one value a card's `target` sets, by the key the plugin reads it under: in the notification binding
+     * (`Notifications:Plugins:<id>:Binding:<key>`) or in the plugin's own configuration (`Plugins:Config:<id>:<key>`).
+     * `pattern` and `maxLength` are the binding schema's own, from the plugin's manifest; the forwarder's URL is
+     * checked by the host rule instead.
      */
-    target: { binding: string } | { config: string };
-    /** The hosts granted under `Plugins:Grants:<id>:Http`; null when the target names the host. */
+    target: { key: 'channel' | 'chat' | 'topic' | 'url'; label: string; where: 'binding' | 'config'; pattern: string | null; maxLength: number };
+    /** The hosts granted under `Plugins:Grants:<id>:Http` by default; null when the target names the host. */
     http: readonly string[] | null;
 }
+
+/** The pattern ntfy's binding declares for `server`. */
+export const serverPattern = '^https?://[^/?#]+$';
 
 export const bundledPlugins: readonly BundledPlugin[] = [
     {
@@ -28,8 +35,9 @@ export const bundledPlugins: readonly BundledPlugin[] = [
         label: 'Slack',
         description: 'Posts a pointer to one channel when Jason starts waiting for you.',
         tokenLabel: 'Bot token',
-        targetLabel: 'Channel id',
-        target: { binding: 'channel' },
+        serverLabel: null,
+        note: null,
+        target: { key: 'channel', label: 'Channel id or name', where: 'binding', pattern: '^(#?[a-z0-9._-]{1,80}|[CDGU][A-Z0-9]{8,})$', maxLength: 400 },
         http: ['slack.com'],
     },
     {
@@ -37,26 +45,30 @@ export const bundledPlugins: readonly BundledPlugin[] = [
         label: 'Telegram',
         description: 'Sends a pointer to one chat when Jason starts waiting for you.',
         tokenLabel: 'Bot token',
-        targetLabel: 'Chat id or @name',
-        target: { binding: 'chat' },
+        serverLabel: null,
+        note: null,
+        target: { key: 'chat', label: 'Chat id or @name', where: 'binding', pattern: '^(-?[0-9]{1,20}|@[A-Za-z][A-Za-z0-9_]{4,31})$', maxLength: 400 },
         http: ['api.telegram.org'],
     },
     {
         id: 'ntfy',
         label: 'ntfy',
-        description: 'Sends a pointer to one ntfy topic when Jason starts waiting for you. ntfy takes no token here: a token for a server of your own is read from the runtime environment only.',
+        description: 'Sends a pointer to one ntfy topic when Jason starts waiting for you.',
         tokenLabel: null,
-        targetLabel: 'Topic',
-        target: { binding: 'topic' },
-        http: ['ntfy.sh'],
+        serverLabel: 'Server (optional)',
+        note: 'A server that needs a token reads it from NTFY_TOKEN in the runtime’s environment, granted under Plugins:Grants:ntfy:Env, as the plugin’s README says; the desktop sets neither.',
+        target: { key: 'topic', label: 'Topic', where: 'binding', pattern: '^[A-Za-z0-9_-]+$', maxLength: 64 },
+        // The star is the public server alone, as the manifest says; a server of the person's own replaces it.
+        http: ['*'],
     },
     {
         id: 'journal-forwarder',
         label: 'Journal forwarder',
         description: 'Posts the journal lines it is granted to one receiver of yours.',
         tokenLabel: 'Bearer token (optional)',
-        targetLabel: 'Receiver URL',
-        target: { config: 'url' },
+        serverLabel: null,
+        note: 'Which journal kinds it forwards is granted under Plugins:Grants:journal-forwarder:Subscriptions, which the desktop does not set; until that grant names a kind, nothing is forwarded.',
+        target: { key: 'url', label: 'Receiver URL', where: 'config', pattern: null, maxLength: 400 },
         http: null,
     },
 ];
@@ -69,6 +81,7 @@ export function bundledPlugin(id: unknown): BundledPlugin | undefined {
 export interface PluginValues {
     token?: string | undefined;
     target?: string | undefined;
+    server?: string | undefined;
 }
 
 export class Refused extends Error {}
@@ -106,55 +119,40 @@ function setOrRemove(object: Json, name: string, value: string | undefined): voi
     else object[key] = value;
 }
 
-/** A target the card may write: one line, no spaces, and for the forwarder an https URL or http on this machine. */
-export function targetProblem(plugin: BundledPlugin, target: string): string | null {
-    if (target === '') return null;
-    if (target.length > 400 || /\s/.test(target)) return `That is not a ${plugin.targetLabel.toLowerCase()}.`;
-    if ('config' in plugin.target) {
-        let url: URL;
-        try {
-            url = new URL(target);
-        } catch {
-            return 'That is not a web address.';
-        }
-        const here = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
-        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && here)) return 'The receiver is reached over https, or over http on this machine.';
+/** An address this machine answers on, the one place plain http may go. */
+function onThisMachine(url: URL): boolean {
+    return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+}
+
+/** A web address a plugin may be pointed at: https, or http on this machine; the problem with it otherwise. */
+function addressProblem(text: string, what: string): string | null {
+    let url: URL;
+    try {
+        url = new URL(text);
+    } catch {
+        return `That is not a web address for the ${what}.`;
+    }
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && onThisMachine(url))) {
+        return `The ${what} is reached over https, or over http on this machine.`;
     }
     return null;
 }
 
-/**
- * The installation's settings with one plugin configured, as a person would write it: the token under
- * `Plugins:Config:<id>:token`, the hosts under `Plugins:Grants:<id>:Http`, the target as the notification binding or the
- * plugin's own setting. Every other key stays as it was, `Routes` is never touched, and the input is not changed.
- */
-export function withPluginConfigured(settings: Json, plugin: BundledPlugin, values: PluginValues): Json {
-    if (plugin.tokenLabel === null && values.token !== undefined && values.token !== '') {
-        throw new Refused(`${plugin.label} takes no token from the settings file.`);
-    }
-    const target = values.target?.trim();
-    const problem = target === undefined ? null : targetProblem(plugin, target);
-    if (problem !== null) throw new Refused(problem);
+/** A target the card may write: present, one line, and the binding's own pattern, or for the forwarder the host rule. */
+export function targetProblem(plugin: BundledPlugin, target: string): string | null {
+    const named = plugin.target.label.toLowerCase();
+    if (target === '') return `Enter the ${named}: ${plugin.label} needs one.`;
+    if (target.length > plugin.target.maxLength || /\s/.test(target)) return `That is not a ${named}.`;
+    if (plugin.target.pattern !== null && !new RegExp(plugin.target.pattern).test(target)) return `That is not a ${named} ${plugin.label} takes.`;
+    if (plugin.target.where === 'config') return addressProblem(target, 'receiver');
+    return null;
+}
 
-    const next = structuredClone(settings);
-    const config = section(next, ['Plugins', 'Config', plugin.id]);
-    setOrRemove(config, 'token', values.token?.trim());
-
-    if ('binding' in plugin.target) {
-        if (target !== undefined) {
-            const binding = section(next, ['Notifications', 'Plugins', plugin.id, 'Binding']);
-            setOrRemove(binding, plugin.target.binding, target);
-        }
-    } else {
-        setOrRemove(config, plugin.target.config, target);
-    }
-
-    const hosts = plugin.http ?? (target ? [new URL(target).host] : null);
-    if (hosts !== null) {
-        const grant = section(next, ['Plugins', 'Grants', plugin.id]);
-        grant[keyOf(grant, 'Http')] = [...hosts];
-    }
-    return next;
+/** A server the card may write for ntfy: the binding's own pattern, then the host rule. */
+export function serverProblem(server: string): string | null {
+    if (server === '') return null;
+    if (/\s/.test(server) || !new RegExp(serverPattern).test(server)) return 'That is not a server address: give its scheme and host, and nothing after.';
+    return addressProblem(server, 'server');
 }
 
 function at(root: unknown, path: readonly string[]): unknown {
@@ -166,16 +164,65 @@ function at(root: unknown, path: readonly string[]): unknown {
     return here;
 }
 
+/**
+ * The installation's settings with one plugin configured, as a person would write it: the token under
+ * `Plugins:Config:<id>:token`, the hosts under `Plugins:Grants:<id>:Http`, the target as the notification binding or the
+ * plugin's own setting, and for ntfy its server beside the topic. Everything is checked before anything is changed;
+ * every other key stays as it was, `Routes` is never touched, and the input is not changed.
+ */
+export function withPluginConfigured(settings: Json, plugin: BundledPlugin, values: PluginValues): Json {
+    if (plugin.tokenLabel === null && values.token !== undefined && values.token !== '') {
+        throw new Refused(`${plugin.label} takes no token from the settings file.`);
+    }
+    if (plugin.serverLabel === null && values.server !== undefined) throw new Refused(`${plugin.label} takes no server.`);
+    const target = values.target?.trim();
+    const server = values.server?.trim();
+    const problem = (target === undefined ? null : targetProblem(plugin, target)) ?? (server === undefined ? null : serverProblem(server));
+    if (problem !== null) throw new Refused(problem);
+
+    const next = structuredClone(settings);
+    const config = section(next, ['Plugins', 'Config', plugin.id]);
+    setOrRemove(config, 'token', values.token?.trim());
+
+    if (plugin.target.where === 'binding') {
+        if (target !== undefined || server !== undefined) {
+            const binding = section(next, ['Notifications', 'Plugins', plugin.id, 'Binding']);
+            setOrRemove(binding, plugin.target.key, target);
+            setOrRemove(binding, 'server', server);
+        }
+    } else {
+        setOrRemove(config, plugin.target.key, target);
+    }
+
+    // The grant follows what the settings now hold: the forwarder's receiver, ntfy's own server, or the plugin's default.
+    const own = plugin.target.where === 'config'
+        ? at(next, ['Plugins', 'Config', plugin.id, plugin.target.key])
+        : plugin.serverLabel !== null ? at(next, ['Notifications', 'Plugins', plugin.id, 'Binding', 'server']) : undefined;
+    const hosts = typeof own === 'string' && own !== '' ? [new URL(own).host] : plugin.http;
+    if (hosts !== null) {
+        const grant = section(next, ['Plugins', 'Grants', plugin.id]);
+        grant[keyOf(grant, 'Http')] = [...hosts];
+    }
+    return next;
+}
+
 const present = (value: unknown) => typeof value === 'string' && value !== '';
 
-/** Whether the settings carry what the plugin needs to be invoked: its target, and its token where it takes one. */
+/** Whether the settings carry what the plugin needs to be invoked: its target, and its token where it requires one. */
 export function isConfigured(settings: unknown, plugin: BundledPlugin): boolean {
-    const target = 'binding' in plugin.target
-        ? at(settings, ['Notifications', 'Plugins', plugin.id, 'Binding', plugin.target.binding])
-        : at(settings, ['Plugins', 'Config', plugin.id, plugin.target.config]);
+    const target = plugin.target.where === 'binding'
+        ? at(settings, ['Notifications', 'Plugins', plugin.id, 'Binding', plugin.target.key])
+        : at(settings, ['Plugins', 'Config', plugin.id, plugin.target.key]);
     if (!present(target)) return false;
     if (plugin.id === 'slack' || plugin.id === 'telegram') return present(at(settings, ['Plugins', 'Config', plugin.id, 'token']));
     return true;
+}
+
+/** Whether the settings hold a notification binding for the plugin; null for one that takes none. */
+export function hasBinding(settings: unknown, plugin: BundledPlugin): boolean | null {
+    if (plugin.target.where !== 'binding') return null;
+    const binding = at(settings, ['Notifications', 'Plugins', plugin.id, 'Binding']);
+    return typeof binding === 'object' && binding !== null && !Array.isArray(binding);
 }
 
 /** The settings file's text as an object, an absent file as an empty one; anything else is refused, never replaced. */
@@ -300,4 +347,34 @@ export function pluginValid(stdout: string, id: string): boolean {
     } catch {
         return false;
     }
+}
+
+/** What the runtime answered for one plugin: whether it is valid, and how many grants it holds across its capabilities. */
+export interface PluginRuntime {
+    valid: boolean;
+    grants: number;
+}
+
+/** Each plugin `jason plugin list` printed, by id; an empty map when it printed nothing readable. */
+export function pluginRuntimes(stdout: string): Map<string, PluginRuntime> {
+    const answered = new Map<string, PluginRuntime>();
+    let raw: { plugins?: { id?: unknown; status?: unknown; capabilities?: unknown }[] };
+    try {
+        raw = JSON.parse(stdout);
+    } catch {
+        return answered;
+    }
+    for (const plugin of Array.isArray(raw?.plugins) ? raw.plugins : []) {
+        if (typeof plugin?.id !== 'string') continue;
+        let grants = 0;
+        const capabilities = plugin.capabilities;
+        if (typeof capabilities === 'object' && capabilities !== null) {
+            for (const capability of Object.values(capabilities)) {
+                const granted = (capability as { granted?: unknown } | null)?.granted;
+                if (Array.isArray(granted)) grants += granted.length;
+            }
+        }
+        answered.set(plugin.id, { valid: plugin.status === 'valid', grants });
+    }
+    return answered;
 }

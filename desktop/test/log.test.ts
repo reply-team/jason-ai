@@ -48,7 +48,7 @@ test('the desktop’s log, read back, carries none of the secrets the desktop wa
     // Every way a caller could try to put one in: a field that is no hole, a hole given text too long or on two lines.
     const loose = log as unknown as Record<'info' | 'warn' | 'error', (name: string, fields: Record<string, unknown>) => void>;
     loose.info('reply_connected', { Method: 'key', Exit: 0, Key: planted[0], stdin: planted[0] });
-    loose.info('plugin_configured', { PluginId: 'slack', TokenChanged: true, TargetChanged: true, Exit: 0, Token: planted[1] });
+    loose.info('plugin_configured', { PluginId: 'slack', TokenChanged: true, TargetChanged: true, ServerChanged: false, Exit: 0, Token: planted[1] });
     loose.info('provider_key_stored', { ProviderId: 'deepseek', key: planted[2] });
     loose.warn('navigation_refused', { Origin: `${planted[3]}\nsecond line` });
     loose.error('window_load_failed', { Step: 'x'.repeat(401) + planted[4], Exit: 3, Message: planted[4] });

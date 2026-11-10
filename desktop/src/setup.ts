@@ -19,15 +19,17 @@ import type { DesktopSettings } from './settings.ts';
 import {
     bundledPlugin,
     bundledPlugins,
+    hasBinding,
     isConfigured,
     parseInstallationSettings,
     parseReplyAccounts,
     parseReplyAuth,
-    pluginValid,
+    pluginRuntimes,
     programInstalls,
     Refused,
     versionIn,
     withPluginConfigured,
+    type PluginRuntime,
     type PluginValues,
     type ReplyAccount,
 } from './setup-model.ts';
@@ -55,9 +57,13 @@ export interface PluginState {
     id: string;
     label: string;
     description: string;
+    target: { key: 'channel' | 'chat' | 'topic' | 'url'; label: string };
     tokenLabel: string | null;
-    targetLabel: string;
+    serverLabel: string | null;
+    note: string | null;
     configured: boolean;
+    runtime: PluginRuntime | null;
+    binding: boolean | null;
 }
 
 export interface SetupState {
@@ -71,6 +77,11 @@ export interface SetupState {
      */
     versionsDiffer: string | null;
     plugins: PluginState[];
+    /**
+     * Why the settings file could not be read, in the words of the desktop's parse or of the runtime's last reload
+     * (`settings_file_unreadable`); null when it could.
+     */
+    settingsRefused: string | null;
 }
 
 export interface SetupDeps {
@@ -109,6 +120,18 @@ function words(result: RunResult, otherwise: string): string {
     return (result.stderr.trim() || result.stdout.trim() || otherwise).slice(-1000);
 }
 
+/** The words of a reload refused because the settings file could not be read, or null for any other answer. */
+export function settingsUnreadable(stdout: string): string | null {
+    try {
+        const raw = JSON.parse(stdout) as { error?: { details?: { code?: unknown; message?: unknown }[] } };
+        const details = Array.isArray(raw.error?.details) ? raw.error.details : [];
+        const detail = details.find((entry) => entry?.code === 'settings_file_unreadable');
+        return typeof detail?.message === 'string' ? detail.message : null;
+    } catch {
+        return null;
+    }
+}
+
 /** Pure: what the system screen says when the runtime and the desktop are two versions. */
 export function versionsDifferSentence(runtimeVersion: string | null, bundleVersion: string): string | null {
     if (runtimeVersion === null || runtimeVersion === bundleVersion) return null;
@@ -120,6 +143,8 @@ export class Setup {
     #listeners = new Set<() => void>();
     #versions = new Map<ProgramName, string | null>();
     #queue: Promise<unknown> = Promise.resolve();
+    /** What the last reload said about the settings file, when it could not read it. */
+    #reloadRefusal: string | null = null;
 
     constructor(deps: SetupDeps) {
         this.#deps = deps;
@@ -188,16 +213,22 @@ export class Setup {
         }));
 
         let settings: unknown = {};
+        let settingsRefused = this.#reloadRefusal;
         try {
             settings = parseInstallationSettings(readText(this.#deps.paths.installationSettings));
-        } catch {
+        } catch (error) {
             settings = {};
+            settingsRefused = (error as Error).message;
         }
+
+        // One question to the runtime answers both the Reply card and the plugins' cards.
+        const listed = await this.#deps.cli.run(['plugin', 'list']);
+        const answered = listed.exit === 0 ? pluginRuntimes(listed.stdout) : new Map<string, PluginRuntime>();
 
         const runtimeVersion = this.#deps.runtimeVersion();
         return {
             hosts: [...programHosts, ...providerHosts],
-            reply: await this.#reply(),
+            reply: await this.#reply(answered.get('reply')?.valid ?? false),
             runtimeVersion,
             bundleVersion: this.#deps.bundleVersion,
             versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion),
@@ -205,21 +236,25 @@ export class Setup {
                 id: plugin.id,
                 label: plugin.label,
                 description: plugin.description,
+                target: { key: plugin.target.key, label: plugin.target.label },
                 tokenLabel: plugin.tokenLabel,
-                targetLabel: plugin.targetLabel,
+                serverLabel: plugin.serverLabel,
+                note: plugin.note,
                 configured: isConfigured(settings, plugin),
+                runtime: answered.get(plugin.id) ?? null,
+                binding: hasBinding(settings, plugin),
             })),
+            settingsRefused,
         };
     }
 
-    async #reply(): Promise<ReplyState> {
+    async #reply(wired: boolean): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [] };
         }
         const version = await this.#version('reply');
         const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
-        const wired = pluginValid((await this.#deps.cli.run(['plugin', 'list'])).stdout, 'reply');
         const accounts = auth.signedIn ? parseReplyAccounts((await this.#run('reply', 'account list', ['account', 'list'])).stdout) : [];
         return { cli: { found, version, install: null }, signedIn: auth.signedIn, user: auth.user, wired, accounts };
     }
@@ -294,20 +329,25 @@ export class Setup {
     }
 
     /**
-     * Places one of the four bundled plugins with the CLI, writes its token, its target and its grant into the
-     * installation's settings as a person would, and asks the runtime to load it again. A settings file the desktop
-     * cannot read is refused and left as it is. The token travels in that file only: never in an argument, an
-     * environment or a log.
+     * Places one of the four bundled plugins with the CLI, writes its token, its target, ntfy's server and its grant into
+     * the installation's settings as a person would, and asks the runtime to load its plugins again. With no values it
+     * only asks for the reload, which is what Reload is. A settings file the desktop cannot read is refused and left as
+     * it is. The token travels in that file only: never in an argument, an environment or a log.
      */
     configurePlugin(pluginId: unknown, values: unknown): Promise<void> {
         return this.#serial(async () => {
             const plugin = bundledPlugin(pluginId);
             if (plugin === undefined) throw new Refused('That is not a plugin the desktop configures.');
-            const asked = (values ?? {}) as Record<string, unknown>;
+            const asked = (typeof values === 'object' && values !== null ? values : {}) as Record<string, unknown>;
             const wanted: PluginValues = {
                 token: typeof asked.token === 'string' ? asked.token : undefined,
                 target: typeof asked.target === 'string' ? asked.target : undefined,
+                server: typeof asked.server === 'string' ? asked.server : undefined,
             };
+            if (wanted.token === undefined && wanted.target === undefined && wanted.server === undefined) {
+                await this.#reload(plugin.id, wanted);
+                return;
+            }
 
             const file = this.#deps.paths.installationSettings;
             let current: Record<string, unknown>;
@@ -326,16 +366,22 @@ export class Setup {
             const latest = parseInstallationSettings(readText(file));
             const merged = JSON.stringify(latest) === JSON.stringify(current) ? next : withPluginConfigured(latest, plugin, wanted);
             writeAtomically(file, `${JSON.stringify(merged, null, 2)}\n`);
-
-            const reload = await this.#deps.cli.run(['plugin', 'reload']);
-            this.#deps.log.info('plugin_configured', {
-                PluginId: plugin.id,
-                TokenChanged: wanted.token !== undefined,
-                TargetChanged: wanted.target !== undefined,
-                Exit: reload.exit,
-            });
-            this.#changed();
-            if (reload.exit !== 0) throw new Refused(words(reload, 'The runtime did not load the plugins again.'));
+            await this.#reload(plugin.id, wanted);
         });
+    }
+
+    /** Asks the runtime to read its plugins again, and keeps what it said about the settings file for `status()`. */
+    async #reload(pluginId: string, wanted: PluginValues): Promise<void> {
+        const reload = await this.#deps.cli.run(['plugin', 'reload']);
+        this.#reloadRefusal = reload.exit === 0 ? null : settingsUnreadable(reload.stdout);
+        this.#deps.log.info('plugin_configured', {
+            PluginId: pluginId,
+            TokenChanged: wanted.token !== undefined,
+            TargetChanged: wanted.target !== undefined,
+            ServerChanged: wanted.server !== undefined,
+            Exit: reload.exit,
+        });
+        this.#changed();
+        if (reload.exit !== 0) throw new Refused(this.#reloadRefusal ?? words(reload, 'The runtime did not load the plugins again.'));
     }
 }

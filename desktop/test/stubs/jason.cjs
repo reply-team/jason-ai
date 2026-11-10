@@ -37,7 +37,28 @@ if (args[0] === 'status') {
 } else if (verb === 'ui open') {
     print({ url: process.env.STUB_LINK || `${origin}/ui/#pair=planted-pair-code` });
 } else if (verb === 'plugin list') {
-    print({ plugins: [{ id: 'reply', status: 'valid' }] });
+    if (process.env.STUB_PLUGIN_LIST_FAILS === 'yes') {
+        process.stderr.write('No runtime answered.\n');
+        process.exit(3);
+    }
+    const granted = (http, env) => ({ exec: null, http: { requested: [], granted: http }, env: { requested: [], granted: env }, api: null, subscriptions: null });
+    print({
+        plugins: [
+            { id: 'reply', status: 'valid', capabilities: granted([], []) },
+            { id: 'slack', status: 'valid', capabilities: granted(['slack.com'], ['SLACK_PROXY']) },
+            { id: 'ntfy', status: 'invalid', capabilities: granted([], []) },
+        ],
+    });
+} else if (verb === 'plugin reload' && process.env.STUB_RELOAD_REFUSED === 'yes') {
+    print({
+        error: {
+            code: 'plugin_reload_rejected',
+            message: 'The reload was rejected; the previous plugins stay active.',
+            retryable: false,
+            details: [{ field: 'settings.json', code: 'settings_file_unreadable', message: 'the settings file could not be read (not valid JSON at line 1, byte 2), so nothing it grants or routes can be resolved; fix it, or close what holds it open, and reload again.' }],
+        },
+    });
+    process.exit(1);
 } else if (['ui install', 'skills install', 'plugin install', 'plugin reload'].includes(verb)) {
     print({});
 } else {
