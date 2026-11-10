@@ -358,6 +358,38 @@ describe('The campaign the provider change is queued in', () => {
         fireEvent.change(where, { target: { value: 'cmp_2' } });
         expect(where.value).toBe('cmp_2');
     });
+
+    it('is the campaign picked, not the opening one, that the work item carries', async () => {
+        const api = new FakeApi()
+            .answer('contact.get', 'contact.get/person-after-half-move')
+            .answer('suppression.list', ...registerClear)
+            .answer('workitem.list', 'workitem.list/by-contact-open')
+            .answer('journal.list', 'journal.list/by-contact')
+            .answer('contact.update', 'contact.update/person-saved')
+            .answer('workitem.create', 'workitem.create/provider-contact-update');
+        watch(api);
+        render(
+            <ApiProvider api={api}>
+                <PersonPanel contactId={ingrid.id} campaignId="cmp_3" onClose={() => undefined} />
+            </ApiProvider>,
+        );
+        fireEvent.click(within(await shown()).getByRole('tab', { name: 'Details' }));
+        fireEvent.click(await within(panel()).findByRole('button', { name: 'Edit' }));
+        fireEvent.input(within(panel()).getByRole('textbox', { name: 'Title' }), { target: { value: 'VP Revenue' } });
+        fireEvent.input(within(panel()).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' }), {
+            target: { value: 'Promoted in October.' },
+        });
+        fireEvent.click(within(panel()).getByRole('checkbox', { name: /queue the name, company and title/ }));
+        fireEvent.change(within(panel()).getByRole('combobox', { name: 'The campaign the change is queued in' }), {
+            target: { value: 'cmp_2' },
+        });
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Save' }));
+
+        expect((await within(panel()).findByRole('status')).textContent).toContain(
+            'The change is queued for the provider in Nordic pilot.',
+        );
+        expect(asked(api, 'workitem.create')).toEqual([recorded('workitem.create/provider-contact-update')]);
+    });
 });
 
 describe('Do not contact', () => {
