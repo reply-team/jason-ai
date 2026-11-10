@@ -137,7 +137,7 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     assert.equal(host.stdin, words);
     assert.ok(host.args.every((arg) => !arg.includes(words)), 'the words are never on the command line');
     assert.ok(same(host.cwd, r.b.paths.chat), `started in ${host.cwd}`);
-    for (const flag of ['-p', '--strict-mcp-config', '--permission-prompt-tool', '--mcp-config', '--setting-sources', '--allowedTools', '--disallowedTools']) assert.ok(host.args.includes(flag), flag);
+    for (const flag of ['-p', '--strict-mcp-config', '--permission-prompt-tool', '--mcp-config', '--setting-sources', '--settings', '--allowedTools', '--disallowedTools']) assert.ok(host.args.includes(flag), flag);
     assert.ok(!host.args.includes('--bare'));
     assert.ok(!host.args.includes('--resume'), 'a first turn resumes nothing');
     assert.ok(!host.args.includes('--add-dir'), 'a turn with no campaign adds no folder');

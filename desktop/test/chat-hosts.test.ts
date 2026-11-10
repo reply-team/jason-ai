@@ -28,9 +28,16 @@ test('a Claude Code turn runs in print mode with the stream-json events, and nev
     assert.equal(valueOf(args, '--mcp-config'), turn.mcpConfig);
 });
 
+test('every Claude Code turn blocks reads outside its working folders, so a read-only command on such a path asks', () => {
+    for (const args of [claudeArguments(turn), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] })]) {
+        assert.equal(args.filter((arg) => arg === '--settings').length, 1);
+        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}');
+    }
+});
+
 test('the person\'s words are never on a host\'s command line: every argument is a flag or a flag\'s value', () => {
     const claude = claudeArguments({ ...turn, model: 'sonnet', resume: 'ses-1', addDirs: ['/c', '/p'] });
-    const flagsWithValue = new Set(['--output-format', '--allowedTools', '--disallowedTools', '--setting-sources', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
+    const flagsWithValue = new Set(['--output-format', '--allowedTools', '--disallowedTools', '--setting-sources', '--settings', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
     for (let i = 0; i < claude.length; i++) {
         const arg = claude[i] ?? '';
         assert.ok(arg.startsWith('-'), `${arg} is not a flag`);

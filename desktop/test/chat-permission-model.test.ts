@@ -296,6 +296,24 @@ test('any other command gets a card, remembered by the program and its first wor
     assert.equal(commandPrefix('git status; rm -rf x'), null);
 });
 
+test('a read-only command naming a path outside the chat\'s folders gets a card, never an allowance', () => {
+    // The host asks for these only because every turn blocks reads outside its working folders (claudeArguments);
+    // once asked, the answer is the person's, whatever the program.
+    const outside: [ChatScope, string, string][] = [
+        [mac(), 'Bash', 'cat ~/.ssh/id_rsa'],
+        [mac(), 'Bash', 'ls ~/Documents'],
+        [mac(), 'Bash', 'grep -r password ~/.aws'],
+        [mac(), 'Bash', 'head -n 5 /Users/someone/.zsh_history'],
+        [windows(), 'Bash', 'cat C:/Users/someone/.ssh/id_rsa'],
+        [windows(), 'PowerShell', 'Get-Content C:\\Users\\someone\\.aws\\credentials'],
+        [windows(), 'PowerShell', 'Get-ChildItem C:\\Users\\someone\\Documents'],
+    ];
+    for (const [scope, tool, command] of outside) {
+        const judged = judge(tool, { command }, scope);
+        assert.ok(judged.verdict === 'ask' && judged.title === 'Run a command' && judged.detail === command, command);
+    }
+});
+
 test('the shell operators that make a command compound are each recognised', () => {
     for (const command of ['a && b', 'a || b', 'a; b', 'a | b', 'a `b`', 'a $(b)', 'a > b', 'a >> b', 'a 2> b', 'a < b', 'a\nb', 'a & b']) {
         assert.ok(isCompound(command), command);

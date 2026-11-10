@@ -44,15 +44,25 @@ export interface ClaudeTurn {
 }
 
 /**
+ * The settings every Claude Code turn carries on its command line. Claude Code runs its built-in read-only commands
+ * (`cat`, `ls`, `grep` and the like) without asking, wherever the path they name; with reads outside the working folders
+ * blocked, such a command on a path outside the chat folder and the added folders asks, and so reaches the permission
+ * tool, as does a command whose folder the host cannot trace. It holds no secret, so it travels as inline JSON. The key
+ * is read from Claude Code 2.1.257; an older version skips it without a word.
+ */
+export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}';
+
+/**
  * The command line of one Claude Code turn. Never `--bare`, which drops the subscription sign-in and the skills; always
- * `--strict-mcp-config`, so a person's own MCP servers never enter the chat; no prompt argument, so the prompt is read
- * from standard input.
+ * `--strict-mcp-config`, so a person's own MCP servers never enter the chat; reads outside the working folders blocked
+ * (`claudeTurnSettings`); no prompt argument, so the prompt is read from standard input.
  */
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
     args.push('--allowedTools', claudeAllowedTools.join(','));
     args.push('--disallowedTools', [...denyRules(turn.denied), ...turn.dataRules].join(','));
     args.push('--setting-sources', 'project');
+    args.push('--settings', claudeTurnSettings);
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
     args.push('--permission-prompt-tool', promptToolName, '--mcp-config', turn.mcpConfig, '--strict-mcp-config');
     if (turn.model) args.push('--model', turn.model);
