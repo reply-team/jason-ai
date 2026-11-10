@@ -166,7 +166,7 @@ describe('the console', () => {
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 
-    it('follows the journal stream from its own origin, and draws a hostile line as text', async () => {
+    it('opens the journal stream at the origin and with the token the stream was given, and draws a hostile line as text', async () => {
         const fake = pending(new FakeApi());
         const { journal } = renderConsole(fake);
         await waitFor(() => expect(journal.opened).toHaveLength(1));

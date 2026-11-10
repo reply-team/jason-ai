@@ -33,19 +33,26 @@ The same build mounts one of two shells, chosen once as the page loads (`src/mai
   runtime only through the API client and the journal stream (`src/platform/journal-stream.ts`, a WebSocket at
   `GET /v1/journal.stream` under the page's own pairing).
 
-The console's live panels read the same facts as the classic Attention and Campaigns screens, through those screens'
-own stores, and for now duplicate them: the classic screens stay for the browser.
+The console's live panels read the same facts as the classic Attention and Campaigns screens, with the same
+operations, and for now duplicate them: the classic screens stay for the browser. Each panel keeps its lists apart
+from the screen's, so the page panel can show that screen at a table or a filter of its own while a journal line
+re-reads the panel.
 
 **How the console draws.** A panel is markup from one tagged template, `html` in `src/console/html.ts`, which escapes
 every value it interpolates unless the tag itself made it, and is written into the page by one painter, `paint`. A
 control in that markup carries `data-action` and its arguments, answered by one closed table of actions
 (`src/console/actions.ts`) through one delegated listener; the chat's composer is plain JSX. Nothing it draws carries
-an inline handler, a style attribute or a style element, which the runtime's policy (`default-src 'self'`) refuses. The
+an inline handler, a style attribute or a style element, which the runtime's policy (`default-src 'self'`) refuses; and
+the tag refuses text inside a tag, where it could add an attribute of its own. A repaint keeps the control a person is
+in focused, with its selection. The
 classic screens in the page panel take the browser's stylesheet, scoped under `.harness` when the build runs
 (`src/console/scope.ts`), so the two stylesheets do not meet.
 
-**Languages.** The shell's words are in `src/locale/` in English and Ukrainian, chosen under Settings; a language file
-must hold every key the English one has.
+**Language and theme.** The browser shell's words are in `src/locale/` in English and Ukrainian, each file naming its
+language in its own words, and a language file must hold every key the English one has. The language and the theme
+(light, dark, or the system's) are chosen under Settings and kept in this browser, never sent to the runtime; the
+document's `lang` follows the language. The console's own words are English in this release: the locale files serve
+the browser shell's.
 
 ## Dev loop
 
