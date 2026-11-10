@@ -184,7 +184,9 @@ test('inside the application’s folder is decided by the platform’s own path 
 test('the nsis uninstaller starts the application before it removes the files, on a person’s uninstall only', () => {
     assert.equal(configuration({ version: '0.34.0' }).nsis.include, 'installer/uninstall.nsh');
     const script = readFileSync(join(desktop, 'installer', 'uninstall.nsh'), 'utf8');
-    const lines = script.split(/\r?\n/).filter((line) => line.trim() !== '' && !line.trim().startsWith(';')).map((line) => line.trim());
+    // From the uninstall's own macro on; the check that closes running programs comes before it, with rows of its own
+    // (installer-processes.test.ts).
+    const lines = script.slice(script.indexOf('!macro customUnInstall\n')).split(/\r?\n/).filter((line) => line.trim() !== '' && !line.trim().startsWith(';')).map((line) => line.trim());
     assert.deepEqual(lines, [
         '!macro customUnInstall',
         '${ifNot} ${isUpdated}',
