@@ -69,6 +69,7 @@ const searchRefusal = 'That folder holds the installation\'s own data, so a sear
 const lengthRefusal ='That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
 /** The longest path each platform takes: the `\\?\` form's limit on Windows, `PATH_MAX` on macOS and Linux. */
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
+const replyRefusal = 'The chat runs only reply auth status and reply account list of reply: provider work goes through jason, and the connection is made on the Connect card. Nothing was run.';
 const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
 
 const pathsOf = (platform: Platform) => (platform === 'win32' ? win32 : posix);
@@ -278,6 +279,22 @@ function jasonIn(command: string, scope: ChatScope): 'deny' | 'jason' | null {
     return found;
 }
 
+/**
+ * True when any command inside the text, in any part, form or nesting, runs reply with words other than the two the chat
+ * runs: `auth status` and `account list`. Read as jason is read, by every token whose program is reply.
+ */
+function replyRefused(command: string, scope: ChatScope): boolean {
+    for (const part of command.split(/&&|\|\||\$\(|[;|&`\n\r<>(){}]/)) {
+        const tokens = part.trim().split(/\s+/).map(unquoted).filter((token) => token !== '');
+        for (const [at, token] of tokens.entries()) {
+            if (programOf(scope.platform, token) !== 'reply') continue;
+            const words = tokens.slice(at + 1);
+            if (!allowedReply.some((pair) => pair.every((word, index) => words[index] === word))) return true;
+        }
+    }
+    return false;
+}
+
 /** A text as paths in it are compared: one slash for any run of slashes or backslashes, case folded where the platform folds it. */
 function pathText(platform: Platform, text: string): string {
     return keyOf(platform, text.replace(/[\\/]+/g, '/'));
@@ -347,6 +364,7 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
     // person's to answer, each time.
     if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
+    if (replyRefused(command, scope)) return { verdict: 'deny', message: replyRefusal };
     // Only the Bash tool's commands are fenced by the host and may be allowed or remembered; any other tool's command is
     // the person's to answer, each time.
     if (tool !== 'Bash') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };

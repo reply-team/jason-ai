@@ -361,12 +361,23 @@ test('a jason command with a word that begins with @ is refused, since it would 
     }
 });
 
-test('reply auth status and reply account list are allowed without a card, and nothing else of reply', () => {
+test('reply auth status and reply account list are allowed without a card, and any other reply command is refused', () => {
     assert.deepEqual(run(windows(), 'reply auth status --json'), { verdict: 'allow' });
     assert.deepEqual(run(mac(), 'reply account list'), { verdict: 'allow' });
-    assert.equal(run(windows(), 'reply auth login').verdict, 'ask');
-    assert.equal(run(windows(), 'reply schedule list').verdict, 'ask');
-    assert.equal(run(windows(), 'reply --version').verdict, 'ask');
+    const refused = (judged: ReturnType<typeof judge>) => judged.verdict === 'deny' && /goes through jason/.test(judged.message) && /Connect card/.test(judged.message);
+    for (const scope of [windows(), mac()]) {
+        for (const command of ['reply auth login', 'reply schedule list', 'reply --version', 'reply', 'reply auth', 'reply account', 'reply auth logout',
+            'reply account list && reply sequences delete 5', 'npx reply prospects list', "bash -c 'reply contacts create --email a@example.com'",
+            'echo $(reply campaigns list)', 'X=1 reply people list', '/usr/local/bin/reply sequences list', 'reply auth status; reply auth login']) {
+            assert.ok(refused(run(scope, command)), command);
+            assert.ok(refused(judge('PowerShell', { command }, scope)), `PowerShell: ${command}`);
+        }
+    }
+    for (const command of ['reply.cmd sequences list', 'REPLY.EXE auth login', '"C:\\Program Files\\nodejs\\reply.cmd" contacts list']) {
+        assert.ok(refused(run(windows(), command)), command);
+    }
+    // One of the two inside a compound command is not refused, and is still not allowed without a card.
+    assert.equal(run(mac(), 'reply auth status && ls').verdict, 'ask');
 });
 
 test('every deny-list command is refused without a card, with its arguments and whatever follows', () => {
