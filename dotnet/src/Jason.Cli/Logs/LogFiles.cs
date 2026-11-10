@@ -3,7 +3,17 @@ using System.Text.RegularExpressions;
 
 namespace Jason.Cli.Logs;
 
-/// <summary>One of the runtime's log files, as the directory listing showed it.</summary>
+/// <summary>Which program wrote a log file: the runtime, or the desktop application beside it.</summary>
+public enum LogSource
+{
+    /// <summary>The runtime's own log, <c>runtime-YYYYMMDD.jsonl</c>.</summary>
+    Runtime,
+
+    /// <summary>The desktop application's log, <c>desktop-YYYYMMDD.jsonl</c>, written in the runtime log's shape.</summary>
+    Desktop,
+}
+
+/// <summary>One log file, as the directory listing showed it.</summary>
 /// <param name="Path">The full path.</param>
 /// <param name="Name">The file's name, which carries the day and the roll.</param>
 /// <param name="Day">The date in the name: the local date of the machine when the file was started.</param>
@@ -15,40 +25,56 @@ namespace Jason.Cli.Logs;
 /// not updated on every write.
 /// </param>
 /// <param name="ModifiedAt">When the file was last written, as the listing showed it.</param>
-public sealed record LogFile(string Path, string Name, DateOnly Day, int Sequence, long Bytes, DateTimeOffset ModifiedAt);
+/// <param name="Source">Which program wrote it, as its name says.</param>
+public sealed record LogFile(
+    string Path,
+    string Name,
+    DateOnly Day,
+    int Sequence,
+    long Bytes,
+    DateTimeOffset ModifiedAt,
+    LogSource Source = LogSource.Runtime);
 
 /// <summary>
-/// Which files under the log directory are the runtime's own, and the order they were written in.
+/// Which files under the log directory are a source's own, and the order they were written in.
 /// </summary>
 /// <remarks>
 /// The runtime's log sink names its files <c>runtime-YYYYMMDD.jsonl</c> and, when a day's file reaches its size
-/// limit, <c>runtime-YYYYMMDD_001.jsonl</c>, <c>_002</c> and so on. Only a name of exactly that shape directly in the
-/// directory is a log. A diagnostic bundle kept in a directory beside them, a backup somebody made, a file another
+/// limit, <c>runtime-YYYYMMDD_001.jsonl</c>, <c>_002</c> and so on. The desktop application names its own the same
+/// way, with <c>desktop-</c> in front. Only a name of exactly that shape directly in the directory is a log, and each
+/// source is listed apart. A diagnostic bundle kept in a directory beside them, a backup somebody made, a file another
 /// program left that merely starts with the same letters: none of them is read as a log.
 /// </remarks>
 public static partial class LogFiles
 {
     // The roll sequence is the sink's own: three digits or more, since it numbers with a width of three and a
     // thousandth roll is _1000. The name ends at the end of the string, never just before a final line break.
-    [GeneratedRegex(@"^runtime-(?<day>[0-9]{8})(?:_(?<sequence>[0-9]{3,9}))?\.jsonl\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^(?<source>runtime|desktop)-(?<day>[0-9]{8})(?:_(?<sequence>[0-9]{3,9}))?\.jsonl\z", RegexOptions.CultureInvariant)]
     private static partial Regex NamePattern();
 
     /// <summary>
-    /// The runtime's log files in the directory, oldest first: by the date in the name, then by the roll sequence
-    /// compared as a number, because after <c>_999</c> the number grows a digit and the text no longer sorts. A
-    /// directory that does not exist has none.
+    /// One source's log files in the directory, the runtime's unless another is named, oldest first: by the date in
+    /// the name, then by the roll sequence compared as a number, because after <c>_999</c> the number grows a digit
+    /// and the text no longer sorts. A directory that does not exist has none.
     /// </summary>
-    public static IReadOnlyList<LogFile> In(string directory)
+    public static IReadOnlyList<LogFile> In(string directory, LogSource source = LogSource.Runtime)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory);
+        var prefix = source switch
+        {
+            LogSource.Runtime => "runtime",
+            LogSource.Desktop => "desktop",
+            _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Not a log source."),
+        };
 
         var files = new List<LogFile>();
         try
         {
-            foreach (var info in new DirectoryInfo(directory).EnumerateFiles("runtime-*.jsonl", SearchOption.TopDirectoryOnly))
+            foreach (var info in new DirectoryInfo(directory).EnumerateFiles("*.jsonl", SearchOption.TopDirectoryOnly))
             {
                 var match = NamePattern().Match(info.Name);
                 if (!match.Success
+                    || !string.Equals(match.Groups["source"].Value, prefix, StringComparison.Ordinal)
                     || !DateOnly.TryParseExact(match.Groups["day"].Value, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
                 {
                     continue;
@@ -57,7 +83,7 @@ public static partial class LogFiles
                 var sequence = match.Groups["sequence"].Success ? int.Parse(match.Groups["sequence"].Value, CultureInfo.InvariantCulture) : 0;
                 try
                 {
-                    files.Add(new LogFile(info.FullName, info.Name, day, sequence, info.Length, info.LastWriteTimeUtc));
+                    files.Add(new LogFile(info.FullName, info.Name, day, sequence, info.Length, info.LastWriteTimeUtc, source));
                 }
                 catch (FileNotFoundException)
                 {

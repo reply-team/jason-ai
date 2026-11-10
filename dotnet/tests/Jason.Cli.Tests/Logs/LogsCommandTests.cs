@@ -381,6 +381,9 @@ public sealed class LogsCommandTests
     [InlineData("--limit", "10001")]
     [InlineData("--limit", "many")]
     [InlineData("--limit", "1.5")]
+    [InlineData("--source", "browser")]
+    [InlineData("--source", "Desktop ")]
+    [InlineData("--source", "runtime,desktop")]
     public async Task A_filter_that_cannot_be_what_it_names_is_a_usage_error_before_anything_is_read(string option, string value)
     {
         // No log directory at all: the refusal comes from the arguments, not from what was or was not there to read.
@@ -403,6 +406,52 @@ public sealed class LogsCommandTests
         Assert.Contains("--campaign", (await RunAsync(dir, "--campaign", "x")).Error, StringComparison.Ordinal);
         Assert.Contains("--work-item", (await RunAsync(dir, "--work-item", "x")).Error, StringComparison.Ordinal);
         Assert.Contains("--limit", (await RunAsync(dir, "--limit", "0")).Error, StringComparison.Ordinal);
+        Assert.Contains("--source", (await RunAsync(dir, "--source", "browser")).Error, StringComparison.Ordinal);
+    }
+
+    // ---- the source ----------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task The_runtime_s_log_is_read_unless_the_desktop_s_is_asked_for_and_neither_is_ever_read_as_the_other()
+    {
+        using var dir = new TempPaths();
+        var logs = LogsIn(dir);
+        Write(logs, "runtime-20261003.jsonl", Event(At(1), "Runtime line"));
+        Write(logs, "desktop-20261003.jsonl", Event(At(2), "Desktop line"));
+        Write(logs, "desktop-20261003_001.jsonl", Event(At(3), "Desktop rolled line"));
+
+        var runtime = Document((await RunAsync(dir)).Out);
+        var named = Document((await RunAsync(dir, "--source", "runtime")).Out);
+        var (exit, output, error) = await RunAsync(dir, "--source", "desktop");
+        var desktop = Document(output);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Empty(error);
+        Assert.Equal(["Runtime line"], Messages(runtime));
+        Assert.Equal(["runtime-20261003.jsonl"], runtime["files"]!.AsArray().Select(file => (string)file!["name"]!));
+        Assert.Equal(runtime.ToJsonString(), named.ToJsonString());
+        Assert.Equal(["Desktop line", "Desktop rolled line"], Messages(desktop));
+        Assert.Equal(
+            ["desktop-20261003.jsonl", "desktop-20261003_001.jsonl"],
+            desktop["files"]!.AsArray().Select(file => (string)file!["name"]!));
+    }
+
+    [Fact]
+    public async Task The_desktop_s_log_takes_the_same_filters_and_the_same_human_form()
+    {
+        using var dir = new TempPaths();
+        var logs = LogsIn(dir);
+        Write(
+            logs,
+            "desktop-20261003.jsonl",
+            Event(At(1), "jason {Verb} exited {Exit} after {ElapsedMs} ms", null, ("Verb", "status"), ("Exit", "0"), ("ElapsedMs", "12")),
+            Event(At(2), "A link that is not https was refused", "Warning"));
+
+        var (exit, output, _) = await RunAsync(dir, "--source", "desktop", "--level", "warning", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var line = Assert.Single(Lines(output));
+        Assert.Contains("A link that is not https was refused", line, StringComparison.Ordinal);
     }
 
     // ---- for people --------------------------------------------------------------------------------------------
@@ -744,6 +793,8 @@ public sealed class LogsCommandTests
         // Where, and that nothing else is read.
         Assert.Contains("JASON_DATA_DIR", help, StringComparison.Ordinal);
         Assert.Contains("runtime-YYYYMMDD.jsonl", help, StringComparison.Ordinal);
+        Assert.Contains("--source runtime|desktop", help, StringComparison.Ordinal);
+        Assert.Contains("desktop-YYYYMMDD.jsonl", help, StringComparison.Ordinal);
         Assert.Contains("never asks the runtime", help, StringComparison.Ordinal);
         Assert.Contains("never reads its descriptor", help, StringComparison.Ordinal);
 
