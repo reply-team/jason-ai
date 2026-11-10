@@ -212,6 +212,62 @@ describe('the console', () => {
         expect(screen.getByText('1 action')).toBeTruthy();
     });
 
+    it("draws the agent's Markdown as its subset, and everything else in it as text", async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Draft it' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+        const reply = [
+            '## The draft',
+            '- first **point**',
+            '> Hi Ana, a *quoted* line',
+            '| Name | Stage |',
+            '|---|---|',
+            '| Ana | `sent` |',
+            '```',
+            hostile,
+            '```',
+            'See [the guide](javascript:window.hit=1) <script>window.hit=1</script>',
+            '',
+            '<iframe srcdoc="<script>parent.hit=1</script>"></iframe>',
+            '',
+            '> ```',
+            '> <svg onload="window.hit=1"></svg>',
+            '> ```',
+            '',
+            '| Cell |',
+            '|---|',
+            '| <b onclick="window.hit=1">bold</b> |',
+        ].join('\n');
+        flush(() => {
+            desktop.emit(id, { kind: 'text', text: reply });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        const drawn = await waitFor(() => {
+            const element = document.querySelector<HTMLElement>('.thread .chat-md');
+            expect(element).toBeTruthy();
+            return element!;
+        });
+        expect(within(drawn).getByRole('heading', { name: 'The draft', level: 2 })).toBeTruthy();
+        expect(within(drawn).getByRole('listitem').textContent).toBe('first point');
+        expect(drawn.querySelector('blockquote em')?.textContent).toBe('quoted');
+        expect(within(drawn).getByRole('cell', { name: 'sent' }).querySelector('code')).toBeTruthy();
+        expect(drawn.querySelector('pre code')?.textContent).toBe(hostile);
+        expect(words(drawn)).toContain('See the guide (javascript:window.hit=1) <script>window.hit=1</script>');
+        expect(words(drawn)).toContain('<iframe srcdoc="<script>parent.hit=1</script>"></iframe>');
+        expect(drawn.querySelector('blockquote pre code')?.textContent).toBe('<svg onload="window.hit=1"></svg>');
+        expect(within(drawn).getByRole('cell', { name: '<b onclick="window.hit=1">bold</b>' })).toBeTruthy();
+        expect(drawn.querySelectorAll('a, b, img, script, iframe, svg, [href], [src]')).toHaveLength(0);
+        const handlers = Array.from(drawn.querySelectorAll('*')).flatMap((element) =>
+            element.getAttributeNames().filter((name) => name.startsWith('on')),
+        );
+        expect(handlers).toEqual([]);
+        expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
     it('answers a permission once, and says so when the desktop no longer holds it', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
