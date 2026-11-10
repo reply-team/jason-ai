@@ -166,8 +166,8 @@ public static class AttemptErrors
     public const string SearchRouteMismatch = "search_route_mismatch";
 
     /// <summary>
-    /// The work names an audience by its number under <c>args.audience</c> that its campaign does not hold. This build
-    /// numbers no audience, so every number is refused here.
+    /// The work names an audience by its number under <c>args.audience</c> that its campaign does not hold: a campaign's
+    /// audiences are numbered from 1, in the order the claim made them.
     /// </summary>
     public const string AudienceUnknown = "audience_unknown";
 

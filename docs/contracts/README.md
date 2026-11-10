@@ -149,8 +149,9 @@ route, and so the schema, is not resolved yet. The dialect expresses the shapes 
 
 **An audience by its number.** `audience.search` and `audience.preview` take an audience the campaign holds by its
 number, `args.audience`, or a definition, `args.definition`: exactly one of the two. The runtime composes the root
-`definition` from either (below). This build numbers no audience, so a number is refused `audience_unknown`, at the
-claim and at the preview.
+`definition` from either (below). The runtime numbers a campaign's audiences, 1, 2, 3, as the claim of each one's first
+search makes it ([`docs/campaign-manager.md`](../campaign-manager.md) §10), and a number the campaign holds none under is
+refused `audience_unknown`, at the claim and at the preview.
 
 **A campaign's reads are routed by the campaign's route.** `audience.preview`, `audience.filter_values` and
 `audience.availability` are read when a person or an agent asks, outside any work item, routed by the campaign's route
@@ -291,6 +292,13 @@ and the line is a verdict of the same campaign about the thread the reply answer
 same person. Anything else is refused as `validation_failed` at the field `context.reply_verdict`. The key is what a
 standing approval reads at the claim, and nothing else reads it
 ([`docs/work-execution.md`](../work-execution.md), "Standing approvals").
+
+**A third, the runtime's own: `context.audience` on a search.** The claim of an `audience.search` that it does not
+refuse records there the audience the search runs under, `{"id": "aud_…", "number": 2, "definition": {…}}`, with the
+definition the search is searched by, whichever way its arguments named the audience
+([`docs/campaign-manager.md`](../campaign-manager.md) §10). `workitem.create` and `workitem.update` refuse a search that
+writes the key or removes it, as `validation_failed` at the field `context.audience`; on any other work the key is the
+caller's own.
 
 **A reserved journal line beside the goals.** A role records its verdict on a reply — the category it read, its
 confidence, the reaction it chose and the goal it steers to — through the Runtime API's `reply.record`

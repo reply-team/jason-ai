@@ -13,6 +13,7 @@ using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Audiences;
 
@@ -73,21 +74,31 @@ public sealed partial class AudienceReadService(
         errors.ThrowIfAny();
         var target = await TargetAsync(request.CampaignId, PreviewOperation, cancellationToken).ConfigureAwait(false);
 
-        // As the claim answers a top-up by a number this build holds no audience under.
+        // An audience by its number is read as the claim reads a top-up: the campaign's own, and the definition it was made
+        // from. A preview makes no audience either way.
+        var args = new JsonObject();
+        JsonObject definition;
         if (request.Audience is { } number)
         {
-            throw new NotFoundException(
-                AttemptErrors.AudienceUnknown,
-                string.Create(CultureInfo.InvariantCulture, $"Campaign '{target.Campaign.PublicId}' holds no audience under {number}: this build numbers no audience yet, so name the audience by its definition."));
+            var held = await CampaignAudiences.ByNumber(db, target.Campaign.Id, number).AsNoTracking().FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw new NotFoundException(
+                    AttemptErrors.AudienceUnknown,
+                    string.Create(CultureInfo.InvariantCulture, $"Campaign '{target.Campaign.PublicId}' holds no audience under {number}: a campaign numbers its audiences from 1, in the order their first searches were claimed, so name one it holds, or the audience by its definition."));
+            args["audience"] = number;
+            definition = held.Definition;
+        }
+        else
+        {
+            args["definition"] = request.Definition!.DeepClone();
+            definition = request.Definition.DeepClone().AsObject();
         }
 
-        var args = new JsonObject { ["definition"] = request.Definition!.DeepClone() };
         if (request.PeoplePerCompany is { } perCompany)
         {
             args["people_per_company"] = perCompany;
         }
 
-        var input = CanonicalInput.ComposeCampaignRead(target.Contract, target.Campaign, target.Pins, args, request.Definition.DeepClone().AsObject());
+        var input = CanonicalInput.ComposeCampaignRead(target.Contract, target.Campaign, target.Pins, args, definition);
 
         // The definition is the provider's, so the routed plugin's declared schema refuses it before anything runs, under
         // the claim's own code and with the claim's pointers.

@@ -48,7 +48,7 @@ public static class CanonicalInput
     /// <c>args.definition</c>, or from the audience <c>args.audience</c> names, and the plugin reads it there and nowhere
     /// else.
     /// </summary>
-    private const string DefinitionKey = "definition";
+    public const string DefinitionKey = "definition";
 
     /// <summary>The arguments key of an audience the campaign holds, named by its number.</summary>
     private const string AudienceKey = "audience";

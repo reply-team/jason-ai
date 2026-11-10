@@ -8,6 +8,7 @@ using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Approvals;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
@@ -410,6 +411,10 @@ public sealed class WorkItemService(
 
         ValidateContextKeys(request.Set, request.Unset, errors);
         ValidateProviderInput(item, request.Set, request.Unset, _timing, errors);
+        CampaignAudiences.RefuseWritten(
+            item.Operation,
+            request.Set?.ContainsKey(CampaignAudiences.ContextKey) == true || request.Unset?.Contains(CampaignAudiences.ContextKey, StringComparer.Ordinal) == true,
+            errors);
         await ValidateVerdictReferenceAsync(item, request.Set, request.Unset, errors, cancellationToken).ConfigureAwait(false);
         errors.ThrowIfAny();
 

@@ -39,10 +39,16 @@ is spent. A rule of the provider's that the schema cannot express is the plugin'
 `jason operation describe audience.search` answers both schemas for a campaign.
 
 Exactly one of `args.audience` and `args.definition` is given: both at once are refused when the work item is written,
-and so is neither. A definition starts a new audience; a number names an audience the campaign already searched under,
-and is searched by the definition that audience was made from. No audience is numbered in this version yet, so a search
-by number fails the claim `audience_unknown`. Either way the runtime composes the definition under `definition` at the
-root of the input, and the plugin reads it there and nowhere else.
+and so is neither. A definition starts a new audience; a number names one of the campaign's audiences, and is searched
+by the definition that audience was made from; a number the campaign holds no audience under fails the claim
+`audience_unknown`. Either way the runtime composes the definition under `definition` at the root of the input, and the
+plugin reads it there and nowhere else.
+
+A search the claim lets through, to run now or to wait for a person, runs under one of the campaign's audiences: the
+claim finds the audience its definition already is — the same content, its members in any order — or makes the
+campaign's next one, numbered 1, 2, 3 in that order, and records it on the work item under `context.audience`. A search
+the claim refuses makes none. The plugin is told none of this: it reads the definition at the root and the arguments
+as they were written, a top-up's number among them ([`docs/campaign-manager.md`](../../campaign-manager.md) §10).
 
 ## The input you receive
 

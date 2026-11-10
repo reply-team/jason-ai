@@ -394,7 +394,43 @@ leaves the chronicle as it stands; set again, the next look goes on from the lat
 how to top the audience up is the manager's. A paused campaign is not counted; what was written meanwhile waits above
 its watermark for the next look.
 
-## 10. Not here yet
+## 10. The audiences
+
+A campaign's audiences are the definitions its searches run under. An audience is made at the claim of the first
+`audience.search` under its definition that the claim lets through, to run now or to wait for a person's approval: the
+definition has passed the schema the routed plugin declares for one ([routing](routing.md) §7, `definition_invalid`). A
+search the claim refuses makes none, and a preview never does. The campaign's context keeps the person's own words
+about who belongs; nothing structured about an audience is kept there, and the dispatcher reads none of it.
+
+**One row per definition**, in the table `audiences`: the campaign, a number, the definition as the claim held it, the
+`sha256:` of the definition's canonical form, and when the claim that made it ran. The number is the runtime's, never a
+writer's: 1, 2, 3 within the campaign, in the order the claim made them. The canonical form — every object's members in
+ordinal key order, every array in its order, every value as written, compact UTF-8 — is the one that names a route's
+binding and an approval's subject, so the same definition with its members in another order is the same audience, and a
+definition the campaign searched under before, a reverted one, finds its old row and its old number. A row is never
+changed or removed. An audience is its campaign's: no other campaign holds it, and a project holds none.
+
+**A search names its audience one of two ways**, exactly one of `args.definition` and `args.audience`: a definition,
+which is a new audience or finds the one it already is, or the number of one the campaign holds, a top-up, searched by
+the definition that audience was made from. A number the campaign holds no audience under is refused at the claim,
+`audience_unknown`, and so is a preview by it: `jason audience preview --campaign <campaign-id> --audience 2` reads the
+campaign's audience 2 and previews it by its definition.
+
+**The search carries its audience** under the reserved key `context.audience`, which the claim writes:
+
+```json
+{"id": "aud_…", "number": 2, "definition": {"industries": [{"value": "Logistics", "type": "include"}]}}
+```
+
+`definition` is the one the search is searched by, whichever way its arguments named the audience, so the search, and
+the snapshot of its context the attempt that runs it keeps, says what was searched. The claim writes the key when it
+finds or makes the audience and says so in one `workitem_context_updated` line by the dispatcher; the claim that runs a
+search a person approved finds the same audience and writes nothing, and a claim that refuses the search writes nothing
+either, so the key names the audience of the last claim that let it through. The key is the runtime's on a search: `workitem.create` and
+`workitem.update` refuse a search that writes it or removes it (`validation_failed` at `context.audience`). On any other
+work it is the caller's own.
+
+## 11. Not here yet
 
 - **Notifications.** Nothing tells anybody a review happened. A person finds out by reading the
   chronicle or listing work.
@@ -404,3 +440,5 @@ its watermark for the next look.
   [inbound sync](inbound-sync.md)), queues the read of the thread and the responder for a thread that is the
   campaign's own, and wakes the manager; it never reads or classifies the reply itself, and nothing tells a person
   one came. Reading it, and answering it, is the responder's; what it means for the campaign is the manager's.
+- **Reading the audiences.** No read lists a campaign's audiences yet, and the people a search finds are answered by
+  its status read without becoming the campaign's members by it.
