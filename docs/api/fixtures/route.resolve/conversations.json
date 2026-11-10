@@ -1,0 +1,27 @@
+{
+  "operation": "route.resolve",
+  "case": "conversations",
+  "request": {
+    "campaign_id": "cmp_1",
+    "operation": "conversation.list"
+  },
+  "status": 200,
+  "response": {
+    "operation": "conversation.list",
+    "campaign_id": "cmp_1",
+    "plugin_id": "reply",
+    "plugin_version": "1.0.0",
+    "digest": "sha256:0",
+    "plugin_status": "valid",
+    "scope": "global_default",
+    "binding": {
+      "workspace": "a"
+    },
+    "binding_identity": "sha256:recorded-3",
+    "routing_snapshot_id": "rts_1",
+    "plugin_snapshot_id": "snp_1",
+    "operation_version": 1,
+    "usable": true,
+    "problems": []
+  }
+}

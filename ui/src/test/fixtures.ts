@@ -13,6 +13,8 @@ import type {
     Page,
     Project,
     Routes,
+    RouteResolution,
+    RouteResolveRequest,
     SystemInfo,
     UiRevoke,
     UiRevokeRequest,
@@ -106,6 +108,8 @@ import campaignGetDetails from '../../../docs/api/fixtures/campaign.get/details.
 import campaignGetGone from '../../../docs/api/fixtures/campaign.get/gone.json';
 import campaignGetGoneHere from '../../../docs/api/fixtures/campaign.get/gone-here.json';
 import campaignGetInProjectWithFolder from '../../../docs/api/fixtures/campaign.get/in-project-with-folder.json';
+import campaignGetInbox from '../../../docs/api/fixtures/campaign.get/inbox.json';
+import campaignGetInboxQuiet from '../../../docs/api/fixtures/campaign.get/inbox-quiet.json';
 import campaignGetMany from '../../../docs/api/fixtures/campaign.get/many.json';
 import campaignGetOne from '../../../docs/api/fixtures/campaign.get/one.json';
 import campaignGetSummer from '../../../docs/api/fixtures/campaign.get/summer.json';
@@ -114,6 +118,7 @@ import campaignGetUnlinked from '../../../docs/api/fixtures/campaign.get/unlinke
 import campaignListCampaignsForPicker from '../../../docs/api/fixtures/campaign.list/campaigns-for-picker.json';
 import campaignListFirstPage from '../../../docs/api/fixtures/campaign.list/first-page.json';
 import campaignListForPicker from '../../../docs/api/fixtures/campaign.list/for-picker.json';
+import campaignListInbox from '../../../docs/api/fixtures/campaign.list/inbox.json';
 import campaignListIncludeArchived from '../../../docs/api/fixtures/campaign.list/include-archived.json';
 import campaignListQuery from '../../../docs/api/fixtures/campaign.list/query.json';
 import campaignListScreen from '../../../docs/api/fixtures/campaign.list/screen.json';
@@ -142,6 +147,9 @@ import campaignStartAfterPause from '../../../docs/api/fixtures/campaign.start/a
 import campaignSummaryAll from '../../../docs/api/fixtures/campaign.summary/all.json';
 import campaignSummaryAllAfter from '../../../docs/api/fixtures/campaign.summary/all-after.json';
 import campaignSummaryArchived from '../../../docs/api/fixtures/campaign.summary/archived.json';
+import campaignSummaryInboxAll from '../../../docs/api/fixtures/campaign.summary/inbox-all.json';
+import campaignSummaryInboxOne from '../../../docs/api/fixtures/campaign.summary/inbox-one.json';
+import campaignSummaryInboxQuiet from '../../../docs/api/fixtures/campaign.summary/inbox-quiet.json';
 import campaignSummaryMany from '../../../docs/api/fixtures/campaign.summary/many.json';
 import campaignSummaryManyNext from '../../../docs/api/fixtures/campaign.summary/many-next.json';
 import campaignSummarySome from '../../../docs/api/fixtures/campaign.summary/some.json';
@@ -178,6 +186,8 @@ import contactThreadMessages from '../../../docs/api/fixtures/contact.thread/mes
 import contactThreadNext from '../../../docs/api/fixtures/contact.thread/next.json';
 import contactThreadNotThisContact from '../../../docs/api/fixtures/contact.thread/not-this-contact.json';
 import contactThreadsHasMore from '../../../docs/api/fixtures/contact.threads/has-more.json';
+import contactThreadsInboxMateo from '../../../docs/api/fixtures/contact.threads/inbox-mateo.json';
+import contactThreadsInboxPaula from '../../../docs/api/fixtures/contact.threads/inbox-paula.json';
 import contactThreadsNext from '../../../docs/api/fixtures/contact.threads/next.json';
 import contactThreadsNoRoute from '../../../docs/api/fixtures/contact.threads/no-route.json';
 import contactThreadsNotLinked from '../../../docs/api/fixtures/contact.threads/not-linked.json';
@@ -194,6 +204,8 @@ import decisionListSummerPending from '../../../docs/api/fixtures/decision.list/
 import journalListByAwaitingItem from '../../../docs/api/fixtures/journal.list/by-awaiting-item.json';
 import journalListByCampaign from '../../../docs/api/fixtures/journal.list/by-campaign.json';
 import journalListByCampaignChanges from '../../../docs/api/fixtures/journal.list/by-campaign-changes.json';
+import journalListByCampaignReplies from '../../../docs/api/fixtures/journal.list/by-campaign-replies.json';
+import journalListByCampaignRepliesNone from '../../../docs/api/fixtures/journal.list/by-campaign-replies-none.json';
 import journalListByContact from '../../../docs/api/fixtures/journal.list/by-contact.json';
 import journalListByContactChanges from '../../../docs/api/fixtures/journal.list/by-contact-changes.json';
 import journalListByContactDecisions from '../../../docs/api/fixtures/journal.list/by-contact-decisions.json';
@@ -213,6 +225,8 @@ import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
 import routeListEmpty from '../../../docs/api/fixtures/route.list/empty.json';
 import projectGetById from '../../../docs/api/fixtures/project.get/by-id.json';
 import projectGetBySlug from '../../../docs/api/fixtures/project.get/by-slug.json';
+import routeResolveConversations from '../../../docs/api/fixtures/route.resolve/conversations.json';
+import routeResolveNoRoute from '../../../docs/api/fixtures/route.resolve/no-route.json';
 import systemInfoWithUi from '../../../docs/api/fixtures/system.info/with-ui.json';
 import systemInfoWithoutUi from '../../../docs/api/fixtures/system.info/without-ui.json';
 import uiRevokeNeverUsed from '../../../docs/api/fixtures/ui.revoke/never-used.json';
@@ -467,6 +481,8 @@ export const fixtures = {
         { campaign_id: string },
         Campaign
     >,
+    'campaign.get/inbox': campaignGetInbox satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/inbox-quiet': campaignGetInboxQuiet satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
@@ -478,6 +494,7 @@ export const fixtures = {
     >,
     'campaign.list/first-page': campaignListFirstPage satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/for-picker': campaignListForPicker satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
+    'campaign.list/inbox': campaignListInbox satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/include-archived': campaignListIncludeArchived satisfies Exchange<
         CampaignListRequest,
         Page<CampaignSummary>
@@ -572,6 +589,18 @@ export const fixtures = {
         CampaignSummaryRequest,
         CampaignSummaryResponse
     >,
+    'campaign.summary/inbox-all': campaignSummaryInboxAll satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/inbox-one': campaignSummaryInboxOne satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/inbox-quiet': campaignSummaryInboxQuiet satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
     'campaign.summary/many': campaignSummaryMany satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
     'campaign.summary/many-next': campaignSummaryManyNext satisfies Exchange<
         CampaignSummaryRequest,
@@ -638,6 +667,8 @@ export const fixtures = {
         ErrorEnvelope
     >,
     'contact.threads/has-more': contactThreadsHasMore satisfies Exchange<ContactThreadsRequest, ContactThreads>,
+    'contact.threads/inbox-mateo': contactThreadsInboxMateo satisfies Exchange<ContactThreadsRequest, ContactThreads>,
+    'contact.threads/inbox-paula': contactThreadsInboxPaula satisfies Exchange<ContactThreadsRequest, ErrorEnvelope>,
     'contact.threads/next': contactThreadsNext satisfies Exchange<ContactThreadsRequest, ContactThreads>,
     'contact.threads/no-route': contactThreadsNoRoute satisfies Exchange<ContactThreadsRequest, ErrorEnvelope>,
     'contact.threads/not-linked': contactThreadsNotLinked satisfies Exchange<ContactThreadsRequest, ErrorEnvelope>,
@@ -669,6 +700,14 @@ export const fixtures = {
     >,
     'journal.list/by-campaign': journalListByCampaign satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/by-campaign-changes': journalListByCampaignChanges satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/by-campaign-replies': journalListByCampaignReplies satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/by-campaign-replies-none': journalListByCampaignRepliesNone satisfies Exchange<
         JournalListRequest,
         Page<JournalEntry>
     >,
@@ -712,6 +751,8 @@ export const fixtures = {
     'route.list/empty': routeListEmpty satisfies Exchange<object, Routes>,
     'project.get/by-id': projectGetById satisfies Exchange<{ project_id: string }, Project>,
     'project.get/by-slug': projectGetBySlug satisfies Exchange<{ slug: string }, Project>,
+    'route.resolve/conversations': routeResolveConversations satisfies Exchange<RouteResolveRequest, RouteResolution>,
+    'route.resolve/no-route': routeResolveNoRoute satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
     'system.info/with-ui': systemInfoWithUi satisfies Exchange<object, SystemInfo>,
     'system.info/without-ui': systemInfoWithoutUi satisfies Exchange<object, SystemInfo>,
     'ui.revoke/never-used': uiRevokeNeverUsed satisfies Exchange<UiRevokeRequest, UiRevoke>,
