@@ -1,0 +1,13 @@
+{
+  "operation": "suppression.list",
+  "case": "person-second-email-clear",
+  "request": {
+    "channel": "email",
+    "value": "ingrid.solberg@fjordline.example"
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

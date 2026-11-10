@@ -26,6 +26,7 @@ public class PersonPanelExchangesTests
     private static readonly string FollowUps = Id("cmp", 203);
     private const string Email = "ingrid@fjordline.example";
     private const string LinkedIn = "https://www.linkedin.com/in/ingrid-solberg-example";
+    private const string SecondEmail = "ingrid.solberg@fjordline.example";
 
     /// <summary>The reads the panel opens with: the person, whether each of their addresses is on Jason's do-not-contact register, the researcher's findings, and the campaigns a move may go to.</summary>
     [Fact]
@@ -208,6 +209,153 @@ public class PersonPanelExchangesTests
             new { campaign_id = Nordic, kind = "ai_role", role = "researcher", contact_id = Ingrid, actor = Ada },
             Ct);
         Assert.Empty(plain.Context);
+    }
+
+    /// <summary>
+    /// The primary picked per channel kind: the LinkedIn address made primary beside the email, then a second email
+    /// added and made the primary email, and the register read for the address added.
+    /// </summary>
+    [Fact]
+    public async Task A_primary_per_channel_kind()
+    {
+        await using var api = await StartAsync();
+
+        var saved = await api.RecordAsync<ContactDto>(
+            Operations.ContactUpdate,
+            "person-primaries",
+            new
+            {
+                contact_id = Ingrid,
+                channels = new object[]
+                {
+                    new { channel = "email", value = Email, label = (string?)null, primary = false, data = (object?)null },
+                    new { channel = "linkedin", value = LinkedIn, label = (string?)null, primary = true, data = (object?)null },
+                    new { channel = "email", value = SecondEmail, label = (string?)null, primary = true, data = (object?)null },
+                },
+                actor = Ada,
+            },
+            Ct);
+        Assert.Equal(["linkedin:" + LinkedIn, "email:" + SecondEmail], saved.Channels.Where(c => c.Primary).Select(c => c.Channel + ":" + c.Value).OrderByDescending(v => v, StringComparer.Ordinal));
+        Assert.Empty((await api.RecordAsync<Page<SuppressionDto>>(Operations.SuppressionList, "person-second-email-clear", new { channel = "email", value = SecondEmail }, Ct)).Items);
+    }
+
+    /// <summary>A field emptied: sent as null, with nothing else changed.</summary>
+    [Fact]
+    public async Task A_field_cleared()
+    {
+        await using var api = await StartAsync();
+
+        var saved = await api.RecordAsync<ContactDto>(Operations.ContactUpdate, "person-cleared", new { contact_id = Ingrid, company = (string?)null, actor = Ada }, Ct);
+        Assert.Null(saved.Company);
+        Assert.Equal(2, saved.Channels.Count);
+    }
+
+    /// <summary>
+    /// Acts the runtime refuses for a campaign archived elsewhere after the panel opened: the provider's update queued
+    /// after a save, the researcher asked, and the person excluded.
+    /// </summary>
+    [Fact]
+    public async Task Work_refused_in_an_archived_campaign()
+    {
+        await using var api = await StartAsync();
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = Nordic, actor = Ada }, Ct);
+
+        var provider = await api.RecordErrorAsync(
+            Operations.WorkItemCreate,
+            "provider-archived",
+            new
+            {
+                campaign_id = Nordic,
+                kind = "provider_op",
+                operation = "contact.update",
+                contact_id = Ingrid,
+                context = new { input = new { channel = "email", fields = new { title = "VP Revenue" } } },
+                reason = "Promoted in October.",
+                actor = Ada,
+            },
+            HttpStatusCode.Conflict,
+            Ct);
+        Assert.Equal("campaign_archived", provider.Code);
+        var researcher = await api.RecordErrorAsync(
+            Operations.WorkItemCreate,
+            "researcher-archived",
+            new { campaign_id = Nordic, kind = "ai_role", role = "researcher", contact_id = Ingrid, actor = Ada },
+            HttpStatusCode.Conflict,
+            Ct);
+        Assert.Equal("campaign_archived", researcher.Code);
+        var excluded = await api.RecordErrorAsync(
+            Operations.CampaignRemoveContacts,
+            "exclude-archived",
+            new { campaign_id = Nordic, contact_ids = new[] { Ingrid }, reason = "Not a fit for the pilot.", actor = Ada },
+            HttpStatusCode.Conflict,
+            Ct);
+        Assert.Equal("campaign_archived", excluded.Code);
+    }
+
+    /// <summary>A person whose one membership not excluded has finished, as the panel reads them.</summary>
+    [Fact]
+    public async Task A_person_whose_campaign_finished()
+    {
+        await using var api = await StartAsync();
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var membership = db.CampaignContacts.Single(m => m.Campaign!.PublicId == Nordic && m.Contact!.PublicId == Ingrid);
+            membership.State = MembershipState.Finished;
+            membership.UpdatedAt = new DateTime(2026, 10, 15, 0, 0, 0, DateTimeKind.Utc);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var person = await api.RecordAsync<ContactDto>(Operations.ContactGet, "person-finished", new { contact_id = Ingrid }, Ct);
+        Assert.Contains(person.Campaigns!, c => c.CampaignId == Nordic && c.State == MembershipState.Finished);
+    }
+
+    /// <summary>A move whose add is refused for the person alone: the record was archived elsewhere after the panel opened.</summary>
+    [Fact]
+    public async Task Move_whose_add_is_refused_for_the_person()
+    {
+        await using var api = await StartAsync();
+        await api.PostOkAsync<ContactDto>(Operations.ContactArchive, new { contact_id = Ingrid, actor = Ada }, Ct);
+
+        var into = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "move-in-rejected", new { campaign_id = FollowUps, contacts = new[] { new { contact_id = Ingrid } }, reason = "Moved to the follow-ups.", actor = Ada }, Ct);
+        Assert.Equal(1, into.Summary.Rejected);
+    }
+
+    /// <summary>
+    /// Two findings about the person, the second read whole: an older research beside the one every test seeds, so the
+    /// seeded one stays the first the list names.
+    /// </summary>
+    [Fact]
+    public async Task Two_findings()
+    {
+        await using var api = await StartAsync();
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var day = new DateTime(2026, 10, 16, 0, 0, 0, DateTimeKind.Utc);
+            var nordic = db.Campaigns.Single(c => c.PublicId == Nordic);
+            var ingrid = db.Contacts.Single(c => c.PublicId == Ingrid);
+            var older = WorkItemFactory.NewAiRole(nordic, "researcher", day.AddDays(-6));
+            older.PublicId = Id("wi", 202);
+            older.Contact = ingrid;
+            older.Status = WorkItemStatus.Succeeded;
+            older.FinishedAt = day.AddDays(-6).AddHours(1);
+            older.Result = new JsonObject { ["summary"] = "Fjordline runs ferries between Bergen and Stavanger." };
+            db.WorkItems.Add(older);
+            var ran = WorkItemFactory.NewAttempt(older, 1, AttemptStatus.Succeeded, day.AddDays(-6));
+            ran.PublicId = Id("att", 202);
+            db.Attempts.Add(ran);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var findings = await api.RecordAsync<Page<WorkItemSummaryDto>>(
+            Operations.WorkItemList,
+            "researcher-findings-two",
+            new { contact_id = Ingrid, kind = "ai_role", role = "researcher", status = new[] { "succeeded" }, order = "finished", limit = 20 },
+            Ct);
+        Assert.Equal([Id("wi", 201), Id("wi", 202)], findings.Items.Select(i => i.Id));
+        var second = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "researcher-finding-second", new { work_item_id = Id("wi", 202) }, Ct);
+        Assert.Equal(Id("wi", 202), second.Id);
     }
 
     /// <summary>The runtime with the seed in place and the panel's first read recorded, which numbers the ids.</summary>

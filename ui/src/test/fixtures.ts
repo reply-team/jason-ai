@@ -288,15 +288,20 @@ import workitemUpdateDates from '../../../docs/api/fixtures/workitem.update/date
 import workitemUpdateFinishedMeanwhile from '../../../docs/api/fixtures/workitem.update/finished-meanwhile.json';
 // The person panel's recordings.
 import personCampaignAddContactsMoveIn from '../../../docs/api/fixtures/campaign.add_contacts/move-in.json';
+import personCampaignAddContactsMoveInRejected from '../../../docs/api/fixtures/campaign.add_contacts/move-in-rejected.json';
 import personCampaignListMoveTargets from '../../../docs/api/fixtures/campaign.list/move-targets.json';
+import personCampaignRemoveContactsExcludeArchived from '../../../docs/api/fixtures/campaign.remove_contacts/exclude-archived.json';
 import personCampaignRemoveContactsExcludeOne from '../../../docs/api/fixtures/campaign.remove_contacts/exclude-one.json';
 import personCampaignRemoveContactsMoveOut from '../../../docs/api/fixtures/campaign.remove_contacts/move-out.json';
 import personCampaignRemoveContactsMoveOutArchived from '../../../docs/api/fixtures/campaign.remove_contacts/move-out-archived.json';
 import personContactGetPersonAfterExclude from '../../../docs/api/fixtures/contact.get/person-after-exclude.json';
 import personContactGetPersonAfterHalfMove from '../../../docs/api/fixtures/contact.get/person-after-half-move.json';
 import personContactGetPersonAfterMove from '../../../docs/api/fixtures/contact.get/person-after-move.json';
+import personContactGetPersonFinished from '../../../docs/api/fixtures/contact.get/person-finished.json';
 import personContactGetPersonPanel from '../../../docs/api/fixtures/contact.get/person-panel.json';
 import personContactUpdatePersonChannels from '../../../docs/api/fixtures/contact.update/person-channels.json';
+import personContactUpdatePersonCleared from '../../../docs/api/fixtures/contact.update/person-cleared.json';
+import personContactUpdatePersonPrimaries from '../../../docs/api/fixtures/contact.update/person-primaries.json';
 import personContactUpdatePersonRefused from '../../../docs/api/fixtures/contact.update/person-refused.json';
 import personContactUpdatePersonSaved from '../../../docs/api/fixtures/contact.update/person-saved.json';
 import personSuppressionAddPersonEmail from '../../../docs/api/fixtures/suppression.add/person-email.json';
@@ -311,13 +316,18 @@ import personSuppressionListPersonEmailListed from '../../../docs/api/fixtures/s
 import personSuppressionListPersonLinkedinClear from '../../../docs/api/fixtures/suppression.list/person-linkedin-clear.json';
 import personSuppressionListPersonLinkedinListed from '../../../docs/api/fixtures/suppression.list/person-linkedin-listed.json';
 import personSuppressionListPersonPhoneClear from '../../../docs/api/fixtures/suppression.list/person-phone-clear.json';
+import personSuppressionListPersonSecondEmailClear from '../../../docs/api/fixtures/suppression.list/person-second-email-clear.json';
 import personSuppressionRemovePersonEmail from '../../../docs/api/fixtures/suppression.remove/person-email.json';
 import personSuppressionRemovePersonLinkedin from '../../../docs/api/fixtures/suppression.remove/person-linkedin.json';
+import personWorkitemCreateProviderArchived from '../../../docs/api/fixtures/workitem.create/provider-archived.json';
 import personWorkitemCreateProviderContactUpdate from '../../../docs/api/fixtures/workitem.create/provider-contact-update.json';
+import personWorkitemCreateResearcherArchived from '../../../docs/api/fixtures/workitem.create/researcher-archived.json';
 import personWorkitemCreateResearcherAsked from '../../../docs/api/fixtures/workitem.create/researcher-asked.json';
 import personWorkitemCreateResearcherAskedPlain from '../../../docs/api/fixtures/workitem.create/researcher-asked-plain.json';
 import personWorkitemGetResearcherFinding from '../../../docs/api/fixtures/workitem.get/researcher-finding.json';
+import personWorkitemGetResearcherFindingSecond from '../../../docs/api/fixtures/workitem.get/researcher-finding-second.json';
 import personWorkitemListResearcherFindings from '../../../docs/api/fixtures/workitem.list/researcher-findings.json';
+import personWorkitemListResearcherFindingsTwo from '../../../docs/api/fixtures/workitem.list/researcher-findings-two.json';
 
 export type Exchange<Req, Res> = { operation: string; case: string; request: Req; status: number; response: Res };
 
@@ -842,9 +852,17 @@ export const fixtures = {
         AddContactsRequest,
         AddContactsResult
     >,
+    'campaign.add_contacts/move-in-rejected': personCampaignAddContactsMoveInRejected satisfies Exchange<
+        AddContactsRequest,
+        AddContactsResult
+    >,
     'campaign.list/move-targets': personCampaignListMoveTargets satisfies Exchange<
         CampaignListRequest,
         Page<CampaignSummary>
+    >,
+    'campaign.remove_contacts/exclude-archived': personCampaignRemoveContactsExcludeArchived satisfies Exchange<
+        RemoveContactsRequest,
+        ErrorEnvelope
     >,
     'campaign.remove_contacts/exclude-one': personCampaignRemoveContactsExcludeOne satisfies Exchange<
         RemoveContactsRequest,
@@ -870,8 +888,14 @@ export const fixtures = {
         { contact_id: string },
         Contact
     >,
+    'contact.get/person-finished': personContactGetPersonFinished satisfies Exchange<{ contact_id: string }, Contact>,
     'contact.get/person-panel': personContactGetPersonPanel satisfies Exchange<{ contact_id: string }, Contact>,
     'contact.update/person-channels': personContactUpdatePersonChannels satisfies Exchange<
+        ContactUpdateRequest,
+        Contact
+    >,
+    'contact.update/person-cleared': personContactUpdatePersonCleared satisfies Exchange<ContactUpdateRequest, Contact>,
+    'contact.update/person-primaries': personContactUpdatePersonPrimaries satisfies Exchange<
         ContactUpdateRequest,
         Contact
     >,
@@ -925,6 +949,10 @@ export const fixtures = {
         SuppressionListRequest,
         Page<Suppression>
     >,
+    'suppression.list/person-second-email-clear': personSuppressionListPersonSecondEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
     'suppression.remove/person-email': personSuppressionRemovePersonEmail satisfies Exchange<
         SuppressionRequest,
         SuppressionRemoved
@@ -933,9 +961,17 @@ export const fixtures = {
         SuppressionRequest,
         SuppressionRemoved
     >,
+    'workitem.create/provider-archived': personWorkitemCreateProviderArchived satisfies Exchange<
+        WorkItemCreateRequest,
+        ErrorEnvelope
+    >,
     'workitem.create/provider-contact-update': personWorkitemCreateProviderContactUpdate satisfies Exchange<
         WorkItemCreateRequest,
         WorkItem
+    >,
+    'workitem.create/researcher-archived': personWorkitemCreateResearcherArchived satisfies Exchange<
+        WorkItemCreateRequest,
+        ErrorEnvelope
     >,
     'workitem.create/researcher-asked': personWorkitemCreateResearcherAsked satisfies Exchange<
         WorkItemCreateRequest,
@@ -949,7 +985,15 @@ export const fixtures = {
         WorkItemGetRequest,
         WorkItemWithResult
     >,
+    'workitem.get/researcher-finding-second': personWorkitemGetResearcherFindingSecond satisfies Exchange<
+        WorkItemGetRequest,
+        WorkItemWithResult
+    >,
     'workitem.list/researcher-findings': personWorkitemListResearcherFindings satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'workitem.list/researcher-findings-two': personWorkitemListResearcherFindingsTwo satisfies Exchange<
         WorkItemListRequest,
         Page<WorkItemSummary>
     >,
