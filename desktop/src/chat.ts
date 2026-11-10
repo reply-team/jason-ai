@@ -7,6 +7,7 @@
  */
 
 import { mkdirSync, readdirSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { isAbsolute } from 'node:path';
 import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine } from './chat-hosts.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permission-broker.ts';
@@ -296,6 +297,7 @@ export class Chat {
                     chat: paths.chat,
                     added,
                     data: paths.data,
+                    home: homedir(),
                     protectedFiles: [paths.installationSettings, paths.runFile],
                     denied: fence.commands,
                     deniedOperations: fence.operations,

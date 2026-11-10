@@ -38,6 +38,7 @@ function windows(real: Record<string, string> = {}): ChatScope {
         chat: 'C:\\Users\\someone\\.jason\\desktop\\chat',
         added: ['C:\\Users\\someone\\Jason\\Northwind\\campaigns\\spring', 'C:\\Users\\someone\\Jason\\Northwind'],
         data: 'C:\\Users\\someone\\.jason',
+        home: 'C:\\Users\\someone',
         protectedFiles: ['C:\\Users\\someone\\.jason\\config\\settings.json', 'C:\\Users\\someone\\.jason\\run\\runtime.json'],
         denied,
         deniedOperations,
@@ -69,6 +70,7 @@ function mac(): ChatScope {
         chat: '/Users/someone/.jason/desktop/chat',
         added: ['/Users/someone/Jason/Northwind'],
         data: '/Users/someone/.jason',
+        home: '/Users/someone',
         protectedFiles: ['/Users/someone/.jason/config/settings.json', '/Users/someone/.jason/run/runtime.json'],
         denied,
         deniedOperations,
@@ -153,6 +155,16 @@ test('on Windows, a component that ends in a dot or a space, or carries a colon,
     }
     assert.deepEqual(write(windows(), '..\\chat\\a.md'), { verdict: 'allow' });
     assert.deepEqual(write(mac(), '/Users/someone/Jason/Northwind/notes.'), { verdict: 'allow' });
+});
+
+test('a write under .git in a working folder is a card, as for .claude; a read there is not', () => {
+    for (const [scope, path] of [[windows(), 'C:\\Users\\someone\\Jason\\Northwind\\.git\\hooks\\pre-commit'], [windows(), '.GIT\\config'],
+        [mac(), '/Users/someone/Jason/Northwind/.git/hooks/post-checkout'], [mac(), 'repo/.git/config']] as const) {
+        const card = write(scope, path);
+        assert.ok(card.verdict === 'ask' && card.remember === null, path);
+        assert.deepEqual(read(scope, path), { verdict: 'allow' }, path);
+    }
+    assert.deepEqual(write(mac(), '/Users/someone/Jason/Northwind/.gitignore'), { verdict: 'allow' });
 });
 
 test('a path that begins with ~ is a card, never an allowance', () => {
@@ -254,6 +266,7 @@ test('a real junction or symbolic link that leads out of the chat folder is foll
         chat,
         added: [],
         data,
+        home: root,
         protectedFiles: [join(data, 'run', 'runtime.json')],
         denied,
         deniedOperations,
@@ -355,6 +368,26 @@ test('a denied verb anywhere in a command refuses it, whatever form names the pr
     assert.equal(run(windows(), 'JASON.EXE approval approve apr_A').verdict, 'deny');
     assert.equal(run(windows(), '& jason runtime stop').verdict, 'deny');
     assert.equal(run(mac(), '/usr/local/bin/jason approval approve apr_A').verdict, 'deny');
+});
+
+test('a command whose text names the data directory outside the chat folder is refused, in any spelling', () => {
+    for (const command of ['type C:\\Users\\someone\\.jason\\config\\settings.json', 'cat C:/Users/someone/.jason/run/runtime.json',
+        'cat /c/Users/someone/.jason/run/runtime.json', 'ls //c/users/someone/.JASON', 'cat ~/.jason/config/settings.json', 'ls $HOME/.jason',
+        'cat "C:\\\\Users\\\\someone\\\\.jason\\\\plugins\\\\x\\\\main.js"', 'cat ~/.jason/desktop/chat/../../config/settings.json', 'ls ~/.jason/desktop',
+        'python -c "open(r\'C:\\Users\\someone\\.jason\\config\\settings.json\')"']) {
+        assert.equal(run(windows(), command).verdict, 'deny', command);
+    }
+    for (const command of ['cat /Users/someone/.jason/config/settings.json', 'ls ~/.jason', 'cat ~/.jason/logs/x.jsonl', 'cat //Users/someone/.jason/run/runtime.json',
+        'ls /users/SOMEONE/.jason/plugins']) {
+        assert.equal(run(mac(), command).verdict, 'deny', command);
+    }
+    // The chat folder is the chat's, and a folder that only begins like the data directory is not it.
+    assert.equal(run(windows(), 'cat C:/Users/someone/.jason/desktop/chat/notes.md').verdict, 'ask');
+    assert.equal(run(mac(), 'cat ~/.jason/desktop/chat/notes.md').verdict, 'ask');
+    assert.equal(run(mac(), 'ls ~/.jason-old').verdict, 'ask');
+    // ~/.jason is the data directory only when the data directory is the default one.
+    assert.equal(run({ ...mac(), data: '/Volumes/work/jason-data', protectedFiles: [] }, 'ls ~/.jason').verdict, 'ask');
+    assert.equal(run({ ...mac(), data: '/Volumes/work/jason-data', protectedFiles: [] }, 'ls /Volumes/work/jason-data/config').verdict, 'deny');
 });
 
 test('a command that names a denied operation is refused, the runtime\'s stop, system.shutdown, first among them', () => {

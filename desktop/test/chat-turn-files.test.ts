@@ -49,7 +49,7 @@ test('the chat\'s agent is refused a read or a write of the configuration', (t) 
     const paths = desktopPaths(root);
     const file = writeTurnConfig(paths.desktop, newTurnId(), 'http://127.0.0.1:50123/mcp', 's3cret');
     const platform = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
-    const scope = { platform, cwd: paths.chat, chat: paths.chat, added: [], data: root, protectedFiles: [], denied: [], deniedOperations: [], real: realPathOf } as const;
+    const scope = { platform, cwd: paths.chat, chat: paths.chat, added: [], data: root, protectedFiles: [], denied: [], deniedOperations: [], home: root, real: realPathOf } as const;
     assert.equal(judge('Read', { file_path: file }, scope).verdict, 'deny');
     assert.equal(judge('Read', { file_path: join('..', 'turn-x.mcp.json') }, scope).verdict, 'deny');
     assert.equal(judge('Write', { file_path: file, content: '{}' }, scope).verdict, 'deny');

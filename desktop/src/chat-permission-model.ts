@@ -16,6 +16,8 @@ export interface ChatScope {
     added: readonly string[];
     /** The data directory: nothing under it but the chat folder is the chat's. */
     data: string;
+    /** The person's home folder, for `~/.jason` when the data directory is the default one. */
+    home: string;
     /** The files refused first: the installation's settings file and the runtime's run file. */
     protectedFiles: readonly string[];
     /** The deny list's commands. */
@@ -42,8 +44,14 @@ const shells = new Set(['Bash', 'PowerShell']);
  * card covers its one request.
  */
 const runsNothing: ReadonlySet<string> = new Set<string>();
-/** Inside a working folder, this one still configures the host for the next turn, so writing it is never silent. */
-const hostSettings = '.claude';
+/**
+ * Inside a working folder, these still act on what runs next: `.claude` configures the host for the next turn, and
+ * `.git` holds a repository's hooks and configuration, which git runs. Writing under either is never silent.
+ */
+const guardedFolders: Readonly<Record<string, string>> = {
+    '.claude': 'Change the agent\'s own settings',
+    '.git': 'Change a repository\'s own files',
+};
 const allowedReply = [['auth', 'status'], ['account', 'list']];
 
 const dataRefusal = 'That path is the installation\'s own data, outside the chat\'s folder: the chat neither reads nor writes it. Nothing was done.';
@@ -134,9 +142,9 @@ function judgePath(value: string, scope: ChatScope, writes: boolean): Judgement 
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, chat, path)) return { verdict: 'deny', message: dataRefusal };
     const root = [chat, ...scope.added.map((folder) => located(folder, scope))].find((folder) => inside(scope, folder, path));
     if (root !== undefined) {
-        const settings = paths.relative(root, path).split(paths.sep).some((part) => keyOf(scope.platform, part) === hostSettings);
-        if (!(writes && settings)) return allow;
-        return { verdict: 'ask', title: 'Change the agent\'s own settings', detail: shorten(path), remember: null };
+        const guarded = paths.relative(root, path).split(paths.sep).map((part) => guardedFolders[keyOf(scope.platform, part)]).find((title) => title !== undefined);
+        if (!(writes && guarded !== undefined)) return allow;
+        return { verdict: 'ask', title: guarded, detail: shorten(path), remember: null };
     }
     if (writes) return { verdict: 'ask', title: 'Change a file outside the chat\'s folders', detail: shorten(path), remember: null };
     return { verdict: 'ask', title: 'Read a file outside the chat\'s folders', detail: shorten(path), remember: `read:${keyOf(scope.platform, paths.dirname(path))}` };
@@ -229,7 +237,42 @@ function jasonIn(command: string, scope: ChatScope): 'deny' | 'jason' | null {
     return found;
 }
 
+/** A text as paths in it are compared: one slash for any run of slashes or backslashes, case folded where the platform folds it. */
+function pathText(platform: Platform, text: string): string {
+    return keyOf(platform, text.replace(/[\\/]+/g, '/'));
+}
+
+/**
+ * True when the command's text names the data directory, or anything in it outside the chat folder, in any spelling a
+ * shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows, and
+ * `~/.jason` or `$HOME/.jason` when the data directory is the default one. A name that only begins like it is not it.
+ */
+function namesData(command: string, scope: ChatScope): boolean {
+    const paths = pathsOf(scope.platform);
+    const text = pathText(scope.platform, command);
+    const data = pathText(scope.platform, paths.resolve(scope.data)).replace(/\/$/, '');
+    const chat = pathText(scope.platform, paths.resolve(scope.chat));
+    const chatRest = chat.startsWith(`${data}/`) ? chat.slice(data.length) : null;
+    const spellings = [data];
+    const drive = /^([a-z]):\//i.exec(data);
+    if (drive) spellings.push(`/${drive[1]}${data.slice(2)}`);
+    if (data === `${pathText(scope.platform, paths.resolve(scope.home)).replace(/\/$/, '')}/.jason`) {
+        for (const home of ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE']) spellings.push(pathText(scope.platform, `${home}/.jason`));
+    }
+    for (const spelling of spellings) {
+        for (let at = text.indexOf(spelling); at >= 0; at = text.indexOf(spelling, at + 1)) {
+            const rest = text.slice(at + spelling.length);
+            if (/^[A-Za-z0-9._-]/.test(rest)) continue;
+            const named = posix.normalize(`/${/^[^\s"'`;|&<>()]*/.exec(rest)?.[0] ?? ''}`);
+            if (chatRest !== null && (named === chatRest || named.startsWith(`${chatRest}/`))) continue;
+            return true;
+        }
+    }
+    return false;
+}
+
 function judgeCommand(tool: string, command: string, scope: ChatScope): Judgement {
+    if (namesData(command, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
     if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
     // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
