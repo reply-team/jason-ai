@@ -923,8 +923,7 @@ body,
 .jc-console .harness .app.chromeless {
     min-height: 100%;
 }
-/* Needs you: the filter over what waits and the card that says nothing does. Settings: the icon beside each
-   section's heading, set on the line of its words. */
+/* Needs you: the filter over what waits and the card that says nothing does. */
 .jc-console .needs-filter {
     display: flex;
     gap: 6px;
@@ -937,8 +936,4 @@ body,
 .jc-console .needs-empty {
     color: var(--faint);
     text-align: center;
-}
-.jc-console .settings-icon {
-    vertical-align: -2px;
-    color: var(--teal);
 }

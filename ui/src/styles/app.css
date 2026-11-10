@@ -156,3 +156,9 @@
     border-color: var(--accent);
     color: var(--accent-text);
 }
+/* Settings: the icon beside each section's heading, set on the line of its words; the console shows this screen
+   under the same rule. */
+.settings-icon {
+    vertical-align: -2px;
+    color: var(--accent-text);
+}

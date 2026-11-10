@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '../../platform/i18n';
@@ -40,6 +41,16 @@ describe('Settings', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'Мова', level: 2 }));
         expect(icon('Вигляд')).toBeTruthy();
         expect(icon('Мова')).toBeTruthy();
+    });
+
+    it("sets each icon on the line of its heading's words, in the browser's own stylesheet", () => {
+        // Read from the file: the test run hands a stylesheet import back empty. The run starts in ui/.
+        const sheet = readFileSync('src/styles/app.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
+        const rule = Array.from(sheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g)).find(
+            (each) => each[1]!.trim() === '.settings-icon',
+        );
+        expect(rule?.[2]).toMatch(/vertical-align:\s*-2px;/);
+        expect(rule?.[2]).toMatch(/color:\s*var\(--accent-text\);/);
     });
 
     it('sets the theme on the document', async () => {
