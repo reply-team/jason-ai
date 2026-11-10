@@ -66,7 +66,7 @@ const networkRefusal = 'That path is on another computer, or reaches this one as
 const climbRefusal = 'That pattern climbs out of its folder with ..: the chat does not take it. Name the folder as the path instead. Nothing was done.';
 const ownToolRefusal = 'That tool answers the chat\'s own permission requests: only the person answers them. Nothing was done.';
 const searchRefusal = 'That folder holds the installation\'s own data, so a search or a listing of it would walk that data: the chat does not take it. Name a narrower folder, one that does not hold the data directory. Nothing was done.';
-const lengthRefusal ='That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
+const lengthRefusal = 'That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
 /** The longest path each platform takes: the `\\?\` form's limit on Windows, `PATH_MAX` on macOS and Linux. */
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
 const replyRefusal = 'The chat runs only reply auth status and reply account list of reply: provider work goes through jason, and the connection is made on the Connect card. Nothing was run.';
