@@ -14,7 +14,7 @@ import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention } from './needs';
-import { chats, lines, setupBusy } from './state';
+import { chats, clock, lines, setupBusy } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -527,5 +527,38 @@ describe('the console', () => {
         expect(classicAttention.approvals.value).toBe(page);
         expect(classicAttention.questions.value).toBe(questions);
         expect(attention.approvals.value.map((each) => each.id)).toEqual(pendingIds);
+    });
+
+    it('keeps the field a person is typing in focused, with its text and caret, through the clock and a journal line', async () => {
+        const fake = pending(new FakeApi());
+        const { journal } = renderConsole(fake);
+        await waitFor(() => screen.getAllByText('Grace Hopper'));
+        const reason = () =>
+            within(panel('Needs you').querySelector<HTMLElement>('[data-id="apr_2"]')!).getByRole<HTMLInputElement>(
+                'textbox',
+                { name: 'Reason (optional)' },
+            );
+        reason().focus();
+        fireEvent.input(reason(), { target: { value: 'not this quarter' } });
+        reason().setSelectionRange(4, 8);
+        const before = reason();
+
+        flush(() => {
+            clock.value = clock.value + 30_000;
+        });
+        expect(reason()).not.toBe(before);
+        expect(document.activeElement).toBe(reason());
+        expect([reason().selectionStart, reason().selectionEnd]).toEqual([4, 8]);
+
+        const approvals = asked(fake, 'approval.list');
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_401' }));
+        });
+        await waitFor(() => expect(asked(fake, 'approval.list')).toBe(approvals + 1));
+        await waitFor(() => expect(asked(fake, 'campaign.summary')).toBe(2));
+        expect(document.activeElement).toBe(reason());
+        expect(reason().value).toBe('not this quarter');
+        expect([reason().selectionStart, reason().selectionEnd]).toEqual([4, 8]);
     });
 });

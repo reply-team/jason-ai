@@ -49,9 +49,60 @@ export function join(values: readonly Value[], between: Html): Html {
 
 export const markupOf = (value: Html): string => value.markup;
 
-/** The one place the console writes markup into the page. */
+/** The attributes that name what a control does; with its arguments, one of them says which control it is. */
+const naming = ['data-input', 'data-enter', 'data-change', 'data-action'] as const;
+
+type Identity = { attribute: string; name: string; args: string | null } | { id: string };
+type Selection = { start: number; end: number; direction: 'forward' | 'backward' | 'none' };
+
+function identify(element: Element): Identity | null {
+    for (const attribute of naming) {
+        const name = element.getAttribute(attribute);
+        if (name !== null) return { attribute, name, args: element.getAttribute('data-args') };
+    }
+    return element.id ? { id: element.id } : null;
+}
+
+function same(element: Element, identity: Identity): boolean {
+    if ('id' in identity) return element.id === identity.id;
+    return (
+        element.getAttribute(identity.attribute) === identity.name &&
+        element.getAttribute('data-args') === identity.args
+    );
+}
+
+/** The selection of a text field; null for a control that has none (a button, a checkbox). */
+function selectionOf(element: Element): Selection | null {
+    if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) return null;
+    try {
+        const { selectionStart: start, selectionEnd: end, selectionDirection: direction } = element;
+        return start === null || end === null ? null : { start, end, direction: direction ?? 'none' };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The one place the console writes markup into the page. A panel is painted again while a person works in it (the
+ * clock, a journal line), and the new markup replaces the control they were in; so the control of the same identity is
+ * focused again afterwards, with the same selection, and typing goes on where it was.
+ */
 export function paint(into: Element, value: Html): void {
+    const active = into.ownerDocument.activeElement;
+    const identity = active && into.contains(active) ? identify(active) : null;
+    const selection = identity && active ? selectionOf(active) : null;
     into.innerHTML = value.markup;
+    if (!identity) return;
+    const again = Array.from(into.querySelectorAll('*')).find((element) => same(element, identity));
+    if (!(again instanceof HTMLElement)) return;
+    again.focus({ preventScroll: true });
+    if (selection && (again instanceof HTMLInputElement || again instanceof HTMLTextAreaElement)) {
+        try {
+            again.setSelectionRange(selection.start, selection.end, selection.direction);
+        } catch {
+            // A field of a kind that takes no selection keeps its focus alone.
+        }
+    }
 }
 
 /** A value computed at run time, set through the CSSOM: never a style attribute in markup. */
