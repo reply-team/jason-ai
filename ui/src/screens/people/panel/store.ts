@@ -50,15 +50,22 @@ export async function loadNext(api: Api, contactId: string): Promise<void> {
     }
 }
 
-/** The campaigns a person is a live member of, in the order contact.get answered them: the ones an act for the person can go through. */
-export function liveCampaigns(person: Contact): ContactCampaign[] {
-    return (person.campaigns ?? []).filter((each) => each.state === 'enrolled' || each.state === 'paused');
+/**
+ * The campaigns a work item about the person can belong to, in the order contact.get answered them: every one the
+ * person is a member of and not excluded from, a finished one included.
+ */
+export function workCampaigns(person: Contact): ContactCampaign[] {
+    return (person.campaigns ?? []).filter((each) => each.state !== 'excluded');
 }
 
-/** The campaign an act uses unless the person picks another: the one the panel was opened from, else the first. */
+/**
+ * The campaign a work item uses unless the person picks another: the one the panel was opened from, else the first
+ * the person is enrolled in or paused in, else the first whose work with them finished.
+ */
 export function defaultCampaign(person: Contact, openedFrom: string | undefined): string | null {
-    const live = liveCampaigns(person);
-    return (live.find((each) => each.campaign_id === openedFrom) ?? live[0])?.campaign_id ?? null;
+    const offered = workCampaigns(person);
+    const live = offered.find((each) => each.state === 'enrolled' || each.state === 'paused');
+    return (offered.find((each) => each.campaign_id === openedFrom) ?? live ?? offered[0])?.campaign_id ?? null;
 }
 
 /**

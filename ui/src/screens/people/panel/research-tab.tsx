@@ -47,7 +47,7 @@ export function ResearchTab({ person, campaignId, now, zone }: Props) {
         void panel.loadFindings(api, person.id);
     }, [api, person.id]);
 
-    const live = panel.liveCampaigns(person);
+    const offered = panel.workCampaigns(person);
     const chosen = campaign ?? panel.defaultCampaign(person, campaignId);
     const shown = panel.findings.value?.contactId === person.id ? panel.findings.value : null;
 
@@ -55,7 +55,7 @@ export function ResearchTab({ person, campaignId, now, zone }: Props) {
         event.preventDefault();
         if (busy || !chosen) return;
         setBusy(true);
-        const name = live.find((each) => each.campaign_id === chosen)?.campaign_name ?? chosen;
+        const name = offered.find((each) => each.campaign_id === chosen)?.campaign_name ?? chosen;
         try {
             const asked = await panel.askResearcher(api, chosen, person.id, question.trim() || undefined);
             setQuestion('');
@@ -80,21 +80,21 @@ export function ResearchTab({ person, campaignId, now, zone }: Props) {
                         onChange={(event) => setQuestion(event.target.value)}
                     />
                     <div className="where">
-                        {live.length > 1 ? (
+                        {offered.length > 1 ? (
                             <select
                                 className="select"
                                 aria-label="The campaign the researcher works in"
                                 value={chosen}
                                 onChange={(event) => setCampaign(event.target.value)}
                             >
-                                {live.map((each) => (
+                                {offered.map((each) => (
                                     <option key={each.campaign_id} value={each.campaign_id}>
                                         {each.campaign_name}
                                     </option>
                                 ))}
                             </select>
                         ) : (
-                            <span className="muted">in {live[0]?.campaign_name}</span>
+                            <span className="muted">in {offered[0]?.campaign_name}</span>
                         )}
                         <button className="btn primary" type="submit" disabled={busy}>
                             Ask the researcher

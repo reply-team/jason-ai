@@ -93,7 +93,7 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
         void panel.loadRegister(api, person);
     }, [api, person.id, addresses]);
 
-    const live = panel.liveCampaigns(person);
+    const offered = panel.workCampaigns(person);
     const chosen = campaign ?? panel.defaultCampaign(person, campaignId);
 
     if (!draft)
@@ -161,7 +161,7 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
             const saved = await panel.save(api, { contact_id: person.id, ...changed, ...(why ? { reason: why } : {}) });
             let line: Said = 'saved';
             if (provider && offerable && chosen) {
-                const name = live.find((each) => each.campaign_id === chosen)?.campaign_name ?? chosen;
+                const name = offered.find((each) => each.campaign_id === chosen)?.campaign_name ?? chosen;
                 try {
                     const queued = await panel.queueProviderUpdate(api, chosen, saved, forProvider, why);
                     line = { queued, campaign: name };
@@ -270,16 +270,16 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
                             onChange={(event) => setProvider(event.target.checked)}
                         />
                         Also queue the name, company and title changes for the provider, in{' '}
-                        {live.length === 1 ? live[0]!.campaign_name : null}
+                        {offered.length === 1 ? offered[0]!.campaign_name : null}
                     </label>
-                    {live.length > 1 && (
+                    {offered.length > 1 && (
                         <select
                             className="select"
                             aria-label="The campaign the change is queued in"
                             value={chosen}
                             onChange={(event) => setCampaign(event.target.value)}
                         >
-                            {live.map((each) => (
+                            {offered.map((each) => (
                                 <option key={each.campaign_id} value={each.campaign_id}>
                                     {each.campaign_name}
                                 </option>

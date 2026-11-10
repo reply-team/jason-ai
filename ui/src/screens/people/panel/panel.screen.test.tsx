@@ -430,6 +430,34 @@ describe('The campaign the provider change is queued in', () => {
         );
         expect(asked(api, 'workitem.create')).toEqual([recorded('workitem.create/provider-contact-update')]);
     });
+
+    it('is a campaign whose work with the person finished when that is the one not excluded, with the ask; nothing to exclude or move', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-finished')
+            .answer('suppression.list', ...registerClear)
+            .answer('workitem.list', 'workitem.list/researcher-findings')
+            .answer('workitem.get', 'workitem.get/researcher-finding');
+        open(api, ingrid.id, 'details');
+        fireEvent.click(await within(await shown()).findByRole('button', { name: 'Edit' }));
+        fireEvent.input(within(panel()).getByRole('textbox', { name: 'Title' }), { target: { value: 'VP Revenue' } });
+        const box = within(panel()).getByRole<HTMLInputElement>('checkbox', {
+            name: /queue the name, company and title/,
+        });
+        expect(box.disabled).toBe(false);
+        expect(box.closest('label')!.textContent).toContain('Nordic pilot');
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Cancel' }));
+
+        fireEvent.click(within(panel()).getByRole('tab', { name: 'Research' }));
+        await within(panel()).findByText('Fjordline opened an office in Bergen in September.');
+        const ask = within(panel()).getByRole('button', { name: 'Ask the researcher' });
+        expect(ask.closest('form')?.textContent).toContain('in Nordic pilot');
+
+        fireEvent.click(within(panel()).getByRole('tab', { name: 'Sequences' }));
+        const finished = (await within(panel()).findByText('Nordic pilot', { selector: 'a' })).closest('li')!;
+        expect(finished.textContent).toContain('Finished');
+        expect(within(panel()).queryByRole('button', { name: 'Exclude' })).toBeNull();
+        expect(within(panel()).queryByRole('button', { name: 'Move' })).toBeNull();
+    });
 });
 
 describe('Do not contact', () => {
