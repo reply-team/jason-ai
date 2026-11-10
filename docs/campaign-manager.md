@@ -52,11 +52,14 @@ line. These kinds summon a review:
 | `inbound_reply_observed` | A thread in one of the campaign's conversations moved since the last read: somebody may have replied. The runtime's own read says so and interprets nothing. For the campaign's own thread the same line has already woken the responder, queued ahead of this review, which reads the reply and answers it; what the campaign as a whole calls for is the manager's ([inbound sync](inbound-sync.md)). |
 | `provider_event_observed` | A provider said something happened that concerns the campaign — a reply it detected, an invitation accepted, a message that bounced — and the runtime found it by an identifier the campaign's own operations pinned, or by the person a member is. What it calls for is the manager's ([events](events.md)). |
 | `provider_blocked` | A provider block holds the campaign's work: the account, or one sending account under it, is refused for its money, plan, allowance, credential or channel, and what reaches people has stopped until it clears. Said once per campaign and block. Whether to tell somebody, or change course, is the manager's; the block's clearing is not a trigger, because the work runs again by itself ([work execution](work-execution.md) §Provider blocks). |
+| `audience_reserve_low` | The campaign's untouched people — the summary's `new` — fell under the threshold the campaign set with `--audience-threshold`. The runtime counts them and says so once per crossing; whether to top the audience up, and how, is the manager's (§9). |
 
 **And what is deliberately not in the list.** `workitem_succeeded` is out: a review after every
 successful step is cost without judgment, and the work that needs looking at is the work that did not
 go well. `workitem_expired` and `workitem_cancelled` are out: the cadence catches them soon enough.
 `provider_block_cleared` is out: what the block held runs again by itself, and the manager was told when it began.
+`audience_reserve_recovered` is out: the manager was told when the reserve fell, and a reserve that recovered asks
+nothing of it.
 `message_sent_observed` is out by default, and a campaign's installation may add it: a send the provider took for later
 going out is the course the campaign planned, and it is worth a review only where the plan waits on that moment.
 Everything about profiles, plugins, routes and roles is operator maintenance, not campaign meaning.
@@ -326,7 +329,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
+| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
 | `Manager:ReviewSeconds` | `18000` | 300..604800 | the cadence, unless a campaign names its own |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
@@ -349,14 +352,49 @@ defaults; a list written with no kind in it — an empty array, `null`, an empty
 kinds." It used to read as the defaults, the opposite of what whoever wrote it meant, without a word.
 The key is read without regard to case, as every setting is. A list narrowed before
 `inbound_reply_observed` existed does not hold it, so that installation is not woken by replies until
-the kind is added; the same holds for `provider_event_observed` and `provider_blocked`.
+the kind is added; the same holds for `provider_event_observed`, `provider_blocked` and `audience_reserve_low`.
 
 **A narrowed list has to keep `decision_answered`.** Dropping any other kind narrows what a manager is
 woken for; dropping this one breaks something, because a question a person has answered is what
 releases the work that follows and the role that asked has already ended. Nothing refuses the
 configuration — it is a legitimate thing to write — so it is said here instead.
 
-## 9. Not here yet
+## 9. The reserve
+
+A campaign can say how many people it wants to keep in reserve: members nobody has started on yet.
+`jason campaign update <campaign-id> --audience-threshold 50` sets the number, between 1 and 100000, and
+`--clear audience_threshold` takes it away. A campaign has none until one is set, and without one nobody counts. It is a
+field beside the review pace rather than a key in the context for the same reason (§4): the dispatcher reads it.
+
+**Untouched** is the summary's `new` ([work execution](work-execution.md) §A campaign's people, counted): a current
+member with no work about them that a person, a role, an attempt or a plugin created. Work the runtime made about
+somebody by itself, the read of a thread that moved and the responder it woke, does not touch them. The step counts by
+the summary's own definition, so the number it says is the number `jason campaign summary` shows.
+
+**The reserve step** runs in every scan, for each active campaign that has a threshold, after the respond step and
+before the summon, so a line saying the reserve is low summons a review in the same scan. It counts only when something
+that can change the number was written since its last look: a member added or removed (`contacts_added`,
+`contacts_removed`), work created about somebody (`workitem_created`), or a setting of the campaign changed
+(`campaign_updated`, the threshold among them). It keeps its place in the chronicle as a watermark on the campaign,
+moved at every look that found new lines, so a scan with nothing new costs one read and counts nobody.
+
+**Once per crossing, decided by the chronicle.** The step writes `audience_reserve_low` when the count is under the
+threshold and the campaign's latest reserve line is not already a low one, and `audience_reserve_recovered` when the
+count is back at or above the threshold after a low one. The latest of the two is where the reserve stands and nothing
+else is kept, so a restart says nothing twice; a top-up that leaves the count still under says nothing more, and only a
+recovery lets the next fall be said. Both lines are the dispatcher's (`system:dispatcher`), carry no key, and say
+`new.untouched` and `new.threshold`: the count and the threshold at that moment. `audience_reserve_low` is a default
+trigger (§2); `audience_reserve_recovered` is not.
+
+**A threshold changed while the reserve is low** is one more change. Raised, the count is still under, and nothing is
+said; lowered to or under the count, the reserve has recovered, and says so. A threshold cleared stops the counting and
+leaves the chronicle as it stands; set again, the next look goes on from the latest line.
+
+**What it never does.** It creates no work item, no search and no check-in: the review is the summon's, and whether and
+how to top the audience up is the manager's. A paused campaign is not counted; what was written meanwhile waits above
+its watermark for the next look.
+
+## 10. Not here yet
 
 - **Notifications.** Nothing tells anybody a review happened. A person finds out by reading the
   chronicle or listing work.

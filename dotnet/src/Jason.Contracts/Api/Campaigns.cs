@@ -25,7 +25,8 @@ public sealed record CampaignSummaryDto(
 /// is always a list, possibly empty, for the same reason a contact's is. <c>execution_profile</c> is the
 /// campaign's policy on which host its agent work uses, and null means it has none of its own. <c>project_id</c> and
 /// <c>project_slug</c> name the project it is in. <c>folder_path</c> is the full path of its folder under the harness root,
-/// null where none is recorded — a campaign made before folders were.
+/// null where none is recorded — a campaign made before folders were. <c>audience_threshold</c> is how few untouched
+/// members the campaign keeps before its manager is told the reserve is low; absent, nobody counts them.
 /// </summary>
 public sealed record CampaignDto(
     string Id,
@@ -43,7 +44,8 @@ public sealed record CampaignDto(
 
     /// <summary>The key the campaign was created with, when its creator gave one; absent otherwise.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null,
-    string? FolderPath = null);
+    string? FolderPath = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? AudienceThreshold = null);
 
 /// <summary>
 /// <c>idempotency_key</c> is a key the caller chose, so that sending the same request again answers with the campaign
@@ -78,7 +80,8 @@ public sealed record CampaignListRequest(
 /// <c>execution_profile</c> leaves its policy alone. An explicit null clears the policy; a value has to name a
 /// profile this runtime knows. <c>review_seconds</c> behaves the same way, and null there means "however often
 /// the installation reviews everything else". <c>project_id</c> moves the campaign to another project; a campaign is
-/// always in one, so null is refused.
+/// always in one, so null is refused. <c>audience_threshold</c> behaves as <c>review_seconds</c> does, and null there
+/// means nobody counts the campaign's untouched members.
 /// </summary>
 public sealed record CampaignUpdateRequest(
     string? CampaignId,
@@ -87,7 +90,8 @@ public sealed record CampaignUpdateRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> ReviewSeconds,
     ActorRef? Actor,
     string? Reason,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ProjectId = default);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ProjectId = default,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> AudienceThreshold = default);
 
 /// <summary>The body of <c>campaign.start</c>, <c>campaign.pause</c> and <c>campaign.archive</c>.</summary>
 public sealed record CampaignTransitionRequest(string? CampaignId, ActorRef? Actor, string? Reason);

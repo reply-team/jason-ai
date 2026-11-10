@@ -508,7 +508,7 @@ public sealed class JournalForwarderPackageTests
         Assert.NotNull(plugin);
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Equal(PluginKind.Subscriber, plugin.Manifest.Kind);
-        Assert.Equal("1.2.0", plugin.Manifest.Version);
+        Assert.Equal("1.3.0", plugin.Manifest.Version);
         Assert.Equal(["localhost:8787"], plugin.Manifest.Capabilities.Http!.Hosts);
         Assert.True(plugin.Manifest.Capabilities.Http.AnyGrantedHost);
         Assert.Equal([UrlVariable, TokenVariable, FileVariable], plugin.Manifest.Capabilities.Env!.Variables);

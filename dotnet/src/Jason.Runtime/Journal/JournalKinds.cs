@@ -223,6 +223,20 @@ public static partial class JournalKinds
     public const string ProviderBlockCleared = "provider_block_cleared";
 
     /// <summary>
+    /// A campaign's untouched members — the summary's <c>new</c> — fell under the <c>audience_threshold</c> it set: the
+    /// count and the threshold, no key. Said by the dispatcher once per crossing, which the journal decides: the latest of
+    /// this kind and <see cref="AudienceReserveRecovered"/> is where the reserve stands. A default manager trigger.
+    /// </summary>
+    public const string AudienceReserveLow = "audience_reserve_low";
+
+    /// <summary>
+    /// A campaign's untouched members are back at or above its <c>audience_threshold</c>, after a line said they had
+    /// fallen under it: the count and the threshold, no key. Not a trigger by default: the manager was told when the
+    /// reserve fell, and a reserve that recovered asks nothing of it.
+    /// </summary>
+    public const string AudienceReserveRecovered = "audience_reserve_recovered";
+
+    /// <summary>
     /// A project was made: keyed by its id, with the name and slug it was made with. It names no campaign. The default
     /// project, made by the migration that brought projects in, was made by nobody and has no line.
     /// </summary>
@@ -327,6 +341,8 @@ public static partial class JournalKinds
         EventsBackfillRequested,
         ProviderBlocked,
         ProviderBlockCleared,
+        AudienceReserveLow,
+        AudienceReserveRecovered,
         ProjectCreated,
         ProjectUpdated,
         ProjectLinked,

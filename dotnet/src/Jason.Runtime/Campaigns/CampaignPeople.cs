@@ -47,11 +47,13 @@ internal static class CampaignPeople
     // One pass over the campaigns' work, grouped by person: whether any is open or running, whether they were put into the
     // sequence or stopped there, and whether a failure is among their latest finished work — the latest failure finished
     // when their latest work did. A rejection ends the item as failed, but it is a person's decision about the work, not
-    // the work failing.
+    // the work failing. Work the runtime made about a person by itself, a responder's read of their thread say, is
+    // nobody starting on them: only work a person, a role, an attempt or a plugin created makes them no longer new.
     private const string Work = $$"""
         SELECT w.campaign_id, w.contact_id,
                max(w.status IN ('created', 'awaiting_approval', 'scheduled', 'processing')) AS is_open,
                max(w.status IN ('created', 'scheduled', 'processing')) AS is_working,
+               max(w.created_by_type <> 'system') AS has_own_work,
                max(w.kind = 'provider_op' AND w.operation = 'campaign.enroll' AND w.status = 'succeeded') AS is_enrolled,
                max(w.kind = 'provider_op' AND w.operation = 'enrollment.stop' AND w.status = 'succeeded') AS is_stopped,
                max(w.finished_at) AS last_finish,
@@ -165,6 +167,7 @@ internal static class CampaignPeople
         Work,
         ByPerson: false,
         "coalesce(wk.is_open, 0) AS is_open, coalesce(wk.is_working, 0) AS is_working, wk.contact_id IS NOT NULL AS has_work, "
+        + "coalesce(wk.has_own_work, 0) AS has_own_work, "
         + "coalesce(wk.is_enrolled, 0) AS is_enrolled, coalesce(wk.is_stopped, 0) AS is_stopped, coalesce(wk.last_failure = wk.last_finish, 0) AS last_failed");
 
     private static readonly Part WaitingPart = new("wo", WaitingOn, ByPerson: false, "wo.contact_id IS NOT NULL AS is_waiting");
@@ -194,7 +197,7 @@ internal static class CampaignPeople
         new(CampaignSummaryFilter.Waiting, $"({Current} AND f.is_waiting)", [WaitingPart]),
         new(CampaignSummaryFilter.Failed, $"({Current} AND NOT f.is_open AND f.last_failed)", [WorkPart]),
         new(CampaignSummaryFilter.Working, $"({Current} AND f.is_working)", [WorkPart]),
-        new(CampaignSummaryFilter.New, $"({Current} AND NOT f.has_work)", [WorkPart]),
+        new(CampaignSummaryFilter.New, $"({Current} AND NOT f.has_own_work)", [WorkPart]),
         new(CampaignSummaryFilter.Idle, $"({Current} AND f.has_work AND NOT f.is_open AND NOT f.last_failed AND NOT f.is_enrolled)", [WorkPart]),
         new(CampaignSummaryFilter.Sequence, $"({Current} AND f.is_enrolled AND NOT {OutNow})", [WorkPart, OutPart, SuppressedPart]),
         new(CampaignSummaryFilter.Out, $"({Current} AND {OutNow})", [WorkPart, OutPart, SuppressedPart]),
@@ -225,6 +228,12 @@ internal static class CampaignPeople
     internal static readonly FrozenDictionary<CampaignSummaryFilter, string> Summary = SummaryDefinitions.ToFrozenDictionary(
         definition => definition.Filter,
         definition => $"SELECT * FROM ({Facts(definition.Parts, SummaryMembers)}) AS f WHERE {definition.Condition}");
+
+    /// <summary>
+    /// The untouched members of one campaign: the summary's <c>new</c>, by the same SQL, which is what the reserve step
+    /// counts, so the number it says and the number the summary shows cannot drift apart.
+    /// </summary>
+    internal static readonly string UntouchedCountSql = $"SELECT count(*) AS Value FROM ({Summary[CampaignSummaryFilter.New]}) AS n";
 
     /// <summary>Every Summary count per campaign, from the same conditions the lists filter by.</summary>
     internal static readonly string SummaryCountsSql =
@@ -339,6 +348,13 @@ internal static class CampaignPeople
     {
         ArgumentNullException.ThrowIfNull(db);
         return db.Database.SqlQueryRaw<SummaryCounts>(SummaryCountsSql, Keys(campaignIds)).ToDictionaryAsync(counts => counts.CampaignId, ct);
+    }
+
+    /// <summary>How many untouched members one campaign has now: its <c>new</c>, read on its own.</summary>
+    public static Task<int> UntouchedAsync(JasonDbContext db, int campaignId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.Database.SqlQueryRaw<int>(UntouchedCountSql, Keys([campaignId])).SingleAsync(ct);
     }
 
     /// <summary>Every Activity count of each campaign asked that has had people, in one read.</summary>

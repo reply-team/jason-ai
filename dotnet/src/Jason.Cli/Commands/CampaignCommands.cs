@@ -14,7 +14,7 @@ namespace Jason.Cli.Commands;
 public static class CampaignCommands
 {
     /// <summary>The fields <c>--clear</c> can set back to nothing. A campaign always has a name, so that is not one.</summary>
-    private static readonly string[] Clearable = ["execution_profile", "review_seconds"];
+    private static readonly string[] Clearable = ["execution_profile", "review_seconds", "audience_threshold"];
 
     /// <summary>The largest page the runtime gives, so the names of every campaign usually take one request.</summary>
     private const int NamesPage = 1000;
@@ -175,17 +175,22 @@ public static class CampaignCommands
         {
             Description = "How often this campaign is reviewed, in seconds. Absent leaves it alone; --clear review_seconds puts it back on the installation's cadence.",
         };
+        var audienceThreshold = new Option<int?>("--audience-threshold")
+        {
+            Description = "Below this many untouched members the campaign's manager is told the reserve is low. Absent leaves it alone; --clear audience_threshold stops the counting.",
+        };
         var project = ProjectOption("Move the campaign to this project, as prj_.... A campaign is always in one, so it cannot be cleared.");
         var clear = VerbOptions.Repeatable(
             "--clear",
             $"A field to set back to nothing: {string.Join(", ", Clearable)}. Repeat the option for more than one.");
-        var file = VerbOptions.File("The object holds the fields to patch (name, execution_profile, review_seconds, project_id).");
+        var file = VerbOptions.File("The object holds the fields to patch (name, execution_profile, review_seconds, audience_threshold, project_id).");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
         command.Options.Add(name);
         command.Options.Add(executionProfile);
         command.Options.Add(reviewSeconds);
+        command.Options.Add(audienceThreshold);
         command.Options.Add(project);
         command.Options.Add(clear);
         command.Options.Add(file);
@@ -199,6 +204,7 @@ public static class CampaignCommands
                 .Set("name", parseResult.GetValue(name))
                 .Set("execution_profile", parseResult.GetValue(executionProfile))
                 .Set("review_seconds", parseResult.GetValue(reviewSeconds))
+                .Set("audience_threshold", parseResult.GetValue(audienceThreshold))
                 .Set("project_id", parseResult.GetValue(project));
 
             // An explicit null is what tells the runtime "take this away" from "say nothing about it", and it

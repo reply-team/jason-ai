@@ -1,0 +1,29 @@
+{
+  "kind": "audience_reserve_recovered",
+  "version": 1,
+  "since": "0.34.0",
+  "summary": "A campaign's untouched members are back at or above the threshold it set, after a line said they had fallen under it; not a trigger.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "null" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["untouched", "threshold"],
+        "properties": {
+          "untouched": { "type": "integer", "minimum": 0, "description": "The campaign's untouched members when the line was said: its current members nobody has started on." },
+          "threshold": { "type": "integer", "minimum": 1, "description": "The campaign's audience_threshold the count is back at or above." }
+        }
+      }
+    }
+  }
+}
