@@ -40,7 +40,7 @@ function electronLogin(): ElectronLogin & { asked: unknown[]; set: unknown[] } {
 const pathRead = Promise.resolve();
 const executable = '/Applications/Jason.app/Contents/MacOS/Jason';
 
-test('the LaunchAgent is the one the application is started by at sign-in, in the background, in the person’s own session', () => {
+test('the LaunchAgent is the one the application is started by at sign-in, in the background, as the person who signed in', () => {
     assert.equal(launchAgentFile('/Users/someone'), join('/Users/someone', 'Library', 'LaunchAgents', 'ai.jasonharness.desktop.plist'));
     const plist = launchAgent('/Applications/J&son <1>.app/Contents/MacOS/Jason');
     assert.match(plist, /<key>Label<\/key><string>ai\.jasonharness\.desktop<\/string>/);
