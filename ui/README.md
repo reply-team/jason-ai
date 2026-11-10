@@ -18,6 +18,35 @@ The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` an
 `ui/` at its tag and publishes `jason-ui.zip` beside its archives). To try a build against a real Jason: unzip
 `jason-ui.zip` into `~/.jason/ui/custom/` and run `jason ui open`; `jason status` says which build is served. Delete `custom/` to go back.
 
+## Two shells, one build
+
+The same build mounts one of two shells, chosen once as the page loads (`src/main.tsx`):
+
+- **In a browser, the classic shell**: the sidebar and the screens under `src/screens/`, and a Chat screen that says
+  the chat with an agent is part of the desktop application, where a page can start an agent on the computer and ask
+  the person before it acts.
+- **Inside Jason Desktop, the console** (`src/console/`). The desktop puts `window.jasonDesktop` on the page before the
+  page runs; with it there, the chat is home, in a dock (dockview) with panels beside it: what needs the person
+  (approvals and questions), the campaigns, the journal's activity, and Connect, which shows the agent hosts found on
+  the computer, the model keys, the Reply connection and the notification channels. The browser's other screens open in a page panel
+  of the same dock. The console reaches the desktop only through the seam typed in `src/platform/desktop.d.ts`, and the
+  runtime only through the API client and the journal stream (`src/platform/journal-stream.ts`, a WebSocket at
+  `GET /v1/journal.stream` under the page's own pairing).
+
+The console's live panels read the same facts as the classic Attention and Campaigns screens, through those screens'
+own stores, and for now duplicate them: the classic screens stay for the browser.
+
+**How the console draws.** A panel is markup from one tagged template, `html` in `src/console/html.ts`, which escapes
+every value it interpolates unless the tag itself made it, and is written into the page by one painter, `paint`. A
+control in that markup carries `data-action` and its arguments, answered by one closed table of actions
+(`src/console/actions.ts`) through one delegated listener; the chat's composer is plain JSX. Nothing it draws carries
+an inline handler, a style attribute or a style element, which the runtime's policy (`default-src 'self'`) refuses. The
+classic screens in the page panel take the browser's stylesheet, scoped under `.harness` when the build runs
+(`src/console/scope.ts`), so the two stylesheets do not meet.
+
+**Languages.** The shell's words are in `src/locale/` in English and Ukrainian, chosen under Settings; a language file
+must hold every key the English one has.
+
 ## Dev loop
 
 A scratch runtime (`JASON_DATA_DIR` set to a scratch directory, never `~/.jason`), `dist/` linked as that directory's
@@ -49,11 +78,11 @@ when a signal it read changes, which Preact did on its own.
 Three layers, each proving one kind of thing, and nothing proven twice. The static gate (`npm run check`: `tsc`,
 ESLint, Prettier) runs first and is not a layer.
 
-| Layer         | Lives in                               | Runs as                                               | Belongs here                                                                                                          | Does not belong                                                            |
-| ------------- | -------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Unit          | `src/**/*.test.ts`, beside the module  | `vitest --project unit`: Node, no DOM                 | dense, isolated logic: time, grouping, the paging merge, the route grammar                                            | mappings, wiring, anything whose correctness needs a screen or the runtime |
-| Screen        | `src/screens/<name>/*.screen.test.tsx` | `vitest --project screen`: happy-dom, testing-library | one test per screen behaviour, against a fake client fed only from `docs/api/fixtures/`                               | hand-written response JSON, HTTP mocking libraries, the real client        |
-| Browser smoke | `tests/e2e/*.spec.ts`                  | `playwright test`: Chromium, a real runtime           | what only a browser proves: pairing, bookmark after restart, revoke, custom over default, 404, CSP, the request guard | business flows, seeded data, the fake agent host, any provider             |
+| Layer         | Lives in                                                                | Runs as                                               | Belongs here                                                                                                                                                                                                  | Does not belong                                                                                                                                                 |
+| ------------- | ----------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit          | `src/**/*.test.ts`, beside the module                                   | `vitest --project unit`: Node, no DOM                 | dense, isolated logic: time, grouping, the paging merge, the route grammar                                                                                                                                    | mappings, wiring, anything whose correctness needs a screen or the runtime                                                                                      |
+| Screen        | `src/screens/<name>/*.screen.test.tsx`, `src/console/*.screen.test.tsx` | `vitest --project screen`: happy-dom, testing-library | one test per screen or panel behaviour, against a fake client fed only from `docs/api/fixtures/`; the console's with a stand-in desktop and journal stream (`src/test/desktop.ts`)                            | hand-written response JSON, HTTP mocking libraries, the real client                                                                                             |
+| Browser smoke | `tests/e2e/*.spec.ts`                                                   | `playwright test`: Chromium, a real runtime           | what only a browser proves: pairing, bookmark after restart, revoke, custom over default, 404, CSP, the request guard, and the console under the policy with a stand-in desktop, following the journal stream | business flows, data beyond the one campaign the console's row creates through the command line for a journal line to stream, the fake agent host, any provider |
 
 **Why.** A unit test of a mapping proves nothing until a screen reacts, so mappings are tested where the reaction is
 visible. A screen test against a hand-written fixture tests a belief about the runtime; the fixtures here were
@@ -77,7 +106,11 @@ fails `npm run check`.
 test renderer; no `.json` lives under `ui/` but the three configuration files; `package.json`'s dependencies are an
 allowlist a test holds; the fixture catalog is one-to-one with the files on disk; the fake client answers a request
 only with a recording whose request equals the one sent, and a request a test recorded no answer for fails the test,
-even when the screen caught the error; only `tests/e2e/harness.ts` may
-start a process; the CI job runs all of it on every push.
+even when the screen caught the error; the console's source makes markup only with its tag, writes it into the page
+only through its painter, and carries no inline handler or style attribute in markup or JSX
+(`tests/guards/console-templates.test.ts`, which reads the source as TypeScript); the desktop seam's members are
+named once more in `tests/guards/desktop-seam.test.ts`, so a member added or dropped is a red build; only
+`tests/e2e/harness.ts` may start a process, and it gives each runtime a data directory and a harness root of its own;
+the CI job runs all of it on every push.
 
 **Running.** `npm test` (unit and screen), `npm run e2e` (needs `npm run build`, a runtime built from its source in Release, or `JASON_EXE` naming an installed `jason`, and `npx playwright install chromium` once).
