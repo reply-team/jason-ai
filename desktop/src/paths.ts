@@ -15,6 +15,8 @@ export interface DesktopPaths {
     providerKeys: string;
     /** `<data>/desktop/turns/`: one MCP configuration per running chat turn, with that turn's secret. */
     turns: string;
+    /** `<data>/desktop/rollback/`: the previous application an update kept aside, and the record of that update. */
+    rollback: string;
     /**
      * `<data>/desktop/electron/`: Electron's own files (its `userData` and `sessionData`), where the page's storage, the
      * single-instance lock and, on Windows, the key the operating system's encryption of `provider-keys` is made with
@@ -46,6 +48,7 @@ export function desktopPaths(data: string): DesktopPaths {
         chat: join(desktop, 'chat'),
         providerKeys: join(desktop, 'provider-keys'),
         turns: join(desktop, 'turns'),
+        rollback: join(desktop, 'rollback'),
         electron: join(desktop, 'electron'),
         electronLogs: join(desktop, 'electron', 'logs'),
         logs: join(data, 'logs'),

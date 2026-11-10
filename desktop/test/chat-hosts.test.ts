@@ -4,7 +4,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readFence } from '../src/chat-deny.ts';
-import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexLine, dataRules, hostEnvironment, rulePath, type HostLine } from '../src/chat-hosts.ts';
+import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexLine, dataRules, hostEnvironment, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
+import { desktopPaths } from '../src/paths.ts';
 import { markersIn, plantedConfiguration, plantedMarkers } from './planted-session.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -143,7 +144,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     assert.deepEqual(targetsOf(rules), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -155,8 +156,18 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
+});
+
+test('every entry the desktop names in its folder but the chat folder is a known entry, so the data rules cover it before it exists', () => {
+    const data = join('/home', 'a', '.jason');
+    const paths = desktopPaths(data);
+    const named = Object.values(paths)
+        .filter((path) => dirname(path) === paths.desktop && path !== paths.chat)
+        .map((path) => path.slice(paths.desktop.length + 1));
+    assert.ok(named.includes('rollback'), named.join(' '));
+    assert.deepEqual(named.filter((name) => !knownDesktopEntries.includes(name)), []);
 });
 
 test('the host\'s environment puts the bundled jason first on PATH and names the data directory', () => {

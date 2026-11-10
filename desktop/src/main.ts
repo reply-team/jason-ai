@@ -201,7 +201,7 @@ async function run(): Promise<void> {
     const login = new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead, log });
     const autostart = version === null ? null : new RuntimeAutostart({ cli, log });
     // The updater runs only in an installed build: a development build has no installer to hand an update to.
-    const rollback = join(paths.desktop, 'rollback');
+    const rollback = paths.rollback;
     const updates = app.isPackaged
         ? new Updater({
               updater: autoUpdater,
