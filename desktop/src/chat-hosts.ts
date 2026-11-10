@@ -137,19 +137,63 @@ function withheld(name: string): boolean {
 }
 
 /**
+ * What a person's environment says about which provider and credentials each host uses. A turn on a key provider is
+ * started without them, so the provider the person picked is the one the turn reaches: an inherited
+ * `CLAUDE_CODE_USE_BEDROCK` or `OPENAI_BASE_URL` would otherwise send it elsewhere. A plain Claude Code or Codex turn
+ * keeps them, as the person's own configuration.
+ */
+const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>>> = {
+    claude: new Set([
+        'ANTHROPIC_API_KEY',
+        'ANTHROPIC_AUTH_TOKEN',
+        'ANTHROPIC_BASE_URL',
+        'ANTHROPIC_MODEL',
+        'ANTHROPIC_DEFAULT_OPUS_MODEL',
+        'ANTHROPIC_DEFAULT_SONNET_MODEL',
+        'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+        'ANTHROPIC_SMALL_FAST_MODEL',
+        'CLAUDE_CODE_USE_BEDROCK',
+        'CLAUDE_CODE_USE_VERTEX',
+        'CLAUDE_CODE_USE_FOUNDRY',
+        'CLAUDE_CODE_OAUTH_TOKEN',
+    ]),
+    codex: new Set(['OPENAI_API_KEY', 'OPENAI_BASE_URL']),
+};
+
+/**
+ * Set on every Claude Code turn: the host strips credentials from the environment of the commands, hooks and stdio
+ * servers it starts (a key provider's key among them), so the key reaches the host's own process and not a read-only
+ * `echo` that runs without a card.
+ */
+const scrub = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB';
+
+/**
  * The host's environment: the desktop's own, with the bundled `jason`'s folder first on PATH, the data directory named
  * when the desktop runs with one, and a key provider's variables. Nothing of a plugin's configuration is passed on, and
  * `CLAUDE_AUTO_BACKGROUND_TASKS`, which would let the host move a waiting permission call to the background, is removed,
- * as are the markers of a Claude Code session the desktop itself was started from.
+ * as are the markers of a Claude Code session the desktop itself was started from. A key provider's turn is started
+ * without the provider and credentials the desktop inherited (`inheritedProvider`); a Claude Code turn always carries
+ * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`.
  */
 export function hostEnvironment(
     base: Readonly<Record<string, string | undefined>>,
-    options: { platform: Platform; bundle: string; data: string | null; provider: Readonly<Record<string, string>> },
+    options: {
+        platform: Platform;
+        bundle: string;
+        data: string | null;
+        program: 'claude' | 'codex';
+        /** Whether the turn runs on a key provider. */
+        keyed: boolean;
+        provider: Readonly<Record<string, string>>;
+    },
 ): Record<string, string> {
     const env: Record<string, string> = {};
     let path = '';
+    const replaced = options.keyed ? inheritedProvider[options.program] : new Set<string>();
     for (const [name, value] of Object.entries(base)) {
         if (value === undefined || withheld(name)) continue;
+        const upper = name.toUpperCase();
+        if (replaced.has(upper) || upper === scrub) continue;
         if (name.toUpperCase() === 'PATH') {
             path = value;
             continue;
@@ -161,6 +205,7 @@ export function hostEnvironment(
     env.PATH = path === '' ? options.bundle : `${options.bundle}${separator}${path}`;
     if (options.data !== null) env.JASON_DATA_DIR = options.data;
     for (const [name, value] of Object.entries(options.provider)) env[name] = value;
+    if (options.program === 'claude') env[scrub] = '1';
     return env;
 }
 

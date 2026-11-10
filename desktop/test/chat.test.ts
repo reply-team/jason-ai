@@ -413,6 +413,27 @@ test('a provider\'s key reaches the host\'s environment only, and an Anthropic-c
     for (const host of [compatible, anthropic]) assert.ok(!host?.args.some((arg) => arg.includes('sk-planted')), 'a key is never on the command line');
 });
 
+test('a key provider\'s turn is started without the provider the desktop inherited, and a plain turn with it; every Claude Code turn scrubs', async (t) => {
+    const r = rig(t);
+    Object.assign(r.b.env, { ANTHROPIC_API_KEY: 'sk-inherited', CLAUDE_CODE_USE_BEDROCK: '1', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'inherited-haiku', OPENAI_BASE_URL: 'https://inherited.example/v1' });
+    r.keys.deepseek = 'sk-planted-deepseek';
+    r.keys['codex-api-key'] = 'sk-planted-openai';
+    await r.turn('c1', words, { host: 'deepseek' });
+    await r.turn('c2', words, { host: 'claude' });
+    await r.turn('c3', words, { host: 'codex-api-key' });
+    await r.turn('c4', words, { host: 'codex' });
+    const [deepseek, claude, openai, codex] = r.hosts();
+    assert.equal(deepseek?.env.ANTHROPIC_API_KEY, undefined);
+    assert.equal(deepseek?.env.CLAUDE_CODE_USE_BEDROCK, undefined);
+    assert.equal(deepseek?.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'deepseek-v4-pro');
+    assert.equal(claude?.env.ANTHROPIC_API_KEY, 'sk-inherited');
+    assert.equal(claude?.env.CLAUDE_CODE_USE_BEDROCK, '1');
+    assert.equal(openai?.env.OPENAI_BASE_URL, undefined);
+    assert.equal(openai?.env.OPENAI_API_KEY, 'sk-planted-openai');
+    assert.equal(codex?.env.OPENAI_BASE_URL, 'https://inherited.example/v1');
+    for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, '1');
+});
+
 test('closing the window stops every turn', async (t) => {
     const r = rig(t);
     const pidFile = join(r.b.root, 'grandchild.pid');

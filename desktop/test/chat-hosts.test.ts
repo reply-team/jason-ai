@@ -140,36 +140,82 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 });
 
 test('the host\'s environment puts the bundled jason first on PATH and names the data directory', () => {
-    const env = hostEnvironment({ Path: '/usr/bin:/bin', HOME: '/h', JASON_DATA_DIR: '/old' }, { platform: 'darwin', bundle: '/app/bundle', data: '/d', provider: {} });
+    const env = hostEnvironment({ Path: '/usr/bin:/bin', HOME: '/h', JASON_DATA_DIR: '/old' }, { platform: 'darwin', bundle: '/app/bundle', data: '/d', program: 'codex', keyed: false, provider: {} });
     assert.equal(env.PATH, '/app/bundle:/usr/bin:/bin');
     assert.equal(Object.keys(env).filter((name) => name.toUpperCase() === 'PATH').length, 1);
     assert.equal(env.JASON_DATA_DIR, '/d');
     assert.equal(env.HOME, '/h');
-    assert.equal(hostEnvironment({ PATH: 'C:\\w' }, { platform: 'win32', bundle: 'C:\\b', data: null, provider: {} }).PATH, 'C:\\b;C:\\w');
-    assert.equal('JASON_DATA_DIR' in hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundle: '/b', data: null, provider: {} }), false);
+    assert.equal(hostEnvironment({ PATH: 'C:\\w' }, { platform: 'win32', bundle: 'C:\\b', data: null, program: 'codex', keyed: false, provider: {} }).PATH, 'C:\\b;C:\\w');
+    assert.equal('JASON_DATA_DIR' in hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} }), false);
 });
 
 test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE_AUTO_BACKGROUND_TASKS', () => {
     const env = hostEnvironment(
         { PATH: '/x', JASON_Plugins__slack__Token: 'xoxb-planted', jason_plugins__grants__reply: 'y', CLAUDE_AUTO_BACKGROUND_TASKS: '1', claude_auto_background_tasks: '1', JASON_Harness__Root: '/h/Jason' },
-        { platform: 'darwin', bundle: '/b', data: '/d', provider: {} },
+        { platform: 'darwin', bundle: '/b', data: '/d', program: 'codex', keyed: false, provider: {} },
     );
     assert.deepEqual(Object.keys(env).sort(), ['JASON_DATA_DIR', 'JASON_Harness__Root', 'PATH']);
     assert.ok(!JSON.stringify(env).includes('xoxb-planted'));
 });
 
 test('a desktop started from inside a Claude Code session hands the host none of that session\'s markers, and keeps a person\'s configuration', () => {
-    const env = hostEnvironment({ PATH: '/x', ...plantedMarkers, claudecode: '1', ...plantedConfiguration }, { platform: 'darwin', bundle: '/b', data: null, provider: {} });
+    const env = hostEnvironment({ PATH: '/x', ...plantedMarkers, claudecode: '1', ...plantedConfiguration }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed: false, provider: {} });
     assert.deepEqual(markersIn(Object.keys(env)), []);
-    assert.deepEqual(Object.keys(env).sort(), ['PATH', ...Object.keys(plantedConfiguration)].sort());
+    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', ...Object.keys(plantedConfiguration)].sort());
     for (const [name, value] of Object.entries(plantedConfiguration)) assert.equal(env[name], value, name);
     assert.ok(!JSON.stringify(env).includes('planted-messaging-token'));
 });
 
 test('a key provider\'s variables are added to the host\'s environment over the desktop\'s own', () => {
-    const env = hostEnvironment({ PATH: '/x', ANTHROPIC_BASE_URL: 'https://elsewhere' }, { platform: 'darwin', bundle: '/b', data: null, provider: { ANTHROPIC_AUTH_TOKEN: 'k', ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic' } });
+    const env = hostEnvironment({ PATH: '/x', ANTHROPIC_BASE_URL: 'https://elsewhere' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed: true, provider: { ANTHROPIC_AUTH_TOKEN: 'k', ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic' } });
     assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'k');
     assert.equal(env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
+});
+
+/** What a person's shell may already say about which provider and credentials Claude Code and Codex use. */
+const inheritedClaudeProvider: Readonly<Record<string, string>> = {
+    ANTHROPIC_API_KEY: 'sk-inherited-anthropic',
+    ANTHROPIC_AUTH_TOKEN: 'inherited-auth-token',
+    ANTHROPIC_BASE_URL: 'https://inherited.example',
+    ANTHROPIC_MODEL: 'inherited-model',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'inherited-opus',
+    ANTHROPIC_DEFAULT_SONNET_MODEL: 'inherited-sonnet',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'inherited-haiku',
+    ANTHROPIC_SMALL_FAST_MODEL: 'inherited-small',
+    CLAUDE_CODE_USE_BEDROCK: '1',
+    CLAUDE_CODE_USE_VERTEX: '1',
+    CLAUDE_CODE_USE_FOUNDRY: '1',
+    CLAUDE_CODE_OAUTH_TOKEN: 'inherited-oauth',
+};
+const inheritedCodexProvider: Readonly<Record<string, string>> = { OPENAI_API_KEY: 'sk-inherited-openai', OPENAI_BASE_URL: 'https://inherited.example/v1' };
+
+test('a key provider\'s turn is started without the provider and credentials the desktop inherited; a plain turn keeps them', () => {
+    const base = { PATH: '/x', HOME: '/h', ...inheritedClaudeProvider, ...inheritedCodexProvider };
+    const deepseek = { ANTHROPIC_AUTH_TOKEN: 'sk-deepseek', ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic', ANTHROPIC_MODEL: 'deepseek-v4-pro' };
+    const keyed = hostEnvironment({ ...base, anthropic_api_key: 'sk-lower', claude_code_use_bedrock: '1' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed: true, provider: deepseek });
+    for (const name of Object.keys(inheritedClaudeProvider)) {
+        const kept = Object.keys(keyed).filter((each) => each.toUpperCase() === name);
+        if (name in deepseek) assert.deepEqual(kept.map((each) => keyed[each]), [deepseek[name as keyof typeof deepseek]], name);
+        else assert.deepEqual(kept, [], name + ' is withheld');
+    }
+    for (const value of [...Object.values(inheritedClaudeProvider).filter((each) => each !== '1'), 'sk-lower']) assert.ok(!Object.values(keyed).includes(value), value);
+    assert.equal(keyed.HOME, '/h');
+
+    const openai = hostEnvironment(base, { platform: 'darwin', bundle: '/b', data: null, program: 'codex', keyed: true, provider: { OPENAI_API_KEY: 'sk-openai' } });
+    assert.equal(openai.OPENAI_API_KEY, 'sk-openai');
+    assert.equal('OPENAI_BASE_URL' in openai, false);
+
+    for (const program of ['claude', 'codex'] as const) {
+        const plain = hostEnvironment(base, { platform: 'darwin', bundle: '/b', data: null, program, keyed: false, provider: {} });
+        for (const [name, value] of Object.entries({ ...inheritedClaudeProvider, ...inheritedCodexProvider })) assert.equal(plain[name], value, program + ' keeps ' + name);
+    }
+});
+
+test('every Claude Code turn asks the host to scrub credentials from the commands it runs', () => {
+    for (const keyed of [false, true]) {
+        const env = hostEnvironment({ PATH: '/x', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0', claude_code_subprocess_env_scrub: '0' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
+        assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'), [['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', '1']]);
+    }
 });
 
 test('a recorded Claude Code turn maps to its session, its words and one step per tool use, in order, then the end', () => {

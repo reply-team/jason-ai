@@ -73,6 +73,8 @@ interface Resolved {
     label: string;
     program: 'claude' | 'codex';
     provider: Record<string, string>;
+    /** Whether the turn runs on a key provider, which the inherited provider and credentials never reach. */
+    keyed: boolean;
     /** The model named on the command line; an Anthropic-compatible endpoint is given its model by the environment instead. */
     model: string | undefined;
 }
@@ -198,14 +200,14 @@ export class Chat {
             const key = this.#options.keyFor(provider.id);
             if (!key) return `No key is stored for ${provider.label}. Add it on the Connect card, then send again.`;
             const provided = providerEnvironment(provider, key, model ?? '');
-            return { host: provider.id, label: provider.label, program: provider.program, provider: provided, model: provider.baseUrl ? undefined : model };
+            return { host: provider.id, label: provider.label, program: provider.program, provider: provided, keyed: true, model: provider.baseUrl ? undefined : model };
         }
         const known = hosts.find((each) => each.id === host);
         if (known === undefined) return notAHost;
         if (!known.drivesChat || (known.program !== 'claude' && known.program !== 'codex')) {
             return `${known.label} runs campaign work, not the chat yet. Choose Claude Code or Codex for the chat.`;
         }
-        return { host: known.id, label: known.label, program: known.program, provider: {}, model };
+        return { host: known.id, label: known.label, program: known.program, provider: {}, keyed: false, model };
     }
 
     /** The campaign's folder and its project's, as the runtime recorded them and only when they are on this disk. */
@@ -304,6 +306,8 @@ export class Chat {
             platform: this.#platform,
             bundle: this.#options.bundle,
             data: this.#options.dataNamed ? paths.data : null,
+            program: resolved.program,
+            keyed: resolved.keyed,
             provider: resolved.provider,
         });
         let steps = 0;
