@@ -290,6 +290,18 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.deepEqual(absent.reply.cli, { found: false, version: null, install: null }, 'without npm there is nothing to install it with');
 });
 
+test('a Reply CLI older than the one Jason’s Reply plugin requires is offered the update, and is not asked what it cannot answer', async (t) => {
+    const b = bench(t, { programs: ['reply', 'npm'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_VERSION: '0.11.0' } });
+    const { reply } = await setupOn(b).status();
+    assert.deepEqual(reply.cli, { found: true, version: '0.11.0', install: 'reply' });
+    assert.deepEqual(reply.accounts, []);
+    const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
+    assert.equal(asked.includes('account list'), false, 'that version has no account command');
+
+    const current = bench(t, { programs: ['reply', 'npm'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    assert.equal((await setupOn(current).status()).reply.cli.install, null);
+});
+
 test('every host is listed, found or not; the missing ones name an install only where npm can do it', async (t) => {
     const b = bench(t, { programs: ['claude', 'gemini', 'npm'] });
     const { hosts } = await setupOn(b).status();

@@ -26,7 +26,9 @@ import {
     parseReplyAuth,
     pluginRuntimes,
     programInstalls,
+    replyMinimumVersion,
     Refused,
+    versionAtLeast,
     versionIn,
     withPluginConfigured,
     type PluginRuntime,
@@ -256,9 +258,12 @@ export class Setup {
             return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [] };
         }
         const version = await this.#version('reply');
+        // Older than Jason's Reply plugin requires, the CLI is offered the update and is not asked for its accounts,
+        // which it has no command for.
+        const current = version !== null && versionAtLeast(version, replyMinimumVersion);
         const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
-        const accounts = auth.signedIn ? parseReplyAccounts((await this.#run('reply', 'account list', ['account', 'list'])).stdout) : [];
-        return { cli: { found, version, install: null }, signedIn: auth.signedIn, user: auth.user, wired, accounts };
+        const accounts = auth.signedIn && current ? parseReplyAccounts((await this.#run('reply', 'account list', ['account', 'list'])).stdout) : [];
+        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts };
     }
 
     connectReply(): Promise<void> {
