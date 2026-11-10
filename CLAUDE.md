@@ -70,7 +70,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   Skills, memory files, named preferences, campaign context, role notes and learned practice are six distinct
   knowledge concepts; do not blur them. Membership in a Jason campaign is local; `campaign.enroll` — a later,
   provider-side, approval-gated act — is a different thing.
-- Runtime API: RPC style, `POST /v1/{noun}.{verb}` for everything, reads included. Success is 200
+- Runtime API: RPC style, `POST /v1/{noun}.{verb}` for everything, reads included, with one declared exception:
+  `GET /v1/journal.stream`, the journal's lines as they are written over a WebSocket, is a `GET` because a WebSocket
+  upgrade is one by its protocol, and `jason journal watch` maps to it one to one. Success is 200
   with a bare DTO; errors are `{"error":{"code","message","retryable"}}` with snake_case codes.
   JSON is snake_case, enums are snake_case strings, timestamps are ISO-8601 UTC, public ids are
   prefixed ULIDs (`cmp_…`, `wi_…`, `att_…`, `rol_…`). Partial patches distinguish absent from null

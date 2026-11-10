@@ -9,7 +9,7 @@ namespace Jason.Runtime.Logging;
 /// whatever a local client chose to send, and the line is written for every request — before the host it named is
 /// checked and before its token is — so as sent they would carry anything at all into the log. The path is said as
 /// the route of the operation the request matched, which only the code writes, or as <see cref="Unmatched"/>; the
-/// method as the one the API uses, or as <see cref="Other"/>.
+/// method as one of the two the API uses, or as <see cref="Other"/>.
 /// </summary>
 internal static class RequestLine
 {
@@ -39,6 +39,12 @@ internal static class RequestLine
     internal static string Route(Endpoint? endpoint) =>
         endpoint is RouteEndpoint { RoutePattern: { Parameters.Count: 0, RawText: { } route } } ? route : Unmatched;
 
-    /// <summary>Every operation is invoked with POST; any other method is one word, whatever the client sent.</summary>
-    internal static string Method(string method) => HttpMethods.IsPost(method) ? HttpMethods.Post : Other;
+    /// <summary>
+    /// Every operation is invoked with POST and the journal's stream is opened with GET, a WebSocket upgrade being a
+    /// GET by its protocol; any other method is one word, whatever the client sent.
+    /// </summary>
+    internal static string Method(string method) =>
+        HttpMethods.IsPost(method) ? HttpMethods.Post
+        : HttpMethods.IsGet(method) ? HttpMethods.Get
+        : Other;
 }

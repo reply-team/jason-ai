@@ -6,7 +6,8 @@ namespace Jason.Cli.Commands;
 
 /// <summary>
 /// The <c>journal</c> verb group. The chronicle is append-only: there is a verb to add an entry and a verb to
-/// read entries back, and none to change one; a third reads what each kind the runtime writes itself means.
+/// read entries back, and none to change one; a third reads what each kind the runtime writes itself means, and a
+/// fourth, <see cref="JournalWatch"/>, follows the entries as they are written.
 /// </summary>
 public static class JournalCommands
 {
@@ -15,10 +16,11 @@ public static class JournalCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var journal = new Command("journal", "Append to and read the campaign chronicle.");
+        var journal = new Command("journal", "Append to, read and follow the campaign chronicle.");
         journal.Subcommands.Add(Append(env, actor));
         journal.Subcommands.Add(List(env, actor));
         journal.Subcommands.Add(Kinds(env, actor));
+        journal.Subcommands.Add(JournalWatch.Command(env, actor));
         return journal;
     }
 

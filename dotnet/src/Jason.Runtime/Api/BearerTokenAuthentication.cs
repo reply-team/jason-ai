@@ -17,6 +17,12 @@ namespace Jason.Runtime.Api;
 /// A handler capability is narrower than the other two: it opens only the operations it was minted for, so any other
 /// path it is presented on, an operation outside its set or no operation at all, is refused here with
 /// <c>operation_not_granted</c> before a handler runs.
+/// <para>
+/// A browser can set no header on a WebSocket, so on the journal's stream alone, and only on an upgrade to it, the
+/// bearer may come as a subprotocol instead, <see cref="Streams.BearerSubProtocolPrefix"/> before the token. Only the
+/// run token and a UI token are accepted that way; anywhere else the subprotocol is not read at all, so a request that
+/// carries its bearer only there is refused as one that carries none.
+/// </para>
 /// </remarks>
 public static class BearerTokenAuthentication
 {
@@ -32,7 +38,19 @@ public static class BearerTokenAuthentication
 
         var header = context.Request.Headers.Authorization.ToString();
         var presented = header.StartsWith(Scheme, StringComparison.Ordinal) ? header[Scheme.Length..].Trim() : null;
-        if (presented is not null && (CapabilityToken.Matches(presented, token) || await IsUiTokenAsync(context, presented).ConfigureAwait(false)))
+        if (presented is null && StreamBearer(context) is { } offered)
+        {
+            if (await AdmitsAsync(context, offered, token).ConfigureAwait(false))
+            {
+                await next().ConfigureAwait(false);
+                return;
+            }
+
+            await RefuseAsync(context).ConfigureAwait(false);
+            return;
+        }
+
+        if (presented is not null && await AdmitsAsync(context, presented, token).ConfigureAwait(false))
         {
             await next().ConfigureAwait(false);
             return;
@@ -51,14 +69,50 @@ public static class BearerTokenAuthentication
             return;
         }
 
-        context.Response.Headers.WWWAuthenticate = "Bearer";
-        await ErrorResults.WriteAsync(context, StatusCodes.Status401Unauthorized, "unauthorized", "A valid capability token is required: Authorization: Bearer <token> from the runtime descriptor.", retryable: false).ConfigureAwait(false);
+        await RefuseAsync(context).ConfigureAwait(false);
     };
 
-    private static Task<bool> IsUiTokenAsync(HttpContext context, string presented)
+    private static Task RefuseAsync(HttpContext context)
     {
+        context.Response.Headers.WWWAuthenticate = "Bearer";
+        return ErrorResults.WriteAsync(context, StatusCodes.Status401Unauthorized, "unauthorized", "A valid capability token is required: Authorization: Bearer <token> from the runtime descriptor.", retryable: false);
+    }
+
+    /// <summary>The run token, or a UI token, which the request then carries the hash of.</summary>
+    private static async Task<bool> AdmitsAsync(HttpContext context, string presented, string token)
+    {
+        if (CapabilityToken.Matches(presented, token))
+        {
+            return true;
+        }
+
         var store = context.RequestServices.GetService<UiTokenStore>();
-        return store is null ? Task.FromResult(false) : store.MatchesAsync(presented, context.RequestAborted);
+        if (store is null || !await store.MatchesAsync(presented, context.RequestAborted).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        context.Features.Set(new UiTokenBearer(UiTokenStore.Hash(presented)));
+        return true;
+    }
+
+    /// <summary>The bearer an upgrade to the journal's stream offers as a subprotocol; on any other request, none.</summary>
+    private static string? StreamBearer(HttpContext context)
+    {
+        if (!context.Request.Path.Equals(Streams.JournalRoute, StringComparison.Ordinal) || !context.WebSockets.IsWebSocketRequest)
+        {
+            return null;
+        }
+
+        foreach (var protocol in context.WebSockets.WebSocketRequestedProtocols)
+        {
+            if (protocol.StartsWith(Streams.BearerSubProtocolPrefix, StringComparison.Ordinal) && protocol.Length > Streams.BearerSubProtocolPrefix.Length)
+            {
+                return protocol[Streams.BearerSubProtocolPrefix.Length..];
+            }
+        }
+
+        return null;
     }
 
     private static bool IsHandlerCapability(HttpContext context, string presented, out DoorGrant grant)
