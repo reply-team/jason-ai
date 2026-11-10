@@ -1,0 +1,213 @@
+/**
+ * Jason Desktop's main process: a window onto the UI the installation's runtime serves at its loopback address, and the
+ * Connect cards' actions behind it. It is one more client of the installation the `jason` command line uses: it finds the
+ * data directory as the CLI does, brings the runtime up only through `jason runtime start`, and changes the installation
+ * only through CLI verbs and the settings file a person would edit.
+ */
+
+import { app, BrowserWindow, ipcMain, safeStorage, shell, type WebContents } from 'electron';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { cliAt } from './cli.ts';
+import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
+import { loggedCli, startInstallation, StartFailed } from './installation.ts';
+import { eventChannels, handle, type InvokeMember } from './ipc.ts';
+import { fileLogger, limitsFrom, type Logger } from './log.ts';
+import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
+import { pathOf, programsOn, withPath } from './programs.ts';
+import { ProviderKeys } from './providers.ts';
+import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
+import { Setup } from './setup.ts';
+import { loginPath } from './shell-path.ts';
+
+function readText(file: string): string | null {
+    try {
+        return readFileSync(file, 'utf8');
+    } catch {
+        return null;
+    }
+}
+
+/** The folder the application carries `jason` and the skills package in: beside the app when packaged, else `bundle/`. */
+function bundleDirectory(): string {
+    return app.isPackaged ? join(process.resourcesPath, 'bundle') : join(app.getAppPath(), 'bundle');
+}
+
+/** The version the bundle was prepared as: a release's or a candidate's, never `dev`. */
+function bundleVersion(bundle: string): string | null {
+    try {
+        const raw = JSON.parse(readFileSync(join(bundle, 'version.json'), 'utf8')) as { version?: unknown };
+        return typeof raw.version === 'string' && raw.version !== '' ? raw.version : null;
+    } catch {
+        return null;
+    }
+}
+
+function originOf(url: string): string | null {
+    try {
+        return loopbackOrigin(new URL(url).origin);
+    } catch {
+        return null;
+    }
+}
+
+function isHttps(url: string): boolean {
+    try {
+        return new URL(url).protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
+/** Shows the desktop's own page while the installation comes up, or why it did not. */
+function showStarting(window: BrowserWindow, message: string, failed: boolean): Promise<void> {
+    return window.loadFile(join(app.getAppPath(), 'shell', 'starting.html'), { query: { message, state: failed ? 'failed' : 'starting' } });
+}
+
+/**
+ * Locks the window to the runtime's origin: a navigation elsewhere is refused, and a link or `window.open` that leaves
+ * it goes to the system browser only when it is https. Nothing the page asks for is granted: no permission, no webview.
+ */
+function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): void {
+    const leave = (url: string) => {
+        if (isHttps(url)) {
+            void shell.openExternal(url);
+            log.info('link_opened', {});
+        } else {
+            log.warn('link_refused', {});
+        }
+    };
+    const guard = (event: { preventDefault(): void }, url: string) => {
+        const here = origin();
+        if (here !== null && originOf(url) === here) return;
+        event.preventDefault();
+        log.warn('navigation_refused', { Origin: here ?? 'none' });
+        leave(url);
+    };
+    contents.on('will-navigate', guard);
+    contents.on('will-redirect', guard);
+    contents.on('will-attach-webview', (event) => event.preventDefault());
+    contents.setWindowOpenHandler(({ url }) => {
+        leave(url);
+        return { action: 'deny' };
+    });
+    contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+    contents.session.setPermissionCheckHandler(() => false);
+}
+
+function registerSetup(setup: Setup, origin: () => string | null, log: Logger, window: () => BrowserWindow | null): void {
+    const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
+    const members: [InvokeMember, (...args: unknown[]) => unknown][] = [
+        ['setup.status', () => setup.status()],
+        ['setup.connectReply', () => setup.connectReply()],
+        ['setup.connectReplyWithKey', (key) => setup.connectReplyWithKey(key)],
+        ['setup.setProviderKey', (id, key) => setup.setProviderKey(id, key)],
+        ['setup.installProgram', (id) => setup.installProgram(id)],
+        ['setup.configurePlugin', (id, values) => setup.configurePlugin(id, values)],
+    ];
+    for (const [member, handler] of members) handle(ipcMain, member, origin, handler, refused);
+    setup.onChanged(() => window()?.webContents.send(eventChannels['setup.changed']));
+}
+
+async function run(): Promise<void> {
+    const home = homedir();
+    // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
+    // finds it.
+    process.env.PATH = await loginPath(pathOf(process.env), home);
+    const env = withPath(process.env, process.env.PATH);
+
+    const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
+    const log = fileLogger(paths.logs, limitsFrom(readText(paths.installationSettings)));
+    const bundle = bundleDirectory();
+    const version = bundleVersion(bundle);
+    log.info('desktop_started', { Version: version ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
+
+    const window = new BrowserWindow({
+        width: 1280,
+        height: 860,
+        minWidth: 900,
+        minHeight: 600,
+        title: 'Jason',
+        backgroundColor: '#f7f7f5',
+        webPreferences: {
+            preload: join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+            webSecurity: true,
+            spellcheck: false,
+        },
+    });
+    let current: BrowserWindow | null = window;
+    window.on('closed', () => {
+        current = null;
+    });
+    window.setMenuBarVisibility(false);
+
+    // The origin is read from the run file on every check, because the runtime may come back on another port.
+    const origin = () => runtimeOrigin(readText(paths.runFile) ?? '');
+    lockNavigation(window.webContents, origin, log);
+
+    let settings: DesktopSettings = readSettings(paths.settings);
+    const cli = loggedCli(cliAt(join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason'), env), log);
+    let runtimeVersion: string | null = null;
+    registerSetup(
+        new Setup({
+            paths,
+            cli,
+            programs: programsOn(env),
+            keys: new ProviderKeys(paths.providerKeys, safeStorage),
+            log,
+            bundleVersion: version ?? 'unprepared',
+            runtimeVersion: () => runtimeVersion,
+            settings: () => settings,
+        }),
+        origin,
+        log,
+        () => current,
+    );
+
+    await showStarting(window, 'Starting Jason…', false);
+    if (version === null) {
+        await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
+        return;
+    }
+
+    try {
+        const started = await startInstallation({
+            cli,
+            paths,
+            log,
+            bundle,
+            bundleVersion: version,
+            settings,
+            saveSettings(next) {
+                settings = next;
+                writeSettings(paths.settings, next);
+            },
+        });
+        runtimeVersion = started.runtimeVersion;
+        await window.loadURL(started.link);
+        log.info('window_loaded', { Origin: started.origin });
+    } catch (error) {
+        const step = error instanceof StartFailed ? error.step : 'load';
+        const exit = error instanceof StartFailed ? error.exit : -1;
+        log.error('window_load_failed', { Step: step, Exit: exit });
+        if (current !== null) await showStarting(current, error instanceof Error ? error.message : String(error), true);
+    }
+}
+
+if (!app.requestSingleInstanceLock()) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        const [window] = BrowserWindow.getAllWindows();
+        if (window) {
+            if (window.isMinimized()) window.restore();
+            window.focus();
+        }
+    });
+    app.on('window-all-closed', () => app.quit());
+    void app.whenReady().then(run);
+}
