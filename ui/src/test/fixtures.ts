@@ -84,6 +84,7 @@ import campaignActivityLast7Days from '../../../docs/api/fixtures/campaign.activ
 import campaignActivityMany from '../../../docs/api/fixtures/campaign.activity/many.json';
 import campaignActivityManyOne from '../../../docs/api/fixtures/campaign.activity/many-one.json';
 import campaignActivityOne from '../../../docs/api/fixtures/campaign.activity/one.json';
+import campaignActivitySummer from '../../../docs/api/fixtures/campaign.activity/summer.json';
 import campaignActivityToday from '../../../docs/api/fixtures/campaign.activity/today.json';
 import campaignActivityTwo from '../../../docs/api/fixtures/campaign.activity/two.json';
 import campaignActivityByPeriodContacted7Days from '../../../docs/api/fixtures/campaign.activity_by_period/contacted-7-days.json';
@@ -393,6 +394,10 @@ export const fixtures = {
         CampaignActivityResponse
     >,
     'campaign.activity/one': campaignActivityOne satisfies Exchange<CampaignActivityRequest, CampaignActivityResponse>,
+    'campaign.activity/summer': campaignActivitySummer satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
     'campaign.activity/today': campaignActivityToday satisfies Exchange<
         CampaignActivityRequest,
         CampaignActivityResponse

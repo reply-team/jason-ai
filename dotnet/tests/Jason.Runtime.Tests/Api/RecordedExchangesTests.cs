@@ -654,6 +654,11 @@ public class RecordedExchangesTests
         await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "oli", new { contact_id = seed.Oli, kinds = personAll, limit = 50 }, Ct);
         // A campaign an address names that the runtime no longer knows.
         Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.CampaignGet, "gone-here", new { campaign_id = "cmp_01K7QN00000000000000000999" }, HttpStatusCode.NotFound, Ct)).Code);
+
+        // The quieter campaign's Results: its people now are its summary above, and nothing happened to any of them this week.
+        Assert.Equal(
+            new CampaignActivityRow(summer, 0, 0, 0, 0, 0, 0, Removed: 0),
+            Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "summer", new { campaign_ids = new[] { summer }, since = WeekStart, until = Now }, Ct)).Campaigns));
     }
 
     /// <summary>

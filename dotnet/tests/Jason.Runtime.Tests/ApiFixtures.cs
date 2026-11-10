@@ -58,6 +58,7 @@ public static class ApiFixtures
         "campaign.activity/many",
         "campaign.activity/many-one",
         "campaign.activity/one",
+        "campaign.activity/summer",
         "campaign.activity/today",
         "campaign.activity/two",
         "campaign.activity_by_period/contacted-7-days",
