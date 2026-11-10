@@ -301,11 +301,14 @@ import personContactUpdatePersonRefused from '../../../docs/api/fixtures/contact
 import personContactUpdatePersonSaved from '../../../docs/api/fixtures/contact.update/person-saved.json';
 import personSuppressionAddPersonEmail from '../../../docs/api/fixtures/suppression.add/person-email.json';
 import personSuppressionListAguilarEmailClear from '../../../docs/api/fixtures/suppression.list/aguilar-email-clear.json';
+import personSuppressionListGraceEmailClear from '../../../docs/api/fixtures/suppression.list/grace-email-clear.json';
 import personSuppressionListMateoEmailClear from '../../../docs/api/fixtures/suppression.list/mateo-email-clear.json';
 import personSuppressionListMateoLinkedinClear from '../../../docs/api/fixtures/suppression.list/mateo-linkedin-clear.json';
 import personSuppressionListMateoPhoneClear from '../../../docs/api/fixtures/suppression.list/mateo-phone-clear.json';
 import personSuppressionListPersonEmailClear from '../../../docs/api/fixtures/suppression.list/person-email-clear.json';
+import personSuppressionListPersonEmailListed from '../../../docs/api/fixtures/suppression.list/person-email-listed.json';
 import personSuppressionListPersonLinkedinClear from '../../../docs/api/fixtures/suppression.list/person-linkedin-clear.json';
+import personSuppressionListPersonPhoneClear from '../../../docs/api/fixtures/suppression.list/person-phone-clear.json';
 import personSuppressionRemovePersonEmail from '../../../docs/api/fixtures/suppression.remove/person-email.json';
 import personWorkitemCreateProviderContactUpdate from '../../../docs/api/fixtures/workitem.create/provider-contact-update.json';
 import personWorkitemCreateResearcherAsked from '../../../docs/api/fixtures/workitem.create/researcher-asked.json';
@@ -879,6 +882,10 @@ export const fixtures = {
         SuppressionListRequest,
         Page<Suppression>
     >,
+    'suppression.list/grace-email-clear': personSuppressionListGraceEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
     'suppression.list/mateo-email-clear': personSuppressionListMateoEmailClear satisfies Exchange<
         SuppressionListRequest,
         Page<Suppression>
@@ -895,7 +902,15 @@ export const fixtures = {
         SuppressionListRequest,
         Page<Suppression>
     >,
+    'suppression.list/person-email-listed': personSuppressionListPersonEmailListed satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
     'suppression.list/person-linkedin-clear': personSuppressionListPersonLinkedinClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/person-phone-clear': personSuppressionListPersonPhoneClear satisfies Exchange<
         SuppressionListRequest,
         Page<Suppression>
     >,

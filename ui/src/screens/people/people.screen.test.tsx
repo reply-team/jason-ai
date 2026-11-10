@@ -29,6 +29,13 @@ const sentLists = (api: FakeApi) =>
     api.calls.filter((c) => c.operation === 'contact.list').map((c) => c.body as Record<string, unknown>);
 
 const mateo = fixtures['contact.get/with-campaigns'].response;
+/** Details reads Jason's register for each address it shows; none of these is on it. */
+const registerClear: FixtureName[] = [
+    'suppression.list/mateo-email-clear',
+    'suppression.list/mateo-linkedin-clear',
+    'suppression.list/mateo-phone-clear',
+    'suppression.list/aguilar-email-clear',
+];
 
 /** What a person's page reads besides their record: their open work and their journal under All. */
 function timeline(
@@ -143,7 +150,8 @@ describe('People', () => {
         const api = timeline(
             new FakeApi()
                 .answer('contact.list', 'contact.list/by-activity-query', 'contact.list/by-activity-query-aguilar')
-                .answer('contact.get', 'contact.get/with-campaigns', 'contact.get/no-first-name'),
+                .answer('contact.get', 'contact.get/with-campaigns', 'contact.get/no-first-name')
+                .answer('suppression.list', ...registerClear),
         );
         open(api, { q: 'mat' });
         await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
@@ -408,7 +416,8 @@ describe('People', () => {
         const aguilar = fixtures['contact.get/no-first-name'].response;
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/by-activity')
-            .answer('contact.get', 'contact.get/no-first-name');
+            .answer('contact.get', 'contact.get/no-first-name')
+            .answer('suppression.list', ...registerClear);
         open(api, {}, aguilar.id, 'details');
         await waitFor(() => expect(api.sent('contact.get')).toEqual({ contact_id: aguilar.id }));
 
@@ -428,7 +437,8 @@ describe('People', () => {
             .answer('contact.list', 'contact.list/by-activity')
             .answer('contact.get', 'contact.get/with-campaigns')
             .answer('contact.threads', 'contact.threads/has-more', 'contact.threads/next')
-            .answer('contact.thread', 'contact.thread/has-more', 'contact.thread/next');
+            .answer('contact.thread', 'contact.thread/has-more', 'contact.thread/next')
+            .answer('suppression.list', ...registerClear);
         open(api, {}, mateo.id, 'details');
         const tab = await screen.findByRole('tab', { name: 'Messages' });
         expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([

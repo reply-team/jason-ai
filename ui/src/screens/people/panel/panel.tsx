@@ -12,6 +12,7 @@ import { Timeline } from '../timeline';
 import { DetailsTab } from './details-tab';
 import { NextTab } from './next-tab';
 import { SequencesTab } from './sequences-tab';
+import * as panel from './store';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -65,9 +66,16 @@ export function PersonPanel({ contactId, campaignId, onClose, tab, to }: PersonP
     const [adding, setAdding] = useState(false);
     useEffect(() => {
         setAdding(false);
+        panel.forget();
         void people.open(api, contactId);
     }, [api, contactId]);
-    useEffect(() => () => people.close(), []);
+    useEffect(
+        () => () => {
+            people.close();
+            panel.forget();
+        },
+        [],
+    );
 
     const person = people.person.value;
     const shown = shownTab(person, tab ?? own);

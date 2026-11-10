@@ -1,15 +1,22 @@
-import type { Contact } from '../../api/types';
+import type { ReactNode } from 'react';
+import type { Channel, Contact } from '../../api/types';
 import { place, shortDate } from '../../time/format';
 import { channelName } from './labels';
 
-type Props = { person: Contact; now: Date; zone: string };
+type Props = {
+    person: Contact;
+    now: Date;
+    zone: string;
+    /** What a screen adds to a channel's row, after its value. */
+    aside?: ((channel: Channel) => ReactNode) | undefined;
+};
 
 function value(v: unknown): string {
     return typeof v === 'string' ? v : JSON.stringify(v);
 }
 
 /** The person's record: how to reach them, the facts, custom fields and what providers call them, in one grid. */
-export function Details({ person, now, zone }: Props) {
+export function Details({ person, now, zone, aside }: Props) {
     const here = person.time_zone ? place(person.time_zone, now) : null;
     const pins = person.external_ids ?? [];
     const custom = Object.entries(person.custom ?? {});
@@ -22,13 +29,14 @@ export function Details({ person, now, zone }: Props) {
                         <>
                             <dt key={`${c.channel}-${c.value}-k`}>{channelName(c.channel)}</dt>
                             <dd key={`${c.channel}-${c.value}-v`}>
-                                {c.value}
+                                <span className="value">{c.value}</span>
                                 {c.primary && (
                                     <>
                                         {' '}
                                         <span className="muted">primary</span>
                                     </>
                                 )}
+                                {aside?.(c)}
                             </dd>
                         </>
                     ))}

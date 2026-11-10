@@ -8,6 +8,7 @@ import { Notice } from '../../../layout/notice';
 import { href } from '../../../router';
 import { Details } from '../details';
 import { channelName } from '../labels';
+import { RegisterControl } from './register';
 import * as panel from './store';
 
 type Props = { person: Contact; campaignId: string | undefined; now: Date; zone: string };
@@ -84,6 +85,12 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
         setFailure(null);
     }, [person.id]);
 
+    // Jason's register is read for each address on show, once while the panel is open on the person.
+    const addresses = JSON.stringify(person.channels.map((c) => panel.addressKey(c.channel, c.value)));
+    useEffect(() => {
+        void panel.loadRegister(api, person);
+    }, [api, person.id, addresses]);
+
     const live = panel.liveCampaigns(person);
     const chosen = campaign ?? panel.defaultCampaign(person, campaignId);
 
@@ -107,7 +114,13 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
                     </button>
                 </ActionsRow>
                 {said && <SaidLine said={said} />}
-                <Details person={person} now={now} zone={zone} />
+                {panel.registerFailure.value && <Notice danger>{panel.registerFailure.value}</Notice>}
+                <Details
+                    person={person}
+                    now={now}
+                    zone={zone}
+                    aside={(channel) => <RegisterControl contactId={person.id} channel={channel} />}
+                />
             </>
         );
 

@@ -48,6 +48,14 @@ function recorded(name: FixtureName): object {
     return rest;
 }
 
+/** Details reads Jason's register for each address it shows; none of these is on it. */
+const registerClear: FixtureName[] = [
+    'suppression.list/person-email-clear',
+    'suppression.list/person-linkedin-clear',
+    'suppression.list/person-phone-clear',
+    'suppression.list/grace-email-clear',
+];
+
 const panel = () => document.querySelector<HTMLElement>('.person-panel')!;
 /** The panel once it shows a person. */
 async function shown(): Promise<HTMLElement> {
@@ -209,6 +217,7 @@ describe('Saving the person', () => {
     it("saves the fields changed with the reason, and the ticked box queues the provider's contact.update with what its document takes", async () => {
         const api = people()
             .answer('contact.get', 'contact.get/person-panel')
+            .answer('suppression.list', ...registerClear)
             .answer('contact.update', 'contact.update/person-saved')
             .answer('workitem.create', 'workitem.create/provider-contact-update');
         open(api, ingrid.id, 'details');
@@ -237,6 +246,7 @@ describe('Saving the person', () => {
     it('a save the runtime refuses says why and keeps what was typed; nothing is queued', async () => {
         const api = people()
             .answer('contact.get', 'contact.get/person-panel')
+            .answer('suppression.list', ...registerClear)
             .answer('contact.update', 'contact.update/person-refused');
         open(api, ingrid.id, 'details');
         fireEvent.click(await within(await shown()).findByRole('button', { name: 'Edit' }));
@@ -257,6 +267,7 @@ describe('Saving the person', () => {
     it('edits the channels: the ones the person had are sent as they were, with the one added', async () => {
         const api = people()
             .answer('contact.get', 'contact.get/person-panel')
+            .answer('suppression.list', ...registerClear)
             .answer('contact.update', 'contact.update/person-channels');
         open(api, ingrid.id, 'details');
         fireEvent.click(await within(await shown()).findByRole('button', { name: 'Edit' }));
@@ -274,7 +285,9 @@ describe('Saving the person', () => {
     });
 
     it('a person in no campaign has no box for the provider, and Cancel leaves the record as it was', async () => {
-        const api = people().answer('contact.get', 'contact.get/imported');
+        const api = people()
+            .answer('contact.get', 'contact.get/imported')
+            .answer('suppression.list', ...registerClear);
         open(api, grace.id, 'details');
         fireEvent.click(await within(await shown()).findByRole('button', { name: 'Edit' }));
         expect(within(panel()).queryByRole('checkbox', { name: /queue/ })).toBeNull();
@@ -285,7 +298,9 @@ describe('Saving the person', () => {
     });
 
     it('a refresh of the list keeps the panel and what is being typed in it', async () => {
-        const api = people().answer('contact.get', 'contact.get/person-panel');
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('suppression.list', ...registerClear);
         open(api, ingrid.id, 'details');
         fireEvent.click(await within(await shown()).findByRole('button', { name: 'Edit' }));
         type('Title', 'VP Revenue');
@@ -303,6 +318,7 @@ describe('The campaign the provider change is queued in', () => {
     it('is named, and for a person in more than one it is the opening campaign until the person picks another', async () => {
         const api = new FakeApi()
             .answer('contact.get', 'contact.get/person-after-half-move')
+            .answer('suppression.list', ...registerClear)
             .answer('workitem.list', 'workitem.list/by-contact-open')
             .answer('journal.list', 'journal.list/by-contact');
         watch(api);
@@ -330,5 +346,77 @@ describe('The campaign the provider change is queued in', () => {
         expect(where.value).toBe('cmp_3');
         fireEvent.change(where, { target: { value: 'cmp_2' } });
         expect(where.value).toBe('cmp_2');
+    });
+});
+
+describe('Do not contact', () => {
+    const email = fixtures['contact.get/person-panel'].response.channels[0]!.value;
+    /** The row of one address in Details. */
+    const row = (value: string) => within(panel()).getByText(value).closest('dd') as HTMLElement;
+
+    it("Details reads Jason's register for each address, and says which ones Jason will not contact", async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer(
+                'suppression.list',
+                'suppression.list/person-email-listed',
+                'suppression.list/person-linkedin-clear',
+            );
+        open(api, ingrid.id, 'details');
+        await waitFor(() => expect(asked(api, 'suppression.list')).toHaveLength(2));
+        expect(asked(api, 'suppression.list')).toEqual([
+            recorded('suppression.list/person-email-listed'),
+            recorded('suppression.list/person-linkedin-clear'),
+        ]);
+        await waitFor(() => expect(row(email).textContent).toContain('Jason will not contact this address'));
+        expect(within(row(email)).getByRole('button', { name: 'Contact again' })).toBeTruthy();
+        const linkedin = row(fixtures['contact.get/person-panel'].response.channels[1]!.value);
+        expect(within(linkedin).getByRole('button', { name: 'Do not contact' })).toBeTruthy();
+        expect(linkedin.textContent).not.toContain('Jason will not contact');
+    });
+
+    it("puts an address on Jason's register with the reason given, and says so on its row", async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer('suppression.list', ...registerClear)
+            .answer('suppression.add', 'suppression.add/person-email');
+        open(api, ingrid.id, 'details');
+        await shown();
+        fireEvent.click(await waitFor(() => within(row(email)).getByRole('button', { name: 'Do not contact' })));
+        fireEvent.input(within(row(email)).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' }), {
+            target: { value: 'Asked not to be emailed.' },
+        });
+        fireEvent.click(within(row(email)).getByRole('button', { name: 'Do not contact this address' }));
+
+        await waitFor(() => expect(row(email).textContent).toContain('Jason will not contact this address'));
+        expect(asked(api, 'suppression.add')).toEqual([recorded('suppression.add/person-email')]);
+        expect(within(row(email)).getByRole('button', { name: 'Contact again' })).toBeTruthy();
+    });
+
+    it('takes an address off the register only with a reason, and the row offers Do not contact again', async () => {
+        const api = people()
+            .answer('contact.get', 'contact.get/person-panel')
+            .answer(
+                'suppression.list',
+                'suppression.list/person-email-listed',
+                'suppression.list/person-linkedin-clear',
+            )
+            .answer('suppression.remove', 'suppression.remove/person-email');
+        open(api, ingrid.id, 'details');
+        fireEvent.click(await within(await shown()).findByRole('button', { name: 'Contact again' }));
+        const confirm = within(row(email)).getByRole<HTMLButtonElement>('button', {
+            name: 'Take this address off the register',
+        });
+        expect(confirm.disabled).toBe(true);
+        fireEvent.input(within(row(email)).getByRole('textbox', { name: 'Reason (required, kept in the journal)' }), {
+            target: { value: 'Asked to hear from us again.' },
+        });
+        expect(confirm.disabled).toBe(false);
+        fireEvent.click(confirm);
+
+        await waitFor(() => expect(asked(api, 'suppression.remove')).toHaveLength(1));
+        expect(asked(api, 'suppression.remove')).toEqual([recorded('suppression.remove/person-email')]);
+        expect(await within(row(email)).findByRole('button', { name: 'Do not contact' })).toBeTruthy();
+        expect(row(email).textContent).not.toContain('Jason will not contact');
     });
 });

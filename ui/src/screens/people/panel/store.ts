@@ -5,6 +5,8 @@ import type {
     ContactCampaign,
     ContactUpdateRequest,
     Page,
+    Suppression,
+    SuppressionRemoved,
     WorkItem,
     WorkItemCreateRequest,
     WorkItemSummary,
@@ -82,4 +84,53 @@ export async function queueProviderUpdate(
     };
     if (reason) body.reason = reason;
     return api.call<WorkItem>('workitem.create', body, 'write');
+}
+
+/** Where an address stands on Jason's register: the entry, null when it is not on it, absent until it was read. */
+export const register = signal<{ contactId: string; entries: Record<string, Suppression | null> } | null>(null);
+export const registerFailure = signal<string | null>(null);
+
+export function addressKey(channel: string, value: string): string {
+    return `${channel}\n${value}`;
+}
+
+function note(contactId: string, channel: string, value: string, entry: Suppression | null): void {
+    const was = register.value?.contactId === contactId ? register.value.entries : {};
+    register.value = { contactId, entries: { ...was, [addressKey(channel, value)]: entry } };
+}
+
+/** Reads the register for each of the person's addresses not read yet while their panel is open. */
+export async function loadRegister(api: Api, person: Contact): Promise<void> {
+    if (register.value?.contactId !== person.id) register.value = { contactId: person.id, entries: {} };
+    registerFailure.value = null;
+    const unread = person.channels.filter((c) => !(addressKey(c.channel, c.value) in register.value!.entries));
+    await Promise.all(
+        unread.map(async ({ channel, value }) => {
+            try {
+                const page = await api.call<Page<Suppression>>('suppression.list', { channel, value });
+                if (register.value?.contactId === person.id) note(person.id, channel, value, page.items[0] ?? null);
+            } catch (error) {
+                if (register.value?.contactId === person.id) fail(error, registerFailure);
+            }
+        }),
+    );
+}
+
+/** Puts an address on Jason's register: Jason will not contact it. */
+export async function doNotContact(api: Api, contactId: string, channel: string, value: string, reason?: string) {
+    const body: Record<string, unknown> = { channel, value };
+    if (reason) body['reason'] = reason;
+    note(contactId, channel, value, await api.call<Suppression>('suppression.add', body, 'write'));
+}
+
+/** Takes an address off Jason's register, with the reason the runtime requires for it. */
+export async function contactAgain(api: Api, contactId: string, channel: string, value: string, reason: string) {
+    await api.call<SuppressionRemoved>('suppression.remove', { channel, value, reason }, 'write');
+    note(contactId, channel, value, null);
+}
+
+/** Forgets what the panel read about a person: another person, or the same one opened again, is read afresh. */
+export function forget(): void {
+    register.value = null;
+    registerFailure.value = null;
 }
