@@ -19,6 +19,17 @@ function valueOf(args: readonly string[], flag: string): string | undefined {
     return at < 0 ? undefined : args[at + 1];
 }
 
+/** The values that follow a flag taking a list: every element up to the next one that starts with a dash. */
+function valuesOf(args: readonly string[], flag: string): string[] {
+    const at = args.indexOf(flag);
+    if (at < 0) return [];
+    const values: string[] = [];
+    for (let i = at + 1; i < args.length && !(args[i] ?? '-').startsWith('-'); i++) values.push(args[i] ?? '');
+    return values;
+}
+
+const listFlags = new Set(['--allowedTools', '--disallowedTools']);
+
 test('a Claude Code turn runs in print mode with the stream-json events, and never with --bare', () => {
     const args = claudeArguments(turn);
     assert.deepEqual(args.slice(0, 4), ['-p', '--output-format', 'stream-json', '--verbose']);
@@ -38,17 +49,18 @@ test('every Claude Code turn blocks reads outside its working folders, so a read
 
 test('the person\'s words are never on a host\'s command line: every argument is a flag or a flag\'s value', () => {
     const claude = claudeArguments({ ...turn, model: 'sonnet', resume: 'ses-1', addDirs: ['/c', '/p'] });
-    const flagsWithValue = new Set(['--output-format', '--allowedTools', '--disallowedTools', '--setting-sources', '--settings', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
+    const flagsWithValue = new Set(['--output-format', '--setting-sources', '--settings', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
     for (let i = 0; i < claude.length; i++) {
         const arg = claude[i] ?? '';
         assert.ok(arg.startsWith('-'), `${arg} is not a flag`);
-        if (flagsWithValue.has(arg)) i++;
+        if (listFlags.has(arg)) i += valuesOf(claude.slice(i), arg).length;
+        else if (flagsWithValue.has(arg)) i++;
     }
     assert.deepEqual(codexArguments({}), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-']);
 });
 
 test('the allowed tools are the skills, web search and fetch, subagents, the task list, jason, and two reply reads', () => {
-    assert.equal(valueOf(claudeArguments(turn), '--allowedTools'), claudeAllowedTools.join(','));
+    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [...claudeAllowedTools]);
     assert.deepEqual(
         claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')),
         ['Bash(jason:*)', 'Bash(reply auth status:*)', 'Bash(reply account list:*)'],
@@ -60,7 +72,7 @@ test('the allowed tools are the skills, web search and fetch, subagents, the tas
 });
 
 test('the host\'s argv carries every deny-list entry as a disallowed tool, and a jason command that starts with an option', () => {
-    const disallowed = (valueOf(claudeArguments(turn), '--disallowedTools') ?? '').split(',');
+    const disallowed = valuesOf(claudeArguments(turn), '--disallowedTools');
     assert.ok(entries.length > 10);
     for (const entry of entries) assert.ok(disallowed.includes(`Bash(jason ${entry}:*)`), `${entry} is not fenced`);
     assert.ok(disallowed.includes('Bash(jason -*)'));
@@ -68,8 +80,17 @@ test('the host\'s argv carries every deny-list entry as a disallowed tool, and a
 
 test('the data rules join the disallowed tools after the deny list', () => {
     const rules = ['Read(//data/config)', 'Read(//data/config/**)'];
-    const disallowed = (valueOf(claudeArguments({ ...turn, dataRules: rules }), '--disallowedTools') ?? '').split(',');
+    const disallowed = valuesOf(claudeArguments({ ...turn, dataRules: rules }), '--disallowedTools');
     assert.deepEqual(disallowed.slice(-2), rules);
+});
+
+test('each allowed and disallowed rule is an argument of its own, so a comma in a data path never splits a rule', () => {
+    const rules = ['Read(//Users/a,b/.jason/config)', 'Read(//Users/a,b/.jason/config/**)'];
+    const args = claudeArguments({ ...turn, dataRules: rules });
+    assert.equal(args.filter((arg) => arg === '--allowedTools').length, 1);
+    assert.equal(args.filter((arg) => arg === '--disallowedTools').length, 1);
+    for (const rule of [...claudeAllowedTools, ...rules]) assert.equal(args.filter((arg) => arg === rule).length, 1, rule);
+    assert.deepEqual(valuesOf(args, '--disallowedTools').slice(-2), rules);
 });
 
 test('the campaign\'s and the project\'s folders are added one --add-dir each; a model and a session are passed when given', () => {

@@ -108,6 +108,12 @@ const kinds = (events: ChatEvent[]) => events.map((event) => event.kind);
 const doneOf = (events: ChatEvent[]) => events.at(-1);
 const same = (a: string, b: string) => realpathSync.native(a).toLowerCase() === realpathSync.native(b).toLowerCase();
 const flagValue = (args: string[], flag: string) => args[args.indexOf(flag) + 1] ?? '';
+/** The elements after a flag that takes a list, up to the next flag. */
+const flagValues = (args: string[], flag: string) => {
+    const after = args.slice(args.indexOf(flag) + 1);
+    const end = after.findIndex((arg) => arg.startsWith('-'));
+    return end < 0 ? after : after.slice(0, end);
+};
 const gone = (pid: number) => {
     try {
         process.kill(pid, 0);
@@ -141,9 +147,9 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     assert.ok(!host.args.includes('--bare'));
     assert.ok(!host.args.includes('--resume'), 'a first turn resumes nothing');
     assert.ok(!host.args.includes('--add-dir'), 'a turn with no campaign adds no folder');
-    const fence = flagValue(host.args, '--disallowedTools');
-    assert.ok(fence.includes('Bash(jason approval approve:*)') && fence.includes('Bash(jason -*)'), fence);
-    assert.ok(fence.includes('/config/**)') && fence.includes('/logs/**)'), 'the data directory outside the chat is fenced off');
+    const fence = flagValues(host.args, '--disallowedTools');
+    assert.ok(fence.includes('Bash(jason approval approve:*)') && fence.includes('Bash(jason -*)'), fence.join(' '));
+    assert.ok(fence.some((rule) => rule.endsWith('/config/**)')) && fence.some((rule) => rule.endsWith('/logs/**)')), 'the data directory outside the chat is fenced off');
     const config = flagValue(host.args, '--mcp-config');
     assert.ok(same(join(config, '..'), r.b.paths.desktop), 'the turn file is the desktop folder, outside the chat folder');
     assert.equal(existsSync(config), false, 'the turn file is gone once the turn is over');

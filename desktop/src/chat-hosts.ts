@@ -56,12 +56,13 @@ export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDire
 /**
  * The command line of one Claude Code turn. Never `--bare`, which drops the subscription sign-in and the skills; always
  * `--strict-mcp-config`, so a person's own MCP servers never enter the chat; reads outside the working folders blocked
- * (`claudeTurnSettings`); no prompt argument, so the prompt is read from standard input.
+ * (`claudeTurnSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives,
+ * so a comma in a data path never splits a rule; no prompt argument, so the prompt is read from standard input.
  */
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    args.push('--allowedTools', claudeAllowedTools.join(','));
-    args.push('--disallowedTools', [...denyRules(turn.denied), ...turn.dataRules].join(','));
+    args.push('--allowedTools', ...claudeAllowedTools);
+    args.push('--disallowedTools', ...denyRules(turn.denied), ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', claudeTurnSettings);
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
