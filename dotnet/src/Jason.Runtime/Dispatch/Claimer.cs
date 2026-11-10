@@ -51,6 +51,9 @@ public sealed class Claimer(
     /// <summary>The kind an operation names the send it made the provider take by.</summary>
     private const string SendKind = "send";
 
+    /// <summary>The kind an operation names the search it had the provider start by.</summary>
+    private const string SearchKind = "search";
+
     private static readonly Action<ILogger, string, Exception?> ClaimSkipped = LoggerMessage.Define<string>(
         LogLevel.Information,
         new EventId(1, nameof(ClaimSkipped)),
@@ -159,7 +162,7 @@ public sealed class Claimer(
                 continue;
             }
 
-            // Held by a provider block, whether the twentieth check said so or a person released work the block still
+            // Held by a provider block, whether the twenty-fifth check said so or a person released work the block still
             // holds: the item waits on the block, with no attempt, unless it is the block's trial.
             if (verdict is { Block: { } block } && (released is not null || verdict.Code == AttemptErrors.ProviderBlocked)
                 && !await TrialAsync(db, block, item, now, ct).ConfigureAwait(false))
@@ -645,7 +648,8 @@ public sealed class Claimer(
     /// <summary>
     /// What the pre-flight decides on, read inside the claim transaction and nowhere else. The route is resolved
     /// first — a pure lookup over the snapshot the decision itself will use again — because whose identifiers to
-    /// read is the routed plugin's question, and an item nothing routes needs no reads at all.
+    /// read is the routed plugin's question, and an item nothing routes needs no reads at all. No audience is read: this
+    /// build numbers none, so an audience named by its number is found nowhere, and the claim says so.
     /// </summary>
     private async Task<PreflightFacts> FactsAsync(JasonDbContext db, WorkItem item, RouteSnapshot routing, CancellationToken ct)
     {
@@ -671,10 +675,30 @@ public sealed class Claimer(
         var blocks = OperationCatalog.HeldByProviderBlock.Contains(contract.Id)
             ? await ProviderBlocks.OpenAsync(db, pluginId, ProviderBlocks.Identity(resolution.Route.BindingIdentity), ct).ConfigureAwait(false)
             : null;
-        var send = await SendAsync(db, contract, item, ct).ConfigureAwait(false);
+        var send = CanonicalInput.NamesASend(contract)
+            ? await ReferenceAsync(
+                db,
+                item,
+                CanonicalInput.NamedSend(item),
+                SendKind,
+                (made, reference, ran) => new NamedSend(made.PublicId, made.Operation, made.Status, reference, ran?.PluginId, ran?.BindingIdentity),
+                ct).ConfigureAwait(false)
+            : null;
+
+        // The search's cursor is null: this build keeps none, so a status read starts from the beginning.
+        var search = CanonicalInput.NamesASearch(contract)
+            ? await ReferenceAsync(
+                db,
+                item,
+                CanonicalInput.NamedSearch(item),
+                SearchKind,
+                (made, reference, ran) => new NamedSearch(made.PublicId, made.Operation, made.Status, reference, ran?.PluginId, ran?.BindingIdentity),
+                ct).ConfigureAwait(false)
+            : null;
+
         if (item.Contact is not { } contact)
         {
-            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled));
+            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled), search);
         }
 
         if (contract.Preflight.Channel == ChannelRequirement.FromArgs)
@@ -694,7 +718,8 @@ public sealed class Claimer(
             blocks,
             unsettled,
             send,
-            Learned(contact.ExternalIds, campaign.ExternalIds, pluginId, item, unsettled));
+            Learned(contact.ExternalIds, campaign.ExternalIds, pluginId, item, unsettled),
+            search);
     }
 
     /// <summary>
@@ -724,35 +749,39 @@ public sealed class Claimer(
     }
 
     /// <summary>
-    /// The send the work names under <c>args.send</c>, read only for an operation whose input carries one, and only in the
-    /// work's own campaign: another campaign's work is not this one's to name. What it kept of where it went is its
-    /// succeeded attempt's, the one that returned the reference.
+    /// The work the arguments name by its id — a send under <c>args.send</c>, a search under <c>args.search</c> — read only in
+    /// the work's own campaign: another campaign's work is not this one's to name. What it kept of where it went is its
+    /// succeeded attempt's, the one that returned the reference under <paramref name="kind"/>.
     /// </summary>
-    private static async Task<NamedSend?> SendAsync(JasonDbContext db, OperationContract contract, WorkItem item, CancellationToken ct)
+    private static async Task<T?> ReferenceAsync<T>(
+        JasonDbContext db,
+        WorkItem item,
+        string? named,
+        string kind,
+        Func<WorkItem, string?, AttemptProvenanceDto?, T> found,
+        CancellationToken ct)
+        where T : NamedReference
     {
-        if (!CanonicalInput.NamesASend(contract) || CanonicalInput.NamedSend(item) is not { } named)
+        if (named is null)
         {
             return null;
         }
 
-        var send = await db.WorkItems
+        var made = await db.WorkItems
             .AsNoTracking()
             .Include(candidate => candidate.Attempts.Where(attempt => attempt.Status == AttemptStatus.Succeeded))
             .SingleOrDefaultAsync(candidate => candidate.PublicId == named && candidate.CampaignId == item.CampaignId, ct)
             .ConfigureAwait(false);
-        if (send is null)
+        if (made is null)
         {
             return null;
         }
 
-        var made = send.Attempts.MaxBy(attempt => attempt.Number)?.Provenance;
-        return new NamedSend(
-            send.PublicId,
-            send.Operation,
-            send.Status,
-            made?.ExternalIdsReturned is { } returned && returned.TryGetValue(SendKind, out var reference) ? reference : null,
-            made?.PluginId,
-            made?.BindingIdentity);
+        var ran = made.Attempts.MaxBy(attempt => attempt.Number)?.Provenance;
+        return found(
+            made,
+            ran?.ExternalIdsReturned is { } returned && returned.TryGetValue(kind, out var reference) ? reference : null,
+            ran);
     }
 
     /// <summary>

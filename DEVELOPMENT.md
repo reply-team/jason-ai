@@ -114,8 +114,8 @@ one commit per release, and after it the one that moves `main` to the next versi
 **What CI runs, by stage.** Before a push, the critical tier is run locally: the tests that carry the `Critical` trait,
 run with `--filter-trait "Category=Critical"`, about two minutes on a workstation. A pull request into
 a release branch runs the Linux set — the version check, the linux-x64 build with the critical tier, the install script
-on Ubuntu, an update on linux-x64 and the UI's checks — and merges on green; a change under `dotnet/` has run the whole
-suite locally before that. The release's pull request into `main` runs every check, the whole suite included, on Linux,
+on Ubuntu, an update on linux-x64, the UI's checks and the desktop's — and merges on green; a change under `dotnet/`
+has run the whole suite locally before that. The release's pull request into `main` runs every check, the whole suite included, on Linux,
 Windows and macOS, and the release merges only when that run is green. At the tag, the release workflow runs the
 critical tier again and packages and smoke-tests the executable for each platform; it does not run the whole suite
 again, since the tag is the tree that run tested. `.github/workflows/ci.yml` says which run each event gets,

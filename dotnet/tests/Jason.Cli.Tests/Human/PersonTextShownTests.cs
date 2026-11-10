@@ -102,6 +102,21 @@ public class PersonTextShownTests
              "candidates":[{"directory":"H","status":"invalid","problems":[{"code":"field_invalid","path":"name","message":"H"}]}],
              "routes":[{"route":"H","code":"route_invalid","message":"H"}]},"activated":false}
             """),
+        ["audience preview"] = (AudienceRenderers.Preview, """
+            {"plugin_id":"reply","count":12,"companies":3,"sample":[{"external_id":"H","first_name":"H","last_name":"H","title":"H",
+             "company":{"name":"H","domain":"H","industry":"H","size":"H"},"location":"H","raw":"H"}]}
+            """),
+        ["audience filter-values"] = (AudienceRenderers.FilterValues, """
+            {"plugin_id":"reply","values":["H","H"]}
+            """),
+        ["audience availability"] = (AudienceRenderers.Availability, """
+            {"plugin_id":"reply","available":false,"reason":"other","detail":"H","credits":{"balance":3,"price_per_person":0.5,"currency":"H"},
+             "headroom":10}
+            """),
+        ["operation describe"] = (OperationRenderers.Description, """
+            {"operation":"audience.search","version":1,"plugin_id":"reply","plugin_version":"H","arguments":{"description":"H"},
+             "definition":{"schema":{"properties":{"industries":{"description":"H"}}},"keys":{}}}
+            """),
     };
 
     public static TheoryData<string, int> Places => new()
@@ -125,6 +140,10 @@ public class PersonTextShownTests
         { "campaign add-contacts", 1 },
         { "contact get", 5 },
         { "plugin list", 4 },
+        { "audience preview", 5 },
+        { "audience filter-values", 2 },
+        { "audience availability", 2 },
+        { "operation describe", 1 },
     };
 
     [Theory]

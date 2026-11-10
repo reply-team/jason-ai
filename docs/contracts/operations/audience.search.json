@@ -1,0 +1,283 @@
+{
+  "id": "audience.search",
+  "version": 1,
+  "l1": { "name": "candidate.promote", "contract_version": "2.0.0", "family": 1, "core": false },
+  "intent": "\"Find up to this many people matching this definition, and make them ours\" — one search the provider runs and charges for, its people revealed",
+
+  "reach": "control",
+  "reversibility": "compensatable",
+  "approval": "confirm_once",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "the provider's searches started since `context.unsettled_since`: one of them may be this request's, and repeating spends again.",
+  "idempotency_key": "required",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "metered",
+  "cost_basis": "per person found and taken, by the provider's own tariff; phones extra where asked for",
+  "meter": "reveal",
+  "invariants": ["B1", "B3", "B6", "B7", "C2", "C3"],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+  "channel_arguments": null,
+  "channel_templates": null,
+  "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "runs" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": {
+    "summary": "Search the provider for up to {/args/count} people matching the definition below, for Jason's campaign {/campaign/name}: a metered search, charged per person found.",
+    "highlights": ["/args/count", "/definition", "/args/audience", "/args/people_per_company", "/args/include_without_email", "/args/find_phones", "/args/exclude"]
+  },
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.search:1:input",
+    "title": "audience.search input",
+    "description": "One search of the provider's database for people matching a definition — a new audience, or more of an audience this campaign already searched under — bounded by a count, with the people already known left out.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "definition", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["count"],
+        "description": "Exactly one of `audience` and `definition`: both at once are refused, and so is neither.",
+        "properties": {
+          "audience": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The number of an audience this campaign already searched under: a top-up, searched by the definition that audience was made from, which the runtime composes under `definition`."
+          },
+          "definition": { "$ref": "#/$defs/definition" },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "At most this many people to find and take: an upper bound, never a promise. The search stops at it, or sooner where the source runs out."
+          },
+          "exclude": { "$ref": "#/$defs/exclude" },
+          "people_per_company": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "At most this many people from any one company. Absent reads as 1."
+          },
+          "include_without_email": {
+            "type": "boolean",
+            "description": "Whether a person the provider holds no email address for is taken too. Absent reads as false."
+          },
+          "find_phones": {
+            "type": "boolean",
+            "description": "Whether the provider is asked for each person's phone number too, which it may charge for on top. Absent reads as false."
+          }
+        },
+        "anyOf": [
+          { "required": ["audience"], "not": { "required": ["definition"] } },
+          { "required": ["definition"], "not": { "required": ["audience"] } }
+        ]
+      },
+      "definition": { "$ref": "#/$defs/definition" },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier, stable across every attempt."
+      }
+    },
+    "$defs": {
+      "definition": {
+        "type": "object",
+        "description": "The audience in the provider's own words: the filters its search takes, in the shape the routed plugin declares under `audience_definition` in its manifest. This document holds it to being an object; the plugin's declared schema is applied at the claim, never when the work item is written. The runtime composes it at the root from `args.definition`, or from the audience `args.audience` names, and a plugin reads it there and nowhere else."
+      },
+      "exclude": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "People already known, who are not to come back: by the provider's own identifier, by email address or by LinkedIn profile. Each list may be left out.",
+        "properties": {
+          "provider_ids": {
+            "type": "array",
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 500 },
+            "description": "The provider's identifiers for people it found before."
+          },
+          "emails": {
+            "type": "array",
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 500 },
+            "description": "Email addresses of people already known."
+          },
+          "linkedin_urls": {
+            "type": "array",
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 500 },
+            "description": "LinkedIn profile links of people already known."
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.search:1:output",
+    "title": "audience.search result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome for the one search.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reference", "found", "people"],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["finished", "accepted"],
+              "description": "`finished`: the search ended inside the call, and every person it found is under `people`. `accepted`: the provider took the search and is running it; its people are read by `audience.search_status`, by `reference`. Either one is the item done. A refusal is a failed outcome with its class."
+            },
+            "reference": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "The provider's reference for a search it is still running, by which it is read and cancelled; null on `finished`. It comes back under `external_ids.search` too, the one value in both places."
+            },
+            "found": {
+              "type": ["integer", "null"],
+              "minimum": 0,
+              "description": "How many people the search has found so far, or null where the provider does not say."
+            },
+            "people": {
+              "type": "array",
+              "maxItems": 1000,
+              "items": { "$ref": "#/$defs/person" },
+              "description": "On `finished`, every person the search found; on `accepted`, empty."
+            }
+          }
+        }
+      }
+    },
+    "$defs": {
+      "person": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["external_id", "first_name", "last_name", "title", "company", "location", "channels", "raw"],
+        "description": "One person the search found and revealed, in the one shape every provider answers in.",
+        "properties": {
+          "external_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "The provider's identifier for the person. Reported, never pinned by this operation."
+          },
+          "first_name": { "type": ["string", "null"], "maxLength": 200, "description": "The person's first name, or null where the provider holds none." },
+          "last_name": { "type": ["string", "null"], "maxLength": 200, "description": "The person's last name, or null where the provider holds none." },
+          "title": { "type": ["string", "null"], "maxLength": 200, "description": "The person's job title, as the provider holds it, or null where it holds none." },
+          "company": { "$ref": "#/$defs/company" },
+          "location": {
+            "type": ["string", "null"],
+            "maxLength": 500,
+            "description": "Where the person is, as the provider spells it — a city, a region, a country, or all three on one line — or null where it holds none."
+          },
+          "channels": {
+            "type": "array",
+            "maxItems": 8,
+            "items": { "$ref": "#/$defs/channel" },
+            "description": "How the person is reached, as present: each address, number and LinkedIn profile the provider holds for them and revealed. Empty where it holds none."
+          },
+          "raw": {
+            "type": ["string", "null"],
+            "maxLength": 16384,
+            "description": "The provider's own record for the person, untranslated, written as JSON text and trimmed by the plugin to fit, or null where it gives none to keep. Jason reads none of it: the fields beside it carry what Jason reads."
+          }
+        }
+      },
+      "company": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "domain", "size", "industry"],
+        "description": "The company the person works at, as the provider holds it; each member null where it holds none.",
+        "properties": {
+          "name": { "type": ["string", "null"], "maxLength": 200 },
+          "domain": { "type": ["string", "null"], "maxLength": 253, "description": "The company's web domain, such as `example.com`." },
+          "size": { "type": ["string", "null"], "maxLength": 64, "description": "The company's headcount in the provider's own words or band, such as `51-200`." },
+          "industry": { "type": ["string", "null"], "maxLength": 200, "description": "The company's industry, as the provider names it." }
+        }
+      },
+      "channel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "value"],
+        "properties": {
+          "channel": { "type": "string", "enum": ["email", "phone", "linkedin"] },
+          "value": { "type": "string", "minLength": 1, "maxLength": 500, "description": "The address, the number or the LinkedIn profile's link, as the provider holds it." }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "search": {
+      "entity": "work_item",
+      "description": "The provider's reference for the search this work item started and the provider is still running, the result's `items[0].reference`. One work item is one search, so it is kept on the attempt that learned it and in the item's result, and pinned to no contact and no campaign; `audience.search_status` and `audience.search_cancel` read and stop the search by it."
+    }
+  },
+
+  "recovery_read": {
+    "reads": "The provider's searches of this account started at or after `context.unsettled_since`: the one under this work item's key, where the provider keeps a key for a search, or else the one of the same definition and options. A search found is this request's, and is answered `accepted` with its reference whatever state it is in; a new search is started only where none matches.",
+    "justification": "A search spends per person found, so a blind repeat would start a second one that spends again on the same people; where the provider runs one search of a definition at a time, it would also fail `search_in_progress` against the search the first attempt started. The provider's list of searches is the one trace of the first attempt's."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "definition_rejected", "class": "validation", "when": "The provider refused the definition for a rule of its own that the schema the plugin declares cannot express: a value it does not know, a combination it does not take. Nothing was started or spent; the provider's own words travel in the message." },
+    { "code": "search_in_progress", "class": "permanent", "when": "The provider is already running a search of this definition for this account, and starts no second one until it ends. Nothing was started or spent; the running search is read, or stopped, by the work item that started it." },
+    { "code": "insufficient_credits", "class": "permanent", "when": "The account has no credits left to start a search. Nothing was started or spent. This code stands for an answer the plugin cannot read as a provider block; one it can is `provider_blocked`." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include searching its database, so no search by this account can be started." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so no search was started. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential, or the user it signs in to the provider as, may not search for this account. This code stands for an answer the plugin cannot read as a provider block; one it can is `provider_blocked`." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now, and no search was started; it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before a search was started." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so a search may already have started and be spending. The repeat reads the provider's searches first and answers the one it finds, so no second search is started." },
+    { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "The definition searched is the one the runtime composed under `definition`; the plugin reads it there and nowhere else. It satisfies the schema the plugin declares under `audience_definition`, which the runtime checked at the claim; a rule of the provider's that the schema cannot express fails `definition_rejected` before anything is spent.",
+    "An attempt starts at most one search, under the work item's key where the provider keeps one for a search.",
+    "The result says `finished` only where the search ended inside the call and every person it found fits the result, under `people`; otherwise it says `accepted` with the provider's `reference` and `people` empty, and the people are read by `audience.search_status`. The `reference` is the one under `external_ids.search`: both on `accepted`, neither on `finished`.",
+    "Where the provider finds people first and reveals them after, both happen inside the plugin: nobody picks among the candidates, and every person the search returns is revealed.",
+    "Nobody `args.exclude` names comes back: the provider leaves them out where it can, and the plugin drops them where it cannot.",
+    "`count` bounds the search: it stops at that many people, or sooner where the source runs out. `people_per_company`, `include_without_email` and `find_phones` read as 1, false and false where they are absent.",
+    "A repeat after `provider_answer_lost` reads the provider's searches started since `context.unsettled_since` first, and answers the one that is this request's as `accepted` with its reference; a new search is started only where none is.",
+    "Each person comes back in the one shape every provider answers in, the provider's own record beside it under `raw` as JSON text. A person found is pinned to nothing by this operation."
+  ]
+}

@@ -1,0 +1,141 @@
+{
+  "id": "audience.availability",
+  "version": 1,
+  "l1": { "name": "capability.list", "contract_version": "2.0.0", "family": 21, "core": true },
+  "intent": "\"Can this account search now, and what is left?\" — allowed or not, why not, and the credits and room the provider can say",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["A6", "N5"],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+  "channel_arguments": null,
+  "channel_templates": null,
+  "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "runs" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.availability:1:input",
+    "title": "audience.availability input",
+    "description": "Whether the account the route binds may search the provider's database now. Nothing is named: the binding names the account.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "description": "Nothing: the account is the binding's."
+      },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it. The answer names no campaign: what an account may do is the account's."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.availability:1:output",
+    "title": "audience.availability result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["available", "reason", "detail", "credits", "headroom", "vendor"],
+    "properties": {
+      "available": {
+        "type": "boolean",
+        "description": "Whether a search by this account would be started now, as far as the provider can say before one is."
+      },
+      "reason": {
+        "type": ["string", "null"],
+        "enum": ["no_credits", "not_permitted", "not_included", "other", null],
+        "description": "Why not, where `available` is false: `no_credits`, the account's credits are spent; `not_permitted`, the user the plugin signs in as may not search, such as a member whose role is restricted; `not_included`, the account's plan does not include searching, or holds no more contacts; `other` for a reason this vocabulary has no word for. Null where `available` is true."
+      },
+      "detail": {
+        "type": ["string", "null"],
+        "maxLength": 500,
+        "description": "The provider's own words for why not, as it gives them, or null where it gives none."
+      },
+      "credits": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["balance", "price_per_person", "currency"],
+        "description": "What the account has to spend, where the provider can say; null where it cannot.",
+        "properties": {
+          "balance": { "type": ["number", "null"], "minimum": 0, "description": "The credits left, in the provider's own unit, or null where it does not say." },
+          "price_per_person": { "type": ["number", "null"], "minimum": 0, "description": "What one person found and taken costs, in the same unit, or null where it does not say." },
+          "currency": { "type": ["string", "null"], "maxLength": 8, "description": "The unit both are counted in — `credits`, or a currency's code — or null where the provider does not say." }
+        }
+      },
+      "headroom": {
+        "type": ["integer", "null"],
+        "minimum": 0,
+        "description": "How many more people the account's plan lets it hold, or null where the provider does not say."
+      },
+      "vendor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "description": "The provider's own word for the account's state. A closed list, so nothing else travels here.",
+        "properties": { "status": { "type": ["string", "null"], "maxLength": 64 } }
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read what this account may do. This code stands for an answer the plugin cannot read as a provider block; one it can is `provider_blocked`." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing, so the next attempt simply asks again." },
+    { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
+  ],
+
+  "timeout_ms": 30000,
+
+  "conformance": [
+    "`available` is the provider's answer as far as it can give one before a search starts; a search may still be refused for a reason the provider only says then.",
+    "Where `available` is false, `reason` says why in this vocabulary and `detail` in the provider's own words; where it is true, `reason` is null.",
+    "A provider that can say nothing beyond whether the account may search answers `available` with `credits` and `headroom` null, never a number it does not know.",
+    "A user the plugin signs in as who may not search is `available: false` with `not_permitted`, an answer, not `unauthorized`, which says the credential cannot read even this.",
+    "A state this vocabulary has no word for is `other`, with the provider's own word under `vendor.status`.",
+    "Nothing is pinned."
+  ]
+}

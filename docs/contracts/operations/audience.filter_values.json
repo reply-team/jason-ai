@@ -1,0 +1,130 @@
+{
+  "id": "audience.filter_values",
+  "version": 1,
+  "l1": { "name": "vocabulary.list", "contract_version": "2.0.0", "family": 21, "core": true },
+  "intent": "\"What values may this filter take, starting with this text?\" — the provider's own values for one of its own filters",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["A6", "E12", "H2"],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+  "channel_arguments": null,
+  "channel_templates": null,
+  "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "runs" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.filter_values:1:input",
+    "title": "audience.filter_values input",
+    "description": "The first values the provider offers for one of the filters its definition takes, matching a piece of text a person is typing.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["filter", "query", "limit"],
+        "properties": {
+          "filter": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+            "description": "The filter whose values are asked for: a typeahead the routed plugin's `audience_definition` names under `keys`."
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The text the values start with or contain, as the provider matches it. Empty asks for the first values it offers."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "At most this many values. Required: absence is not a default, and fewer may come back."
+          }
+        }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it. The values name no campaign: a filter's values are the account's."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.filter_values:1:output",
+    "title": "audience.filter_values result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["values"],
+    "properties": {
+      "values": {
+        "type": "array",
+        "maxItems": 100,
+        "uniqueItems": true,
+        "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": "The first `limit` values matching `query`, in the provider's own order, each exactly as a definition writes it. Not a page: there is no next one, and a narrower `query` finds the rest."
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "filter_unknown", "class": "validation", "when": "The provider offers no values for this filter: a name the plugin's declaration does not pair with a typeahead, or one the provider does not know. Nothing was read." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include searching its database, so it offers no values to search by." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential, or the user it signs in to the provider as, may not read this account's filter values. This code stands for an answer the plugin cannot read as a provider block; one it can is `provider_blocked`." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing, so the next attempt simply asks again." },
+    { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
+  ],
+
+  "timeout_ms": 30000,
+
+  "conformance": [
+    "A filter is answered only where the plugin's `audience_definition` pairs it with a typeahead under `keys`; any other name fails `filter_unknown`.",
+    "The values are the provider's own, each written exactly as a definition takes it, so a value read here is a value a definition may name.",
+    "At most `limit` values come back, the first that match `query` in the provider's own order, none twice; an empty `query` asks for the first the provider offers.",
+    "A provider whose API offers no values for its filters answers the reserved `capability_not_offered`, or leaves the operation out of its manifest.",
+    "An answer larger than the plugin may read from a program fails `provider_answer_too_large` as permanent: asking again would cut it at the same place.",
+    "Nothing is pinned."
+  ]
+}

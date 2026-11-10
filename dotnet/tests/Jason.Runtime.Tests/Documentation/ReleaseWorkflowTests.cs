@@ -509,7 +509,7 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The checks ci.yml reports, its matrix legs expanded, are exactly the eleven this repository's ruleset requires
+    /// The checks ci.yml reports, its matrix legs expanded, are exactly the twelve this repository's ruleset requires
     /// before a pull request merges. A renamed job is a required check that never reports, and every pull request
     /// would wait for it: a job is renamed here only together with the ruleset. The job that reports a check a rule
     /// skipped reports it under a name another job's leg has, which CiRunsTests holds, so it adds no name here.
@@ -531,6 +531,7 @@ public partial class ReleaseWorkflowTests
             "install.sh on ubuntu",
             "install.ps1 on windows",
             "The UI on ubuntu",
+            "The desktop on ubuntu",
         ];
 
         // Reported and not required by the ruleset: none today. Making one required is a ruleset change, made together

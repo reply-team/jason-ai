@@ -1,0 +1,63 @@
+{
+  "operation": "audience.search_status",
+  "version": 1,
+  "case": "a page that says nowhere for the next read to start",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "state": "in_progress",
+      "found": 40,
+      "people": [
+        {
+          "external_id": "p-90211",
+          "first_name": "Lena",
+          "last_name": "Novak",
+          "title": "Head of Operations",
+          "company": {
+            "name": "Northwind Freight",
+            "domain": "northwind-freight.example",
+            "size": "51-200",
+            "industry": "Logistics"
+          },
+          "location": "Porto, Portugal",
+          "channels": [
+            {
+              "channel": "email",
+              "value": "lena.novak@northwind-freight.example"
+            },
+            {
+              "channel": "linkedin",
+              "value": "https://www.linkedin.com/in/lena-example"
+            }
+          ],
+          "raw": "{\"id\":\"p-90211\",\"seniority\":\"head\",\"department\":\"operations\"}"
+        }
+      ],
+      "has_more": false,
+      "vendor": {
+        "status": "running"
+      }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [
+      {
+        "pointer": "/cursor",
+        "reason": "required"
+      }
+    ]
+  }
+}

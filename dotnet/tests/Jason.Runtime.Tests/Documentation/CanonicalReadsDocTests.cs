@@ -244,7 +244,9 @@ public sealed partial class CanonicalReadsDocTests
     /// <summary>
     /// A page that counts the published operations counts them right: the number word is the catalog's own count, so
     /// the next operation added fails here until every page says so, and any other number in a count phrase fails
-    /// whatever it is. The five pages that count say it at least once; the divergence file may not count at all.
+    /// whatever it is. The five pages that count say it at least once; the divergence file may not count at all. The Reply
+    /// package's own README counts the operations the package performs, which is the catalog less what it does not
+    /// perform yet.
     /// </summary>
     [Theory]
     [InlineData("README.md", false)]
@@ -256,7 +258,9 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("plugins/reply/README.md", true)]
     public void A_page_that_counts_the_published_operations_says_the_catalog_s_number(string page, bool counts)
     {
-        var expected = NumberWords[OperationCatalog.All.Count];
+        var expected = NumberWords[page.StartsWith("plugins/reply/", StringComparison.Ordinal)
+            ? Plugins.Reply.ReplyPlugins.PublishedItPerforms.Count
+            : OperationCatalog.All.Count];
         var said = CountPhrase().Matches(Flat(Source(page))).Select(match => match.Groups["n"].Value.ToLowerInvariant()).ToList();
 
         Assert.True(!counts || said.Count > 0, $"{page} no longer counts the published operations.");
@@ -267,7 +271,7 @@ public sealed partial class CanonicalReadsDocTests
     [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
         "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-two",
-        "twenty-three", "twenty-four",
+        "twenty-three", "twenty-four", "twenty-five", "twenty-six", "twenty-seven", "twenty-eight", "twenty-nine", "thirty",
     ];
 
     [Fact]
@@ -276,7 +280,7 @@ public sealed partial class CanonicalReadsDocTests
         var index = Source("plugins/README.md");
         var row = index.Split('\n').Single(line => line.StartsWith("| [`reply/`]", StringComparison.Ordinal));
 
-        Assert.All(OperationCatalog.All, contract => Assert.Contains($"`{contract.Id}`", row, StringComparison.Ordinal));
+        Assert.All(Plugins.Reply.ReplyPlugins.PublishedItPerforms, id => Assert.Contains($"`{id}`", row, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -335,7 +339,7 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     /// <summary>
-    /// The table of the claim's twenty answers says, at row 10, which operations the suppression register does not
+    /// The table of the claim's twenty-five answers says, at row 10, which operations the suppression register does not
     /// refuse — every one the catalog marks `not_applicable`, and the field that marks it.
     /// </summary>
     [Fact]
@@ -545,7 +549,7 @@ public sealed partial class CanonicalReadsDocTests
     /// published" names a subset, and is not a count.
     /// </summary>
     [GeneratedRegex(
-        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-four|twenty-three|twenty-two|twenty-one|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-four|twenty-three|twenty-two|twenty-one|twenty)\b",
+        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|thirty|twenty-nine|twenty-eight|twenty-seven|twenty-six|twenty-five|twenty-four|twenty-three|twenty-two|twenty-one|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|thirty|twenty-nine|twenty-eight|twenty-seven|twenty-six|twenty-five|twenty-four|twenty-three|twenty-two|twenty-one|twenty)\b",
         RegexOptions.IgnoreCase)]
     private static partial Regex CountPhrase();
 

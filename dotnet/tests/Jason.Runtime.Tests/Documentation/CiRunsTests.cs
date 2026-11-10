@@ -58,7 +58,7 @@ public class CiRunsTests
     /// <summary>The set the version pull request runs once it is ready.</summary>
     private const string VersionOnly = "version-only";
 
-    /// <summary>The eleven checks the main branch's ruleset requires before a merge.</summary>
+    /// <summary>The twelve checks the main branch's ruleset requires before a merge.</summary>
     private static readonly string[] Required =
     [
         "The version this tree carries",
@@ -72,12 +72,14 @@ public class CiRunsTests
         "install.sh on ubuntu",
         "install.ps1 on windows",
         "The UI on ubuntu",
+        "The desktop on ubuntu",
     ];
 
     /// <summary>What the Linux set runs: a draft's push, and all a release branch's ruleset requires.</summary>
     private static readonly string[] TheLinuxSet =
     [
         "The version this tree carries", "linux-x64", "install.sh on ubuntu", "an update on linux-x64", "The UI on ubuntu",
+        "The desktop on ubuntu",
     ];
 
     /// <summary>The commit, the tree and the pull request a run is about. Made up.</summary>
@@ -1305,9 +1307,35 @@ public class CiRunsTests
             ["install-sh"] = Linux,
             ["install-ps1"] = Full,
             ["ui"] = Linux,
+            ["desktop"] = Linux,
             [StandIn] = Skipping,
         };
         Assert.Equal(expected.OrderBy(pair => pair.Key, StringComparer.Ordinal), conditions.OrderBy(pair => pair.Key, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The desktop's check, which the rulesets of main and of the release branches require, reports on every run of the
+    /// Linux set though this tree carries no desktop application: its one step says, in the log and in the run's summary,
+    /// that there is nothing to check, and the job passes under the check's own name. It checks nothing out, so its token can do nothing, and it
+    /// carries no <c>continue-on-error</c>: what it reports is what its step said.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_check_says_this_tree_has_no_desktop_application_to_check()
+    {
+        var job = Mapping(Jobs(), "desktop");
+
+        Assert.Equal("The desktop on ubuntu", Scalar(job, "name"));
+        Assert.Equal("ubuntu-latest", Scalar(job, "runs-on"));
+        Assert.Empty(Mapping(job, "permissions").Children);
+        Assert.Null(Node(job, "continue-on-error"));
+
+        var step = Assert.Single(Steps(job));
+        Assert.Null(Scalar(step, "uses"));
+        Assert.Null(Node(step, "continue-on-error"));
+        var lines = Scalar(step, "run")!.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(2, lines.Length);
+        Assert.All(lines, line => Assert.Contains("this tree carries no desktop application", line, StringComparison.Ordinal));
+        Assert.EndsWith(">> \"$GITHUB_STEP_SUMMARY\"", lines[1], StringComparison.Ordinal);
     }
 
     /// <summary>

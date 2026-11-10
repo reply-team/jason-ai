@@ -44,6 +44,12 @@ public static class ProblemCodes
     /// </summary>
     public const string SettlesByKeyInvalid = "settles_by_key_invalid";
 
+    /// <summary>
+    /// <c>operations</c> lists <c>audience.search</c> without <c>audience.search_status</c>: a search the provider keeps
+    /// running would be started with no way to read what it found.
+    /// </summary>
+    public const string AudienceFamilyIncomplete = "audience_family_incomplete";
+
     /// <summary>A declared subscription names a kind the runtime does not write to its journal.</summary>
     public const string SubscriptionKindUnknown = "subscription_kind_unknown";
 

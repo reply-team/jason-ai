@@ -1,0 +1,37 @@
+{
+  "operation": "audience.search_cancel",
+  "version": 1,
+  "case": "a paused search's state answered as how it ended, which a cancel does not say",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "status": "already_ended",
+          "ended_as": "paused"
+        }
+      ]
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [
+      {
+        "pointer": "/items/0/ended_as",
+        "reason": "enum"
+      }
+    ]
+  }
+}

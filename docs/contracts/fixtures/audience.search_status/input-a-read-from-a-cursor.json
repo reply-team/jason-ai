@@ -1,0 +1,25 @@
+{
+  "operation": "audience.search_status",
+  "version": 1,
+  "case": "a later read, from the cursor an earlier read answered",
+  "input": {
+    "args": {
+      "search": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG",
+      "limit": 100
+    },
+    "search": {
+      "work_item": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG",
+      "reference": "search-5521",
+      "cursor": "page-2"
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": "valid"
+}

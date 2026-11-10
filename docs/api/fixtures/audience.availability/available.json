@@ -1,0 +1,16 @@
+{
+  "operation": "audience.availability",
+  "case": "available",
+  "request": {
+    "campaign_id": "cmp_1"
+  },
+  "status": 200,
+  "response": {
+    "plugin_id": "stand-in-search",
+    "available": true,
+    "reason": null,
+    "detail": null,
+    "credits": null,
+    "headroom": null
+  }
+}
