@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Jason.Runtime.Persistence.Migrations
 {
     [DbContext(typeof(JasonDbContext))]
-    [Migration("20261110213936_AudienceSearches")]
-    partial class AudienceSearches
+    [Migration("20261111143412_Audience")]
+    partial class Audience
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
