@@ -67,7 +67,7 @@ export interface Configuration {
         maintainer: string;
     };
     appImage: { artifactName: string };
-    deb: { artifactName: string };
+    deb: { artifactName: string; recommends: string[] };
     toolsets: { appimage: string };
 }
 

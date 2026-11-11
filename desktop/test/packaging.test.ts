@@ -161,6 +161,14 @@ test('the AppImage is packed with the static runtime, which needs no libfuse2, a
     assert.ok(!JSON.stringify(built).includes('no-sandbox'));
 });
 
+test('the deb recommends the ICU library the jason it carries needs, by alternatives, keeping electron-builder’s own recommendation and its dependencies', () => {
+    // app-builder-lib 26.18.0, out/targets/FpmTarget.js: a deb's recommends replace getDefaultRecommends ("libappindicator3-1"),
+    // and a depends would replace getDefaultDepends, so none is set.
+    assert.deepEqual(built.deb.recommends, ['libappindicator3-1', 'libicu78 | libicu77 | libicu76 | libicu74 | libicu72 | libicu70']);
+    for (const options of [built.linux, built.deb] as Record<string, unknown>[]) assert.equal('depends' in options, false);
+    assert.equal('recommends' in built.linux, false);
+});
+
 test('the deb names its maintainer and its home page, which a deb must, and its category in the menu', () => {
     assert.equal(built.linux.maintainer, 'ReplyApp Inc. <support@reply.io>');
     assert.equal(built.extraMetadata.homepage, 'https://github.com/reply-team/jason-ai');

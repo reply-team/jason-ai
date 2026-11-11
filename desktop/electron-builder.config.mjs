@@ -165,7 +165,12 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
         appId: 'ai.jasonharness.desktop',
         productName: 'Jason',
         copyright: 'Copyright (c) 2026 ReplyApp Inc.',
-        // The home page is what a deb names as its own (FpmTarget's computeFpmMetaInfoOptions refuses a deb without one).
+        // The home page is set for the deb, which must name one: FpmTarget's computeFpmMetaInfoOptions refuses a deb whose
+        // AppInfo.computePackageUrl finds none (metadata.homepage, else a repository, which desktop/ names nowhere). In the
+        // pinned app-builder-lib 26.18.0 two other readers see it: the nsis installer, whose uninstall entry's help and
+        // about links it becomes when nsis names none (out/targets/nsis/NsisTarget.js, UNINSTALL_URL_*), and the Windows
+        // signing manager, which hands it to the sign hook as `site`, which scripts/sign-windows.mjs does not read. It is
+        // also in app.asar's package.json, which nothing of the desktop reads. Nothing on the Mac reads it.
         extraMetadata: { version, homepage: 'https://github.com/reply-team/jason-ai' },
         directories: { output: 'dist', buildResources: 'installer' },
         // Inside app.asar: the compiled main process, the starting page, the tray icons desk.ts loads from the app,
@@ -258,7 +263,14 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
         },
         // electron-builder spells x64 as x86_64 in an AppImage's name and amd64 in a deb's, so these say x64 themselves.
         appImage: { artifactName: 'jason-desktop-linux-x64.${ext}' },
-        deb: { artifactName: 'jason-desktop-linux-x64.${ext}' },
+        // The jason a deb carries needs the ICU library, whose package is named by its version: recommended, by
+        // alternatives, so apt installs one where none is, and never a dependency that would refuse a system whose ICU is
+        // named otherwise. A deb's recommends replace electron-builder's own (FpmTarget.getDefaultRecommends), which is
+        // kept first; its dependencies stay electron-builder's (getDefaultDepends).
+        deb: {
+            artifactName: 'jason-desktop-linux-x64.${ext}',
+            recommends: ['libappindicator3-1', 'libicu78 | libicu77 | libicu76 | libicu74 | libicu72 | libicu70'],
+        },
         // The AppImage's runtime: 1.0.3 is the static runtime, which needs no libfuse2, where the default, 0.0.0, is the
         // legacy FUSE 2 one (app-builder-lib 26.18.0, out/configuration.d.ts, ToolsetConfig.appimage, which lists 1.0.3
         // among its betas; out/toolsets/linux.js pins its archive's sha256).
