@@ -18,7 +18,7 @@ const confirming = signal<string | null>(null);
  * Reply's web app, where an account's limits, signature, pauses and connection are managed. The desktop manages none of
  * them; the card links there instead.
  */
-const replyAccountsAddress = 'https://run.reply.io/';
+export const replyAccountsAddress = 'https://run.reply.io/';
 
 /** The channels the Reply CLI lists accounts for, in the order the card shows them, with their headings. */
 const channels: readonly (readonly [string, string])[] = [

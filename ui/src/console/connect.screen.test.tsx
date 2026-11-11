@@ -9,6 +9,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
+import { replyAccountsAddress } from './connect';
 import { Console } from './console';
 import { attention } from './needs';
 import { chats, lines } from './state';
@@ -195,7 +196,8 @@ describe('the Reply card', () => {
         expect(links).toHaveLength(1);
         const link = links[0]! as HTMLAnchorElement;
         expect(words(link)).toBe('Manage accounts in Reply');
-        expect(link.getAttribute('href')).toBe('https://run.reply.io/');
+        expect(link.getAttribute('href')).toBe(replyAccountsAddress);
+        expect(new URL(link.href).protocol).toBe('https:');
         expect(link.tagName).toBe('A');
         expect(link.getAttribute('target')).toBe('_blank');
         expect(link.getAttribute('rel')).toBe('noreferrer');
