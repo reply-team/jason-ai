@@ -42,7 +42,7 @@ import type { Cli } from './cli.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs } from './programs.ts';
-import { hosts, keyedFolder, keyProvider, providerEnvironment, withoutKey } from './providers-model.ts';
+import { hosts, keyedFolder, keyProvider, providerEnvironment, withoutKey, withoutWholeKey } from './providers-model.ts';
 
 /** Why a turn starts a fresh session of a conversation that had one. */
 export type FreshReason = 'host_changed' | 'not_found';
@@ -895,13 +895,21 @@ export class Chat {
                         pending = null;
                     }
                     shown++;
+                    // On a keyed turn the whole key, exactly as it is, never reaches the page or the record in what the
+                    // host says while it runs; only the exact key, since an answer's long ids and hashes are its own.
+                    const key = resolved.key;
+                    const clean = key === null ? (text: string) => text : (text: string) => withoutWholeKey(text, key);
                     if (line.kind === 'step') {
                         steps++;
-                        conversation.entries.push(line.detail === undefined ? { kind: 'step', text: line.text } : { kind: 'step', text: line.text, detail: line.detail });
+                        const step: Extract<ChatEvent, { kind: 'step' }> =
+                            line.detail === undefined ? { kind: 'step', text: clean(line.text) } : { kind: 'step', text: clean(line.text), detail: clean(line.detail) };
+                        conversation.entries.push({ ...step });
+                        this.#options.emit(replyTo, step);
                     } else {
-                        conversation.entries.push({ kind: 'text', text: line.text });
+                        const said: Extract<ChatEvent, { kind: 'text' }> = { kind: 'text', text: clean(line.text) };
+                        conversation.entries.push({ ...said });
+                        this.#options.emit(replyTo, said);
                     }
-                    this.#options.emit(replyTo, line);
                 }
             };
             let started: HostProcess;

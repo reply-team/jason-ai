@@ -133,6 +133,15 @@ export function withoutKey(text: string, key: string): string {
 }
 
 /**
+ * What a host says while a keyed turn runs, its words and its steps, with the whole key, exactly as it is, replaced by
+ * the fixed word (`keyWord`), and nothing else: none of `withoutKey`'s shapes, since an answer's long ids and hashes are
+ * its own.
+ */
+export function withoutWholeKey(text: string, key: string): string {
+    return key === '' ? text : text.split(key).join(keyWord);
+}
+
+/**
  * The variables a host's process is started with to use a provider: its key, the host's folder of the desktop's own
  * (`keyedFolder`), and for an Anthropic-compatible endpoint where that endpoint is and which of its models stands in for
  * every model Claude Code would otherwise ask for by name. The agent host's environment is the one place a key goes.

@@ -768,6 +768,28 @@ test('a keyed turn that ends on a host error keeps no part of the key, on the pa
     assert.deepEqual(doneOf(await r.turn('c-plain', words, { host: 'codex' })), { kind: 'done', error: masked });
 });
 
+test('during a keyed turn a text line and a step that carry the whole key reach the page and the record without it; a plain turn is untouched', async (t) => {
+    const r = rig(t);
+    const key = 'sk-PLANTEDdeepseekWholeKey24680';
+    r.keys.deepseek = key;
+    // A long id or hash in an answer is not the key, and stays as it is.
+    const hash = 'a3f9c2e1b7d4058e6f1a2b3c4d5e6f708192a3b4';
+    const steps = [{ say: `Your key is ${key}; the commit is ${hash}.` }, { use: { tool: 'Read', input: { file_path: `/tmp/${key}/notes.md` } } }];
+    plan(r, steps);
+    const keyed = await r.turn('c-keyed', words, { host: 'deepseek' });
+    assert.deepEqual(doneOf(keyed), { kind: 'done', error: null });
+    assert.ok(texts(keyed).includes(`Your key is [key]; the commit is ${hash}.`), JSON.stringify(texts(keyed)));
+    assert.ok(keyed.some((event) => event.kind === 'step' && event.detail === '/tmp/[key]/notes.md'), JSON.stringify(keyed));
+    assert.ok(!JSON.stringify(keyed).includes(key), 'the page never gets the key');
+    assert.ok(!recordsText(r).includes(key), 'the record never keeps the key');
+    assert.ok(recordsText(r).includes(hash));
+
+    plan(r, steps);
+    const plain = await r.turn('c-plain', words, { host: 'claude' });
+    assert.ok(texts(plain).includes(`Your key is ${key}; the commit is ${hash}.`));
+    assert.ok(plain.some((event) => event.kind === 'step' && event.detail === `/tmp/${key}/notes.md`));
+});
+
 test('a keyed folder that cannot be made refuses the send and starts no host', async (t) => {
     const r = rig(t);
     r.keys['claude-api-key'] = 'sk-planted-anthropic';
