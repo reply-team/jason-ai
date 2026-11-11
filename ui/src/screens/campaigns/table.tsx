@@ -48,7 +48,7 @@ export function CampaignTable({ campaigns, view, period, filters, summary, activ
                             view === 'summary' ? summary[campaign.id] : activity[campaign.id];
                         const linked = view === 'activity' || summary[campaign.id]?.sequence_linked !== false;
                         const at = { screen: 'campaigns' as const, id: campaign.id, view, period, filters };
-                        const opened = { ...at, ...(opens ?? { tab: 'timeline' as const }) };
+                        const opened = { ...at, ...(opens ?? { tab: 'sequence' as const }) };
                         return (
                             <tr
                                 key={campaign.id}

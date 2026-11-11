@@ -16,6 +16,7 @@ import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { registry } from '../platform/slots';
 import { resolvedTheme } from '../platform/theme';
 import { navigate, parseRoute, type Route } from '../router';
+import { CampaignChat } from '../screens/campaigns/campaign-chat';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
@@ -27,7 +28,7 @@ import * as connect from './connect';
 import * as needs from './needs';
 import { Painted } from './painted';
 import { sideView } from './side';
-import { bind, changeChat, chats, clock, keepLine, streamState, type Dock, type PanelName } from './state';
+import { bind, changeChat, chats, clock, here, keepLine, streamState, type Dock, type PanelName } from './state';
 
 // The desktop's shell: a sidebar and a dock. Home is the Live chat; beside it the panels the console draws itself from
 // the Runtime API, and a page panel that shows the browser shell's screens. The dock's layout is not kept: every
@@ -49,12 +50,23 @@ function ChatTab({ params, api }: IDockviewPanelProps<{ chatId: string }>) {
     return <ChatPanel chatId={params.chatId} />;
 }
 
+/** What a campaign's Chat in the page panel does: brings forward the newest chat about the campaign the console still
+ *  holds, and opens one only when there is none. One function for every render, so the pages it is handed to keep it. */
+function chatAbout(campaign: { id: string; name: string }): void {
+    const held = Object.values(chats.value).filter((chat) => chat.campaignId === campaign.id);
+    const newest = held[held.length - 1]; // the console keeps its chats in the order they were opened
+    if (newest) here().dock.showChat(newest.id);
+    else here().dock.chat(campaign);
+}
+
 function PagePanel() {
     return (
         <div className="harness">
             <div className="app chromeless">
                 <div className="content">
-                    <CurrentPage />
+                    <CampaignChat.Provider value={chatAbout}>
+                        <CurrentPage />
+                    </CampaignChat.Provider>
                 </div>
             </div>
         </div>

@@ -72,8 +72,8 @@ function WorkRow({ item, now, zone }: { item: WorkItemSummary; now: Date; zone: 
 }
 
 /**
- * The campaign over time: what is planned, what waits for you and what is running above the now line, and below it
- * what its journal says, by day, narrowed by chips as a person's timeline is.
+ * The campaign's Sequence: what is planned, what waits for you and what is running above the now line, and below it,
+ * as its last section, What happened: what its journal says, by day, narrowed by chips as a person's timeline is.
  */
 export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) {
     const api = useApi();
@@ -170,40 +170,45 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
                     <span className="pill">now {clock(now, zone)}</span>
                     <span className="line" />
                 </div>
-                {timeline.linesLoaded.value && mine && lines.length === 0 && (
-                    <div className="empty">Nothing here yet.</div>
-                )}
-                {groupByDay(lines, (entry) => new Date(entry.ts), zone).map((group) => (
-                    <div key={group.day}>
-                        <div className="group">{dayLabel(group.day, today)}</div>
-                        {group.items.map((entry) => {
-                            const label = entryLabel(entry, me);
-                            const link = linkOf(entry);
-                            const body = (
-                                <>
-                                    <span className={`mark ${label.mark.kind}`}>{label.mark.glyph}</span>
-                                    <span className="what">
-                                        <span className="name">{lineTitle(entry, me)}</span>
-                                        {label.note && <span className="in">{label.note}</span>}
-                                    </span>
-                                    <span className="meta">
-                                        <time>{clock(new Date(entry.ts), zone)}</time>
-                                    </span>
-                                </>
-                            );
-                            return link ? (
-                                <a key={entry.id} className="row" href={link}>
-                                    {body}
-                                </a>
-                            ) : (
-                                <div key={entry.id} className="row">
-                                    {body}
-                                </div>
-                            );
-                        })}
+                <section className="campaign-tabs-happened" aria-labelledby="campaign-tabs-happened">
+                    <div className="group" id="campaign-tabs-happened">
+                        What happened
                     </div>
-                ))}
-                <More more={timeline.linesCursor.value ? () => timeline.moreLines(api, subject) : null} />
+                    {timeline.linesLoaded.value && mine && lines.length === 0 && (
+                        <div className="empty">Nothing here yet.</div>
+                    )}
+                    {groupByDay(lines, (entry) => new Date(entry.ts), zone).map((group) => (
+                        <div key={group.day}>
+                            <div className="group">{dayLabel(group.day, today)}</div>
+                            {group.items.map((entry) => {
+                                const label = entryLabel(entry, me);
+                                const link = linkOf(entry);
+                                const body = (
+                                    <>
+                                        <span className={`mark ${label.mark.kind}`}>{label.mark.glyph}</span>
+                                        <span className="what">
+                                            <span className="name">{lineTitle(entry, me)}</span>
+                                            {label.note && <span className="in">{label.note}</span>}
+                                        </span>
+                                        <span className="meta">
+                                            <time>{clock(new Date(entry.ts), zone)}</time>
+                                        </span>
+                                    </>
+                                );
+                                return link ? (
+                                    <a key={entry.id} className="row" href={link}>
+                                        {body}
+                                    </a>
+                                ) : (
+                                    <div key={entry.id} className="row">
+                                        {body}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
+                    <More more={timeline.linesCursor.value ? () => timeline.moreLines(api, subject) : null} />
+                </section>
             </div>
         </div>
     );

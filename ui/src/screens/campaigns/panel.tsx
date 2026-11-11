@@ -1,7 +1,8 @@
 import type { Campaign, CampaignActivityRow, CampaignSummaryRow } from '../../api/types';
-import { href, type CampaignTab, type Route } from '../../router';
+import { campaignTabs, href, type CampaignTab, type Route } from '../../router';
 import { periodLabels } from '../../time/periods';
 import { activityColumns, summaryColumns } from './labels';
+import { useCampaignChat } from './campaign-chat';
 import { ActionsRow } from '../../layout/actions-row';
 import { PanelHeader } from '../../layout/panel-header';
 import { Tabs } from '../../layout/tabs';
@@ -12,11 +13,18 @@ type Props = {
     campaign: Campaign;
     at: At;
     counted: CampaignSummaryRow | CampaignActivityRow | null;
-    onAct: (act: 'pause' | 'start' | 'add') => void;
+    onAct: (act: 'add') => void;
     onClose: () => void;
 };
 
-const tabNames: Record<CampaignTab, string> = { timeline: 'Timeline', people: 'People', details: 'Details' };
+const tabNames: Record<CampaignTab, string> = {
+    sequence: 'Sequence',
+    people: 'People',
+    inbox: 'Inbox',
+    results: 'Results',
+    settings: 'Settings',
+};
+
 const number = new Intl.NumberFormat('en-US');
 
 /** "active · 22 people · reply campaign 4711": where it stands, how many it holds, and the provider campaign it is linked to. */
@@ -44,6 +52,8 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
         (c) => c.column !== false,
     );
     const linked = at.view === 'activity' || (row?.['sequence_linked'] ?? true) !== false;
+    // Inside the desktop the Chat tab opens a chat about the campaign; it is no address, so it selects nothing here.
+    const chat = useCampaignChat();
     return (
         <>
             <PanelHeader
@@ -59,17 +69,6 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                 onClose={onClose}
             />
             <ActionsRow>
-                {/* A draft is taken live by the planner or the command line; an archived campaign is over. */}
-                {campaign.status === 'active' && (
-                    <button className="btn" type="button" onClick={() => onAct('pause')}>
-                        Pause
-                    </button>
-                )}
-                {campaign.status === 'paused' && (
-                    <button className="btn" type="button" onClick={() => onAct('start')}>
-                        Start
-                    </button>
-                )}
                 <button className="btn" type="button" onClick={() => onAct('add')}>
                     Add people
                 </button>
@@ -94,14 +93,25 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                         })}
                 </div>
             )}
-            <Tabs
-                tabs={(['timeline', 'people', 'details'] as const).map((each) => ({
-                    key: each,
-                    label: each === 'people' && at.view === 'activity' ? 'People Activity' : tabNames[each],
-                }))}
-                active={at.tab}
-                to={to}
-            />
+            <div className="campaign-tabs">
+                {chat && (
+                    <button
+                        className="campaign-tabs-chat"
+                        type="button"
+                        onClick={() => chat({ id: campaign.id, name: campaign.name })}
+                    >
+                        Chat
+                    </button>
+                )}
+                <Tabs
+                    tabs={campaignTabs.map((each) => ({
+                        key: each,
+                        label: each === 'people' && at.view === 'activity' ? 'People Activity' : tabNames[each],
+                    }))}
+                    active={at.tab}
+                    to={to}
+                />
+            </div>
         </>
     );
 }

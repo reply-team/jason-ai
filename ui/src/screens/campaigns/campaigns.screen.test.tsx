@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
-import { href, route, type Route } from '../../router';
+import { App } from '../../app';
+import { CampaignChat } from './campaign-chat';
+import { href, parseRoute, route, type Route } from '../../router';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock, in UTC here.
 const recordedAt = new Date('2026-10-16T09:00:00Z');
@@ -16,7 +18,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-const table: Route = { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} };
+const table: Route = { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} };
 
 /** Opens the screen the way an address does: renderApp clears the address, and its late change event must agree with ours. */
 function open(api: FakeApi, to: Route = table) {
@@ -100,7 +102,7 @@ describe('Campaigns', () => {
                 'campaign.summary/some',
             )
             .answer('campaign.get', 'campaign.get/details');
-        open(api, { ...table, id: 'cmp_1', tab: 'details' });
+        open(api, { ...table, id: 'cmp_1', tab: 'settings' });
         expect(await screen.findByRole('link', { name: '3 waiting' })).toBeTruthy();
         await screen.findByRole('cell', { name: /^Autumn/ });
         const find = screen.getByRole('searchbox', { name: 'Find a campaign' });
@@ -109,7 +111,7 @@ describe('Campaigns', () => {
         await waitFor(() => expect(sent(api, 'campaign.list')).toHaveLength(2), { timeout: 2000 });
         expect(sent(api, 'campaign.list')[1]).toEqual(fixtures['campaign.list/screen-query'].request);
         await waitFor(() => expect(screen.queryByRole('cell', { name: /^Autumn/ })).toBeNull());
-        expect(location.hash).toBe('#/campaigns/cmp_1/details?q=spr');
+        expect(location.hash).toBe('#/campaigns/cmp_1/settings?q=spr');
         expect(screen.getByRole('link', { name: '3 waiting' })).toBeTruthy();
 
         fireEvent.input(find, { target: { value: '' } });
@@ -127,7 +129,7 @@ describe('Campaigns', () => {
             fixtures['campaign.list/screen'].request,
             fixtures['campaign.list/screen-query'].request,
         ]);
-        expect(location.hash).toBe('#/campaigns/cmp_1/details?q=spr');
+        expect(location.hash).toBe('#/campaigns/cmp_1/settings?q=spr');
         // The counts read: the table's with each listing, and the open campaign's once, when it opened.
         expect(sent(api, 'campaign.summary')).toEqual([
             fixtures['campaign.summary/all'].request,
@@ -206,7 +208,7 @@ describe('Campaigns', () => {
 });
 
 describe('The campaign panel', () => {
-    const spring: Route = { ...table, id: 'cmp_1', tab: 'details' };
+    const spring: Route = { ...table, id: 'cmp_1', tab: 'settings' };
 
     function panelApi() {
         return new FakeApi()
@@ -215,7 +217,7 @@ describe('The campaign panel', () => {
             .answer('campaign.get', 'campaign.get/details');
     }
 
-    it('says what the campaign is, counts its people as the table does, and shows its record under Details', async () => {
+    it('says what the campaign is, counts its people as the table does, and shows its record under Settings', async () => {
         const api = panelApi();
         open(api, spring);
 
@@ -233,7 +235,36 @@ describe('The campaign panel', () => {
         expect(screen.getByText('A two-week pilot of the reconciliation tool.')).toBeTruthy();
         expect(screen.getByText('Provider ids')).toBeTruthy();
         expect(screen.getByText('Raw campaign record')).toBeTruthy();
-        expect(screen.getByRole('tab', { name: 'Details' }).getAttribute('aria-selected')).toBe('true');
+        expect(screen.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected')).toBe('true');
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'Sequence',
+            'People',
+            'Inbox',
+            'Results',
+            'Settings',
+        ]);
+        // The browser hands no way to open a chat, so there is no Chat tab.
+        expect(screen.queryByRole('button', { name: 'Chat' })).toBeNull();
+    });
+
+    it('inside the desktop has a Chat tab, which opens a chat about the campaign and moves nowhere', async () => {
+        const api = panelApi();
+        const chat = vi.fn();
+        const { rerender } = renderApp(api);
+        rerender(
+            <CampaignChat.Provider value={chat}>
+                <App api={api} uiApiVersion="v1" />
+            </CampaignChat.Provider>,
+        );
+        location.hash = href(spring);
+        route.value = spring;
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Chat' }));
+
+        expect(chat).toHaveBeenCalledTimes(1);
+        expect(chat).toHaveBeenCalledWith({ id: 'cmp_1', name: 'Spring' });
+        expect(location.hash).toBe('#/campaigns/cmp_1/settings');
+        expect(screen.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected')).toBe('true');
     });
 
     it('closes back to the table', async () => {
@@ -251,7 +282,7 @@ describe('The campaign panel', () => {
             .answer('campaign.summary', 'campaign.summary/all')
             .answer('campaign.get', 'campaign.get/unknown')
             .answer('contact.list', 'contact.list/by-activity');
-        open(api, { ...table, id: fixtures['campaign.get/unknown'].request.campaign_id, tab: 'timeline' });
+        open(api, { ...table, id: fixtures['campaign.get/unknown'].request.campaign_id, tab: 'sequence' });
 
         expect((await screen.findByRole('status')).textContent).toContain('no longer exists');
         await waitFor(() => expect(location.hash).toBe('#/campaigns'));
@@ -560,6 +591,91 @@ describe('A campaign’s people', () => {
         expect(await screen.findByRole('heading', { level: 2, name: 'Spring' })).toBeTruthy();
     });
 
+    it('anybody not waiting for you opens in the person panel in place, from this campaign, and Close returns to the list', async () => {
+        const api = peopleApi('campaign.list_contacts/summary-failed')
+            .answer('contact.get', 'contact.get/imported')
+            .answer('workitem.list', 'workitem.list/by-contact-open-imported')
+            .answer('journal.list', 'journal.list/by-contact-empty')
+            .answer('suppression.list', 'suppression.list/grace-email-clear');
+        open(api, people('failed'));
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+        const address = location.hash;
+
+        fireEvent.click(await row('Cleo Example'));
+
+        const person = await waitFor(() => {
+            const shown = document.querySelector<HTMLElement>('.person-panel');
+            expect(shown && within(shown).queryByRole('heading', { level: 2 })).toBeTruthy();
+            return shown!;
+        });
+        expect(sent(api, 'contact.get')).toEqual([fixtures['contact.get/imported'].request]);
+        expect(location.hash).toBe(address);
+        // The panel keeps its tab itself: the address stays the campaign's.
+        fireEvent.click(within(person).getByRole('tab', { name: 'Details' }));
+        expect(location.hash).toBe(address);
+
+        fireEvent.click(within(person).getByRole('button', { name: 'Close' }));
+        expect(document.querySelector('.person-panel')).toBeNull();
+        expect(await row('Cleo Example')).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 2, name: 'Spring' })).toBeTruthy();
+    });
+
+    /** The People tab under Failed with Cleo opened in the person panel, and what each test goes on to read. */
+    async function cleoOpen(api: FakeApi): Promise<void> {
+        api.answer('contact.get', 'contact.get/imported')
+            .answer('workitem.list', 'workitem.list/by-contact-open-imported')
+            .answer('journal.list', 'journal.list/by-contact-empty');
+        open(api, people('failed'));
+        fireEvent.click(await row('Cleo Example'));
+        await waitFor(() => expect(document.querySelector('.person-panel .panel-header h2')).toBeTruthy());
+    }
+
+    it('a person opened in place is let go when another count of the campaign is clicked in the table', async () => {
+        const api = peopleApi('campaign.list_contacts/summary-failed', 'campaign.list_contacts/summary-waiting');
+        await cleoOpen(api);
+
+        const spring = (await screen.findByRole('cell', { name: 'Spring' })).closest('tr')!;
+        const waiting = within(spring)
+            .getAllByRole('link')
+            .find((link) => link.getAttribute('href') === '#/campaigns/cmp_1/people?filter=waiting')!;
+        fireEvent.click(waiting);
+
+        expect(await row('Ben Example')).toBeTruthy();
+        expect(document.querySelector('.person-panel')).toBeNull();
+    });
+
+    it('a person opened in place is not shown again when the campaign is left and opened again', async () => {
+        const autumn = fixtures['campaign.get/unlinked'].response.id;
+        const api = peopleApi(
+            'campaign.list_contacts/summary-failed',
+            'campaign.list_contacts/unlinked',
+            'campaign.list_contacts/summary-failed',
+        )
+            .answer('campaign.get', 'campaign.get/details', 'campaign.get/unlinked')
+            .answer(
+                'campaign.summary',
+                'campaign.summary/some',
+                'campaign.summary/all',
+                'campaign.summary/unlinked',
+                'campaign.summary/some',
+            );
+        await cleoOpen(api);
+
+        const away = { ...table, id: autumn, tab: 'people' as const };
+        location.hash = href(away);
+        route.value = away;
+        await screen.findByRole('heading', { level: 2, name: 'Autumn' });
+        expect(document.querySelector('.person-panel')).toBeNull();
+
+        const back = people('failed');
+        location.hash = href(back);
+        route.value = back;
+
+        await screen.findByRole('heading', { level: 2, name: 'Spring' });
+        expect(await row('Cleo Example')).toBeTruthy();
+        expect(document.querySelector('.person-panel')).toBeNull();
+    });
+
     it('a number opened after the world moved shows the list as it is now', async () => {
         // The table was read when Waiting was 3; the panel asks again and the runtime now says 2.
         const api = peopleApi('campaign.list_contacts/summary-waiting-after').answer(
@@ -601,7 +717,7 @@ describe('A campaign’s people', () => {
     });
 });
 
-describe('A campaign’s Timeline', () => {
+describe('A campaign’s Sequence', () => {
     function timelineApi() {
         return new FakeApi()
             .answer('campaign.list', 'campaign.list/screen')
@@ -615,7 +731,7 @@ describe('A campaign’s Timeline', () => {
 
     it('puts what waits for you and what runs above now, and the campaign’s journal below it', async () => {
         const api = timelineApi();
-        open(api, { ...table, id: 'cmp_1', tab: 'timeline' });
+        open(api, { ...table, id: 'cmp_1', tab: 'sequence' });
 
         expect(await screen.findByText('Waiting for you')).toBeTruthy();
         expect(screen.getByText('Running')).toBeTruthy();
@@ -623,6 +739,11 @@ describe('A campaign’s Timeline', () => {
         // The questions about the whole campaign wait here too, though they count for nobody.
         expect(screen.getAllByText('Follow up on LinkedIn?')).toHaveLength(3);
         expect(await screen.findByText(/Holding the sends over the holiday\./)).toBeTruthy();
+        // The journal's lines are the last section, under What happened, below the now line.
+        const happened = screen.getByRole('region', { name: 'What happened' });
+        expect(within(happened).getByText(/Holding the sends over the holiday\./)).toBeTruthy();
+        expect(within(happened).queryByText('Running')).toBeNull();
+        expect(happened.parentElement?.lastElementChild).toBe(happened);
         // The runtime says what is planned and what runs, each in its own read: the page splits nothing itself.
         expect(sent(api, 'workitem.list')).toEqual([
             fixtures['workitem.list/by-campaign-planned'].request,
@@ -633,9 +754,19 @@ describe('A campaign’s Timeline', () => {
         expect(sent(api, 'journal.list')).toEqual([fixtures['journal.list/by-campaign'].request]);
     });
 
+    it('opens first, and is where an address naming a tab that is gone opens', async () => {
+        const api = timelineApi();
+        const gone = parseRoute('#/campaigns/cmp_1/timeline');
+        open(api, gone);
+
+        expect(await screen.findByText('Waiting for you')).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'Sequence' }).getAttribute('aria-selected')).toBe('true');
+        expect(screen.getAllByRole('tab')[0]?.textContent).toBe('Sequence');
+    });
+
     it('Changes lists what was done to the campaign itself', async () => {
         const api = timelineApi();
-        open(api, { ...table, id: 'cmp_1', tab: 'timeline' });
+        open(api, { ...table, id: 'cmp_1', tab: 'sequence' });
         // The timeline's first read goes out once the panel has painted; a chip clicked before it would be overridden.
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(1));
 
@@ -647,9 +778,9 @@ describe('A campaign’s Timeline', () => {
         expect(await screen.findByText(/Holding the sends over the holiday\./)).toBeTruthy();
     });
 
-    it('a waiting approval opens in place, and Back finds the timeline under the chip it left', async () => {
+    it('a waiting approval opens in place, and Back finds the sequence under the chip it left', async () => {
         const api = timelineApi().answer('approval.get', 'approval.get/for-campaign-row');
-        open(api, { ...table, id: 'cmp_1', tab: 'timeline' });
+        open(api, { ...table, id: 'cmp_1', tab: 'sequence' });
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(1));
         fireEvent.click(screen.getByRole('button', { name: 'Changes' }));
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(2));
@@ -668,7 +799,7 @@ describe('A campaign’s Timeline', () => {
         // Closed and opened again, the campaign starts on All.
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         await waitFor(() => expect(location.hash).toBe('#/campaigns'));
-        const again: Route = { ...table, id: 'cmp_1', tab: 'timeline' };
+        const again: Route = { ...table, id: 'cmp_1', tab: 'sequence' };
         location.hash = href(again);
         route.value = again;
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(4));
@@ -676,8 +807,241 @@ describe('A campaign’s Timeline', () => {
     });
 });
 
+describe('A campaign’s Inbox', () => {
+    const pilot: Route = { ...table, id: fixtures['campaign.get/inbox'].request.campaign_id, tab: 'inbox' };
+
+    function inboxApi() {
+        return new FakeApi()
+            .answer('campaign.list', 'campaign.list/inbox')
+            .answer('campaign.summary', 'campaign.summary/inbox-all', 'campaign.summary/inbox-one')
+            .answer('campaign.get', 'campaign.get/inbox')
+            .answer('journal.list', 'journal.list/by-campaign-replies');
+    }
+
+    /** Each person's section, by the name it is headed with. */
+    const person = (name: string) =>
+        screen.getByRole('heading', { level: 3, name }).closest('.campaign-tabs-inbox-person') as HTMLElement;
+
+    it('lists who replied in the order Jason observed it, each with their threads asked of the plugin their line names', async () => {
+        const api = inboxApi().answer('contact.threads', 'contact.threads/inbox-paula', 'contact.threads/inbox-mateo');
+        open(api, pilot);
+
+        expect(await screen.findByText(/Re: Soluna's next quarter/)).toBeTruthy();
+        expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+            'Paula Mendes',
+            'Mateo Ruiz',
+        ]);
+        expect(within(person('Mateo Ruiz')).getByText(/Happy to connect\./)).toBeTruthy();
+        // Paula is linked through an account no route reaches: the threads view says so in its own words, once.
+        expect(within(person('Paula Mendes')).getByText(/no route reaches the reply account/)).toBeTruthy();
+        expect(within(person('Paula Mendes')).queryByRole('button', { name: 'Try again' })).toBeNull();
+        // Paula's line was written at 08:50 for a move the provider made at 07:35: the reply's moment is the provider's,
+        // and the line keeps its place in the order Jason observed the replies.
+        expect(within(person('Paula Mendes')).getByText(/^replied 07:35/)).toBeTruthy();
+        expect(within(person('Paula Mendes')).queryByText(/08:50/)).toBeNull();
+        expect(within(person('Mateo Ruiz')).getByText(/^replied 08:41/)).toBeTruthy();
+        expect(screen.getByText(/in the order Jason observed them/)).toBeTruthy();
+        // The newest line is tied to nobody: its channel and moment, and no read for it.
+        const untied = document.querySelector('.campaign-tabs-inbox-untied') as HTMLElement;
+        expect(untied.textContent).toMatch(/LinkedIn/);
+        expect(untied.textContent).toMatch(/no person in Jason is tied to it/);
+        expect(within(untied).getByText('08:55')).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'Inbox' }).getAttribute('aria-selected')).toBe('true');
+
+        expect(sent(api, 'journal.list')).toEqual([fixtures['journal.list/by-campaign-replies'].request]);
+        expect(sent(api, 'route.resolve')).toEqual([]);
+        // One read per person and plugin, newest line first, each with the plugin its line names.
+        expect(sent(api, 'contact.threads')).toEqual([
+            fixtures['contact.threads/inbox-paula'].request,
+            fixtures['contact.threads/inbox-mateo'].request,
+        ]);
+        const lines = fixtures['journal.list/by-campaign-replies'].response.items;
+        expect(sent(api, 'contact.threads').map((body) => body['plugin_id'])).toEqual(
+            lines.filter((l) => l.contact_id !== null).map((l) => (l.new as { plugin: string }).plugin),
+        );
+    });
+
+    it('reads again when the person refreshes it, lines and threads both', async () => {
+        const api = inboxApi().answer('contact.threads', 'contact.threads/inbox-paula', 'contact.threads/inbox-mateo');
+        open(api, pilot);
+        expect(await screen.findByText(/Re: Soluna's next quarter/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh the inbox' }));
+        await waitFor(() => expect(sent(api, 'contact.threads')).toHaveLength(4));
+        expect(sent(api, 'journal.list')).toHaveLength(2);
+        expect(await screen.findByText(/Re: Soluna's next quarter/)).toBeTruthy();
+    });
+
+    it('a campaign no reply was observed in says so, and reads nothing else', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/inbox')
+            .answer('campaign.summary', 'campaign.summary/inbox-all', 'campaign.summary/inbox-quiet')
+            .answer('campaign.get', 'campaign.get/inbox-quiet')
+            .answer('journal.list', 'journal.list/by-campaign-replies-none');
+        open(api, { ...pilot, id: fixtures['campaign.get/inbox-quiet'].request.campaign_id });
+
+        expect(await screen.findByText('No reply has been observed in this campaign yet.')).toBeTruthy();
+        expect(sent(api, 'journal.list')).toEqual([fixtures['journal.list/by-campaign-replies-none'].request]);
+        expect(sent(api, 'route.resolve')).toEqual([]);
+        expect(sent(api, 'contact.threads')).toEqual([]);
+    });
+
+    it('asks again from an empty Inbox, which has its Refresh as every Inbox does', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/inbox')
+            .answer('campaign.summary', 'campaign.summary/inbox-all', 'campaign.summary/inbox-quiet')
+            .answer('campaign.get', 'campaign.get/inbox-quiet')
+            .answer('journal.list', 'journal.list/by-campaign-replies-none');
+        open(api, { ...pilot, id: fixtures['campaign.get/inbox-quiet'].request.campaign_id });
+        expect(await screen.findByText('No reply has been observed in this campaign yet.')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh the inbox' }));
+
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(2));
+        expect(sent(api, 'journal.list')[1]).toEqual(fixtures['journal.list/by-campaign-replies-none'].request);
+    });
+
+    it('a read that failed says why, does not claim to load, and can be asked again', async () => {
+        const api = inboxApi().answer('contact.threads', 'contact.threads/inbox-paula', 'contact.threads/inbox-mateo');
+        const reachable = api.unreachable('journal.list');
+        open(api, pilot);
+
+        expect((await screen.findByText(/Failed to fetch/)).closest('.notice')).toBeTruthy();
+        expect(screen.queryByText('loading…')).toBeNull();
+
+        reachable();
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh the inbox' }));
+        expect(await screen.findByText(/Re: Soluna's next quarter/)).toBeTruthy();
+        expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+    });
+
+    it('is read again by the toolbar’s Refresh while it is open', async () => {
+        const api = inboxApi().answer('contact.threads', 'contact.threads/inbox-paula', 'contact.threads/inbox-mateo');
+        open(api, pilot);
+        expect(await screen.findByText(/Re: Soluna's next quarter/)).toBeTruthy();
+
+        fireEvent.click(screen.getByTitle('Refresh'));
+
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(2));
+        await waitFor(() => expect(sent(api, 'contact.threads')).toHaveLength(4));
+    });
+});
+
+describe('A campaign’s Results', () => {
+    /** The figures as the page shows them: each tile's name and its number. */
+    async function figures(): Promise<string[]> {
+        const group = await screen.findByRole('group', { name: 'The campaign’s results' });
+        await waitFor(() => expect(group.getAttribute('aria-busy')).toBe('false'));
+        return within(group)
+            .getAllByRole('figure')
+            .map((tile) => tile.getAttribute('aria-label') ?? '');
+    }
+
+    it('shows four figures as the runtime counts them: its people now, and the period’s contacted, replied and opted out', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.activity', 'campaign.activity/one');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+
+        // Each figure says what it measures over: the people now, the other three in the period, so none reads as one measure.
+        expect(await figures()).toEqual([
+            'People now, 22',
+            'Contacted in the last 7 days, 4',
+            'Replied in the last 7 days, 2',
+            'Opted out in the last 7 days, 2',
+        ]);
+        expect(screen.getByRole('tab', { name: 'Results' }).getAttribute('aria-selected')).toBe('true');
+        expect(screen.getAllByText('in the last 7 days')).toHaveLength(3);
+        expect(screen.getAllByText('now')).toHaveLength(1);
+        // Two reads, each the runtime's answer: nothing on the page divides one figure by another.
+        expect(sent(api, 'campaign.summary')).toContainEqual(fixtures['campaign.summary/some'].request);
+        expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/one'].request]);
+        expect(screen.queryByText(/%/)).toBeNull();
+    });
+
+    it('a campaign nothing has happened in yet shows its zeros, not blanks', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/summer')
+            .answer('campaign.get', 'campaign.get/summer')
+            .answer('campaign.activity', 'campaign.activity/summer');
+        open(api, { ...table, id: fixtures['campaign.get/summer'].request.campaign_id, tab: 'results' });
+
+        expect(await figures()).toEqual([
+            'People now, 2',
+            'Contacted in the last 7 days, 0',
+            'Replied in the last 7 days, 0',
+            'Opted out in the last 7 days, 0',
+        ]);
+        expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/summer'].request]);
+    });
+
+    function resultsApi() {
+        return new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.activity', 'campaign.activity/one');
+    }
+
+    it('a read that failed says why, and is neither busy nor shows a figure', async () => {
+        const api = resultsApi();
+        api.unreachable('campaign.activity');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+
+        expect((await screen.findByText(/Failed to fetch/)).closest('.notice')).toBeTruthy();
+        expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+        expect(screen.queryAllByRole('figure')).toEqual([]);
+        expect(screen.queryByText('…')).toBeNull();
+    });
+
+    it('a failure is said over its own tab only: going to Sequence leaves it behind', async () => {
+        const api = resultsApi()
+            .answer('workitem.list', 'workitem.list/by-campaign-planned', 'workitem.list/by-campaign-running')
+            .answer('approval.list', 'approval.list/by-campaign-pending')
+            .answer('decision.list', 'decision.list/by-campaign-pending')
+            .answer('journal.list', 'journal.list/by-campaign');
+        api.unreachable('campaign.activity');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        expect(await screen.findByText(/Failed to fetch/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Sequence' }));
+
+        expect(await screen.findByRole('region', { name: 'What happened' })).toBeTruthy();
+        expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+    });
+
+    it('a late failure of one campaign’s read is never said over another campaign', async () => {
+        const api = resultsApi()
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some', 'campaign.summary/summer')
+            .answer('campaign.get', 'campaign.get/details', 'campaign.get/summer');
+        // Spring's period counts fail, but only once Summer is open.
+        const asked = api.call.bind(api);
+        let refuse = () => {};
+        const late = new Promise<void>((resolve) => (refuse = resolve));
+        api.call = (async (operation: string, body?: object, kind?: 'read' | 'write') => {
+            if (operation !== 'campaign.activity') return asked(operation, body, kind);
+            await late;
+            throw new TypeError('Failed to fetch');
+        }) as typeof api.call;
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await screen.findByRole('heading', { level: 2, name: 'Spring' });
+
+        const summer = { ...table, id: fixtures['campaign.get/summer'].request.campaign_id, tab: 'settings' as const };
+        location.hash = href(summer);
+        route.value = summer;
+        await screen.findByRole('heading', { level: 2, name: fixtures['campaign.get/summer'].response.name });
+        refuse();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+    });
+});
+
 describe('What the panel does', () => {
-    const details: Route = { ...table, id: 'cmp_1', tab: 'details' };
+    const details: Route = { ...table, id: 'cmp_1', tab: 'settings' };
 
     /** Each write is followed by the campaign's numbers and then the table's, read again in that order. */
     function actionsApi(get: 'campaign.get/details' | 'campaign.get/archived' = 'campaign.get/details', writes = 0) {
@@ -690,6 +1054,8 @@ describe('What the panel does', () => {
     }
 
     const actions = () => document.querySelector('.panel > .panel-actions') as HTMLElement;
+    /** Settings' own row: where a campaign is started, paused and resumed. */
+    const settings = () => document.querySelector('.campaign-tabs-settings') as HTMLElement;
 
     /** Chooses a person in the open Add people dialog, searching for them first when the first page does not offer them. */
     async function choose(dialog: HTMLElement, name: string, search?: string) {
@@ -699,7 +1065,7 @@ describe('What the panel does', () => {
         fireEvent.click(await within(dialog).findByRole('option', { name: new RegExp(name) }, { timeout: 2000 }));
     }
 
-    it('Pause says what pausing does, Escape leaves it, the reason is sent, and Start releases the work again', async () => {
+    it('Pause says what pausing does, Escape leaves it, the reason is sent, and Resume releases the work again', async () => {
         const api = actionsApi()
             .answer('campaign.pause', 'campaign.pause/with-reason')
             .answer('campaign.start', 'campaign.start/after-pause')
@@ -708,13 +1074,13 @@ describe('What the panel does', () => {
         open(api, details);
         await screen.findByRole('heading', { level: 2, name: 'Spring' });
 
-        fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
+        fireEvent.click(within(settings()).getByRole('button', { name: 'Pause' }));
         const left = await screen.findByRole('dialog', { name: 'Pause Spring' });
         await waitFor(() => expect(left.contains(document.activeElement)).toBe(true));
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
-        fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
+        fireEvent.click(within(settings()).getByRole('button', { name: 'Pause' }));
         const dialog = await screen.findByRole('dialog', { name: 'Pause Spring' });
         expect(dialog.textContent).toContain(
             "Jason stops releasing this campaign's work. Work already running finishes. Reply's sequence keeps sending until a role pauses it there. Your reason is recorded.",
@@ -731,12 +1097,14 @@ describe('What the panel does', () => {
             expect((document.querySelector('.panel-header') as HTMLElement).textContent).toContain('paused'),
         );
 
-        fireEvent.click(within(actions()).getByRole('button', { name: 'Start' }));
-        const start = await screen.findByRole('dialog', { name: 'Start Spring' });
+        // Pause and Resume are not in the header: Settings holds them, and Add people stays where it was.
+        expect(within(actions()).queryByRole('button', { name: 'Resume' })).toBeNull();
+        fireEvent.click(within(settings()).getByRole('button', { name: 'Resume' }));
+        const start = await screen.findByRole('dialog', { name: 'Resume Spring' });
         expect(start.textContent).toContain("Jason releases this campaign's work again.");
-        // Another campaign is opened while Start is on its way: the answer, and what is read after it, leave it open.
+        // Another campaign is opened while Resume is on its way: the answer, and what is read after it, leave it open.
         const release = api.hold('campaign.start');
-        fireEvent.click(within(start).getByRole('button', { name: 'Start' }));
+        fireEvent.click(within(start).getByRole('button', { name: 'Resume' }));
         await waitFor(() =>
             expect(sent(api, 'campaign.start')).toEqual([written(fixtures['campaign.start/after-pause'].request)]),
         );
@@ -754,6 +1122,25 @@ describe('What the panel does', () => {
             ]),
         );
         expect(screen.getByRole('heading', { level: 2, name: 'Autumn' })).toBeTruthy();
+    });
+
+    it('a draft is started from Settings, saying that its work is released for the first time', async () => {
+        const autumn = fixtures['campaign.get/unlinked'].response;
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/unlinked')
+            .answer('campaign.get', 'campaign.get/unlinked');
+        open(api, { ...details, id: autumn.id });
+        await screen.findByRole('heading', { level: 2, name: autumn.name });
+
+        expect(within(settings()).queryByRole('button', { name: 'Pause' })).toBeNull();
+        expect(within(settings()).queryByRole('button', { name: 'Resume' })).toBeNull();
+        fireEvent.click(within(settings()).getByRole('button', { name: 'Start' }));
+        const start = await screen.findByRole('dialog', { name: `Start ${autumn.name}` });
+        expect(start.textContent).toContain("Jason starts releasing this campaign's work.");
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(sent(api, 'campaign.start')).toEqual([]);
     });
 
     it('Add people adds the people chosen and says what happened to each', async () => {
@@ -792,8 +1179,9 @@ describe('What the panel does', () => {
         open(api, { ...details, id: winter.id });
         await screen.findByRole('heading', { level: 2, name: winter.name });
 
-        expect(within(actions()).queryByRole('button', { name: 'Pause' })).toBeNull();
-        expect(within(actions()).queryByRole('button', { name: 'Start' })).toBeNull();
+        expect(screen.getByText('Raw campaign record')).toBeTruthy();
+        // Settings offers no move to an archived campaign: its row of moves is not drawn at all.
+        expect(settings()).toBeNull();
         fireEvent.click(within(actions()).getByRole('button', { name: 'Add people' }));
         const dialog = await screen.findByRole('dialog', { name: `Add people to ${winter.name}` });
         await choose(dialog, 'Hal Example');

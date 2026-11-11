@@ -10,7 +10,7 @@ export const campaignsPlugin: UiPlugin = {
             id: 'campaigns',
             label: () => t('nav.campaigns'),
             order: 30,
-            href: () => href({ screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} }),
+            href: () => href({ screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} }),
             component: CampaignsScreen,
         });
     },

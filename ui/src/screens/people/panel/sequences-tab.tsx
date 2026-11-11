@@ -81,7 +81,7 @@ export function SequencesTab({ person, now, zone }: Props) {
                                 href={href({
                                     screen: 'campaigns',
                                     id: campaign.campaign_id,
-                                    tab: 'timeline',
+                                    tab: 'sequence',
                                     view: 'summary',
                                     period: '7d',
                                     filters: {},

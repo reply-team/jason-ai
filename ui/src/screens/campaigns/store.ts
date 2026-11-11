@@ -13,12 +13,14 @@ import type {
     CampaignSummaryRow,
     Decision,
     DecisionSummary,
+    JournalEntry,
     MembershipItem,
     MembershipWhy,
     Page,
     WorkItemSummary,
 } from '../../api/types';
 import { mergePage } from '../../lists/paging';
+import { inboxEntriesOf, inboxLines, type InboxEntry } from './inbox-lines';
 import type { CampaignFilters, CampaignView, Period } from '../../router';
 import { periodWindow } from '../../time/periods';
 
@@ -64,12 +66,18 @@ export function listBody(filters: CampaignFilters): Record<string, unknown> {
     return body;
 }
 
-export function fail(error: unknown, into = failure): void {
+/** What a failed read says to a person, or nothing when the pairing is gone and the page asks for it again. */
+function failureText(error: unknown): string | null {
     if (error instanceof Unpaired) {
         session.clear();
-        return;
+        return null;
     }
-    into.value = error instanceof ApiError ? error.message : String(error);
+    return error instanceof ApiError ? error.message : String(error);
+}
+
+export function fail(error: unknown, into = failure): void {
+    const text = failureText(error);
+    if (text !== null) into.value = text;
 }
 
 /** The view's counts for one page of campaigns, in one read: by campaign id. */
@@ -239,7 +247,109 @@ export function close(): void {
     waiting.value = null;
     campaign.value = null;
     counted.value = null;
+    results.value = null;
+    inbox.value = null;
+    tabFailure.value = null;
     panelFailure.value = null;
+}
+
+/**
+ * A Results or an Inbox read that failed, with the campaign and the tab that asked: it is said over that campaign and
+ * that tab only, and leaving the tab lets it go (`leaveTab`).
+ */
+export const tabFailure = signal<{ id: string; tab: 'results' | 'inbox'; text: string } | null>(null);
+
+/** What failed for this campaign's tab, or nothing. */
+export function failedOver(id: string | null, tab: string): string | null {
+    const found = tabFailure.value;
+    return found && found.id === id && found.tab === tab ? found.text : null;
+}
+
+/** The person left a tab: what failed there is not said any more. */
+export function leaveTab(): void {
+    tabFailure.value = null;
+}
+
+function failOver(id: string, tab: 'results' | 'inbox', error: unknown): void {
+    const text = failureText(error);
+    if (text !== null) tabFailure.value = { id, tab, text };
+}
+
+function forget(tab: 'results' | 'inbox'): void {
+    if (tabFailure.value?.tab === tab) tabFailure.value = null;
+}
+
+/**
+ * The Results tab's two answers, with the campaign and the period they were read for: the campaign's people now, from
+ * campaign.summary, and the period's counts, from campaign.activity. The tab shows them as they came; it divides nothing.
+ */
+export const results = signal<{
+    id: string;
+    period: Period;
+    now: CampaignSummaryRow;
+    counts: CampaignActivityRow;
+} | null>(null);
+let resulting = 0;
+
+/** Reads the open campaign's Results again: both answers, or why not, said over this campaign's Results only. */
+export async function loadResults(api: Api, id: string, period: Period, now: Date, zone: string): Promise<void> {
+    const mine = ++resulting;
+    forget('results');
+    try {
+        const [summed, active] = await Promise.all([
+            api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: [id] }),
+            api.call<CampaignActivityResponse>('campaign.activity', {
+                campaign_ids: [id],
+                ...periodWindow(period, now, zone),
+            }),
+        ]);
+        const [row, counts] = [summed.campaigns[0], active.campaigns[0]];
+        if (mine === resulting && row && counts) results.value = { id, period, now: row, counts };
+    } catch (error) {
+        if (mine === resulting) failOver(id, 'results', error);
+    }
+}
+
+/** The Results of this campaign for this period, or none while they are on their way. */
+export function resultsFor(id: string | null, period: Period) {
+    const found = results.value;
+    return found && found.id === id && found.period === period ? found : null;
+}
+
+/**
+ * The Inbox tab: what the campaign's latest `inbound_reply_observed` lines say, as entries (`inboxEntriesOf`). Each
+ * person's threads are asked of the plugin their line names, never of a plugin of the tab's own.
+ */
+export const inbox = signal<{ id: string; read: number; entries: InboxEntry[]; left: number } | null>(null);
+let inboxing = 0;
+
+/**
+ * The person left the Inbox: what it showed goes, and so does every read still on its way, so the tab opened again
+ * shows only what a read made since says.
+ */
+export function leaveInbox(): void {
+    ++inboxing;
+    inbox.value = null;
+}
+
+/**
+ * Reads the Inbox's lines, when the tab opens and when the person asks again; nothing reads it in the background. Each
+ * read is numbered: only the latest is shown, and its number makes the threads read anew.
+ */
+export async function loadInbox(api: Api, id: string): Promise<void> {
+    const mine = ++inboxing;
+    forget('inbox');
+    try {
+        const lines = await api.call<Page<JournalEntry>>('journal.list', {
+            campaign_id: id,
+            kinds: ['inbound_reply_observed'],
+            limit: inboxLines,
+        });
+        const { entries, left } = inboxEntriesOf(lines.items);
+        if (mine === inboxing) inbox.value = { id, read: mine, entries, left };
+    } catch (error) {
+        if (mine === inboxing) failOver(id, 'inbox', error);
+    }
 }
 
 /** What the People tab lists: one count of the view, or All, its everyone; and what the search found. */

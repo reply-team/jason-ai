@@ -1,0 +1,35 @@
+{
+  "operation": "campaign.list",
+  "case": "inbox",
+  "request": {
+    "limit": 100
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cmp_1",
+        "name": "LatAm pilot",
+        "status": "active",
+        "project_id": "prj_1",
+        "project_slug": "default",
+        "created_at": "2026-09-16T00:00:00.000Z",
+        "updated_at": "2026-09-16T00:00:00.000Z",
+        "archived_at": null,
+        "folder_path": null
+      },
+      {
+        "id": "cmp_2",
+        "name": "Re-engage Q2 no-replies",
+        "status": "paused",
+        "project_id": "prj_1",
+        "project_slug": "default",
+        "created_at": "2026-09-16T00:00:00.000Z",
+        "updated_at": "2026-09-16T00:00:00.000Z",
+        "archived_at": null,
+        "folder_path": null
+      }
+    ],
+    "next_cursor": null
+  }
+}
