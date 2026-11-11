@@ -514,7 +514,9 @@ describe('the console', () => {
         );
         expect(panel('Connect').textContent).toContain('It has no binding yet: set its chat id.');
         expect(panel('Connect').textContent).toContain(setupFound.plugins[1]!.note!);
-        expect(panel('Connect').textContent).not.toMatch(/connected/i);
+        // A plugin is configured, never said to be connected; the word is the Reply card's, for the state Reply reports.
+        const pluginsCard = plugins.getByText('Plugins', { selector: 'b' }).closest<HTMLElement>('.card')!;
+        expect(pluginsCard.textContent).not.toMatch(/connected/i);
         expect(plugins.queryByRole('button', { name: /test/i })).toBeNull();
         fireEvent.input(plugins.getByLabelText('Bot token'), { target: { value: ' 123:abc ' } });
         fireEvent.input(plugins.getByLabelText('Chat id'), { target: { value: ' -1001 ' } });

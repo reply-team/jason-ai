@@ -381,6 +381,11 @@ export interface ReplyAccount {
     channel: string;
     name: string;
     address: string;
+    /**
+     * The state Reply reports for the account, its `reply_status` as Reply wrote it (email: connected, disconnected,
+     * unknown; LinkedIn: enabled, disabled, cookieInvalid, dailyLimitReached; or another word); empty when Reply reported
+     * none. The CLI's own `status` summarises it into four words and is not read.
+     */
     status: string;
 }
 
@@ -429,7 +434,7 @@ export function parseReplyAccounts(stdout: string): ReplyAccount[] {
             channel: String(item['channel'] ?? ''),
             name: String(item['name'] ?? ''),
             address: String(item['address'] ?? ''),
-            status: String(item['status'] ?? ''),
+            status: typeof item['reply_status'] === 'string' ? item['reply_status'] : '',
         }));
     } catch {
         return [];

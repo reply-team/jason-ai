@@ -51,7 +51,7 @@ export const setupFound: DesktopSetup = {
         user: 'person@example.test',
         wired: true,
         accounts: [
-            { id: 'acc_1', channel: 'email', name: 'Sales inbox', address: 'sales@example.test', status: 'active' },
+            { id: 'acc_1', channel: 'email', name: 'Sales inbox', address: 'sales@example.test', status: 'connected' },
         ],
     },
     runtimeVersion: '0.34.0',
