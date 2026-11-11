@@ -113,6 +113,32 @@ describe('the desktop’s conversations', () => {
         expect(calls(desktop, 'chat.open')).toHaveLength(1);
     });
 
+    it('reopens on the host, model and effort its last turn was sent with, and the next turn names them again', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000C1',
+            campaignId: 'cmp_1',
+            title: 'Spring',
+            chosen: { host: 'claude', model: 'sonnet', effort: 'low' },
+        });
+        renderConsole(desktop);
+        await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        const panel = hero.closest<HTMLElement>('.chat-panel')!;
+        await waitFor(() =>
+            expect(within(panel).getByRole('combobox', { name: 'Model' })).toHaveProperty('value', 'sonnet'),
+        );
+        expect(within(panel).getByRole('combobox', { name: 'Effort' })).toHaveProperty('value', 'low');
+        const id = await send(desktop, 'And now?', panel);
+        expect(calls(desktop, 'chat.send').at(-1)!.args).toEqual([
+            id,
+            'And now?',
+            { host: 'claude', model: 'sonnet', effort: 'low' },
+        ]);
+        expect(desktop.kept.get(id)?.chosen).toEqual({ host: 'claude', model: 'sonnet', effort: 'low' });
+    });
+
     it('reads the list again when a turn ends, so what the desktop changed meanwhile is listed', async () => {
         const desktop = stubDesktop();
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000B1', campaignId: 'cmp_1', title: 'Spring' });

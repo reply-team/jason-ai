@@ -723,6 +723,16 @@
     max-width: 60%;
     text-overflow: ellipsis;
 }
+/* The model, its typed name and its effort sit beside the host, each kept short so the row holds on a narrow window. */
+.jc-console .composer select.model,
+.jc-console .composer select.effort {
+    max-width: 22%;
+}
+.jc-console .composer .model-name {
+    min-width: 0;
+    width: 11em;
+    max-width: 30%;
+}
 .jc-console .send {
     margin-left: auto;
     width: 34px;
