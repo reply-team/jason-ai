@@ -3,8 +3,10 @@ using Jason.Contracts.Execution;
 namespace Jason.App.Tests.EndToEnd;
 
 /// <summary>
-/// <c>JASON_CONFINED</c> confines the CLI call it is set on, and the runtime is indifferent to it: the shipped program,
-/// asked to start a runtime with the variable set, starts one as it does without it.
+/// <c>JASON_CONFINED</c> confines the CLI call it is set on, and <c>jason runtime start</c> with the variable set starts
+/// a runtime as it does without it. The start drops the variable from the runtime it starts, so this row shows only that
+/// the start is not broken by it; that the runtime itself is indifferent is held by the foreground row in
+/// <see cref="EndToEndTests"/>, which hands the variable to the runtime's own environment.
 /// </summary>
 public class ConfinedRuntimeStartTests
 {
