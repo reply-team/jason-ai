@@ -490,7 +490,8 @@ public static class AutostartArtifacts
     /// The search path as a unit's <c>Environment=</c> spells it: the whole assignment in double quotes, so an entry with
     /// a space in it stays one word, and a per-cent doubled as in the command line. A double quote, a backslash and a
     /// control character have no spelling the unit and the reader below would both agree on, so a search path carrying
-    /// one is refused by name, as a double quote in the command line is.
+    /// one is refused by name, as a double quote in the command line is. Only a registration carries one: a removal is
+    /// composed with none, so the refusal is <c>enable</c>'s and an import's alone, never <c>disable</c>'s.
     /// </summary>
     private static string SystemdPath(string searchPath)
     {

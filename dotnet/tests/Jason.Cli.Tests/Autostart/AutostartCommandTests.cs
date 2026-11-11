@@ -434,6 +434,33 @@ public class AutostartCommandTests
     }
 
     /// <summary>An installation with a recording machine behind it, and its own temporary data directory.</summary>
+    /// <summary>
+    /// A PATH the unit cannot carry refuses `enable` only. A registration is known by its file, not by what a new one
+    /// would hold, so `disable` composes it with no search path and takes away what is there, or says nothing is,
+    /// whatever the terminal's PATH holds: the advice an uninstall gives on a refusal is `disable`, and it must work.
+    /// </summary>
+    [Theory]
+    [InlineData("/home/ada/\"q\"/bin:/usr/bin", true)]
+    [InlineData("/home/ada/\"q\"/bin:/usr/bin", false)]
+    [InlineData("/home/ada/a\\b/bin:/usr/bin", true)]
+    [InlineData("/home/ada/a\\b/bin:/usr/bin", false)]
+    public async Task On_linux_disable_takes_the_unit_away_whatever_the_search_path_holds(string searched, bool registered)
+    {
+        using var machine = new Machine(new RecordingRegistrar(AutostartPlatform.Linux), searched);
+        if (registered)
+        {
+            machine.Registrar.State = new AutostartState(true, [Installed, "runtime", "run", "--detached", "--data-dir", machine.Paths.Root], null);
+        }
+
+        Assert.Equal(ExitCodes.Success, await machine.RunAsync(["runtime", "autostart", "disable"], Ct));
+        Assert.False(machine.Answer().Registered);
+        Assert.Equal(1, machine.Registrar.Removals);
+
+        machine.Clear();
+        Assert.Equal(ExitCodes.ApiError, await machine.RunAsync(["runtime", "autostart", "enable"], Ct));
+        Assert.Empty(machine.Registrar.Applied);
+    }
+
     private sealed class Machine : IDisposable
     {
         private readonly TempPaths _directory = new();

@@ -988,10 +988,10 @@ package manager's own setup most often puts its line. So from 0.35.0 `enable` re
 registers in the unit, as an `Environment=` line, and the runtime starts at logon with it; `jason runtime autostart
 status` says it under `path`, and a unit an earlier version registered carries none, so `--human` names the user
 manager's. A `PATH` with a double quote, a backslash or a control character in an entry has no spelling the unit
-carries, so `enable` refuses it and names the entry. A program installed after the registration, in a directory that
-`PATH` did not hold, is missing to a runtime started at logon until you register again from a terminal whose `PATH`
-has it, with `jason runtime autostart enable`, then `jason runtime restart`. Or start the runtime from that terminal
-instead.
+carries, so `enable` refuses it and names the entry; `disable` and `jason uninstall` take the unit away whatever the
+`PATH` holds. A program installed after the registration, in a directory that `PATH` did not hold, is missing to a
+runtime started at logon until you register again from a terminal whose `PATH` has it, with `jason runtime autostart
+enable`, then `jason runtime restart`. Or start the runtime from that terminal instead.
 
 On macOS the registration is a LaunchAgent, and launchd starts an agent on a search path of its own,
 `/usr/bin:/bin:/usr/sbin:/sbin`, which holds no program a package manager installed. So `enable` records the `PATH`

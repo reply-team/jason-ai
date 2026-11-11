@@ -97,7 +97,7 @@ public static class RuntimeAutostartCommands
         {
             if (registrar.Platform is not AutostartPlatform.Unsupported)
             {
-                registrar.Remove(Registration(env, registrar.Platform));
+                registrar.Remove(Removal(env, registrar.Platform));
             }
 
             return Print(env, human, registrar);
@@ -140,13 +140,23 @@ public static class RuntimeAutostartCommands
     /// naming it fails at every logon from then on without saying anything to anybody.
     /// </remarks>
     internal static AutostartRegistration Registration(CliEnvironment env, AutostartPlatform platform) =>
+        Composed(env, platform, env.SearchPath ?? Environment.GetEnvironmentVariable("PATH"));
+
+    /// <summary>
+    /// The registration as a removal composes it: by its file and its name, with no search path. A search path differs
+    /// from terminal to terminal and from one version to the next, and is not what makes a registration this one, so a
+    /// PATH a new registration could not carry never stops <c>disable</c> or <c>jason uninstall</c> taking away what is there.
+    /// </summary>
+    internal static AutostartRegistration Removal(CliEnvironment env, AutostartPlatform platform) => Composed(env, platform, searchPath: null);
+
+    private static AutostartRegistration Composed(CliEnvironment env, AutostartPlatform platform, string? searchPath) =>
         AutostartArtifacts.Compose(
             platform,
             PackageOwner.Of(env) is { } owner ? [owner.StableEntry] : env.InstallPath is { } installed ? [installed] : SelfExecutable.Command,
             env.Paths.Root,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             AutostartRegistrars.ThisAccount(),
-            env.SearchPath ?? Environment.GetEnvironmentVariable("PATH"));
+            searchPath);
 
     /// <summary>The search path launchd starts an agent on when the agent carries none of its own.</summary>
     internal const string LaunchdSearchPath = "/usr/bin:/bin:/usr/sbin:/sbin";
