@@ -16,12 +16,14 @@ Unless you switch it off (by setting `Update:CheckEnabled` to `false`), the runn
 version exists five minutes after it starts and then once a day; both intervals can be configured, and a check you or
 your agent ask for (`jason update check`) is the same request. That check, and the downloads you request to install or
 update the runtime, go to an address operated by ReplyApp Inc., which redirects them to GitHub. The update check
-identifies only the runtime's version, including its build, and a download only the file requested; like any web
-server, that address also receives your IP address, the time of the request and the standard headers of the program
-that makes it. ReplyApp Inc. uses these records only to operate and secure the service and to count downloads in
-aggregate, keeps them for no longer than 31 days, and does not combine them with any other data. ReplyApp Inc.'s
-privacy policy (<https://reply.io/privacy-policy/>) applies to them. After the redirect, and when you install skills,
-which are fetched from GitHub directly, GitHub's terms and privacy statement apply.
+identifies only the runtime's version, including its build, and a download only the file requested, and the `ref` of
+the link you followed where it carries one; like any web server, that address also receives your IP address, the time
+of the request and the standard headers of the program that makes it. ReplyApp Inc. uses these records only to operate
+and secure the service and to count downloads in aggregate, keeps them for no longer than 31 days, and does not
+combine them with any other data. That address counts the downloads and install-page reads it answers by day, file and
+the `ref` the followed link names, and keeps nothing of the person in those counts. ReplyApp Inc.'s privacy policy
+(<https://reply.io/privacy-policy/>) applies to them. After the redirect, and when you install skills, which are
+fetched from GitHub directly, GitHub's terms and privacy statement apply.
 
 ### Your providers and AI agents
 
