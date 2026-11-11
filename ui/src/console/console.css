@@ -1006,6 +1006,17 @@ body,
 .jc-console .chat-remove {
     margin: 8px 16px 0;
 }
+.jc-console .chat-rename {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+    min-width: 0;
+}
+.jc-console .chat-rename input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+}
 .jc-console .chat-note {
     color: var(--mute);
     font-size: 13px;

@@ -201,8 +201,9 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         const stops = [
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
-                // The desktop renamed or reordered its conversations: a hand-over, or a turn's end.
-                if (event.kind === 'attached' || event.kind === 'done') void reloadConversations();
+                // The desktop renamed or reordered its conversations: a hand-over, a new title, or a turn's end.
+                if (event.kind === 'attached' || event.kind === 'renamed' || event.kind === 'done')
+                    void reloadConversations();
             }),
             desktop.setup.onChanged(() => void connect.reload()),
             desktop.onCommand((command) => {

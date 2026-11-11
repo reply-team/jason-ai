@@ -585,6 +585,64 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => expect(current()).toEqual(['Autumn']));
     });
 
+    it('renames a conversation from its header: the tab and the sidebar follow, and nothing is asked before it is kept', async () => {
+        const { desktop } = renderConsole();
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        expect(screen.getByRole('button', { name: 'Rename' })).toHaveProperty('disabled', true);
+        const id = await send(desktop, 'Help me start a new campaign.');
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Rename' })).toHaveProperty('disabled', false));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+        const box = screen.getByRole('textbox', { name: 'Conversation name' });
+        expect((box as HTMLInputElement).value).toBe('Help me start a new campaign.');
+        expect(document.activeElement).toBe(box);
+        fireEvent.change(box, { target: { value: 'Spring plan' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+        await waitFor(() =>
+            expect(calls(desktop, 'chat.rename').map((each) => each.args)).toEqual([[id, 'Spring plan']]),
+        );
+        await waitFor(() => expect(within(listed()).getByRole('button', { name: 'Spring plan' })).toBeTruthy());
+        await waitFor(() =>
+            expect([...document.querySelectorAll('.dv-default-tab-content')].map((each) => each.textContent)).toContain(
+                'Spring plan',
+            ),
+        );
+        expect(screen.queryByRole('textbox', { name: 'Conversation name' })).toBeNull();
+        // Escape leaves the name as it was and asks nothing.
+        fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Conversation name' }), { target: { value: 'Other' } });
+        fireEvent.keyDown(screen.getByRole('textbox', { name: 'Conversation name' }), { key: 'Escape' });
+        expect(screen.queryByRole('textbox', { name: 'Conversation name' })).toBeNull();
+        expect(calls(desktop, 'chat.rename')).toHaveLength(1);
+        expect(chats.value[id]?.title).toBe('Spring plan');
+    });
+
+    it('says a rename the desktop refused in its own words and keeps the name as it was', async () => {
+        const { desktop } = renderConsole();
+        const id = await send(desktop, 'Go');
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        desktop.refuse.set('chat.rename', 'A name needs at least one character that shows.');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Rename' })).toHaveProperty('disabled', false));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Conversation name' }), { target: { value: hostile } });
+        fireEvent.submit(screen.getByRole('textbox', { name: 'Conversation name' }));
+        await waitFor(() => screen.getByText('A name needs at least one character that shows.'));
+        expect(chats.value[id]?.title).toBe('Go');
+        expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
+    it('takes the name the desktop gave a set-up chat after its first turn, said after the turn ended', async () => {
+        const { desktop } = renderConsole();
+        const id = await send(desktop, 'Help me reach dentists in Ohio');
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        desktop.kept.get(id)!.title = hostile;
+        flush(() => desktop.emit(id, { kind: 'renamed', title: hostile }));
+        await waitFor(() => expect(within(listed()).getByRole('button', { name: hostile })).toBeTruthy());
+        expect(chats.value[id]?.title).toBe(hostile);
+        expect(document.querySelector('.side img[src="x"]')).toBeNull();
+        expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
     it('draws a tab title made of a person’s words as text', async () => {
         const { desktop } = renderConsole();
         await send(desktop, hostile);
