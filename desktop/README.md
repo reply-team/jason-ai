@@ -43,9 +43,10 @@ The Reply card writes `Plugins:Grants:reply:Exec` (`["reply"]`, only where the g
 all, `Routes:Default` with the profile signed in (`{"Plugin": "reply", "Binding": {"profile": "default"}}` unless
 `reply auth status` names another), as the golden path writes them by hand; a default you set is kept. No other
 `Routes` key is ever written, and every other key is kept as it was. Disconnect, on the `slack`, `telegram` and `ntfy`
-cards, removes `Plugins:Config:<id>` whole and the `Binding` under `Notifications:Plugins:<id>`, and keeps an `Enabled`
-written beside it, the plugin's grants under `Plugins:Grants:<id>` and its package, then runs `jason plugin reload` and
-`jason plugin list`.
+cards, removes `Plugins:Config:<id>` and the plugin's entry under `Notifications:Plugins:<id>` whole, so the plugin is no
+longer a channel that is on; an entry whose `Enabled` is `false` keeps it and loses only its `Binding`. A section the
+removal leaves empty is dropped; one empty before is kept. The plugin's grants under `Plugins:Grants:<id>` and
+its package stay, and `jason plugin reload` and `jason plugin list` run after.
 
 A file the desktop cannot parse is refused and left as it is: the runtime reads comments and trailing commas, and the
 desktop, which writes plain JSON, will not rewrite them away. A target is checked against the pattern the plugin's

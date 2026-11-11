@@ -81,15 +81,19 @@ test('Disconnect takes out the plugin’s whole configuration and its binding, a
     }
 });
 
-test('under the plugin’s notification entry only Binding goes: Enabled is the person’s and stays', () => {
+test('the plugin is no longer a channel that is on: its notification entry goes whole, unless the person set Enabled false', () => {
     const slack = notification('slack');
-    const before = {
-        Plugins: { Config: { slack: { token: 'xoxb-1' } } },
-        Notifications: { Plugins: { slack: { Enabled: true, Binding: { channel: 'C0123ABCD' } } } },
-    };
-    assert.deepEqual(withPluginDisconnected(before, slack), { Notifications: { Plugins: { slack: { Enabled: true } } } });
-    const off = { Notifications: { Plugins: { slack: { Enabled: false, Binding: { channel: 'C0123ABCD' } } } } };
-    assert.deepEqual(withPluginDisconnected(off, slack), { Notifications: { Plugins: { slack: { Enabled: false } } } });
+    const config = { Plugins: { Config: { slack: { token: 'xoxb-1' } } } };
+    const binding = { channel: 'C0123ABCD' };
+    const disconnect = (entry: unknown) => withPluginDisconnected({ ...config, Notifications: { QuietSeconds: 30, Plugins: { slack: entry } } }, slack);
+    assert.deepEqual(disconnect({ Enabled: true, Binding: binding }), { Notifications: { QuietSeconds: 30 } }, 'Enabled true: no entry');
+    assert.deepEqual(disconnect({ Binding: binding }), { Notifications: { QuietSeconds: 30 } }, 'no Enabled: no entry');
+    assert.deepEqual(disconnect({ Enabled: 'false', Binding: binding }), { Notifications: { QuietSeconds: 30 } }, 'only the JSON false is an off');
+    assert.deepEqual(
+        disconnect({ Enabled: false, Binding: binding }),
+        { Notifications: { QuietSeconds: 30, Plugins: { slack: { Enabled: false } } } },
+        'Enabled false: the person keeps their off, and only Binding goes',
+    );
 });
 
 test('a section left empty by the removal is dropped, and one that was empty before is left', () => {
@@ -110,8 +114,10 @@ test('names are found in any letter case, as the runtime’s configuration reads
     };
     assert.equal(isConfigured(before, ntfy), true);
     const after = withPluginDisconnected(before, ntfy);
-    assert.deepEqual(after, { plugins: { grants: { Ntfy: { http: ['ntfy.example.test'] } } }, notifications: { plugins: { NtFy: { enabled: true } } } });
+    assert.deepEqual(after, { plugins: { grants: { Ntfy: { http: ['ntfy.example.test'] } } } });
     assert.equal(isConfigured(after, ntfy), false);
+    const off = { NOTIFICATIONS: { Plugins: { nTfY: { ENABLED: false, binding: { topic: 'alerts' } } } } };
+    assert.deepEqual(withPluginDisconnected(off, ntfy), { NOTIFICATIONS: { Plugins: { nTfY: { ENABLED: false } } } });
 });
 
 test('a settings file whose path to the binding is not an object is refused and not changed', () => {
@@ -208,7 +214,7 @@ test('Disconnect with no settings file writes none', async (t) => {
 
 const executable = process.env.JASON_EXE;
 
-test('against the real executable, the reload after Disconnect activates a snapshot read from a file with no value for the plugin, its package unchanged', { skip: !executable || !existsSync(executable) ? 'set JASON_EXE to run it' : false }, async (t) => {
+test('against the real executable, the reload after Disconnect activates a snapshot read from a file with no value for the plugin, which is no longer a channel that is on, its package unchanged', { skip: !executable || !existsSync(executable) ? 'set JASON_EXE to run it' : false }, async (t) => {
     const root = mkdtempSync(join(tmpdir(), 'jason-desktop-disconnect-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const data = join(root, 'data');
@@ -228,7 +234,7 @@ test('against the real executable, the reload after Disconnect activates a snaps
     const started = await cli.run(['runtime', 'start']);
     assert.equal(started.exit, 0, started.stderr);
     try {
-        const info = async () => JSON.parse((await cli.run(['runtime', 'status'])).stdout) as { runtime_version: string; plugins: { snapshot_id: string; last_reload_activated: boolean }; notifications: { channels: { channel: string }[] } };
+        const info = async () => JSON.parse((await cli.run(['runtime', 'status'])).stdout) as { runtime_version: string; plugins: { snapshot_id: string; last_reload_activated: boolean }; notifications: { channels: { channel: string; on: boolean }[] } };
         const listed = async () => (JSON.parse((await cli.run(['plugin', 'list'])).stdout) as { plugins: { id: string; digest: string; status: string; capabilities: { http: { granted: string[] } } }[] }).plugins.find((each) => each.id === 'slack');
         const before = await info();
         const slackBefore = await listed();
@@ -248,11 +254,13 @@ test('against the real executable, the reload after Disconnect activates a snaps
         }).disconnectPlugin('slack');
 
         const kept = JSON.parse(readFileSync(paths.installationSettings, 'utf8')) as Record<string, unknown>;
-        assert.deepEqual(kept, { Plugins: { Grants: { slack: { Http: ['slack.com'] } } }, Notifications: { Plugins: { slack: { Enabled: true } } } });
+        assert.deepEqual(kept, { Plugins: { Grants: { slack: { Http: ['slack.com'] } } } });
         assert.deepEqual(log.lines.find((each) => each.name === 'plugin_disconnected')?.fields, { PluginId: 'slack', Exit: 0, Valid: true });
         const after = await info();
         assert.notEqual(after.plugins.snapshot_id, before.plugins.snapshot_id, 'the runtime read its plugins again');
         assert.equal(after.plugins.last_reload_activated, true, 'and activated what it read');
+        assert.ok(before.notifications.channels.some((each) => each.channel === 'slack' && each.on), 'slack was a channel that is on');
+        assert.equal(after.notifications.channels.some((each) => each.channel === 'slack' && each.on), false, 'and after the reload it is not');
         const slackAfter = await listed();
         assert.equal(slackAfter?.status, 'valid');
         assert.equal(slackAfter?.digest, slackBefore?.digest, 'the package the runtime reads is the one it read before');

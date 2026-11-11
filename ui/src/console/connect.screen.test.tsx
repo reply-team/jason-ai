@@ -238,7 +238,7 @@ describe('Disconnect', () => {
         fireEvent.click(within(card(connect, 'ntfy')).getByRole('button', { name: 'Disconnect' }));
         const asking = await waitFor(() => within(card(connect, 'ntfy')).getByRole('alertdialog'));
         expect(words(asking)).toContain(
-            'Every value under its configuration in the settings file and its notification target are removed. The plugin stays installed, and what it is granted stays.',
+            'Every value under its configuration in the settings file and its notification target are removed. Jason stops sending notifications there. The plugin stays installed, and what it is granted stays.',
         );
         expect(desktop.calls.some((each) => each.name === 'setup.disconnectPlugin')).toBe(false);
         fireEvent.click(within(asking).getByRole('button', { name: 'Cancel' }));

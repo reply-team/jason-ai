@@ -338,7 +338,7 @@ function disconnect(each: DesktopPlugin, busy: Html | null): Html | null {
         </button>`;
     return html`<div class="note am" role="alertdialog" aria-label="Disconnect ${each.label}">
         Disconnect ${each.label}? Every value under its configuration in the settings file and its notification target
-        are removed. The plugin stays installed, and what it is granted stays.
+        are removed. Jason stops sending notifications there. The plugin stays installed, and what it is granted stays.
         <button class="btn sm" type="button" ${busy} ${act('connect.disconnectConfirm', each.id)}>
             Disconnect ${each.label}
         </button>

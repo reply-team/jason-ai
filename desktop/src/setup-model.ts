@@ -261,17 +261,21 @@ function removeAndPrune(root: Json, path: readonly string[], name: string): void
 
 /**
  * The installation's settings with one notification plugin disconnected: its whole configuration, `Plugins:Config:<id>`,
- * is removed, and under `Notifications:Plugins:<id>` its `Binding` and nothing else, so an `Enabled` a person wrote stays;
- * a section the removal left empty is dropped. Its grant, `Plugins:Grants:<id>`, `Routes` and every other key stay as
- * they were, and the input is not changed. The journal forwarder has no Disconnect: without its receiver it would fail
- * every journal line it is still granted.
+ * is removed, and so is its entry under `Notifications:Plugins:<id>`, since a plugin named there is a channel that is on
+ * unless its entry says `Enabled` false, and one left on with no binding would fail every send. An entry whose `Enabled`
+ * is the JSON false keeps it, a person's off staying theirs, and loses only its `Binding`. A section the removal left
+ * empty is dropped. Its grant, `Plugins:Grants:<id>`, `Routes` and every other key stay as they were, and the input is
+ * not changed. The journal forwarder has no Disconnect: without its receiver it would fail every journal line it is
+ * still granted.
  */
 export function withPluginDisconnected(settings: Json, plugin: BundledPlugin): Json {
     if (plugin.target.where !== 'binding') {
         throw new Refused(`${plugin.label} has no Disconnect: without its receiver it would fail every journal line it is still granted.`);
     }
     const next = structuredClone(settings);
-    removeAndPrune(next, ['Notifications', 'Plugins', plugin.id], 'Binding');
+    const entry = existing(next, ['Notifications', 'Plugins', plugin.id]);
+    if (entry !== undefined && entry[keyOf(entry, 'Enabled')] === false) removeAndPrune(next, ['Notifications', 'Plugins', plugin.id], 'Binding');
+    else removeAndPrune(next, ['Notifications', 'Plugins'], plugin.id);
     removeAndPrune(next, ['Plugins', 'Config'], plugin.id);
     return next;
 }
