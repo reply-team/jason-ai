@@ -16,11 +16,19 @@ public static class ApprovalCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var approval = new Command("approval", "See what is waiting for a person's decision, read what it would do, and decide it; or decide in advance for one category of verdict in a campaign.");
+        var approval = new Command(
+            "approval",
+            "See what is waiting for a person's decision, read what it would do, and decide it; or decide in advance for one category of verdict in a campaign, or for the searches under one of its audiences.");
         approval.Subcommands.Add(List(env, actor));
         approval.Subcommands.Add(Get(env, actor));
-        approval.Subcommands.Add(Decide(env, actor, "approve", Operations.ApprovalApprove, "Approve it. The work goes back into the queue exactly as it was."));
-        approval.Subcommands.Add(Decide(env, actor, "reject", Operations.ApprovalReject, "Reject it. The work ends, carrying your reason."));
+        approval.Subcommands.Add(Decide(
+            env,
+            actor,
+            "approve",
+            Operations.ApprovalApprove,
+            "Approve it. The work goes back into the queue exactly as it was. Approving a search under an audience other than the one the campaign's allowance names takes the allowance back in the same act; --allow sets one for this search's audience instead.",
+            allows: true));
+        approval.Subcommands.Add(Decide(env, actor, "reject", Operations.ApprovalReject, "Reject it. The work ends, carrying your reason.", allows: false));
         approval.Subcommands.Add(SetStanding(env, actor));
         approval.Subcommands.Add(UnsetStanding(env, actor));
         approval.Subcommands.Add(ListStanding(env, actor));
@@ -101,22 +109,29 @@ public static class ApprovalCommands
     {
         var command = new Command(
             "set-standing",
-            "Let the drafts answering one category of verdict in a campaign go without being asked each time. Set again, it replaces what was set and its count starts again. "
+            "Let the drafts answering one category of verdict in a campaign go without being asked each time; or, with --operation audience.search, "
+            + "let the searches under one of its audiences go until the people they ask for reach a ceiling, the campaign's allowance. "
+            + "Set again, it replaces what was set and its count starts again. "
             + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var id = new Argument<string>("campaign-id") { Description = "The campaign, as cmp_...." };
-        var category = new Option<string>("--category")
+        var category = new Option<string?>("--category")
         {
-            Description = "The verdict's category, exactly as verdicts are recorded — for example interested.",
-            Required = true,
+            Description = "The verdict's category, exactly as verdicts are recorded — for example interested. Required unless --operation is audience.search.",
         };
         var operation = VerbOptions.Repeatable(
             "--operation",
-            "conversation.reply or message.send; repeat it to name both. conversation.reply alone when absent.");
+            "conversation.reply or message.send; repeat it to name both. conversation.reply alone when absent. audience.search alone sets the allowance.");
         var expiresAt = new Option<string?>("--expires-at")
         {
             Description = "When it stops, as ISO-8601 UTC — for example 2026-12-01T00:00:00Z. It never stops when absent.",
         };
         var maxReleases = new Option<int?>("--max-releases") { Description = "How many drafts it may let go, from 1 to 10000. No limit when absent." };
+        var audience = new Option<int?>("--audience") { Description = "The allowance's audience, by the number the campaign knows it by. Required with audience.search." };
+        var maxPeople = new Option<int?>("--max-people")
+        {
+            Description = "The allowance's ceiling: how many people its searches may ask for, added up, from 1 to 100000. Required with audience.search.",
+        };
+        var maxPerSearch = new Option<int?>("--max-per-search") { Description = "The most people one search under the allowance may ask for, from 1 to 1000. No cap when absent." };
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -124,6 +139,9 @@ public static class ApprovalCommands
         command.Options.Add(operation);
         command.Options.Add(expiresAt);
         command.Options.Add(maxReleases);
+        command.Options.Add(audience);
+        command.Options.Add(maxPeople);
+        command.Options.Add(maxPerSearch);
         command.Options.Add(reason);
         command.Options.Add(human);
 
@@ -134,6 +152,9 @@ public static class ApprovalCommands
                 .Set("campaign_id", parseResult.GetValue(id))
                 .Set("category", parseResult.GetValue(category))
                 .Set("operations", operations is { Length: > 0 } ? new JsonArray([.. operations.Select(o => JsonValue.Create(o))]) : null)
+                .Set("audience", parseResult.GetValue(audience))
+                .Set("max_people", parseResult.GetValue(maxPeople))
+                .Set("max_per_search", parseResult.GetValue(maxPerSearch))
                 .Set("expires_at", parseResult.GetValue(expiresAt))
                 .Set("max_releases", parseResult.GetValue(maxReleases))
                 .Set("reason", parseResult.GetValue(reason))
@@ -152,14 +173,17 @@ public static class ApprovalCommands
     {
         var command = new Command(
             "unset-standing",
-            "Take back the standing approval for one category of verdict in a campaign; drafts from now on wait for a person. "
+            "Take back the standing approval for one category of verdict in a campaign, or with --operation audience.search its allowance; "
+            + "what it covered waits for a person from now on. "
             + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var id = new Argument<string>("campaign-id") { Description = "The campaign, as cmp_...." };
-        var category = new Option<string>("--category") { Description = "The verdict's category the standing approval was set for.", Required = true };
+        var category = new Option<string?>("--category") { Description = "The verdict's category the standing approval was set for." };
+        var operation = new Option<string?>("--operation") { Description = "audience.search, to take back the campaign's allowance instead of a category's standing approval." };
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
         command.Options.Add(category);
+        command.Options.Add(operation);
         command.Options.Add(reason);
         command.Options.Add(human);
 
@@ -168,6 +192,7 @@ public static class ApprovalCommands
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(id))
                 .Set("category", parseResult.GetValue(category))
+                .Set("operation", parseResult.GetValue(operation))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "approval unset-standing", "a standing approval is taken back on a person's word");
@@ -183,7 +208,7 @@ public static class ApprovalCommands
     {
         var command = new Command(
             "list-standing",
-            "The standing approvals set for a campaign, by category: what each covers, its limits, how many drafts it let go and whether it is still in force.");
+            "The standing approvals set for a campaign, by category, and its allowance for searches: what each covers, its limits, how much it let go — for the allowance, the people its searches asked for — and whether it is still in force.");
         var id = new Argument<string>("campaign-id") { Description = "The campaign, as cmp_...." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
@@ -210,23 +235,53 @@ public static class ApprovalCommands
 
     /// <summary>
     /// Both decisions take the same three things. The actor is the one the whole CLI carries, but not its default: a
-    /// decision is a person's word, so one that names nobody is refused here, before the runtime would refuse it.
+    /// decision is a person's word, so one that names nobody is refused here, before the runtime would refuse it. An
+    /// approval may also carry an allowance for the audience of the search it approves.
     /// </summary>
-    private static Command Decide(CliEnvironment env, Option<string?> actor, string verb, string operation, string description)
+    private static Command Decide(CliEnvironment env, Option<string?> actor, string verb, string operation, string description, bool allows)
     {
         var command = new Command(verb, $"{description} {ActorOption.NoDefault} {ActorOption.RefusedInsideARun}");
         var id = new Argument<string>("approval-id") { Description = "The approval, as approval list shows it." };
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
+        var allow = new Option<int?>("--allow")
+        {
+            Description = "Approve a search and allow up to this many more people under its audience, from 1 to 100000: the campaign's allowance, set in the same act.",
+        };
+        var allowPerSearch = new Option<int?>("--allow-per-search") { Description = "With --allow: the most people one search under it may ask for, from 1 to 1000." };
+        var allowExpiresAt = new Option<string?>("--allow-expires-at") { Description = "With --allow: when the allowance stops, as ISO-8601 UTC. It never stops when absent." };
         command.Arguments.Add(id);
         command.Options.Add(reason);
+        if (allows)
+        {
+            command.Options.Add(allow);
+            command.Options.Add(allowPerSearch);
+            command.Options.Add(allowExpiresAt);
+        }
+
         command.Options.Add(human);
 
         command.SetAction((parseResult, cancellationToken) =>
         {
+            var allowed = allows ? parseResult.GetValue(allow) : null;
+            if (allows && allowed is null && (parseResult.GetValue(allowPerSearch) is not null || parseResult.GetValue(allowExpiresAt) is not null))
+            {
+                throw new UsageException("--allow-per-search and --allow-expires-at shape the allowance --allow sets; give --allow with them, or leave them out.");
+            }
+
             var body = RequestBody.Empty()
                 .Set("approval_id", parseResult.GetValue(id))
                 .Set("reason", parseResult.GetValue(reason))
+                .Set(
+                    "allow",
+                    allowed is { } most
+                        ? new JsonObject
+                        {
+                            ["max_people"] = most,
+                            ["max_per_search"] = parseResult.GetValue(allowPerSearch),
+                            ["expires_at"] = parseResult.GetValue(allowExpiresAt),
+                        }
+                        : null)
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, $"approval {verb}", "an approval is decided on a person's word");
 

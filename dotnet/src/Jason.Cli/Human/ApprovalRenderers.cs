@@ -148,15 +148,26 @@ public static class ApprovalRenderers
     public static string? StandingApproval(string json)
     {
         var standing = RenderText.Read<StandingApprovalDto>(json);
-        if (standing?.CampaignId is null || standing.Category is null)
+        if (standing?.CampaignId is null || (standing.Category is null && standing.Operations is null))
         {
             return null;
         }
 
         var text = new StringBuilder();
-        text.AppendLine(Line("Category:", standing.Category));
+        if (standing.Category is not null)
+        {
+            text.AppendLine(Line("Category:", standing.Category));
+        }
+
         text.AppendLine(Line("Campaign:", standing.CampaignId));
         text.AppendLine(Line("Covers:", Covers(standing)));
+        if (standing.Category is null)
+        {
+            text.AppendLine(Line("Audience:", Audience(standing, withId: true)));
+            text.AppendLine(Line("People:", People(standing)));
+            text.AppendLine(Line("Per search:", standing.MaxPerSearch?.ToString(CultureInfo.InvariantCulture)));
+        }
+
         text.AppendLine(Line("In force:", standing.InForce ? "yes" : "no"));
         text.AppendLine(Line("Expires:", RenderText.Moment(standing.ExpiresAt)));
         text.AppendLine(Line("Let go:", Released(standing)));
@@ -175,12 +186,14 @@ public static class ApprovalRenderers
             return null;
         }
 
-        var table = new HumanTable("CATEGORY", "COVERS", "IN FORCE", "EXPIRES", "LET GO", "SET BY");
+        var table = new HumanTable("CATEGORY", "COVERS", "AUDIENCE", "PEOPLE", "IN FORCE", "EXPIRES", "LET GO", "SET BY");
         foreach (var standing in page.Items)
         {
             table.Row(
                 standing.Category,
                 Covers(standing),
+                Audience(standing, withId: false),
+                People(standing),
                 standing.InForce ? "yes" : "no",
                 RenderText.Moment(standing.ExpiresAt),
                 Released(standing),
@@ -192,6 +205,18 @@ public static class ApprovalRenderers
 
     private static string? Covers(StandingApprovalDto standing) =>
         standing.Operations is null ? null : string.Join(", ", standing.Operations);
+
+    /// <summary>The allowance's audience by its number, and its id where there is room; nothing for a category.</summary>
+    private static string? Audience(StandingApprovalDto standing, bool withId) => standing.Audience is not { } audience
+        ? null
+        : withId
+            ? string.Create(CultureInfo.InvariantCulture, $"{audience.Number} ({RenderText.Shown(audience.Id)})")
+            : audience.Number.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The people the allowance's searches asked for, against its ceiling; nothing for a category.</summary>
+    private static string? People(StandingApprovalDto standing) => standing.MaxPeople is { } ceiling
+        ? string.Create(CultureInfo.InvariantCulture, $"{standing.People ?? 0} of {ceiling}")
+        : null;
 
     private static string Released(StandingApprovalDto standing) => standing.MaxReleases is { } ceiling
         ? string.Create(CultureInfo.InvariantCulture, $"{standing.Released} of {ceiling}")

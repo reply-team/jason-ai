@@ -16,7 +16,10 @@ companies, and the addresses, numbers and profiles they are reached at. It is ho
 provider: a new audience from a definition, or more of one it already searched under, a top-up.
 
 A person approves it once per work item (`confirm_once`), reading the count, the definition and the options before
-anything is spent. Nobody picks among candidates: where a provider finds people first and reveals them after, both
+anything is spent. After the first search under an audience, the campaign's allowance — a standing approval a person sets
+for one audience, capped in the people its searches ask for — may let a top-up go without the question; one it does not
+cover waits as the first did, its preview saying why ([`docs/work-execution.md`](../../work-execution.md), "Standing
+approvals"). Nobody picks among candidates: where a provider finds people first and reveals them after, both
 happen inside the plugin, and every person the search returns is revealed.
 
 The contract asks no provider to leave people already known out of a search: not every provider's search takes a list

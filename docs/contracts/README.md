@@ -117,7 +117,9 @@ nothing in the runtime reads.
   the campaign's. It is the spending act: a work item, `confirm_once` and `metered`, charged per person found by the
   provider's own tariff. Like every write it answers one item: `finished` with every person found, where the provider
   searches inside one call, or `accepted` with the provider's reference, by which the search is read and stopped. A search reaches nobody, it buys
-  records, so it is `reach: control` and runs through a provider block.
+  records, so it is `reach: control` and runs through a provider block. A person confirms the first search under an
+  audience, and the campaign's allowance, a standing approval capped in people, may then let the top-ups under it go
+  without the question ([`docs/work-execution.md`](../work-execution.md), "Standing approvals").
 - [`audience.search_status`](operations/audience.search_status.md): how far a search has got, and the people it found
   from the cursor on. A work item whose search the runtime composes, reference and cursor, and a caller never writes;
   the runtime makes one itself on a cadence for each search it follows, and lands the people of every read that succeeds
@@ -386,7 +388,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`approval_cancelled`](journal/approval_cancelled.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision was ended because the work it was about was cancelled or passed its due date. |
 | [`approval_rejected`](journal/approval_rejected.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A person rejected parked work, so it ends as failed. |
 | [`approval_requested`](journal/approval_requested.json) | `0.1.0` | yes | campaign, contact, work_item, approval | Work was parked to wait for a person's decision, and the line names the approval that asks for it. |
-| [`approval_standing_applied`](journal/approval_standing_applied.json) | `0.25.0` | yes | campaign, contact, work_item, approval | A standing approval released a drafted reply without asking a person, and the line names the approval that records the release, the standing approval and the verdict the reply answers. |
+| [`approval_standing_applied`](journal/approval_standing_applied.json) | `0.25.0` | yes | campaign, contact, work_item, approval | A standing approval released work without asking a person, a drafted reply under a category's or a search under the allowance, and the line names the approval that records the release, the standing approval, and the verdict the reply answers or the audience and the people the search asks for. |
 | [`approval_superseded`](journal/approval_superseded.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision stopped applying because the subject of the work it was about changed before the work ran, and a new decision is asked in its place. |
 | [`audience_people_landed`](journal/audience_people_landed.json) | `0.34.0` | yes | campaign, contact, work_item, plugin | One page of a search's people landed in its campaign: what the page held, whom it made members, and whom it made contacts of the directory; one line per page that carried anybody. |
 | [`audience_reserve_low`](journal/audience_reserve_low.json) | `0.34.0` | yes | campaign | A campaign's untouched members fell under the threshold the campaign set, said once per crossing; a default manager trigger. |
@@ -434,8 +436,8 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`role_note_set`](journal/role_note_set.json) | `0.1.0` | yes | campaign, project, role | A role's note at one level, a campaign, a project or the client, was written; the line records its size and hash, never what it says. |
 | [`role_updated`](journal/role_updated.json) | `0.1.0` | yes | role, profile | The execution profile a role's work runs under was set, changed or cleared. |
 | [`routes_updated`](journal/routes_updated.json) | `0.1.0` | yes | campaign, plugin | A campaign's route was set or taken away, so an operation, or the campaign's default, goes to the plugin it names or back to the routes above it. |
-| [`standing_approval_set`](journal/standing_approval_set.json) | `0.25.0` | yes | campaign | A person gave a campaign a standing approval for one category of reply, or replaced the one in force, so drafted replies it covers go without a decision each time. |
-| [`standing_approval_unset`](journal/standing_approval_unset.json) | `0.25.0` | yes | campaign | A person took back a campaign's standing approval for one category of reply, so drafted replies of it wait for a decision again. |
+| [`standing_approval_set`](journal/standing_approval_set.json) | `0.25.0` | yes | campaign | A person gave a campaign a standing approval for one category of reply, or its allowance for the searches under one of its audiences, or replaced the one in force, so the work it covers goes without a decision each time. |
+| [`standing_approval_unset`](journal/standing_approval_unset.json) | `0.25.0` | yes | campaign | A person took back a campaign's standing approval for one category of reply, or its allowance for searches, so the work it covered waits for a decision again. |
 | [`subscription_cursor_rewound`](journal/subscription_cursor_rewound.json) | `0.29.0` | no | none | A person moved a subscribed kind's cursor back, so the kind's chain hands its plugins again every line after the new cursor; every rewind is a line of its own. |
 | [`subscription_failed`](journal/subscription_failed.json) | `0.29.0` | no | plugin | A subscriber's handler ended in a final class for one line, so the chain of the line's kind ended there for that line and the kind moved on. |
 | [`suppression_added`](journal/suppression_added.json) | `0.1.0` | yes | none | An address or number was put on the do-not-contact register, so nothing reaches it on its channel. |

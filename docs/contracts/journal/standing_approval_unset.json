@@ -2,35 +2,47 @@
   "kind": "standing_approval_unset",
   "version": 1,
   "since": "0.25.0",
-  "summary": "A person took back a campaign's standing approval for one category of reply, so drafted replies of it wait for a decision again.",
+  "summary": "A person took back a campaign's standing approval for one category of reply, or its allowance for searches, so the work it covered waits for a decision again.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" }
   },
-  "field_since": {},
+  "field_since": { "/old/audience": "0.34.0", "/old/max_people": "0.34.0", "/old/max_per_search": "0.34.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
     "required": ["key", "old", "new"],
     "properties": {
-      "key": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply, which the campaign's newest line for it decides." },
+      "key": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply, or `audience.search` for the allowance, which the campaign's newest line for it decides." },
       "old": {
         "type": "object",
-        "description": "The standing approval taken back, as it was set.",
+        "description": "The standing approval taken back, as it was set: by the person's unset, by a new allowance that replaces it, or by the person's approval of a search under another audience.",
         "additionalProperties": false,
         "required": ["category", "operations", "expires_at", "max_releases"],
         "properties": {
-          "category": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers." },
+          "category": { "type": ["string", "null"], "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers; null on an allowance, which covers searches." },
           "operations": {
             "type": "array",
             "minItems": 1,
             "maxItems": 2,
             "uniqueItems": true,
-            "items": { "enum": ["conversation.reply", "message.send"] },
-            "description": "The operations it releases, in ordinal order."
+            "items": { "enum": ["conversation.reply", "message.send", "audience.search"] },
+            "description": "The operations it releases, in ordinal order: one or both of a reply and a message for a category of reply, or `audience.search` alone for an allowance."
           },
           "expires_at": { "type": ["null", "string"], "format": "date-time", "description": "When it stops releasing work; null where it does not expire." },
-          "max_releases": { "type": ["null", "integer"], "minimum": 1, "maximum": 10000, "description": "How many releases it makes before it stops; null where it has no ceiling." }
+          "max_releases": { "type": ["null", "integer"], "minimum": 1, "maximum": 10000, "description": "How many releases it makes before it stops; null where it has no ceiling." },
+          "audience": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "number"],
+            "description": "On an allowance, the campaign's audience whose searches it covers; absent on a category of reply's.",
+            "properties": {
+              "id": { "type": "string", "pattern": "^aud_", "description": "The audience, by its id." },
+              "number": { "type": "integer", "minimum": 1, "description": "The number the campaign knows the audience by." }
+            }
+          },
+          "max_people": { "type": "integer", "minimum": 1, "maximum": 100000, "description": "On an allowance, the most people the searches under it may ask for, added up; absent on a category of reply's." },
+          "max_per_search": { "type": ["null", "integer"], "minimum": 1, "maximum": 1000, "description": "On an allowance, the most people one search under it may ask for; null where it caps none, absent on a category of reply's." }
         }
       },
       "new": { "type": "null" }

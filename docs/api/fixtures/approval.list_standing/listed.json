@@ -9,14 +9,42 @@
     "items": [
       {
         "campaign_id": "cmp_1",
+        "category": null,
+        "operations": [
+          "audience.search"
+        ],
+        "audience": {
+          "id": "aud_1",
+          "number": 1
+        },
+        "expires_at": "2026-12-01T00:00:00.000Z",
+        "max_releases": null,
+        "max_people": 500,
+        "max_per_search": 100,
+        "released": 0,
+        "people": 0,
+        "in_force": true,
+        "set_by": {
+          "type": "human",
+          "id": "ada"
+        },
+        "set_at": "2026-09-14T12:00:00.000Z",
+        "line_id": "jrn_2"
+      },
+      {
+        "campaign_id": "cmp_1",
         "category": "interested",
         "operations": [
           "conversation.reply",
           "message.send"
         ],
+        "audience": null,
         "expires_at": "2026-12-01T00:00:00.000Z",
         "max_releases": 20,
+        "max_people": null,
+        "max_per_search": null,
         "released": 0,
+        "people": null,
         "in_force": true,
         "set_by": {
           "type": "human",
@@ -31,16 +59,20 @@
         "operations": [
           "conversation.reply"
         ],
+        "audience": null,
         "expires_at": null,
         "max_releases": null,
+        "max_people": null,
+        "max_per_search": null,
         "released": 0,
+        "people": null,
         "in_force": true,
         "set_by": {
           "type": "human",
           "id": "ada"
         },
         "set_at": "2026-09-14T12:00:00.000Z",
-        "line_id": "jrn_2"
+        "line_id": "jrn_3"
       }
     ],
     "next_cursor": null

@@ -2,7 +2,7 @@
 name: approvals-and-questions
 description: Use when a person asks what Jason is waiting for them to decide, or arrives because a notification said approvals or questions are waiting, or tells you to decide something Jason has parked - list the approvals and the questions waiting on a person, present each in their own words, and record their decision as theirs.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Approvals and questions
@@ -15,8 +15,8 @@ are confident, not when they told you earlier to handle things, not when work is
 runtime refuses a decision that does not name a person, and that refusal is the floor of this rule
 rather than the whole of it.
 
-**Status: verified** against Claude Code 2.1.318. It covers the two waiting things this
-build publishes and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do. It covers the two waiting things this build publishes and nothing else.
 
 ## The two things that wait, and how they differ
 
@@ -166,6 +166,9 @@ jason approval unset-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_
   set and starts its count over; taking one back leaves the drafts already let go as they were.
 - **`--actor human:<their id>` is required**, as with the three verbs above. A role or an attempt is refused with
   `approval_not_human`, and no name with `actor_required`.
+- **A search is approved and allowed in one act**: `jason approval approve <apr_…> --allow <people> --actor human:<their id>`
+  approves it and lets the campaign's later searches under its audience ask for up to that many more people without a
+  question, only on the person's word for the number; `list-standing` shows how many they have asked for.
 
 **What it releases is a draft nobody has been asked about, and nothing else.** A reply parked before the standing
 approval was set still waits for the person, however long ago, and setting one releases none of it; it stays theirs

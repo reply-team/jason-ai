@@ -321,7 +321,8 @@ them reads them.
 
 ### Standing approvals
 
-A person may decide in advance for one kind of reply. `approval.set_standing` names a campaign and a verdict's
+A person may decide in advance for one kind of reply, and for the searches under one of a campaign's audiences (the
+allowance, below). `approval.set_standing` names a campaign and a verdict's
 category — the word a `reply.record` verdict carries, compared exactly — and says that a drafted `conversation.reply`
 answering such a verdict goes without being asked each time; `operations` may name `message.send` too, and is
 `conversation.reply` alone when absent. `expires_at` and `max_releases` (1 to 10000) are optional limits, and there is
@@ -363,13 +364,49 @@ Nobody is asked, so nothing is notified. Not covered, the work parks as any repl
 `standing_approval`: the verdict, its category, and the first condition that failed — `not_coverable`,
 `verdict_unknown`, `verdict_superseded`, `reaction_not_draft`, `verdict_not_authentic`, `not_the_verdicts_work`,
 `edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
-`ceiling_reached`. Work that names no verdict is not asked about.
+`ceiling_reached`. A reply or a message that names no verdict is not asked about.
 
 **A standing approval decides once.** Its row is an approval like any other: a retry of the same subject runs under it
 even after the standing approval was taken back, and a subject that changed parks with `input_changed` for a person;
 the standing approval is not asked again. A question already put to a person stays theirs, whatever is set later.
 Whatever the pre-flight refuses, the do-not-contact register among it, is refused before a standing approval is asked,
 and work released under one is still held by an open block of its account.
+
+**The allowance: a standing approval for the campaign's searches.** A search spends the provider's credits, so the first
+search under an audience, its probe, parks for a person as `audience.search`'s `confirm_once` says; after it, the person
+may let the campaign's top-ups go without a question until a ceiling. `approval.set_standing` with `operations`
+`audience.search` alone and no category sets it: `audience` names one of the campaign's audiences by its number
+(`audience_unknown` where the campaign holds none under it), `max_people` (1 to 100000) is the ceiling in people and is
+required, and `max_per_search` (1 to 1000) and `expires_at` are optional limits. `max_releases` is a reply's limit and is
+refused on an allowance, as `audience`, `max_people` and `max_per_search` are on a category of reply, and `audience.search`
+is never a category. Its lines are `standing_approval_set` and `standing_approval_unset` keyed by the operation, so a
+campaign holds one allowance: a set equal to the one in force writes nothing, and any other retires the one before it,
+an unset of it and then the set, both the person's. `approval.unset_standing` names `operation` `audience.search` instead
+of a category to take it back. Only a named person moves it, as any standing approval.
+
+**Approving a search moves it, in the same act.** `approval.approve` of a search may carry `allow`: `max_people`, and
+optionally `max_per_search` and `expires_at`, which set the allowance for that search's audience, retiring the one before
+it ("approve and allow up to N more people"). Without `allow`, approving a search under an audience other than the one the
+allowance names retires the allowance: an unset by the person, with the reason they gave, saved with the approval.
+Approving a search under the audience the allowance names leaves it as it is, and nothing else moves it: no role's act,
+no verdict, and no probe that waits for a person, so a top-up under the allowance while a new audience's probe waits is
+inside what the person allowed. An audience the allowance moved away from may be allowed again; none is the latest.
+`allow` on a rejection, or on an approval of other work, is refused at `allow`, and in an archived campaign, whose
+standing approvals no longer change, with `campaign_archived`; an approval there moves no allowance.
+
+**At the claim**, a search that would park and has no approval row of its own is covered when, in this order: the
+campaign's newest line for `audience.search` is a set; it names the audience the claim has just recorded on the search
+(`context.audience`); it has not expired; the search's `count` is at most its `max_per_search`; and the counts of the
+searches released under it since it was set, with this one's, come to at most its `max_people`. The gate counts people by
+the count a search asks for, at the claim; what the provider charges is the provider's to count. Covered, the search runs
+in the same claim as a covered reply does, and its `approval_standing_applied` line names the audience and the count, with
+`verdict` and `category` null. Not covered, it parks, and its preview's `standing_approval` says what the allowance is —
+`standing` (the line that set it), `audience`, `expires_at`, `max_people`, `max_per_search` and `people` (the counts
+released under it), each null where there is none — the search's `count`, and the first condition that failed:
+`no_standing_approval`, `another_audience`, `expired`, `over_per_search` or `ceiling_reached`. A new audience's probe parks
+by construction, since no allowance names an audience before the claim of its first search made it.
+`approval.list_standing` answers the allowance beside the categories, with `released` (the searches it let go) and
+`people` (the people they asked for), and shows it not in force once `people` reaches `max_people`.
 
 ## Leases and heartbeats
 

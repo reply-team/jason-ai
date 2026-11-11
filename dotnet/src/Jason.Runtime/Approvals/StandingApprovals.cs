@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -14,13 +15,15 @@ namespace Jason.Runtime.Approvals;
 
 /// <summary>
 /// A person's word, given in advance, that one campaign's drafted replies of one category may go without a decision each
-/// time — and the reads that say whether it covers a piece of work the claim is about to park.
+/// time, or that its searches under one audience may, up to a ceiling in people (the allowance) — and the reads that say
+/// whether it covers a piece of work the claim is about to park.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The record is the chronicle: a <c>standing_approval_set</c> or <c>standing_approval_unset</c> line per change, keyed by
-/// the category, and the newest one for a campaign and a category is the state. Each release under one is an
-/// <c>approval_standing_applied</c> line keyed by the line that set it, which is what its ceiling counts.
+/// the category, or by <see cref="Searches"/> for the allowance, and the newest one for a campaign and a key is the state.
+/// Each release under one is an <c>approval_standing_applied</c> line keyed by the line that set it, which is what its
+/// ceiling counts: the lines themselves for a category, the people each search asked for for the allowance.
 /// </para>
 /// <para>
 /// Every read here is written as SQL that names its index, and a test pins each plan. The kind index is on <c>kind</c>
@@ -47,6 +50,18 @@ public static class StandingApprovals
     /// <summary>The highest ceiling a standing approval may carry.</summary>
     public const int MaxReleases = 10_000;
 
+    /// <summary>
+    /// The operation an allowance covers: a search, under one of the campaign's audiences, until the people its searches
+    /// asked for reach a ceiling. Its lines are keyed by the operation, so a campaign holds one allowance.
+    /// </summary>
+    public const string Searches = "audience.search";
+
+    /// <summary>The highest ceiling in people an allowance may carry.</summary>
+    public const int MaxPeople = 100_000;
+
+    /// <summary>The highest cap per search: a search asks for at most this many people (<c>audience.search</c>'s <c>count</c>).</summary>
+    public const int MaxPerSearch = 1_000;
+
     /// <summary>Why a standing approval did not release work it was asked about, in the order the claim asks.</summary>
     public static class Why
     {
@@ -63,6 +78,8 @@ public static class StandingApprovals
         public const string OperationNotCovered = "operation_not_covered";
         public const string Expired = "expired";
         public const string CeilingReached = "ceiling_reached";
+        public const string AnotherAudience = "another_audience";
+        public const string OverPerSearch = "over_per_search";
     }
 
     /// <summary>The newest standing-approval line of one campaign for one category, set or unset, through the kind index.</summary>
@@ -80,6 +97,16 @@ public static class StandingApprovals
             WHERE kind IN ('standing_approval_set', 'standing_approval_unset') AND campaign_id = {campaignId}
             ORDER BY id
             """).AsNoTracking();
+
+    /// <summary>
+    /// How many people the searches released under an allowance asked for since it was set: each release's count, added up
+    /// over the same lines <see cref="Released"/> counts.
+    /// </summary>
+    internal static IQueryable<int> People(JasonDbContext db, JournalEntry set) =>
+        db.Database.SqlQuery<int>($"""
+            SELECT coalesce(sum(json_extract(new_json, '$.count')), 0) AS "Value" FROM journal INDEXED BY ix_journal_kind
+            WHERE kind = 'approval_standing_applied' AND id > {set.Id} AND key = {set.PublicId}
+            """);
 
     /// <summary>How many releases name the line that set a standing approval: the releases since it was set.</summary>
     internal static IQueryable<int> Released(JasonDbContext db, JournalEntry set) =>
@@ -126,8 +153,105 @@ public static class StandingApprovals
         DateTimeOffset? expires = line["expires_at"] is JsonValue moment && moment.TryGetValue<string>(out var text)
             ? DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)
             : null;
-        int? ceiling = line["max_releases"] is JsonValue number && number.TryGetValue<int>(out var count) ? count : null;
-        return new Record(set, set.Key ?? string.Empty, operations, expires, ceiling);
+        var audience = line["audience"] is JsonObject which
+            && Text(which["id"]) is { } id
+            && which["number"] is JsonValue held && held.TryGetValue<int>(out var number)
+            ? new AudienceRef(id, number)
+            : null;
+        return new Record(set, Text(line["category"]), operations, expires, Whole(line["max_releases"]), audience, Whole(line["max_people"]), Whole(line["max_per_search"]));
+    }
+
+    /// <summary>
+    /// The campaign's allowance as it stands, with how much of it is used: the newest line for <see cref="Searches"/> where
+    /// it is a set that names an audience, the releases made under it and the people they asked for; null where there is
+    /// none. One read, for every reader that says how far the allowance has gone.
+    /// </summary>
+    public static async Task<Allowance?> AllowanceAsync(JasonDbContext db, int campaignId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var newest = await Newest(db, campaignId, Searches).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return newest is { Kind: JournalKinds.StandingApprovalSet } ? await UsedAsync(db, newest, ct).ConfigureAwait(false) : null;
+    }
+
+    /// <summary>The allowance a set line holds, with the releases and people since; null where the line holds none.</summary>
+    internal static async Task<Allowance?> UsedAsync(JasonDbContext db, JournalEntry set, CancellationToken ct)
+    {
+        var record = Read(set);
+        if (record.Audience is null || record.MaxPeople is null)
+        {
+            return null;
+        }
+
+        var released = await Released(db, set).SingleAsync(ct).ConfigureAwait(false);
+        var people = await People(db, set).SingleAsync(ct).ConfigureAwait(false);
+        return new Allowance(record, released, people);
+    }
+
+    /// <summary>
+    /// The record an allowance's set line writes: no category, the one operation, the expiry and no count of releases as a
+    /// reply's has, then the audience by id and number, the ceiling in people and the cap per search.
+    /// </summary>
+    internal static JsonObject AllowanceLine(AudienceRef audience, int maxPeople, int? maxPerSearch, DateTimeOffset? expiresAt) => new()
+    {
+        ["category"] = null,
+        ["operations"] = new JsonArray(Searches),
+        ["expires_at"] = expiresAt is { } moment ? InboundSync.Instant(moment) : null,
+        ["max_releases"] = null,
+        ["audience"] = new JsonObject { ["id"] = audience.Id, ["number"] = audience.Number },
+        ["max_people"] = maxPeople,
+        ["max_per_search"] = maxPerSearch,
+    };
+
+    /// <summary>
+    /// Writes an allowance, retiring the one it replaces: an unset of the newest set where there is one, then the set, both
+    /// by <paramref name="actor"/> with the same reason. Nothing is saved here; the caller's act saves them with whatever
+    /// else it writes.
+    /// </summary>
+    internal static JournalEntry Allow(JasonDbContext db, JournalWriter journal, ActorRef actor, Campaign campaign, JournalEntry? standing, JsonObject record, string? reason)
+    {
+        ArgumentNullException.ThrowIfNull(journal);
+        if (standing is not null)
+        {
+            Retire(db, journal, actor, campaign, standing, reason);
+        }
+
+        return journal.Append(db, actor, JournalKinds.StandingApprovalSet, campaign, key: Searches, old: null, updated: record, reason: reason);
+    }
+
+    /// <summary>Takes back the standing approval <paramref name="standing"/> set, by <paramref name="actor"/>: an unset line, unsaved.</summary>
+    internal static void Retire(JasonDbContext db, JournalWriter journal, ActorRef actor, Campaign campaign, JournalEntry standing, string? reason)
+    {
+        ArgumentNullException.ThrowIfNull(journal);
+        ArgumentNullException.ThrowIfNull(standing);
+        journal.Append(db, actor, JournalKinds.StandingApprovalUnset, campaign, key: standing.Key, old: standing.New?.DeepClone(), reason: reason);
+    }
+
+    /// <summary>
+    /// The limits an allowance is held to, wherever a person gives one, each refusal at its field under
+    /// <paramref name="prefix"/>: a ceiling in people, required; a cap per search no larger than a search may ask for; an
+    /// expiry later than now.
+    /// </summary>
+    internal static void ValidateLimits(int? maxPeople, int? maxPerSearch, DateTimeOffset? expiresAt, DateTimeOffset now, ValidationErrors errors, string prefix = "")
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+        if (maxPeople is null)
+        {
+            errors.Add(prefix + "max_people", "required", "max_people is required: the most people the searches under the allowance may ask for.");
+        }
+        else if (maxPeople is < 1 or > MaxPeople)
+        {
+            errors.Add(prefix + "max_people", "invalid", string.Create(CultureInfo.InvariantCulture, $"max_people must be from 1 to {MaxPeople}."));
+        }
+
+        if (maxPerSearch is < 1 or > MaxPerSearch)
+        {
+            errors.Add(prefix + "max_per_search", "invalid", string.Create(CultureInfo.InvariantCulture, $"max_per_search must be from 1 to {MaxPerSearch}."));
+        }
+
+        if (expiresAt is { } expires && expires <= now)
+        {
+            errors.Add(prefix + "expires_at", "in_the_past", "expires_at must be a moment later than now.");
+        }
     }
 
     /// <summary>The record a set line writes: the category, the operations, the expiry and the ceiling, nothing else.</summary>
@@ -155,6 +279,11 @@ public static class StandingApprovals
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(plan);
+
+        if (string.Equals(plan.Contract.Id, Searches, StringComparison.Ordinal))
+        {
+            return await AllowanceCoverAsync(db, item, plan, now, ct).ConfigureAwait(false);
+        }
 
         if (item.Context[VerdictKey] is not { } named)
         {
@@ -238,7 +367,56 @@ public static class StandingApprovals
             return Miss(Why.CeilingReached, cited, category);
         }
 
-        return new Answer(new Cover(newest, verdict, category!, new ActorRef(newest.ActorType, newest.ActorId)), null);
+        var names = new JsonObject { ["verdict"] = verdict.PublicId, ["category"] = category };
+        return new Answer(new Cover(newest, new ActorRef(newest.ActorType, newest.ActorId), names), null);
+    }
+
+    /// <summary>
+    /// Whether the campaign's allowance covers this search, asked in this order, the first that fails naming the answer:
+    /// there is one; it names the audience the search runs under, which the claim has just recorded on the search; it has
+    /// not expired; the search asks for no more people than one search may; and the people the searches let go under it
+    /// asked for, with this one's, stay within its ceiling. The gate counts people by the count a search asks for; what the
+    /// provider charges is the provider's to count.
+    /// </summary>
+    private static async Task<Answer> AllowanceCoverAsync(JasonDbContext db, WorkItem item, ProviderOpPlan plan, DateTime now, CancellationToken ct)
+    {
+        var count = Count(plan.Input["args"]!["count"]);
+        var searched = item.Context[CampaignAudiences.ContextKey] is JsonObject carried ? Text(carried["id"]) : null;
+        var allowance = await AllowanceAsync(db, item.CampaignId, ct).ConfigureAwait(false);
+        var record = allowance?.Record;
+        var facts = new JsonObject
+        {
+            ["standing"] = record?.Line.PublicId,
+            ["audience"] = record?.Audience is { } named ? new JsonObject { ["id"] = named.Id, ["number"] = named.Number } : null,
+            ["expires_at"] = record?.ExpiresAt is { } moment ? InboundSync.Instant(moment) : null,
+            ["max_people"] = record?.MaxPeople,
+            ["max_per_search"] = record?.MaxPerSearch,
+            ["people"] = allowance?.People,
+            ["count"] = count,
+        };
+
+        var why = allowance switch
+        {
+            null => Why.NoStandingApproval,
+            _ when !string.Equals(record!.Audience!.Id, searched, StringComparison.Ordinal) => Why.AnotherAudience,
+            _ when record!.ExpiresAt is { } expires && expires.UtcDateTime <= now => Why.Expired,
+            _ when record!.MaxPerSearch is { } cap && count > cap => Why.OverPerSearch,
+            _ when allowance.People + count > record!.MaxPeople => Why.CeilingReached,
+            _ => null,
+        };
+        if (why is not null)
+        {
+            return new Answer(null, new Uncovered(why, facts));
+        }
+
+        var released = new JsonObject
+        {
+            ["verdict"] = null,
+            ["category"] = null,
+            ["audience"] = facts["audience"]!.DeepClone(),
+            ["count"] = count,
+        };
+        return new Answer(new Cover(record!.Line, new ActorRef(record.Line.ActorType, record.Line.ActorId), released), null);
     }
 
     /// <summary>
@@ -383,28 +561,78 @@ public static class StandingApprovals
         }
     }
 
-    private static Answer Miss(string why, string? verdict, string? category) => new(null, new Uncovered(why, verdict, category));
+    private static Answer Miss(string why, string? verdict, string? category) =>
+        new(null, new Uncovered(why, new JsonObject { ["verdict"] = verdict, ["category"] = category }));
 
     private static string? Text(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
-    /// <summary>A standing approval as its set line holds it.</summary>
-    internal sealed record Record(JournalEntry Line, string Category, IReadOnlyList<string> Operations, DateTimeOffset? ExpiresAt, int? MaxReleases);
+    private static int? Whole(JsonNode? node) => node is JsonValue value && value.TryGetValue<int>(out var number) ? number : null;
+
+    /// <summary>
+    /// The number of people a search asks for. The claim held the input to the operation's schema before it asked, and the
+    /// schema takes any whole number from 1 to 1000, <c>50.0</c> among them, which is not an <see cref="int"/> as written.
+    /// </summary>
+    private static int Count(JsonNode? node) => node switch
+    {
+        JsonValue value when value.TryGetValue<int>(out var whole) => whole,
+        JsonValue value when value.TryGetValue<decimal>(out var exact) => (int)exact,
+        _ => (int)node!.GetValue<double>(),
+    };
+
+    /// <summary>
+    /// A standing approval as its set line holds it: a category of reply's, or an allowance, which names an audience and a
+    /// ceiling in people and no category.
+    /// </summary>
+    public sealed record Record(
+        JournalEntry Line,
+        string? Category,
+        IReadOnlyList<string> Operations,
+        DateTimeOffset? ExpiresAt,
+        int? MaxReleases,
+        AudienceRef? Audience,
+        int? MaxPeople,
+        int? MaxPerSearch)
+    {
+        /// <summary>
+        /// Whether it still stands, having let go <paramref name="released"/> pieces of work that asked for
+        /// <paramref name="people"/>: not past its expiry, under its ceilings, and in a campaign that is not archived — an
+        /// archived campaign's work is over, so nothing it set stands, though the record of it is listed.
+        /// </summary>
+        public bool InForce(int released, int? people, DateTime now, CampaignStatus campaign) =>
+            !(ExpiresAt is { } expires && expires.UtcDateTime <= now)
+            && !(MaxReleases is { } ceiling && released >= ceiling)
+            && !(MaxPeople is { } most && people >= most)
+            && campaign != CampaignStatus.Archived;
+    }
+
+    /// <summary>The campaign's allowance: its record, the searches released under it, and the people those asked for.</summary>
+    public sealed record Allowance(Record Record, int Released, int People)
+    {
+        /// <summary>Whether it still stands at <paramref name="now"/> in a campaign of status <paramref name="campaign"/>.</summary>
+        public bool InForce(DateTime now, CampaignStatus campaign) => Record.InForce(Released, People, now, campaign);
+    }
 
     /// <summary>The claim's answer: a cover, or why there is none.</summary>
     internal sealed record Answer(Cover? Cover, Uncovered? Uncovered);
 
-    /// <summary>What released the work: the line that set the standing approval, the verdict, its category and who set it.</summary>
-    internal sealed record Cover(JournalEntry Standing, JournalEntry Verdict, string Category, ActorRef SetBy);
+    /// <summary>
+    /// What released the work: the line that set the standing approval, who set it, and what the line of the release names
+    /// besides — the verdict and its category for a reply, the audience and the people asked for for a search.
+    /// </summary>
+    internal sealed record Cover(JournalEntry Standing, ActorRef SetBy, JsonObject Names);
 
-    /// <summary>What a parked approval's preview says about a standing approval that did not release it.</summary>
-    internal sealed record Uncovered(string Why, string? Verdict, string? Category)
+    /// <summary>
+    /// What a parked approval's preview says about a standing approval that did not release it: the facts it was decided
+    /// on — the verdict and its category for a reply; the allowance, its use and the search's count for a search — and why.
+    /// </summary>
+    internal sealed record Uncovered(string Why, JsonObject Facts)
     {
-        public JsonObject ToJson() => new()
+        public JsonObject ToJson()
         {
-            ["verdict"] = Verdict,
-            ["category"] = Category,
-            ["why"] = Why,
-        };
+            var said = Facts.DeepClone().AsObject();
+            said["why"] = Why;
+            return said;
+        }
     }
 
     /// <summary>A verdict's author: the work item a run of which wrote it, or none where a person did.</summary>

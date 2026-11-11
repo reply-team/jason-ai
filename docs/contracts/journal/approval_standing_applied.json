@@ -2,7 +2,7 @@
   "kind": "approval_standing_applied",
   "version": 1,
   "since": "0.25.0",
-  "summary": "A standing approval released a drafted reply without asking a person, and the line names the approval that records the release, the standing approval and the verdict the reply answers.",
+  "summary": "A standing approval released work without asking a person, a drafted reply under a category's or a search under the allowance, and the line names the approval that records the release, the standing approval, and the verdict the reply answers or the audience and the people the search asks for.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -10,7 +10,7 @@
     "contact": { "at": "/contact_id", "presence": "sometimes" },
     "approval": { "at": "/new/id", "presence": "always" }
   },
-  "field_since": {},
+  "field_since": { "/new/audience": "0.34.0", "/new/count": "0.34.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -24,11 +24,22 @@
         "required": ["id", "operation", "subject_hash", "standing", "verdict", "category"],
         "properties": {
           "id": { "type": "string", "pattern": "^apr_", "description": "The approval written already approved, decided by the person who set the standing approval." },
-          "operation": { "enum": ["conversation.reply", "message.send"] },
+          "operation": { "enum": ["conversation.reply", "message.send", "audience.search"] },
           "subject_hash": { "type": "string", "pattern": "^sha256:", "description": "The digest of what was released; the subject itself stays on the approval." },
           "standing": { "type": "string", "pattern": "^jrn_", "description": "The line that set the standing approval, the same as the key." },
-          "verdict": { "type": "string", "pattern": "^jrn_", "description": "The line that classified the reply this work answers." },
-          "category": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers." }
+          "verdict": { "type": ["string", "null"], "pattern": "^jrn_", "description": "The line that classified the reply this work answers; null on a search." },
+          "category": { "type": ["string", "null"], "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers; null on a search." },
+          "audience": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "number"],
+            "description": "On a search, the campaign's audience it runs under, the one the allowance names; absent on a reply.",
+            "properties": {
+              "id": { "type": "string", "pattern": "^aud_", "description": "The audience, by its id." },
+              "number": { "type": "integer", "minimum": 1, "description": "The number the campaign knows the audience by." }
+            }
+          },
+          "count": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "On a search, how many people it asks for: what the allowance's ceiling counts. Absent on a reply." }
         }
       }
     }
