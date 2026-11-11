@@ -1338,6 +1338,47 @@ public class CiRunsTests
     }
 
     /// <summary>
+    /// The system packages the browser asks for may fail to install without failing the job: on 2026-11-11 the hosted
+    /// runners could not resolve the package servers' names for hours. Both steps that install them fall back to the
+    /// browser alone and say so in a warning, and the browser smoke after them, which carries no condition, is what
+    /// proves the browser starts. Nothing in the job continues on an error.
+    /// </summary>
+    [Fact]
+    public void A_browser_whose_system_packages_cannot_be_installed_is_left_to_the_smoke()
+    {
+        var job = Mapping(Jobs(), "ui");
+        var steps = Steps(job);
+        var smoke = steps.FindIndex(step => Scalar(step, "name") == "Browser smoke");
+        Assert.True(smoke >= 0);
+        Assert.Equal("npm run e2e", Scalar(steps[smoke], "run")?.Trim());
+        Assert.Null(Node(steps[smoke], "if"));
+
+        foreach (var (name, install) in new[]
+        {
+            ("Browser", "npx playwright install --with-deps chromium"),
+            ("Browser's system libraries", "npx playwright install-deps chromium"),
+        })
+        {
+            var index = steps.FindIndex(step => Scalar(step, "name") == name);
+            Assert.InRange(index, 0, smoke - 1);
+            Assert.Equal("bash", Scalar(steps[index], "shell"));
+            var lines = Scalar(steps[index], "run")!.Split('\n')
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .ToList();
+            Assert.Equal($"if ! {install}; then", lines[0]);
+            Assert.StartsWith("echo \"::warning title=Browser's system packages::", lines[1], StringComparison.Ordinal);
+            Assert.EndsWith("the browser smoke decides.\"", lines[1], StringComparison.Ordinal);
+            Assert.Equal("npx playwright install chromium", lines[2]);
+            Assert.Equal("fi", lines[3]);
+            Assert.Equal(4, lines.Count);
+        }
+
+        Assert.All(steps, step => Assert.Null(Node(step, "continue-on-error")));
+        Assert.Null(Node(job, "continue-on-error"));
+    }
+
+    /// <summary>
     /// One job runs the desktop application's checks, in the order desktop/README.md gives them: the install, the
     /// type-check and the Node tests, in the desktop's own folder, on a node of 22 or later, which runs the tests' TypeScript
     /// as it is. Electron's own binary is never downloaded: no test starts a window. None of the steps may fail without
