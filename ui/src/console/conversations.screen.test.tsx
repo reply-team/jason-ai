@@ -106,7 +106,7 @@ describe('the desktop’s conversations', () => {
         expect(
             within(shown).getByText('Earlier messages of this conversation were let go to keep it within its size.'),
         ).toBeTruthy();
-        expect(document.querySelector('img')).toBeNull();
+        expect(Array.from(document.querySelectorAll('img')).filter((img) => !img.closest('.brand'))).toEqual([]);
         expect((window as { hit?: number }).hit).toBeUndefined();
         // Shown again, it is brought forward, not read again.
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));

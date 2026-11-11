@@ -16,20 +16,21 @@
   gap: var(--space-4);
 }
 
-.wordmark {
+.brand {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-2);
-  font-size: var(--text-md);
-  font-weight: 600;
-  letter-spacing: -0.01em;
 }
-.wordmark .glyph {
-  width: 18px; height: 18px;
-  border: 2px solid var(--text);
-  border-radius: 5px 5px 5px 1px;
+.brand .mark { width: 24px; height: 24px; flex: none; }
+.brand .wordmark { height: 14px; width: auto; max-width: 100%; min-width: 0; }
+.brand .wordmark.dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand .wordmark.light { display: none; }
+  :root:not([data-theme="light"]) .brand .wordmark.dark { display: inline; }
 }
+:root[data-theme="dark"] .brand .wordmark.light { display: none; }
+:root[data-theme="dark"] .brand .wordmark.dark { display: inline; }
 
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a {

@@ -231,7 +231,7 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
                 { target: 'zip', arch: ['arm64', 'x64'] },
             ],
             category: 'public.app-category.business',
-            icon: 'resources/icon.png',
+            icon: 'installer/icon.icns',
             hardenedRuntime: true,
             entitlements: 'installer/entitlements.mac.plist',
             entitlementsInherit: 'installer/entitlements.mac.plist',

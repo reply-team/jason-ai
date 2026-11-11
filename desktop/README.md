@@ -278,7 +278,7 @@ electron-updater update a package as a deb, so the configuration starts the deb 
 
 The release passes `--executable` with the `jason` it has already built and signed, so the package carries that very
 file, and signs the package itself: a Mac package is never built unsigned. Inside `app.asar` are `lib/`, `shell/`,
-`resources/`, the chat's two lists and its instruction text; beside it, in the package's `resources/`, are `bundle/`
+`resources/` (the application icon as a PNG, and the tray's images; the Mac's icon set is read at build time from `installer/`), the chat's two lists and its instruction text; beside it, in the package's `resources/`, are `bundle/`
 (the executable with `LICENSE` and `THIRD-PARTY-NOTICES`, the skills and `version.json`) and `notices/` (the
 repository's `LICENSE`, this folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package
 carries no UI: `jason ui install` places the UI of the runtime's own release.
