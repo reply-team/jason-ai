@@ -77,8 +77,10 @@ export interface SetupState {
     runtimeVersion: string | null;
     bundleVersion: string;
     /**
-     * When the runtime is another version than the one the desktop carries, the sentence that says so and names
-     * `jason update`; null when they are one version or no runtime answers.
+     * When the runtime is another version than the one the desktop carries, the sentence that says so and names the way
+     * to one version: Check for Updates when the runtime runs from the jason the desktop carries, which `jason update`
+     * refuses to change, and `jason update` when it is another installation's; null when they are one version or no
+     * runtime answers.
      */
     versionsDiffer: string | null;
     plugins: PluginState[];
@@ -97,6 +99,8 @@ export interface SetupDeps {
     log: Logger;
     bundleVersion: string;
     runtimeVersion(): string | null;
+    /** Whether the runtime runs from the jason the desktop carries (`own-runtime.ts`), as the start found it; absent, it does not. */
+    runtimeIsOurs?(): boolean;
     settings(): DesktopSettings;
     clock?: () => number;
 }
@@ -148,12 +152,20 @@ export function settingsUnreadable(stdout: string): string | null {
     }
 }
 
-/** Pure: what the system screen says when the runtime and the desktop are two versions. */
-export function versionsDifferSentence(runtimeVersion: string | null, bundleVersion: string): string | null {
+/**
+ * Pure: what the system screen says when the runtime and the desktop are two versions. A runtime that runs from the jason
+ * the desktop carries is brought to one version by the desktop's own update, since `jason update` refuses to change a
+ * carried file; another installation's runtime by `jason update`.
+ */
+export function versionsDifferSentence(runtimeVersion: string | null, bundleVersion: string, ours: boolean): string | null {
     // A build after a plus names the commit, not another version.
     const bare = (version: string) => version.split('+')[0];
     if (runtimeVersion === null || bare(runtimeVersion) === bare(bundleVersion)) return null;
-    return `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is. Run \`jason update\` to bring them to one version.`;
+    // A Windows or Linux window shows no menu bar, so the tray's menu is named too, in the CLI's own words.
+    const way = ours
+        ? "Choose Check for Updates… in the desktop's Jason menu, or in the menu of its icon in the tray,"
+        : 'Run `jason update`';
+    return `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is. ${way} to bring them to one version.`;
 }
 
 export class Setup {
@@ -249,7 +261,7 @@ export class Setup {
             reply: await this.#reply(answered.get('reply')?.valid ?? false),
             runtimeVersion,
             bundleVersion: this.#deps.bundleVersion,
-            versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion),
+            versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion, this.#deps.runtimeIsOurs?.() ?? false),
             plugins: bundledPlugins.map((plugin) => ({
                 id: plugin.id,
                 label: plugin.label,

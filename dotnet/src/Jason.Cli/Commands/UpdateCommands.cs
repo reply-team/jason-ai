@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Cli.Installation;
 using Jason.Cli.Process;
@@ -60,7 +61,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "apply",
-            "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair.");
+            "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair. Refused, before anything is fetched or stopped, when this jason is the one the desktop application carries, or when the update in flight is that jason's: the desktop's Check for Updates updates the application and its jason together.");
         var feed = new Option<string?>("--feed")
         {
             Description = "Read a different feed: the https address of a manifest.json, or http on this machine. Default: the public release feed.",
@@ -104,8 +105,11 @@ public static class UpdateCommands
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        // Before anything at all: before the ledger is read, a byte is fetched, or the runtime is asked to drain.
-        if (RefusedAsManaged(env, "apply"))
+        // Before anything at all: before a byte is fetched, the runtime is asked to drain or a step is recorded. A
+        // carried executable reads the update record only to know whether it was handed an update an earlier release began.
+        if (RefusedAsCarried(env, "apply", carriesOnAHandOver: true)
+            || RefusedAsRecordedCarried(env, "apply", completeToo: false)
+            || RefusedAsManaged(env, "apply"))
         {
             return ExitCodes.ApiError;
         }
@@ -277,7 +281,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "rollback",
-            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote.");
+            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Refused when this jason is the one the desktop application carries, or when the update recorded is that jason's.");
         var human = VerbOptions.Human();
         command.Options.Add(human);
 
@@ -311,7 +315,9 @@ public static class UpdateCommands
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        if (RefusedAsManaged(env, "rollback"))
+        if (RefusedAsCarried(env, "rollback", carriesOnAHandOver: false)
+            || RefusedAsRecordedCarried(env, "rollback", completeToo: true)
+            || RefusedAsManaged(env, "rollback"))
         {
             return ExitCodes.ApiError;
         }
@@ -340,6 +346,92 @@ public static class UpdateCommands
             env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
+    }
+
+    /// <summary>
+    /// Refuses, and says so, where this jason is the one the desktop application carries (<see cref="CarriedExecutable"/>).
+    /// The file is the application's — signed with it on macOS, the installer's on Windows — and the desktop's own update
+    /// replaces the application and the jason inside it together, so these verbs leave it alone and point there.
+    /// </summary>
+    /// <remarks>
+    /// One update is carried on rather than refused, and only by <c>apply</c>: one already past <c>swapped</c> whose
+    /// install path is this very file. Only the applier of a release from before this refusal leaves one: it takes every
+    /// step up to the swap in its own process — the runtime stopped, the carried file moved aside, the new one put in its
+    /// place — and then runs <c>jason update apply</c> from that path, so no code of this build runs before the carried file
+    /// is replaced. A refusal then would leave the runtime it stopped stopped and the update half done; the update is
+    /// finished instead, and the next one is refused.
+    /// </remarks>
+    private static bool RefusedAsCarried(CliEnvironment env, string verb, bool carriesOnAHandOver)
+    {
+        if (CarriedExecutable.Of(env) is not { } carried || (carriesOnAHandOver && HandedOverTo(env, carried)))
+        {
+            return false;
+        }
+
+        env.Out.WriteLine(CliErrors.Serialize(
+            UpdateCodes.CarriedByDesktop,
+            $"This jason is the one the Jason desktop application carries, at {carried.Executable}, so `jason update {verb}` "
+            + "would change a file inside the application. The application and the jason it carries are updated together: "
+            + "choose Check for Updates in the desktop's Jason menu, or in the menu of its icon in the tray.",
+            retryable: false));
+        return true;
+    }
+
+    /// <summary>Whether the update record names one past <c>swapped</c>, not complete, whose install path is the carried file.</summary>
+    private static bool HandedOverTo(CliEnvironment env, CarriedExecutable carried)
+    {
+        try
+        {
+            return UpdateLedger.ReadFile(new UpdatePaths(env.Paths).Ledger) is { Step: >= UpdateStep.Swapped and not UpdateStep.Complete } ledger
+                && carried.Is(ledger.InstallPath);
+        }
+        catch (Exception error) when (error is UpdateLedgerException or IOException or UnauthorizedAccessException)
+        {
+            // Not an update record this build reads: nothing was handed over that it can tell, and the refusal stands.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Refuses, and says so, where the update record names a carried executable other than the one this process runs
+    /// as. A resumed apply and a rollback act on the file the record names, not on their own, so another jason sharing
+    /// the data directory, one the install line put on the PATH say, would otherwise replace the application's file.
+    /// </summary>
+    /// <remarks>
+    /// An apply acts only on a record in flight, and plans a new update of its own file past a complete one; a rollback
+    /// acts on any record. A record that cannot be read refuses nothing here: the verb reads it again and answers as it
+    /// always has. The hand-over is not taken here: it is only for the carried file running as itself.
+    /// </remarks>
+    private static bool RefusedAsRecordedCarried(CliEnvironment env, string verb, bool completeToo)
+    {
+        var path = new UpdatePaths(env.Paths).Ledger;
+        UpdateLedger? ledger;
+        try
+        {
+            ledger = UpdateLedger.ReadFile(path);
+        }
+        catch (Exception error) when (error is UpdateLedgerException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        if (ledger is null
+            || (!completeToo && ledger.Step == UpdateStep.Complete)
+            || string.IsNullOrWhiteSpace(ledger.InstallPath)
+            || CarriedExecutable.Of(ledger.InstallPath) is not { } carried
+            || carried.Is(env.InstallPath ?? SelfExecutable.InstalledImage))
+        {
+            return false;
+        }
+
+        env.Out.WriteLine(CliErrors.Serialize(
+            UpdateCodes.CarriedByDesktop,
+            $"The update recorded at {path} belongs to the jason the Jason desktop application carries, at "
+            + $"{carried.Executable}, so `jason update {verb}` would change a file inside the application. "
+            + "The application and the jason it carries are updated together: choose Check for Updates in the "
+            + "desktop's Jason menu, or in the menu of its icon in the tray.",
+            retryable: false));
+        return true;
     }
 
     /// <summary>

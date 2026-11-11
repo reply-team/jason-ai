@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text.Json;
 using Jason.Cli.Commands;
+using Jason.Cli.Installation;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Update;
@@ -81,6 +82,9 @@ public static class UninstallCommand
         Installed by a package manager (Homebrew, winget): steps 5 and 6 are the manager's. The executable, its
         directory and the PATH entry that reaches it are left to it, and the plan names the command that takes
         them off: brew uninstall jason, or winget uninstall Reply.Jason. The runtime is still stopped first.
+        Carried by the desktop application (a version.json beside the executable): refused before anything is
+        read or removed, since it would delete the executable out of the application. The application is
+        removed the way the system removes one, and its own uninstall says what it takes off.
         This account's, not this installation's: the logon registration, the notification registration and the
         agent harnesses. Uninstalling a second installation on one account takes the first one's registrations
         and harness skills too. The jason: link goes only where its command names this executable.
@@ -132,6 +136,19 @@ public static class UninstallCommand
     /// </summary>
     public static async Task<int> RunAsync(CliEnvironment env, UninstallOptions options, CancellationToken cancellationToken)
     {
+        // Before anything at all, a dry run included: the executable this would delete last is the desktop
+        // application's, and a plan that named it under what is removed would be a plan nobody should follow.
+        if (CarriedExecutable.Of(env) is { } carried)
+        {
+            return Refuse(
+                env,
+                options.Human,
+                CliErrors.UninstallCarriedByDesktop,
+                $"This jason is the one the Jason desktop application carries, at {carried.Executable}, so `jason uninstall` "
+                + $"would delete it out of the application. Nothing was read or removed. {RemovingTheApplication()} "
+                + $"The data directory at '{env.Paths.Root}' is kept either way.");
+        }
+
         // Before anything is read, let alone removed. The seam that touches the machine is the one an
         // environment can forget to name, and a destructive verb that treated "nobody named one" as "there is
         // nothing to do" would report a clean uninstall it never performed.
@@ -413,6 +430,13 @@ public static class UninstallCommand
             ? $"  what Jason keeps in the data directory at {plan.DataDirectory}, and the directory once nothing else is in it"
             : $"The data directory at {plan.DataDirectory} is kept. --purge-data removes it.");
     }
+
+    private static string RemovingTheApplication() =>
+        OperatingSystem.IsWindows()
+            ? "Uninstall Jason from Installed apps in Settings: its uninstaller stops the runtime the application carries and takes off what it placed."
+            : OperatingSystem.IsMacOS()
+                ? "Take off what the application placed from its Jason menu, quit it, then move Jason.app to the Trash."
+                : "Take off what the application placed from its Jason menu, quit it, then remove the package it was installed from, or delete the AppImage.";
 
     /// <summary>
     /// The one shape a refusal takes: the error envelope on stdout by default, a sentence on stderr under
