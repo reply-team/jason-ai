@@ -6,7 +6,8 @@
  * desktop carries everywhere: the CLI it runs, the runtime it starts and stops, the PATH command and the chat's PATH.
  *
  * The copy is written into a temporary folder file by file, each file read and written, never linked, then renamed into
- * place, so a copy under its version is always whole. A copy already there is used only when every file of it, the
+ * place, so a copy under its version is always whole. The folder is copied whole, never a chosen list of files, so
+ * `version.json`, the record beside the executable that the command line reads, stays beside the copied `jason`. A copy already there is used only when every file of it, the
  * executable among them, has the SHA-256 of the package's own and no file is more or fewer; one that differs is neither
  * used nor overwritten, and the start stops naming it (`differsWords`), so the copy never silently differs from what the
  * package carries. The copies of other versions are removed, but the one the rollback record names, which a version put
@@ -28,7 +29,7 @@ export class BundleDiffers extends Error {}
 
 /** What the starting page says when the copy under the version differs from the package's bundle. */
 export function differsWords(copy: string): string {
-    return `The jason this application carries is copied to ${copy}, and that copy no longer matches the one in this package, so Jason did not start with it. Something changed it after it was copied; jason update apply run as that copy does. Remove ${copy} and start Jason again: it copies the package’s jason there again.`;
+    return `The jason this application carries is copied to ${copy}, and that copy no longer matches the one in this package, so Jason did not start with it. Something changed it after it was copied. Remove ${copy} and start Jason again: it copies the package’s jason there again.`;
 }
 
 function digestOf(file: string): string {

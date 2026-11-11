@@ -48,6 +48,17 @@ test('the bundle is copied under its version, by write and rename, file by file,
     if (process.platform !== 'win32') assert.equal(statSync(join(carried, 'jason')).mode & 0o777, 0o755, 'the executable stays one');
 });
 
+test('the copy keeps version.json beside the copied jason, the record the command line reads there', (t) => {
+    const b = bench(t);
+    const carried = carriedBundle({ source: b.source, bundles: b.bundles, version: '0.35.0', keep: [] });
+    assert.ok(statSync(join(carried, 'jason')).isFile());
+    assert.deepEqual(JSON.parse(readFileSync(join(carried, 'version.json'), 'utf8')), { version: '0.35.0' });
+    // The folder is copied whole: a file the package adds later is carried without a list naming it.
+    writeFileSync(join(b.source, 'a-later-record.json'), '{}');
+    const next = carriedBundle({ source: b.source, bundles: join(b.root, 'other'), version: '0.35.0', keep: [] });
+    assert.deepEqual(filesOf(next), filesOf(b.source));
+});
+
 test('a link in the package is copied as the file it names, never as a link', (t) => {
     const b = bench(t);
     rmSync(join(b.source, 'LICENSE'));
@@ -91,7 +102,7 @@ test('a copy already there is used only when every file of it, the executable am
 test('a copy that differs is named with the act that clears it', () => {
     assert.equal(
         differsWords('/home/a/.jason/desktop/bundle/0.35.0'),
-        'The jason this application carries is copied to /home/a/.jason/desktop/bundle/0.35.0, and that copy no longer matches the one in this package, so Jason did not start with it. Something changed it after it was copied; jason update apply run as that copy does. Remove /home/a/.jason/desktop/bundle/0.35.0 and start Jason again: it copies the package’s jason there again.',
+        'The jason this application carries is copied to /home/a/.jason/desktop/bundle/0.35.0, and that copy no longer matches the one in this package, so Jason did not start with it. Something changed it after it was copied. Remove /home/a/.jason/desktop/bundle/0.35.0 and start Jason again: it copies the package’s jason there again.',
     );
 });
 
