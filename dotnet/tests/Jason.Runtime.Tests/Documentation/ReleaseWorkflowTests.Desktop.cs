@@ -437,13 +437,15 @@ public partial class ReleaseWorkflowTests
             "[ \"$(dpkg-deb --field \"$deb\" Package)\" = jason-desktop ] || { echo \"::error title=Desktop::The deb is not the package jason-desktop.\"; exit 1; }",
             "[ \"$(dpkg-deb --field \"$deb\" Version)\" = \"${VERSION//-/\\~}\" ] || { echo \"::error title=Desktop::The deb's version is not $VERSION as dpkg spells it.\"; exit 1; }",
             "[ \"$(dpkg-deb --field \"$deb\" Architecture)\" = amd64 ] || { echo \"::error title=Desktop::The deb is not for amd64.\"; exit 1; }",
+            "dpkg-deb --field \"$deb\" Recommends | grep -q 'libicu74 | libicu72' || { echo \"::error title=Desktop::The deb does not recommend the ICU library its jason needs.\"; exit 1; }",
+            "if dpkg-deb --field \"$deb\" Depends | grep -q libicu; then echo \"::error title=Desktop::The deb depends on an ICU library by one name; it recommends it by alternatives.\"; exit 1; fi",
             "dpkg-deb --extract \"$deb\" \"$opened\"",
             "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses, its updater or its AppArmor profile.\"; exit 1; }",
             "dpkg-deb --control \"$deb\" \"$control\"",
             "grep -q 'apparmor_parser --replace' \"$control/postinst\" || { echo \"::error title=Desktop::The deb's after-install loads no AppArmor profile for its sandbox.\"; exit 1; }",
             "carries \"$opened/opt/Jason\" deb",
             "if grep -q -e '--no-sandbox' \"${entries[@]}\"; then echo \"::error title=Desktop::The deb's menu entry starts the program with --no-sandbox.\"; exit 1; fi",
-            "readelf --dynamic \"$appimage\" | grep -E 'NEEDED|INTERP' && { echo \"::error title=Desktop::The AppImage's runtime needs shared libraries, libfuse2 among them maybe.\"; exit 1; }",
+            "readelf -lW -d \"$appimage\" | grep -E '\\(NEEDED\\)|^ *INTERP ' && { echo \"::error title=Desktop::The AppImage's runtime names an interpreter or a shared library, libfuse2 among them maybe.\"; exit 1; }",
             "(cd \"$extracted\" && \"$appimage\" --appimage-extract > /dev/null)",
             "node desktop/scripts/check-package.mjs --app \"$extracted/squashfs-root\" --platform linux --form appimage || { echo \"::error title=Desktop::The AppImage's application is not what it was configured to be: its feed, its fuses or its updater.\"; exit 1; }",
             "carries \"$extracted/squashfs-root\" AppImage",
@@ -481,12 +483,16 @@ public partial class ReleaseWorkflowTests
         var lines = LinuxLines(LinuxDesktopStart);
         InOrder(lines,
         [
+            "program='^[^ ]*/jason-desktop-app( |$)'",
+            "if pgrep -f -- \"$program\" > /dev/null; then pgrep -a -f -- \"$program\"; echo \"::error title=Desktop::A process of the application runs before the $form starts.\"; return 1; fi",
             "mkdir -p \"$data/ui/custom\"",
             "JASON_DATA_DIR=\"$data\" JASON_Harness__Root=\"$data-harness\" xvfb-run --auto-servernum \"$@\" > \"$data.out\" 2>&1 &",
             "if grep -qs '\"EventName\":\"window_loaded\"' \"$data\"/logs/desktop-*.jsonl; then loaded=yes; break; fi",
             "grep -qs '\"EventName\":\"desktop_started\"' \"$data\"/logs/desktop-*.jsonl || { echo \"::error title=Desktop::The $form logged no desktop_started.\"; return 1; }",
             "case \" $said \" in *' --no-sandbox '*) echo \"::error title=Desktop::The $form runs with --no-sandbox.\"; return 1 ;; esac",
-            "if kill -0 \"$desktop\" 2> /dev/null; then echo \"::error title=Desktop::The $form did not quit.\"; return 1; fi",
+            "kill -TERM \"$main\"",
+            "if kill -0 \"$main\" 2> /dev/null; then echo \"::error title=Desktop::The $form did not quit.\"; return 1; fi",
+            "if pgrep -f -- \"$program\" > /dev/null; then pgrep -a -f -- \"$program\"; echo \"::error title=Desktop::The $form left a process of the application running.\"; return 1; fi",
             "JASON_DATA_DIR=\"$data\" \"$jason\" runtime stop || { echo \"::error title=Desktop::The runtime the $form started did not stop with the jason it carries.\"; return 1; }",
             "sudo apt-get install -y --no-install-recommends \"$dist/jason-desktop-linux-x64.deb\"",
             "if [ -e /etc/apparmor.d/jason-desktop-app ]; then echo \"The deb installed its AppArmor profile.\"; else echo \"The deb installed no AppArmor profile: this runner's AppArmor reads none.\"; fi",
@@ -502,11 +508,27 @@ public partial class ReleaseWorkflowTests
         Assert.All(lines.Where(line => line.Contains("JASON_DATA_DIR=", StringComparison.Ordinal)), line => Assert.Contains("\"$data\"", line, StringComparison.Ordinal));
         Assert.Contains("data=\"$RUNNER_TEMP/jason-desktop-appimage-data\"", lines);
         Assert.DoesNotContain(lines, line => Regex.IsMatch(line, @"\$HOME|~/"));
-        Assert.DoesNotContain(lines, line => line.Contains("--no-sandbox", StringComparison.Ordinal) && !line.StartsWith("case ", StringComparison.Ordinal) && !line.StartsWith("#", StringComparison.Ordinal));
-        Assert.True(
-            lines.FindIndex(line => line.StartsWith("sudo sysctl", StringComparison.Ordinal)) > lines.FindIndex(line => line.StartsWith("started deb ", StringComparison.Ordinal)),
-            "The runner's restriction is lifted before the deb starts as shipped.");
-        Assert.Single(lines, line => line.StartsWith("sudo sysctl", StringComparison.Ordinal));
+
+        // The switch is named on one line alone, the one that refuses a start carrying it.
+        const string refusal = "case \" $said \" in *' --no-sandbox '*) echo \"::error title=Desktop::The $form runs with --no-sandbox.\"; return 1 ;; esac";
+        Assert.Equal([refusal], lines.Where(line => line.Contains("--no-sandbox", StringComparison.Ordinal)));
+
+        // The application's processes are found by the program's own first word, never a wrapper's command line that
+        // ends with it: no other pattern is handed to pgrep or pkill, and nothing is killed by a pattern at all.
+        Assert.All(lines.Where(line => Regex.IsMatch(line, @"\bpgrep\b")), line => Assert.DoesNotMatch(@"pgrep [^|;]*'", line));
+        Assert.All(lines.Where(line => Regex.IsMatch(line, @"\bpgrep\b")), line => Assert.Contains("-- \"$program\"", line, StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => line.Contains("pkill", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => line.Contains("kill -0 \"$desktop\" 2> /dev/null; then", StringComparison.Ordinal));
+
+        // The runner's restriction is lifted only inside the one test that finds it refusing user namespaces, after the
+        // deb has started as shipped, and nowhere else.
+        var sysctl = Assert.Single(lines.Select((line, index) => (Line: line, Index: index)), each => each.Line.Contains("sysctl", StringComparison.Ordinal));
+        Assert.Equal("sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0", sysctl.Line);
+        var opened = lines.FindLastIndex(sysctl.Index, line => line.StartsWith("if ", StringComparison.Ordinal) || line == "fi");
+        Assert.Equal("if ! unshare -Ur true 2> /dev/null; then", lines[opened]);
+        var closed = lines.FindIndex(sysctl.Index, line => line == "fi" || line.StartsWith("if ", StringComparison.Ordinal));
+        Assert.Equal("fi", lines[closed]);
+        Assert.True(opened > lines.FindIndex(line => line.StartsWith("started deb ", StringComparison.Ordinal)), "The runner's restriction is lifted before the deb starts as shipped.");
     }
 
     /// <summary>

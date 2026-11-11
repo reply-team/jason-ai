@@ -933,7 +933,8 @@ runs:
     # architecture; unpacked, /opt/Jason is held to the configuration it was built from (its feed, its fuses, and
     # package-type saying deb, which makes electron-updater's deb updater), and its menu entry starts the program without
     # --no-sandbox; its AppArmor profile lets the program make user namespaces, and its after-install loads that profile.
-    # The AppImage's runtime is linked to no shared library, so it needs no libfuse2; its contents, extracted
+    # The AppImage's runtime names no interpreter and no shared library, read from its program headers and its dynamic
+    # section, so it needs no libfuse2; its contents, extracted
     # by that runtime, are held to the configuration the same way, with no package-type, which makes the AppImage updater.
     # Each carries the executable this call published, byte for byte and runnable, with its notices, Chromium's, and the
     # release's version in version.json. The feed's digest and size of each file it names are computed again from the
@@ -968,6 +969,8 @@ runs:
         [ "$(dpkg-deb --field "$deb" Package)" = jason-desktop ] || { echo "::error title=Desktop::The deb is not the package jason-desktop."; exit 1; }
         [ "$(dpkg-deb --field "$deb" Version)" = "${VERSION//-/\~}" ] || { echo "::error title=Desktop::The deb's version is not $VERSION as dpkg spells it."; exit 1; }
         [ "$(dpkg-deb --field "$deb" Architecture)" = amd64 ] || { echo "::error title=Desktop::The deb is not for amd64."; exit 1; }
+        dpkg-deb --field "$deb" Recommends | grep -q 'libicu74 | libicu72' || { echo "::error title=Desktop::The deb does not recommend the ICU library its jason needs."; exit 1; }
+        if dpkg-deb --field "$deb" Depends | grep -q libicu; then echo "::error title=Desktop::The deb depends on an ICU library by one name; it recommends it by alternatives."; exit 1; fi
         opened="$RUNNER_TEMP/jason-desktop-deb"
         rm -rf "$opened"
         dpkg-deb --extract "$deb" "$opened"
@@ -982,8 +985,8 @@ runs:
         grep -H '^Exec=' "${entries[@]}"
         if grep -q -e '--no-sandbox' "${entries[@]}"; then echo "::error title=Desktop::The deb's menu entry starts the program with --no-sandbox."; exit 1; fi
 
-        readelf --dynamic "$appimage" | grep -E 'NEEDED|INTERP' && { echo "::error title=Desktop::The AppImage's runtime needs shared libraries, libfuse2 among them maybe."; exit 1; }
-        echo "The AppImage's runtime needs no shared library."
+        readelf -lW -d "$appimage" | grep -E '\(NEEDED\)|^ *INTERP ' && { echo "::error title=Desktop::The AppImage's runtime names an interpreter or a shared library, libfuse2 among them maybe."; exit 1; }
+        echo "The AppImage's runtime names no interpreter and no shared library."
         extracted="$RUNNER_TEMP/jason-desktop-appimage"
         rm -rf "$extracted"
         mkdir -p "$extracted"
@@ -1011,10 +1014,15 @@ runs:
         dist="$GITHUB_WORKSPACE/desktop/dist"
         if unshare -Ur true 2> /dev/null; then echo "This runner admits unprivileged user namespaces."; else echo "This runner refuses unprivileged user namespaces."; fi
 
+        # The application's own processes are those whose first word, the program they run, is jason-desktop-app; the
+        # pattern is anchored there so that it never matches xvfb-run, whose command line ends with the program it starts.
+        program='^[^ ]*/jason-desktop-app( |$)'
+
         # One start of one form: $1 the form, $2 its data directory, $3 the jason it carries, then what starts it.
         started() {
           form=$1 data=$2 jason=$3
           shift 3
+          if pgrep -f -- "$program" > /dev/null; then pgrep -a -f -- "$program"; echo "::error title=Desktop::A process of the application runs before the $form starts."; return 1; fi
           rm -rf "$data" "$data-harness"
           mkdir -p "$data/ui/custom"
           printf '<!doctype html><title>Jason</title>\n' > "$data/ui/custom/index.html"
@@ -1030,13 +1038,16 @@ runs:
           cat "$data"/logs/desktop-*.jsonl || true
           if [ -z "$loaded" ]; then cat "$data.out"; echo "::error title=Desktop::The $form did not load its window."; return 1; fi
           grep -qs '"EventName":"desktop_started"' "$data"/logs/desktop-*.jsonl || { echo "::error title=Desktop::The $form logged no desktop_started."; return 1; }
-          main=$(pgrep -o -f -- '/jason-desktop-app( |$)') || { echo "::error title=Desktop::The $form's program is not running once its window loaded."; return 1; }
+          main=$(pgrep -o -f -- "$program") || { echo "::error title=Desktop::The $form's program is not running once its window loaded."; return 1; }
           said=$(tr '\0' ' ' < "/proc/$main/cmdline")
           echo "The $form runs as: $said"
           case " $said " in *' --no-sandbox '*) echo "::error title=Desktop::The $form runs with --no-sandbox."; return 1 ;; esac
-          pkill -TERM -f -- '/jason-desktop-app( |$)' || true
-          for _ in $(seq 1 30); do kill -0 "$desktop" 2> /dev/null || break; sleep 1; done
-          if kill -0 "$desktop" 2> /dev/null; then echo "::error title=Desktop::The $form did not quit."; return 1; fi
+          kill -TERM "$main"
+          for _ in $(seq 1 30); do kill -0 "$main" 2> /dev/null || break; sleep 1; done
+          if kill -0 "$main" 2> /dev/null; then echo "::error title=Desktop::The $form did not quit."; return 1; fi
+          for _ in $(seq 1 15); do pgrep -f -- "$program" > /dev/null || break; sleep 1; done
+          if pgrep -f -- "$program" > /dev/null; then pgrep -a -f -- "$program"; echo "::error title=Desktop::The $form left a process of the application running."; return 1; fi
+          for _ in $(seq 1 15); do kill -0 "$desktop" 2> /dev/null || break; sleep 1; done
           JASON_DATA_DIR="$data" "$jason" runtime stop || { echo "::error title=Desktop::The runtime the $form started did not stop with the jason it carries."; return 1; }
           echo "The $form started, loaded its window, quit, and its runtime stopped."
         }
