@@ -242,12 +242,16 @@ test('a stop that fails or does not finish is said, and the runtime is left as i
         { name: 'the CLI could not be started or ran out of time', stop: () => ({ exit: -1, stdout: '', stderr: 'timed out' }), exit: -1 },
         { name: 'said stopped while the runtime still answers', stop: () => ok({ instance_id: 'rt_A' }), exit: 0 },
         { name: 'said unreachable while the runtime still answers', stop: () => refused(3, 'runtime_unreachable'), exit: 3 },
+        // Exit 3 says the runtime is gone only for no run file or nothing answering; a refused token says nothing of it.
+        { name: 'the token refused (exit 3, unauthorized)', stop: () => refused(3, 'unauthorized'), exit: 3 },
+        { name: 'a usage error (exit 2)', stop: () => ({ exit: 2, stdout: '', stderr: 'usage' }), exit: 2 },
     ];
     for (const one of failures) {
         const { cli, asked } = fakeCli({ status: still, stop: one.stop });
         assert.deepEqual(await stopOwnRuntime(deps(s, { file: runFile('rt_A', s.executable) }, cli)), { kind: 'failed', exit: one.exit }, one.name);
         // A stop that says the runtime is gone is checked again; one that says it did not stop is taken at its word.
-        assert.deepEqual(asked, one.exit === 0 || one.exit === 3 ? ['runtime status', 'runtime stop', 'runtime status'] : ['runtime status', 'runtime stop'], one.name);
+        const gone = one.exit === 0 || one.stop().stdout.includes('runtime_unreachable');
+        assert.deepEqual(asked, gone ? ['runtime status', 'runtime stop', 'runtime status'] : ['runtime status', 'runtime stop'], one.name);
     }
 });
 
