@@ -649,6 +649,23 @@ test('the data directory\'s variable is refused by its name, whatever wraps it, 
     }
 });
 
+test('a command that names JASON_CONFINED is refused in any letter case, on every platform, whatever wraps it', () => {
+    const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
+    const named = ['JASON_CONFINED= jason contact create --file c.json', 'unset JASON_CONFINED; jason status', 'env -u jason_confined jason status',
+        'printenv Jason_Confined', 'echo ${JASON_CONFINED:-}', 'Remove-Item Env:JASON_CONFINED', 'set jason_confined=', 'echo %Jason_Confined%'];
+    for (const command of named) {
+        for (const scope of [windows(), mac(), linux]) {
+            const judged = run(scope, command);
+            assert.equal(judged.verdict, 'deny', `${scope.platform} ${command}`);
+            assert.match(judged.verdict === 'deny' ? judged.message : '', /confine/, command);
+        }
+    }
+    // A longer name that only begins or ends like it is not it.
+    for (const command of ['echo $JASON_CONFINED_X', 'printenv MY_JASON_CONFINED']) {
+        for (const scope of [windows(), mac(), linux]) assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
+    }
+});
+
 test('a command that names a denied operation is refused, the runtime\'s stop, system.shutdown, first among them', () => {
     assert.equal(run(windows(), 'curl -X POST http://127.0.0.1:5000/v1/approval.approve -d "{}"').verdict, 'deny');
     assert.equal(run(mac(), 'curl http://127.0.0.1:5000/v1/approval.set_standing').verdict, 'deny');

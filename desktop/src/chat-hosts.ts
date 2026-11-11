@@ -5,7 +5,7 @@
 import { posix, win32 } from 'node:path';
 import { allowRules, denyRules } from './chat-deny.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
-import type { Platform } from './chat-permission-model.ts';
+import { confinedVariable, type Platform } from './chat-permission-model.ts';
 import { isSessionMarker } from './session-markers.ts';
 
 /**
@@ -64,6 +64,13 @@ export interface ClaudeTurn {
 export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}';
 
 /**
+ * The host's own refusal of any Bash command that names `JASON_CONFINED`, anywhere in it: the variable confines the jason
+ * the chat runs (`hostEnvironment`), and a command that names it could clear it. The rule is the exact spelling; the
+ * permission model refuses the name in any letter case.
+ */
+export const confinedRule = `Bash(*${confinedVariable}*)`;
+
+/**
  * The command line of one Claude Code turn. Never `--bare`, which drops the subscription sign-in and the skills; always
  * `--strict-mcp-config`, so a person's own MCP servers never enter the chat; reads outside the working folders blocked
  * (`claudeTurnSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives,
@@ -72,7 +79,7 @@ export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDire
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
     args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(turn.allowed));
-    args.push('--disallowedTools', ...claudeRemovedTools, ...denyRules(turn.denied), ...turn.dataRules);
+    args.push('--disallowedTools', ...claudeRemovedTools, ...denyRules(turn.denied), confinedRule, ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', claudeTurnSettings);
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
@@ -212,7 +219,9 @@ const noBackground = 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS';
  * as are the markers of a Claude Code session the desktop itself was started from. A key provider's turn is started
  * without the provider and credentials the desktop inherited (`inheritedProvider`); a Claude Code turn always carries
  * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and
- * `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
+ * `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`. Every host's turn carries `JASON_CONFINED=1`, whatever the desktop
+ * inherited, so the jason it runs reads a request's content from standard input only and runs a provider check's
+ * program by a bare name only; the desktop's own calls of jason do not carry it.
  */
 export function hostEnvironment(
     base: Readonly<Record<string, string | undefined>>,
@@ -237,13 +246,14 @@ export function hostEnvironment(
             path = value;
             continue;
         }
-        if (name.toUpperCase() === 'JASON_DATA_DIR') continue;
+        if (upper === 'JASON_DATA_DIR' || upper === confinedVariable) continue;
         env[name] = value;
     }
     const separator = options.platform === 'win32' ? ';' : ':';
     env.PATH = path === '' ? options.bundle : `${options.bundle}${separator}${path}`;
     if (options.data !== null) env.JASON_DATA_DIR = options.data;
     for (const [name, value] of Object.entries(options.provider)) env[name] = value;
+    env[confinedVariable] = '1';
     if (options.program === 'claude') {
         env[scrub] = '1';
         env[maintainFolder] = '1';

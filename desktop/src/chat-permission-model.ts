@@ -72,6 +72,7 @@ const lengthRefusal = 'That path is longer than the system takes: the chat neith
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
 const replyRefusal = 'The chat runs only reply auth status and reply account list of reply: provider work goes through jason, and the connection is made on the Connect card. Nothing was run.';
 const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
+const confinedRefusal = 'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.';
 
 const pathsOf = (platform: Platform) => (platform === 'win32' ? win32 : posix);
 const keyOf = (platform: Platform, path: string) => (platform === 'linux' ? path : path.toLowerCase());
@@ -395,6 +396,19 @@ function namesDataVariable(command: string, scope: ChatScope): boolean {
 }
 
 /**
+ * The variable every host's environment carries so that the jason it runs is confined: an option that reads a file into
+ * a request takes standard input only, and the provider check runs a bare name only (`hostEnvironment`). A command that
+ * names it could clear it for the jason it runs, so it is refused by its name as a whole word, in any letter case on
+ * every platform, whatever wraps it; the host's own deny rule (`confinedRule`) refuses the exact spelling first. A longer
+ * name that only begins or ends like it is not it.
+ */
+export const confinedVariable = 'JASON_CONFINED';
+
+function namesConfinedVariable(command: string): boolean {
+    return new RegExp(`(?<![A-Za-z0-9_])${confinedVariable}(?![A-Za-z0-9_])`, 'i').test(command);
+}
+
+/**
  * True when the command's text names the data directory, or anything in it outside the chat folder, in any literal
  * spelling a shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows,
  * and `~/.jason`, `$HOME/.jason` or `.jason` under the home folder's variable in any shell's spelling (`$USERPROFILE`
@@ -456,6 +470,7 @@ function wordNamesData(places: readonly string[], scope: ChatScope): boolean {
 }
 
 function judgeCommand(tool: string, command: string, scope: ChatScope): Judgement {
+    if (namesConfinedVariable(command)) return { verdict: 'deny', message: confinedRefusal };
     const places = placesOf(command, scope);
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
