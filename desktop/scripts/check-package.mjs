@@ -1,10 +1,18 @@
 // Reads a built package back and holds it to the configuration it was built from: the updater's app-update.yml as
 // electron-builder wrote it into the package, and the fuse wire of the binary Electron reads its fuses from.
 //
-//   node desktop/scripts/check-package.mjs --app <package> --platform win32|darwin
+//   node desktop/scripts/check-package.mjs --app <package> --platform win32|darwin|linux [--form deb|appimage]
 //
-// <package> is the folder holding Jason.exe on Windows and Jason.app on macOS. What was read goes to stdout; a refusal
-// goes to stderr with exit 1, and arguments it cannot use with exit 2. It reads files only; it starts no process.
+// <package> is the folder holding Jason.exe on Windows and Jason.app on macOS, and on Linux the folder holding the
+// program: what a deb installs as /opt/Jason, or what an AppImage's --appimage-extract writes as squashfs-root, which
+// --form names. What was read goes to stdout; a refusal goes to stderr with exit 1, and arguments it cannot use with
+// exit 2. It reads files only; it starts no process.
+//
+// On Linux the form decides which updater the package makes. electron-updater makes its deb updater wherever
+// resources/package-type reads deb, and its AppImage updater where there is none (electron-updater 6.8.11, out/main.js,
+// doLoadAutoUpdater), so a deb must carry the file saying deb and an AppImage must carry none. An AppImage's contents
+// hold AppRun at their root and a deb's folder does not, and the menu entry an AppImage carries starts the program
+// without --no-sandbox.
 //
 // app-update.yml names the feed an installed package asks for updates: the provider, the owner and the repository. On
 // Windows it also names the publisher an update must be signed by, and electron-updater checks no signature when that
@@ -14,7 +22,7 @@
 // '1' on and 'r' removed. Every copy of the wire in the binary is read. A fuse the configuration does not set is said
 // as Electron left it.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { configuration, fuses, signer } from '../electron-builder.config.mjs';
@@ -35,13 +43,17 @@ export const wireOrder = Object.freeze([
 
 const built = configuration({ version: '0.0.0' });
 
-/** The binary Electron reads its fuses from: the program on Windows, the Electron framework inside the .app on macOS. */
+/** The binary Electron reads its fuses from: the program on Windows and Linux, the Electron framework inside the .app on macOS. */
 export function fuseFile(app, platform) {
     if (platform === 'darwin') return join(app, 'Contents', 'Frameworks', 'Electron Framework.framework', 'Electron Framework');
+    if (platform === 'linux') return join(app, built.linux.executableName);
     return join(app, `${built.productName}.exe`);
 }
 
-/** Where electron-builder writes app-update.yml: the resources folder beside the program, or inside the .app. */
+/**
+ * Where electron-builder writes app-update.yml: the resources folder beside the program, or inside the .app. On Linux
+ * both forms write it into the folder they are made from (app-builder-lib's AppImageTarget.js and FpmTarget.js, build).
+ */
 export function updateFile(app, platform) {
     if (platform === 'darwin') return join(app, 'Contents', 'Resources', 'app-update.yml');
     return join(app, 'resources', 'app-update.yml');
@@ -130,20 +142,51 @@ function checkFuses(app, platform) {
     return said;
 }
 
-/** What the package says, line by line; throws when it is not what it was configured to be. */
-export function checkPackage(app, platform) {
-    return [checkUpdater(app, platform), ...checkFuses(app, platform)];
+/** Which updater a Linux package makes, and that it is the form it says it is. */
+function checkForm(app, form) {
+    const said = [];
+    const typed = join(app, 'resources', 'package-type');
+    const type = existsSync(typed) ? readFileSync(typed, 'utf8').trim() : null;
+    const appRun = existsSync(join(app, 'AppRun'));
+    if (form === 'deb') {
+        if (appRun) throw new Error(`${app} holds AppRun; it is an AppImage's contents, not a deb's folder.`);
+        if (type === null) throw new Error(`${app} holds no resources/package-type, so electron-updater would make its AppImage updater for a deb.`);
+        if (type !== 'deb') throw new Error(`${typed}: package-type says ${type}, and a deb's must say deb.`);
+        said.push('package-type: deb, so electron-updater makes its deb updater');
+        return said;
+    }
+    if (!appRun) throw new Error(`${app} holds no AppRun; it is not an AppImage's contents.`);
+    if (type !== null) throw new Error(`The AppImage carries resources/package-type saying ${type}, so electron-updater would update it as a ${type}.`);
+    said.push('package-type: none, so electron-updater makes its AppImage updater');
+    for (const entry of readdirSync(app).filter((name) => name.endsWith('.desktop')).sort()) {
+        const exec = readFileSync(join(app, entry), 'utf8').split(/\r?\n/).find((line) => line.startsWith('Exec=')) ?? 'Exec=';
+        if (/(^|\s)--no-sandbox(\s|$)/.test(exec.slice('Exec='.length))) throw new Error(`${entry} starts the program with --no-sandbox: ${exec}`);
+        said.push(`${entry}: ${exec}`);
+    }
+    return said;
+}
+
+/**
+ * What the package says, line by line; throws when it is not what it was configured to be. `form` is a Linux package's,
+ * deb or appimage, and only a Linux package has one.
+ */
+export function checkPackage(app, platform, form) {
+    if (platform === 'linux' && form !== 'deb' && form !== 'appimage') throw new Error(`A Linux package is a deb or an AppImage: --form deb|appimage, not ${String(form)}.`);
+    if (platform !== 'linux' && form !== undefined) throw new Error(`Only a Linux package has a form, and this one is ${platform}'s.`);
+    return [checkUpdater(app, platform), ...checkFuses(app, platform), ...(platform === 'linux' ? checkForm(app, form) : [])];
 }
 
 function main(argv) {
     const app = argv[argv.indexOf('--app') + 1];
     const platform = argv[argv.indexOf('--platform') + 1];
-    if (!argv.includes('--app') || !argv.includes('--platform') || app === undefined || (platform !== 'win32' && platform !== 'darwin')) {
-        process.stderr.write('usage: node check-package.mjs --app <package> --platform win32|darwin\n');
+    const form = argv.includes('--form') ? argv[argv.indexOf('--form') + 1] : undefined;
+    const known = platform === 'win32' || platform === 'darwin' ? form === undefined : platform === 'linux' && (form === 'deb' || form === 'appimage');
+    if (!argv.includes('--app') || !argv.includes('--platform') || app === undefined || !known) {
+        process.stderr.write('usage: node check-package.mjs --app <package> --platform win32|darwin|linux [--form deb|appimage]\n');
         return 2;
     }
     try {
-        for (const line of checkPackage(app, platform)) process.stdout.write(`${line}\n`);
+        for (const line of checkPackage(app, platform, form)) process.stdout.write(`${line}\n`);
         return 0;
     } catch (error) {
         process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
