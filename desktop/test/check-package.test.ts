@@ -24,6 +24,15 @@ const sentinel = 'dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX';
 
 type Platform = 'win32' | 'darwin';
 
+test('the fuse library these rows write with is declared, pinned, and the one copy electron-builder flips the fuses with', () => {
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { devDependencies: Record<string, string> };
+    const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8')) as { packages: Record<string, { version?: string; devDependencies?: Record<string, string> }> };
+    assert.equal(manifest.devDependencies['@electron/fuses'], '1.8.0');
+    assert.equal(lock.packages['']?.devDependencies?.['@electron/fuses'], '1.8.0');
+    assert.equal(lock.packages['node_modules/@electron/fuses']?.version, '1.8.0');
+    assert.deepEqual(Object.keys(lock.packages).filter((path) => path.endsWith('node_modules/@electron/fuses')), ['node_modules/@electron/fuses']);
+});
+
 function temporary(t: { after(fn: () => void): void }): string {
     const folder = mkdtempSync(join(tmpdir(), 'jason-check-package-'));
     t.after(() => rmSync(folder, { recursive: true, force: true }));
