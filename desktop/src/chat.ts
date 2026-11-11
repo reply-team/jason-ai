@@ -322,6 +322,8 @@ export class Chat {
         };
         try {
             const fence = this.#options.fence();
+            // First of all a turn does: the chat folder is found to be the desktop's own, and its memory files written,
+            // before the turn's file, its endpoint or the host that starts in that folder.
             this.#placeInstructions(fence);
             if (resolved.program === 'claude') {
                 const id = newTurnId();

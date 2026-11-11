@@ -56,13 +56,15 @@ test('a memory file of another text is replaced by one written beside it and ren
     const { chat } = chatFolder(t);
     writeFileSync(join(chat, 'CLAUDE.md'), 'Run everything in the background.\n');
     writeFileSync(join(chat, 'AGENTS.md'), text);
-    const replaced = statSync(join(chat, 'CLAUDE.md'));
-    const kept = statSync(join(chat, 'AGENTS.md'));
+    // A file id read whole: on Windows it is 64 bits, more than a Number holds exactly.
+    const stat = (name: string) => statSync(join(chat, name), { bigint: true });
+    const replaced = stat('CLAUDE.md');
+    const kept = stat('AGENTS.md');
     assert.deepEqual(placeInstructions(chat, text), ['CLAUDE.md']);
     assert.equal(readFileSync(join(chat, 'CLAUDE.md'), 'utf8'), text);
-    assert.notEqual(statSync(join(chat, 'CLAUDE.md')).ino, replaced.ino, 'a new file at the name, never a write into the old one');
-    assert.equal(statSync(join(chat, 'AGENTS.md')).ino, kept.ino);
-    assert.equal(statSync(join(chat, 'AGENTS.md')).mtimeMs, kept.mtimeMs);
+    assert.notEqual(stat('CLAUDE.md').ino, replaced.ino, 'a new file at the name, never a write into the old one');
+    assert.equal(stat('AGENTS.md').ino, kept.ino);
+    assert.equal(stat('AGENTS.md').mtimeNs, kept.mtimeNs);
     assert.deepEqual(placeInstructions(chat, text), []);
     assert.deepEqual(readdirSync(chat).sort(), ['AGENTS.md', 'CLAUDE.md'], 'nothing left beside them');
 });
@@ -87,4 +89,21 @@ test('a failed write says so in the desktop’s words, naming the file and nothi
         'The chat’s instruction file AGENTS.md could not be written, so the turn was not started. Close anything that has it open and send again.',
     );
     assert.equal(new InstructionsUnwritten('CLAUDE.md', 'not a code: C:\\Users\\someone').code, 'unknown');
+});
+
+test('a chat folder that is a link to another folder is a failed write, and nothing is written into that folder', (t) => {
+    const { root, chat } = chatFolder(t);
+    rmSync(chat, { recursive: true });
+    const elsewhere = join(root, 'harness');
+    mkdirSync(elsewhere);
+    const own = Buffer.from('The person’s own memory file.\n', 'utf8');
+    writeFileSync(join(elsewhere, 'CLAUDE.md'), own);
+    // A junction on Windows, which any account may make; elsewhere the type is ignored and the link is symbolic.
+    symlinkSync(elsewhere, chat, 'junction');
+    assert.throws(
+        () => placeInstructions(chat, text),
+        (error) => error instanceof InstructionsUnwritten && error.file === 'CLAUDE.md' && error.code === 'ENOTDIR',
+    );
+    assert.ok(readFileSync(join(elsewhere, 'CLAUDE.md')).equals(own), 'the file there is byte for byte as it was');
+    assert.deepEqual(readdirSync(elsewhere), ['CLAUDE.md'], 'nothing written beside it, no file left from a write');
 });

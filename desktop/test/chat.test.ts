@@ -3,7 +3,7 @@
 // their answers, a stop, a card nobody answers, Codex, and the hosts that are refused before anything starts.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/chat.ts';
@@ -655,4 +655,21 @@ test('a start that cannot write an instruction file goes on and says so, and the
     rmSync(join(r.b.paths.chat, 'CLAUDE.md'), { recursive: true });
     assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
     assert.ok(sameBytes(r.b.paths.chat));
+});
+
+test('a chat folder that became a link to another folder refuses the turn before anything is written there or a host starts', async (t) => {
+    const unwritten: string[] = [];
+    const r = rig(t, { chat: { instructionsUnwritten: (file, code) => void unwritten.push(`${file} ${code}`) } });
+    const elsewhere = join(r.b.root, 'harness-copy');
+    mkdirSync(elsewhere);
+    writeFileSync(join(elsewhere, 'AGENTS.md'), 'kept\n');
+    rmSync(r.b.paths.chat, { recursive: true });
+    symlinkSync(elsewhere, r.b.paths.chat, 'junction');
+    for (const host of ['claude', 'codex']) {
+        assert.deepEqual(await r.turn('c1', words, { host }), [{ kind: 'done', error: unwrittenSentence('CLAUDE.md') }], host);
+    }
+    assert.deepEqual(r.hosts(), []);
+    assert.deepEqual(unwritten, ['CLAUDE.md ENOTDIR', 'CLAUDE.md ENOTDIR']);
+    assert.deepEqual(readdirSync(elsewhere), ['AGENTS.md']);
+    assert.equal(readFileSync(join(elsewhere, 'AGENTS.md'), 'utf8'), 'kept\n');
 });

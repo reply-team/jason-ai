@@ -5,6 +5,7 @@
 // What stands at a file's name is never followed: a file holds the text only when it is a regular file of that size with
 // those bytes, and anything else (a link, another text, nothing) is replaced by a file written beside it and renamed over
 // the name. A directory at the name is never removed; the write fails, and the turn is refused until it can be made.
+// The chat folder is never followed: a name that is not a directory itself fails the write before anything is written.
 
 import { randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,11 +33,17 @@ export class InstructionsUnwritten extends Error {
  */
 export function placeInstructions(folder: string, text: string): string[] {
     const wanted = Buffer.from(text, 'utf8');
+    // The folder itself is never followed either: a link or a junction at its name would take both files into the
+    // folder it names, the person's own memory files there included. A recursive make succeeds on such a name, so the
+    // name is looked at after it.
+    let isFolder: boolean;
     try {
         mkdirSync(folder, { recursive: true });
+        isFolder = lstatSync(folder).isDirectory();
     } catch (error) {
         throw new InstructionsUnwritten(memoryFiles[0], (error as NodeJS.ErrnoException).code);
     }
+    if (!isFolder) throw new InstructionsUnwritten(memoryFiles[0], 'ENOTDIR');
     return memoryFiles.filter((name) => {
         const file = join(folder, name);
         if (holds(file, wanted)) return false;
