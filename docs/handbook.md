@@ -270,6 +270,10 @@ or the executable its package ships, then `--version`. Which provider you use is
 be this product naming a vendor in its own sources, which it does not. In its own output it names the file the
 name resolved to and, for npm's shim, what that runs, and, whenever it read a PATH, whose it was: the CLI's,
 which the runtime's may differ from. It prints no credential — not the key, not a prefix of it, not its length.
+With `JASON_CONFINED` set, only a bare name is run, looked up in the fully qualified entries of PATH alone: relative and
+empty entries are skipped, so a working folder is never searched by name, and a value with a directory in it is neither
+looked up nor started. The check says what it did not run and why, and names the cure: name a program on the search
+path, or run the check in a terminal. `status` answers as it always does, `ready` in its body and its usual exit code.
 
 ### When something is wrong
 
@@ -407,6 +411,15 @@ instead of making it twice, and a different request under a key already used is 
 Every verb prints the exact API response as compact JSON on stdout (add `--human` for a readable
 rendering). The runtime keeps its data under `~/.jason` (override with the `JASON_DATA_DIR`
 environment variable).
+
+`JASON_CONFINED`, set to any value but empty, confines the one call of the CLI it is set on, for a host that checks
+what a command reads and runs. An option that reads a file's content into a request (`--file`, `--value-file`,
+`--note-file`, `--result-file`) then takes only `-`, so the content comes by standard input, as
+`--file - < contacts.json` or a here-document, and any other value is refused before the file is opened and before any request,
+exit 1. `jason status --provider-cli <program>` runs a bare name only, found in a fully qualified entry of PATH.
+Options that name a path for another reason are not under the rule: `project link --path`, `doctor --output`, `export`
+and `import`, and `logs`, which takes no path. The variable confines the call and nothing that call starts: a runtime
+it starts, and the role work a runtime launches, never carry it. Unset or empty, nothing changes.
 
 A work item moves through one set of statuses: a dispatcher claims it under a lease, with at most one live
 attempt at a time, and whatever performs it reports what happened through the same API; `jason workitem get
