@@ -4,12 +4,14 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Autostart;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
+using Jason.Cli.Human;
 using Jason.Cli.Installation;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
 using Jason.Contracts;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Execution;
 using Jason.Contracts.Hosts;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
@@ -265,6 +267,7 @@ internal static class StatusChecks
             var registry = asked ? await ReadAsync<PluginRegistryDto>(client!, Operations.PluginList, cancellationToken).ConfigureAwait(false) : null;
             checks.Add(PluginAvailability(asked, registry));
             checks.Add(PluginSubscriptions(asked, registry));
+            checks.Add(PluginGrants(asked, registry));
             var routes = client is null ? null : await ReadAsync<RoutesDto>(client, Operations.RouteList, cancellationToken).ConfigureAwait(false);
             checks.Add(Route(routes));
             checks.Add(Binding(routes));
@@ -1091,6 +1094,66 @@ internal static class StatusChecks
             null);
     }
 
+    /// <summary>
+    /// Which plugins ask for a capability and are granted nothing of it, read from the same <c>plugin.list</c> answer as
+    /// <c>plugin_availability</c>: each named with the keys under <c>Plugins:Grants:&lt;id&gt;</c> that would grant it.
+    /// Optional, and never deciding readiness: such a plugin runs without what it is not granted, and an installation with
+    /// no plugin is ready too. A plugin this machine holds back is named here as well, whatever its status: the runtime
+    /// resolves its grants before it decides its status, so what it is granted is as true of it as of any other, and one
+    /// report then says both its problems, in the check above, and its grant.
+    /// </summary>
+    /// <remarks>
+    /// Only ids and capability keys are quoted: what a manifest asks for — a program, a host, a variable — is its author's
+    /// text, and a bundle carries this fact as it is, so the full sentence stays in <c>jason plugin list --human</c>.
+    /// </remarks>
+    private static StatusCheck PluginGrants(bool asked, PluginRegistryDto? registry)
+    {
+        const string Name = "plugin_grants";
+        if (!asked)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime did not answer, so what its plugins are granted was not asked.", null);
+        }
+
+        if (registry?.Plugins is not { } listed)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "plugin.list did not answer, so what each plugin is granted is not known.", null);
+        }
+
+        var plugins = listed.Where(plugin => plugin is not null).ToList();
+        if (plugins.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, "No plugin is installed, so none waits for a grant.", null);
+        }
+
+        var waiting = plugins
+            .Where(plugin => plugin.Capabilities is not null)
+            .Select(plugin => (Plugin: plugin, Keys: PluginRenderers.Asked(plugin.Capabilities!).Select(ask => ask.Key).ToList()))
+            .Where(entry => entry.Keys.Count > 0)
+            .ToList();
+        if (waiting.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, "Every plugin is granted something of each capability it asks for.", null);
+        }
+
+        var named = string.Join(" ", waiting.Take(MostNamed).Select(entry =>
+            $"{(PluginIds.IsWellFormed(entry.Plugin.Id) ? entry.Plugin.Id : "A plugin whose id no package can have")} is granted nothing it asks for under {string.Join(", ", entry.Keys)}."));
+        var more = waiting.Count - MostNamed;
+        if (more > 0)
+        {
+            named += string.Create(CultureInfo.InvariantCulture, $" {more} more {(more == 1 ? "plugin is granted nothing it asks" : "plugins are granted nothing they ask")} for.");
+        }
+
+        return new StatusCheck(
+            Name,
+            false,
+            CheckState.Failed,
+            named
+                + " Such a plugin runs without what it is not granted, and nothing else stops, so this check never decides readiness."
+                + $" `{Repair.ListPlugins} --human` says what each asks for, the key that grants it and the settings file, and"
+                + $" `{Repair.ReloadPlugins}` reads the grant.",
+            null);
+    }
+
     private static string SubscriberLine(PluginDto plugin)
     {
         var who = PluginIds.IsWellFormed(plugin.Id) ? plugin.Id : "A plugin whose id no package can have";
@@ -1228,7 +1291,22 @@ internal static class StatusChecks
             return new StatusCheck("provider_cli", false, CheckState.Unknown, $"This environment cannot run programs, so '{command}' was not run.", null);
         }
 
-        var (found, directory) = FindProvider(providerCli, env.SearchPath);
+        // A confined call runs a bare name only: a path, which on Windows takes in a value naming a drive, names a file
+        // anyone who can write there chose, so it is neither looked up nor started.
+        var confined = env.Confined();
+        if (confined && IsPath(providerCli))
+        {
+            return new StatusCheck(
+                "provider_cli",
+                false,
+                CheckState.Unknown,
+                $"This environment cannot run a program named by a path, so '{command}' was not run: {Confinement.Variable} is set. "
+                    + "Name a program on the search path, or run it in a terminal.",
+                null);
+        }
+
+        var searchPath = confined ? FullyQualified(env.SearchPath ?? Environment.GetEnvironmentVariable("PATH")) : env.SearchPath;
+        var (found, directory) = FindProvider(providerCli, searchPath);
 
         // A name is looked up on this process's search path; a path names its directory and reads none, except that a shim
         // given by path takes its interpreter from the search path when none stands beside it. A runtime that started at
@@ -1238,7 +1316,7 @@ internal static class StatusChecks
 
         if (found is not { Outcome: ProgramLookupOutcome.Program or ProgramLookupOutcome.NpmShim, Path: { } program })
         {
-            var script = found.Outcome == ProgramLookupOutcome.NotFound ? ScriptNamed(providerCli, env.SearchPath) : null;
+            var script = found.Outcome == ProgramLookupOutcome.NotFound ? ScriptNamed(providerCli, searchPath) : null;
             return new StatusCheck("provider_cli", false, CheckState.Absent, Said(NotRun(found, providerCli, directory, script, command)), null);
         }
 
@@ -1274,8 +1352,8 @@ internal static class StatusChecks
     /// The provider CLI as Jason finds every program it starts by name (<see cref="ProgramLookup"/>): on Windows an
     /// <c>.exe</c> or a <c>.com</c>, or npm's shim read for what it starts (the interpreter and entry script it names, or
     /// the executable its package ships), and never a script
-    /// a shell would have to interpret. A value with a directory in it is a path, looked up in that directory alone by
-    /// the same rule; the directory comes back with the answer, so a name not found there says where it was looked for.
+    /// a shell would have to interpret. A value that is a path (<see cref="ProgramLookup.IsPath"/>) is looked up in the
+    /// directory it names alone by the same rule; the directory comes back with the answer, so a name not found there says where it was looked for.
     /// A shim found there takes its interpreter from the search path, as the shim itself would when it runs.
     /// </summary>
     private static (FoundProgram Found, string? Directory) FindProvider(string providerCli, string? searchPath)
@@ -1296,9 +1374,23 @@ internal static class StatusChecks
             : (ProgramLookup.Find(name, new ProgramSearchPath(directory, pathExt), onPath), directory);
     }
 
-    private static bool IsPath(string providerCli) =>
-        providerCli.Contains(System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal)
-        || providerCli.Contains(System.IO.Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+    /// <summary>
+    /// The entries of a search path a confined call looks a bare name up in: the fully qualified ones. A relative or empty
+    /// entry, or on Windows one rooted on no drive, names a folder relative to wherever the call runs, which is a working
+    /// folder anyone the call serves may write in.
+    /// </summary>
+    private static string FullyQualified(string? searchPath) =>
+        string.Join(
+            System.IO.Path.PathSeparator,
+            (searchPath ?? string.Empty)
+                .Split(System.IO.Path.PathSeparator)
+                .Where(entry => entry.Trim().Trim('"') is { Length: > 0 } directory && System.IO.Path.IsPathFullyQualified(directory)));
+
+    /// <summary>
+    /// What a path is, for the confined refusal and the path branch alike, as the lookup itself reads it: a separator, a
+    /// root, or on Windows a colon, so a value naming a drive is a path.
+    /// </summary>
+    private static bool IsPath(string providerCli) => ProgramLookup.IsPath(providerCli);
 
     /// <summary>The extensions a value may carry that name a script only a shell could run.</summary>
     private static readonly string[] ScriptExtensions = [".cmd", ".bat", ".ps1"];

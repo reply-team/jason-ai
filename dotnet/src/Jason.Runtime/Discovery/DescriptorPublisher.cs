@@ -70,6 +70,12 @@ public sealed class DescriptorPublisher(JasonPaths paths)
     /// <summary>The one rename over the descriptor; a test's own, for a refusal no file system gives on demand.</summary>
     internal Action<string, string> Rename { get; init; } = (temporary, descriptor) => File.Move(temporary, descriptor, overwrite: true);
 
+    /// <summary>
+    /// The executable file this runtime runs as, written into the descriptor: <see cref="SelfExecutable.InstalledImage"/>,
+    /// except in a test, which is never a single-file image.
+    /// </summary>
+    internal Func<string?> InstalledImage { get; init; } = () => SelfExecutable.InstalledImage;
+
     /// <param name="info">The runtime the descriptor describes.</param>
     /// <param name="baseUrl">Where its API listens.</param>
     /// <param name="token">The capability token a client presents.</param>
@@ -90,7 +96,8 @@ public sealed class DescriptorPublisher(JasonPaths paths)
             info.Pid,
             baseUrl.GetLeftPart(UriPartial.Authority),
             token,
-            info.StartedAt);
+            info.StartedAt,
+            InstalledImage());
 
         var temporary = Path.Combine(paths.RunDirectory, $".runtime.{Guid.NewGuid():N}.tmp");
         try

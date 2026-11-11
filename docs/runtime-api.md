@@ -20,7 +20,7 @@ The descriptor is `run/runtime.json` under the data directory: `~/.jason/run/run
 directory `JASON_DATA_DIR` names when that variable is set. It is one JSON object:
 
 ```json
-{"api_version":"v1","runtime_version":"0.23.0","instance_id":"rt_…","pid":4242,"base_url":"http://127.0.0.1:52766","token":"…","started_at":"2026-10-26T09:00:00.000Z"}
+{"api_version":"v1","runtime_version":"0.34.0","instance_id":"rt_…","pid":4242,"base_url":"http://127.0.0.1:52766","token":"…","started_at":"2026-10-26T09:00:00.000Z","installed_image":"/usr/local/bin/jason"}
 ```
 
 | Field | What it is |
@@ -32,11 +32,17 @@ directory `JASON_DATA_DIR` names when that variable is set. It is one JSON objec
 | `base_url` | where the API listens; every request goes here |
 | `token` | the capability token, the next section's subject |
 | `started_at` | when this run started |
+| `installed_image` | the executable file this runtime runs as, when it is an installed single-file executable; `null` when it is not, a build run from source for one, and absent from a descriptor a runtime before 0.34.0 wrote. Absent and `null` both mean unknown |
 
 The runtime writes the descriptor last, so a program that finds one finds an address that is already listening, and it
 removes the descriptor when it stops. A descriptor can outlive its runtime, after a crash for one; a program that wants
 to be sure asks `system.info` and compares the `instance_id` it answers with the descriptor's. No descriptor means no
 runtime is running, and `jason runtime start` starts one.
+
+`installed_image` is for a program that must know whether the runtime it found is the copy it would replace or remove.
+It is believed only from a descriptor whose `instance_id` the runtime answering there confirms, and only when it names
+the same file as that program's copy once both paths are resolved; anything else, unknown included, means another
+copy, which that program leaves running.
 
 Every start writes a new descriptor with a new `instance_id` and a new token. A program reads the descriptor when it
 starts and again whenever the runtime answers `unauthorized`: the runtime it knew has stopped, and another may be
@@ -103,7 +109,9 @@ so in one line on stderr, naming the variable and never its value.
 ## The request form
 
 - **Every operation is `POST /v1/{noun}.{verb}`**, reads included, with a JSON body; an operation that needs nothing
-  takes `{}`. A name the runtime does not know is answered `404` with the code `not_found`.
+  takes `{}`. A name the runtime does not know is answered `404` with the code `not_found`. One route beside the
+  operations is a `GET`: the journal's stream, `GET /v1/journal.stream`, because a WebSocket opens with a `GET` by its
+  protocol ([below](#following-the-journal-as-it-is-written)).
 - **JSON is snake_case**, in both directions: members, enum values and the keys of a map. A property written twice in
   one body is refused.
 - **A member is matched by its exact spelling**, compared ordinally, at every depth of a request: `Name` is not `name`.
@@ -143,11 +151,13 @@ so in one line on stderr, naming the variable and never its value.
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume` and `report.submit` take no
-  such default: given no actor, the CLI refuses all ten itself, before any request, in one sentence that names the
-  form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. `reason` is
-  free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`, `contact.archive`,
-  `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove` set it no limit of
-  their own.
+  such default: given no actor, the CLI refuses all ten itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
+  form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
+  `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
+  the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
+  `reason` is free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`,
+  `contact.archive`, `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove`
+  set it no limit of their own.
 - **A partial update tells absent from `null`**: a field left out stays as it is, and a field sent as `null` is
   cleared where the field can be empty. A context is the exception: in `campaign.update_context` and
   `workitem.update`, its `set` stores `null` as a value, and its `unset` removes a key.
@@ -362,6 +372,9 @@ that is not that attempt does not call them.
 - `journal.list`
 - `journal.kinds`: every kind the runtime reserves for its own lines, in kind order, each as its document says it.
 
+Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: the lines as they are written
+([below](#following-the-journal-as-it-is-written)); `jason journal watch` on the command line.
+
 ### `plugin`
 
 - `plugin.list`: each plugin's status, granted over requested, and digest.
@@ -440,6 +453,42 @@ that is not that attempt does not call them.
   sentence of what a line records, whether a plugin may subscribe to it, the entities a line names and where, each place
   a list of JSON pointers into the line as `journal.list` answers it, the release each later field arrived in, and the
   schema of the line's `key`, `old` and `new`. A kind a person or an agent appends is not among them.
+
+## Following the journal as it is written
+
+`journal.list` answers what has been written. A program that wants each line as it is written opens the journal's
+stream instead, `GET /v1/journal.stream`: the one route under `/v1/` that is not a `POST`, because a WebSocket is
+opened by a `GET` that asks to upgrade, and that is the protocol's, not a choice. `jason journal watch` is the stream on
+the command line, one to one: it prints each line as it arrives, compact JSON or rendered under `--human`, until it is
+interrupted.
+
+- **The upgrade** offers the subprotocol `jason.journal.v1`, which names the form of the frames, and the runtime answers
+  with that one and no other. A request that is not an upgrade, or that does not offer `jason.journal.v1`, is answered
+  `400` with the code `websocket_required`, in the API's error shape.
+- **The token** goes in the `Authorization: Bearer` header, as on every operation. A browser's WebSocket cannot set a
+  header, so on this route, and on no other, the token may instead come as one more subprotocol the upgrade offers,
+  `jason.bearer.<token>`; the runtime never answers with it, and never writes it to a log. Either the capability token
+  or a paired browser's UI token opens the stream. Any other upgrade is refused before it becomes a WebSocket: `401`
+  with no token, or an unknown or revoked one, and `403` with the code `operation_not_granted` with a plugin handler's
+  capability in the header, which opens its own operations alone. A `jason.bearer.` subprotocol sent to any other route
+  counts for nothing: without the header, that request is answered `401` too.
+- **Where it starts**: without `after`, with the next line committed after the stream opens. With `after=<id>`, the id
+  of the last line you have — the `id` every frame and every `journal.list` line carries, `jrn_` and its ULID — it
+  sends every line committed after that one, in the order they were committed. A line's id is made before its write
+  waits for the database, so a line can be committed after one whose id is newer: a program that resumes from the
+  newest id `journal.list` showed it may be sent a line it already has once more, and never misses one, so it drops a
+  line whose `id` it already has. An `after` that is not a line's id, or names no line, is answered `400` with the code
+  `validation_failed` before the upgrade, naming the field `after`. The stream never takes `journal.list`'s cursor.
+- **Each line is one text frame**, the line exactly as `journal.list` answers it, and the lines come oldest first. The
+  stream sends nothing else, and reads nothing from the program but its close.
+- **How soon**: the runtime looks for new lines every second, up to 200 at a time, and looks again at once when a look
+  finds that many. The stream only reads: each look is a read of its own, and nothing stays open between two of them.
+- **How it ends**: the program closes it, and the runtime answers `1000`. The runtime closes it with `1008` and the reason
+  `revoked` when the UI token that opened it is revoked, at its next look, and with `1001` when the runtime stops,
+  before the stop completes; a reader that has stopped taking frames is cut without a close, at the stop or once a
+  frame has waited 30 seconds for it, so an open stream never holds a stop. A revoked or unknown token is refused `401`
+  at the upgrade and never opens one. The capability token changes at every start, so a program that follows the
+  journal across a restart reads the descriptor again and opens the stream with `after` set to the last line it has.
 
 ## What a program can write so its result comes back as a fact
 

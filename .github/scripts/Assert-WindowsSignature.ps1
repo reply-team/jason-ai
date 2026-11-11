@@ -11,10 +11,12 @@ the newest x64 signtool the Windows SDK installed, never the one the signing act
 reading follows: the signature valid, and a timestamp, without which the signature would end with its certificate.
 A valid, timestamped signature says only that some trusted publisher signed the file, so the signer's simple name, the
 CN of its certificate's subject, must be -Publisher exactly: in full and in the same case, never a name that only
-contains it.
+contains it. That signer is read from the signature the file carries, never from Windows' answer: where Windows
+answers for a file from a catalog of its own, the two readings above are the catalog's, and the publisher is still
+the file's own, so a file that carries no signature of its own is refused, whoever the catalog names.
 
-What signed the file is printed: the signer, its issuer and thumbprint, and the timestamp's signer. -SignTool names
-another signtool, which is how each refusal is shown working on its own.
+What signed the file is printed: the signer, its issuer and thumbprint, from the signature the file carries, and the
+timestamp's signer. -SignTool names another signtool, which is how each refusal is shown working on its own.
 #>
 [CmdletBinding()]
 param(
@@ -52,9 +54,17 @@ if ($LASTEXITCODE -ne 0) { Refuse "signtool verify /pa refused $path (exit $LAST
 $signature = Get-AuthenticodeSignature -LiteralPath $path
 if ($signature.Status -ne 'Valid') { Refuse "$path does not carry a valid Authenticode signature: $($signature.Status)." }
 if (-not $signature.TimeStamperCertificate) { Refuse "$path is signed without a timestamp, so its signature ends with its certificate." }
-$signer = $signature.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+# The signer the file's own signature names. CreateFromSignedFile reads only what the file carries, and throws when
+# it carries nothing, where Get-AuthenticodeSignature would have answered from a catalog of the machine.
+try {
+    $own = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([System.Security.Cryptography.X509Certificates.X509Certificate]::CreateFromSignedFile($path))
+}
+catch {
+    Refuse "$path carries no signature of its own; Windows vouches for it only from a catalog of this machine."
+}
+$signer = $own.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
 if ($signer -cne $Publisher) { Refuse "$path is signed by '$signer', not by '$Publisher', the publisher it must be signed by." }
 
-Write-Host "$path is signed by $($signature.SignerCertificate.Subject)"
-Write-Host "  issued by $($signature.SignerCertificate.Issuer), thumbprint $($signature.SignerCertificate.Thumbprint)"
+Write-Host "$path is signed by $($own.Subject)"
+Write-Host "  issued by $($own.Issuer), thumbprint $($own.Thumbprint)"
 Write-Host "  timestamped by $($signature.TimeStamperCertificate.Subject)"

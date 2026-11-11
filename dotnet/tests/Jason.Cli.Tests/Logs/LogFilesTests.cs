@@ -35,6 +35,32 @@ public sealed class LogFilesTests
     }
 
     [Fact]
+    public void The_desktop_s_files_are_admitted_by_the_same_pattern_and_each_source_is_read_alone()
+    {
+        using var tree = new TempTree();
+        // The desktop application writes its log beside the runtime's, in the same shape: a file a day, rolled at the
+        // same size limit. Each source is listed apart, so neither is ever read as the other.
+        foreach (var name in new[]
+                 {
+                     "runtime-20261003.jsonl", "desktop-20261003_001.jsonl", "desktop-20261003.jsonl", "desktop-20261002.jsonl",
+                     "runtime-20261002_001.jsonl", "desktop-x.jsonl", "desktop-20261002_01.jsonl", "xdesktop-20261002.jsonl",
+                 })
+        {
+            LogFixtures.Write(tree.Root, name, "{}");
+        }
+
+        var runtime = LogFiles.In(tree.Root);
+        var desktop = LogFiles.In(tree.Root, LogSource.Desktop);
+
+        Assert.Equal(["runtime-20261002_001.jsonl", "runtime-20261003.jsonl"], runtime.Select(file => file.Name));
+        Assert.All(runtime, file => Assert.Equal(LogSource.Runtime, file.Source));
+        Assert.Equal(["desktop-20261002.jsonl", "desktop-20261003.jsonl", "desktop-20261003_001.jsonl"], desktop.Select(file => file.Name));
+        Assert.All(desktop, file => Assert.Equal(LogSource.Desktop, file.Source));
+        Assert.Equal([0, 0, 1], desktop.Select(file => file.Sequence));
+        Assert.Equal(runtime, LogFiles.In(tree.Root, LogSource.Runtime));
+    }
+
+    [Fact]
     public void A_file_is_described_by_where_it_is_how_big_it_is_and_when_it_was_last_written()
     {
         using var tree = new TempTree();

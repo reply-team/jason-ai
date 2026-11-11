@@ -24,7 +24,8 @@ the same either way a caller writes it). They lead the manifest in this order; a
 is kept after them.
 
 .PARAMETER Plugins
-The packages the release carries beside its archives (each plugin package, the UI's and the skills'), by file name,
+The packages the release carries beside its archives (each plugin package, the UI's, the skills', and the desktop's
+installers, Mac packages, block maps and update feeds), by file name,
 as a list or comma-separated. Each must be in the directory; it is hashed here and listed in checksums.txt after the
 archives, and never among the manifest's artifacts, which are platforms. A plugin's package is named in the manifest
 only through -PluginDigests.

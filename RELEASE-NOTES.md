@@ -217,7 +217,8 @@ is not there any more" with its path.
 On Windows, a campaign's move to another project can be refused for the instant the background import-file sweep writes
 inside that folder, soon after a start; ask again and it succeeds.
 
-`reply skills install --project` does not see an old `reply-adapter@reply-skills` plugin installed at user scope on
+`reply skills install --project` does not see an old `reply-adapter` plugin from the `reply-skills` marketplace
+installed at user scope on
 Claude Code, so that plugin keeps loading beside the project copy of the skills.
 
 `reply skills install --dry-run` and `reply skills update --dry-run` describe what they would do in the past tense, as

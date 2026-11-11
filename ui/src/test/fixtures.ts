@@ -47,19 +47,32 @@ import type {
     ContactThread,
     CampaignActivityByPeriodRequest,
     CampaignActivityByPeriodResponse,
+    ContactUpdateRequest,
+    Suppression,
+    SuppressionListRequest,
+    SuppressionRequest,
+    SuppressionRemoved,
+    RemoveContactsRequest,
+    RemoveContactsResult,
+    WorkItemCreateRequest,
+    WorkItemGetRequest,
+    WorkItemWithResult,
 } from '../api/types';
 
 import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.approve/already-decided.json';
 import approvalApproveApproved from '../../../docs/api/fixtures/approval.approve/approved.json';
 import approvalApproveFromCampaignRow from '../../../docs/api/fixtures/approval.approve/from-campaign-row.json';
 import approvalApproveFromCampaignRowAgain from '../../../docs/api/fixtures/approval.approve/from-campaign-row-again.json';
+import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/email-message.json';
 import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
+import approvalGetLinkedinMessage from '../../../docs/api/fixtures/approval.get/linkedin-message.json';
 import approvalGetOtherPending from '../../../docs/api/fixtures/approval.get/other-pending.json';
 import approvalGetPendingWithPreview from '../../../docs/api/fixtures/approval.get/pending-with-preview.json';
 import approvalListByCampaignPending from '../../../docs/api/fixtures/approval.list/by-campaign-pending.json';
 import approvalListByWorkItem from '../../../docs/api/fixtures/approval.list/by-work-item.json';
 import approvalListDecided from '../../../docs/api/fixtures/approval.list/decided.json';
 import approvalListEmpty from '../../../docs/api/fixtures/approval.list/empty.json';
+import approvalListMessagesPending from '../../../docs/api/fixtures/approval.list/messages-pending.json';
 import approvalListPending from '../../../docs/api/fixtures/approval.list/pending.json';
 import approvalListSummerPending from '../../../docs/api/fixtures/approval.list/summer-pending.json';
 import approvalListUnauthorized from '../../../docs/api/fixtures/approval.list/unauthorized.json';
@@ -71,6 +84,7 @@ import campaignActivityLast7Days from '../../../docs/api/fixtures/campaign.activ
 import campaignActivityMany from '../../../docs/api/fixtures/campaign.activity/many.json';
 import campaignActivityManyOne from '../../../docs/api/fixtures/campaign.activity/many-one.json';
 import campaignActivityOne from '../../../docs/api/fixtures/campaign.activity/one.json';
+import campaignActivitySummer from '../../../docs/api/fixtures/campaign.activity/summer.json';
 import campaignActivityToday from '../../../docs/api/fixtures/campaign.activity/today.json';
 import campaignActivityTwo from '../../../docs/api/fixtures/campaign.activity/two.json';
 import campaignActivityByPeriodContacted7Days from '../../../docs/api/fixtures/campaign.activity_by_period/contacted-7-days.json';
@@ -92,6 +106,8 @@ import campaignGetDetails from '../../../docs/api/fixtures/campaign.get/details.
 import campaignGetGone from '../../../docs/api/fixtures/campaign.get/gone.json';
 import campaignGetGoneHere from '../../../docs/api/fixtures/campaign.get/gone-here.json';
 import campaignGetInProjectWithFolder from '../../../docs/api/fixtures/campaign.get/in-project-with-folder.json';
+import campaignGetInbox from '../../../docs/api/fixtures/campaign.get/inbox.json';
+import campaignGetInboxQuiet from '../../../docs/api/fixtures/campaign.get/inbox-quiet.json';
 import campaignGetMany from '../../../docs/api/fixtures/campaign.get/many.json';
 import campaignGetOne from '../../../docs/api/fixtures/campaign.get/one.json';
 import campaignGetSummer from '../../../docs/api/fixtures/campaign.get/summer.json';
@@ -100,6 +116,7 @@ import campaignGetUnlinked from '../../../docs/api/fixtures/campaign.get/unlinke
 import campaignListCampaignsForPicker from '../../../docs/api/fixtures/campaign.list/campaigns-for-picker.json';
 import campaignListFirstPage from '../../../docs/api/fixtures/campaign.list/first-page.json';
 import campaignListForPicker from '../../../docs/api/fixtures/campaign.list/for-picker.json';
+import campaignListInbox from '../../../docs/api/fixtures/campaign.list/inbox.json';
 import campaignListIncludeArchived from '../../../docs/api/fixtures/campaign.list/include-archived.json';
 import campaignListQuery from '../../../docs/api/fixtures/campaign.list/query.json';
 import campaignListScreen from '../../../docs/api/fixtures/campaign.list/screen.json';
@@ -128,6 +145,9 @@ import campaignStartAfterPause from '../../../docs/api/fixtures/campaign.start/a
 import campaignSummaryAll from '../../../docs/api/fixtures/campaign.summary/all.json';
 import campaignSummaryAllAfter from '../../../docs/api/fixtures/campaign.summary/all-after.json';
 import campaignSummaryArchived from '../../../docs/api/fixtures/campaign.summary/archived.json';
+import campaignSummaryInboxAll from '../../../docs/api/fixtures/campaign.summary/inbox-all.json';
+import campaignSummaryInboxOne from '../../../docs/api/fixtures/campaign.summary/inbox-one.json';
+import campaignSummaryInboxQuiet from '../../../docs/api/fixtures/campaign.summary/inbox-quiet.json';
 import campaignSummaryMany from '../../../docs/api/fixtures/campaign.summary/many.json';
 import campaignSummaryManyNext from '../../../docs/api/fixtures/campaign.summary/many-next.json';
 import campaignSummarySome from '../../../docs/api/fixtures/campaign.summary/some.json';
@@ -164,6 +184,8 @@ import contactThreadMessages from '../../../docs/api/fixtures/contact.thread/mes
 import contactThreadNext from '../../../docs/api/fixtures/contact.thread/next.json';
 import contactThreadNotThisContact from '../../../docs/api/fixtures/contact.thread/not-this-contact.json';
 import contactThreadsHasMore from '../../../docs/api/fixtures/contact.threads/has-more.json';
+import contactThreadsInboxMateo from '../../../docs/api/fixtures/contact.threads/inbox-mateo.json';
+import contactThreadsInboxPaula from '../../../docs/api/fixtures/contact.threads/inbox-paula.json';
 import contactThreadsNext from '../../../docs/api/fixtures/contact.threads/next.json';
 import contactThreadsNoRoute from '../../../docs/api/fixtures/contact.threads/no-route.json';
 import contactThreadsNotLinked from '../../../docs/api/fixtures/contact.threads/not-linked.json';
@@ -180,6 +202,8 @@ import decisionListSummerPending from '../../../docs/api/fixtures/decision.list/
 import journalListByAwaitingItem from '../../../docs/api/fixtures/journal.list/by-awaiting-item.json';
 import journalListByCampaign from '../../../docs/api/fixtures/journal.list/by-campaign.json';
 import journalListByCampaignChanges from '../../../docs/api/fixtures/journal.list/by-campaign-changes.json';
+import journalListByCampaignReplies from '../../../docs/api/fixtures/journal.list/by-campaign-replies.json';
+import journalListByCampaignRepliesNone from '../../../docs/api/fixtures/journal.list/by-campaign-replies-none.json';
 import journalListByContact from '../../../docs/api/fixtures/journal.list/by-contact.json';
 import journalListByContactChanges from '../../../docs/api/fixtures/journal.list/by-contact-changes.json';
 import journalListByContactDecisions from '../../../docs/api/fixtures/journal.list/by-contact-decisions.json';
@@ -273,6 +297,48 @@ import workitemListTomasNow from '../../../docs/api/fixtures/workitem.list/tomas
 import workitemListUnknownCampaign from '../../../docs/api/fixtures/workitem.list/unknown-campaign.json';
 import workitemUpdateDates from '../../../docs/api/fixtures/workitem.update/dates.json';
 import workitemUpdateFinishedMeanwhile from '../../../docs/api/fixtures/workitem.update/finished-meanwhile.json';
+// The person panel's recordings.
+import personCampaignAddContactsMoveIn from '../../../docs/api/fixtures/campaign.add_contacts/move-in.json';
+import personCampaignAddContactsMoveInRejected from '../../../docs/api/fixtures/campaign.add_contacts/move-in-rejected.json';
+import personCampaignListMoveTargets from '../../../docs/api/fixtures/campaign.list/move-targets.json';
+import personCampaignRemoveContactsExcludeArchived from '../../../docs/api/fixtures/campaign.remove_contacts/exclude-archived.json';
+import personCampaignRemoveContactsExcludeOne from '../../../docs/api/fixtures/campaign.remove_contacts/exclude-one.json';
+import personCampaignRemoveContactsMoveOut from '../../../docs/api/fixtures/campaign.remove_contacts/move-out.json';
+import personCampaignRemoveContactsMoveOutArchived from '../../../docs/api/fixtures/campaign.remove_contacts/move-out-archived.json';
+import personContactGetPersonAfterExclude from '../../../docs/api/fixtures/contact.get/person-after-exclude.json';
+import personContactGetPersonAfterHalfMove from '../../../docs/api/fixtures/contact.get/person-after-half-move.json';
+import personContactGetPersonAfterMove from '../../../docs/api/fixtures/contact.get/person-after-move.json';
+import personContactGetPersonFinished from '../../../docs/api/fixtures/contact.get/person-finished.json';
+import personContactGetPersonPanel from '../../../docs/api/fixtures/contact.get/person-panel.json';
+import personContactUpdatePersonChannels from '../../../docs/api/fixtures/contact.update/person-channels.json';
+import personContactUpdatePersonCleared from '../../../docs/api/fixtures/contact.update/person-cleared.json';
+import personContactUpdatePersonPrimaries from '../../../docs/api/fixtures/contact.update/person-primaries.json';
+import personContactUpdatePersonRefused from '../../../docs/api/fixtures/contact.update/person-refused.json';
+import personContactUpdatePersonSaved from '../../../docs/api/fixtures/contact.update/person-saved.json';
+import personSuppressionAddPersonEmail from '../../../docs/api/fixtures/suppression.add/person-email.json';
+import personSuppressionAddPersonLinkedin from '../../../docs/api/fixtures/suppression.add/person-linkedin.json';
+import personSuppressionListAguilarEmailClear from '../../../docs/api/fixtures/suppression.list/aguilar-email-clear.json';
+import personSuppressionListGraceEmailClear from '../../../docs/api/fixtures/suppression.list/grace-email-clear.json';
+import personSuppressionListMateoEmailClear from '../../../docs/api/fixtures/suppression.list/mateo-email-clear.json';
+import personSuppressionListMateoLinkedinClear from '../../../docs/api/fixtures/suppression.list/mateo-linkedin-clear.json';
+import personSuppressionListMateoPhoneClear from '../../../docs/api/fixtures/suppression.list/mateo-phone-clear.json';
+import personSuppressionListPersonEmailClear from '../../../docs/api/fixtures/suppression.list/person-email-clear.json';
+import personSuppressionListPersonEmailListed from '../../../docs/api/fixtures/suppression.list/person-email-listed.json';
+import personSuppressionListPersonLinkedinClear from '../../../docs/api/fixtures/suppression.list/person-linkedin-clear.json';
+import personSuppressionListPersonLinkedinListed from '../../../docs/api/fixtures/suppression.list/person-linkedin-listed.json';
+import personSuppressionListPersonPhoneClear from '../../../docs/api/fixtures/suppression.list/person-phone-clear.json';
+import personSuppressionListPersonSecondEmailClear from '../../../docs/api/fixtures/suppression.list/person-second-email-clear.json';
+import personSuppressionRemovePersonEmail from '../../../docs/api/fixtures/suppression.remove/person-email.json';
+import personSuppressionRemovePersonLinkedin from '../../../docs/api/fixtures/suppression.remove/person-linkedin.json';
+import personWorkitemCreateProviderArchived from '../../../docs/api/fixtures/workitem.create/provider-archived.json';
+import personWorkitemCreateProviderContactUpdate from '../../../docs/api/fixtures/workitem.create/provider-contact-update.json';
+import personWorkitemCreateResearcherArchived from '../../../docs/api/fixtures/workitem.create/researcher-archived.json';
+import personWorkitemCreateResearcherAsked from '../../../docs/api/fixtures/workitem.create/researcher-asked.json';
+import personWorkitemCreateResearcherAskedPlain from '../../../docs/api/fixtures/workitem.create/researcher-asked-plain.json';
+import personWorkitemGetResearcherFinding from '../../../docs/api/fixtures/workitem.get/researcher-finding.json';
+import personWorkitemGetResearcherFindingSecond from '../../../docs/api/fixtures/workitem.get/researcher-finding-second.json';
+import personWorkitemListResearcherFindings from '../../../docs/api/fixtures/workitem.list/researcher-findings.json';
+import personWorkitemListResearcherFindingsTwo from '../../../docs/api/fixtures/workitem.list/researcher-findings-two.json';
 
 export type Exchange<Req, Res> = { operation: string; case: string; request: Req; status: number; response: Res };
 
@@ -290,7 +356,9 @@ export const fixtures = {
         ApprovalDecisionRequest,
         ErrorEnvelope
     >,
+    'approval.get/email-message': approvalGetEmailMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/linkedin-message': approvalGetLinkedinMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/other-pending': approvalGetOtherPending satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/pending-with-preview': approvalGetPendingWithPreview satisfies Exchange<
         { approval_id: string },
@@ -303,6 +371,10 @@ export const fixtures = {
     'approval.list/by-work-item': approvalListByWorkItem satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/decided': approvalListDecided satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/empty': approvalListEmpty satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
+    'approval.list/messages-pending': approvalListMessagesPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
     'approval.list/pending': approvalListPending satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/summer-pending': approvalListSummerPending satisfies Exchange<
         ApprovalListRequest,
@@ -332,6 +404,10 @@ export const fixtures = {
         CampaignActivityResponse
     >,
     'campaign.activity/one': campaignActivityOne satisfies Exchange<CampaignActivityRequest, CampaignActivityResponse>,
+    'campaign.activity/summer': campaignActivitySummer satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
     'campaign.activity/today': campaignActivityToday satisfies Exchange<
         CampaignActivityRequest,
         CampaignActivityResponse
@@ -401,6 +477,8 @@ export const fixtures = {
         { campaign_id: string },
         Campaign
     >,
+    'campaign.get/inbox': campaignGetInbox satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/inbox-quiet': campaignGetInboxQuiet satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
@@ -412,6 +490,7 @@ export const fixtures = {
     >,
     'campaign.list/first-page': campaignListFirstPage satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/for-picker': campaignListForPicker satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
+    'campaign.list/inbox': campaignListInbox satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/include-archived': campaignListIncludeArchived satisfies Exchange<
         CampaignListRequest,
         Page<CampaignSummary>
@@ -506,6 +585,18 @@ export const fixtures = {
         CampaignSummaryRequest,
         CampaignSummaryResponse
     >,
+    'campaign.summary/inbox-all': campaignSummaryInboxAll satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/inbox-one': campaignSummaryInboxOne satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/inbox-quiet': campaignSummaryInboxQuiet satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
     'campaign.summary/many': campaignSummaryMany satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
     'campaign.summary/many-next': campaignSummaryManyNext satisfies Exchange<
         CampaignSummaryRequest,
@@ -572,6 +663,8 @@ export const fixtures = {
         ErrorEnvelope
     >,
     'contact.threads/has-more': contactThreadsHasMore satisfies Exchange<ContactThreadsRequest, ContactThreads>,
+    'contact.threads/inbox-mateo': contactThreadsInboxMateo satisfies Exchange<ContactThreadsRequest, ContactThreads>,
+    'contact.threads/inbox-paula': contactThreadsInboxPaula satisfies Exchange<ContactThreadsRequest, ErrorEnvelope>,
     'contact.threads/next': contactThreadsNext satisfies Exchange<ContactThreadsRequest, ContactThreads>,
     'contact.threads/no-route': contactThreadsNoRoute satisfies Exchange<ContactThreadsRequest, ErrorEnvelope>,
     'contact.threads/not-linked': contactThreadsNotLinked satisfies Exchange<ContactThreadsRequest, ErrorEnvelope>,
@@ -603,6 +696,14 @@ export const fixtures = {
     >,
     'journal.list/by-campaign': journalListByCampaign satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/by-campaign-changes': journalListByCampaignChanges satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/by-campaign-replies': journalListByCampaignReplies satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/by-campaign-replies-none': journalListByCampaignRepliesNone satisfies Exchange<
         JournalListRequest,
         Page<JournalEntry>
     >,
@@ -785,6 +886,156 @@ export const fixtures = {
     'workitem.update/finished-meanwhile': workitemUpdateFinishedMeanwhile satisfies Exchange<
         WorkItemUpdateRequest,
         ErrorEnvelope
+    >,
+    // The person panel's recordings.
+    'campaign.add_contacts/move-in': personCampaignAddContactsMoveIn satisfies Exchange<
+        AddContactsRequest,
+        AddContactsResult
+    >,
+    'campaign.add_contacts/move-in-rejected': personCampaignAddContactsMoveInRejected satisfies Exchange<
+        AddContactsRequest,
+        AddContactsResult
+    >,
+    'campaign.list/move-targets': personCampaignListMoveTargets satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
+    'campaign.remove_contacts/exclude-archived': personCampaignRemoveContactsExcludeArchived satisfies Exchange<
+        RemoveContactsRequest,
+        ErrorEnvelope
+    >,
+    'campaign.remove_contacts/exclude-one': personCampaignRemoveContactsExcludeOne satisfies Exchange<
+        RemoveContactsRequest,
+        RemoveContactsResult
+    >,
+    'campaign.remove_contacts/move-out': personCampaignRemoveContactsMoveOut satisfies Exchange<
+        RemoveContactsRequest,
+        RemoveContactsResult
+    >,
+    'campaign.remove_contacts/move-out-archived': personCampaignRemoveContactsMoveOutArchived satisfies Exchange<
+        RemoveContactsRequest,
+        ErrorEnvelope
+    >,
+    'contact.get/person-after-exclude': personContactGetPersonAfterExclude satisfies Exchange<
+        { contact_id: string },
+        Contact
+    >,
+    'contact.get/person-after-half-move': personContactGetPersonAfterHalfMove satisfies Exchange<
+        { contact_id: string },
+        Contact
+    >,
+    'contact.get/person-after-move': personContactGetPersonAfterMove satisfies Exchange<
+        { contact_id: string },
+        Contact
+    >,
+    'contact.get/person-finished': personContactGetPersonFinished satisfies Exchange<{ contact_id: string }, Contact>,
+    'contact.get/person-panel': personContactGetPersonPanel satisfies Exchange<{ contact_id: string }, Contact>,
+    'contact.update/person-channels': personContactUpdatePersonChannels satisfies Exchange<
+        ContactUpdateRequest,
+        Contact
+    >,
+    'contact.update/person-cleared': personContactUpdatePersonCleared satisfies Exchange<ContactUpdateRequest, Contact>,
+    'contact.update/person-primaries': personContactUpdatePersonPrimaries satisfies Exchange<
+        ContactUpdateRequest,
+        Contact
+    >,
+    'contact.update/person-refused': personContactUpdatePersonRefused satisfies Exchange<
+        ContactUpdateRequest,
+        ErrorEnvelope
+    >,
+    'contact.update/person-saved': personContactUpdatePersonSaved satisfies Exchange<ContactUpdateRequest, Contact>,
+    'suppression.add/person-email': personSuppressionAddPersonEmail satisfies Exchange<SuppressionRequest, Suppression>,
+    'suppression.add/person-linkedin': personSuppressionAddPersonLinkedin satisfies Exchange<
+        SuppressionRequest,
+        Suppression
+    >,
+    'suppression.list/aguilar-email-clear': personSuppressionListAguilarEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/grace-email-clear': personSuppressionListGraceEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/mateo-email-clear': personSuppressionListMateoEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/mateo-linkedin-clear': personSuppressionListMateoLinkedinClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/mateo-phone-clear': personSuppressionListMateoPhoneClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/person-email-clear': personSuppressionListPersonEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/person-email-listed': personSuppressionListPersonEmailListed satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/person-linkedin-clear': personSuppressionListPersonLinkedinClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/person-linkedin-listed': personSuppressionListPersonLinkedinListed satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/person-phone-clear': personSuppressionListPersonPhoneClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.list/person-second-email-clear': personSuppressionListPersonSecondEmailClear satisfies Exchange<
+        SuppressionListRequest,
+        Page<Suppression>
+    >,
+    'suppression.remove/person-email': personSuppressionRemovePersonEmail satisfies Exchange<
+        SuppressionRequest,
+        SuppressionRemoved
+    >,
+    'suppression.remove/person-linkedin': personSuppressionRemovePersonLinkedin satisfies Exchange<
+        SuppressionRequest,
+        SuppressionRemoved
+    >,
+    'workitem.create/provider-archived': personWorkitemCreateProviderArchived satisfies Exchange<
+        WorkItemCreateRequest,
+        ErrorEnvelope
+    >,
+    'workitem.create/provider-contact-update': personWorkitemCreateProviderContactUpdate satisfies Exchange<
+        WorkItemCreateRequest,
+        WorkItem
+    >,
+    'workitem.create/researcher-archived': personWorkitemCreateResearcherArchived satisfies Exchange<
+        WorkItemCreateRequest,
+        ErrorEnvelope
+    >,
+    'workitem.create/researcher-asked': personWorkitemCreateResearcherAsked satisfies Exchange<
+        WorkItemCreateRequest,
+        WorkItem
+    >,
+    'workitem.create/researcher-asked-plain': personWorkitemCreateResearcherAskedPlain satisfies Exchange<
+        WorkItemCreateRequest,
+        WorkItem
+    >,
+    'workitem.get/researcher-finding': personWorkitemGetResearcherFinding satisfies Exchange<
+        WorkItemGetRequest,
+        WorkItemWithResult
+    >,
+    'workitem.get/researcher-finding-second': personWorkitemGetResearcherFindingSecond satisfies Exchange<
+        WorkItemGetRequest,
+        WorkItemWithResult
+    >,
+    'workitem.list/researcher-findings': personWorkitemListResearcherFindings satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'workitem.list/researcher-findings-two': personWorkitemListResearcherFindingsTwo satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
     >,
 } as const;
 

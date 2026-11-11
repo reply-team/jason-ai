@@ -96,7 +96,7 @@ public class PersonTextShownTests
             {"id":"cnt_1","first_name":"H","company":"H","title":"H","time_zone":"H","channels":[],"custom":{"H":1},
              "external_ids":[],"created_at":"T","updated_at":"T"}
             """),
-        ["plugin list"] = (PluginRenderers.Registry, """
+        ["plugin list"] = (json => PluginRenderers.Registry(json, "settings.json"), """
             {"snapshot":{"id":"snp_1","loaded_at":"T","source":"reload","plugin_count":0},"routing_snapshot_id":"rts_1","plugins":[],
              "last_reload":{"at":"T","source":"reload","activated":false,
              "candidates":[{"directory":"H","status":"invalid","problems":[{"code":"field_invalid","path":"name","message":"H"}]}],

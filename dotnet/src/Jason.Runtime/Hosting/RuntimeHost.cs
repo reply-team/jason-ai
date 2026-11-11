@@ -536,6 +536,9 @@ public static class RuntimeHost
             requestLogging.Logger = logger;
             requestLogging.GetMessageTemplateProperties = (context, _, elapsedMs, statusCode) => RequestLine.Properties(context, elapsedMs, statusCode);
         });
+        // Before the host, origin and bearer checks, so the bearer check can tell an upgrade from a plain request; a
+        // socket is accepted only by the stream's own handler, after all three.
+        app.UseWebSockets();
         app.Use(LoopbackHostFilter.Middleware);
         app.Use(OriginRule.Middleware);
         app.Use(BearerTokenAuthentication.Middleware(token));
@@ -561,6 +564,9 @@ public static class RuntimeHost
         app.MapEventsOperations();
         app.MapSubscriptionOperations();
         app.MapUiOperations();
+
+        // The one route that answers a GET: a WebSocket upgrade is a GET by its protocol.
+        app.MapGet(Streams.JournalRoute, JournalStream.HandleAsync);
         app.MapUi();
 
         // An explicit catch-all pattern: the default fallback pattern is "{*path:nonfile}", and every operation

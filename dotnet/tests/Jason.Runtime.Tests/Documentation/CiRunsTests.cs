@@ -1314,6 +1314,30 @@ public class CiRunsTests
     }
 
     /// <summary>
+    /// One job runs all of the UI's checks, in the order ui/README.md gives them: the install, the static checks, the unit
+    /// and screen layers, the build and its package, and the browser smoke against the runtime the job built. None of
+    /// them may fail without failing the job, and none may be skipped: the steps that run them carry no condition of
+    /// their own, and the job carries no <c>continue-on-error</c>.
+    /// </summary>
+    [Fact]
+    public void The_ui_job_runs_every_layer_of_the_ui_s_tests_in_order()
+    {
+        var job = Mapping(Jobs(), "ui");
+        var steps = Steps(job);
+        var commands = new[] { "npm ci", "npm run check", "npm test", "npm run build", "npm run package", "npm run e2e" };
+        static List<string> Lines(YamlMappingNode step) => [.. (Scalar(step, "run") ?? "").Split('\n').Select(line => line.Trim())];
+        var runs = steps.SelectMany(Lines).ToList();
+
+        var order = commands.Select(command => runs.IndexOf(command)).ToList();
+
+        Assert.DoesNotContain(-1, order);
+        Assert.Equal(order.Order(), order);
+        Assert.All(steps.Where(step => Scalar(step, "run") is not null), step => Assert.Null(Node(step, "continue-on-error")));
+        Assert.All(steps.Where(step => Lines(step).Intersect(commands, StringComparer.Ordinal).Any()), step => Assert.Null(Node(step, "if")));
+        Assert.Null(Node(job, "continue-on-error"));
+    }
+
+    /// <summary>
     /// The system packages the browser asks for may fail to install without failing the job: on 2026-11-11 the hosted
     /// runners could not resolve the package servers' names for hours. Both steps that install them fall back to the
     /// browser alone and say so in a warning, and the browser smoke after them, which carries no condition, is what
@@ -1355,28 +1379,37 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// The desktop's check, which the rulesets of main and of the release branches require, reports on every run of the
-    /// Linux set though this tree carries no desktop application: its one step says, in the log and in the run's summary,
-    /// that there is nothing to check, and the job passes under the check's own name. It checks nothing out, so its token can do nothing, and it
-    /// carries no <c>continue-on-error</c>: what it reports is what its step said.
+    /// One job runs the desktop application's checks, in the order desktop/README.md gives them: the install, the
+    /// type-check and the Node tests, in the desktop's own folder, on a node of 22 or later, which runs the tests' TypeScript
+    /// as it is. Electron's own binary is never downloaded: no test starts a window. None of the steps may fail without
+    /// failing the job, and none may be skipped.
     /// </summary>
     [Fact]
-    public void The_desktop_s_check_says_this_tree_has_no_desktop_application_to_check()
+    public void The_desktop_job_runs_the_install_the_type_check_and_the_node_tests_in_order()
     {
         var job = Mapping(Jobs(), "desktop");
-
         Assert.Equal("The desktop on ubuntu", Scalar(job, "name"));
         Assert.Equal("ubuntu-latest", Scalar(job, "runs-on"));
-        Assert.Empty(Mapping(job, "permissions").Children);
-        Assert.Null(Node(job, "continue-on-error"));
+        Assert.Equal("desktop", Scalar(Mapping(Mapping(job, "defaults"), "run"), "working-directory"));
+        Assert.Equal("1", Scalar(Mapping(job, "env"), "ELECTRON_SKIP_BINARY_DOWNLOAD"));
+        Assert.Equal("read", Scalar(Mapping(job, "permissions"), "contents"));
 
-        var step = Assert.Single(Steps(job));
-        Assert.Null(Scalar(step, "uses"));
-        Assert.Null(Node(step, "continue-on-error"));
-        var lines = Scalar(step, "run")!.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(2, lines.Length);
-        Assert.All(lines, line => Assert.Contains("this tree carries no desktop application", line, StringComparison.Ordinal));
-        Assert.EndsWith(">> \"$GITHUB_STEP_SUMMARY\"", lines[1], StringComparison.Ordinal);
+        var steps = Steps(job);
+        var commands = new[] { "npm ci", "npm run check", "npm test" };
+        var runs = steps.Select(step => Scalar(step, "run")?.Trim()).ToList();
+        var order = commands.Select(command => runs.IndexOf(command)).ToList();
+        Assert.DoesNotContain(-1, order);
+        Assert.Equal(order.Order(), order);
+
+        var node = steps.FindIndex(step => Scalar(step, "uses")?.StartsWith("actions/setup-node@", StringComparison.Ordinal) == true);
+        Assert.InRange(node, 0, order[0] - 1);
+        var with = Mapping(steps[node], "with");
+        Assert.InRange(int.Parse(Scalar(with, "node-version")!, System.Globalization.CultureInfo.InvariantCulture), 22, int.MaxValue);
+        Assert.Equal("desktop/package-lock.json", Scalar(with, "cache-dependency-path"));
+
+        Assert.All(steps.Where(step => Scalar(step, "run") is not null), step => Assert.Null(Node(step, "continue-on-error")));
+        Assert.All(steps.Where(step => commands.Contains(Scalar(step, "run")?.Trim())), step => Assert.Null(Node(step, "if")));
+        Assert.Null(Node(job, "continue-on-error"));
     }
 
     /// <summary>
@@ -1434,8 +1467,9 @@ public class CiRunsTests
 
     /// <summary>
     /// What CI uploads is kept three days: it exists for the jobs of the same run and for a person looking at a failure.
-    /// The packaging action is shared with the release, whose call names no retention, and the action's default, 0, is
-    /// upload-artifact's own word for the repository's retention — so a release keeps what it always kept.
+    /// The packaging action is shared with the release, whose calls name no retention, and the action's default, 0, is
+    /// upload-artifact's own word for the repository's retention — so a release keeps what it always kept, the desktop's
+    /// packages included.
     /// </summary>
     [Fact]
     public void Ci_keeps_what_it_uploads_three_days_and_a_release_what_it_always_kept()
@@ -1443,10 +1477,12 @@ public class CiRunsTests
         var action = Parse(Read(Action));
         var retention = Mapping(Mapping(action, "inputs"), "retention-days");
         Assert.Equal("0", Scalar(retention, "default"));
-        var upload = Assert.Single(
-            Assert.IsType<YamlSequenceNode>(Node(Mapping(action, "runs"), "steps")).Children.Cast<YamlMappingNode>(),
-            step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true);
-        Assert.Equal("${{ inputs.retention-days }}", Scalar(Mapping(upload, "with"), "retention-days"));
+        // The platform's upload, and the desktop's two, which only a release's calls make.
+        var uploads = Assert.IsType<YamlSequenceNode>(Node(Mapping(action, "runs"), "steps")).Children.Cast<YamlMappingNode>()
+            .Where(step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true)
+            .ToList();
+        Assert.Equal(3, uploads.Count);
+        Assert.All(uploads, upload => Assert.Equal("${{ inputs.retention-days }}", Scalar(Mapping(upload, "with"), "retention-days")));
 
         var ci = PackagingCalls(Ci);
         Assert.NotEmpty(ci);

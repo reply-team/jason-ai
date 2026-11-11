@@ -15,6 +15,8 @@ describe('parseRoute', () => {
         ],
         ['#/attention?decided=yes', { screen: 'attention' }],
         ['#/system', { screen: 'system' }],
+        ['#/settings', { screen: 'settings' }],
+        ['#/chat?t=abc', { screen: 'chat' }],
         ['#/nowhere/else', { screen: 'attention' }],
         ['#/attention/approvals/', { screen: 'attention' }],
         ['#/attention/approvals/%E0%A4%A', { screen: 'attention' }],
@@ -42,14 +44,17 @@ describe('parseRoute', () => {
             { screen: 'people', id: 'cnt_7', tab: 'details', filters: { q: 'ada', campaign: 'cmp_1', archived: true } },
         ],
         ['#/people/cnt_7/threads', { screen: 'people', id: 'cnt_7', tab: 'threads', filters: {} }],
+        ['#/people/cnt_7/sequences', { screen: 'people', id: 'cnt_7', tab: 'sequences', filters: {} }],
+        ['#/people/cnt_7/next', { screen: 'people', id: 'cnt_7', tab: 'next', filters: {} }],
+        ['#/people/cnt_7/research', { screen: 'people', id: 'cnt_7', tab: 'research', filters: {} }],
         ['#/people/cnt_7/elsewhere?archived=yes&x=1', { screen: 'people', id: 'cnt_7', tab: 'timeline', filters: {} }],
         ['#/people/%E0%A4%A/details', { screen: 'people', tab: 'timeline', filters: {} }],
-        ['#/campaigns', { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} }],
+        ['#/campaigns', { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} }],
         [
             '#/campaigns?view=activity&period=30d&q=spr&archived=1&t=abc',
             {
                 screen: 'campaigns',
-                tab: 'timeline',
+                tab: 'sequence',
                 view: 'activity',
                 period: '30d',
                 filters: { q: 'spr', archived: true },
@@ -57,15 +62,15 @@ describe('parseRoute', () => {
         ],
         [
             '#/campaigns?view=summary&period=today',
-            { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+            { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
         ],
         [
             '#/campaigns?view=weekly&period=1y',
-            { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+            { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
         ],
         [
             '#/campaigns/cmp_1',
-            { screen: 'campaigns', id: 'cmp_1', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+            { screen: 'campaigns', id: 'cmp_1', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
         ],
         [
             '#/campaigns/cmp_1/people?filter=failed',
@@ -108,20 +113,42 @@ describe('parseRoute', () => {
             },
         ],
         [
+            '#/campaigns/cmp_1/settings?filter=failed',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'settings', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns/cmp_1/inbox',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'inbox', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns/cmp_1/results?view=activity&period=30d',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'results', view: 'activity', period: '30d', filters: {} },
+        ],
+        // The tabs an address named before the campaign opened as Sequence, People, Inbox, Results and Settings: its
+        // Timeline is now its Sequence and its Details its Settings.
+        [
+            '#/campaigns/cmp_1/timeline',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
             '#/campaigns/cmp_1/details?filter=failed',
-            { screen: 'campaigns', id: 'cmp_1', tab: 'details', view: 'summary', period: '7d', filters: {} },
+            { screen: 'campaigns', id: 'cmp_1', tab: 'settings', view: 'summary', period: '7d', filters: {} },
+        ],
+        [
+            '#/campaigns/cmp_1/chat',
+            { screen: 'campaigns', id: 'cmp_1', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
         ],
         [
             '#/campaigns/cmp_1/elsewhere',
-            { screen: 'campaigns', id: 'cmp_1', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+            { screen: 'campaigns', id: 'cmp_1', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
         ],
         [
             '#/campaigns/%E0%A4%A/people',
-            { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} },
+            { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
         ],
         [
             '#/campaigns?view=activity&period=90d',
-            { screen: 'campaigns', tab: 'timeline', view: 'activity', period: '7d', filters: {} },
+            { screen: 'campaigns', tab: 'sequence', view: 'activity', period: '7d', filters: {} },
         ],
         ['#/performance', { screen: 'performance', tab: 'timeline', period: '7d', campaigns: [] }],
         [
@@ -140,6 +167,11 @@ describe('parseRoute', () => {
                 from: '2026-10-13T00:00:00.000Z',
                 to: '2026-10-14T00:00:00.000Z',
             },
+        ],
+        // Performance's panel has three of the person's tabs; another name is its first.
+        [
+            '#/performance/cnt_1/sequences',
+            { screen: 'performance', id: 'cnt_1', tab: 'timeline', period: '7d', campaigns: [] },
         ],
         [
             '#/performance?count=nope&from=2026-10-13T00:00:00.000Z',
@@ -187,6 +219,8 @@ describe('href', () => {
             '#/attention/approvals/apr_1?decided=1',
         ],
         [{ screen: 'system' as const }, '#/system'],
+        [{ screen: 'settings' as const }, '#/settings'],
+        [{ screen: 'chat' as const }, '#/chat'],
         [{ screen: 'workitems' as const, tab: 'now' as const, filters: {} }, '#/workitems'],
         [
             {
@@ -217,7 +251,7 @@ describe('href', () => {
         [
             {
                 screen: 'campaigns' as const,
-                tab: 'timeline' as const,
+                tab: 'sequence' as const,
                 view: 'summary' as const,
                 period: '7d' as const,
                 filters: {},
@@ -227,7 +261,7 @@ describe('href', () => {
         [
             {
                 screen: 'campaigns' as const,
-                tab: 'timeline' as const,
+                tab: 'sequence' as const,
                 view: 'activity' as const,
                 period: '30d' as const,
                 filters: { archived: true, q: 'a b' },
@@ -262,12 +296,34 @@ describe('href', () => {
             {
                 screen: 'campaigns' as const,
                 id: 'cmp_1',
-                tab: 'details' as const,
+                tab: 'settings' as const,
                 view: 'summary' as const,
                 period: '7d' as const,
                 filters: {},
             },
-            '#/campaigns/cmp_1/details',
+            '#/campaigns/cmp_1/settings',
+        ],
+        [
+            {
+                screen: 'campaigns' as const,
+                id: 'cmp_1',
+                tab: 'inbox' as const,
+                view: 'summary' as const,
+                period: '7d' as const,
+                filters: {},
+            },
+            '#/campaigns/cmp_1/inbox',
+        ],
+        [
+            {
+                screen: 'campaigns' as const,
+                id: 'cmp_1',
+                tab: 'results' as const,
+                view: 'activity' as const,
+                period: '30d' as const,
+                filters: {},
+            },
+            '#/campaigns/cmp_1/results?view=activity&period=30d',
         ],
         [
             { screen: 'performance' as const, tab: 'timeline' as const, period: '7d' as const, campaigns: [] },

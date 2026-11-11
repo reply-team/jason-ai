@@ -86,12 +86,12 @@ public class RoleCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("role", "set-profile", "researcher", "--execution-profile", "local-claude", "--reason", "the laptop runs this one");
+        var exit = await cli.RunAsync("--actor", "human:ada", "role", "set-profile", "researcher", "--execution-profile", "local-claude", "--reason", "the laptop runs this one");
 
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(
             Operations.RoleSetProfile,
-            "{\"name\":\"researcher\",\"execution_profile\":\"local-claude\",\"reason\":\"the laptop runs this one\"}");
+            "{\"name\":\"researcher\",\"execution_profile\":\"local-claude\",\"reason\":\"the laptop runs this one\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
     }
 
     [Fact]
@@ -99,10 +99,10 @@ public class RoleCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("role", "set-profile", "researcher", "--clear");
+        var exit = await cli.RunAsync("--actor", "human:ada", "role", "set-profile", "researcher", "--clear");
 
         Assert.Equal(ExitCodes.Success, exit);
-        cli.AssertPosted(Operations.RoleSetProfile, "{\"name\":\"researcher\",\"execution_profile\":null}");
+        cli.AssertPosted(Operations.RoleSetProfile, "{\"name\":\"researcher\",\"execution_profile\":null,\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
     }
 
     /// <summary>Setting and clearing at once asks two contradictory things, and the CLI can tell without the runtime.</summary>
@@ -111,7 +111,7 @@ public class RoleCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("role", "set-profile", "researcher", "--execution-profile", "local-claude", "--clear");
+        var exit = await cli.RunAsync("--actor", "human:ada", "role", "set-profile", "researcher", "--execution-profile", "local-claude", "--clear");
 
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Contains("--execution-profile", cli.Error.ToString(), StringComparison.Ordinal);
@@ -123,7 +123,7 @@ public class RoleCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("role", "set-profile", "researcher");
+        var exit = await cli.RunAsync("--actor", "human:ada", "role", "set-profile", "researcher");
 
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Contains("--execution-profile", cli.Error.ToString(), StringComparison.Ordinal);

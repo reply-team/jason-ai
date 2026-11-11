@@ -1,0 +1,76 @@
+# The jason commands the desktop's chat runs without asking, one per line: every verb of the CLI that the deny list
+# does not cover, but doctor, which writes its bundle to any path and so goes to the person's card at every use.
+#
+# Written from the CLI's command tree and chat-deny-list.txt by DesktopDenyListTests; a verb added to the CLI is red
+# there until JASON_UPDATE_FIXTURES=1 writes this file again. Do not edit it by hand.
+approval get
+approval list
+approval list-standing
+audience availability
+audience filter-values
+audience preview
+block get
+block list
+campaign activity
+campaign activity-by-period
+campaign add-contacts
+campaign archive
+campaign audience
+campaign create
+campaign get
+campaign list
+campaign list-contacts
+campaign pause
+campaign remove-contacts
+campaign start
+campaign summary
+campaign update
+campaign update-context
+contact archive
+contact create
+contact get
+contact list
+contact thread
+contact threads
+contact update
+decision get
+decision list
+decision raise
+events backfill
+events signal
+events sources
+journal append
+journal kinds
+journal list
+logs
+operation describe
+plugin list
+preference list
+project create
+project get
+project list
+project update
+reply record
+report get
+report list
+role list
+rolenote get
+rolenote list
+rolenote set
+route list
+route resolve
+status
+subscription list
+subscription runs
+suppression add
+suppression list
+workitem cancel
+workitem complete
+workitem count
+workitem create
+workitem get
+workitem heartbeat
+workitem list
+workitem set-result
+workitem update
+workitem wait

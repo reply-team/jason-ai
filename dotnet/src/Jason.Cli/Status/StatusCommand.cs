@@ -42,8 +42,9 @@ public static class StatusCommand
         Optional — absent never fails:  no update is waiting to be resumed | a provider plugin is installed |
                                         each plugin package this release publishes is the one installed |
                                         every plugin installed is available | a plugin is granted a journal
-                                        kind | a route is configured | a binding names an account | a provider
-                                        CLI you name answers | the skill packs are deployed to an agent
+                                        kind | every plugin is granted something of each capability it
+                                        asks for | a route is configured | a binding names an account | a
+                                        provider CLI you name answers | the skill packs are deployed to an agent
                                         harness, and the files their record names are there | every enabled
                                         profile names an agent host detected on this machine | autostart is
                                         registered | notifications reach you | a UI is installed, and the
@@ -101,13 +102,22 @@ public static class StatusCommand
         installation, so the check never decides readiness. 'jason plugin list' says which kinds each plugin
         declares and which it is granted.
 
+        The grants check names each plugin that asks for a capability and is granted nothing of it, by
+        its id and the capability's key under Plugins:Grants, and never what the manifest asks for. Such a
+        plugin runs without what it is not granted, and nothing else stops, so the check never decides
+        readiness. 'jason plugin list --human' says what each asks for, the key that grants it and the settings
+        file, and 'jason plugin reload' reads the grant.
+
         The provider CLI is only checked when you name it: --provider-cli <program> runs '<program> --version'
         with a ten-second bound and reports whether it answered. The name is found the way Jason finds every
         program it starts by name: on Windows an .exe or a .com first, else npm's .cmd shim, run as the
         interpreter and script it names, and never a script only a shell could run. The check says which file
         it resolved to, and, when it looked the name up on a PATH, whose: the CLI's PATH; the runtime's PATH
         may differ, see the install page. Which provider you use is yours, so this build knows no vendor's
-        command by heart.
+        command by heart. With JASON_CONFINED set, only a bare name is run, found in a fully qualified entry
+        of PATH; a path is not run. Relative and empty entries are skipped, so a working folder is never
+        searched by name, and the check says what was not run: name a program on the search path, or run
+        the check in a terminal.
 
         In the JSON, the role_skills check alone carries details: the deployment its record names, as fields
         a program reads instead of the fact — ref, source, commit (empty where the record names none, a

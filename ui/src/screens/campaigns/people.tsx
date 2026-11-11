@@ -25,6 +25,8 @@ type Props = {
     more: (() => Promise<void>) | null;
     onSearch: (q: string) => void;
     onWaiting: (person: MembershipItem) => void;
+    /** Opens anybody not waiting for you in the person panel, from this campaign. */
+    onPerson: (contactId: string) => void;
 };
 
 /** Why a person is in the count they were listed under, in the few words a row has room for. */
@@ -54,7 +56,7 @@ function about(person: MembershipItem): string {
 
 /**
  * The campaign's people under one count of the view, or All of them, found by a search: each with why the count
- * counts them. A person waiting for you opens what waits in place; anybody else opens on People.
+ * counts them. A person waiting for you opens what waits in place; anybody else opens in the person panel.
  */
 export function CampaignPeople({
     at,
@@ -69,6 +71,7 @@ export function CampaignPeople({
     more,
     onSearch,
     onWaiting,
+    onPerson,
 }: Props) {
     const columns =
         at.view === 'summary'
@@ -89,7 +92,7 @@ export function CampaignPeople({
     };
     const chosen = at.filter ?? '';
     return (
-        <div class="panel-body people-tab">
+        <div className="panel-body people-tab">
             <Search
                 value={query}
                 label="Search people on this campaign"
@@ -112,34 +115,37 @@ export function CampaignPeople({
                 onChoose={(key) => go(key ? { filter: key } : {})}
             />
             {failure && <Notice danger>{failure}</Notice>}
-            {people !== null && people.length === 0 && <div class="empty">Nobody here.</div>}
-            <div class="rows">
+            {people !== null && people.length === 0 && <div className="empty">Nobody here.</div>}
+            <div className="rows">
                 {(people ?? []).map((person) => {
                     const opens = person.why?.kind === 'approval' || person.why?.kind === 'question';
                     const line = why(person, at.filter, me, now, zone);
                     return (
                         <a
                             key={person.contact.id}
-                            class="row"
+                            className="row"
                             href={`#/people/${encodeURIComponent(person.contact.id)}`}
                             onClick={(event) => {
-                                if (!opens) return;
+                                if (event.ctrlKey || event.metaKey || event.shiftKey) return;
                                 event.preventDefault();
-                                onWaiting(person);
+                                if (opens) onWaiting(person);
+                                else onPerson(person.contact.id);
                             }}
                         >
-                            <span class={`mark ${opens ? 'wait' : person.why?.kind === 'failure' ? 'fail' : 'off'}`}>
+                            <span
+                                className={`mark ${opens ? 'wait' : person.why?.kind === 'failure' ? 'fail' : 'off'}`}
+                            >
                                 {opens ? '!' : person.why?.kind === 'failure' ? '×' : '·'}
                             </span>
-                            <span class="what">
-                                <span class="name">{displayName(person.contact).name}</span>
-                                <span class="in" title={line ?? undefined}>
+                            <span className="what">
+                                <span className="name">{displayName(person.contact).name}</span>
+                                <span className="in" title={line ?? undefined}>
                                     {line ?? about(person)}
                                 </span>
                             </span>
                             {person.state === 'excluded' && (
-                                <span class="meta">
-                                    <span class="badge outline">Removed</span>
+                                <span className="meta">
+                                    <span className="badge outline">Removed</span>
                                 </span>
                             )}
                         </a>

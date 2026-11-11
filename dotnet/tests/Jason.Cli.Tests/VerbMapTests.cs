@@ -148,6 +148,47 @@ public class VerbMapTests
     }
 
     /// <summary>
+    /// The verbs that map one to one to a stream rather than to an operation: a stream is a route of the API, named in
+    /// <see cref="Contracts.Api.Streams"/>, that a client upgrades to a WebSocket and reads, and its verb is no exception
+    /// to the map. A second stream arrives here with its verb, in the open.
+    /// </summary>
+    private static readonly Dictionary<string, string> StreamVerbs = new(StringComparer.Ordinal)
+    {
+        ["journal watch"] = Contracts.Api.Streams.Journal,
+    };
+
+    /// <summary>
+    /// The <c>journal</c> group is its three operations and <c>watch</c>, which is the journal's stream, one to one. The
+    /// stream is a route of the API beside the operations and none of them, so the verb is not a declared exception.
+    /// </summary>
+    [Fact]
+    [Critical(Family.R2, "a stream's verb maps to its route")]
+    public void The_journal_verb_group_is_its_three_operations_and_the_verb_of_its_stream()
+    {
+        using var paths = new TempPaths();
+        var group = Jason.Cli.Commands.JournalCommands.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths), new System.CommandLine.Option<string?>("--actor"));
+        var verbs = group.Subcommands.Select(command => command.Name).Order(StringComparer.Ordinal).ToArray();
+        var operations = typeof(Contracts.Api.Operations)
+            .GetFields()
+            .Where(field => field.IsLiteral)
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .ToArray();
+        var journalOperations = operations
+            .Where(name => name.StartsWith("journal.", StringComparison.Ordinal))
+            .Select(name => name["journal.".Length..]);
+
+        Assert.Equal(["append", "kinds", "list", "watch"], verbs);
+        Assert.Equal(["watch"], verbs.Except(journalOperations, StringComparer.Ordinal));
+
+        // Every stream has its verb and every stream verb its stream, under the stream's own noun; a stream is a route of
+        // the version every operation is under, and never an operation itself.
+        Assert.Equal(Contracts.Api.Streams.All.Order(StringComparer.Ordinal), StreamVerbs.Values.Order(StringComparer.Ordinal));
+        Assert.All(StreamVerbs, pair => Assert.Equal(pair.Key.Split(' ')[0], pair.Value.Split('.')[0]));
+        Assert.Equal(Contracts.Api.Streams.JournalRoute, Contracts.Api.Operations.Route(Contracts.Api.Streams.Journal));
+        Assert.All(Contracts.Api.Streams.All, stream => Assert.DoesNotContain(stream, operations));
+    }
+
+    /// <summary>
     /// The <c>subscription</c> group is its three operations and nothing beside them: where each subscribed kind stands,
     /// the records of its chains, and a person's rewind of its cursor. Running a chain is the runtime's own.
     /// </summary>

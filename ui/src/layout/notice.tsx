@@ -1,4 +1,4 @@
-import type { ComponentChildren } from 'preact';
+import type { ReactNode } from 'react';
 
 /**
  * A line above what it is about. A failure is announced as it appears (`danger`); a list of failures said at once is
@@ -13,10 +13,10 @@ export function Notice({
     danger?: boolean;
     alert?: boolean;
     status?: boolean;
-    children: ComponentChildren;
+    children: ReactNode;
 }) {
     return (
-        <div class={danger ? 'notice danger' : 'notice'} role={alert ? 'alert' : status ? 'status' : undefined}>
+        <div className={danger ? 'notice danger' : 'notice'} role={alert ? 'alert' : status ? 'status' : undefined}>
             {children}
         </div>
     );

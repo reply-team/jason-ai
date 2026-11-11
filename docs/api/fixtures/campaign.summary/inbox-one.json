@@ -1,0 +1,38 @@
+{
+  "operation": "campaign.summary",
+  "case": "inbox-one",
+  "request": {
+    "campaign_ids": [
+      "cmp_1"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 2,
+        "waiting": 0,
+        "failed": 0,
+        "working": 1,
+        "new": 0,
+        "idle": 1,
+        "sequence": 0,
+        "out": 1,
+        "removed": 0,
+        "sequence_linked": false
+      }
+    ],
+    "total": {
+      "people": 2,
+      "waiting": 0,
+      "failed": 0,
+      "working": 1,
+      "new": 0,
+      "idle": 1,
+      "sequence": 0,
+      "out": 1,
+      "removed": 0
+    }
+  }
+}

@@ -76,10 +76,10 @@ public class RouteCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("route", "set", "--campaign", "cmp_A", "--plugin", "other-provider");
+        var exit = await cli.RunAsync("--actor", "human:ada", "route", "set", "--campaign", "cmp_A", "--plugin", "other-provider");
 
         Assert.Equal(ExitCodes.Success, exit);
-        cli.AssertPosted(Operations.RouteSet, "{\"campaign_id\":\"cmp_A\",\"plugin\":\"other-provider\"}");
+        cli.AssertPosted(Operations.RouteSet, "{\"campaign_id\":\"cmp_A\",\"plugin\":\"other-provider\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
     }
 
     [Fact]
@@ -87,12 +87,12 @@ public class RouteCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("route", "unset", "--campaign", "cmp_A", "--operation", "campaign.get", "--reason", "back to the house account");
+        var exit = await cli.RunAsync("--actor", "human:ada", "route", "unset", "--campaign", "cmp_A", "--operation", "campaign.get", "--reason", "back to the house account");
 
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(
             Operations.RouteUnset,
-            "{\"campaign_id\":\"cmp_A\",\"operation\":\"campaign.get\",\"reason\":\"back to the house account\"}");
+            "{\"campaign_id\":\"cmp_A\",\"operation\":\"campaign.get\",\"reason\":\"back to the house account\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
     }
 
     /// <summary>
@@ -105,7 +105,7 @@ public class RouteCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("route", "set", "--plugin", "fake-provider", "--operation", "campaign.get");
+        var exit = await cli.RunAsync("--actor", "human:ada", "route", "set", "--plugin", "fake-provider", "--operation", "campaign.get");
 
         AssertSaidWhereGlobalRoutesLive(cli, exit);
     }
@@ -115,7 +115,7 @@ public class RouteCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("route", "unset", "--operation", "campaign.get");
+        var exit = await cli.RunAsync("--actor", "human:ada", "route", "unset", "--operation", "campaign.get");
 
         AssertSaidWhereGlobalRoutesLive(cli, exit);
     }
@@ -135,7 +135,7 @@ public class RouteCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("route", "set", "--campaign", "cmp_A");
+        var exit = await cli.RunAsync("--actor", "human:ada", "route", "set", "--campaign", "cmp_A");
 
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Contains("--plugin", cli.Error.ToString(), StringComparison.Ordinal);
@@ -146,7 +146,7 @@ public class RouteCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("route", "set", "--campaign", "cmp_A", "--plugin", "fake-provider", "--binding", "[1]");
+        var exit = await cli.RunAsync("--actor", "human:ada", "route", "set", "--campaign", "cmp_A", "--plugin", "fake-provider", "--binding", "[1]");
 
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Contains("--binding", cli.Error.ToString(), StringComparison.Ordinal);

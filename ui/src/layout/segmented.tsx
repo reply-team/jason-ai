@@ -15,19 +15,19 @@ export function Segmented<T>({
     onChange: (value: T) => void;
 }) {
     return (
-        <div class="segmented" role="group" aria-label={label}>
+        <div className="segmented" role="group" aria-label={label}>
             {options.map((option) => (
                 <button
                     key={option.label}
                     type="button"
-                    class={option.value === value ? 'on' : ''}
+                    className={option.value === value ? 'on' : ''}
                     aria-pressed={option.value === value}
                     onClick={() => {
                         if (option.value !== value) onChange(option.value);
                     }}
                 >
                     {option.label}
-                    {option.count != null && <span class="count"> {number.format(option.count)}</span>}
+                    {option.count != null && <span className="count"> {number.format(option.count)}</span>}
                 </button>
             ))}
         </div>

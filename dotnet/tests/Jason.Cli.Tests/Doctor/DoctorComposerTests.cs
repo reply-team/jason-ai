@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Cli.Autostart;
 using Jason.Cli.Doctor;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
@@ -571,7 +572,10 @@ public sealed class DoctorComposerTests
         var section = Section(await ComposeAsync(dir, Running(dir)), "logs");
 
         Assert.Equal(
-            ["directory", "exists", "files", "files_truncated", "recent_errors", "recent_errors_truncated", "slice", "slice_truncated", "skipped_lines"],
+            [
+                "directory", "exists", "files", "files_truncated", "recent_errors", "recent_errors_truncated", "slice", "slice_truncated", "skipped_lines",
+                "desktop_files", "desktop_files_truncated", "desktop_slice", "desktop_slice_truncated", "desktop_skipped_lines",
+            ],
             Keys(section));
         Assert.Equal(Path.Combine("<data>", "logs"), Text(section["directory"]));
         Assert.Equal(["runtime-20261003.jsonl", "runtime-20261004.jsonl"], section["files"]!.AsArray().Select(file => Text(file!["name"])));
@@ -590,6 +594,56 @@ public sealed class DoctorComposerTests
         Assert.Equal("line 301", Text(slice[1]!["@mt"]));
         Assert.True(section["slice_truncated"]!.GetValue<bool>());
         Assert.Equal(1, section["skipped_lines"]!.GetValue<int>());
+    }
+
+    /// <summary>
+    /// The desktop application writes its own log beside the runtime's. The bundle carries its files and the newest of
+    /// its events apart from the runtime's, bounded on their own, and neither source is ever read into the other's list.
+    /// </summary>
+    [Fact]
+    public async Task The_logs_section_carries_a_bounded_tail_of_the_desktop_s_log_apart_from_the_runtime_s()
+    {
+        using var dir = new TempPaths();
+        var logs = Directory.CreateDirectory(dir.Paths.LogsDirectory).FullName;
+        Write(logs, "runtime-20261004.jsonl", Event(At(0), "runtime line"), Event(At(1), "runtime failure", "Error"));
+        Write(logs, "desktop-20261003.jsonl", [.. Enumerable.Range(0, 400).Select(n => Event(At(n), $"desktop {n}"))]);
+        Write(logs, "desktop-20261004.jsonl", [.. Enumerable.Range(400, 400).Select(n => Event(At(n), n == 799 ? "desktop failure" : $"desktop {n}", n == 799 ? "Error" : null)), "not an event"]);
+
+        var section = Section(await ComposeAsync(dir, Running(dir)), "logs");
+
+        Assert.Equal(["runtime-20261004.jsonl"], section["files"]!.AsArray().Select(file => Text(file!["name"])));
+        Assert.Equal(["runtime line", "runtime failure"], section["slice"]!.AsArray().Select(evt => Text(evt!["@mt"])));
+        Assert.Equal(["runtime failure"], section["recent_errors"]!.AsArray().Select(evt => Text(evt!["@mt"])));
+        Assert.Equal(0, section["skipped_lines"]!.GetValue<int>());
+
+        Assert.Equal(["desktop-20261003.jsonl", "desktop-20261004.jsonl"], section["desktop_files"]!.AsArray().Select(file => Text(file!["name"])));
+        Assert.Equal(["name", "bytes", "modified_at"], Keys(section["desktop_files"]![0]!));
+        Assert.False(section["desktop_files_truncated"]!.GetValue<bool>());
+        var desktop = section["desktop_slice"]!.AsArray();
+        Assert.Equal(DoctorComposer.DesktopSliceEvents, desktop.Count);
+        Assert.Equal("desktop failure", Text(desktop[^1]!["@mt"]));
+        Assert.Equal($"desktop {800 - DoctorComposer.DesktopSliceEvents}", Text(desktop[0]!["@mt"]));
+        Assert.True(section["desktop_slice_truncated"]!.GetValue<bool>());
+        Assert.Equal(1, section["desktop_skipped_lines"]!.GetValue<int>());
+    }
+
+    /// <summary>The desktop's tail ends at its own byte budget, in the bundle's bytes, before its event count does.</summary>
+    [Fact]
+    public async Task The_desktop_s_tail_ends_at_its_own_budget_before_its_event_count()
+    {
+        using var dir = new TempPaths();
+        var logs = Directory.CreateDirectory(dir.Paths.LogsDirectory).FullName;
+        Write(logs, "desktop-20261004.jsonl", [.. Enumerable.Range(0, 400).Select(n => Event(At(n), new string('w', 10 * 1024) + n))]);
+
+        var bundle = await ComposeAsync(dir, Running(dir));
+
+        var section = Section(bundle, "logs");
+        var desktop = section["desktop_slice"]!.AsArray();
+        Assert.InRange(desktop.Count, 60, 110);
+        Assert.True(section["desktop_slice_truncated"]!.GetValue<bool>());
+        Assert.EndsWith("399", Text(desktop[^1]!["@mt"]), StringComparison.Ordinal);
+        Assert.Empty(section["slice"]!.AsArray());
+        Assert.InRange(bundle.Contents.Single(entry => entry.Name == "logs").Bytes, 0, DoctorComposer.DesktopSliceBytes + (64 * 1024));
     }
 
     /// <summary>A few enormous events end the slice by their size before the event count does.</summary>
@@ -710,6 +764,7 @@ public sealed class DoctorComposerTests
             ["JASON_Update__FeedUrl"] = "https://SENTINEL_ENV_FEED.example",
             ["JASON_SENTINEL_ENV_NAME"] = "a value",
             ["JASON_DATA_DIR"] = dir.Paths.Root,
+            ["JASON_CONFINED"] = "1",
             ["jason_dispatcher__enabled"] = "false",
             ["PATH"] = "SENTINEL_PATH_VALUE",
         };
@@ -723,7 +778,7 @@ public sealed class DoctorComposerTests
 
         var environment = config["environment"]!.AsArray().ToDictionary(variable => Text(variable!["name"]), variable => variable!.AsObject());
         Assert.Equal(
-            ["JASON_<key>", "JASON_DATA_DIR", "JASON_Dispatcher__MaxParallel", "JASON_Logging__MinimumLevel", "JASON_Update__FeedUrl", "jason_dispatcher__enabled"],
+            ["JASON_<key>", "JASON_CONFINED", "JASON_DATA_DIR", "JASON_Dispatcher__MaxParallel", "JASON_Logging__MinimumLevel", "JASON_Update__FeedUrl", "jason_dispatcher__enabled"],
             environment.Keys);
         Assert.Equal(4, environment["JASON_Dispatcher__MaxParallel"]["value"]!.GetValue<int>());
         Assert.Equal("Debug", Text(environment["JASON_Logging__MinimumLevel"]["value"]));
@@ -731,6 +786,7 @@ public sealed class DoctorComposerTests
         Assert.Equal("string", Text(environment["JASON_Update__FeedUrl"]["shape"]!["type"]));
         Assert.False(environment["JASON_Update__FeedUrl"].ContainsKey("value"));
         Assert.False(environment["JASON_DATA_DIR"].ContainsKey("value"));
+        Assert.False(environment["JASON_CONFINED"].ContainsKey("value"));
         Assert.False(environment["JASON_<key>"].ContainsKey("value"));
 
         Assert.Equal(["Dispatcher:MaxParallel", "Dispatcher:Enabled", "Logging:MinimumLevel"], bundle.ValuesCarried);
@@ -1723,6 +1779,53 @@ public sealed class DoctorComposerTests
         Assert.Empty(Strings(other["subscriptions"]));
         Assert.False(other["subscriptions_truncated"]!.GetValue<bool>());
         AssertAbsent(bundle, "SENTINEL kind");
+    }
+
+    /// <summary>
+    /// The search path a macOS logon registration carries names the account's tool folders, and the bundle's projection
+    /// has no rule for one, so no section carries it: the status section's autostart check says only that it is
+    /// registered.
+    /// </summary>
+    [Fact]
+    public async Task No_section_carries_the_search_path_a_logon_registration_carries()
+    {
+        using var dir = new TempPaths();
+        var registrar = new RecordingRegistrar(AutostartPlatform.MacOs)
+        {
+            State = new AutostartState(true, ["jason", "runtime", "run"], null, "/SENTINEL_TOOL_FOLDER/bin:/usr/bin"),
+        };
+
+        var bundle = await DoctorComposer.ComposeAsync(Machine(dir, Running(dir)) with { Autostart = registrar }, false, new FixedClock(Now), Ct);
+
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "autostart")!;
+        Assert.Equal("ok", Text(check["state"]));
+        AssertAbsent(bundle, "SENTINEL_TOOL_FOLDER");
+    }
+
+    /// <summary>
+    /// The status fact that names a plugin granted nothing of what it asks for travels as it is: its id as the alias the
+    /// runtime section writes it as — and a plugin Jason ships by its own id — and the capability's key, and never the
+    /// program its manifest asks to run.
+    /// </summary>
+    [Fact]
+    public async Task The_grants_fact_names_a_plugin_by_its_alias_and_a_key_and_never_what_its_manifest_asks_for()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        var waiting = StubRuntime.Plugin("sentinel-waiting", "sha256:own", PluginStatus.Valid, []) with
+        {
+            Capabilities = new PluginCapabilitiesDto(new ExecCapabilityDto([new ExecutableDto("SENTINEL_PROGRAM", null, null, null)], []), null, null),
+        };
+        var shipped = StubRuntime.Plugin("reply", "sha256:shipped", PluginStatus.Valid, []) with { Capabilities = waiting.Capabilities };
+        runtime.Registry = new PluginRegistryDto(new SnapshotDto("snp_01JDOCTOR", Now, SnapshotSource.Startup, 2), "rts_01JDOCTOR", [waiting, shipped], null, Activated: true);
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "plugin_grants")!;
+        Assert.Equal("failed", Text(check["state"]));
+        Assert.False(check["required"]!.GetValue<bool>());
+        Assert.StartsWith("<plugin-1> is granted nothing it asks for under Exec. reply is granted nothing it asks for under Exec.", Text(check["fact"]), StringComparison.Ordinal);
+        AssertAbsent(bundle, "sentinel-waiting", "SENTINEL_PROGRAM");
     }
 
     /// <summary>

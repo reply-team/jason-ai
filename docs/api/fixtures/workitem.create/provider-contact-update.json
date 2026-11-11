@@ -1,0 +1,68 @@
+{
+  "operation": "workitem.create",
+  "case": "provider-contact-update",
+  "request": {
+    "campaign_id": "cmp_2",
+    "kind": "provider_op",
+    "operation": "contact.update",
+    "contact_id": "cnt_1",
+    "context": {
+      "input": {
+        "channel": "email",
+        "fields": {
+          "title": "VP Revenue"
+        }
+      }
+    },
+    "reason": "Promoted in October.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": "wi_1",
+    "campaign_id": "cmp_2",
+    "contact_id": "cnt_1",
+    "kind": "provider_op",
+    "role": null,
+    "operation": "contact.update",
+    "execution_profile": null,
+    "status": "created",
+    "eligible": true,
+    "priority": 0,
+    "not_before": null,
+    "due_at": null,
+    "retry_after": null,
+    "timeout_seconds": null,
+    "heartbeat_seconds": null,
+    "max_attempts": null,
+    "created_by": {
+      "type": "human",
+      "id": "ada"
+    },
+    "context": {
+      "input": {
+        "channel": "email",
+        "fields": {
+          "title": "VP Revenue"
+        }
+      }
+    },
+    "result_format": null,
+    "result": null,
+    "attempt_count": 0,
+    "current_attempt_id": null,
+    "last_error": null,
+    "attempts": [],
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "finished_at": null,
+    "lineage": {
+      "state": "root"
+    },
+    "campaign_name": "Nordic pilot",
+    "contact_name": "Ingrid Solberg"
+  }
+}

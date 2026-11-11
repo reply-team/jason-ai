@@ -1,0 +1,8 @@
+:root { color-scheme: light dark; --bg: #f7f7f5; --fg: #1d1d1b; --muted: #5c5c57; --bad: #a3271f; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1b1b1a; --fg: #ededea; --muted: #a8a8a2; --bad: #ff8a80; } }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; display: grid; place-items: center; }
+main { max-width: 36rem; padding: 0 16px; text-align: center; }
+h1 { font-size: 1.4rem; font-weight: 600; margin: 0 0 0.5rem; }
+#message { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.failed #message { color: var(--bad); text-align: left; }

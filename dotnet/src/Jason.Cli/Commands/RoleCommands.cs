@@ -93,7 +93,7 @@ public static class RoleCommands
     /// </summary>
     private static Command SetProfile(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("set-profile", "Say which execution profile a role's work uses, or take the policy away.");
+        var command = new Command("set-profile", "Say which execution profile a role's work uses, or take the policy away. " + ActorOption.NoDefaultForAnAct);
         var name = new Argument<string>("name") { Description = "The role whose policy changes — for example researcher." };
         var executionProfile = ExecutionProfileOption();
         var clear = new Option<bool>("--clear")
@@ -129,7 +129,8 @@ public static class RoleCommands
                 .Set("name", parseResult.GetValue(name))
                 .Set("execution_profile", profile, onlyIfNotNull: false)
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(body, "role set-profile", "the CLI will not put this account's name on a change of a role's profile by itself", $"name who does it, e.g. {ActorOption.Name} human:<Name>");
 
             return OperationRunner.RunAsync(env, Operations.RoleSetProfile, body, new RunOptions(parseResult.GetValue(human), RoleRenderers.Role), cancellationToken);
         });

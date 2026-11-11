@@ -50,7 +50,7 @@ public static class SuppressionCommands
 
     private static Command Remove(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("remove", "Lift a suppression. Removing one that is not there is not an error.");
+        var command = new Command("remove", "Lift a suppression. Removing one that is not there is not an error. " + ActorOption.NoDefaultForAnAct);
         var channel = Channel("The channel the value belongs to, for example email.", required: true);
         var value = Value("The channel value to stop suppressing: the entry kept under exactly this text, or where there is none, the one kept under the value as its channel's rule normalizes it.", required: true);
         var reason = new Option<string>("--reason")
@@ -70,7 +70,8 @@ public static class SuppressionCommands
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("value", parseResult.GetValue(value))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(body, "suppression remove", "the CLI will not put this account's name on lifting a suppression by itself", $"name who does it, e.g. {ActorOption.Name} human:<Name>");
 
             return OperationRunner.RunAsync(env, Operations.SuppressionRemove, body, new RunOptions(parseResult.GetValue(human), SuppressionRenderers.Removed), cancellationToken);
         });

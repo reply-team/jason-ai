@@ -1,0 +1,52 @@
+{
+  "operation": "campaign.summary",
+  "case": "inbox-all",
+  "request": {
+    "campaign_ids": [
+      "cmp_1",
+      "cmp_2"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 2,
+        "waiting": 0,
+        "failed": 0,
+        "working": 1,
+        "new": 0,
+        "idle": 1,
+        "sequence": 0,
+        "out": 1,
+        "removed": 0,
+        "sequence_linked": false
+      },
+      {
+        "campaign_id": "cmp_2",
+        "people": 0,
+        "waiting": 0,
+        "failed": 0,
+        "working": 0,
+        "new": 0,
+        "idle": 0,
+        "sequence": 0,
+        "out": 0,
+        "removed": 1,
+        "sequence_linked": false
+      }
+    ],
+    "total": {
+      "people": 2,
+      "waiting": 0,
+      "failed": 0,
+      "working": 1,
+      "new": 0,
+      "idle": 1,
+      "sequence": 0,
+      "out": 1,
+      "removed": 1
+    }
+  }
+}

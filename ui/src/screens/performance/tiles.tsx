@@ -17,7 +17,7 @@ export function Tiles({
     onChoose: (count: ActivityCount) => void;
 }) {
     return (
-        <div class="tiles" role="group" aria-label="The period’s counts" aria-busy={total === null}>
+        <div className="tiles" role="group" aria-label="The period’s counts" aria-busy={total === null}>
             {counts.map(({ key, label, hint }) => {
                 const value = total?.[key] ?? null;
                 const on = chosen === key;
@@ -29,18 +29,18 @@ export function Tiles({
                     <button
                         key={key}
                         type="button"
-                        class={`tile${on ? ' on' : ''}`}
+                        className={`tile${on ? ' on' : ''}`}
                         aria-pressed={on}
                         aria-label={value === null ? label : `${label}, ${number.format(value)}`}
                         disabled={value === null}
                         title={hint}
                         onClick={() => onChoose(key)}
                     >
-                        <b class={key === 'replied' ? 'hot' : undefined}>
+                        <b className={key === 'replied' ? 'hot' : undefined}>
                             {value === null ? '…' : number.format(value)}
                         </b>
-                        <span class="label">{label}</span>
-                        {share && <span class="rel">{share}</span>}
+                        <span className="label">{label}</span>
+                        {share && <span className="rel">{share}</span>}
                     </button>
                 );
             })}

@@ -1,0 +1,54 @@
+{
+  "operation": "contact.get",
+  "case": "person-panel",
+  "request": {
+    "contact_id": "cnt_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "cnt_1",
+    "first_name": "Ingrid",
+    "last_name": "Solberg",
+    "company": "Fjordline",
+    "title": "Head of Revenue",
+    "time_zone": "Europe/Oslo",
+    "channels": [
+      {
+        "channel": "email",
+        "value": "ingrid@fjordline.example",
+        "label": null,
+        "primary": true,
+        "data": null
+      },
+      {
+        "channel": "linkedin",
+        "value": "https://www.linkedin.com/in/ingrid-solberg-example",
+        "label": null,
+        "primary": false,
+        "data": null
+      }
+    ],
+    "custom": {},
+    "external_ids": [],
+    "created_at": "2026-09-16T00:00:00.000Z",
+    "updated_at": "2026-09-16T00:00:00.000Z",
+    "archived_at": null,
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "campaign_name": "Spring webinar",
+        "state": "excluded",
+        "added_at": "2026-09-11T00:00:00.000Z",
+        "updated_at": "2026-09-21T00:00:00.000Z"
+      },
+      {
+        "campaign_id": "cmp_2",
+        "campaign_name": "Nordic pilot",
+        "state": "enrolled",
+        "added_at": "2026-10-02T00:00:00.000Z",
+        "updated_at": "2026-10-02T00:00:00.000Z"
+      }
+    ],
+    "last_activity": null
+  }
+}

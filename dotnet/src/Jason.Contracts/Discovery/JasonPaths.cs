@@ -130,7 +130,8 @@ public sealed class JasonPaths
 
     /// <summary>
     /// The name of every entry this product ever puts directly in the data directory: the runtime's layout, the
-    /// skills it deploys, what an update keeps and the document a Windows logon registration is made from.
+    /// skills it deploys, what an update keeps, the document a Windows logon registration is made from, and the desktop
+    /// application's own folder.
     /// </summary>
     /// <remarks>
     /// What <c>jason uninstall --purge-data</c> removes, and nothing else. <c>JASON_DATA_DIR</c> may name any
@@ -138,5 +139,5 @@ public sealed class JasonPaths
     /// that deleted the directory it names with everything in it would delete those as well. A test reads every
     /// path this product composes under the data directory and holds each to a name on this list.
     /// </remarks>
-    public static IReadOnlyList<string> OwnEntries { get; } = ["state", "config", "plugins", "run", "logs", "work", "skills", "update", "autostart", "ui"];
+    public static IReadOnlyList<string> OwnEntries { get; } = ["state", "config", "plugins", "run", "logs", "work", "skills", "update", "autostart", "ui", "desktop"];
 }

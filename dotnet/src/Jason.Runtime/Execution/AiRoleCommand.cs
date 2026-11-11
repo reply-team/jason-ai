@@ -119,9 +119,11 @@ public sealed class AiRoleCommand(
             ProgramResolver.ExecutableDirectory,
             host?.Environment);
 
-        // And one thing is taken away: the mark of an update's own launch says whose start this runtime was, and an
-        // agent that ran `jason runtime run` with it would start a runtime around an update it is no part of.
+        // And two things are taken away: the mark of an update's own launch says whose start this runtime was, and an
+        // agent that ran `jason runtime run` with it would start a runtime around an update it is no part of; and the
+        // confinement of the call that ran this runtime in the foreground is that call's, never a role's.
         startInfo.Environment.Remove(UpdateLaunch.Variable);
+        startInfo.Environment.Remove(Confinement.Variable);
 
         Process process;
         try

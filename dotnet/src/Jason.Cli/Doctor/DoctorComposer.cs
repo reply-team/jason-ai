@@ -206,6 +206,12 @@ public static partial class DoctorComposer
     /// </summary>
     public const long SliceBytes = 4L * 1024 * 1024;
 
+    /// <summary>The most events in the slice of the desktop application's log.</summary>
+    public const int DesktopSliceEvents = 500;
+
+    /// <summary>The most of the desktop's slice in the bundle, and the most of its log read for it.</summary>
+    public const long DesktopSliceBytes = 1024L * 1024;
+
     /// <summary>The journal's window, in days back from the moment the bundle is composed.</summary>
     public const int JournalWindowDays = 7;
 
@@ -243,7 +249,7 @@ public static partial class DoctorComposer
     /// The most a bundle can be: the lists' budgets, one <see cref="SectionBytes"/> for each of the ten sections, the
     /// header's budget, and a kilobyte for the names that hold them together.
     /// </summary>
-    public const long MaxBundleBytes = RecentErrorsBytes + SliceBytes + JournalEntriesBytes + (10 * SectionBytes) + HeaderBytes + 1024;
+    public const long MaxBundleBytes = RecentErrorsBytes + SliceBytes + DesktopSliceBytes + JournalEntriesBytes + (10 * SectionBytes) + HeaderBytes + 1024;
 
     /// <summary>The most problem codes listed for one plugin; <c>problem_codes_truncated</c> says where there were more.</summary>
     public const int MaxProblemCodes = 20;
@@ -340,6 +346,7 @@ public static partial class DoctorComposer
         JasonPaths.DataDirectoryVariable,
         ExecutionEnvironment.AttemptIdVariable,
         ExecutionEnvironment.WorkItemIdVariable,
+        Confinement.Variable,
     };
 
     /// <summary>
@@ -724,7 +731,7 @@ public static partial class DoctorComposer
 
     private static long Budget(string section) => section switch
     {
-        Logs => RecentErrorsBytes + SliceBytes + SectionBytes,
+        Logs => RecentErrorsBytes + SliceBytes + DesktopSliceBytes + SectionBytes,
         JournalEntries => JournalEntriesBytes + SectionBytes,
         _ => SectionBytes,
     };
@@ -1378,8 +1385,8 @@ public static partial class DoctorComposer
 
     /// <summary>
     /// The log directory, its newest files, the newest errors and a slice from its end, each read with a byte budget and
-    /// kept, once rewritten, to its budget in the bundle. A part that cannot be read leaves the section saying so and every
-    /// other part as it is.
+    /// kept, once rewritten, to its budget in the bundle; then the desktop application's files and a slice of its own log,
+    /// under a budget of their own. A part that cannot be read leaves the section saying so and every other part as it is.
     /// </summary>
     private static LogsRead LogsSection(JasonPaths paths)
     {
@@ -1387,12 +1394,14 @@ public static partial class DoctorComposer
         string? failure = null;
         var exists = false;
         IReadOnlyList<LogFile> files = [];
+        IReadOnlyList<LogFile> desktopFiles = [];
         try
         {
             exists = Directory.Exists(directory);
             if (exists)
             {
                 files = LogFiles.In(directory);
+                desktopFiles = LogFiles.In(directory, LogSource.Desktop);
             }
             else if (File.Exists(directory))
             {
@@ -1406,7 +1415,8 @@ public static partial class DoctorComposer
 
         var errors = Tail(files, new LogFilter(LogLevelName.Error), RecentErrors, ErrorSearchBytes, ref failure);
         var slice = Tail(files, new LogFilter(), SliceEvents, SliceBytes, ref failure);
-        var listed = files.Skip(Math.Max(0, files.Count - MaxLogFiles)).Select(file => new LogFileEntry(file.Name, file.Bytes, file.ModifiedAt)).ToList();
+        var desktop = Tail(desktopFiles, new LogFilter(), DesktopSliceEvents, DesktopSliceBytes, ref failure);
+        var listed = Listed(files);
 
         var node = new JsonObject
         {
@@ -1422,6 +1432,12 @@ public static partial class DoctorComposer
             // Both reads start at the end of the same log, so the longer one covers the shorter: its count is the count
             // of every line either read and could not take for an event.
             ["skipped_lines"] = Math.Max(errors?.SkippedLines ?? 0, slice?.SkippedLines ?? 0),
+
+            ["desktop_files"] = JsonSerializer.SerializeToNode(Listed(desktopFiles), Dialect),
+            ["desktop_files_truncated"] = desktopFiles.Count > MaxLogFiles,
+            ["desktop_slice"] = Events(desktop),
+            ["desktop_slice_truncated"] = desktop is { } own && (own.LimitReached || own.BytesExhausted),
+            ["desktop_skipped_lines"] = desktop?.SkippedLines ?? 0,
         };
 
         if (failure is not null)
@@ -1429,8 +1445,11 @@ public static partial class DoctorComposer
             node[Keys.Incomplete] = failure;
         }
 
-        return new LogsRead(node, (errors?.Events.Count ?? 0) + (slice?.Events.Count ?? 0));
+        return new LogsRead(node, (errors?.Events.Count ?? 0) + (slice?.Events.Count ?? 0) + (desktop?.Events.Count ?? 0));
     }
+
+    private static List<LogFileEntry> Listed(IReadOnlyList<LogFile> files) =>
+        [.. files.Skip(Math.Max(0, files.Count - MaxLogFiles)).Select(file => new LogFileEntry(file.Name, file.Bytes, file.ModifiedAt))];
 
     private static LogTail? Tail(IReadOnlyList<LogFile> files, LogFilter filter, int limit, long maxBytes, ref string? failure)
     {
@@ -1456,7 +1475,7 @@ public static partial class DoctorComposer
     private static int FinishLogs(JsonObject composed, JsonObject rewritten)
     {
         var events = 0;
-        foreach (var (list, flag, budget) in new[] { ("recent_errors", "recent_errors_truncated", RecentErrorsBytes), ("slice", "slice_truncated", SliceBytes) })
+        foreach (var (list, flag, budget) in new[] { ("recent_errors", "recent_errors_truncated", RecentErrorsBytes), ("slice", "slice_truncated", SliceBytes), ("desktop_slice", "desktop_slice_truncated", DesktopSliceBytes) })
         {
             if (composed[list] is not JsonArray originals || Place(composed, list) is not (>= 0 and var at) || rewritten.GetAt(at).Value is not JsonArray copies)
             {

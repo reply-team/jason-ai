@@ -1,0 +1,13 @@
+{
+  "operation": "suppression.list",
+  "case": "grace-email-clear",
+  "request": {
+    "channel": "email",
+    "value": "grace@navy.example"
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

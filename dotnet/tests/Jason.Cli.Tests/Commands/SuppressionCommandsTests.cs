@@ -40,7 +40,7 @@ public class SuppressionCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("suppression", "remove", "--channel", "email", "--value", "ada@example.com");
+        var exit = await cli.RunAsync("--actor", "human:ada", "suppression", "remove", "--channel", "email", "--value", "ada@example.com");
 
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Contains("--reason", cli.Error.ToString(), StringComparison.Ordinal);
@@ -105,7 +105,7 @@ public class SuppressionCommandsTests
         var removed = JsonSerializer.Serialize(new SuppressionRemovedDto("email", "ada@example.com", false), JasonJson.Options);
         using var cli = new CliRun(removed);
 
-        var exit = await cli.RunAsync("suppression", "remove", "--channel", "email", "--value", "ada@example.com", "--reason", "a mistake", "--human");
+        var exit = await cli.RunAsync("--actor", "human:ada", "suppression", "remove", "--channel", "email", "--value", "ada@example.com", "--reason", "a mistake", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("ada@example.com", cli.Text, StringComparison.Ordinal);

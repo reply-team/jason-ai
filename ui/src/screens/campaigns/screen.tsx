@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'react';
 import { useApi } from '../../api/context';
 import { FiltersBar } from '../../layout/filters-bar';
 import { PeriodSwitch } from '../../layout/period-switch';
@@ -7,6 +7,7 @@ import { Toolbar } from '../../layout/toolbar';
 import { session } from '../../api/session';
 import { ApprovalPanel } from '../attention/approval-panel';
 import { QuestionPanel } from '../attention/question-panel';
+import { PersonPanel } from '../people/panel/panel';
 import * as timeline from '../people/store';
 import { Search } from '../../lists/search';
 import {
@@ -15,16 +16,19 @@ import {
     replace,
     route,
     type CampaignFilters,
+    type CampaignTab,
     type CampaignView,
     type Period,
     type Route,
 } from '../../router';
 import { AddPeopleDialog } from './add-dialog';
-import { Details } from './details';
 import { views } from './labels';
 import { CampaignPanel } from './panel';
-import { TransitionDialog } from './pause-dialog';
+import { TransitionDialog, type Transition } from './pause-dialog';
+import { CampaignInbox } from './inbox';
 import { CampaignPeople } from './people';
+import { CampaignResults } from './results';
+import { CampaignSettings } from './settings';
 import { CampaignTimeline } from './timeline';
 import * as store from './store';
 import { CampaignTable } from './table';
@@ -33,6 +37,7 @@ import { Notice } from '../../layout/notice';
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 type At = Extract<Route, { screen: 'campaigns' }>;
+type Act = Transition | 'add';
 
 export function CampaignsScreen() {
     const api = useApi();
@@ -40,9 +45,9 @@ export function CampaignsScreen() {
     const at: At =
         current.screen === 'campaigns'
             ? current
-            : { screen: 'campaigns', tab: 'timeline', view: 'summary', period: '7d', filters: {} };
+            : { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} };
     const table: store.Table = { view: at.view, period: at.period, filters: at.filters };
-    const key = href({ screen: 'campaigns', tab: 'timeline', ...table });
+    const key = href({ screen: 'campaigns', tab: 'sequence', ...table });
     const countedUnder = store.numbersKey(table);
     const selected = at.id ?? null;
 
@@ -67,7 +72,7 @@ export function CampaignsScreen() {
         void store.open(api, selected, table, new Date(), zone, at.tab !== 'people').then((known) => {
             if (known) return;
             store.notice.value = 'The campaign in this address no longer exists; it was closed.';
-            replace({ screen: 'campaigns', tab: 'timeline', ...table });
+            replace({ screen: 'campaigns', tab: 'sequence', ...table });
         });
     }, [api, selected]);
 
@@ -81,18 +86,33 @@ export function CampaignsScreen() {
         }
     }, [countedUnder]);
 
-    const close = () => navigate({ screen: 'campaigns', tab: 'timeline', ...table });
+    const close = () => navigate({ screen: 'campaigns', tab: 'sequence', ...table });
 
     // The dialog open, with the campaign it belongs to: it never shows over another one.
-    const [act, setAct] = useState<{ id: string | null; what: 'pause' | 'start' | 'add' } | null>(null);
+    const [act, setAct] = useState<{ id: string | null; what: Act } | null>(null);
+    // The person opened from this campaign's People, shown in place of the panel. They are let go when closed, and when
+    // the campaign, the tab or the count in the address changes; the guard keeps them off any frame before that.
+    const [person, setPerson] = useState<{
+        id: string;
+        tab: CampaignTab;
+        filter: string | undefined;
+        contactId: string;
+    } | null>(null);
+    useEffect(() => setPerson(null), [selected, at.tab, at.filter]);
+    const personShown =
+        person && selected && person.id === selected && person.tab === at.tab && person.filter === at.filter
+            ? person.contactId
+            : null;
     const acting = act && act.id === selected ? act.what : null;
-    const setActing = (what: 'pause' | 'start' | 'add' | null) => setAct(what ? { id: selected, what } : null);
+    const setActing = (what: Act | null) => setAct(what ? { id: selected, what } : null);
     /** The open campaign as it is now: its numbers, and what its tab shows. A People list reads the numbers with itself. */
     const rereadPanel = () => {
         if (!selected) return;
         if (at.tab === 'people') void store.listMembers(api, selected, table, query, new Date(), zone);
         else void store.count(api, selected, table, new Date(), zone);
-        if (at.tab === 'timeline') {
+        if (at.tab === 'results') void store.loadResults(api, selected, at.period, new Date(), zone);
+        if (at.tab === 'inbox') void store.loadInbox(api, selected);
+        if (at.tab === 'sequence') {
             void store.loadPending(api, selected);
             void timeline.loadTimeline(api, { campaign_id: selected }, timeline.chip.value, false);
         }
@@ -119,6 +139,24 @@ export function CampaignsScreen() {
     useEffect(() => {
         if (selected && listing) void store.listMembers(api, selected, table, query, new Date(), zone);
     }, [api, listing]);
+
+    // The Results tab reads its two answers when it opens, and again for another period.
+    const resulting = selected && at.tab === 'results' ? `${selected}|${at.period}` : null;
+    useEffect(() => {
+        if (selected && resulting) void store.loadResults(api, selected, at.period, new Date(), zone);
+    }, [api, resulting]);
+    // The Inbox reads its lines when it opens and when the person asks, from its own Refresh or the toolbar's, never in
+    // the background; leaving it lets go of what it showed and of every read on its way.
+    const inboxOf = selected && at.tab === 'inbox' ? selected : null;
+    const inboxShown = store.inbox.value;
+    useEffect(() => {
+        if (!inboxOf) return;
+        void store.loadInbox(api, inboxOf);
+        return () => store.leaveInbox();
+    }, [api, inboxOf]);
+    // What failed on a tab is said over that campaign and that tab only, and leaving the tab lets it go.
+    useEffect(() => () => store.leaveTab(), [selected, at.tab]);
+    const tabFailure = store.failedOver(selected, at.tab);
 
     /** Decides what waits on a person, then reads the table's row and the panel again: the person may have left a count. */
     const decide = async (operation: string, body: Record<string, unknown>) => {
@@ -154,8 +192,8 @@ export function CampaignsScreen() {
         numbers && 'sequence_linked' in numbers ? numbers : selected ? store.summary.value[selected] : undefined;
 
     return (
-        <div class={`main campaigns${selected ? '' : ' single'}`}>
-            <div class="list">
+        <div className={`main campaigns${selected ? '' : ' single'}`}>
+            <div className="list">
                 <Toolbar
                     title="Campaigns"
                     refresh={{
@@ -186,7 +224,7 @@ export function CampaignsScreen() {
                     {at.view === 'activity' && (
                         <PeriodSwitch value={at.period} onChange={(period) => reshape({ period })} />
                     )}
-                    <label class="check">
+                    <label className="check">
                         <input
                             type="checkbox"
                             checked={at.filters.archived === true}
@@ -207,7 +245,7 @@ export function CampaignsScreen() {
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.actionFailure.value && <Notice danger>{store.actionFailure.value}</Notice>}
                 {ready && campaigns.length === 0 ? (
-                    <div class="empty">{filtered ? 'No campaign matches.' : 'No campaigns yet.'}</div>
+                    <div className="empty">{filtered ? 'No campaign matches.' : 'No campaigns yet.'}</div>
                 ) : (
                     <CampaignTable
                         campaigns={campaigns}
@@ -265,9 +303,13 @@ export function CampaignsScreen() {
                     onClose={() => (store.waiting.value = null)}
                 />
             )}
-            {selected && !waiting && (
-                <div class="panel">
+            {selected && !waiting && personShown && (
+                <PersonPanel contactId={personShown} campaignId={selected} onClose={() => setPerson(null)} />
+            )}
+            {selected && !waiting && !personShown && (
+                <div className="panel">
                     {store.panelFailure.value && <Notice danger>{store.panelFailure.value}</Notice>}
+                    {tabFailure && <Notice danger>{tabFailure}</Notice>}
                     {campaign && campaign.id === selected && (
                         <>
                             <CampaignPanel
@@ -277,7 +319,7 @@ export function CampaignsScreen() {
                                 onAct={setActing}
                                 onClose={close}
                             />
-                            {(acting === 'pause' || acting === 'start') && (
+                            {acting && acting !== 'add' && (
                                 <TransitionDialog
                                     campaign={campaign}
                                     kind={acting}
@@ -291,7 +333,7 @@ export function CampaignsScreen() {
                             {acting === 'add' && (
                                 <AddPeopleDialog campaign={campaign} onAdded={reread} onClose={() => setActing(null)} />
                             )}
-                            {at.tab === 'timeline' && (
+                            {at.tab === 'sequence' && (
                                 <CampaignTimeline
                                     campaign={campaign}
                                     me={session.actorId.value ?? ''}
@@ -317,9 +359,29 @@ export function CampaignsScreen() {
                                         const what = person.why ? store.waitingOf(person.why) : null;
                                         if (what) void store.openWaiting(api, selected!, what);
                                     }}
+                                    onPerson={(contactId) =>
+                                        setPerson({ id: selected!, tab: at.tab, filter: at.filter, contactId })
+                                    }
                                 />
                             )}
-                            {at.tab === 'details' && <Details campaign={campaign} now={new Date()} zone={zone} />}
+                            {at.tab === 'inbox' && (
+                                <CampaignInbox
+                                    shown={inboxShown && inboxShown.id === selected ? inboxShown : null}
+                                    failed={tabFailure !== null}
+                                    zone={zone}
+                                    onRefresh={() => void store.loadInbox(api, selected!)}
+                                />
+                            )}
+                            {at.tab === 'results' && (
+                                <CampaignResults
+                                    period={at.period}
+                                    shown={store.resultsFor(selected, at.period)}
+                                    failed={tabFailure !== null}
+                                />
+                            )}
+                            {at.tab === 'settings' && (
+                                <CampaignSettings campaign={campaign} now={new Date()} zone={zone} onAct={setActing} />
+                            )}
                         </>
                     )}
                 </div>

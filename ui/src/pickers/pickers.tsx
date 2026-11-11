@@ -1,5 +1,4 @@
-import type { RefObject } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Unpaired } from '../api/client';
 import { session } from '../api/session';
 
@@ -72,11 +71,11 @@ export function Picker({
     };
 
     return (
-        <div class="picker" ref={box}>
+        <div className="picker" ref={box}>
             <button
                 ref={button}
                 type="button"
-                class={`select${options[0]?.label === label ? '' : ' set'}`}
+                className={`select${options[0]?.label === label ? '' : ' set'}`}
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 onClick={() => {
@@ -91,14 +90,14 @@ export function Picker({
                 }}
             >
                 {label}
-                <span class="caret" aria-hidden="true">
+                <span className="caret" aria-hidden="true">
                     ▾
                 </span>
             </button>
             {open && (
                 <div
                     ref={list}
-                    class="menu"
+                    className="menu"
                     role="listbox"
                     tabIndex={-1}
                     onKeyDown={listKeys(options.length, active, setActive, pick, close)}
@@ -109,7 +108,7 @@ export function Picker({
                             type="button"
                             role="option"
                             tabIndex={-1}
-                            class={at === active ? 'active' : ''}
+                            className={at === active ? 'active' : ''}
                             aria-selected={option.label === label}
                             onMouseEnter={() => setActive(at)}
                             onClick={() => pick(at)}
@@ -191,30 +190,30 @@ export function SearchPicker({
     };
 
     return (
-        <div class="picker" ref={box}>
+        <div className="picker" ref={box}>
             <button
                 ref={button}
                 type="button"
-                class={`select${label === clearLabel ? '' : ' set'}`}
+                className={`select${label === clearLabel ? '' : ' set'}`}
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 onClick={() => (open ? close() : setOpen(true))}
             >
                 {label}
-                <span class="caret" aria-hidden="true">
+                <span className="caret" aria-hidden="true">
                     ▾
                 </span>
             </button>
             {open && (
-                <div class="menu">
+                <div className="menu">
                     <input
                         ref={field}
-                        class="search"
+                        className="search"
                         type="search"
                         placeholder={placeholder}
                         aria-label={placeholder}
                         value={text}
-                        onInput={(e) => setText((e.target as HTMLInputElement).value)}
+                        onChange={(e) => setText((e.target as HTMLInputElement).value)}
                         onKeyDown={listKeys(entries.length, active, setActive, pick, close)}
                     />
                     <div role="listbox">
@@ -224,16 +223,16 @@ export function SearchPicker({
                                 type="button"
                                 role="option"
                                 tabIndex={-1}
-                                class={at === active ? 'active' : ''}
+                                className={at === active ? 'active' : ''}
                                 aria-selected={(entry?.label ?? clearLabel) === label}
                                 onMouseEnter={() => setActive(at)}
                                 onClick={() => pick(at)}
                             >
-                                <span class="name">{entry?.label ?? clearLabel}</span>
-                                {entry?.hint && <span class="hint">{entry.hint}</span>}
+                                <span className="name">{entry?.label ?? clearLabel}</span>
+                                {entry?.hint && <span className="hint">{entry.hint}</span>}
                             </button>
                         ))}
-                        {found?.length === 0 && <div class="none">Nothing matches</div>}
+                        {found?.length === 0 && <div className="none">Nothing matches</div>}
                     </div>
                 </div>
             )}
@@ -263,7 +262,7 @@ export function MultiSearchPicker({
     max: number;
     onToggle: (entry: Found) => void;
     /** The button that opens the list, for a caller that hands the keyboard back to it. */
-    opener?: RefObject<HTMLButtonElement | null>;
+    opener?: RefObject<HTMLButtonElement>;
 }) {
     const [open, setOpen] = useState(false);
     const [text, setText] = useState('');
@@ -315,30 +314,30 @@ export function MultiSearchPicker({
     };
 
     return (
-        <div class="picker" ref={box}>
+        <div className="picker" ref={box}>
             <button
                 ref={button}
                 type="button"
-                class={`select${set ? ' set' : ''}`}
+                className={`select${set ? ' set' : ''}`}
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 onClick={() => (open ? close() : setOpen(true))}
             >
                 {label}
-                <span class="caret" aria-hidden="true">
+                <span className="caret" aria-hidden="true">
                     ▾
                 </span>
             </button>
             {open && (
-                <div class="menu">
+                <div className="menu">
                     <input
                         ref={field}
-                        class="search"
+                        className="search"
                         type="search"
                         placeholder={placeholder}
                         aria-label={placeholder}
                         value={text}
-                        onInput={(e) => setText((e.target as HTMLInputElement).value)}
+                        onChange={(e) => setText((e.target as HTMLInputElement).value)}
                         onKeyDown={listKeys(entries.length, active, setActive, toggle, close)}
                     />
                     <div role="listbox" aria-multiselectable="true">
@@ -350,22 +349,22 @@ export function MultiSearchPicker({
                                     type="button"
                                     role="option"
                                     tabIndex={-1}
-                                    class={at === active ? 'active' : ''}
+                                    className={at === active ? 'active' : ''}
                                     aria-selected={on}
                                     disabled={full(entry)}
                                     title={full(entry) ? `At most ${max} campaigns` : undefined}
                                     onMouseEnter={() => setActive(at)}
                                     onClick={() => toggle(at)}
                                 >
-                                    <span class="name">
-                                        <span class={`box${on ? ' on' : ''}`} aria-hidden="true" />
+                                    <span className="name">
+                                        <span className={`box${on ? ' on' : ''}`} aria-hidden="true" />
                                         {entry.label}
                                     </span>
-                                    {entry.hint && <span class="hint">{entry.hint}</span>}
+                                    {entry.hint && <span className="hint">{entry.hint}</span>}
                                 </button>
                             );
                         })}
-                        {found?.length === 0 && <div class="none">Nothing matches</div>}
+                        {found?.length === 0 && <div className="none">Nothing matches</div>}
                     </div>
                 </div>
             )}

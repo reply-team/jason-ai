@@ -43,7 +43,7 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
 
         // A machine holds one registration per account: a second `enable` replaces what the first left.
         Applied.Add(registration);
-        State = new AutostartState(true, registration.Run, registration.ArtifactPath);
+        State = new AutostartState(true, registration.Run, registration.ArtifactPath, registration.SearchPath);
     }
 
     public AutostartRemoval Remove(AutostartRegistration registration)

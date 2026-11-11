@@ -101,6 +101,8 @@ public partial class ReleaseWorkflowTests
         var text = Read(Release).ReplaceLineEndings("\n");
         const string ClientId = "          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}\n";
         const string TeamId = "          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}\n";
+        // The osx-arm64 call's team id, told from the osx-x64 call's by the step that follows it.
+        const string MacosTail = "\n      # The archive is what a person downloads";
         const string Archive = "      - name: " + ArchivedWindows + "\n        shell: pwsh\n        env:\n          ARCHIVE: ${{ steps.package.outputs.archive }}\n";
         const string PluginSteps = "  plugin:\n    name: The plugins' packages\n    needs: version\n    runs-on: ubuntu-latest\n";
         const string WindowsPackage = "      - name: Package\n        id: package\n        uses: ./.github/actions/package\n        with:\n          rid: win-x64\n";
@@ -121,7 +123,7 @@ public partial class ReleaseWorkflowTests
             "a sixth name" => Moved(ClientId, ClientId + "          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}\n"),
             "two swapped" => Moved(ClientId, "          azure-client-id: ${{ secrets.AZURE_TENANT_ID }}\n"),
             "an Apple secret in the windows call" => Moved(ClientId, ClientId + TeamId),
-            "an Azure secret in the macOS call" => Moved(TeamId, TeamId + ClientId),
+            "an Azure secret in the macOS call" => Moved(TeamId + MacosTail, TeamId + ClientId + MacosTail),
             "another step of the windows job" => Moved(Archive, Archive + "          CLIENT: ${{ secrets.AZURE_CLIENT_ID }}\n"),
             "the matrix's package call" => Moved(MatrixPackage, MatrixPackage + five, Moved(five, string.Empty)),
             "a test in the windows job" => Moved(WindowsPackage, "      - run: dotnet test --solution dotnet/Jason.slnx\n\n" + WindowsPackage),
@@ -420,8 +422,9 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The five inputs reach the two steps that take them, the sign-in and the signature, as their inputs and nowhere
     /// else in the action. The check before them is handed only an expression that names the inputs that are empty, so
-    /// it never holds a value at all. <c>release.yml</c> names each secret once, where it calls the action, and no script
-    /// of its names one.
+    /// it never holds a value at all. The desktop's signing client is told the endpoint, the account and the profile, none
+    /// of them a credential, through its step's environment alone. <c>release.yml</c> names each secret once, where it
+    /// calls the action, and no script of its names one.
     /// </summary>
     [Fact]
     public void The_azure_secrets_reach_only_the_sign_in_and_the_signing_step()
@@ -430,10 +433,23 @@ public partial class ReleaseWorkflowTests
         var signIn = Assert.Single(steps, step => Scalar(step, "name") == SignIn);
         var sign = Assert.Single(steps, step => Scalar(step, "name") == SignWindows);
         var check = Assert.Single(steps, step => Scalar(step, "id") == "signable");
+        var desktop = Assert.Single(steps, step => Scalar(step, "id") == "desktop-signing");
+
+        // The desktop's signing client is told the account it signs with, the three names that are not credentials, as
+        // its step's environment and nowhere else; its one credential is the sign-in above.
+        Assert.Equal(
+            ["SIGNING_ENDPOINT=${{ inputs.azure-signing-endpoint }}", "SIGNING_ACCOUNT=${{ inputs.azure-signing-account }}", "SIGNING_PROFILE=${{ inputs.azure-signing-profile }}"],
+            Mapping(desktop, "env").Children.Select(pair => $"{pair.Key}={pair.Value}"));
+        Assert.DoesNotContain("inputs.azure-", Scalar(desktop, "run"), StringComparison.Ordinal);
 
         var given = new List<string>();
         foreach (var step in steps)
         {
+            if (ReferenceEquals(step, desktop))
+            {
+                continue;
+            }
+
             if (ReferenceEquals(step, signIn) || ReferenceEquals(step, sign))
             {
                 Assert.All(
@@ -873,9 +889,11 @@ public partial class ReleaseWorkflowTests
     /// copy of it with one byte changed and over a file nobody signed. It passes a file its named publisher signed and
     /// timestamped that signtool accepts, and refuses, saying so, a file signtool refuses, an unsigned file, a changed
     /// file, a file Windows reads as validly signed but without a timestamp, a valid timestamped signature by any
-    /// publisher but the one named — a name that only contains it, or differs from it in case, included — a call that
-    /// names no publisher, a signtool that is not there and a runner without the Windows SDK's signtool; signtool is
-    /// asked with the Authenticode policy and verbosely, and only by the script.
+    /// publisher but the one named — a name that only contains it, or differs from it in case, included — a file that
+    /// carries no signature of its own, which Windows vouches for from a catalog of its own and reads as validly signed
+    /// and timestamped by the catalog's signer, even when that signer is the publisher named, a call that names no
+    /// publisher, a signtool that is not there and a runner without the Windows SDK's signtool; signtool is asked with
+    /// the Authenticode policy and verbosely, and only by the script.
     /// </summary>
     [Theory]
     [InlineData("signed, signtool clean", 0)]
@@ -886,6 +904,7 @@ public partial class ReleaseWorkflowTests
     [InlineData("signed by another publisher, signtool clean", 1)]
     [InlineData("signed by a publisher whose name only contains the one named, signtool clean", 1)]
     [InlineData("signed by the publisher named in another case, signtool clean", 1)]
+    [InlineData("vouched for by a catalog of Windows alone, signtool clean", 1)]
     [InlineData("no publisher named", 1)]
     [InlineData("no signtool", 1)]
     [InlineData("no Windows SDK", 1)]
@@ -907,8 +926,13 @@ public partial class ReleaseWorkflowTests
         var signtool = Path.Combine(tree.Root, "signtool.cmd");
         File.WriteAllText(signtool, $"@echo %*> \"{calls}\"\r\n@exit /b {(row == "signed, signtool refuses" ? 1 : 0)}\r\n");
 
+        // Windows' own cmd.exe carries no signature in the file: Windows vouches for it from a catalog of its own, and
+        // reads that catalog's signer, Microsoft Windows, valid and timestamped. Like its neighbours this row runs on
+        // Windows alone, on CI's Windows leg, whose runner image is where a catalog first answered for a library.
+        var catalogued = Path.Combine(Environment.SystemDirectory, "cmd.exe");
         var executable = row.StartsWith("unsigned", StringComparison.Ordinal) ? unsigned
             : row.StartsWith("tampered", StringComparison.Ordinal) ? tampered
+            : row.StartsWith("vouched for by a catalog", StringComparison.Ordinal) ? catalogued
             : signed;
         // The publisher Microsoft signs this file as is the simple name of its signer's certificate, CN=.NET.
         var publisher = row switch
@@ -916,6 +940,7 @@ public partial class ReleaseWorkflowTests
             "signed by another publisher, signtool clean" => "ReplyApp Inc.",
             "signed by a publisher whose name only contains the one named, signtool clean" => "NET",
             "signed by the publisher named in another case, signtool clean" => ".net",
+            "vouched for by a catalog of Windows alone, signtool clean" => "Microsoft Windows",
             _ => ".NET",
         };
         string[] arguments = row switch
@@ -943,6 +968,20 @@ public partial class ReleaseWorkflowTests
                 exit $LASTEXITCODE
                 """);
             script = shadowed;
+        }
+
+        // The row's premise, read as the cmdlet reads it: the catalog's signer, valid and timestamped, the very reading
+        // that once named a library's publisher in place of the signature the library carries.
+        if (row.StartsWith("vouched for by a catalog", StringComparison.Ordinal))
+        {
+            var reading = Path.Combine(tree.Root, "reading.ps1");
+            File.WriteAllText(reading, """
+                $s = Get-AuthenticodeSignature -LiteralPath $args[0]
+                $name = $s.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+                Write-Host "$($s.Status) $($s.SignatureType) $name, timestamped $([bool] $s.TimeStamperCertificate)"
+                """);
+            var read = Script(environment, reading, catalogued);
+            Assert.Equal("Valid Catalog Microsoft Windows, timestamped True", read.Stdout.Trim());
         }
 
         var ran = Script(environment, script, arguments);
@@ -977,6 +1016,11 @@ public partial class ReleaseWorkflowTests
         if (row.StartsWith("signed by", StringComparison.Ordinal))
         {
             Assert.Contains($"is signed by '.NET', not by '{publisher}'", ran.Stderr, StringComparison.Ordinal);
+        }
+
+        if (row.StartsWith("vouched for by a catalog", StringComparison.Ordinal))
+        {
+            Assert.Contains($"{executable} carries no signature of its own", ran.Stderr, StringComparison.Ordinal);
         }
 
         if (row == "no publisher named")

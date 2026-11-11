@@ -18,7 +18,8 @@ export default tseslint.config(
     languageOptions: { globals: { Buffer: 'readonly', process: 'readonly', console: 'readonly' } },
   },
   {
-    // Guard 1: a unit test tests a pure module. No components, no DOM, no test renderer.
+    // Guard 1: a unit test tests a pure module. No components, no DOM, no test renderer. The framework is React, with
+    // its DOM renderer and JSX runtime as subpaths; signals come from the @preact scope and pull React in with them.
     files: ['src/**/*.test.ts', 'tests/guards/**/*.test.ts'],
     rules: {
       'no-restricted-imports': [
@@ -27,7 +28,7 @@ export default tseslint.config(
           paths: noMocking,
           patterns: [
             {
-              group: ['preact', 'preact/*', '@preact/*', '@testing-library/*'],
+              group: ['react', 'react/*', 'react-dom', 'react-dom/*', '@preact/*', '@testing-library/*'],
               message: 'A unit test tests a pure module: no components, no DOM.',
             },
           ],

@@ -31,7 +31,7 @@ internal static class VerbOptions
     }
 
     /// <summary><paramref name="shape"/> names the fields the object may hold, so the help page is the reference for the body.</summary>
-    public static Option<string?> File(string shape) => new("--file")
+    public static RequestFileOption File(string shape) => new("--file")
     {
         Description = $"Request body as JSON — a path, or - for standard input. {shape} Options given on the command line win.",
     };
@@ -92,7 +92,7 @@ internal static class VerbOptions
 
         return file is null
             ? Task.FromResult(RequestBody.Empty())
-            : RequestBody.FromFileAsync(file, env.In ?? TextReader.Null, arrayProperty, cancellationToken);
+            : RequestBody.FromFileAsync(env, "--file", file, arrayProperty, cancellationToken);
     }
 
     /// <summary>Any JSON value given on the command line; an absent option stays absent from the body.</summary>

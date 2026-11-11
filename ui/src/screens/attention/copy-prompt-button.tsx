@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'react';
 import { useApi } from '../../api/context';
 import { composePrompt, resolveFolder, type PromptKind } from './copy-prompt';
 
@@ -40,7 +40,7 @@ export function CopyPromptButton({ kind, itemId, campaignId, workItemId }: Props
     };
 
     return (
-        <button class="btn" type="button" disabled={state === 'working'} onClick={() => void copy()}>
+        <button className="btn" type="button" disabled={state === 'working'} onClick={() => void copy()}>
             {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy prompt'}
         </button>
     );

@@ -74,6 +74,9 @@ trace, the key and the moment included.
 - **The Reply CLI, installed and signed in.** It is a Node program installed with npm, on Node 20 or
   newer; [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) is where it comes from and
   what documents it. Running `reply auth login` is yours to do, as the person whose account it is.
+  Where `npm install -g` is refused with `EACCES`, npm's global prefix is a directory this account does not own:
+  install it under a prefix of the account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin`
+  on the search path the runtime sees, as "A runtime that can find it" below says.
 - **Version 0.20.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
   the answer. 0.20.0 is the release with Live Data and the contact lists a search fills — `reply live-data preview`,
   `start`, `get`, `list`, `delete` and `filter-values`, and `reply contact-list create`, `delete` and `contacts` — which
@@ -108,6 +111,11 @@ trace, the key and the moment included.
   logon is a `systemd --user` unit, whose environment is the user manager's and reads no shell profile — neither
   `~/.profile` nor `~/.bashrc`, where npm's global directory or a version manager most often adds itself — so that
   directory reaches it only through `~/.config/environment.d/` or the unit's own `Environment=`.
+  On macOS, a runtime started at logon is a LaunchAgent, and launchd's default search path is
+  `/usr/bin:/bin:/usr/sbin:/sbin`, which holds neither `~/.local/bin` nor a package manager's directory; from Jason
+  0.34.0 the registration records the `PATH` of the terminal it was made from (`jason runtime autostart status`
+  names it). The repair is to register again from a terminal whose `PATH` has `reply`, with
+  `jason runtime autostart enable`, then `jason runtime restart`.
 - **On Windows, `node.exe` on the same search path.** npm installs the CLI as `reply.cmd`, and the
   runtime starts no program through a shell: `cmd.exe` would parse the arguments, which is the thing the
   argument array exists to prevent. So the runtime reads that shim, cross-checks the entry script it
@@ -180,7 +188,7 @@ jason plugin list --human          # status, granted over requested, the version
 has to be in the active snapshot already, which is why this comes after the reload:
 
 ```sh
-jason route set --campaign cmp_… --plugin reply --binding '{"profile":"outbound"}'
+jason route set --campaign cmp_… --plugin reply --binding '{"profile":"outbound"}' --actor human:you@example.com
 jason route resolve --campaign cmp_… --operation list_membership.add --human
 ```
 

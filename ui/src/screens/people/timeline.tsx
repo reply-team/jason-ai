@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useState } from 'react';
 import { useApi } from '../../api/context';
 import type { Contact, JournalEntry, WorkItemSummary } from '../../api/types';
 import { More } from '../../lists/more';
@@ -151,7 +151,7 @@ export function Timeline({ person, me, now, zone }: Props) {
     const work = mine ? [...store.openWork.value].reverse() : [];
 
     return (
-        <div class="timeline">
+        <div className="timeline">
             <Chips
                 label="Show"
                 row="timeline"
@@ -160,51 +160,53 @@ export function Timeline({ person, me, now, zone }: Props) {
                 onChoose={(each) => void store.loadTimeline(api, { contact_id: person.id }, each)}
             />
             {store.timelineFailure.value && <Notice danger>{store.timelineFailure.value}</Notice>}
-            <div class="rows">
-                {work.length > 0 && <div class="group first">Planned</div>}
+            <div className="rows">
+                {work.length > 0 && <div className="group first">Planned</div>}
                 {work.map((item) => (
                     <a
                         key={item.id}
-                        class="row"
+                        className="row"
                         href={href({ screen: 'workitems', tab: tabOf(item), id: item.id, filters: {} })}
                     >
-                        <span class="mark plan">○</span>
-                        <span class="what">
-                            <span class="name">{what(item)}</span>
-                            <span class="in">{item.campaign_name}</span>
+                        <span className="mark plan">○</span>
+                        <span className="what">
+                            <span className="name">{what(item)}</span>
+                            <span className="in">{item.campaign_name}</span>
                         </span>
-                        <span class="meta">{plannedNote(item, now, zone, (at) => when(at, now, zone))}</span>
+                        <span className="meta">{plannedNote(item, now, zone, (at) => when(at, now, zone))}</span>
                     </a>
                 ))}
                 {store.moreOpenWork.value && (
                     <a
-                        class="end"
+                        className="end"
                         href={href({ screen: 'workitems', tab: 'planned', filters: { contact: person.id } })}
                     >
                         All planned for {displayName(person).name} →
                     </a>
                 )}
-                <div class="now">
-                    <span class="pill">now {clock(now, zone)}</span>
-                    <span class="line" />
+                <div className="now">
+                    <span className="pill">now {clock(now, zone)}</span>
+                    <span className="line" />
                 </div>
-                {store.linesLoaded.value && happened.length === 0 && <div class="empty">Nothing here yet.</div>}
+                {store.linesLoaded.value && happened.length === 0 && <div className="empty">Nothing here yet.</div>}
                 {groupByDay(happened, (h) => h.at, zone).map((group) => (
                     <div key={group.day}>
-                        <div class="group">{dayLabel(group.day, today)}</div>
+                        <div className="group">{dayLabel(group.day, today)}</div>
                         {group.items.map((h) => {
                             const open = expanded === h.key;
                             const body = (
                                 <>
-                                    <span class={`mark ${h.mark.kind}`}>{h.mark.glyph}</span>
-                                    <span class="what">
-                                        <span class="name">{h.title}</span>
+                                    <span className={`mark ${h.mark.kind}`}>{h.mark.glyph}</span>
+                                    <span className="what">
+                                        <span className="name">{h.title}</span>
                                         {h.thread && (
-                                            <span class="cue">{open ? 'hide the thread ⌄' : 'show the thread ›'}</span>
+                                            <span className="cue">
+                                                {open ? 'hide the thread ⌄' : 'show the thread ›'}
+                                            </span>
                                         )}
-                                        {h.note && <span class="in">{h.note}</span>}
+                                        {h.note && <span className="in">{h.note}</span>}
                                     </span>
-                                    <span class="meta">
+                                    <span className="meta">
                                         <time>{clock(h.at, zone)}</time>
                                     </span>
                                 </>
@@ -215,7 +217,7 @@ export function Timeline({ person, me, now, zone }: Props) {
                                     <div key={h.key}>
                                         <button
                                             type="button"
-                                            class="row"
+                                            className="row"
                                             aria-expanded={open}
                                             onClick={() => setExpanded(open ? null : h.key)}
                                         >
@@ -233,11 +235,11 @@ export function Timeline({ person, me, now, zone }: Props) {
                                 );
                             }
                             return h.link ? (
-                                <a key={h.key} class="row" href={h.link}>
+                                <a key={h.key} className="row" href={h.link}>
                                     {body}
                                 </a>
                             ) : (
-                                <div key={h.key} class="row">
+                                <div key={h.key} className="row">
                                     {body}
                                 </div>
                             );

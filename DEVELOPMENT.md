@@ -90,6 +90,8 @@ To stop and remove it all: `jason runtime stop`, run as above, then delete the f
 - Publish: `dotnet publish dotnet/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true`
 - UI: from `ui/`, `npm ci`, `npm run check`, `npm test`, `npm run build`, `npm run package`, `npm run e2e` (the last
   needs a Release build of `Jason.App`).
+- Desktop: from `desktop/`, `npm ci`, `npm run check`, `npm test`; `desktop/README.md` says how its bundle is prepared
+  and the window started.
 
 ## How a change lands
 

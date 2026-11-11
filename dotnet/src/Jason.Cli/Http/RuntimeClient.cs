@@ -1,5 +1,8 @@
+using System.Net;
 using System.Net.Http.Headers;
+using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
@@ -76,5 +79,79 @@ public sealed class RuntimeClient : IDisposable
         return new RuntimeResponse((int)response.StatusCode, body);
     }
 
+    /// <summary>
+    /// Opens a stream of the runtime's: a WebSocket upgrade of <paramref name="pathAndQuery"/> under
+    /// <paramref name="subprotocol"/>, made with this client's headers, the bearer among them, as every request is. The
+    /// upgrade is made here rather than by <see cref="ClientWebSocket"/> so that a refusal comes back as the runtime wrote
+    /// it, status and body, as an operation's does.
+    /// </summary>
+    public async Task<RuntimeStream> OpenStreamAsync(string pathAndQuery, string subprotocol, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(pathAndQuery);
+        ArgumentNullException.ThrowIfNull(subprotocol);
+
+        var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+        using var request = new HttpRequestMessage(HttpMethod.Get, pathAndQuery)
+        {
+            Version = HttpVersion.Version11,
+            VersionPolicy = HttpVersionPolicy.RequestVersionExact,
+        };
+        request.Headers.Connection.Add("Upgrade");
+        request.Headers.Upgrade.Add(new ProductHeaderValue("websocket"));
+        request.Headers.TryAddWithoutValidation("Sec-WebSocket-Version", "13");
+        request.Headers.TryAddWithoutValidation("Sec-WebSocket-Key", key);
+        request.Headers.TryAddWithoutValidation("Sec-WebSocket-Protocol", subprotocol);
+
+        var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (response.StatusCode != HttpStatusCode.SwitchingProtocols)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return new RuntimeStream(null, new RuntimeResponse((int)response.StatusCode, body), null);
+            }
+
+            // What makes the answer an upgrade of this request and not some other server's 101: the key, answered.
+            if (!response.Headers.TryGetValues("Sec-WebSocket-Accept", out var accepts)
+                || accepts.SingleOrDefault() != Accept(key)
+                || !response.Headers.TryGetValues("Sec-WebSocket-Protocol", out var chosen)
+                || chosen.SingleOrDefault() != subprotocol)
+            {
+                throw new HttpRequestException("The answer to the upgrade was not this stream's.");
+            }
+
+            var connection = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var socket = WebSocket.CreateFromStream(connection, new WebSocketCreationOptions { IsServer = false, SubProtocol = subprotocol });
+            var opened = new RuntimeStream(socket, null, response);
+            response = null;
+            return opened;
+        }
+        finally
+        {
+            response?.Dispose();
+        }
+    }
+
+    /// <summary>RFC 6455's answer to a key: the SHA-1 of the key and the protocol's own GUID, in base64.</summary>
+    private static string Accept(string key) =>
+        Convert.ToBase64String(SHA1.HashData(Encoding.ASCII.GetBytes(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")));
+
     public void Dispose() => _http.Dispose();
+}
+
+/// <summary>
+/// A stream the runtime opened, or the answer it refused it with: <see cref="Socket"/> or <see cref="Refusal"/>, never
+/// both. Disposing it lets the connection go.
+/// </summary>
+public sealed class RuntimeStream(WebSocket? socket, RuntimeResponse? refusal, IDisposable? connection) : IDisposable
+{
+    public WebSocket? Socket { get; } = socket;
+
+    public RuntimeResponse? Refusal { get; } = refusal;
+
+    public void Dispose()
+    {
+        Socket?.Dispose();
+        connection?.Dispose();
+    }
 }

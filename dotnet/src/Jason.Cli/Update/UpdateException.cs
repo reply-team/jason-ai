@@ -67,6 +67,12 @@ public static class UpdateCodes
     /// </summary>
     public const string ManagedByPackageManager = "update_managed_by_package_manager";
 
+    /// <summary>
+    /// This jason is the one the desktop application carries, known by the record beside it, so its file is the
+    /// application's: the desktop's own update replaces the application and the jason inside it together.
+    /// </summary>
+    public const string CarriedByDesktop = "update_carried_by_desktop";
+
     /// <summary>Every code above, for the page's guard to read rather than for anything to iterate at runtime.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -84,6 +90,7 @@ public static class UpdateCodes
         NothingToRollBack,
         RollbackUnsafe,
         ManagedByPackageManager,
+        CarriedByDesktop,
     ];
 }
 

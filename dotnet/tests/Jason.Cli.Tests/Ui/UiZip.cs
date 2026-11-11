@@ -20,7 +20,7 @@ public static class UiZip
                 ("manifest.json", $"{{\"version\":\"{version}\",\"api_version\":\"{apiVersion}\"}}\n"),
                 ("favicon.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>"),
                 ("assets/app.js", "export {};"),
-                ("THIRD-PARTY-NOTICES", "preact: MIT"),
+                ("THIRD-PARTY-NOTICES", "react: MIT"),
             })
             {
                 using var stream = archive.CreateEntry(name).Open();

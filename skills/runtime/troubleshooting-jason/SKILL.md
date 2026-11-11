@@ -165,11 +165,11 @@ there. Nothing was sent and nothing was attempted at the provider — the regist
 that — and this is the register **working**. It is final by design: the item is finished, and a second item
 for the same person on the same value would stop in exactly the same place.
 
-**The repair is not yours.** Lifting a suppression is `jason suppression remove`, and it is a person's act on
-another person's behalf — somebody asked not to be contacted, and a session that lifted that to get its work
-moving would be the one failure in this whole document that reaches a real person. Say who is suppressed and
-on which value, and let the person decide. If the campaign should reach them somewhere else, that is new work
-on a channel they have.
+**The repair is not yours.** Lifting a suppression is `jason suppression remove`, which names the person who
+lifts it with `--actor human:<Name>`, and it is a person's act on another person's behalf — somebody asked not to
+be contacted, and a session that lifted that to get its work moving would be the one failure in this whole
+document that reaches a real person. Say who is suppressed and on which value, and let the person decide. If the
+campaign should reach them somewhere else, that is new work on a channel they have.
 
 ### 6. A transient failure
 

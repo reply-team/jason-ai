@@ -1712,23 +1712,38 @@ jobs:
           JASON_EXE: ${{ github.workspace }}/dotnet/src/Jason.App/bin/Release/net10.0/jason
         run: npm run e2e
 
-  # The desktop's check, which the rulesets of main and of the release branches require since the desktop application
-  # landed on another release branch. This tree carries no desktop/, so there is nothing to check: the job reports under
-  # the check's own name, on every run of the Linux set as the desktop's own job does, as a success whose one step says
-  # why. When the desktop arrives here from main, its own job takes this one's place.
+  # The desktop application's checks, in the order desktop/README.md gives them. No test starts a window, so
+  # Electron's own binary is never downloaded; the tests run their TypeScript as it is, on node 22 or later.
   desktop:
     name: The desktop on ubuntu
     needs: version
     if: needs.version.outputs.linux == 'true'
     runs-on: ubuntu-latest
-    # It checks nothing out and reads nothing: its token can do nothing.
-    permissions: {}
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    defaults:
+      run:
+        working-directory: desktop
     steps:
-      - name: Nothing to check
-        shell: bash
-        run: |
-          echo "The desktop on ubuntu passes by rule: this tree carries no desktop application, so there is nothing to check."
-          echo "The desktop on ubuntu passes by rule: this tree carries no desktop application, so there is nothing to check." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Check (types)
+        run: npm run check
+
+      - name: Node tests
+        run: npm test
 
   # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
   # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not

@@ -295,7 +295,7 @@ public static class CampaignCommands
     {
         var command = new Command("add-contacts", "Add contacts to a campaign, creating or matching them as the import asks.");
         var id = CampaignId();
-        var file = new Option<string>("--file")
+        var file = new RequestFileOption("--file")
         {
             Description = "The contacts as JSON — a path, or - for standard input. Either an array of items, or an object holding contacts and match_by. "
                 + "An item is a contact payload (first_name, last_name, company, title, time_zone, channels, custom) or {\"contact_id\": \"cnt_...\"}.",

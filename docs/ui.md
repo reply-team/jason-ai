@@ -69,17 +69,30 @@ zone (`jason campaign activity`). A person may be in several columns, and each c
 counts. A search finds a campaign by its name, and the archived ones appear on request (`jason campaign list --query`,
 `--include-archived`); the view, the period and both filters are part of the page's address. Every number opens its
 campaign with exactly the people it counts (`jason campaign list-contacts --summary`, or `--activity` with the period),
-each with why: a person waiting for you opens the approval or the question in place, as on Attention, and a failure
-shows the reason the runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
-its people and the provider campaign it is linked to. **Pause** stops Jason releasing its work while what is running
-finishes; the provider's own sequence keeps sending until a role pauses it there. **Start** releases the work again
-(`jason campaign pause`, `jason campaign start`, with your reason). **Add people** finds people and adds them (`jason
-campaign add-contacts`). Its **Timeline** puts what is planned, what waits for you and what is running above the now
-line, and the campaign's journal below it (`jason journal list --campaign`), narrowed by chips to replies, work,
-decisions or changes; its **People** are listed by the same counts with a search, Removed among them
+each with why: a person waiting for you opens the approval or the question in place, as on Attention, anybody else
+opens the person's panel in place, with the page's address left as the campaign's, and a failure shows the reason the
+runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
+its people and the provider campaign it is linked to; **Add people** finds people and adds them (`jason campaign
+add-contacts`). A campaign opens on its **Sequence**, which puts what is planned, what waits for you and what is running
+above the now line, and ends with **What happened**, the campaign's journal (`jason journal list --campaign`),
+narrowed by chips to replies, work, decisions or changes; its **People** are listed by the same counts with a search, Removed among them
 (`--summary removed`); in Activity the tab is **People Activity**, and everything it lists is the period's, All being
-everyone something happened to (`--activity people`); its **Details** are its record, its context as the roles read
-it, and what each provider calls it.
+everyone something happened to (`--activity people`); its **Inbox** shows its latest fifty reply lines in the order
+Jason observed them, the latest first (`jason journal list --campaign --kind inbound_reply_observed`), each reply at the
+moment the provider says its thread moved, the line's own moment only when it names none; the ten people Jason saw
+reply last, each with their threads asked of the plugin their line names (`jason contact threads`), and a reply tied to nobody as its
+channel and moment. It is read when the tab opens and when you refresh it, by its own Refresh, which it has whether
+it is loading, empty or failed, or by the toolbar's while the tab is open. Its **Results** are four figures as the runtime counts them,
+its people now and who was contacted, replied and opted out in the period (`jason campaign summary`, `jason campaign
+activity`), with nothing divided on the page. A read of the Inbox or the Results that failed says so over that
+tab of that campaign alone, never as loading, and is gone once you leave the tab. Its **Settings** are its record, its context as the roles read
+it and what each provider calls it, with the moves its status allows. **Pause** stops Jason releasing an active
+campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
+**Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
+`jason campaign start`, with your reason). An address naming a campaign's Details opens its Settings, and one naming
+any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
+brings forward the newest chat about the campaign the desktop still holds, opens one only when there is none, and
+moves nowhere; the browser has no chat, and no Chat tab.
 
 ## Performance
 

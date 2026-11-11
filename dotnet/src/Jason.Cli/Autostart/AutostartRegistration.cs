@@ -34,6 +34,10 @@ public enum AutostartPlatform
 /// <param name="Remove">The commands that unregister it, in order.</param>
 /// <param name="Query">The command that says whether it is registered.</param>
 /// <param name="Run">The command line that gets registered: the runtime itself, and never something that starts one.</param>
+/// <param name="SearchPath">
+/// The search path the registered runtime starts with, where the registration carries one: on macOS, the PATH of the
+/// process that registered it. Null where the registration carries none, and on the two platforms that never do.
+/// </param>
 public sealed record AutostartRegistration(
     AutostartPlatform Platform,
     string Name,
@@ -42,10 +46,12 @@ public sealed record AutostartRegistration(
     IReadOnlyList<IReadOnlyList<string>> Apply,
     IReadOnlyList<IReadOnlyList<string>> Remove,
     IReadOnlyList<string> Query,
-    IReadOnlyList<string> Run);
+    IReadOnlyList<string> Run,
+    string? SearchPath = null);
 
 /// <summary>What a machine says is registered: whether anything is, and the command line it names.</summary>
 /// <param name="Registered">Whether this account has a registration at all.</param>
 /// <param name="Run">The command line the registration names, or nothing where there is no registration.</param>
 /// <param name="ArtifactPath">Where the document lives, for a person who wants to look at it.</param>
-public sealed record AutostartState(bool Registered, IReadOnlyList<string> Run, string? ArtifactPath);
+/// <param name="SearchPath">The search path the registration carries, read back out of it; null where it carries none.</param>
+public sealed record AutostartState(bool Registered, IReadOnlyList<string> Run, string? ArtifactPath, string? SearchPath = null);

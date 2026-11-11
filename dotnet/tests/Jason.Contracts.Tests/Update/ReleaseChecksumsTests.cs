@@ -40,4 +40,25 @@ public class ReleaseChecksumsTests
             Assert.Contains(problem, said, StringComparison.Ordinal);
         }
     }
+
+    /// <summary>
+    /// The checksums a release with the desktop's files writes, read by this reader and by the rule an install script
+    /// greps with: each earlier file still has its one line, and a desktop file's name is never another's, the
+    /// installer's beside its blockmap and a zip's beside its own.
+    /// </summary>
+    [Fact]
+    public void A_release_with_the_desktop_s_files_still_gives_each_file_its_own_line()
+    {
+        var listed = ReleaseAssets.Published.Where(name => name != ReleaseAssets.Checksums && !ReleaseAssets.InstallScripts.Contains(name)).ToList();
+        var digests = listed.Select((name, index) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(name + index)))).ToList();
+        var text = string.Concat(listed.Select((name, index) => $"{digests[index]}  {name}\n"));
+
+        Assert.Contains("jason-desktop-windows-x64-setup.exe", listed);
+        foreach (var (name, index) in listed.Select((name, index) => (name, index)))
+        {
+            Assert.Equal(digests[index], ReleaseChecksums.DigestOf(text, name, out var problem));
+            Assert.Null(problem);
+            Assert.Single(text.Split('\n'), line => line.EndsWith("  " + name, StringComparison.Ordinal));
+        }
+    }
 }
