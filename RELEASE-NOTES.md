@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.34.0
+# Jason 0.34.0-rc.1
 
 ## What is new since 0.33.0
 
