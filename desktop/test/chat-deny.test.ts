@@ -3,7 +3,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { allowListFile, allowRules, denyListFile, denyRules, instructionsFile, parseAllowList, parseDenyList, readFence } from '../src/chat-deny.ts';
+import { allowListFile, allowRules, denyListFile, denyRules, fenceRefusal, instructionsFile, parseAllowList, parseDenyList, readFence } from '../src/chat-deny.ts';
 
 const desktop = join(import.meta.dirname, '..');
 const list = parseDenyList(readFileSync(join(desktop, denyListFile), 'utf8'));
@@ -79,4 +79,26 @@ test('a folder without the instruction text gives a fence without it, and the li
     assert.equal(readFence(folder).instructions, null);
     mkdirSync(join(folder, instructionsFile));
     assert.throws(() => readFence(folder), 'an instruction text that is there and cannot be read refuses the fence');
+});
+
+test('a fence that cannot be read says which of its files failed: the instruction text, or the allow and deny lists', (t) => {
+    const folder = mkdtempSync(join(tmpdir(), 'jason-fence-'));
+    t.after(() => rmSync(folder, { recursive: true, force: true }));
+    const refusalOf = () => {
+        try {
+            readFence(folder);
+        } catch (error) {
+            return fenceRefusal(error);
+        }
+        return 'read';
+    };
+    const lists = 'The chat’s allow and deny lists could not be read.';
+    assert.equal(refusalOf(), lists, 'neither list is there');
+    copyFileSync(join(desktop, denyListFile), join(folder, denyListFile));
+    assert.equal(refusalOf(), lists, 'the allow list is not there');
+    copyFileSync(join(desktop, allowListFile), join(folder, allowListFile));
+    assert.equal(refusalOf(), 'read');
+    mkdirSync(join(folder, instructionsFile));
+    assert.equal(refusalOf(), 'The chat’s instruction text could not be read.');
+    assert.equal(fenceRefusal(new Error('anything else')), lists);
 });

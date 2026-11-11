@@ -25,7 +25,8 @@ and names `jason update`. A `feed` in the desktop's settings is passed to every 
 
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, and the version whose skills were last deployed).
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
-  Claude Code and in `.agents/skills/` for Codex.
+  Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
+  text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`).
 - `<data>/desktop/electron/`: Electron's own files (its profile, the page's storage, and in `logs/` what Electron itself
   logs), set before anything else, so a second data directory is a second desktop and nothing of it lands outside

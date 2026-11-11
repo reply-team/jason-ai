@@ -17,7 +17,7 @@ import { startHost, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
-import { placeInstructions } from './chat-instructions.ts';
+import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import type { Cli } from './cli.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch } from './programs.ts';
@@ -63,6 +63,8 @@ export interface ChatOptions {
     decided?(decided: Decided): void;
     /** Said once, the first time the application is found to carry no instruction text; the turns run without it. */
     instructionsMissing?(): void;
+    /** Said each time a memory file cannot be written, at the start or before a turn, which is then refused. */
+    instructionsUnwritten?(file: string, code: string): void;
     /** How long a card waits for the person; thirty minutes unless a test shortens it. */
     answerWindowMs?: number;
     platform?: Platform;
@@ -152,11 +154,12 @@ export class Chat {
         this.#platform = options.platform ?? currentPlatform();
         sweepTurnFiles(options.paths.turns);
         // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
-        // turn's to refuse, and a file that cannot be written now is written again before it.
+        // turn's to refuse, and a file that cannot be written now is said and written again before that turn. The start
+        // never stops for either.
         try {
             this.#placeInstructions(options.fence());
         } catch {
-            // Nothing to do until a turn starts.
+            // Nothing more to do until a turn starts.
         }
         this.#broker = new PermissionBroker({
             emit: (chatId, event) => options.emit(chatId, event),
@@ -195,7 +198,8 @@ export class Chat {
             await this.#turn(chatId, text, resolved, launch, given.campaignId as string | undefined, running);
         } catch (error) {
             this.#running.delete(chatId);
-            refuse(`The turn could not be started: ${error instanceof Error ? error.message : String(error)}`);
+            if (error instanceof InstructionsUnwritten) refuse(error.message);
+            else refuse(`The turn could not be started: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
@@ -270,8 +274,9 @@ export class Chat {
     }
 
     /**
-     * Writes the instruction text into the chat folder where a memory file is missing or differs. With no text in the
-     * application, nothing is written and the gap is said once.
+     * Writes the instruction text into the chat folder where a memory file does not hold it. With no text in the
+     * application, nothing is written and the gap is said once; a file that cannot be written is said and thrown, and
+     * the turn it was written for is refused in the desktop's words.
      */
     #placeInstructions(fence: ChatFence): void {
         if (fence.instructions === null) {
@@ -279,7 +284,12 @@ export class Chat {
             this.#missingSaid = true;
             return;
         }
-        placeInstructions(this.#options.paths.chat, fence.instructions);
+        try {
+            placeInstructions(this.#options.paths.chat, fence.instructions);
+        } catch (error) {
+            if (error instanceof InstructionsUnwritten) this.#options.instructionsUnwritten?.(error.file, error.code);
+            throw error;
+        }
     }
 
     async #turn(

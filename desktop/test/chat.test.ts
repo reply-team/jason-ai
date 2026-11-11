@@ -30,7 +30,7 @@ interface Rig {
     hosts(): Recorded[];
 }
 
-function rig(t: { after(fn: () => void): void }, options: { programs?: string[]; env?: Record<string, string>; chat?: Partial<ChatOptions> } = {}): Rig {
+function rig(t: { after(fn: () => void): void }, options: { programs?: string[]; env?: Record<string, string>; chat?: Partial<ChatOptions>; before?: (b: Bench) => void } = {}): Rig {
     // The bench's folder is removed only after every turn has been stopped and its host has exited.
     const removals: (() => void)[] = [];
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: options.programs ?? ['claude', 'codex', 'gemini'], env: { JASON_Plugins__Grants__slack__Env__0: 'SLACK_PROXY', CLAUDE_AUTO_BACKGROUND_TASKS: '1', ...options.env } });
@@ -44,6 +44,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
     const decided: Decided[] = [];
     const started: { host: string; resumed: boolean }[] = [];
     const keys: Record<string, string> = {};
+    options.before?.(b);
     const chat = new Chat({
         paths: b.paths,
         env: b.env,
@@ -617,4 +618,41 @@ test('without the instruction text in the application the turn still runs, no me
     assert.equal(r.hosts().length, 2);
     assert.deepEqual(readdirSync(r.b.paths.chat), []);
     assert.equal(missing, 1);
+});
+
+const unwrittenSentence = (file: string) =>
+    `The chat’s instruction file ${file} could not be written, so the turn was not started. Close anything that has it open and send again.`;
+
+test('an instruction file that cannot be written refuses the turn on either host in the desktop’s words, starts nothing and says so; once it can be, the turn runs', async (t) => {
+    const unwritten: string[] = [];
+    const r = rig(t, { chat: { instructionsUnwritten: (file, code) => void unwritten.push(`${file} ${code}`) } });
+    rmSync(join(r.b.paths.chat, 'AGENTS.md'));
+    mkdirSync(join(r.b.paths.chat, 'AGENTS.md'));
+    for (const host of ['claude', 'codex']) {
+        assert.deepEqual(await r.turn('c1', words, { host }), [{ kind: 'done', error: unwrittenSentence('AGENTS.md') }], host);
+        assert.equal(r.chat.isRunning('c1'), false);
+    }
+    assert.deepEqual(r.hosts(), []);
+    assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat'], 'nothing a turn opens was left open');
+    assert.equal(unwritten.length, 2, unwritten.join('\n'));
+    for (const said of unwritten) assert.match(said, /^AGENTS\.md E[A-Z]+$/);
+    rmSync(join(r.b.paths.chat, 'AGENTS.md'), { recursive: true });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null });
+    assert.ok(sameBytes(r.b.paths.chat));
+    assert.equal(unwritten.length, 2);
+});
+
+test('a start that cannot write an instruction file goes on and says so, and the first turn is refused until the file can be written', async (t) => {
+    const unwritten: string[] = [];
+    const r = rig(t, {
+        before: (b) => mkdirSync(join(b.paths.chat, 'CLAUDE.md'), { recursive: true }),
+        chat: { instructionsUnwritten: (file, code) => void unwritten.push(`${file} ${code}`) },
+    });
+    assert.equal(unwritten.length, 1, 'said at the start');
+    assert.match(unwritten[0]!, /^CLAUDE\.md E[A-Z]+$/);
+    assert.deepEqual(await r.turn('c1', words, { host: 'claude' }), [{ kind: 'done', error: unwrittenSentence('CLAUDE.md') }]);
+    assert.deepEqual(r.hosts(), []);
+    rmSync(join(r.b.paths.chat, 'CLAUDE.md'), { recursive: true });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
+    assert.ok(sameBytes(r.b.paths.chat));
 });
