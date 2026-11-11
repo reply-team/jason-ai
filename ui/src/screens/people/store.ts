@@ -21,6 +21,8 @@ export const failure = signal<string | null>(null);
 /** True while a refresh the person asked for is under way: long enough to be seen, even when the answer is instant. */
 export const refreshing = signal(false);
 /** How many people each stage counts, as campaign.summary says it; null while unread, or when the list would not match them. */
+/** The filters the rows on show were fetched with: the table is drawn with these, never with the ones just chosen. */
+export const drawn = signal<PeopleFilters>({});
 export const counts = signal<Record<Stage, number> | null>(null);
 /** The campaign the filter names, with the name to show for it. */
 export const campaign = signal<{ id: string; name: string } | null>(null);
@@ -49,22 +51,25 @@ export function fail(error: unknown, into = failure): void {
 }
 
 /**
- * Whether the chips can show their numbers. A count is everyone in it, archived people included, and unaware of a
- * search, so beside either the list under a chip would not match its number, and the chip shows none.
+ * Whether the chips can show their numbers. A count counts everyone in it, archived people included, and knows no
+ * search; the list leaves archived people out until they are asked for. The two agree only with Archived ticked and no
+ * search, and only then does a chip show a number.
  */
 export function showsCounts(filters: PeopleFilters): boolean {
-    return !filters.q && !filters.archived;
+    return !filters.q && filters.archived === true;
 }
 
 let countsGeneration = 0;
+let countsFor: string | null = null;
 
 /** The chips' numbers: the campaign's own row, or every campaign's total; none while they would not match the list. */
 async function loadCounts(api: Api, filters: PeopleFilters): Promise<void> {
     const mine = ++countsGeneration;
-    if (!showsCounts(filters)) {
-        counts.value = null;
-        return;
-    }
+    const key = showsCounts(filters) ? (filters.campaign ?? '') : null;
+    // Numbers of another request are never left beside this list.
+    if (key !== countsFor) counts.value = null;
+    countsFor = key;
+    if (key === null) return;
     try {
         const answer = await api.call<CampaignSummaryResponse>(
             'campaign.summary',
@@ -89,12 +94,14 @@ export async function load(api: Api, filters: PeopleFilters): Promise<void> {
     const body = listBody(filters);
     const asked = JSON.stringify(body);
     const before = cursor.value;
+    loadingMore = false;
     failure.value = null;
     cursor.value = null;
     try {
         const page = await api.call<Page<Contact>>('contact.list', body);
         if (mine !== generation) return;
         people.value = page.items;
+        drawn.value = filters;
         cursor.value = page.next_cursor;
         loaded.value = true;
         shown = asked;

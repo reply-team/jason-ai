@@ -15,6 +15,9 @@ export function stageWord(key: string): Column | undefined {
     return summaryColumns.find((column) => column.key === key && column.key !== 'people');
 }
 
+/** The counts a membership stands in; none from a runtime that does not say. */
+export const standingOf = (campaign: ContactCampaign): readonly string[] => campaign.standing ?? [];
+
 /** Where a membership stands, each count in its one word; empty when no count counts the person there. */
 export function stageWords(standing: readonly string[]): Column[] {
     return standing.flatMap((key) => stageWord(key) ?? []);
@@ -43,7 +46,7 @@ export function ordered(person: Contact, within?: string): ContactCampaign[] {
 
 /** The campaign a row shows: the first of `ordered`, or under a stage the first whose standing holds it; none for nobody on a campaign. */
 export function leading(person: Contact, stage?: Stage, within?: string): ContactCampaign | null {
-    return ordered(person, within).find((c) => !stage || c.standing.includes(stage)) ?? null;
+    return ordered(person, within).find((c) => !stage || standingOf(c).includes(stage)) ?? null;
 }
 
 /** The campaigns a row does not show, in the same order. */

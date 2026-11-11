@@ -1,15 +1,17 @@
 import type { Contact } from '../../api/types';
 import { More } from '../../lists/more';
 import type { LoadMore } from '../../lists/use-cursor-list';
-import { t } from '../../platform/i18n';
 import { navigate, type PeopleFilters, type PersonTab } from '../../router';
 import { when } from '../../time/format';
 import { channelName, displayName, entryLabel } from './labels';
-import { leading, others, stageWords } from './standing';
+import { leading, others, stageWords, standingOf } from './standing';
 
 type Props = {
     people: Contact[];
+    /** The filters now chosen: where a person opens from. */
     filters: PeopleFilters;
+    /** The filters the rows were fetched with, which decide what each row says. */
+    drawn: PeopleFilters;
     /** The tab the open person is on, which the next person opens on too. */
     tab: PersonTab;
     selected: string | null;
@@ -29,37 +31,38 @@ function channelsOf(person: Contact): { names: string; values: string } {
 }
 
 /** The people, newest activity first as the runtime ordered them, one row each; the person the row names opens in the panel. */
-export function PeopleList({ people, filters, tab, selected, more, me, now, zone }: Props) {
+export function PeopleList({ people, filters, drawn, tab, selected, more, me, now, zone }: Props) {
     const open = (id: string) => navigate({ screen: 'people', id, tab, filters });
     return (
         <div className="tablewrap">
             <table className="ptable">
                 <thead>
                     <tr>
-                        <th scope="col">{t('people.col.name')}</th>
+                        <th scope="col">Name</th>
                         <th scope="col" className="wide">
-                            {t('people.col.company')}
+                            Company
                         </th>
                         <th scope="col" className="wide">
-                            {t('people.col.channels')}
+                            Channels
                         </th>
-                        <th scope="col">{t('people.col.stage')}</th>
+                        <th scope="col">Stage</th>
                         <th scope="col" className="wide">
-                            {t('people.col.campaign')}
+                            Campaign
                         </th>
-                        <th scope="col">{t('people.col.activity')}</th>
+                        <th scope="col">Last activity</th>
                     </tr>
                 </thead>
                 <tbody>
                     {people.map((person) => {
-                        const shown = leading(person, filters.stage, filters.campaign);
-                        const rest = others(person, shown, filters.campaign);
-                        const words = shown ? stageWords(shown.standing) : [];
+                        const shown = leading(person, drawn.stage, drawn.campaign);
+                        const rest = others(person, shown, drawn.campaign);
+                        const words = shown ? stageWords(standingOf(shown)) : [];
                         const channels = channelsOf(person);
                         const last = person.last_activity ? entryLabel(person.last_activity, me) : null;
                         return (
                             <tr
                                 key={person.id}
+                                aria-current={selected === person.id ? 'true' : undefined}
                                 className={`${selected === person.id ? 'sel' : ''}${person.archived_at ? ' quiet' : ''}`}
                                 onClick={(event) => {
                                     if (event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -88,9 +91,7 @@ export function PeopleList({ people, filters, tab, selected, more, me, now, zone
                                     {rest.length > 0 && (
                                         <span
                                             className="also"
-                                            title={t('people.also', {
-                                                names: rest.map((c) => c.campaign_name).join(', '),
-                                            })}
+                                            title={`Also on: ${rest.map((c) => c.campaign_name).join(', ')}`}
                                         >
                                             +{rest.length}
                                         </span>

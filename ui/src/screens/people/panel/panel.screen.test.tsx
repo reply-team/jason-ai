@@ -35,10 +35,7 @@ function open(api: FakeApi, id: string, tab: PersonTab = 'timeline', filters: Pe
 }
 
 /** The list beside the panel, which every test here reads. */
-const people = () =>
-    new FakeApi()
-        .answer('contact.list', 'contact.list/by-activity')
-        .answer('campaign.summary', 'campaign.summary/everyone');
+const people = () => new FakeApi().answer('contact.list', 'contact.list/by-activity');
 
 /** Every request a screen sent to an operation, in order, as it gave them. */
 const asked = (api: FakeApi, operation: string) =>
@@ -678,7 +675,7 @@ describe('Move', () => {
         expect(asked(api, 'campaign.remove_contacts')).toEqual([recorded('campaign.remove_contacts/move-out')]);
         const order = api.calls
             .map((call) => call.operation)
-            .filter((op) => op.startsWith('campaign.') && op !== 'campaign.list' && op !== 'campaign.summary');
+            .filter((op) => op.startsWith('campaign.') && op !== 'campaign.list');
         expect(order).toEqual(['campaign.add_contacts', 'campaign.remove_contacts']);
         await waitFor(() => expect(membership('Nordic pilot').textContent).toContain('Excluded'));
         expect(membership('Q4 follow-ups').textContent).toContain('Enrolled');

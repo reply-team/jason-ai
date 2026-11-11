@@ -11,7 +11,6 @@ import { PersonPanel } from './panel/panel';
 import * as store from './store';
 import { Notice } from '../../layout/notice';
 import { Chips } from '../../layout/chips';
-import { t } from '../../platform/i18n';
 import { stages, stageWord, type Stage } from './standing';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -94,10 +93,10 @@ export function PeopleScreen() {
                 </FiltersBar>
                 <div className="stage-filter">
                     <Chips<Stage | ''>
-                        label={t('people.stages')}
+                        label="Stage"
                         row="filters"
                         chips={[
-                            { key: '', label: t('people.stage.all') },
+                            { key: '', label: 'All' },
                             ...stages.map((stage) => ({
                                 key: stage,
                                 label: stageWord(stage)?.label ?? stage,
@@ -116,6 +115,7 @@ export function PeopleScreen() {
                     <PeopleList
                         people={people}
                         filters={filters}
+                        drawn={store.drawn.value}
                         tab={asked}
                         selected={selected}
                         more={store.cursor.value ? () => store.more(api, filters) : null}

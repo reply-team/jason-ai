@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Contact, ContactCampaign, JournalEntry } from '../../api/types';
-import { leading, others, parseStage, stageWords } from './standing';
+import { leading, others, parseStage, stageWords, standingOf } from './standing';
 
 function membership(id: string, added: string, standing: string[], state = 'enrolled'): ContactCampaign {
     return {
@@ -92,6 +92,17 @@ describe('the stage words', () => {
 
     it('ignores a count this build has no word for', () => {
         expect(stageWords(['waiting', 'paused'])).toHaveLength(1);
+    });
+});
+
+describe('a runtime that does not say where people stand', () => {
+    it('reads an absent standing as none, and never throws', () => {
+        const bare = membership('cmp_1', '2026-10-01T10:00:00.000Z', []) as Partial<ContactCampaign>;
+        delete bare.standing;
+        const shown = person([bare as ContactCampaign]);
+        expect(leading(shown)?.campaign_id).toBe('cmp_1');
+        expect(leading(shown, 'waiting')).toBeNull();
+        expect(stageWords(standingOf(bare as ContactCampaign))).toEqual([]);
     });
 });
 

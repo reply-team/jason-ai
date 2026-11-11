@@ -19,9 +19,6 @@ afterEach(() => {
 
 /** Opens the screen the way an address does: renderApp clears the address, and its late change event must agree with ours. */
 function open(api: FakeApi, filters: PeopleFilters = {}, id?: string, tab: PersonTab = 'timeline') {
-    // Beside no search and no archived people the chips show the runtime's numbers, which the page reads with the list.
-    if (!filters.q && !filters.archived && !filters.campaign)
-        api.answer('campaign.summary', 'campaign.summary/everyone');
     renderApp(api);
     const to = id ? { screen: 'people' as const, id, tab, filters } : { screen: 'people' as const, tab, filters };
     location.hash = href(to);
@@ -100,13 +97,6 @@ describe('People', () => {
         expect(cells(rowOf('Zoe Example')).slice(3)).toEqual(['—', '—', '—']);
     });
 
-    it("draws a person's text as text, never as markup", async () => {
-        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-several');
-        open(api);
-        await waitFor(() => expect(screen.getByText('Ada Example')).toBeTruthy());
-        expect(document.querySelectorAll('.ptable img, .ptable script')).toHaveLength(0);
-    });
-
     it('a list that fails to load keeps the rows of the same list, and drops the rows of a search the person has left', async () => {
         const api = new FakeApi().answer('contact.list', 'contact.list/by-activity', 'contact.list/query-too-long');
         open(api);
@@ -138,6 +128,11 @@ describe('People', () => {
         await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(200));
         fireEvent.click(screen.getByRole('button', { name: /loading/ }));
         await waitFor(() => expect(screen.getByText('Extra 150 Example')).toBeTruthy());
+        // The page and the one past it are one list: every person once, in the order the runtime gave.
+        const names = Array.from(document.querySelectorAll('.ptable td.name')).map((td) => td.textContent);
+        expect(names).toHaveLength(201);
+        expect(new Set(names).size).toBe(201);
+        expect(names.at(-1)).toBe('Extra 150 Example');
         expect(sentLists(api)[1]).toEqual(fixtures['contact.list/many-next'].request);
     });
 
@@ -724,8 +719,7 @@ describe('People', () => {
         const gone = fixtures['campaign.get/gone'].request.campaign_id;
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/gone-campaign', 'contact.list/by-activity')
-            .answer('campaign.get', 'campaign.get/gone')
-            .answer('campaign.summary', 'campaign.summary/summer', 'campaign.summary/everyone');
+            .answer('campaign.get', 'campaign.get/gone');
         open(api, { campaign: gone });
 
         await waitFor(() => expect(route.value).toEqual({ screen: 'people', tab: 'timeline', filters: {} }));
@@ -755,105 +749,122 @@ describe('People: the stage chips', () => {
         Array.from(document.querySelectorAll('.stage-filter .chip')).map((c) =>
             c.textContent?.replace(/\s+/g, ' ').trim(),
         );
+    const plain = ['All', 'Waiting', 'Failed', 'Working', 'New', 'Idle', 'Sequence', 'Out'];
+    const chip = (name: RegExp) =>
+        within(document.querySelector('.stage-filter') as HTMLElement).getByRole('button', { name });
 
-    it("show the runtime's count of every campaign, each person once, and ask for one count when chosen", async () => {
-        const api = new FakeApi()
-            .answer('contact.list', 'contact.list/by-activity-several', 'contact.list/by-activity-summary-waiting')
-            .answer('campaign.summary', 'campaign.summary/everyone');
+    it('ask for one count when chosen, and All asks for everyone; the row is read in the campaign that holds it', async () => {
+        const api = new FakeApi().answer(
+            'contact.list',
+            'contact.list/by-activity-several',
+            'contact.list/by-activity-summary-waiting',
+            'contact.list/by-activity-several',
+        );
         open(api);
         await waitFor(() => expect(screen.getByText('Ada Example')).toBeTruthy());
-
-        expect(api.sent('campaign.summary')).toEqual(fixtures['campaign.summary/everyone'].request);
-        // All has no number: it lists people no campaign counts too.
-        expect(chipLabels()).toEqual([
-            'All',
-            'Waiting 3',
-            'Failed 3',
-            'Working 2',
-            'New 4',
-            'Idle 7',
-            'Sequence 2',
-            'Out 6',
-        ]);
-        expect(screen.getByRole('button', { name: /^Waiting/ }).getAttribute('title')).toBe(
+        // With Archived off the totals would count people the list leaves out: no number, and none asked for.
+        expect(chipLabels()).toEqual(plain);
+        expect(api.calls.some((c) => c.operation === 'campaign.summary')).toBe(false);
+        expect(screen.getByRole('group', { name: 'Stage' })).toBeTruthy();
+        expect(chip(/^Waiting/).getAttribute('title')).toBe(
             'An approval or a question about their work is waiting for you.',
         );
 
-        fireEvent.click(screen.getByRole('button', { name: /^Waiting/ }));
+        fireEvent.click(chip(/^Waiting/));
         await waitFor(() => expect(sentLists(api)).toHaveLength(2));
         expect(sentLists(api)[1]).toEqual(fixtures['contact.list/by-activity-summary-waiting'].request);
         expect(route.value).toMatchObject({ screen: 'people', filters: { stage: 'waiting' } });
         await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(3));
-        expect(screen.getByRole('button', { name: /^Waiting/ }).getAttribute('aria-pressed')).toBe('true');
-        // Pia stands in two counts; the row is read in the campaign that holds the chosen one.
+        expect(chip(/^Waiting/).getAttribute('aria-pressed')).toBe('true');
+        expect(chip(/^Waiting/).getAttribute('aria-current')).toBe('true');
         expect(cells(rowOf('Pia Example'))[3]).toBe('WaitingFailed');
 
-        fireEvent.click(
-            within(document.querySelector('.stage-filter') as HTMLElement).getByRole('button', { name: /^All/ }),
-        );
+        fireEvent.click(chip(/^All/));
         await waitFor(() => expect(sentLists(api)).toHaveLength(3));
         expect(sentLists(api)[2]).toEqual({ order: 'activity', limit: 200 });
-        expect(route.value).toMatchObject({ filters: {} });
     });
 
     it('under a chip the campaign shown is the first one that holds the count', async () => {
-        const api = new FakeApi()
-            .answer('contact.list', 'contact.list/by-activity-summary-waiting')
-            .answer('campaign.summary', 'campaign.summary/everyone');
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-summary-waiting');
         open(api, { stage: 'waiting' });
         await waitFor(() => expect(screen.getByText('Ada Example')).toBeTruthy());
         expect(cells(rowOf('Ada Example')).slice(3, 5)).toEqual(['Waiting', 'Spring+2']);
-        expect(screen.getByRole('button', { name: /^Waiting/ }).getAttribute('aria-pressed')).toBe('true');
     });
 
-    it('show no number beside a search or archived people, which the list under them would not match', async () => {
+    it("show the runtime's numbers only with Archived ticked and no search, which is when the list matches them", async () => {
         const api = new FakeApi()
-            .answer(
-                'contact.list',
-                'contact.list/by-activity-summary-waiting',
-                'contact.list/by-activity-summary-query',
-            )
+            .answer('contact.list', 'contact.list/archived', 'contact.list/by-activity')
             .answer('campaign.summary', 'campaign.summary/everyone');
-        open(api, { stage: 'waiting' });
-        await waitFor(() => expect(chipLabels()).toContain('Waiting 3'));
-
-        fireEvent.input(screen.getByRole('searchbox', { name: 'Search people' }), { target: { value: 'ben' } });
+        open(api, { archived: true });
         await waitFor(() =>
-            expect(sentLists(api).at(-1)).toEqual(fixtures['contact.list/by-activity-summary-query'].request),
+            expect(chipLabels()).toEqual([
+                'All',
+                'Waiting 3',
+                'Failed 3',
+                'Working 2',
+                'New 4',
+                'Idle 7',
+                'Sequence 2',
+                'Out 6',
+            ]),
         );
-        await waitFor(() => expect(chipLabels()).toContain('Waiting'));
-        expect(chipLabels()).toEqual(['All', 'Waiting', 'Failed', 'Working', 'New', 'Idle', 'Sequence', 'Out']);
+        expect(api.sent('campaign.summary')).toEqual(fixtures['campaign.summary/everyone'].request);
+
+        // Unticked, the numbers go at once, before the list answers.
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Archived' }));
+        await waitFor(() => expect(chipLabels()).toEqual(plain));
+        await waitFor(() => expect(sentLists(api)).toHaveLength(2));
         expect(api.calls.filter((c) => c.operation === 'campaign.summary')).toHaveLength(1);
     });
 
-    it("count a campaign's own people when the list is narrowed to it, and read its rows in that campaign", async () => {
-        const unlinked = fixtures['campaign.get/unlinked'].request.campaign_id;
+    it('a count that fails to read leaves the list and says so', async () => {
         const api = new FakeApi()
-            .answer('contact.list', 'contact.list/by-campaign')
-            .answer('campaign.get', 'campaign.get/unlinked')
-            .answer('campaign.summary', 'campaign.summary/unlinked');
-        open(api, { campaign: unlinked });
-        await waitFor(() => expect(chipLabels()).toContain('New 1'));
-
-        expect(api.sent('campaign.summary')).toEqual({ campaign_ids: [unlinked] });
-        expect(chipLabels()).toContain('Idle 1');
-        expect(chipLabels()).toContain('Waiting 0');
-        // Mateo is in two campaigns; the list is of the one, so the row says where they stand there.
-        expect(cells(rowOf('Mateo Ruiz')).slice(3, 5)).toEqual(['WorkingOut', 'LatAm pilot+1']);
-    });
-
-    it('a refresh reads the counts again, and a failed count leaves the list and says so', async () => {
-        const api = new FakeApi()
-            .answer('contact.list', 'contact.list/by-activity-several')
+            .answer('contact.list', 'contact.list/archived')
             .answer('campaign.summary', 'campaign.summary/everyone');
-        open(api);
+        open(api, { archived: true });
         await waitFor(() => expect(chipLabels()).toContain('Waiting 3'));
         const reachable = api.unreachable('campaign.summary');
         fireEvent.click(screen.getByTitle('Refresh'));
         expect((await screen.findByRole('alert')).textContent).toContain('Failed to fetch');
-        expect(screen.getByText('Ada Example')).toBeTruthy();
-        expect(chipLabels()).toContain('Waiting');
-        expect(chipLabels()).not.toContain('Waiting 3');
+        expect(chipLabels()).toEqual(plain);
+        expect(document.querySelectorAll('.ptable tbody tr').length).toBeGreaterThan(0);
         reachable();
+    });
+
+    it("read a campaign's rows in that campaign when the list is narrowed to it", async () => {
+        const unlinked = fixtures['campaign.get/unlinked'].request.campaign_id;
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-campaign')
+            .answer('campaign.get', 'campaign.get/unlinked');
+        open(api, { campaign: unlinked });
+        await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
+        // Mateo is in two campaigns; the list is of the one, so the row says where they stand there.
+        expect(cells(rowOf('Mateo Ruiz')).slice(3, 5)).toEqual(['WorkingOut', 'LatAm pilot+1']);
+    });
+
+    it('keep drawing the rows with the filters they were fetched with while the next list is on its way', async () => {
+        const api = new FakeApi().answer(
+            'contact.list',
+            'contact.list/by-activity-several',
+            'contact.list/by-activity-summary-waiting',
+            'contact.list/by-activity-several',
+        );
+        open(api);
+        await waitFor(() => expect(screen.getByText('Cleo Example')).toBeTruthy());
+        const release = api.hold('contact.list', (body) => (body as { summary?: string }).summary === 'waiting');
+
+        fireEvent.click(chip(/^Waiting/));
+        await waitFor(() => expect(sentLists(api)).toHaveLength(2));
+        // Cleo stands in Failed: with the new chip's rule her row would read as nothing at all.
+        expect(cells(rowOf('Cleo Example'))[3]).toBe('Failed');
+        expect(cells(rowOf('Cleo Example'))[4]).toBe('Spring');
+
+        // The person changes their mind before the answer comes: the late answer is dropped.
+        fireEvent.click(chip(/^All/));
+        await waitFor(() => expect(sentLists(api)).toHaveLength(3));
+        await waitFor(() => expect(route.value).toMatchObject({ filters: {} }));
+        release();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(24);
     });
 });

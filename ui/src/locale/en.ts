@@ -34,15 +34,6 @@ export const en = {
     'chat.get': 'Get Jason Desktop from the releases page',
     'chat.agent':
         'Everything here also works from a session with your agent in a terminal, with the skills Jason deployed.',
-    'people.col.name': 'Name',
-    'people.col.company': 'Company',
-    'people.col.channels': 'Channels',
-    'people.col.stage': 'Stage',
-    'people.col.campaign': 'Campaign',
-    'people.col.activity': 'Last activity',
-    'people.stages': 'Stage',
-    'people.stage.all': 'All',
-    'people.also': 'Also on: {names}',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
 } as const;
