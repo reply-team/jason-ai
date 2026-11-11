@@ -197,7 +197,8 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.33.0 took
 - **The packages:** reply 0.14.8; journal-forwarder 1.2.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0 are as in 0.33.0.
   A release is twenty-four files: the desktop's ten are new.
 - **Skills:** the update redeploys them wherever a deployment was recorded. `operating-the-installation` changed its
-  text (how a fresh installation connects a provider) and keeps `draft`, and no agent host has read it against 0.34.0.
+  text (how a fresh installation connects a provider) and `troubleshooting-jason` changed its text (lifting a
+  suppression names who lifts it with `--actor`); both keep `draft`, and no agent host has read either against 0.34.0.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle
   stay as they were. The desktop keeps what it writes under `<data>/desktop/`, and `jason uninstall --purge-data`
   removes that folder with the rest.
