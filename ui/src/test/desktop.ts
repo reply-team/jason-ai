@@ -175,7 +175,12 @@ export interface StubDesktop extends JasonDesktop {
     keep(record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord;
 }
 
-export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
+/**
+ * A stand-in for the desktop. The window opens on the start screen; most tests are about a chat, so by default the
+ * stand-in sends the menu's New chat command as the console starts, which opens one. `startScreen` leaves the window
+ * as it opens.
+ */
+export function stubDesktop(status: DesktopSetup = setupFound, options: { startScreen?: boolean } = {}): StubDesktop {
     const chatHandlers = new Set<(chatId: string, event: DesktopChatEvent) => void>();
     const changeHandlers = new Set<() => void>();
     const commandHandlers = new Set<(command: DesktopCommand) => void>();
@@ -254,6 +259,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         keep,
         onCommand(handler) {
             commandHandlers.add(handler);
+            if (options.startScreen !== true) queueMicrotask(() => handler('chat.new'));
             return () => commandHandlers.delete(handler);
         },
         chat: {

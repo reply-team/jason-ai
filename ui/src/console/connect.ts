@@ -241,7 +241,7 @@ function provider(host: DesktopHost, busy: Html | null): Html {
     </div>`;
 }
 
-function reply(state: DesktopSetup['reply'], busy: Html | null): Html {
+function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string): Html {
     const cli = state.cli.found
         ? html`<span class="meta">Reply CLI ${state.cli.version ?? ''}</span>`
         : html`<span class="meta">The Reply CLI was not found.</span> ${
@@ -251,7 +251,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null): Html {
                         </button>`
                       : null
               }`;
-    return html`<div class="card">
+    return html`<div class="card" ${label ? html`role="region" aria-label="${label}"` : null}>
         <div class="hd"><b>Reply</b></div>
         <div class="bd">
             <div class="setrow"><div class="grow">${cli}</div></div>
@@ -381,6 +381,33 @@ function plugins(state: DesktopSetup, busy: Html | null): Html {
             ${state.plugins.map((each) => plugin(each, busy, refused))}
         </div>
     </div>`;
+}
+
+/** The AI card alone, for a screen that needs an AI before it goes on: the hosts, found or not, and what they ask. */
+export function aiCardView(): Html {
+    const state = setup.value;
+    const busy = setupBusy.value;
+    const failure = setupError.value;
+    const disabled = busy === null ? null : html`disabled`;
+    return html`<div class="card" role="region" aria-label="Connect an AI">
+        <div class="hd"><b>AI</b></div>
+        <div class="bd">
+            ${busy ? html`<div class="note" role="status"><span class="spin"></span>${busy}</div>` : null}
+            ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
+            ${
+                state
+                    ? state.hosts.filter((each) => each.kind === 'program').map((each) => program(each, disabled))
+                    : html`<div class="empty">Reading what is set up…</div>`
+            }
+        </div>
+    </div>`;
+}
+
+/** The Reply card alone, for the moment the work needs a way to send. */
+export function replyCardView(): Html {
+    const state = setup.value;
+    if (!state) return html``;
+    return reply(state.reply, setupBusy.value === null ? null : html`disabled`, 'Connect Reply');
 }
 
 export function connectView(): Html {
