@@ -148,6 +148,27 @@ public class UninstallVerbTests
         Assert.True(never >= 0 && link > never, $"The help page does not say a link in the data directory goes as itself among what is never touched:{Environment.NewLine}{output}");
     }
 
+    /// <summary>
+    /// The agent hosts keep their own transcripts of the desktop's chat, in folders of their own: the help page names
+    /// them among what is never touched, the purge included. Read with the line breaks made spaces.
+    /// </summary>
+    [Fact]
+    public async Task The_help_page_says_the_hosts_transcripts_of_the_desktop_s_chat_are_never_touched()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["uninstall", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+
+        var help = System.Text.RegularExpressions.Regex.Replace(output.ToString(), @"\s+", " ");
+        var never = help.IndexOf("Never touched:", StringComparison.Ordinal);
+        var root = help.IndexOf("And the harness root", StringComparison.Ordinal);
+        var transcripts = help.IndexOf(
+            "the transcripts the agent hosts keep of the desktop's chat, which are the hosts' own and stay where each host keeps them,",
+            StringComparison.Ordinal);
+        Assert.True(never >= 0 && transcripts > never && transcripts < root, $"The help page does not name the hosts' transcripts among what is never touched:{Environment.NewLine}{output}");
+    }
+
     /// <summary>The wait the help page publishes is the remover's own, not a number written down beside it.</summary>
     [Fact]
     public async Task The_wait_the_help_page_publishes_is_the_removers_rule()
