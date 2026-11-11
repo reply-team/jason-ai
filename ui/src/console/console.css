@@ -1020,3 +1020,7 @@ body,
     color: var(--faint);
     text-align: center;
 }
+.jc-console .needs-empty > .ask-a {
+    justify-content: center;
+    margin: 0 0 16px;
+}
