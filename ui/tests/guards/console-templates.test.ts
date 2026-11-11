@@ -9,7 +9,15 @@ const sources = readdirSync(consoleDir).filter((name) => /\.tsx?$/.test(name) &&
 describe('the console source', () => {
     it('is read whole', () => {
         expect(sources).toEqual(
-            expect.arrayContaining(['html.ts', 'chat.tsx', 'needs.ts', 'connect.ts', 'console.tsx']),
+            expect.arrayContaining([
+                'html.ts',
+                'chat.tsx',
+                'needs.ts',
+                'connect.ts',
+                'console.tsx',
+                'markdown.ts',
+                'markdown-view.ts',
+            ]),
         );
     });
 
