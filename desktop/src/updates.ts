@@ -16,7 +16,7 @@
 import { nextCheckDelay } from './backoff.ts';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
-import { unansweredWords, type StopOutcome } from './own-runtime.ts';
+import { unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
 import { isRejected, keepPrevious, readRollback } from './rollback.ts';
 
 /** Where releases are read: this repository's GitHub releases. */
@@ -72,10 +72,10 @@ export function menuItemOf(state: UpdateState, installed: boolean): MenuItem {
 }
 
 /** What the person is told when the runtime this application carries did not stop, or did not answer, so the update was not installed. */
-export function runtimeRefusal(outcome: { kind: 'failed'; exit: number } | { kind: 'unanswered'; pid: number | null }): string {
+export function runtimeRefusal(outcome: { kind: 'failed'; exit: number } | Unanswered): string {
     const again = 'Then choose Restart Jason and Its Runtime to Install again.';
     if (outcome.kind === 'unanswered') {
-        const { why, next } = unansweredWords(outcome.pid);
+        const { why, next } = unansweredWords(outcome);
         return `The update was not installed, because ${why}. Jason was left as it was. ${next} ${again}`;
     }
     const how = outcome.exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${outcome.exit}`;

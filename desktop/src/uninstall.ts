@@ -23,7 +23,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join, posix, win32 } from 'node:path';
-import { unansweredWords, type StopOutcome } from './own-runtime.ts';
+import { unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
 import type { CommandStatus } from './path-command.ts';
 
 /** On the command line of the start the uninstaller makes. */
@@ -102,9 +102,9 @@ export interface UninstallReport {
 }
 
 /** What the person is told when the runtime this application carries did not stop, or did not answer, so nothing was removed. */
-export function runtimeRefusal(outcome: { kind: 'failed'; exit: number } | { kind: 'unanswered'; pid: number | null }): string {
+export function runtimeRefusal(outcome: { kind: 'failed'; exit: number } | Unanswered): string {
     if (outcome.kind === 'unanswered') {
-        const { why, next } = unansweredWords(outcome.pid);
+        const { why, next } = unansweredWords(outcome);
         return `Nothing was removed, because ${why}. ${next} Then uninstall Jason again.`;
     }
     const how = outcome.exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${outcome.exit}`;

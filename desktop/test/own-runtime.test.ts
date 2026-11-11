@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { test } from 'node:test';
 import type { Cli, CliResult } from '../src/cli.ts';
-import { ownRuntimeDeps, processIsRunning, stopOwnRuntime, whoseRuntime, type OwnRuntimeDeps, type Whose } from '../src/own-runtime.ts';
+import { ownRuntimeDeps, processIsRunning, readRunFileText, stopOwnRuntime, unansweredWords, whoseRuntime, type OwnRuntimeDeps, type Whose } from '../src/own-runtime.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
     const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'jason-desktop-own-runtime-')));
@@ -23,7 +23,7 @@ function scratch(t: { after(fn: () => void): void }) {
         mkdirSync(join(file, '..'), { recursive: true });
         writeFileSync(file, 'an executable');
     }
-    return { root, executable, other };
+    return { root, executable, other, runFile: join(root, 'data', 'run', 'runtime.json') };
 }
 
 /** The pid every planted run file names; the rows say whether it is running. */
@@ -54,6 +54,7 @@ function deps(s: ReturnType<typeof scratch>, run: { file: string | null }, cli: 
     return {
         platform: options.platform ?? process.platform,
         executable: s.executable,
+        runFile: s.runFile,
         readRunFile: () => run.file,
         cli,
         realpath: (path) => realpathSync.native(path),
@@ -119,6 +120,42 @@ test('a run file whose runtime does not answer as itself is no runtime only when
     }
 });
 
+test('a run file that is not there is none, and one that is there and cannot be read is said rather than taken for none', async (t) => {
+    const s = scratch(t);
+    mkdirSync(dirname(s.runFile), { recursive: true });
+    assert.equal(readRunFileText(s.runFile), null, 'not there');
+    assert.equal(readRunFileText(join(s.executable, 'runtime.json')), null, 'a file where a folder of its path goes');
+    writeFileSync(s.runFile, 'the run file');
+    assert.equal(readRunFileText(s.runFile), 'the run file');
+    rmSync(s.runFile);
+    // A folder where the run file goes is there and cannot be read, as a file this account may not read is.
+    mkdirSync(s.runFile);
+    assert.throws(() => readRunFileText(s.runFile));
+
+    const { cli, asked } = fakeCli({ status: () => ok({ instance_id: 'rt_A' }) });
+    const own = ownRuntimeDeps(process.platform, s.executable, s.runFile, cli);
+    assert.deepEqual(await whoseRuntime(own), { whose: 'unanswered', pid: null, unreadable: true });
+    assert.deepEqual(await stopOwnRuntime(own), { kind: 'unanswered', pid: null, runFile: s.runFile, unreadable: true });
+    assert.deepEqual(asked, [], 'nothing is asked about a run file that could not be read');
+});
+
+test('what a person reads about a runtime that did not answer asks the runtime first and ends a process last, only once it is known to be the runtime', () => {
+    const file = 'C:/data/run/runtime.json';
+    const deleting = `If no Jason runtime is running, deleting ${file} lets this go on.`;
+    assert.deepEqual(unansweredWords({ pid: 4242, runFile: file }), {
+        why: 'a runtime may be running that did not answer: its run file names process 4242, which is running',
+        next: `jason runtime status answers once the runtime does. jason runtime start says whether process 4242 is the runtime: it names it if it is, and starts one in place of the run file if it is not. If it is the runtime and never answers, end process 4242. ${deleting}`,
+    });
+    assert.deepEqual(unansweredWords({ pid: null, runFile: file }), {
+        why: 'a runtime may be running that did not answer, and its run file names no process',
+        next: `jason runtime status answers once the runtime does, and jason runtime start starts one in place of a run file left behind. ${deleting}`,
+    });
+    assert.deepEqual(unansweredWords({ pid: null, runFile: file, unreadable: true }), {
+        why: `a runtime may be running: its run file, ${file}, is there and could not be read`,
+        next: `jason runtime status answers once the runtime does. ${deleting}`,
+    });
+});
+
 test('on Windows the carried executable is recognised whatever the case of its path; elsewhere only as written', async (t) => {
     const s = scratch(t);
     const { cli } = fakeCli({ status: () => ok({ instance_id: 'rt_A' }) });
@@ -131,16 +168,18 @@ test('on Windows the carried executable is recognised whatever the case of its p
 test('the application’s own dependencies resolve links and short names as the system does, and look at processes by their id', async (t) => {
     const s = scratch(t);
     const { cli } = fakeCli({ status: () => ok({ instance_id: 'rt_A' }) });
-    const run = { file: null as string | null };
-    const own = ownRuntimeDeps(process.platform, s.executable, () => run.file, cli);
+    const own = ownRuntimeDeps(process.platform, s.executable, s.runFile, cli);
     assert.equal(own.realpath, realpathSync.native, 'the system’s own resolver: realpathSync neither expands a short name nor gives the true case');
     assert.equal(own.isRunning, processIsRunning);
     assert.equal(own.executable, s.executable);
+    assert.equal(own.runFile, s.runFile);
+    assert.equal(own.readRunFile(), null, 'no run file');
+    mkdirSync(dirname(s.runFile), { recursive: true });
 
     // A link to the carried folder (a junction on Windows, a symbolic link elsewhere) names the carried executable.
     const link = join(s.root, 'linked');
     symlinkSync(dirname(s.executable), link, process.platform === 'win32' ? 'junction' : 'dir');
-    run.file = runFile('rt_A', join(link, 'jason.exe'));
+    writeFileSync(s.runFile, runFile('rt_A', join(link, 'jason.exe')));
     assert.equal((await whoseRuntime(own)).whose, 'ours', 'through a link');
 
     if (process.platform === 'win32') {
@@ -154,7 +193,7 @@ test('the application’s own dependencies resolve links and short names as the 
         if (short.toLowerCase() === long.toLowerCase()) {
             t.diagnostic('this volume makes no short names; the short-name case is not run');
         } else {
-            run.file = runFile('rt_A', join(short, 'resources', 'bundle', 'jason.exe'));
+            writeFileSync(s.runFile, runFile('rt_A', join(short, 'resources', 'bundle', 'jason.exe')));
             assert.equal((await whoseRuntime(own)).whose, 'ours', `through the short name ${short}`);
         }
     }
@@ -190,7 +229,7 @@ test('this application’s runtime is stopped through jason runtime stop, and an
     assert.deepEqual(none.asked, [], 'with no run file nothing is asked');
 
     const silent = fakeCli({ status: () => refused(3, 'runtime_unreachable') });
-    assert.deepEqual(await stopOwnRuntime(deps(s, { file: runFile('rt_A', s.executable) }, silent.cli)), { kind: 'unanswered', pid: plantedPid });
+    assert.deepEqual(await stopOwnRuntime(deps(s, { file: runFile('rt_A', s.executable) }, silent.cli)), { kind: 'unanswered', pid: plantedPid, runFile: s.runFile });
     assert.deepEqual(silent.asked, ['runtime status'], 'a runtime that did not answer is not asked to stop');
 });
 
@@ -229,7 +268,7 @@ test('a runtime that ended between the look and the stop is stopped, whatever th
     }
     // One that answers nothing after the stop while its process still runs did not stop, as far as anyone can tell.
     const { cli } = fakeCli({ status: (() => { let first = true; return () => (first ? ((first = false), ok({ instance_id: 'rt_A' })) : refused(3, 'runtime_unreachable')); })(), stop: () => refused(3, 'runtime_unreachable') });
-    assert.deepEqual(await stopOwnRuntime(deps(s, { file: runFile('rt_A', s.executable) }, cli)), { kind: 'unanswered', pid: plantedPid });
+    assert.deepEqual(await stopOwnRuntime(deps(s, { file: runFile('rt_A', s.executable) }, cli)), { kind: 'unanswered', pid: plantedPid, runFile: s.runFile });
 });
 
 test('the stop is given longer than the CLI waits for the runtime to exit', async (t) => {

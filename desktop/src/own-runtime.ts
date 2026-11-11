@@ -13,10 +13,11 @@
  * answers, the CLI could not ask) is taken for no runtime only when the process it names is not running. While that
  * process runs, or when the run file names none, it may be a runtime of this application that hangs or is starting,
  * so the answer is that nothing answered, and an update or an uninstall goes no further until a person has looked: a
- * reused process id can only err towards that answer. Nothing here is logged but what the CLI's own lines say.
+ * reused process id can only err towards that answer. So is a run file that is there and cannot be read: only one that
+ * is not there is no runtime. Nothing here is logged but what the CLI's own lines say.
  */
 
-import { realpathSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { posix, win32 } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
 
@@ -24,7 +25,9 @@ export interface OwnRuntimeDeps {
     platform: NodeJS.Platform;
     /** The jason executable the application carries. */
     executable: string;
-    /** `<data>/run/runtime.json`, or null when there is none. */
+    /** `<data>/run/runtime.json`, which a person is told about when it is left behind. */
+    runFile: string;
+    /** The run file's text, or null when there is none; throws when it is there and cannot be read. */
     readRunFile(): string | null;
     cli: Cli;
     /** The file a path names, links followed; throws when there is none. */
@@ -43,6 +46,8 @@ export interface RuntimeLook {
     whose: Whose;
     /** The process the run file names, or null when there is no run file or it names none. */
     pid: number | null;
+    /** Set when the run file is there and could not be read. */
+    unreadable?: true;
 }
 
 /** What came of stopping this application's runtime: only `none`, `another` and `stopped` let an update or an uninstall go on. */
@@ -51,7 +56,15 @@ export type StopOutcome =
     | { kind: 'another' }
     | { kind: 'stopped' }
     | { kind: 'failed'; exit: number }
-    | { kind: 'unanswered'; pid: number | null };
+    | Unanswered;
+
+/** A runtime that may be running and did not answer, with what a person is told to look at. */
+export interface Unanswered {
+    kind: 'unanswered';
+    pid: number | null;
+    runFile: string;
+    unreadable?: true;
+}
 
 /** `jason runtime status` answers at once or not at all; this bounds a runtime that takes the request and never answers. */
 const statusLimitMs = 30_000;
@@ -68,29 +81,49 @@ export function processIsRunning(pid: number): boolean {
     }
 }
 
-/**
- * The dependencies the application looks with: the system's own resolver, which on Windows expands a short name and
- * gives a path's true case, and the process table by id.
- */
-export function ownRuntimeDeps(platform: NodeJS.Platform, executable: string, readRunFile: () => string | null, cli: Cli): OwnRuntimeDeps {
-    return { platform, executable, readRunFile, cli, realpath: realpathSync.native, isRunning: processIsRunning };
+/** A run file's text, or null only when it is not there; any other error, a folder in its place say, is thrown. */
+export function readRunFileText(file: string): string | null {
+    try {
+        return readFileSync(file, 'utf8');
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+        throw error;
+    }
 }
 
 /**
- * Why a runtime that did not answer stops what was asked, and what the person does next, in the words of what
- * `jason runtime start` does with a run file left behind: it refuses beside a runtime that is still running and names
- * its process, and starts in place of one whose process has gone or now belongs to another program.
+ * The dependencies the application looks with: the run file as it is on disk, the system's own resolver, which on
+ * Windows expands a short name and gives a path's true case, and the process table by id.
  */
-export function unansweredWords(pid: number | null): { why: string; next: string } {
+export function ownRuntimeDeps(platform: NodeJS.Platform, executable: string, runFile: string, cli: Cli): OwnRuntimeDeps {
+    return { platform, executable, runFile, readRunFile: () => readRunFileText(runFile), cli, realpath: realpathSync.native, isRunning: processIsRunning };
+}
+
+/**
+ * Why a runtime that did not answer stops what was asked, and what the person does next: ask the runtime first; then
+ * learn from `jason runtime start` whether the process is the runtime (it refuses beside a runtime that is still running
+ * and names its process, and starts in place of one whose process has gone or now belongs to another program); end the
+ * process only once it is known to be a runtime that never answers; and delete the run file only when no runtime runs.
+ */
+export function unansweredWords(outcome: { pid: number | null; runFile: string; unreadable?: true }): { why: string; next: string } {
+    const deleting = `If no Jason runtime is running, deleting ${outcome.runFile} lets this go on.`;
+    if (outcome.unreadable) {
+        return {
+            why: `a runtime may be running: its run file, ${outcome.runFile}, is there and could not be read`,
+            next: `jason runtime status answers once the runtime does. ${deleting}`,
+        };
+    }
+    const pid = outcome.pid;
     if (pid === null) {
         return {
             why: 'a runtime may be running that did not answer, and its run file names no process',
-            next: 'jason runtime status answers once the runtime does, and jason runtime start starts one in place of a run file left behind.',
+            next: `jason runtime status answers once the runtime does, and jason runtime start starts one in place of a run file left behind. ${deleting}`,
         };
     }
     return {
         why: `a runtime may be running that did not answer: its run file names process ${pid}, which is running`,
-        next: `jason runtime status answers once the runtime does; if it never does, end process ${pid}. If process ${pid} is not a Jason runtime, jason runtime start starts one in place of the run file it left.`,
+        next: `jason runtime status answers once the runtime does. jason runtime start says whether process ${pid} is the runtime: it names it if it is, and starts one in place of the run file if it is not. If it is the runtime and never answers, end process ${pid}. ${deleting}`,
     };
 }
 
@@ -126,7 +159,12 @@ function namesCarried(deps: OwnRuntimeDeps, image: unknown): boolean {
 
 /** Whose the runtime the run file names is, and the process it names. */
 export async function whoseRuntime(deps: OwnRuntimeDeps): Promise<RuntimeLook> {
-    const text = deps.readRunFile();
+    let text: string | null;
+    try {
+        text = deps.readRunFile();
+    } catch {
+        return { whose: 'unanswered', pid: null, unreadable: true };
+    }
     if (text === null) return { whose: 'none', pid: null };
     const file = parse(text);
     const named = file?.['pid'];
@@ -152,7 +190,7 @@ export async function whoseRuntime(deps: OwnRuntimeDeps): Promise<RuntimeLook> {
 export async function stopOwnRuntime(deps: OwnRuntimeDeps): Promise<StopOutcome> {
     const look = await whoseRuntime(deps);
     if (look.whose === 'none' || look.whose === 'another') return { kind: look.whose };
-    if (look.whose === 'unanswered') return { kind: 'unanswered', pid: look.pid };
+    if (look.whose === 'unanswered') return unanswered(deps, look);
 
     const stop = await deps.cli.run(['runtime', 'stop'], { timeoutMs: stopLimitMs });
     const code = errorCode(stop);
@@ -160,6 +198,10 @@ export async function stopOwnRuntime(deps: OwnRuntimeDeps): Promise<StopOutcome>
     if (!gone) return { kind: 'failed', exit: stop.exit };
     const again = await whoseRuntime(deps);
     if (again.whose === 'ours') return { kind: 'failed', exit: stop.exit };
-    if (again.whose === 'unanswered') return { kind: 'unanswered', pid: again.pid };
+    if (again.whose === 'unanswered') return unanswered(deps, again);
     return { kind: 'stopped' };
+}
+
+function unanswered(deps: OwnRuntimeDeps, look: RuntimeLook): Unanswered {
+    return { kind: 'unanswered', pid: look.pid, runFile: deps.runFile, ...(look.unreadable ? { unreadable: true as const } : {}) };
 }

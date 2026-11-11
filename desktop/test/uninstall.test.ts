@@ -211,8 +211,9 @@ test('when the runtime this application carries does not stop, or a runtime did 
         { stop: async () => ({ kind: 'failed', exit: 1 }), acts: ['runtime stop'] },
         { stop: async () => ({ kind: 'failed', exit: -1 }), acts: ['runtime stop'] },
         { stop: async () => Promise.reject(new Error('planted-stop-error')), acts: [] },
-        { stop: async () => ({ kind: 'unanswered', pid: 4242 }), acts: [] },
-        { stop: async () => ({ kind: 'unanswered', pid: null }), acts: [] },
+        { stop: async () => ({ kind: 'unanswered', pid: 4242, runFile: 'C:/data/run/runtime.json' }), acts: [] },
+        { stop: async () => ({ kind: 'unanswered', pid: null, runFile: 'C:/data/run/runtime.json' }), acts: [] },
+        { stop: async () => ({ kind: 'unanswered', pid: null, runFile: 'C:/data/run/runtime.json', unreadable: true }), acts: [] },
     ];
     for (const { stop, acts: asked } of stops) {
         const { folder, deps, acts } = bench(t, { loginOn: true, registration: { registered: true, executable }, stop });
@@ -228,17 +229,17 @@ test('when the runtime this application carries does not stop, or a runtime did 
         assert.equal(message, 'Jason was not removed.');
         assert.match(
             detail,
-            /^Nothing was removed, because (the runtime this application carries is running and did not stop \(jason runtime stop (exited 1|did not finish)\)\. Stop it with jason runtime stop, then uninstall Jason again|a runtime may be running that did not answer(: its run file names process 4242, which is running|, and its run file names no process)\. jason runtime status answers once the runtime does[^]*\. Then uninstall Jason again)\.$/,
+            /^Nothing was removed, because (the runtime this application carries is running and did not stop \(jason runtime stop (exited 1|did not finish)\)\. Stop it with jason runtime stop, then uninstall Jason again|a runtime may be running( that did not answer(: its run file names process 4242, which is running|, and its run file names no process)|: its run file, [^,]+, is there and could not be read)\. jason runtime status answers once the runtime does[^]*\. Then uninstall Jason again)\.$/,
         );
         assert.doesNotMatch(detail, /planted/);
     }
     assert.equal(
-        runtimeRefusal({ kind: 'unanswered', pid: 4242 }),
-        'Nothing was removed, because a runtime may be running that did not answer: its run file names process 4242, which is running. jason runtime status answers once the runtime does; if it never does, end process 4242. If process 4242 is not a Jason runtime, jason runtime start starts one in place of the run file it left. Then uninstall Jason again.',
+        runtimeRefusal({ kind: 'unanswered', pid: 4242, runFile: 'C:/data/run/runtime.json' }),
+        'Nothing was removed, because a runtime may be running that did not answer: its run file names process 4242, which is running. jason runtime status answers once the runtime does. jason runtime start says whether process 4242 is the runtime: it names it if it is, and starts one in place of the run file if it is not. If it is the runtime and never answers, end process 4242. If no Jason runtime is running, deleting C:/data/run/runtime.json lets this go on. Then uninstall Jason again.',
     );
     assert.equal(
-        runtimeRefusal({ kind: 'unanswered', pid: null }),
-        'Nothing was removed, because a runtime may be running that did not answer, and its run file names no process. jason runtime status answers once the runtime does, and jason runtime start starts one in place of a run file left behind. Then uninstall Jason again.',
+        runtimeRefusal({ kind: 'unanswered', pid: null, runFile: 'C:/data/run/runtime.json' }),
+        'Nothing was removed, because a runtime may be running that did not answer, and its run file names no process. jason runtime status answers once the runtime does, and jason runtime start starts one in place of a run file left behind. If no Jason runtime is running, deleting C:/data/run/runtime.json lets this go on. Then uninstall Jason again.',
     );
 });
 

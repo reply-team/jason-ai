@@ -37,7 +37,7 @@ export async function runUninstall(quiet: boolean): Promise<number> {
     const cli = loggedCli(cliAt(executable, withPath(process.env, pathOf(process.env))), log);
     const folder = commandFolder(process.platform, process.env, home);
     const autostart = new RuntimeAutostart({ cli, log });
-    const own = ownRuntimeDeps(process.platform, executable, () => readText(paths.runFile), cli);
+    const own = ownRuntimeDeps(process.platform, executable, paths.runFile, cli);
     const report = await uninstall({
         platform: process.platform,
         runtime: { stop: () => stopOwnRuntime(own) },

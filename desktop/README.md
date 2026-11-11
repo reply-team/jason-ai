@@ -82,7 +82,8 @@ outside the navigation lock in `src/main.ts`.
 
 Before an update installs, the desktop stops the runtime its own `jason` runs as, with `jason runtime stop`, and goes no
 further when that runtime does not stop, or when the run file names a runtime that did not answer while the process it
-names still runs (`src/own-runtime.ts`); it asks only the data directory it was started with.
+names still runs, or when the run file is there and cannot be read (`src/own-runtime.ts`); it asks only the data
+directory it was started with.
 
 On Windows the installer and the uninstaller also look for any process running from the carried `jason.exe`, whichever
 data directory started it, and never close one (`installer/uninstall.nsh`). A person's uninstall starts the application

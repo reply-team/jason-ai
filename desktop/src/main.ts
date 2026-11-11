@@ -214,7 +214,7 @@ async function run(): Promise<void> {
               application: applicationFolder(process.platform, process.execPath),
               rollback,
               log,
-              stopRuntime: () => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, () => readText(paths.runFile), cli)),
+              stopRuntime: () => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)),
               refused: (why) => dialog.showErrorBox('Jason', why),
               async beforeInstall() {
                   quitting = true;

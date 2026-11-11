@@ -276,8 +276,9 @@ test('a runtime the application carries that does not stop keeps the update from
         async () => ({ kind: 'failed', exit: 1 }),
         async () => ({ kind: 'failed', exit: -1 }),
         async () => Promise.reject(new Error('planted-stop-error')),
-        async () => ({ kind: 'unanswered', pid: 4242 }),
-        async () => ({ kind: 'unanswered', pid: null }),
+        async () => ({ kind: 'unanswered', pid: 4242, runFile: 'C:/data/run/runtime.json' }),
+        async () => ({ kind: 'unanswered', pid: null, runFile: 'C:/data/run/runtime.json' }),
+        async () => ({ kind: 'unanswered', pid: null, runFile: 'C:/data/run/runtime.json', unreadable: true }),
     ];
     for (const stop of stops) {
         const s = scratch(t);
@@ -304,7 +305,7 @@ test('a runtime the application carries that does not stop keeps the update from
         assert.equal(told.length, 1);
         assert.match(
             told[0]!,
-            /^The update was not installed, because (the runtime this application carries did not stop \(jason runtime stop (exited 1|did not finish)\)\. Jason was left as it was\. Stop the runtime with jason runtime stop|a runtime may be running that did not answer(: its run file names process 4242, which is running|, and its run file names no process)\. Jason was left as it was\. jason runtime status answers once the runtime does[^]*)\. Then choose Restart Jason and Its Runtime to Install again\.$/,
+            /^The update was not installed, because (the runtime this application carries did not stop \(jason runtime stop (exited 1|did not finish)\)\. Jason was left as it was\. Stop the runtime with jason runtime stop|a runtime may be running( that did not answer(: its run file names process 4242, which is running|, and its run file names no process)|: its run file, [^,]+, is there and could not be read)\. Jason was left as it was\. jason runtime status answers once the runtime does[^]*)\. Then choose Restart Jason and Its Runtime to Install again\.$/,
         );
         assert.doesNotMatch(told[0]!, /planted/);
         assert.deepEqual(log.lines.at(-1), { level: 'error', name: 'update_failed', fields: { Step: 'runtime', Failures: 1 } });
@@ -312,8 +313,8 @@ test('a runtime the application carries that does not stop keeps the update from
     assert.match(runtimeRefusal({ kind: 'failed', exit: 1 }), /jason runtime stop exited 1/);
     assert.match(runtimeRefusal({ kind: 'failed', exit: -1 }), /jason runtime stop did not finish/);
     assert.equal(
-        runtimeRefusal({ kind: 'unanswered', pid: 4242 }),
-        'The update was not installed, because a runtime may be running that did not answer: its run file names process 4242, which is running. Jason was left as it was. jason runtime status answers once the runtime does; if it never does, end process 4242. If process 4242 is not a Jason runtime, jason runtime start starts one in place of the run file it left. Then choose Restart Jason and Its Runtime to Install again.',
+        runtimeRefusal({ kind: 'unanswered', pid: 4242, runFile: 'C:/data/run/runtime.json' }),
+        'The update was not installed, because a runtime may be running that did not answer: its run file names process 4242, which is running. Jason was left as it was. jason runtime status answers once the runtime does. jason runtime start says whether process 4242 is the runtime: it names it if it is, and starts one in place of the run file if it is not. If it is the runtime and never answers, end process 4242. If no Jason runtime is running, deleting C:/data/run/runtime.json lets this go on. Then choose Restart Jason and Its Runtime to Install again.',
     );
 });
 
