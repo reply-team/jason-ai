@@ -1,7 +1,8 @@
 # Jason UI
 
 The browser UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/`. One more client of the Runtime API
-(`POST /v1/<noun>.<verb>`), paired once with `jason ui open`, then bookmarked. Nothing in the runtime knows a screen exists.
+(`POST /v1/<noun>.<verb>`, and the one `GET`, the journal stream `GET /v1/journal.stream`), paired once with
+`jason ui open`, then bookmarked. Nothing in the runtime knows a screen exists.
 
 ## Build
 

@@ -30,7 +30,7 @@ Everything about a release happens in one repository, `reply-team/jason-ai`: the
 A release starts as the release pull request into `main`, whose run builds and tests the tree on Linux, macOS and
 Windows; merging it is the last review a release has. The tag `v<version>` pushed on that merge builds the release
 from it: the critical tests again under the tag's version, the three executables, the macOS and Windows ones signed
-and their archived signatures verified, and the plugins' and the UI's packages. The release job then writes the
+and their archived signatures verified, the plugins' and the UI's packages, and the desktop's. The release job then writes the
 manifest and the checksums and publishes the release at once, with the assets below and its notes, as the latest
 release unless a newer one already is or the version is a release candidate; a last job asks the Homebrew tap to bump
 its formula (§6). The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what

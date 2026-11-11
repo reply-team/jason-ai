@@ -236,6 +236,11 @@ version skips that setting without a word.
 
 Work the desktop's chat queues for a role runs under that role's own execution profile, not behind the chat's cards.
 
+With the desktop installed, the `jason` it carries moves with the desktop's own update (Check for Updates in its menu).
+`jason update apply` and `jason update rollback`, typed as that executable (the PATH command the desktop placed, or its
+full path), replace the file inside the application; on macOS that changes a signed application. A later release
+refuses them there. An installation with its own `jason`, from the install line or Homebrew, updates as before.
+
 The desktop's tray has not been seen on a screen, and the View menu's keys have not been typed at the operating system's
 level; the page receives them, but no run has shown the menu's accelerators fire. A person's run of the installed
 candidate covers both.
