@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Cli.Installation;
 using Jason.Cli.Process;
@@ -60,7 +61,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "apply",
-            "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair. Refused, before anything is fetched or stopped, when this jason is the one the desktop application carries: the desktop's Check for Updates updates the application and its jason together.");
+            "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair. Refused, before anything is fetched or stopped, when this jason is the one the desktop application carries, or when the update in flight is that jason's: the desktop's Check for Updates updates the application and its jason together.");
         var feed = new Option<string?>("--feed")
         {
             Description = "Read a different feed: the https address of a manifest.json, or http on this machine. Default: the public release feed.",
@@ -106,7 +107,9 @@ public static class UpdateCommands
 
         // Before anything at all: before a byte is fetched, the runtime is asked to drain or a step is recorded. A
         // carried executable reads the update record only to know whether it was handed an update an earlier release began.
-        if (RefusedAsCarried(env, "apply", carriesOnAHandOver: true) || RefusedAsManaged(env, "apply"))
+        if (RefusedAsCarried(env, "apply", carriesOnAHandOver: true)
+            || RefusedAsRecordedCarried(env, "apply", completeToo: false)
+            || RefusedAsManaged(env, "apply"))
         {
             return ExitCodes.ApiError;
         }
@@ -278,7 +281,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "rollback",
-            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Refused when this jason is the one the desktop application carries.");
+            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Refused when this jason is the one the desktop application carries, or when the update recorded is that jason's.");
         var human = VerbOptions.Human();
         command.Options.Add(human);
 
@@ -312,7 +315,9 @@ public static class UpdateCommands
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        if (RefusedAsCarried(env, "rollback", carriesOnAHandOver: false) || RefusedAsManaged(env, "rollback"))
+        if (RefusedAsCarried(env, "rollback", carriesOnAHandOver: false)
+            || RefusedAsRecordedCarried(env, "rollback", completeToo: true)
+            || RefusedAsManaged(env, "rollback"))
         {
             return ExitCodes.ApiError;
         }
@@ -378,14 +383,55 @@ public static class UpdateCommands
         try
         {
             return UpdateLedger.ReadFile(new UpdatePaths(env.Paths).Ledger) is { Step: >= UpdateStep.Swapped and not UpdateStep.Complete } ledger
-                && CarriedExecutable.Of(ledger.InstallPath)?.Executable is { } target
-                && string.Equals(target, carried.Executable, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                && carried.Is(ledger.InstallPath);
         }
-        catch (UpdateLedgerException)
+        catch (Exception error) when (error is UpdateLedgerException or IOException or UnauthorizedAccessException)
         {
             // Not an update record this build reads: nothing was handed over that it can tell, and the refusal stands.
             return false;
         }
+    }
+
+    /// <summary>
+    /// Refuses, and says so, where the update record names a carried executable other than the one this process runs
+    /// as. A resumed apply and a rollback act on the file the record names, not on their own, so another jason sharing
+    /// the data directory, one the install line put on the PATH say, would otherwise replace the application's file.
+    /// </summary>
+    /// <remarks>
+    /// An apply acts only on a record in flight, and plans a new update of its own file past a complete one; a rollback
+    /// acts on any record. A record that cannot be read refuses nothing here: the verb reads it again and answers as it
+    /// always has. The hand-over is not taken here: it is only for the carried file running as itself.
+    /// </remarks>
+    private static bool RefusedAsRecordedCarried(CliEnvironment env, string verb, bool completeToo)
+    {
+        var path = new UpdatePaths(env.Paths).Ledger;
+        UpdateLedger? ledger;
+        try
+        {
+            ledger = UpdateLedger.ReadFile(path);
+        }
+        catch (Exception error) when (error is UpdateLedgerException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        if (ledger is null
+            || (!completeToo && ledger.Step == UpdateStep.Complete)
+            || string.IsNullOrWhiteSpace(ledger.InstallPath)
+            || CarriedExecutable.Of(ledger.InstallPath) is not { } carried
+            || carried.Is(env.InstallPath ?? SelfExecutable.InstalledImage))
+        {
+            return false;
+        }
+
+        env.Out.WriteLine(CliErrors.Serialize(
+            UpdateCodes.CarriedByDesktop,
+            $"The update recorded at {path} belongs to the jason the Jason desktop application carries, at "
+            + $"{carried.Executable}, so `jason update {verb}` would change a file inside the application. "
+            + "The application and the jason it carries are updated together: choose Check for Updates in the "
+            + "desktop's Jason menu, or in the menu of its icon in the tray.",
+            retryable: false));
+        return true;
     }
 
     /// <summary>

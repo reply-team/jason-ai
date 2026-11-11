@@ -83,6 +83,14 @@ public sealed record CarriedExecutable(string Executable, string Record, string 
         }
     }
 
+    /// <summary>Whether <paramref name="executable"/>, with any link resolved, is this carried file.</summary>
+    public bool Is(string? executable) =>
+        executable is not null
+        && string.Equals(
+            Path.GetFullPath(Resolved(executable)),
+            Executable,
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
     /// <summary>The file a path names with every link on the way resolved, or the path itself where it is no link or cannot be read.</summary>
     private static string Resolved(string path)
     {

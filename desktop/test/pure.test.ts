@@ -129,6 +129,8 @@ test('the system screen’s sentence names Check for Updates when the runtime is
     assert.match(sentence, /0\.35\.0/);
     assert.match(sentence, /0\.34\.0/);
     assert.match(sentence, /Check for Updates…/);
+    // A Windows or Linux window shows no menu bar, so the sentence names the tray's menu too, in the CLI's own words.
+    assert.match(sentence, /in the desktop's Jason menu, or in the menu of its icon in the tray/);
     assert.doesNotMatch(sentence, /jason update/);
 });
 

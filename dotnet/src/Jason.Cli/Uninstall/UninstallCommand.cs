@@ -431,6 +431,13 @@ public static class UninstallCommand
             : $"The data directory at {plan.DataDirectory} is kept. --purge-data removes it.");
     }
 
+    private static string RemovingTheApplication() =>
+        OperatingSystem.IsWindows()
+            ? "Uninstall Jason from Installed apps in Settings: its uninstaller stops the runtime the application carries and takes off what it placed."
+            : OperatingSystem.IsMacOS()
+                ? "Take off what the application placed from its Jason menu, quit it, then move Jason.app to the Trash."
+                : "Take off what the application placed from its Jason menu, quit it, then remove the package it was installed from, or delete the AppImage.";
+
     /// <summary>
     /// The one shape a refusal takes: the error envelope on stdout by default, a sentence on stderr under
     /// <c>--human</c>, and exit 1 — understood, and declined.
@@ -440,13 +447,6 @@ public static class UninstallCommand
     /// refusals printed their sentence on stdout, so the same verb put a refusal in two places depending on how
     /// early it came.
     /// </remarks>
-    private static string RemovingTheApplication() =>
-        OperatingSystem.IsWindows()
-            ? "Uninstall Jason from Installed apps in Settings: its uninstaller stops the runtime the application carries and takes off what it placed."
-            : OperatingSystem.IsMacOS()
-                ? "Take off what the application placed from its Jason menu, quit it, then move Jason.app to the Trash."
-                : "Take off what the application placed from its Jason menu, quit it, then remove the package it was installed from, or delete the AppImage.";
-
     private static int Refuse(CliEnvironment env, bool human, string code, string message)
     {
         if (human)

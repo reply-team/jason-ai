@@ -454,10 +454,12 @@ The file is the application's: on macOS it is part of a signed application, and 
 desktop's own update, Check for Updates… in its menu, replaces the application and the `jason` inside it together, and
 the system's way of removing the application removes both. So, run as a carried executable, `jason update apply` and
 `jason update rollback` refuse with `update_carried_by_desktop` (§7), and `jason uninstall` with
-`uninstall_carried_by_desktop` (§9), before anything is fetched, stopped, read or removed. `jason update check` and
-`jason status` answer as they do anywhere. When the runtime the desktop finds is another version than the one it
-carries, its system screen names Check for Updates where that runtime runs from the carried `jason`, and
-`jason update` where it is another installation's.
+`uninstall_carried_by_desktop` (§9), before anything is fetched, stopped, read or removed. A resumed apply and a
+rollback act on the file the update record names, not on the one they run as, so another `jason` sharing the data
+directory, one the install line put on the PATH say, refuses both the same way where that record names a carried file
+other than itself. `jason update check` and `jason status` answer as they do anywhere. When the runtime the desktop
+finds is another version than the one it carries, its system screen names Check for Updates where that runtime runs
+from the carried `jason`, and `jason update` where it is another installation's.
 
 A desktop whose `jason` was built before this refusal, the candidate 0.34.0-rc.1, carries the record too, but its
 apply takes every step up to `swapped` in its own process before it hands the rest to the new build (§7): the carried
@@ -502,7 +504,8 @@ still the old build; `jason status` says so in its required `runtime_version` ch
 **It refuses a `jason` the desktop application carries** (§6), with `update_carried_by_desktop`, before anything is
 staged, drained or stopped, and so does `jason update rollback`: the desktop's Check for Updates updates the application
 and its `jason` together. The one update it carries on is one handed to it past `swapped` whose install path is the
-carried file itself, which only the apply of a desktop's `jason` from before this refusal leaves.
+carried file itself, which only the apply of a desktop's `jason` from before this refusal leaves. Any other `jason`
+refuses too where the update in flight, or for a rollback the update recorded, names a carried file other than itself.
 
 Where the feed names no release, `jason update apply` answers `update_feed_unreachable` and does nothing;
 there is nothing to apply until one is published. The feed resolves to the latest release, and a repository
@@ -857,7 +860,7 @@ a code on its own tells nobody what to do next.
 | `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed; no archive is downloaded and no update begins. From 0.20.0 the message names both commands, `jason update apply --version <floor>` and then `jason update apply` or `jason update apply --version <to>` when the apply named one; a build before 0.20.0 names the version to install first, which the same two commands reach |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
 | `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade, `jason runtime start` |
-| `update_carried_by_desktop` | this `jason` is the one the desktop application carries, known by the `version.json` beside it (§6), so the file is the application's and not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message names the desktop's Check for Updates, which updates the application and its `jason` together |
+| `update_carried_by_desktop` | this `jason` is the one the desktop application carries, known by the `version.json` beside it (§6), or the update recorded names such a file other than this one, so the file is the application's and not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message names the desktop's Check for Updates, which updates the application and its `jason` together |
 | `update_cross_volume` | the staged file and the install path are on different volumes. An update renames rather than copies, because a half-copied executable is the one state nothing can recover from. Point `JASON_DATA_DIR` at the executable's volume, or install Jason on the data directory's |
 | `update_runtime_unreachable` | the runtime would not drain or would not stop, so nothing was replaced |
 | `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed, or the new executable could not be run to finish the update. The executable can be put back |

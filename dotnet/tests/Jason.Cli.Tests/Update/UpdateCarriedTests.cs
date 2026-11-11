@@ -145,6 +145,114 @@ public sealed class UpdateCarriedTests
         Assert.Equal("update_carried_by_desktop", RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
     }
 
+    /// <summary>
+    /// The update record a carried jason left names its file, and a resumed apply acts on the record's install path,
+    /// not on the file it runs as. So another jason sharing the data directory, one the install line put on the PATH,
+    /// is refused too where the record in flight names a carried file, and the application's file stays as it is.
+    /// </summary>
+    [Fact]
+    public async Task An_ordinary_jason_does_not_resume_an_update_in_flight_on_a_carried_executable()
+    {
+        using var installation = new FakeInstallation();
+        installation.Killed(UpdateStep.Stopped);
+        CarriedRecord.Beside(installation.InstallPath);
+        var ordinary = Ordinary(installation);
+        var ledger = File.ReadAllText(installation.Update.Ledger);
+        var before = File.ReadAllText(installation.InstallPath);
+
+        var env = installation.Env with { InstallPath = ordinary };
+        var exit = await UpdateCommands.ApplyAsync(env, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal("update_carried_by_desktop", refusal.Code);
+        Assert.False(refusal.Retryable, "the record names the same file next time");
+        Assert.Contains(installation.InstallPath, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("`jason update apply`", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("Check for Updates", refusal.Message, StringComparison.Ordinal);
+
+        Assert.Equal(ledger, File.ReadAllText(installation.Update.Ledger));
+        Assert.Equal(before, File.ReadAllText(installation.InstallPath));
+        var staged = installation.Update.StagedExecutable(installation.To);
+        Assert.True(File.Exists(staged), "the staged executable was moved");
+        Assert.False(File.Exists(installation.Update.PreviousExecutable), "the carried file was moved aside");
+        Assert.Equal("jason 0.34.0", File.ReadAllText(ordinary));
+        Assert.Empty(installation.Fetched);
+        Assert.Empty(installation.Processes.Runs);
+    }
+
+    /// <summary>
+    /// A rollback acts on the record's install path too, so it is refused the same way and moves nothing.
+    /// </summary>
+    [Fact]
+    public async Task An_ordinary_jason_does_not_roll_back_an_update_of_a_carried_executable()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        installation.Killed(UpdateStep.Complete);
+        CarriedRecord.Beside(installation.InstallPath);
+        var ordinary = Ordinary(installation);
+        var ledger = File.ReadAllText(installation.Update.Ledger);
+        var operations = installation.Operations.Count;
+        var before = File.ReadAllText(installation.InstallPath);
+
+        var env = installation.Env with { InstallPath = ordinary };
+        var exit = await UpdateCommands.RollBackAsync(env, human: false, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal("update_carried_by_desktop", refusal.Code);
+        Assert.Contains(installation.InstallPath, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("`jason update rollback`", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("Check for Updates", refusal.Message, StringComparison.Ordinal);
+
+        Assert.Equal(ledger, File.ReadAllText(installation.Update.Ledger));
+        Assert.True(File.Exists(installation.Update.PreviousExecutable), "the executable an update kept was moved");
+        Assert.Equal(before, File.ReadAllText(installation.InstallPath));
+        Assert.Equal("jason 0.34.0", File.ReadAllText(ordinary));
+        Assert.Equal(operations, installation.Operations.Count);
+        Assert.True(installation.Running, "the runtime was stopped for a rollback that was refused");
+    }
+
+    /// <summary>A record in flight that names the ordinary jason's own file is carried on as it always was.</summary>
+    [Fact]
+    public async Task An_ordinary_jason_resumes_an_update_in_flight_on_its_own_file()
+    {
+        using var installation = new FakeInstallation();
+        installation.Killed(UpdateStep.Stopped);
+        var feed = installation.Feed.AbsoluteUri;
+
+        var exit = await UpdateCommands.ApplyAsync(installation.Env, feed, null, 0, human: false, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+        Assert.Equal(UpdateStep.Complete, installation.Ledger()!.Step);
+    }
+
+    /// <summary>
+    /// A record the account cannot read while a carried jason asks whether it was handed an update is no hand-over:
+    /// the refusal stands and is said as one, rather than the read's failure escaping. The file is held open with no
+    /// sharing: Windows refuses every other open of it, and .NET on Linux and macOS refuses one through the advisory
+    /// lock it takes.
+    /// </summary>
+    [Fact]
+    public async Task A_record_that_cannot_be_read_hands_nothing_over_to_a_carried_executable()
+    {
+        using var installation = new FakeInstallation();
+        installation.Killed(UpdateStep.Swapped);
+        CarriedRecord.Beside(installation.InstallPath);
+        var feed = installation.Feed.AbsoluteUri;
+
+        int exit;
+        using (new FileStream(installation.Update.Ledger, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            exit = await UpdateCommands.ApplyAsync(installation.Env, feed, null, 0, human: false, Ct);
+        }
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal("update_carried_by_desktop", RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+        Assert.Equal(UpdateStep.Swapped, installation.Ledger()!.Step);
+    }
+
     /// <summary>The check and the update's own record answer as they always have: neither changes a file.</summary>
     [Fact]
     public async Task Check_and_status_answer_as_before_for_a_carried_executable()
@@ -167,5 +275,15 @@ public sealed class UpdateCarriedTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(installation.To.ToString(), installation.Installed());
+    }
+
+    /// <summary>A jason on the PATH, as the install line puts one, beside no record.</summary>
+    private static string Ordinary(FakeInstallation installation)
+    {
+        var bin = Path.Combine(Path.GetDirectoryName(installation.InstallDirectory)!, "bin");
+        Directory.CreateDirectory(bin);
+        var path = Path.Combine(bin, Path.GetFileName(installation.InstallPath));
+        File.WriteAllText(path, "jason 0.34.0");
+        return path;
     }
 }

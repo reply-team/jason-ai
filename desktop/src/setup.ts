@@ -161,7 +161,10 @@ export function versionsDifferSentence(runtimeVersion: string | null, bundleVers
     // A build after a plus names the commit, not another version.
     const bare = (version: string) => version.split('+')[0];
     if (runtimeVersion === null || bare(runtimeVersion) === bare(bundleVersion)) return null;
-    const way = ours ? 'Choose Check for Updates… in the Jason menu' : 'Run `jason update`';
+    // A Windows or Linux window shows no menu bar, so the tray's menu is named too, in the CLI's own words.
+    const way = ours
+        ? "Choose Check for Updates… in the desktop's Jason menu, or in the menu of its icon in the tray,"
+        : 'Run `jason update`';
     return `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is. ${way} to bring them to one version.`;
 }
 
