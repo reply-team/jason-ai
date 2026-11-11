@@ -43,6 +43,12 @@ export const runFileCalls: Readonly<Record<string, number>> = { 'src/programs.ts
 
 const runFileCall = /\brunFile\s*\(/g;
 const runFileDefinition = /function\s+runFile\s*\(/g;
+/** The program runner's module, by its specifier: `./programs.ts` or `./programs`. */
+const programsModule = String.raw`['"]\.\/programs(?:\.ts)?['"]`;
+/** An import or re-export that names `runFile`, under any name it is given. */
+const runFileNamed = new RegExp(String.raw`(?:import|export)\s*(?:type\s+)?\{[^}]*\brunFile\b[^}]*\}\s*from\s*${programsModule}`);
+/** The runner's module taken whole, so what it holds is reached by a name the guard cannot read. */
+const programsWhole = new RegExp(String.raw`import\s*\*\s*as\s+\w+\s*from\s*${programsModule}|\b(?:require|import)\s*\(\s*${programsModule}`);
 
 /** The one module allowed to register an IPC handler, because it checks every sender's origin first. */
 export const ipcModule = 'src/ipc.ts';
@@ -116,6 +122,9 @@ export function processViolations(path: string, text: string): string[] {
     }
     const runs = [...text.matchAll(runFileCall)].length - [...text.matchAll(runFileDefinition)].length;
     if (runs > (runFileCalls[path] ?? 0)) found.push(`${path} calls the program runner ${runs} times; only the runner itself and a set-up chat's one naming run may`);
+    if (!(path in runFileCalls) && (runFileNamed.test(text) || programsWhole.test(text))) {
+        found.push(`${path} imports the program runner; only the runner itself and a set-up chat's naming run may`);
+    }
     if (killTaken.test(text)) found.push(`${path} takes kill from process, which hides what it signals`);
     if (openPath.test(text)) found.push(`${path} uses shell.openPath, which opens a file with whatever the system runs it with`);
     const lock = path === 'src/main.ts' ? lockNavigationBody(text) : null;
