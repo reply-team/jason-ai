@@ -1,7 +1,7 @@
 // How scripts/check-package.mjs reads a built package back: the updater's app-update.yml as electron-builder wrote it
-// into the package, and the fuse wire of the binary Electron reads its fuses from, each held to the configuration the
-// package was built from. The packages here are made up: a folder or a .app holding those two files, the fuse wire
-// written by the same library electron-builder flips the fuses with.
+// into the package, the fuse wire of the binary Electron reads its fuses from, and on Linux which updater the package
+// makes, each held to the configuration the package was built from. The packages here are made up: a folder or a .app
+// holding those files, the fuse wire written by the same library electron-builder flips the fuses with.
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { fuses, signer } from '../electron-builder.config.mjs';
-import { checkPackage, fuseFile, updateFile, wireOrder } from '../scripts/check-package.mjs';
+import { checkPackage, fuseFile, updateFile, wireOrder, type Form, type Platform } from '../scripts/check-package.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const library = createRequire(join(root, 'package.json'))('@electron/fuses') as {
@@ -22,7 +22,11 @@ const library = createRequire(join(root, 'package.json'))('@electron/fuses') as 
 };
 const sentinel = 'dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX';
 
-type Platform = 'win32' | 'darwin';
+/** A package as one of the four kinds a release builds: Windows', a Mac's, and Linux's deb and AppImage. */
+type Kind = 'win32' | 'darwin' | 'linux-deb' | 'linux-appimage';
+const platformOf = (kind: Kind): Platform => (kind.startsWith('linux') ? 'linux' : (kind as Platform));
+const formOf = (kind: Kind): Form | undefined => (kind === 'linux-deb' ? 'deb' : kind === 'linux-appimage' ? 'appimage' : undefined);
+const check = (app: string, kind: Kind) => checkPackage(app, platformOf(kind), formOf(kind));
 
 test('the fuse library these rows write with is declared, pinned, and the one copy electron-builder flips the fuses with', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { devDependencies: Record<string, string> };
@@ -47,7 +51,7 @@ function binary(length: number, copies = 1, shipped: (index: number) => number =
     return Buffer.concat(parts);
 }
 
-const updaterFile = (platform: Platform) => [
+const updaterFile = (platform: Kind) => [
     'owner: reply-team',
     'repo: jason-ai',
     'provider: github',
@@ -57,24 +61,40 @@ const updaterFile = (platform: Platform) => [
     '',
 ].join('\n');
 
-/** A package as electron-builder lays it out, with its fuses flipped as the configuration says, by the library. */
-async function made(t: { after(fn: () => void): void }, platform: Platform, options: { length?: number; copies?: number; updater?: string | null } = {}): Promise<string> {
+/** The menu entry an AppImage carries at its root, as electron-builder writes it for the static runtime. */
+const menuEntry = (exec: string) => ['[Desktop Entry]', 'Name=Jason', `Exec=${exec}`, 'Terminal=false', 'Type=Application', 'Icon=jason-desktop-app', ''].join('\n');
+
+/**
+ * A package as electron-builder lays it out, with its fuses flipped as the configuration says, by the library: a deb's
+ * folder, /opt/Jason, carries package-type reading deb; an AppImage's, as --appimage-extract writes it, carries AppRun
+ * and the menu entry beside the program, and no package-type.
+ */
+async function made(
+    t: { after(fn: () => void): void },
+    platform: Kind,
+    options: { length?: number; copies?: number; updater?: string | null; packageType?: string | null; appRun?: boolean; exec?: string } = {},
+): Promise<string> {
     const folder = temporary(t);
-    const app = platform === 'win32' ? join(folder, 'win-unpacked') : join(folder, 'mac-arm64', 'Jason.app');
-    mkdirSync(dirname(fuseFile(app, platform)), { recursive: true });
-    mkdirSync(dirname(updateFile(app, platform)), { recursive: true });
-    writeFileSync(fuseFile(app, platform), binary(options.length ?? 9, options.copies ?? 1));
+    const app = platform === 'win32' ? join(folder, 'win-unpacked') : platform === 'darwin' ? join(folder, 'mac-arm64', 'Jason.app') : join(folder, platform === 'linux-deb' ? 'Jason' : 'squashfs-root');
+    const on = platformOf(platform);
+    mkdirSync(dirname(fuseFile(app, on)), { recursive: true });
+    mkdirSync(dirname(updateFile(app, on)), { recursive: true });
+    writeFileSync(fuseFile(app, on), binary(options.length ?? 9, options.copies ?? 1));
     const config: Record<string, unknown> = { version: library.FuseVersion.V1 };
     for (const [name, value] of Object.entries(fuses)) config[String(wireOrder.indexOf(name))] = value;
-    await library.flipFuses(platform === 'win32' ? fuseFile(app, platform) : join(app, 'Contents', 'MacOS', 'Jason'), config);
+    await library.flipFuses(on === 'darwin' ? join(app, 'Contents', 'MacOS', 'Jason') : fuseFile(app, on), config);
     const updater = options.updater === undefined ? updaterFile(platform) : options.updater;
-    if (updater !== null) writeFileSync(updateFile(app, platform), updater);
+    if (updater !== null) writeFileSync(updateFile(app, on), updater);
+    const packageType = options.packageType === undefined ? (platform === 'linux-deb' ? 'deb\n' : null) : options.packageType;
+    if (packageType !== null) writeFileSync(join(app, 'resources', 'package-type'), packageType);
+    if (options.appRun ?? platform === 'linux-appimage') writeFileSync(join(app, 'AppRun'), '#!/usr/bin/env bash\n');
+    if (platform === 'linux-appimage') writeFileSync(join(app, 'jason-desktop-app.desktop'), menuEntry(options.exec ?? 'AppRun %U'));
     return app;
 }
 
 /** Sets one byte of every fuse wire in the package's binary. */
-function setFuse(app: string, platform: Platform, index: number, state: number, which: 'every' | 'last' = 'every'): void {
-    const file = fuseFile(app, platform);
+function setFuse(app: string, kind: Kind, index: number, state: number, which: 'every' | 'last' = 'every'): void {
+    const file = fuseFile(app, platformOf(kind));
     const bytes = readFileSync(file);
     let at = bytes.indexOf(sentinel);
     const found: number[] = [];
@@ -94,21 +114,28 @@ test('the wire order is the fuse library\'s, and every fuse the configuration se
     for (const name of Object.keys(fuses)) assert.ok(wireOrder.includes(name), name);
 });
 
-test('the binary Electron reads its fuses from: Jason.exe beside resources on Windows, the framework inside the .app on macOS', () => {
+test('the binary Electron reads its fuses from: the program beside resources on Windows and Linux, the framework inside the .app on macOS', () => {
     assert.equal(fuseFile(join('D:', 'app'), 'win32'), join('D:', 'app', 'Jason.exe'));
+    assert.equal(fuseFile(join('opt', 'Jason'), 'linux'), join('opt', 'Jason', 'jason-desktop-app'));
+    assert.equal(updateFile(join('opt', 'Jason'), 'linux'), join('opt', 'Jason', 'resources', 'app-update.yml'));
     assert.equal(updateFile(join('D:', 'app'), 'win32'), join('D:', 'app', 'resources', 'app-update.yml'));
     assert.equal(fuseFile(join('dist', 'mac', 'Jason.app'), 'darwin'), join('dist', 'mac', 'Jason.app', 'Contents', 'Frameworks', 'Electron Framework.framework', 'Electron Framework'));
     assert.equal(updateFile(join('dist', 'mac', 'Jason.app'), 'darwin'), join('dist', 'mac', 'Jason.app', 'Contents', 'Resources', 'app-update.yml'));
 });
 
-for (const platform of ['win32', 'darwin'] as const) {
+for (const platform of ['win32', 'darwin', 'linux-deb', 'linux-appimage'] as const) {
     test(`${platform}: a package built as configured is accepted, and what was read is said`, async (t) => {
         const app = await made(t, platform);
-        const said = checkPackage(app, platform);
+        const said = check(app, platform);
         assert.ok(said.includes('app-update.yml: provider github, owner reply-team, repo jason-ai' + (platform === 'win32' ? `, publisher ${signer}` : '')), said.join('\n'));
         assert.ok(said.includes('fuse runAsNode: disabled'), said.join('\n'));
         assert.ok(said.includes('fuse onlyLoadAppFromAsar: enabled'), said.join('\n'));
         assert.ok(said.includes('fuse 8: enabled, as Electron left it'), said.join('\n'));
+        if (platform === 'linux-deb') assert.ok(said.includes('package-type: deb, so electron-updater makes its deb updater'), said.join('\n'));
+        if (platform === 'linux-appimage') {
+            assert.ok(said.includes('package-type: none, so electron-updater makes its AppImage updater'), said.join('\n'));
+            assert.ok(said.includes('jason-desktop-app.desktop: Exec=AppRun %U'), said.join('\n'));
+        }
     });
 
     for (const [index, name] of wireOrder.entries()) {
@@ -116,64 +143,95 @@ for (const platform of ['win32', 'darwin'] as const) {
             const app = await made(t, platform);
             const wanted = (fuses as Record<string, boolean>)[name];
             setFuse(app, platform, index, wanted ? 0x30 : 0x31);
-            assert.throws(() => checkPackage(app, platform), new RegExp(`fuse ${name} is ${wanted ? 'disabled' : 'enabled'}, and the configuration says ${wanted ? 'enabled' : 'disabled'}`));
+            assert.throws(() => check(app, platform), new RegExp(`fuse ${name} is ${wanted ? 'disabled' : 'enabled'}, and the configuration says ${wanted ? 'enabled' : 'disabled'}`));
         });
     }
 
     test(`${platform}: a fuse removed from the binary is refused`, async (t) => {
         const app = await made(t, platform);
         setFuse(app, platform, wireOrder.indexOf('runAsNode'), 'r'.charCodeAt(0));
-        assert.throws(() => checkPackage(app, platform), /fuse runAsNode is removed, and the configuration says disabled/);
+        assert.throws(() => check(app, platform), /fuse runAsNode is removed, and the configuration says disabled/);
     });
 
     test(`${platform}: every copy of the wire is read, the last as the first`, async (t) => {
         const app = await made(t, platform, { copies: 2 });
-        assert.doesNotThrow(() => checkPackage(app, platform));
+        assert.doesNotThrow(() => check(app, platform));
         setFuse(app, platform, wireOrder.indexOf('enableNodeOptionsEnvironmentVariable'), 0x31, 'last');
-        assert.throws(() => checkPackage(app, platform), /fuse enableNodeOptionsEnvironmentVariable is enabled, and the configuration says disabled/);
+        assert.throws(() => check(app, platform), /fuse enableNodeOptionsEnvironmentVariable is enabled, and the configuration says disabled/);
     });
 
     test(`${platform}: a binary with no fuse wire, or one too short for the configuration, is refused`, async (t) => {
         const app = await made(t, platform);
-        writeFileSync(fuseFile(app, platform), Buffer.from('no wire here'));
-        assert.throws(() => checkPackage(app, platform), /holds no fuse wire/);
-        writeFileSync(fuseFile(app, platform), binary(7));
-        assert.throws(() => checkPackage(app, platform), /holds 7 fuses, and the configuration sets grantFileProtocolExtraPrivileges/);
+        writeFileSync(fuseFile(app, platformOf(platform)), Buffer.from('no wire here'));
+        assert.throws(() => check(app, platform), /holds no fuse wire/);
+        writeFileSync(fuseFile(app, platformOf(platform)), binary(7));
+        assert.throws(() => check(app, platform), /holds 7 fuses, and the configuration sets grantFileProtocolExtraPrivileges/);
     });
 
     test(`${platform}: a package without app-update.yml is refused`, async (t) => {
         const app = await made(t, platform, { updater: null });
-        assert.throws(() => checkPackage(app, platform), /holds no app-update\.yml/);
+        assert.throws(() => check(app, platform), /holds no app-update\.yml/);
     });
 
     for (const [key, other] of [['provider', 'generic'], ['owner', 'someone-else'], ['repo', 'another-repository']] as const) {
         test(`${platform}: an app-update.yml naming another ${key} is refused`, async (t) => {
             const app = await made(t, platform, { updater: updaterFile(platform).replace(new RegExp(`^${key}: .*$`, 'm'), `${key}: ${other}`) });
-            assert.throws(() => checkPackage(app, platform), new RegExp(`app-update\\.yml says ${key} ${other}, and the package is built with ${key} `));
+            assert.throws(() => check(app, platform), new RegExp(`app-update\\.yml says ${key} ${other}, and the package is built with ${key} `));
         });
 
         test(`${platform}: an app-update.yml without its ${key} is refused`, async (t) => {
             const app = await made(t, platform, { updater: updaterFile(platform).replace(new RegExp(`^${key}: .*\\n`, 'm'), '') });
-            assert.throws(() => checkPackage(app, platform), new RegExp(`app-update\\.yml says ${key} nothing, and the package is built with ${key} `));
+            assert.throws(() => check(app, platform), new RegExp(`app-update\\.yml says ${key} nothing, and the package is built with ${key} `));
         });
     }
 }
 
 test('win32: an app-update.yml without the publisher an update must carry is refused, since the updater would check none', async (t) => {
     const app = await made(t, 'win32', { updater: updaterFile('darwin') });
-    assert.throws(() => checkPackage(app, 'win32'), new RegExp(`app-update\\.yml names the publishers nothing, and an update must be signed by ${signer} alone`));
+    assert.throws(() => check(app, 'win32'), new RegExp(`app-update\\.yml names the publishers nothing, and an update must be signed by ${signer} alone`));
 });
 
 test('win32: an app-update.yml naming another publisher, or one more, is refused', async (t) => {
     const other = await made(t, 'win32', { updater: updaterFile('win32').replace(signer, 'Someone Else Ltd.') });
-    assert.throws(() => checkPackage(other, 'win32'), /names the publishers Someone Else Ltd\./);
+    assert.throws(() => check(other, 'win32'), /names the publishers Someone Else Ltd\./);
     const more = await made(t, 'win32', { updater: `${updaterFile('win32')}  - Someone Else Ltd.\n` });
-    assert.throws(() => checkPackage(more, 'win32'), new RegExp(`names the publishers ${signer}, Someone Else Ltd\\.`));
+    assert.throws(() => check(more, 'win32'), new RegExp(`names the publishers ${signer}, Someone Else Ltd\\.`));
 });
 
 test('darwin: a publisher in a Mac package\'s app-update.yml is not read: the Mac updater holds an update to the signature of the application it replaces', async (t) => {
     const app = await made(t, 'darwin', { updater: updaterFile('win32') });
-    assert.doesNotThrow(() => checkPackage(app, 'darwin'));
+    assert.doesNotThrow(() => check(app, 'darwin'));
+});
+
+test('linux: a deb without package-type, or with one naming another package, is refused, since its updater would not be the deb\'s', async (t) => {
+    const none = await made(t, 'linux-deb', { packageType: null });
+    assert.throws(() => check(none, 'linux-deb'), /holds no resources\/package-type, so electron-updater would make its AppImage updater for a deb/);
+    const rpm = await made(t, 'linux-deb', { packageType: 'rpm\n' });
+    assert.throws(() => check(rpm, 'linux-deb'), /package-type says rpm, and a deb's must say deb/);
+});
+
+test('linux: an AppImage carrying package-type is refused, since electron-updater would update it as that package', async (t) => {
+    const app = await made(t, 'linux-appimage', { packageType: 'deb\n' });
+    assert.throws(() => check(app, 'linux-appimage'), /The AppImage carries resources\/package-type saying deb, so electron-updater would update it as a deb/);
+});
+
+test('linux: each form is what it says: an AppImage has AppRun at its root, and a deb\'s folder has none', async (t) => {
+    const flat = await made(t, 'linux-appimage', { appRun: false });
+    assert.throws(() => check(flat, 'linux-appimage'), /holds no AppRun; it is not an AppImage's contents/);
+    const deb = await made(t, 'linux-deb', { appRun: true });
+    assert.throws(() => check(deb, 'linux-deb'), /holds AppRun; it is an AppImage's contents, not a deb's folder/);
+});
+
+test('linux: an AppImage whose menu entry starts the program with --no-sandbox is refused', async (t) => {
+    const app = await made(t, 'linux-appimage', { exec: 'AppRun --no-sandbox %U' });
+    assert.throws(() => check(app, 'linux-appimage'), /jason-desktop-app\.desktop starts the program with --no-sandbox/);
+});
+
+test('linux: the form is required and is one of deb and appimage, and only Linux has one', async (t) => {
+    const app = await made(t, 'linux-deb');
+    assert.throws(() => checkPackage(app, 'linux'), /A Linux package is a deb or an AppImage/);
+    assert.throws(() => checkPackage(app, 'linux', 'rpm' as Form), /A Linux package is a deb or an AppImage/);
+    assert.throws(() => checkPackage(app, 'win32', 'deb'), /Only a Linux package has a form/);
 });
 
 test('run as a program: what was read on stdout and exit 0, a refusal on stderr and exit 1, an unknown platform exit 2', async (t) => {
@@ -188,7 +246,14 @@ test('run as a program: what was read on stdout and exit 0, a refusal on stderr 
     assert.equal(refused.status, 1);
     assert.match(refused.stderr, /fuse runAsNode is enabled, and the configuration says disabled/);
 
-    const usage = spawnSync(process.execPath, [script, '--app', app, '--platform', 'linux'], { encoding: 'utf8' });
-    assert.equal(usage.status, 2);
-    assert.match(usage.stderr, /--app <package> --platform win32\|darwin/);
+    for (const args of [['--platform', 'freebsd'], ['--platform', 'linux'], ['--platform', 'linux', '--form', 'rpm'], ['--platform', 'win32', '--form', 'deb']]) {
+        const usage = spawnSync(process.execPath, [script, '--app', app, ...args], { encoding: 'utf8' });
+        assert.equal(usage.status, 2, args.join(' '));
+        assert.match(usage.stderr, /--app <package> --platform win32\|darwin\|linux \[--form deb\|appimage\]/);
+    }
+
+    const deb = await made(t, 'linux-deb');
+    const read = spawnSync(process.execPath, [script, '--app', deb, '--platform', 'linux', '--form', 'deb'], { encoding: 'utf8' });
+    assert.equal(read.status, 0, read.stderr);
+    assert.match(read.stdout, /package-type: deb/);
 });
