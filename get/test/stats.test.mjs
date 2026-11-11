@@ -5,7 +5,7 @@ import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AUD, TEAM, accessKey, accessToken, certs, fakeDb, fakeFetch, send, sqliteDb } from '../fakes.mjs';
 import { forgetKeys } from '../src/access.mjs';
-import { readCounts, renderHtml, tabulate } from '../src/stats.mjs';
+import { readCounts, renderCsv, renderHtml, tabulate } from '../src/stats.mjs';
 
 const key = await accessKey('k-current');
 const other = await accessKey('k-other');
@@ -172,6 +172,34 @@ test('the read stops at its row limit, and the page says so', async () => {
   assert.deepEqual(read.rows.map((row) => row.day), ['2026-11-09', '2026-11-08', '2026-11-07', '2026-11-06']);
   assert.match(renderHtml(tabulate(read.rows), T, read), /stopped at its limit of 4 rows/);
   assert.match((await stats(await accessToken(key))).headers.get('content-type'), /text\/html/);
+});
+
+test('a read of exactly the limit is complete, and one row more is what says it stopped', async () => {
+  const rows = (count) => Array.from({ length: count }, (_, index) => ({ day: `2026-11-0${index + 1}`, path: '/install', ref: 'x', client: 'fetcher', n: 1 }));
+  const exact = await readCounts(store(rows(4)), T, { limit: 4 });
+  assert.equal(exact.rows.length, 4);
+  assert.equal(exact.truncated, false);
+  const over = await readCounts(store(rows(5)), T, { limit: 4 });
+  assert.equal(over.rows.length, 4);
+  assert.equal(over.truncated, true);
+});
+
+test('the CSV says what the page says: a last row when the read stopped, and the folded sources in a header', async () => {
+  const lines = tabulate([{ day: '2026-11-12', path: '/install', source: 'x', client: 'fetcher', n: 1 }]);
+  const complete = renderCsv(lines, { truncated: false }).trim().split('\n');
+  assert.equal(complete.length, 2);
+  const stopped = renderCsv(lines, { truncated: true }).trim().split('\n');
+  assert.equal(stopped.length, 3);
+  assert.equal(stopped[2], ',"(truncated)",,,,,,,,,');
+
+  const many = [];
+  for (let i = 0; i < 203; i += 1) many.push({ day: '2026-11-12', path: '/install', ref: `s${String(i).padStart(3, '0')}`, client: 'fetcher', n: 1000 - i });
+  for (const path of ['/stats', '/stats?format=csv']) {
+    const response = await stats(await accessToken(key), { environment: env(store(many)), path });
+    assert.equal(response.headers.get('x-folded-sources'), '3', path);
+  }
+  const none = await stats(await accessToken(key), { path: '/stats?format=csv' });
+  assert.equal(none.headers.get('x-folded-sources'), '0');
 });
 
 test('the page says its numbers are an upper bound', async () => {

@@ -61,9 +61,14 @@ async function stats(request, env, url, deps) {
     return answer(503, 'The counts could not be read.\n');
   }
   if (url.searchParams.get('format') === 'csv') {
-    return answer(200, renderCsv(lines), { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="downloads-by-source.csv"' });
+    return answer(200, renderCsv(lines, read), {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': 'attachment; filename="downloads-by-source.csv"',
+      'x-folded-sources': String(read.folded),
+    });
   }
   return answer(200, renderHtml(lines, now, read), {
+    'x-folded-sources': String(read.folded),
     'content-type': 'text/html; charset=utf-8',
     'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
     'referrer-policy': 'no-referrer',

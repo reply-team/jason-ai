@@ -57,9 +57,11 @@ const SOURCES = 'SELECT COUNT(DISTINCT ref) AS sources FROM counts WHERE day >= 
 /** The rows of the window, how many sources were folded, and whether the read stopped at its limit. */
 export async function readCounts(db, now, { kept = KEPT_SOURCES, limit = ROW_LIMIT } = {}) {
   const first = firstDay(now);
-  const { results: rows = [] } = await db.prepare(READ).bind(first, kept, limit).all();
+  // One row more than the limit is read, so a read of exactly the limit is not taken for one that stopped.
+  const { results = [] } = await db.prepare(READ).bind(first, kept, limit + 1).all();
+  const rows = results ?? [];
   const { results: [sources = { sources: 0 }] = [] } = await db.prepare(SOURCES).bind(first).all();
-  return { rows: rows ?? [], folded: Math.max(0, Number(sources.sources) - kept), truncated: (rows ?? []).length >= limit, limit };
+  return { rows: rows.slice(0, limit), folded: Math.max(0, Number(sources.sources) - kept), truncated: rows.length > limit, limit };
 }
 
 /** One line per day and source, newest day first, then the most installs. */
@@ -103,10 +105,15 @@ function csvField(value) {
   return `"${inert.replace(/"/g, '""')}"`;
 }
 
-export function renderCsv(lines) {
+/** The source of the CSV's last row when the read stopped at its limit: in parentheses, which a source can never hold. */
+export const TRUNCATED_SOURCE = '(truncated)';
+
+/** The CSV, with a last row saying the read stopped at its limit when it did; the folded sources go in a header. */
+export function renderCsv(lines, { truncated = false } = {}) {
   const header = ['day', 'source', ...COLUMNS.map(([name]) => name)];
   const body = lines.map((line) => header.map((name) => csvField(line[name])).join(','));
-  return [header.join(','), ...body].join('\n') + '\n';
+  const stop = truncated ? [['', csvField(TRUNCATED_SOURCE), ...COLUMNS.map(() => '')].join(',')] : [];
+  return [header.join(','), ...body, ...stop].join('\n') + '\n';
 }
 
 /** What the page says of the read: the folded sources, and the limit when the read stopped at it. */
