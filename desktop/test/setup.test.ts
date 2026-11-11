@@ -370,6 +370,8 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
         const conversation = (await chat.create()).id;
         await chat.send(conversation, 'hello', { host: 'claude' });
         await done;
+        // The set-up chat's naming run, which leaves nothing behind when the host gives no name.
+        await chat.idle();
     }, [...instructionFiles, conversationFile], []);
     const turnFiles = during.filter((path) => !instructionFiles.includes(path) && !conversationFile.test(path));
     assert.equal([...snapshot(b.paths.data).keys()].filter((path) => conversationFile.test(path)).length, 1, 'one conversation kept');

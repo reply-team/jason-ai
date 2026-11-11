@@ -253,6 +253,9 @@
     text-align: center;
     color: var(--faint);
 }
+.jc-console .empty-start p {
+    margin: 0 0 10px;
+}
 .jc-console .note {
     background: var(--blue-2);
     border: 1px solid #c6d6f0;
@@ -1005,6 +1008,17 @@ body,
 }
 .jc-console .chat-remove {
     margin: 8px 16px 0;
+}
+.jc-console .chat-rename {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+    min-width: 0;
+}
+.jc-console .chat-rename input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
 }
 .jc-console .chat-note {
     color: var(--mute);

@@ -143,6 +143,25 @@ export function restartChat(id: string): void {
         .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 }
 
+/**
+ * Renames the conversation to the person's name: the desktop keeps it, and nothing replaces it afterwards. The box
+ * closes at once; a refusal is said in the chat in the desktop's words, and the name stays as it was.
+ */
+export function renameChat(id: string, title: string): void {
+    changeChat(id, (chat) => ({ ...chat, renaming: null }));
+    here()
+        .desktop.chat.rename(id, title)
+        .then((answer) => {
+            if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
+            changeChat(id, (chat) => ({ ...chat, title: answer.title }));
+            void reloadConversations();
+        })
+        .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
+}
+
+/** The most characters a conversation's name keeps, as the desktop cuts it. */
+const nameLength = 60;
+
 /** Removes the conversation, asked twice: its tab closes and the list follows; a refusal is said in the chat. */
 export function removeChat(id: string): void {
     changeChat(id, (chat) => ({ ...chat, removing: false }));
@@ -389,8 +408,21 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const panel = useRef<HTMLDivElement>(null);
     const removeButton = useRef<HTMLButtonElement>(null);
     const keepButton = useRef<HTMLButtonElement>(null);
+    const nameBox = useRef<HTMLInputElement>(null);
+    const renameButton = useRef<HTMLButtonElement>(null);
     const wasRemoving = useRef(false);
+    const wasRenaming = useRef(false);
     const removing = chats.value[chatId]?.removing ?? false;
+    const renaming = chats.value[chatId]?.renaming !== null && chats.value[chatId]?.renaming !== undefined;
+    // The rename box takes focus with its name selected, so typing replaces it; once it closes, by Save, Cancel or
+    // Escape, focus goes back to Rename.
+    useEffect(() => {
+        if (renaming) {
+            nameBox.current?.focus();
+            nameBox.current?.select();
+        } else if (wasRenaming.current) renameButton.current?.focus();
+        wasRenaming.current = renaming;
+    }, [renaming]);
     // Remove's question is a dialog: focus goes to keeping the conversation, the rest of the panel takes nothing while it
     // asks, and once it is answered or dismissed focus goes back to Remove.
     useEffect(() => {
@@ -405,6 +437,9 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const chat = chats.value[chatId];
     if (!chat) return null;
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
+    // A conversation the desktop keeps is listed; one never sent to has no record to rename yet.
+    const keptByDesktop = conversations.value.some((each) => each.id === chatId);
+    const closeRename = () => changeChat(chatId, (each) => ({ ...each, renaming: null }));
     const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
     const host = hostOf(chat);
     // The model and effort shown are the ones chosen on the host the next turn runs on (`onHost`).
@@ -438,6 +473,53 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     return (
         <div className="chat-panel" ref={panel}>
             <div className="chat-bar">
+                {chat.renaming === null ? (
+                    <button
+                        ref={renameButton}
+                        className="btn sm"
+                        type="button"
+                        disabled={!keptByDesktop || chat.removing}
+                        title={
+                            keptByDesktop
+                                ? 'Give this conversation a name of your own'
+                                : 'Send a message first; then the chat can be renamed'
+                        }
+                        onClick={() => changeChat(chatId, (each) => ({ ...each, renaming: each.title }))}
+                    >
+                        Rename
+                    </button>
+                ) : (
+                    <form
+                        className="chat-rename"
+                        aria-label="Rename this conversation"
+                        onKeyDown={(event) => {
+                            if (event.key === 'Escape') closeRename();
+                        }}
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            renameChat(chatId, chat.renaming ?? '');
+                        }}
+                    >
+                        <input
+                            ref={nameBox}
+                            aria-label="Conversation name"
+                            value={chat.renaming}
+                            onChange={(event) =>
+                                changeChat(chatId, (each) => ({
+                                    ...each,
+                                    // The desktop's cut: sixty characters, never a character split in two.
+                                    renaming: Array.from(event.target.value).slice(0, nameLength).join(''),
+                                }))
+                            }
+                        />
+                        <button className="btn sm p" type="submit" aria-label="Save name">
+                            Save
+                        </button>
+                        <button className="btn sm" type="button" onClick={closeRename}>
+                            Cancel
+                        </button>
+                    </form>
+                )}
                 <button
                     className="btn sm"
                     type="button"

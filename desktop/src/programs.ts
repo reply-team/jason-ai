@@ -28,6 +28,8 @@ export interface RunOptions {
     stdin?: string;
     timeoutMs?: number;
     cwd?: string;
+    /** Stops the program before its time limit: answered at once, and the program ended as at the limit. */
+    signal?: AbortSignal;
 }
 
 export interface Programs {
@@ -82,13 +84,16 @@ const defaultLimit = 30_000;
  * Runs a file with arguments and no shell, and reads what it said. Never rejects: a failure to start is an answer too.
  * At its time limit the answer is given at once, as stopped there, whether or not the program has gone, and the program
  * is ended as a stop ends a chat turn's host (`endProgram`), so one that ignores the first signal cannot hold a caller.
+ * An abort of `signal` does the same before the limit.
  */
 export function runFile(file: string, args: readonly string[], env: Record<string, string>, options: RunOptions = {}): Promise<RunResult> {
     return new Promise((resolve) => {
         const limit = options.timeoutMs ?? defaultLimit;
         let bound: ReturnType<typeof setTimeout> | undefined;
+        let stop: (() => void) | undefined;
         const answer = (result: RunResult) => {
             clearTimeout(bound);
+            if (stop !== undefined) options.signal?.removeEventListener('abort', stop);
             resolve(result);
         };
         const child = execFile(
@@ -100,10 +105,14 @@ export function runFile(file: string, args: readonly string[], env: Record<strin
                 answer({ exit: code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') || (error && code === -1 ? error.message : '') });
             },
         );
-        bound = setTimeout(() => {
-            answer({ exit: -1, stdout: '', stderr: `It was stopped at its time limit of ${limit} ms.` });
+        const end = (why: string) => {
+            answer({ exit: -1, stdout: '', stderr: why });
             if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) endProgram(child.pid);
-        }, limit);
+        };
+        bound = setTimeout(() => end(`It was stopped at its time limit of ${limit} ms.`), limit);
+        stop = () => end('It was stopped before it answered.');
+        if (options.signal?.aborted) stop();
+        else options.signal?.addEventListener('abort', stop, { once: true });
         child.stdin?.on('error', () => undefined);
         child.stdin?.end(options.stdin ?? '');
     });

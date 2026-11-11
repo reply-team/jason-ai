@@ -39,6 +39,11 @@ export interface Conversation {
     /** The campaign it is about, or null for a set-up chat. */
     campaign_id: string | null;
     title: string;
+    /**
+     * Present, and true, when a person gave the title: nothing replaces it afterwards, not a hand-over to a campaign, not
+     * the campaign's name, not a name the desktop asks a model for. Absent when the desktop named the conversation.
+     */
+    named_by_person?: true;
     created_at: string;
     updated_at: string;
     /** By host id, the session or thread that host named for this conversation. */
@@ -162,14 +167,25 @@ export function parseConversation(text: string, id: string): Conversation | null
     const given = typeof raw.dropped === 'number' && Number.isSafeInteger(raw.dropped) && raw.dropped >= 0 ? raw.dropped : 0;
     const dropped = given + skipped;
     const chosen = chosenOf(raw.chosen);
-    const read: Conversation = { id, campaign_id: raw.campaign_id as string | null, title: raw.title, created_at: raw.created_at, updated_at: raw.updated_at, sessions, entries, dropped };
+    const read: Conversation = {
+        id,
+        campaign_id: raw.campaign_id as string | null,
+        title: raw.title,
+        ...(raw.named_by_person === true ? { named_by_person: true as const } : {}),
+        created_at: raw.created_at,
+        updated_at: raw.updated_at,
+        sessions,
+        entries,
+        dropped,
+    };
     return chosen === undefined ? read : { ...read, chosen };
 }
 
-/** The record as it is written: its fields in a fixed order. */
+/** The record as it is written: its fields in a fixed order, the person's mark only when a person named it. */
 export function serialize(conversation: Conversation): string {
     const { id, campaign_id, title, created_at, updated_at, sessions, entries, dropped, chosen } = conversation;
-    return JSON.stringify({ id, campaign_id, title, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }) });
+    const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
+    return JSON.stringify({ id, campaign_id, title, ...mark, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }) });
 }
 
 const bytes = (value: string) => Buffer.byteLength(value, 'utf8');

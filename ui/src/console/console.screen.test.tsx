@@ -148,6 +148,27 @@ describe('the console', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
     });
 
+    it('says a Campaigns panel with nothing in it and how a campaign starts, and opens a new chat from it', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/pending')
+            .answer('decision.list', 'decision.list/pending')
+            .answer('campaign.list', 'campaign.list/screen-empty');
+        const { desktop } = renderConsole(fake);
+        await waitFor(() => screen.getByRole('button', { name: 'Campaigns' }));
+        show('Campaigns');
+        await waitFor(() =>
+            expect(words(panel('Campaigns'))).toContain(
+                'No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and the agent sets it up with you.',
+            ),
+        );
+        expect(asked(fake, 'campaign.summary')).toBe(0);
+        const made = () => desktop.calls.filter((each) => each.name === 'chat.create');
+        await waitFor(() => expect(made()).toHaveLength(1), { timeout: 2000 });
+        fireEvent.click(within(panel('Campaigns')).getByRole('button', { name: 'New chat' }));
+        await waitFor(() => expect(made()).toHaveLength(2));
+        expect(made()[1]!.args).toEqual([]);
+    });
+
     it('draws a hostile campaign name as text, in the list and in a chat about it', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);

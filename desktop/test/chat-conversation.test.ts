@@ -70,6 +70,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, chatOptions: Pa
         for (const each of chats) each.closeAll();
         const until = Date.now() + 10_000;
         while (Date.now() < until && chats.some((each) => [...events.keys()].some((id) => each.isRunning(id)))) await new Promise((resolve) => setTimeout(resolve, 50));
+        for (const each of chats) await each.idle();
         for (const remove of removals) remove();
     });
     const until = (chatId: string, take: (event: ChatEvent) => boolean) =>

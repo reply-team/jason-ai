@@ -10,6 +10,8 @@ import { PeopleList } from './list';
 import { PersonPanel } from './panel/panel';
 import * as store from './store';
 import { Notice } from '../../layout/notice';
+import { EmptyStart } from '../../layout/empty-start';
+import { useCampaignChat } from '../campaigns/campaign-chat';
 import { Chips } from '../../layout/chips';
 import { stages, stageWord, type Stage } from './standing';
 
@@ -50,6 +52,7 @@ export function PeopleScreen() {
 
     const people = store.people.value;
     const filtered = Boolean(filters.q || filters.campaign || filters.stage || filters.archived);
+    const chat = useCampaignChat();
     const campaignLabel = filters.campaign
         ? store.campaign.value?.id === filters.campaign
             ? store.campaign.value.name
@@ -110,7 +113,14 @@ export function PeopleScreen() {
                 </div>
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.loaded.value && people.length === 0 ? (
-                    <div className="empty">{filtered ? 'Nobody matches.' : 'Nobody yet.'}</div>
+                    filtered ? (
+                        <div className="empty">Nobody matches.</div>
+                    ) : (
+                        <EmptyStart
+                            sentence="Nobody yet. People come in when a campaign finds or imports them: start with a campaign, set up in a chat with Jason."
+                            start={chat ? () => chat() : null}
+                        />
+                    )
                 ) : (
                     <PeopleList
                         people={people}

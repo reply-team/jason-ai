@@ -24,6 +24,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             remove: (...args) => void calls.push(['remove', ...args]),
             restart: (...args) => void calls.push(['restart', ...args]),
             attach: async (...args) => (calls.push(['attach', ...args]), { id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '', running: false }),
+            rename: (...args) => (calls.push(['rename', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false }),
         },
         () => origin,
         (channel, why) => refusals.push(`${channel} ${why}`),
@@ -31,7 +32,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
     return { listeners, calls, refusals };
 }
 
-test('the chat registers its nine calls, and each reaches the chat from the runtime\'s page', async () => {
+test('the chat registers its ten calls, and each reaches the chat from the runtime\'s page', async () => {
     const { listeners, calls } = registered();
     assert.deepEqual([...listeners.keys()].sort(), [
         'jason:chat.answer',
@@ -40,6 +41,7 @@ test('the chat registers its nine calls, and each reaches the chat from the runt
         'jason:chat.list',
         'jason:chat.open',
         'jason:chat.remove',
+        'jason:chat.rename',
         'jason:chat.restart',
         'jason:chat.send',
         'jason:chat.stop',
@@ -54,6 +56,7 @@ test('the chat registers its nine calls, and each reaches the chat from the runt
     listeners.get('jason:chat.remove')?.(page, 'conv_1');
     listeners.get('jason:chat.restart')?.(page, 'conv_1');
     await listeners.get('jason:chat.attach')?.(page, 'conv_1', 'cmp_1');
+    await listeners.get('jason:chat.rename')?.(page, 'conv_1', 'Mine');
     assert.deepEqual(calls, [
         ['send', 'c1', 'hello', { host: 'claude' }],
         ['stop', 'c1'],
@@ -64,6 +67,7 @@ test('the chat registers its nine calls, and each reaches the chat from the runt
         ['remove', 'conv_1'],
         ['restart', 'conv_1'],
         ['attach', 'conv_1', 'cmp_1'],
+        ['rename', 'conv_1', 'Mine'],
     ]);
 });
 
@@ -74,7 +78,7 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
         assert.throws(() => listeners.get(channel)?.({ senderFrame: { url: `${origin}/ui/`, parent: {} } }, 'c1', 'planted words'), RefusedSender);
     }
     assert.deepEqual(calls, []);
-    assert.equal(refusals.length, 18);
+    assert.equal(refusals.length, 20);
     assert.ok(refusals.every((line) => !line.includes('planted')));
 });
 
@@ -87,11 +91,11 @@ test('a refusal reaches the page as the desktop\'s sentence alone, answered as a
         throw new TypeError('not a refusal');
     };
     const page = { senderFrame: { url: `${origin}/ui/`, parent: null } };
-    const members = ['send', 'open', 'create', 'remove', 'restart', 'attach'] as const;
+    const members = ['send', 'open', 'create', 'remove', 'restart', 'attach', 'rename'] as const;
     for (const member of members) {
         for (const [act, answers] of [[refusing, true], [failing, false]] as const) {
             const listeners = new Map<string, Listener>();
-            const chat = { send: act, stop: () => undefined, answer: () => undefined, list: () => [], open: act, create: act, remove: act, restart: act, attach: act };
+            const chat = { send: act, stop: () => undefined, answer: () => undefined, list: () => [], open: act, create: act, remove: act, restart: act, attach: act, rename: act };
             registerChat({ handle: (channel, listener) => void listeners.set(channel, listener) }, chat as never, () => origin, () => undefined);
             const asked = Promise.resolve(listeners.get(`jason:chat.${member}`)?.(page, 'conv_1', 'cmp_1'));
             if (answers) assert.deepEqual(await asked, { refused: sentence }, member);

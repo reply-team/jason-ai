@@ -125,6 +125,36 @@ desktop does not narrow, so it may read the records.
   overlapped, is offered to the person to pick from (`pick`, kept with the record), and `chat.attach` takes only a
   campaign the pick named. Nothing is handed over when a page of the list could not be read. A campaign a person makes
   by hand while a set-up turn runs cannot be told apart from one the turn made.
+- **A name a person gives.** A person renames a conversation, a set-up chat or a campaign's, from its header
+  (`chat.rename`): one line, every control, format and separator character and every default-ignorable code point (a
+  filler that draws nothing) dropped, cut at 60 characters, and refused when nothing is left. The record
+  keeps it with a mark that a person gave it, and nothing replaces it afterwards: not a hand-over to a campaign, not the
+  campaign's name, not a name the desktop asks a model for. The campaign's own name in the runtime is not changed. A
+  conversation never sent to has no record yet, and its rename is refused.
+- **A set-up chat named by what it is about.** Once, after a set-up chat's first turn ended without an error and still
+  about no campaign, the desktop asks the conversation's own host or provider for a name of two to five words, on its
+  fastest model: Claude Code's `haiku` on a sign-in or on Anthropic's key, `deepseek-flash`, `kimi-k2.6`,
+  `glm-5.3-flash` and `MiniMax-M3.1-Flash` on those keys, and on Codex `gpt-6-luna` when the list the desktop keeps of
+  what that host offers holds it, at low effort when it takes that level, else Codex's own default model. It is one run
+  with no tool:
+  on Claude Code `--tools ""`, every MCP tool denied, no MCP server, our instruction as the whole system prompt, one
+  turn, nothing kept (`--no-session-persistence`); on Codex `exec --ephemeral --ignore-user-config` in its read-only
+  sandbox with every tool its configuration reference names turned off. OpenAI states no Codex run with no tool at
+  all, so a Codex naming run cannot be shown to have none: what holds it is the read-only sandbox, those settings, and
+  the rule that anything in its output but the agent's message and its reasoning refuses the name, whatever its type,
+  as anything but text and thinking does on Claude Code. The run obeys what a turn obeys: Claude Code's version is
+  read first and a host below the floor is not asked, a keyed run has its provider's environment and folder, the first
+  1,000 characters of the message go on standard input as one JSON string, never on the command line, and an inherited
+  `CLAUDE_CODE_EFFORT_LEVEL` is withheld. It runs in an empty folder under `<data>/desktop/turns/`, removed after, one
+  run at a time across the desktop, ended at 30 seconds, and ended as a stop ends a turn's host when the chat's turns
+  end (the window closes or the desktop quits), its folder removed with it; one that waits then never starts. What
+  comes back is untrusted: it is kept only as two to five plain words of letters and digits, each beginning with a
+  letter or a digit, and anything else, a step, an error or the bound keeps the first words of the
+  message, with nothing said on the page. A name the model gives is the desktop's: a person's rename still replaces
+  it, and so does a later hand-over to a campaign. **Naming costs one small request of the person's plan or key per new
+  set-up chat**: on a sign-in it counts against the plan, on a key it is billed to that key. A Codex naming run costs
+  more than Claude Code's: it keeps Codex's built-in instructions, and when the kept list does not offer Codex's fast
+  model it runs on Codex's default model at its default reasoning effort. The log says how each run ended in one word.
 - **Not a boundary.** The instruction text asks the agent to keep to the conversation's campaign and to create at most
   one campaign in a set-up chat; a command that names another campaign is not refused for being in this conversation.
   What a turn may do is the permission model's to decide, as before.
@@ -200,9 +230,10 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
 ## Processes
 
 Every process is started with a file and arguments, never through a shell, and only by the named modules:
-`src/cli.ts` (the bundled `jason`), `src/programs.ts` (the agent hosts, `reply`, `node` and `npm`),
-`src/chat-process.ts` (a chat turn's host, and Codex's model listing, `codex app-server`, which only
-`src/model-lists.ts` starts), `src/shell-path.ts` (on macOS and Linux only, the login shell's PATH, read before anything is started) and `scripts/prepare.mjs` (`dotnet publish`).
+`src/cli.ts` (the bundled `jason`), `src/programs.ts` (the agent hosts, `reply`, `node` and `npm`, and a set-up chat's
+naming run, whose command line `src/chat-naming.ts` gives), `src/chat-process.ts` (a chat turn's host, and Codex's
+model listing, `codex app-server`, which only `src/model-lists.ts` starts), `src/shell-path.ts` (on macOS and Linux
+only, the login shell's PATH, read before anything is started) and `scripts/prepare.mjs` (`dotnet publish`).
 On Windows, a program npm installed is a batch file; the desktop reads which script it hands to Node and starts that
 with Node. `test/process-guard.test.ts` holds this, and also refuses a `require` of `child_process`, an IPC handler
 registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`

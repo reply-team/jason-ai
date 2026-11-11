@@ -278,6 +278,7 @@ details.fold pre {
 
 .empty { padding: var(--space-8) var(--space-5); color: var(--text-secondary); }
 .empty strong { display: block; color: var(--text); font-weight: 500; margin-bottom: 4px; }
+.empty-start p { margin: 0 0 var(--space-3); }
 
 .dialog {
   width: 420px; max-width: 100%;

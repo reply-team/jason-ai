@@ -62,9 +62,9 @@ function ChatTab({ params, api }: IDockviewPanelProps<{ chatId: string }>) {
     return <ChatPanel chatId={params.chatId} />;
 }
 
-/** What a campaign's Chat in the page panel does: shows the campaign's one conversation, made on first use. One
- *  function for every render, so the pages it is handed to keep it. */
-function chatAbout(campaign: { id: string; name: string }): void {
+/** What a campaign's Chat in the page panel does: shows the campaign's one conversation, made on first use; with no
+ *  campaign, a new set-up chat. One function for every render, so the pages it is handed to keep it. */
+function chatAbout(campaign?: { id: string; name: string }): void {
     here().dock.chat(campaign);
 }
 
@@ -201,8 +201,9 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         const stops = [
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
-                // The desktop renamed or reordered its conversations: a hand-over, or a turn's end.
-                if (event.kind === 'attached' || event.kind === 'done') void reloadConversations();
+                // The desktop renamed or reordered its conversations: a hand-over, a new title, or a turn's end.
+                if (event.kind === 'attached' || event.kind === 'renamed' || event.kind === 'done')
+                    void reloadConversations();
             }),
             desktop.setup.onChanged(() => void connect.reload()),
             desktop.onCommand((command) => {

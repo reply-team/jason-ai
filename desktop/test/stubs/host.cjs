@@ -19,6 +19,11 @@
 // With no plan the turn says one line and ends well. STUB_RESUME says what a resume does: "missing" fails as a session
 // that is not there (Claude Code on stderr, Codex with an error event) before anything is said, "other" answers with a
 // session other than the one asked for and goes on as a turn would.
+// A naming run (`naming` below) answers by STUB_NAMING, a JSON object: { "say": "words" } says them, { "use": true }
+// uses a tool first, { "block": "type" } (Claude Code) or { "item": "type" } (Codex) says a content block or an item of
+// that type first, { "error": "words" } ends with a failed result, { "sleep": ms } waits first, { "touch": true } leaves a
+// file in the folder it runs in, { "stuck": "<file>" } never answers, outlives the first signal and writes its ids there. With none it ends well and says nothing. STUB_NAMING_LOG, when set, has a line appended
+// as each naming run starts and ends.
 // STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
 // as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');
@@ -150,6 +155,51 @@ function codex(args, stdin) {
     return false;
 }
 
+async function naming(name, args) {
+    let asked = {};
+    try {
+        asked = JSON.parse(process.env.STUB_NAMING || '{}') || {};
+    } catch {}
+    const log = (word) => process.env.STUB_NAMING_LOG && require('node:fs').appendFileSync(process.env.STUB_NAMING_LOG, `${word} ${process.pid}\n`);
+    log('start');
+    if (asked.touch) writeFileSync(join(process.cwd(), 'left-behind.txt'), 'x');
+    if (asked.stuck !== undefined) {
+        // A run that never answers and outlives the first signal, as the stuck version read does: on Windows it leaves a
+        // detached process of its own holding its output; the ids of both go to the file named.
+        process.on('SIGTERM', () => undefined);
+        const ids = [process.pid];
+        if (process.platform === 'win32') {
+            const kept = spawn(process.execPath, ['-e', 'setInterval(() => undefined, 60000)'], { stdio: ['ignore', 'inherit', 'inherit'], windowsHide: true, detached: true });
+            ids.push(kept.pid);
+        }
+        writeFileSync(asked.stuck, JSON.stringify(ids));
+        hang();
+        return;
+    }
+    if (asked.sleep) await new Promise((resolve) => setTimeout(resolve, asked.sleep));
+    if (name === 'claude') {
+        print({ type: 'system', subtype: 'init', session_id: 'naming-session', ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
+        if (asked.use) print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_n', name: 'Read', input: { file_path: '/x' } }] } });
+        // A content block of the type named, with no tool use among the ones the turn's reading knows.
+        if (asked.block !== undefined) print({ type: 'assistant', message: { content: [{ type: asked.block, id: 'blk_n', name: 'web_fetch', thinking: 'thinking about it', input: {} }] } });
+        if (asked.say !== undefined) print({ type: 'assistant', message: { content: [{ type: 'text', text: asked.say }] } });
+        print(asked.error !== undefined ? { type: 'result', subtype: 'success', is_error: true, result: asked.error } : { type: 'result', subtype: 'success', is_error: false, result: asked.say ?? '' });
+    } else {
+        print({ type: 'thread.started', thread_id: '0199a213-81c0-7800-8aa1-bbab2a035a99' });
+        print({ type: 'turn.started' });
+        if (asked.use) print({ type: 'item.started', item: { id: 'item_n', type: 'command_execution', command: 'ls', status: 'in_progress' } });
+        // An item of the type named, started and completed.
+        if (asked.item !== undefined) {
+            print({ type: 'item.started', item: { id: 'item_t', type: asked.item, text: 'thinking about it' } });
+            print({ type: 'item.completed', item: { id: 'item_t', type: asked.item, text: 'thinking about it' } });
+        }
+        if (asked.say !== undefined) print({ type: 'item.completed', item: { id: 'item_s', type: 'agent_message', text: asked.say } });
+        print(asked.error !== undefined ? { type: 'turn.failed', error: { message: asked.error } } : { type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } });
+    }
+    log('end');
+    process.exitCode = asked.error !== undefined ? 1 : 0;
+}
+
 module.exports = function host(name, args, stdin) {
     if (name === 'claude') {
         void claude(args, stdin).then(
@@ -162,4 +212,10 @@ module.exports = function host(name, args, stdin) {
             },
         );
     } else codex(args, stdin);
+};
+module.exports.naming = (name, args, stdin) => {
+    void naming(name, args, stdin).catch((error) => {
+        process.stderr.write(`${error.stack}\n`);
+        process.exit(4);
+    });
 };

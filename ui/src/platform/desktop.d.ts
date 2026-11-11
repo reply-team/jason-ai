@@ -64,8 +64,10 @@ export interface DesktopConversation {
     /** The campaign it is about: `cmp_` and its ULID; null for a set-up chat. */
     campaignId: string | null;
     /**
-     * The campaign's name, one line; a set-up chat's first sixty characters of the person's first message, or
-     * "New chat". A person's text, shown as text.
+     * The name a person gave it, one line within sixty characters, which nothing replaces afterwards; else the
+     * campaign's name, one line; else for a set-up chat a name of two to five words the desktop asked its model for
+     * after the first turn, or the first sixty characters of the person's first message, or "New chat". A person's or a
+     * model's text, shown as text.
      */
     title: string;
     /** When it last changed, ISO-8601 UTC. */
@@ -137,6 +139,11 @@ export type DesktopChatEvent =
      * set-up chat's turn ran. The person picks one of `campaignIds` (`chat.attach`), or none. Said before `done`.
      */
     | { kind: 'pick'; campaignIds: string[] }
+    /**
+     * The conversation's title changed: a person renamed it (`chat.rename`), or the desktop named a set-up chat by what it
+     * is about once its first turn ended well, which may come after that turn's `done`.
+     */
+    | { kind: 'renamed'; title: string }
     /** The turn is over: `error` is null when it ended well, else the host's own words for why it did not. */
     | { kind: 'done'; error: string | null };
 
@@ -302,6 +309,13 @@ export interface JasonDesktop {
          * a conversation, and for one the pick did not name.
          */
         attach(chatId: string, campaignId: string): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * Renames a conversation, a set-up chat's or a campaign's, to a person's name: one line, with nothing unseen,
+         * within sixty characters. Nothing replaces that name afterwards, and the campaign's own name is not changed. Its
+         * `renamed` event comes before this answers. Refused for a conversation never sent to, and for a name with
+         * nothing that shows.
+         */
+        rename(chatId: string, title: string): Promise<DesktopConversation | DesktopRefusal>;
     };
     setup: {
         status(): Promise<DesktopSetup>;

@@ -51,8 +51,17 @@ describe('a chat as the page keeps it', () => {
         expect(said(newChat('c5', 'claude'), `Find${hidden[0]} leads${hidden[1]} in Berlin${hidden[2]}`).title).toBe(
             'Find leads in Berlin',
         );
+        // And every default-ignorable code point, as the desktop drops it: a filler draws nothing.
+        expect(said(newChat('c6', 'claude'), '\u3164\u115f\ufe0fFind leads').title).toBe('Find leads');
         const about = said(newChat('c3', 'claude', { id: 'cmp_1', name: 'Autumn outreach' }), 'How is it going?');
         expect(about).toMatchObject({ title: 'Autumn outreach', campaignId: 'cmp_1' });
+    });
+
+    it('takes a new title from the desktop, a person’s rename or the name it asked for, and leaves the thread and the turn as they were', () => {
+        const running = said(newChat('c1', 'claude'), 'Help me reach dentists');
+        const renamed = received(running, { kind: 'renamed', title: 'Dentist outreach' });
+        expect(renamed).toMatchObject({ title: 'Dentist outreach', running: true, entries: running.entries });
+        expect(said(received(renamed, { kind: 'done', error: null }), 'Next').title).toBe('Dentist outreach');
     });
 
     it('folds the steps between two messages, and keeps the last ones open while the turn runs', () => {

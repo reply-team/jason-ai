@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures, type FixtureName } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
+import { App } from '../../app';
+import { CampaignChat } from '../campaigns/campaign-chat';
 import { href, route, type PeopleFilters, type PersonTab } from '../../router';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock.
@@ -82,6 +84,34 @@ const rowTitles = () =>
     Array.from(document.querySelectorAll('.panel .rows .row .name')).map((n) => n.textContent?.trim());
 
 describe('People', () => {
+    it('says a People list with nothing in it and how people come in: the sentence alone in a browser, a New chat inside the desktop', async () => {
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity-empty')
+            .answer('campaign.summary', 'campaign.summary/everyone-without-archived-empty');
+        open(api);
+        await screen.findByText(
+            'Nobody yet. People come in when a campaign finds or imports them: start with a campaign, set up in a chat with Jason.',
+        );
+        expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull();
+        expect(sentLists(api)).toEqual([fixtures['contact.list/by-activity-empty'].request]);
+
+        const inside = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity-empty')
+            .answer('campaign.summary', 'campaign.summary/everyone-without-archived-empty');
+        const chat = vi.fn();
+        const { rerender } = renderApp(inside);
+        rerender(
+            <CampaignChat.Provider value={chat}>
+                <App api={inside} uiApiVersion="v1" />
+            </CampaignChat.Provider>,
+        );
+        location.hash = href({ screen: 'people', tab: 'timeline', filters: {} });
+        route.value = { screen: 'people', tab: 'timeline', filters: {} };
+        fireEvent.click(await screen.findByRole('button', { name: 'New chat' }));
+        expect(chat).toHaveBeenCalledTimes(1);
+        expect(chat).toHaveBeenCalledWith();
+    });
+
     it('lists people in a table, one row each, newest activity first as the runtime ordered them', async () => {
         const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-several');
         open(api);

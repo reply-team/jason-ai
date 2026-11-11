@@ -84,6 +84,8 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
         const running = [...events.keys()].filter((chatId) => named.isRunning(chatId));
         named.closeAll();
         await settle(() => running.every((chatId) => !named.isRunning(chatId)));
+        // A set-up chat's naming run, which a turn that ended well starts, ends before the folder goes.
+        await named.idle();
         for (const remove of removals) remove();
     });
     const until = (chatId: string, take: (event: ChatEvent) => boolean) =>
@@ -315,7 +317,10 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     assert.deepEqual(second?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', 'resume', '0199a213-81c0-7800-8aa1-bbab2a035a53', '-']);
     assert.equal(first?.stdin, asked(words));
     assert.ok(same(first?.cwd ?? '', r.b.paths.chat));
-    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations'], 'a Codex turn writes no turn file');
+    // The set-up chat's one naming run ran in a folder under turns/, removed after it: no turn file is there.
+    await r.chat.idle();
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations', 'turns'], 'a Codex turn writes no turn file');
+    assert.deepEqual(readdirSync(r.b.paths.turns), []);
 });
 
 test('a Codex turn that reported an error and then completed ends with no error', async (t) => {
@@ -440,7 +445,11 @@ test('a turn on a Claude Code whose version cannot be read is refused as below t
 
 test('a second send while Claude Code’s version is read is refused as busy, and the first turn goes on', async (t) => {
     let release: (result: RunResult) => void = () => undefined;
-    const { programs } = versionSaying(() => new Promise<RunResult>((resolve) => (release = resolve)));
+    let reads = 0;
+    // The first read is held; a later one, the set-up chat's naming run's, answers at once.
+    const { programs } = versionSaying(() =>
+        reads++ === 0 ? new Promise<RunResult>((resolve) => (release = resolve)) : Promise.resolve({ exit: 0, stdout: '2.1.300\n', stderr: '' }),
+    );
     const r = rig(t, { chat: { programs } });
     const first = r.until('c1', (event) => event.kind === 'done' && event.error === null);
     const sending = r.chat.send('c1', words, { host: 'claude' });

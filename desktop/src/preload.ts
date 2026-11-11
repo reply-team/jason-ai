@@ -30,6 +30,7 @@ const desktop = {
         remove: (chatId: string) => ipcRenderer.invoke('jason:chat.remove', chatId),
         restart: (chatId: string) => ipcRenderer.invoke('jason:chat.restart', chatId),
         attach: (chatId: string, campaignId: string) => ipcRenderer.invoke('jason:chat.attach', chatId, campaignId),
+        rename: (chatId: string, title: string) => ipcRenderer.invoke('jason:chat.rename', chatId, title),
     },
     setup: {
         status: () => ipcRenderer.invoke('jason:setup.status'),
