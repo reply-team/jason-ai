@@ -175,7 +175,7 @@ test('the data rules name the known entries even before they exist, so one made 
     ]);
 });
 
-test('the agent neither reads nor edits the record of a conversation: the data rules name the conversations folder whether it exists or not', () => {
+test('a Claude Code turn neither reads nor edits the record of a conversation: the data rules name the conversations folder whether it exists or not', () => {
     const rules = dataRules('linux', '/home/a/.jason', [], []);
     for (const rule of ['Read', 'Edit']) {
         assert.ok(rules.includes(`${rule}(//home/a/.jason/desktop/conversations)`), rule);

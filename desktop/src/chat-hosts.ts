@@ -139,7 +139,9 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
 /**
  * The desktop folder's own entries but the chat folder, named the same way; `turns` holds every turn's configuration,
  * `rollback` the application an update kept aside and the record the next start acts on, `bundle` an AppImage's copy of
- * the jason it carries, `conversations` the record of every conversation, which the agent neither reads nor edits.
+ * the jason it carries, `conversations` the record of every conversation, which these rules keep a Claude Code turn from
+ * reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox, which the desktop does
+ * not narrow, holds it (`codexArguments`).
  */
 export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations'];
 

@@ -83,22 +83,28 @@ chats, which are about no campaign yet. Each is a record, `<data>/desktop/conver
 it is about, its title, the session each agent host named for it, and what the page drew, kept as text and never as
 markup (the person's words, the agent's, the steps, each card with its answer, the errors). A record is written beside
 its name and renamed over it, readable by this account alone, never through a link, when a host first names its session
-and at the end of each turn; it is kept within 2 MB by dropping its oldest entries, which it counts. A file in the
-folder that is not a record is counted in the log and left as it was. The agent's file rules deny it a read or an edit
-of the folder.
+and at the end of each turn. It is kept within 2 MB: each text of an entry is cut to 128 KB, keeping its end after a
+mark in the desktop's words, then the oldest entries are dropped and counted, and the newest entry always stays. An
+entry of a kind this desktop does not know, written by another version, is skipped and counted the same way. A file in
+the folder that is not a record is counted in the log and left as it was. On a Claude Code turn the desktop's file
+rules deny the agent a read or an edit of the folder; a Codex turn is held only by its own read-only sandbox, which the
+desktop does not narrow, so it may read the records.
 
 - **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: which campaign the
-  conversation is about, its name quoted on one line, with control, separator and direction characters dropped and cut
-  at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it as they are.
-- **A session per host.** A turn resumes the session its host named for the conversation. When that host has none, or
-  its session is not found or another answers, the turn starts a fresh session given a recap, the last of the person's
-  and the agent's words, at most 16 KB, set apart as earlier messages, and the page is told why (`fresh`).
+  conversation is about, its name quoted on one line, with every control, format and separator character dropped and
+  cut at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it as they are.
+- **A session per host.** A turn resumes the session its host named for the conversation; a session id begins with a
+  letter or a digit, and a record's that does not is read as none. When that host has none, or its session is not
+  found, another answers, or the resume fails before saying anything, the turn starts a fresh session given a recap, the
+  last of the person's and the agent's words, at most 16 KB, set apart as earlier messages, and the page is told why
+  (`fresh`). The record gives up its session only once the fresh session has said something.
 - **The hand-over.** A set-up chat's turn reads every page of `jason campaign list --all-projects --include-archived`
   before and after it; a campaign counts as new when it was absent before, is present after, was created at or after
-  the turn's start, and has no conversation. Exactly one new campaign, from a turn no other set-up turn ran beside, makes
-  the chat that campaign's conversation (`attached`); any other count above none, or turns that overlapped, are offered
-  to the person to pick from (`pick`, kept with the record), and `chat.attach` takes only a campaign the pick named.
-  Nothing is handed over when a page of the list could not be read.
+  the turn's start, and has no conversation. Exactly one new campaign, from a turn no other turn of any conversation ran
+  beside, makes the chat that campaign's conversation (`attached`); any other count above none, or a turn another
+  overlapped, is offered to the person to pick from (`pick`, kept with the record), and `chat.attach` takes only a
+  campaign the pick named. Nothing is handed over when a page of the list could not be read. A campaign a person makes
+  by hand while a set-up turn runs cannot be told apart from one the turn made.
 - **Not a boundary.** The instruction text asks the agent to keep to the conversation's campaign and to create at most
   one campaign in a set-up chat; a command that names another campaign is not refused for being in this conversation.
   What a turn may do is the permission model's to decide, as before.
