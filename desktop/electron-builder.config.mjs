@@ -43,8 +43,8 @@ export function electronChecksums() {
     return JSON.parse(readFileSync(join(desktop, 'node_modules', 'electron', 'checksums.json'), 'utf8'));
 }
 
-/** The files the chat's fence reads, packaged inside the application beside package.json. */
-export const chatLists = Object.freeze(['chat-deny-list.txt', 'chat-allow-list.txt']);
+/** The chat's two lists and its instruction text, packaged inside the application beside package.json. */
+export const chatFiles = Object.freeze(['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-instructions.md']);
 
 /** What a pack of one architecture finds in its bundle folder: the executable, its two notices and the skills. */
 export function bundleFiles(platform) {
@@ -119,8 +119,9 @@ export function configuration({ version, sign = null }) {
         extraMetadata: { version },
         directories: { output: 'dist', buildResources: 'installer' },
         // Inside app.asar: the compiled main process, the starting page, the tray icons desk.ts loads from the app,
-        // the chat's two lists, and package.json. node_modules holds the one runtime dependency, the updater.
-        files: ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', ...chatLists],
+        // the chat's two lists and its instruction text, and package.json. node_modules holds the one runtime
+        // dependency, the updater.
+        files: ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', ...chatFiles],
         asar: true,
         // No rebuild of the production dependencies, which would run their install scripts: the one there is, the
         // updater, is plain JavaScript.

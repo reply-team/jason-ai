@@ -8,8 +8,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { allowListFile, denyListFile } from '../src/chat-deny.ts';
-import { bundleFiles, bundleFolder, chatLists, checkBundle, configuration, copyChromiumNotices, fuses, releaseVersion, signer } from '../electron-builder.config.mjs';
+import { allowListFile, denyListFile, instructionsFile } from '../src/chat-deny.ts';
+import { bundleFiles, bundleFolder, chatFiles, checkBundle, configuration, copyChromiumNotices, fuses, releaseVersion, signer } from '../electron-builder.config.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { devDependencies: Record<string, string> };
@@ -154,9 +154,9 @@ test('the bundled jason keeps its own signature on macOS, and the application as
     }
 });
 
-test('app.asar carries the main process, the starting page, the tray icons, the chat’s lists and package.json', () => {
-    assert.deepEqual(built.files, ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', 'chat-deny-list.txt', 'chat-allow-list.txt']);
-    assert.deepEqual(chatLists, ['chat-deny-list.txt', 'chat-allow-list.txt']);
+test('app.asar carries the main process, the starting page, the tray icons, the chat’s lists and instruction text, and package.json', () => {
+    assert.deepEqual(built.files, ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', 'chat-deny-list.txt', 'chat-allow-list.txt', 'chat-instructions.md']);
+    assert.deepEqual(chatFiles, ['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-instructions.md']);
     for (const icon of ['resources/icon.png', 'resources/tray/trayTemplate.png', 'resources/tray/trayTemplate@2x.png']) assert.ok(existsSync(join(root, icon)), icon);
     // buildResources is left out of app.asar by electron-builder, so it is never resources/.
     assert.equal(built.directories.buildResources, 'installer');
@@ -249,10 +249,10 @@ test('DevTools are closed in a packaged build, the window’s and the key that w
     assert.match(keys, /binding\.does\.window === 'devtools' && packaged/);
 });
 
-test('both chat list files are packaged where the main process reads them', () => {
+test('both chat list files and the instruction text are packaged where the main process reads them', () => {
     // The fence's own names, each a file at the application's root, which files puts in app.asar and main.ts reads.
-    assert.deepEqual([...chatLists].sort(), [denyListFile, allowListFile].sort());
-    for (const name of chatLists) assert.ok(existsSync(join(root, name)), name);
+    assert.deepEqual([...chatFiles].sort(), [denyListFile, allowListFile, instructionsFile].sort());
+    for (const name of chatFiles) assert.ok(existsSync(join(root, name)), name);
     const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
     assert.match(main, /readFence\(app\.getAppPath\(\)\)/);
 });

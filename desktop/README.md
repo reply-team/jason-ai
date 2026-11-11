@@ -136,10 +136,10 @@ JASON_VERSION=0.34.0-rc.1 npm run package -- --win --x64   # dist/: the nsis ins
 
 The release passes `--executable` with the `jason` it has already built and signed, so the package carries that very
 file, and signs the package itself: a Mac package is never built unsigned. Inside `app.asar` are `lib/`, `shell/`,
-`resources/` and the chat's two lists; beside it, in the package's `resources/`, are `bundle/` (the executable with
-`LICENSE` and `THIRD-PARTY-NOTICES`, the skills and `version.json`) and `notices/` (the repository's `LICENSE`, this
-folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package carries no UI: `jason ui install`
-places the UI of the runtime's own release.
+`resources/`, the chat's two lists and its instruction text; beside it, in the package's `resources/`, are `bundle/`
+(the executable with `LICENSE` and `THIRD-PARTY-NOTICES`, the skills and `version.json`) and `notices/` (the
+repository's `LICENSE`, this folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package
+carries no UI: `jason ui install` places the UI of the runtime's own release.
 
 electron-builder fetches Electron's distribution for each platform and architecture it packs. The configuration hands it
 the sha256 of each file from the `checksums.json` the `electron` package carries, which `package-lock.json` pins, so a zip
