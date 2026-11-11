@@ -45,7 +45,7 @@ The desktop asks `jason status` whether a runtime is up and whether it is this b
 `jason runtime start` only when none is; a runtime that is already up is used as it is, and `jason runtime run` is never
 started as its child. It places the release's UI with `jason ui install` when the runtime is the version the desktop
 carries and no UI is served, deploys the role skills (`jason skills install --roles-only`) and the chat's skills from the
-package it carries, and loads the link `jason ui open --no-open` prints. When the runtime is another version, the UI it
+package it carries, once for each desktop version, and loads the link `jason ui open --no-open` prints. When the runtime is another version, the UI it
 serves is loaded as it is and the window says the versions differ: it names the desktop's own update where that runtime
 is the one the application carries, and `jason update` otherwise.
 
@@ -68,11 +68,13 @@ The desktop wears the console: the chat is home, in a dock with panels beside it
 - The browser's other screens, People, Performance, Work items, System and Settings, open in a page panel of the same
   dock. [ui.md](ui.md) describes each.
 
-The Jason menu carries the keys (New Chat, What Needs You, Performance, Campaigns, Work Items, People, System, Reload),
-Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and Linux, Remove What
-Jason Placed; the tray's menu opens the window, a new chat and what needs you, and carries the same acts for the installation. The tray counts what waits for you, approvals and questions, read through `jason approval list` and
-`jason decision list` no more often than every 30 seconds while a runtime answers; a system notification carries the counts alone,
-never a name or the words of a question. Both login items are off until you turn them on.
+The View menu carries the keys (New Chat, What Needs You, Performance, Campaigns, Work Items, People, System, Reload).
+The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
+Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
+acts for the installation. The tray counts what waits for you, approvals and questions, read through
+`jason approval list` and `jason decision list` no more often than every 30 seconds while a runtime answers; a system
+notification carries the counts alone, never a name or the words of a question. Both login items are off until you turn
+them on.
 
 ## Its own files
 
@@ -87,6 +89,9 @@ never a name or the words of a question. Both login items are off until you turn
 - `<data>/desktop/claude-keyed/<provider id>/` and `<data>/desktop/codex-keyed/`: the folders a turn on a provider's key
   runs its host with. They keep the host's transcripts of those turns, never the key, and are readable by your account
   alone where the system has modes.
+- `<data>/desktop/turns/`: one small configuration file per running chat turn, readable by your account alone, naming the
+  desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
+  are removed at the next start.
 - `<data>/desktop/rollback/<version>/`: the application as it was before the last update (below).
 - `<data>/desktop/bundle/<version>/`: on Linux, an AppImage's copy of the `jason` it carries. An AppImage runs from a mount
   that lasts only while it runs, so each start copies its `jason` here; that copy is the `jason` it runs, starts the
@@ -158,7 +163,8 @@ Each campaign has one conversation, found or made the first time it is opened, a
 no campaign yet. The window opens on a new set-up chat. A set-up chat whose turn made exactly one campaign becomes that
 campaign's conversation; one that made more, or ran beside another turn, offers what it made to pick from. A
 conversation is kept from its first turn, one never sent to leaves nothing, and **Start afresh** begins the agent's next
-turn without its memory of the conversation and keeps what is shown.
+turn without its memory of the conversation and keeps what is shown. **Remove** deletes the conversation's record from
+this computer after one question; the host keeps its own transcript.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone: the campaign, a title,
 the session each host named for it, and what the page drew, as text, within 2 MB. Every turn begins with a paragraph the
@@ -177,7 +183,8 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
 
 - **Runs without asking.** The skills, web search, subagents and the task list; of `reply` exactly `reply auth status`
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
-  which is the CLI's verbs less the deny list, held to the real tree by a test.
+  which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
+  every time, held to the real tree by a test.
 - **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt): everything the CLI
   reserves for a person (approving and rejecting, answering a decision, a standing approval, a preference, clearing a
   block, resuming work, a report, rewinding a subscription), everything that changes the installation, follows it
@@ -190,7 +197,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   settings file and the run file first among them), a command that names that directory, a command that names `JASON_CONFINED`, a command that changes
   where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a card to show whole, and a write by the
   agent to the chat's own instruction files and to the `.claude`, `.agents` and `.codex` folders of the chat folder.
-- **A card asks you.** Every other command, `jason` commands no allowed verb begins included; a read outside the chat
+- **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the chat
   folder and the added folders; a write outside them, or in a campaign's or a project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a web page, once per site
   per chat, the host's own documentation domains aside. A path that begins with `~`
@@ -274,7 +281,10 @@ electron-updater cannot replace what runs the item says "Updates Come Through th
 the package names.
 
 Updates come to the Windows installer, the macOS application, the AppImage and the deb; anywhere else the item says
-updates come through the package.
+updates come through the package. Built so, and not yet seen on a real machine: a deb update installs the new deb with
+`dpkg`, through the first of `gksudo`, `kdesudo`, `pkexec` and `beesu` the system has and otherwise `sudo`, and asks for an
+administrator's password every time, so an account that cannot give one cannot install it and Jason stays open and says
+so; an AppImage update replaces the file where it is, so its folder must be writable.
 
 **The runtime restarts.** When the runtime runs from the application's own `jason`, the update item says so, "Restart
 Jason and Its Runtime to Install": the desktop stops that runtime with `jason runtime stop` before the installer replaces
@@ -312,7 +322,7 @@ updater's cache named above.
   files that are its own and, on an AppImage, removes the copies under `<data>/desktop/bundle/` once nothing runs from
   them. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
   the application: move Jason.app to the Trash, or `sudo apt remove jason-desktop` for the deb, or delete the AppImage file.
-- **When Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
+- **On macOS and Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
   Jason.app on macOS, `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason`
   for an AppImage.
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this

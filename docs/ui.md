@@ -107,7 +107,7 @@ campaign's work while what is running finishes; the provider's own sequence keep
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
 `jason campaign start`, which resumes a paused one, with your reason). An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
-opens the campaign's one conversation, made the first time and kept by the desktop with what it showed, and moves
+opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
 nowhere; the Campaigns list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
 to reach; what you send there starts a set-up chat, about no campaign yet, and no chat is made before you send. The
 sidebar's first item is the **Feed**, the desktop's main chat; below **New chat** it lists the other conversations it

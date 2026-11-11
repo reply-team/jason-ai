@@ -268,9 +268,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   guard over every message template the runtime writes and by a run of the real executable that reads
   its own log back; the paths the installation runs from do, and a bundle rewrites them. `jason logs`
   reads them without the runtime; `jason doctor` carries a bounded slice of them.
-- Everything in the repository is written in English. The browser UI's own words are one table, `ui/src/locale/en.ts`,
-  and the screen tests that assert them (`ui/src/screens/*/*.screen.test.tsx`, `ui/src/console/*.screen.test.tsx`) read
-  the words as that file writes them, so a word is changed there and the tests that name it with it.
+- Everything in the repository is written in English, with one exception: the translations of the browser UI's words
+  under `ui/src/locale/`, each language beside the English file it translates.
 
 ## Working style
 
