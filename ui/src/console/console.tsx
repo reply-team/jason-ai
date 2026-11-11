@@ -21,7 +21,7 @@ import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
 import { listen } from './actions';
-import { ChatPanel, openChat } from './chat';
+import { ChatPanel, reloadConversations, startChat } from './chat';
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
@@ -50,13 +50,10 @@ function ChatTab({ params, api }: IDockviewPanelProps<{ chatId: string }>) {
     return <ChatPanel chatId={params.chatId} />;
 }
 
-/** What a campaign's Chat in the page panel does: brings forward the newest chat about the campaign the console still
- *  holds, and opens one only when there is none. One function for every render, so the pages it is handed to keep it. */
+/** What a campaign's Chat in the page panel does: shows the campaign's one conversation, made on first use. One
+ *  function for every render, so the pages it is handed to keep it. */
 function chatAbout(campaign: { id: string; name: string }): void {
-    const held = Object.values(chats.value).filter((chat) => chat.campaignId === campaign.id);
-    const newest = held[held.length - 1]; // the console keeps its chats in the order they were opened
-    if (newest) here().dock.showChat(newest.id);
-    else here().dock.chat(campaign);
+    here().dock.chat(campaign);
 }
 
 function PagePanel() {
@@ -128,7 +125,11 @@ function makeDock(get: () => DockviewApi | null): Dock {
     return {
         show,
         showChat,
-        chat: (campaign) => showChat(openChat(campaign)),
+        chat: (campaign) =>
+            void startChat(campaign).then((id) => {
+                if (id !== null) showChat(id);
+            }),
+        closeChat: (id) => get()?.getPanel(chatPanel(id))?.api.close(),
         page: (to) => {
             navigate(to);
             show('page');
@@ -140,6 +141,21 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     const root = useRef<HTMLDivElement>(null);
     const dockApi = useRef<DockviewApi | null>(null);
     const dock = useMemo(() => makeDock(() => dockApi.current), []);
+    // The set-up chat the window opens on, placed once both the desktop has made it and the dock is ready.
+    const first = useRef<string | null>(null);
+    const placeFirst = () => {
+        const dock = dockApi.current;
+        const id = first.current;
+        if (!dock || id === null || dock.getPanel(`chat:${id}`)) return;
+        dock.addPanel({
+            id: `chat:${id}`,
+            component: 'chat',
+            title: chats.value[id]?.title ?? 'Chat',
+            params: { chatId: id },
+            ...(dock.getPanel('needs') ? { position: { referencePanel: 'needs', direction: 'left' as const } } : {}),
+        });
+        dock.getPanel(`chat:${id}`)?.api.setActive();
+    };
 
     useEffect(() => {
         const unbind = bind({ api, desktop, dock });
@@ -148,6 +164,11 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         void needs.reload();
         void campaigns.reload();
         void connect.reload();
+        void reloadConversations();
+        void startChat().then((id) => {
+            first.current = id;
+            placeFirst();
+        });
         let pending: ReturnType<typeof setTimeout> | null = null;
         const journal =
             stream ??
@@ -163,7 +184,11 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 },
             );
         const stops = [
-            desktop.chat.onEvent((id, event) => changeChat(id, (chat) => received(chat, event))),
+            desktop.chat.onEvent((id, event) => {
+                changeChat(id, (chat) => received(chat, event));
+                // The desktop renamed or reordered its conversations: a hand-over, or a turn's end.
+                if (event.kind === 'attached' || event.kind === 'done') void reloadConversations();
+            }),
             desktop.setup.onChanged(() => void connect.reload()),
             desktop.onCommand((command) => {
                 if (command === 'chat.new' || command === 'navigate.chat') return dock.chat();
@@ -200,14 +225,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
 
     const ready = (event: DockviewReadyEvent) => {
         dockApi.current = event.api;
-        const first = openChat();
-        event.api.addPanel({ id: `chat:${first}`, component: 'chat', title: 'Chat', params: { chatId: first } });
-        event.api.addPanel({
-            id: 'needs',
-            component: 'needs',
-            title: titles.needs,
-            position: { referencePanel: `chat:${first}`, direction: 'right' },
-        });
+        event.api.addPanel({ id: 'needs', component: 'needs', title: titles.needs });
         event.api.addPanel({
             id: 'campaigns',
             component: 'campaigns',
@@ -221,7 +239,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             position: { referencePanel: 'needs' },
         });
         event.api.getPanel('needs')?.api.setActive();
-        event.api.getPanel(`chat:${first}`)?.api.setActive();
+        placeFirst();
     };
 
     return (

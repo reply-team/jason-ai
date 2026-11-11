@@ -6,10 +6,28 @@ import { expect, test } from './fixtures';
 function standInDesktop(): void {
     const quiet = () => () => undefined;
     const done = () => Promise.resolve();
+    // The one conversation the window opens on, a set-up chat the desktop made.
+    const made = {
+        id: 'conv_01JD0000000000000000000001',
+        campaignId: null,
+        title: 'New chat',
+        updatedAt: '2026-11-11T00:00:00.000Z',
+    };
     (window as unknown as { jasonDesktop: unknown }).jasonDesktop = {
         platform: 'win32',
         onCommand: quiet,
-        chat: { send: done, stop: done, answer: done, onEvent: quiet },
+        chat: {
+            send: done,
+            stop: done,
+            answer: done,
+            onEvent: quiet,
+            list: () => Promise.resolve([made]),
+            open: () => Promise.resolve({ ...made, entries: [], dropped: 0 }),
+            create: () => Promise.resolve(made),
+            remove: done,
+            restart: done,
+            attach: () => Promise.resolve(made),
+        },
         setup: {
             status: () =>
                 Promise.resolve({

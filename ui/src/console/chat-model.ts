@@ -1,9 +1,15 @@
-// Pure: a chat as the page keeps it, and what each event of the desktop's does to it. The desktop runs the turn; the
-// page keeps what was said, in memory, for as long as the window is open. A message the person sends while a turn runs
+// Pure: a chat as the page keeps it, and what each event of the desktop's does to it. The desktop runs the turn and
+// keeps the conversation, what the page drew included; the page holds what it shows, and a conversation reopened is
+// drawn from what the desktop kept by the same code as a live turn. A message the person sends while a turn runs
 // waits here, one at a time, and nowhere else: it becomes the next turn when this one ends well. When the turn fails, or
 // the moment the person stops it, the message is given back: into the box when the box is empty, and otherwise kept in
 // sight as not sent. Two texts are never merged, and neither is dropped.
-import type { DesktopChatEvent } from '../platform/desktop';
+import type {
+    DesktopChatEvent,
+    DesktopConversation,
+    DesktopConversationRecord,
+    DesktopKeptEntry,
+} from '../platform/desktop';
 
 export type Answer = 'allow' | 'always' | 'deny' | 'gone';
 
@@ -26,10 +32,18 @@ export type Entry =
           remember: string | null;
           answer: Answer | null;
       }
-    | { kind: 'error'; text: string };
+    | { kind: 'error'; text: string }
+    /** The campaigns a set-up turn made, for the person to pick the one this chat is about. */
+    | { kind: 'pick'; campaignIds: string[] }
+    /** The set-up chat became the conversation of the campaign named: said in the page, not kept by the desktop. */
+    | { kind: 'attached'; title: string }
+    /** The turn started a fresh session of the host, and why: said in the page, not kept by the desktop. */
+    | { kind: 'fresh'; reason: 'host_changed' | 'not_found' }
+    /** The person started the conversation afresh: said in the page, not kept by the desktop. */
+    | { kind: 'afresh' };
 
 export interface Chat {
-    /** The id the page made up for the chat, and every turn of it carries. */
+    /** The conversation's id, the desktop's, which every turn of it carries. */
     id: string;
     title: string;
     campaignId: string | null;
@@ -49,9 +63,20 @@ export interface Chat {
     outbox: string | null;
     /** The running turn's words when they were the waiting message, given back if that turn fails. */
     resent: string | null;
+    /** How many of the oldest entries the desktop let go to keep the conversation within its size. */
+    dropped: number;
+    /** Whether the person asked to remove the conversation and has not yet said again. */
+    removing: boolean;
 }
 
-const titleLength = 48;
+/** How much of a set-up chat's first message names it, as the desktop names it. */
+const titleLength = 60;
+
+/** A set-up chat's title from the person's first message: its first sixty characters, on one line. */
+function titleOf(text: string): string {
+    const characters = Array.from(text.replace(/\s+/g, ' ').trim());
+    return characters.length === 0 ? 'New chat' : characters.slice(0, titleLength).join('');
+}
 
 export function newChat(id: string, host: string | null, campaign?: { id: string; name: string }): Chat {
     return {
@@ -67,8 +92,52 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         stopping: false,
         outbox: null,
         resent: null,
+        dropped: 0,
+        removing: false,
     };
 }
+
+/** What the desktop kept of a thing the page drew, as the page draws it; a kept card waits for nothing. */
+function entryOf(entry: DesktopKeptEntry): Entry {
+    switch (entry.kind) {
+        case 'step':
+            return {
+                kind: 'step',
+                step: entry.detail === undefined ? { text: entry.text } : { text: entry.text, detail: entry.detail },
+            };
+        case 'permission':
+            return {
+                kind: 'permission',
+                request: '',
+                title: entry.title,
+                detail: entry.detail,
+                remember: null,
+                answer: entry.answer ?? 'gone',
+            };
+        case 'pick':
+            return { kind: 'pick', campaignIds: [...entry.campaignIds] };
+        default:
+            return { kind: entry.kind, text: entry.text };
+    }
+}
+
+/** A conversation the desktop kept, opened: what the page drew before, and no turn running. */
+export function fromRecord(record: DesktopConversationRecord, host: string | null): Chat {
+    return {
+        ...newChat(record.id, host),
+        title: record.title,
+        campaignId: record.campaignId,
+        entries: record.entries.map(entryOf),
+        dropped: record.dropped,
+    };
+}
+
+/** The person picked the campaign a set-up chat is about, and the desktop made it that campaign's conversation. */
+export const pickedFor = (chat: Chat, conversation: DesktopConversation): Chat => ({
+    ...chat,
+    campaignId: conversation.campaignId,
+    title: conversation.title,
+});
 
 /**
  * The person's words go into the chat and its turn starts; the first words of a chat give it its title. `resent` says
@@ -76,10 +145,9 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
  */
 export function said(chat: Chat, text: string, resent = false): Chat {
     const first = chat.campaignId === null && !chat.entries.some((each) => each.kind === 'user');
-    const title = text.length > titleLength ? `${text.slice(0, titleLength - 1)}…` : text;
     return {
         ...chat,
-        title: first ? title : chat.title,
+        title: first ? titleOf(text) : chat.title,
         entries: [...chat.entries, { kind: 'user', text }],
         running: true,
         resent: resent ? text : null,
@@ -113,11 +181,17 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             };
         case 'permission_gone':
             return answered(chat, event.request, 'gone');
-        // The conversations the desktop keeps: this page does not draw them yet.
         case 'attached':
+            return {
+                ...chat,
+                campaignId: event.campaignId,
+                title: event.title,
+                entries: [...chat.entries, { kind: 'attached', title: event.title }],
+            };
         case 'fresh':
+            return { ...chat, entries: [...chat.entries, { kind: 'fresh', reason: event.reason }] };
         case 'pick':
-            return chat;
+            return { ...chat, entries: [...chat.entries, { kind: 'pick', campaignIds: [...event.campaignIds] }] };
         case 'done': {
             const over = ended(chat);
             if (event.error === null)
@@ -234,6 +308,15 @@ export function failed(chat: Chat, error: string): Chat {
         entries: [...over.entries, { kind: 'error', text: error }],
     });
 }
+
+/** Something the desktop refused, said in the chat in its words; a turn that runs goes on. */
+export const told = (chat: Chat, error: string): Chat => ({
+    ...chat,
+    entries: [...chat.entries, { kind: 'error', text: error }],
+});
+
+/** The person asked to start the conversation afresh, and the desktop did. */
+export const afresh = (chat: Chat): Chat => ({ ...chat, entries: [...chat.entries, { kind: 'afresh' }] });
 
 /** The steps between two messages fold into one line; the last group stays open while the turn runs. */
 export type Shown = { kind: 'steps'; steps: Step[]; open: boolean } | Exclude<Entry, { kind: 'step' }>;

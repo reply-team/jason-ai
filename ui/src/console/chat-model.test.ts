@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
     answered,
     failed,
+    fromRecord,
     handed,
     kept,
     lost,
     newChat,
+    pickedFor,
     received,
     replaced,
     said,
@@ -30,7 +32,9 @@ describe('a chat as the page keeps it', () => {
         const chat = said(newChat('c1', 'claude'), 'What is waiting for me?');
         expect(chat).toMatchObject({ title: 'What is waiting for me?', running: true });
         expect(said(chat, 'And then?').title).toBe('What is waiting for me?');
-        expect(said(newChat('c2', 'claude'), 'x'.repeat(80)).title).toHaveLength(48);
+        // As the desktop names a set-up chat: its first sixty characters, on one line.
+        expect(said(newChat('c2', 'claude'), 'x'.repeat(80)).title).toBe('x'.repeat(60));
+        expect(said(newChat('c4', 'claude'), 'Find\n\nleads   in Berlin').title).toBe('Find leads in Berlin');
         const about = said(newChat('c3', 'claude', { id: 'cmp_1', name: 'Autumn outreach' }), 'How is it going?');
         expect(about).toMatchObject({ title: 'Autumn outreach', campaignId: 'cmp_1' });
     });
@@ -67,12 +71,77 @@ describe('a chat as the page keeps it', () => {
         expect(lost(allowed, 'req_1').entries[1]).toMatchObject({ answer: 'gone' });
     });
 
-    it('is not changed by what the desktop says of its conversations: a hand-over, a fresh session, a pick', () => {
-        const chat = asking(said(newChat('c1', 'claude'), 'Go'));
-        expect(received(chat, { kind: 'attached', campaignId: 'cmp_1', title: 'Autumn outreach' })).toBe(chat);
-        expect(received(chat, { kind: 'fresh', reason: 'not_found' })).toBe(chat);
-        expect(received(chat, { kind: 'fresh', reason: 'host_changed' })).toBe(chat);
-        expect(received(chat, { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] })).toBe(chat);
+    it('becomes a campaign’s conversation on a hand-over, and keeps a fresh session and a pick in its thread', () => {
+        const chat = said(newChat('conv_1', 'claude'), 'Set up an autumn campaign');
+        const attached = received(chat, { kind: 'attached', campaignId: 'cmp_1', title: 'Autumn outreach' });
+        expect(attached).toMatchObject({ campaignId: 'cmp_1', title: 'Autumn outreach', running: true });
+        expect(attached.entries.at(-1)).toEqual({ kind: 'attached', title: 'Autumn outreach' });
+        expect(received(chat, { kind: 'fresh', reason: 'not_found' }).entries.at(-1)).toEqual({
+            kind: 'fresh',
+            reason: 'not_found',
+        });
+        expect(received(chat, { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] }).entries.at(-1)).toEqual({
+            kind: 'pick',
+            campaignIds: ['cmp_1', 'cmp_2'],
+        });
+        // A pick the person settled names the campaign; a set-up chat's later turns keep their title.
+        const picked = pickedFor(received(chat, { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] }), {
+            id: 'conv_1',
+            campaignId: 'cmp_2',
+            title: 'Winter',
+            updatedAt: '2026-11-11T10:00:00.000Z',
+        });
+        expect(picked).toMatchObject({ campaignId: 'cmp_2', title: 'Winter' });
+        expect(said(picked, 'Next').title).toBe('Winter');
+    });
+
+    it('opens a kept conversation with its entries drawn as live ones are, its open cards ended', () => {
+        const chat = fromRecord(
+            {
+                id: 'conv_1',
+                campaignId: 'cmp_1',
+                title: 'Spring',
+                updatedAt: '2026-11-11T10:00:00.000Z',
+                dropped: 3,
+                entries: [
+                    { kind: 'user', text: 'How is it doing?' },
+                    { kind: 'step', text: 'Ran a jason command', detail: 'jason campaign get cmp_1' },
+                    { kind: 'step', text: 'Read its task list' },
+                    { kind: 'permission', title: 'Run a command', detail: 'git status', answer: 'deny' },
+                    { kind: 'permission', title: 'Read a file', detail: '/x', answer: null },
+                    { kind: 'text', text: 'Well.' },
+                    { kind: 'error', text: 'Claude Code stopped.' },
+                    { kind: 'pick', campaignIds: ['cmp_2'] },
+                ],
+            },
+            'claude',
+        );
+        expect(chat).toMatchObject({ id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', running: false, dropped: 3 });
+        expect(shown(chat)).toEqual([
+            { kind: 'user', text: 'How is it doing?' },
+            {
+                kind: 'steps',
+                steps: [
+                    { text: 'Ran a jason command', detail: 'jason campaign get cmp_1' },
+                    { text: 'Read its task list' },
+                ],
+                open: false,
+            },
+            {
+                kind: 'permission',
+                request: '',
+                title: 'Run a command',
+                detail: 'git status',
+                remember: null,
+                answer: 'deny',
+            },
+            { kind: 'permission', request: '', title: 'Read a file', detail: '/x', remember: null, answer: 'gone' },
+            { kind: 'text', text: 'Well.' },
+            { kind: 'error', text: 'Claude Code stopped.' },
+            { kind: 'pick', campaignIds: ['cmp_2'] },
+        ]);
+        // A kept card is never answered again: no request of a turn that ended waits.
+        expect(answered(chat, '', 'allow')).toEqual(chat);
     });
 
     it('ends a turn with the host own words when it failed, and with every request it held gone', () => {

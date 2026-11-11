@@ -91,8 +91,14 @@ campaign's work while what is running finishes; the provider's own sequence keep
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
 `jason campaign start`, with your reason). An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
-brings forward the newest chat about the campaign the desktop still holds, opens one only when there is none, and
-moves nowhere; the browser has no chat, and no Chat tab.
+opens the campaign's one conversation, made the first time and kept by the desktop with what it showed, and moves
+nowhere; the Campaigns list's Chat opens the same one. The desktop's sidebar lists its conversations, newest first, a
+campaign's by its name and a set-up chat about no campaign yet by its first words; a set-up chat whose turn made one
+campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
+another, offers what it made to pick from. **Start afresh** begins
+the agent's next turn without its memory of the conversation and keeps what is shown; **Remove** takes the conversation
+off this computer after asking, and the agent host keeps its own transcript of it. The browser has no chat, and no Chat
+tab.
 
 ## Performance
 

@@ -118,6 +118,12 @@ export interface StubDesktop extends JasonDesktop {
     status: DesktopSetup;
     /** Calls whose promise the test settles: by name, the reason they reject with. */
     refuse: Map<string, string>;
+    /** The conversations the stand-in keeps, by id, as the desktop's records hold them; the newest last. */
+    kept: Map<string, DesktopConversationRecord>;
+    /** A campaign's name, as the desktop reads it from the runtime when it makes that campaign's conversation. */
+    names: Map<string, string>;
+    /** Keeps a conversation as a desktop that kept it before this window opened. */
+    keep(record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord;
 }
 
 export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
@@ -138,19 +144,48 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         (...args: unknown[]): Promise<T> => {
             calls.push({ name, args });
             const reason = refuse.get(name);
-            return reason === undefined ? Promise.resolve(value(...args)) : Promise.reject(new Error(reason));
+            if (reason !== undefined) return Promise.reject(new Error(reason));
+            try {
+                return Promise.resolve(value(...args));
+            } catch (error) {
+                return Promise.reject(error);
+            }
         };
-    const conversation = (id: unknown, campaignId: unknown): DesktopConversation => ({
-        id: typeof id === 'string' ? id : 'conv_01JD0000000000000000000000',
-        campaignId: typeof campaignId === 'string' ? campaignId : null,
-        title: 'New chat',
-        updatedAt: '2026-11-11T00:00:00.000Z',
+    // The conversations, kept as the desktop keeps them: one per campaign, any number of set-up chats.
+    const kept = new Map<string, DesktopConversationRecord>();
+    const names = new Map<string, string>([['cmp_1', 'Spring']]);
+    let made = 0;
+    const summaryOf = ({ id, campaignId, title, updatedAt }: DesktopConversationRecord): DesktopConversation => ({
+        id,
+        campaignId,
+        title,
+        updatedAt,
     });
+    const keep = (record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord => {
+        const full: DesktopConversationRecord = {
+            campaignId: null,
+            title: 'New chat',
+            updatedAt: '2026-11-11T00:00:00.000Z',
+            entries: [],
+            dropped: 0,
+            ...record,
+        };
+        kept.set(full.id, full);
+        return full;
+    };
+    const own = (id: unknown): DesktopConversationRecord => {
+        const record = typeof id === 'string' ? kept.get(id) : undefined;
+        if (!record) throw new Error('That conversation is not one this desktop keeps.');
+        return record;
+    };
     const stub: StubDesktop = {
         platform: 'win32',
         calls,
         refuse,
         status,
+        kept,
+        names,
+        keep,
         onCommand(handler) {
             commandHandlers.add(handler);
             return () => commandHandlers.delete(handler);
@@ -163,16 +198,29 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
                 chatHandlers.add(handler);
                 return () => chatHandlers.delete(handler);
             },
-            list: answering('chat.list', (): DesktopConversation[] => []),
-            open: answering('chat.open', (id): DesktopConversationRecord => ({
-                ...conversation(id, null),
-                entries: [],
-                dropped: 0,
-            })),
-            create: answering('chat.create', (campaignId) => conversation(undefined, campaignId)),
-            remove: call('chat.remove'),
-            restart: call('chat.restart'),
-            attach: answering('chat.attach', (id, campaignId) => conversation(id, campaignId)),
+            list: answering('chat.list', (): DesktopConversation[] => [...kept.values()].reverse().map(summaryOf)),
+            open: answering('chat.open', (id): DesktopConversationRecord => structuredClone(own(id))),
+            create: answering('chat.create', (campaignId): DesktopConversation => {
+                const campaign = typeof campaignId === 'string' ? campaignId : null;
+                const existing = [...kept.values()].find((each) => campaign !== null && each.campaignId === campaign);
+                if (existing) return summaryOf(existing);
+                const id = `conv_01JD${String(++made).padStart(22, '0')}`;
+                const title = campaign === null ? 'New chat' : (names.get(campaign) ?? campaign);
+                return summaryOf(keep({ id, campaignId: campaign, title }));
+            }),
+            remove: answering('chat.remove', (id) => {
+                own(id);
+                kept.delete(id as string);
+            }),
+            restart: answering('chat.restart', (id) => {
+                own(id);
+            }),
+            attach: answering('chat.attach', (id, campaignId): DesktopConversation => {
+                const record = own(id);
+                record.campaignId = campaignId as string;
+                record.title = names.get(campaignId as string) ?? (campaignId as string);
+                return summaryOf(record);
+            }),
         },
         setup: {
             status: () => {

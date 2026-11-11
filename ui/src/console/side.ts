@@ -5,10 +5,11 @@ import { info } from '../shell/shell';
 import { act, define } from './actions';
 import { html, type Html } from './html';
 import { svg, type IconName } from './icons';
-import { chats, here, type PanelName } from './state';
+import { openConversation } from './chat';
+import { chats, conversations, conversationsFailure, here, type PanelName } from './state';
 
-// The console's sidebar: a new chat, the chats open, the console's own panels, and the browser shell's screens that
-// the console has no panel of its own for, shown in the page panel.
+// The console's sidebar: a new chat, the conversations the desktop keeps, newest first, the console's own panels, and
+// the browser shell's screens that the console has no panel of its own for, shown in the page panel.
 
 const panels: readonly { panel: PanelName; label: string; icon: IconName }[] = [
     { panel: 'needs', label: 'Needs you', icon: 'att' },
@@ -30,7 +31,10 @@ const icons: Readonly<Record<string, IconName>> = {
 
 define('side.new', () => here().dock.chat());
 define('side.chat', ([id]) => {
-    if (typeof id === 'string') here().dock.showChat(id);
+    if (typeof id !== 'string') return;
+    void openConversation(id).then((held) => {
+        if (held !== null) here().dock.showChat(held);
+    });
 });
 define('side.show', ([panel]) => {
     if (panel === 'needs' || panel === 'campaigns' || panel === 'activity' || panel === 'connect')
@@ -47,14 +51,18 @@ export function sideView(): Html {
     const version = `Jason ${info.value?.runtime_version ?? '…'}`;
     return html`<div class="brand"><span class="glyph"></span>Jason</div>
         <button class="newbtn" type="button" ${act('side.new')}>${svg('plus', 15)}New chat</button>
-        <nav class="list" aria-label="Chats">
-            ${Object.values(chats.value).map(
-                (chat) =>
-                    html`<button class="item" type="button" ${act('side.chat', chat.id)}>
-                        ${svg('chat', 15)}<span>${chat.title}</span>
+        <nav class="list" aria-label="Conversations">
+            ${conversations.value.map(
+                // A chat the console holds says its title as it is now; the list says it as the desktop kept it.
+                (conversation) =>
+                    html`<button class="item" type="button" ${act('side.chat', conversation.id)}>
+                        ${svg(conversation.campaignId === null ? 'chat' : 'camp', 15)}<span
+                            >${chats.value[conversation.id]?.title ?? conversation.title}</span
+                        >
                     </button>`,
             )}
         </nav>
+        ${conversationsFailure.value !== null ? html`<div class="note am side-note" role="alert">${conversationsFailure.value}</div>` : null}
         <nav class="list" aria-label="Console">
             ${panels.map(
                 (each) =>
