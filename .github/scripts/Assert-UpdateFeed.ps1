@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Refuses a desktop update feed, latest.yml or latest-mac.yml, that names a version other than -Version, names no file,
+Refuses a desktop update feed, latest.yml, latest-mac.yml or latest-linux.yml, that names a version other than -Version, names no file,
 lists files other than exactly -Expect, or names a file whose bytes beside it have a digest or a size other than the feed
 says.
 
@@ -10,7 +10,8 @@ reads the size for its download. So every file the feed lists under files:, and 
 from the folder the feed is in, as it will be published, and its SHA-512 (base64) and its size in bytes are held to what
 the feed says. A file the feed names must be beside it: a name with a folder in it is refused. Each file is printed with
 its digest and its size. The files it lists are exactly -Expect, in any order, given as names or as one comma-separated
-argument: a Mac feed lists both architectures' zips, and a feed that names one alone is refused.
+argument: a Mac feed lists both architectures' zips, and a feed that names one alone is refused; the Linux feed lists the
+deb and the AppImage.
 
 The blockmap beside each file is not read. electron-updater uses it only to download the part of a file that changed,
 and falls back to the whole file when the part it built does not match; what it installs is decided by the SHA-512 this

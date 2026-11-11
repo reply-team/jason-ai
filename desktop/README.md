@@ -153,14 +153,15 @@ What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), 
 - Jason never runs without Chromium's sandbox. An AppImage's launcher, which electron-builder writes, adds
   `--no-sandbox` wherever the system refuses unprivileged user namespaces; a start that carries it, on any platform,
   is refused before anything else is decided: a dialog says so, one log line says it was refused, and the application
-  quits (`src/sandbox.ts`). So the AppImage needs a system that lets it run its sandbox: on Ubuntu 24.04 and later, as
-  shipped, it says so and names the deb, whose install brings an AppArmor profile that lets the program make the user
-  namespaces its sandbox uses.
+  quits (`src/sandbox.ts`). So the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu
+  24.04 and later, as shipped, it says so and names the deb, whose install brings an AppArmor profile that lets the
+  program make the user namespaces its sandbox uses; neither package has yet been seen on such a machine.
 - Updates come to the AppImage and to the deb. An AppImage update keeps the AppImage file itself under
   `<data>/desktop/rollback/<version>/`; a deb update keeps no copy, and if the new version does not start, the page names
   the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says
   updates come through the package. When the installer stops before it finishes (a refused password, say), Jason stays
-  open and says so. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
+  open and says so; that, the password dialog and an AppImage replacing itself are built so and not yet seen on a real
+  machine. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
 
 ## Building and testing
 
@@ -211,8 +212,10 @@ that does not match, downloaded or cached, stops the pack; its own tools (nsis, 
 dmgbuild) it checks against the sha256 its own source names.
 
 `scripts/check-package.mjs` reads a built package back against this configuration: the feed and, on Windows, the
-publisher its `app-update.yml` names, the fuses its binary carries, and on Linux the updater the form makes: a deb must
-carry `resources/package-type` saying `deb`, an AppImage none. The release runs it on every package it builds:
+publisher its `app-update.yml` names, the fuses its binary carries, and on Linux what each form is: a deb must carry
+`resources/package-type` saying `deb` and an AppArmor profile that lets `/opt/Jason/jason-desktop-app` make user
+namespaces; an AppImage must carry no `package-type`, hold `AppRun`, and have a menu entry at its root whose `Exec`
+line is there and carries no `--no-sandbox`. The release runs it on every package it builds:
 
 ```sh
 node scripts/check-package.mjs --app dist/win-unpacked --platform win32

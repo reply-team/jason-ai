@@ -75,9 +75,10 @@ Rosetta where the release's runner has it; the test suite does not run on an Int
 On Linux, install the deb with `sudo apt install ./jason-desktop-linux-x64.deb`; it puts Jason in `/opt/Jason` and
 in the applications menu. Or make the AppImage executable, `chmod +x jason-desktop-linux-x64.AppImage`, and run it
 from wherever you keep it; it is built on the AppImage runtime that needs no libfuse2. Jason never runs without
-Chromium's sandbox, so the AppImage needs a system that lets it run its sandbox: on Ubuntu 24.04 and later, as
-shipped, it says so, does not start, and names the deb, whose install sets up what its sandbox needs there. Neither is
-signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
+Chromium's sandbox, so the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04
+and later, as shipped, the AppImage says so, does not start, and names the deb, whose install brings an AppArmor profile
+for its sandbox there; this release's build machine started both packages sandboxed, and neither has yet been seen on
+such a machine. Neither is signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file this release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. The `jason` they carry needs the ICU
 library (`libicu`), as the archive's does.
@@ -95,18 +96,22 @@ puts it back by itself: to go back, quit Jason and put that folder back in the p
 hand. That puts back the previous application and the `jason` it carried; the data directory stays as the newer
 version left it.
 
-On Linux the deb's update installs the new deb with `dpkg`, which asks for an administrator's password every time,
-through the first of `gksudo`, `kdesudo`, `pkexec` and `beesu` the system has, else `sudo`: an account that cannot give
-one cannot install the update, and Jason stays open and says so. A deb update keeps no copy; to go back, install
-the previous release's `jason-desktop-linux-x64.deb` the same way. An AppImage update replaces the file where it is,
-so you need to be able to write to its folder, and keeps the file as it was under `~/.jason/desktop/rollback/<version>/`.
+On Linux the updates are built as follows, and not yet seen on a real machine. The deb's update installs the new deb
+with `dpkg`, which asks for an administrator's password every time, through the first of `gksudo`, `kdesudo`,
+`pkexec` and `beesu` the system has, else `sudo`: an account that cannot give one cannot install the update, and
+Jason stays open and says so. A deb update keeps no copy; to go back, install the previous release's
+`jason-desktop-linux-x64.deb` the same way. An AppImage update replaces the file where it is, so you need to be able to
+write to its folder, and keeps the file as it was under `~/.jason/desktop/rollback/<version>/`.
 
 Uninstalling the desktop on Windows stops the runtime the application carries first, and removes nothing when that
 runtime does not stop. It then takes off what it put there - the `jason` command it placed on the PATH, Open Jason at
 login, and the runtime's logon start when that start names the application's own folder - and leaves the data
 directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `%LOCALAPPDATA%\jason-desktop-updater`,
-saying so. On Linux, `sudo apt remove jason-desktop` removes the deb, and deleting the file removes the AppImage; the
-data directory and the harness root stay.
+saying so. On Linux, take off first, from the Jason menu, what Jason placed on your word: turn off Open Jason at Login
+and Start the Runtime at Logon, and under Command Line remove `jason` from the PATH. Then `sudo apt remove
+jason-desktop` removes the deb, and deleting the file removes the AppImage. Neither takes off what is named above, nor
+the updater's cache, `~/.cache/jason-desktop-updater`, the data directory (`~/.jason`) or the harness root
+(`~/Jason`).
 
 ## Installing
 
