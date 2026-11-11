@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals-react';
+import { effect, signal } from '@preact/signals-react';
 import type { DesktopHost, DesktopPlugin, DesktopReplyAccount, DesktopSetup } from '../platform/desktop';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
@@ -13,6 +13,12 @@ const typed = new Map<string, string>();
 
 /** The plugin whose Disconnect waits on the person's confirmation; null when none does. */
 const confirming = signal<string | null>(null);
+
+// A confirmation is forgotten once the plugin it names is no longer configured, so configuring it again asks afresh.
+effect(() => {
+    const id = confirming.value;
+    if (id !== null && !setup.value?.plugins.some((each) => each.id === id && each.configured)) confirming.value = null;
+});
 
 /**
  * Reply's web app, where an account's limits, signature, pauses and connection are managed. The desktop manages none of
@@ -46,8 +52,11 @@ const states: Record<string, Record<string, readonly [string, Tone]>> = {
     },
 };
 
-/** Text the card did not write, cut to forty characters so a long one cannot crowd the row. */
-const cap = (text: string): string => (text.length > 40 ? `${text.slice(0, 40)}…` : text);
+/** Text the card did not write, cut to forty characters so a long one cannot crowd the row; never inside one. */
+const cap = (text: string): string => {
+    const characters = [...text];
+    return characters.length > 40 ? `${characters.slice(0, 40).join('')}…` : text;
+};
 
 function stateOf(account: DesktopReplyAccount): readonly [string, Tone] {
     if (!account.status) return ['State unknown', 'gray'];
@@ -338,7 +347,7 @@ function disconnect(each: DesktopPlugin, busy: Html | null): Html | null {
         </button>`;
     return html`<div class="note am" role="alertdialog" aria-label="Disconnect ${each.label}">
         Disconnect ${each.label}? Every value under its configuration in the settings file and its notification target
-        are removed. Jason stops sending notifications there. The plugin stays installed, and what it is granted stays.
+        are removed. Jason stops sending notifications there. The plugin stays installed.
         <button class="btn sm" type="button" ${busy} ${act('connect.disconnectConfirm', each.id)}>
             Disconnect ${each.label}
         </button>

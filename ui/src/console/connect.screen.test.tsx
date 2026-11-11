@@ -179,6 +179,14 @@ describe('the Reply card', () => {
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 
+    it('cuts by characters, never inside one, and leaves forty characters whole', async () => {
+        const forty = `${'x'.repeat(39)}😀`;
+        renderConnect(withAccounts([account('e1', 'email', `${forty}yy`), account('e2', 'email', forty)]));
+        const states = new Map(rows(replyCard(await openConnect())).map(([, name, state]) => [name, state]));
+        expect(states.get('Account e1')).toBe(`${forty}…`);
+        expect(states.get('Account e2')).toBe(forty);
+    });
+
     it('draws a channel it does not know as inert text, cut to forty characters', async () => {
         const channel = `${hostile}${'y'.repeat(30)}`;
         renderConnect(withAccounts([account('z1', channel, 'connected')]));
@@ -238,8 +246,9 @@ describe('Disconnect', () => {
         fireEvent.click(within(card(connect, 'ntfy')).getByRole('button', { name: 'Disconnect' }));
         const asking = await waitFor(() => within(card(connect, 'ntfy')).getByRole('alertdialog'));
         expect(words(asking)).toContain(
-            'Every value under its configuration in the settings file and its notification target are removed. Jason stops sending notifications there. The plugin stays installed, and what it is granted stays.',
+            'Every value under its configuration in the settings file and its notification target are removed. Jason stops sending notifications there. The plugin stays installed.',
         );
+        expect(words(asking)).not.toContain('granted');
         expect(desktop.calls.some((each) => each.name === 'setup.disconnectPlugin')).toBe(false);
         fireEvent.click(within(asking).getByRole('button', { name: 'Cancel' }));
         await waitFor(() => expect(within(card(connect, 'ntfy')).queryByRole('alertdialog')).toBeNull());
@@ -259,6 +268,45 @@ describe('Disconnect', () => {
         );
         await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1));
         expect(within(card(connect, 'slack')).queryByRole('alertdialog')).toBeNull();
+    });
+
+    it('forgets a confirmation left open once its plugin is no longer configured, so configuring it again asks afresh', async () => {
+        const desktop = renderConnect(allConfigured);
+        const connect = await openConnect();
+        fireEvent.click(within(card(connect, 'telegram')).getByRole('button', { name: 'Disconnect' }));
+        await waitFor(() => within(card(connect, 'telegram')).getByRole('alertdialog'));
+        const unconfigured = (configured: boolean): DesktopSetup => ({
+            ...allConfigured,
+            plugins: allConfigured.plugins.map((each) => (each.id === 'telegram' ? { ...each, configured } : each)),
+        });
+        desktop.status = unconfigured(false);
+        desktop.changed();
+        await waitFor(() => expect(within(card(connect, 'telegram')).getByText('Not configured')).toBeTruthy());
+        desktop.status = unconfigured(true);
+        desktop.changed();
+        await waitFor(() => expect(within(card(connect, 'telegram')).getByText('Configured')).toBeTruthy());
+        expect(within(card(connect, 'telegram')).queryByRole('alertdialog')).toBeNull();
+        expect(within(card(connect, 'telegram')).getAllByRole('button', { name: 'Disconnect' })).toHaveLength(1);
+    });
+
+    it('says a Disconnect the desktop refuses as its words, inert, and leaves the card as it stood', async () => {
+        const desktop = renderConnect(allConfigured);
+        const reason = `The settings file has Notifications:Plugins:slack as something other than an object, so it was left as it is. Edit it by hand, then press Reload. ${hostile}`;
+        desktop.refuse.set('setup.disconnectPlugin', reason);
+        const connect = await openConnect();
+        const read = desktop.calls.filter((each) => each.name === 'setup.status').length;
+        fireEvent.click(within(card(connect, 'slack')).getByRole('button', { name: 'Disconnect' }));
+        const asking = await waitFor(() => within(card(connect, 'slack')).getByRole('alertdialog'));
+        fireEvent.click(within(asking).getByRole('button', { name: 'Disconnect Slack' }));
+        const alert = await waitFor(() => within(connect).getByRole('alert'));
+        expect(words(alert)).toBe(reason);
+        expect(connect.querySelector('img')).toBeNull();
+        expect((window as { hit?: number }).hit).toBeUndefined();
+        await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1));
+        const slack = card(connect, 'slack');
+        expect(within(slack).getByText('Configured')).toBeTruthy();
+        expect(within(slack).queryByRole('alertdialog')).toBeNull();
+        expect(within(slack).getAllByRole('button', { name: 'Disconnect' })).toHaveLength(1);
     });
 
     it('is not offered while the settings file cannot be kept, as Configure is not', async () => {
