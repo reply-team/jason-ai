@@ -43,6 +43,8 @@ define('side.page', ([hash]) => {
 export function sideView(): Html {
     const marked = pendingMark.value;
     const screens = registry.list('screen').filter((each) => !ownPanels.has(each.id));
+    // A long version is cut with an ellipsis at the sidebar's width; the title keeps all of it.
+    const version = `Jason ${info.value?.runtime_version ?? '…'}`;
     return html`<div class="brand"><span class="glyph"></span>Jason</div>
         <button class="newbtn" type="button" ${act('side.new')}>${svg('plus', 15)}New chat</button>
         <nav class="list" aria-label="Chats">
@@ -70,5 +72,5 @@ export function sideView(): Html {
                     </button>`,
             )}
         </nav>
-        <div class="sfoot meta">Jason ${info.value?.runtime_version ?? '…'}</div>`;
+        <div class="sfoot meta" title="${version}">${version}</div>`;
 }

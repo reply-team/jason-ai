@@ -839,6 +839,24 @@ describe('the console', () => {
         expect(send.matches('.jc-console *')).toBe(true);
     });
 
+    it("cuts the sidebar's version line with an ellipsis rather than scrolling, and keeps its whole text in the title", async () => {
+        renderConsole(pending(new FakeApi()));
+        const version = `Jason ${fixtures['system.info/with-ui'].response.runtime_version}`;
+        const foot = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
+            expect(words(found).trim()).toBe(version);
+            return found;
+        });
+        expect(foot.title).toBe(version);
+        const body = rules()
+            .filter((rule) => rule.selector.includes('sfoot') && foot.matches(rule.selector))
+            .map((rule) => rule.body)
+            .join(';');
+        expect(body).toMatch(/white-space:\s*nowrap/);
+        expect(body).toMatch(/overflow:\s*hidden/);
+        expect(body).toMatch(/text-overflow:\s*ellipsis/);
+    });
+
     it('says after a fresh start that lines written in between are not shown, and keeps the lines it has', async () => {
         const { journal } = renderConsole(pending(new FakeApi()));
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));

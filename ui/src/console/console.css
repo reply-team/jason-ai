@@ -429,6 +429,9 @@
 .jc-console .sfoot {
     border-top: 1px solid var(--line);
     padding: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .jc-console .pillc {
     display: inline-flex;
