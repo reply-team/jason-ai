@@ -6,7 +6,7 @@
     "query": "mat",
     "campaign_id": "cmp_2",
     "include_archived": true,
-    "limit": 50
+    "limit": 200
   },
   "status": 200,
   "response": {

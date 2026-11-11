@@ -397,12 +397,12 @@ public class RecordedExchangesTests
         string[] changes = ["contact_created", "contact_updated", "contact_archived"];
         string[] all = [.. replies, .. work, .. decisions, .. changes];
 
-        var first = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity", new { order = "activity", limit = 50 }, Ct);
+        var first = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity", new { order = "activity", limit = 200 }, Ct);
         Assert.Equal([seed.Mateo, seed.Aguilar, seed.Paula, seed.Grace], first.Items.Select(c => c.Id));
         Assert.Null(first.NextCursor);
-        Assert.Equal([seed.Mateo, seed.Aguilar], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign", new { order = "activity", campaign_id = seed.LatAm, limit = 50 }, Ct)).Items.Select(c => c.Id));
-        Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-query", new { order = "activity", query = "mat", limit = 50 }, Ct)).Items.Select(c => c.Id));
-        Assert.Contains(seed.Marcos, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "archived", new { order = "activity", include_archived = true, limit = 50 }, Ct)).Items.Select(c => c.Id));
+        Assert.Equal([seed.Mateo, seed.Aguilar], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign", new { order = "activity", campaign_id = seed.LatAm, limit = 200 }, Ct)).Items.Select(c => c.Id));
+        Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-query", new { order = "activity", query = "mat", limit = 200 }, Ct)).Items.Select(c => c.Id));
+        Assert.Contains(seed.Marcos, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "archived", new { order = "activity", include_archived = true, limit = 200 }, Ct)).Items.Select(c => c.Id));
 
         Assert.Equal(2, (await api.RecordAsync<ContactDto>(Operations.ContactGet, "with-campaigns", new { contact_id = seed.Mateo }, Ct)).Campaigns!.Count);
         Assert.Null((await api.RecordAsync<ContactDto>(Operations.ContactGet, "no-first-name", new { contact_id = seed.Aguilar }, Ct)).FirstName);
@@ -420,11 +420,11 @@ public class RecordedExchangesTests
 
         // The list narrowed the way a person narrows it — a name, then a campaign, then the archived too, then a name nobody
         // has — and the person found by another name; the other people's pages as they open.
-        Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-query", new { order = "activity", query = "mat", campaign_id = seed.LatAm, limit = 50 }, Ct)).Items.Select(c => c.Id));
-        Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-query-archived", new { order = "activity", query = "mat", campaign_id = seed.LatAm, include_archived = true, limit = 50 }, Ct)).Items.Select(c => c.Id));
-        Assert.Empty((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-query-none", new { order = "activity", query = "zz", campaign_id = seed.LatAm, include_archived = true, limit = 50 }, Ct)).Items);
-        Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.ContactList, "query-too-long", new { order = "activity", query = new string('a', 201), limit = 50 }, HttpStatusCode.BadRequest, Ct)).Code);
-        Assert.Equal([seed.Aguilar], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-query-aguilar", new { order = "activity", query = "aguilar", limit = 50 }, Ct)).Items.Select(c => c.Id));
+        Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-query", new { order = "activity", query = "mat", campaign_id = seed.LatAm, limit = 200 }, Ct)).Items.Select(c => c.Id));
+        Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-query-archived", new { order = "activity", query = "mat", campaign_id = seed.LatAm, include_archived = true, limit = 200 }, Ct)).Items.Select(c => c.Id));
+        Assert.Empty((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-query-none", new { order = "activity", query = "zz", campaign_id = seed.LatAm, include_archived = true, limit = 200 }, Ct)).Items);
+        Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.ContactList, "query-too-long", new { order = "activity", query = new string('a', 201), limit = 200 }, HttpStatusCode.BadRequest, Ct)).Code);
+        Assert.Equal([seed.Aguilar], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-query-aguilar", new { order = "activity", query = "aguilar", limit = 200 }, Ct)).Items.Select(c => c.Id));
         Assert.Empty((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-contact-open-none", new { contact_id = seed.Aguilar, status = new[] { "created", "awaiting_approval", "scheduled", "processing" }, order = "due", limit = 50 }, Ct)).Items);
         Assert.Equal("Paula", (await api.RecordAsync<ContactDto>(Operations.ContactGet, "unrouted", new { contact_id = seed.Paula }, Ct)).FirstName);
         Assert.Null((await api.RecordAsync<ContactDto>(Operations.ContactGet, "imported", new { contact_id = seed.Grace }, Ct)).TimeZone);
@@ -432,7 +432,7 @@ public class RecordedExchangesTests
         // A campaign an address names that is no longer there.
         const string Gone = "cmp_01K7QN00000000000000000099";
         Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.CampaignGet, "gone", new { campaign_id = Gone }, HttpStatusCode.NotFound, Ct)).Code);
-        Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.ContactList, "gone-campaign", new { order = "activity", campaign_id = Gone, limit = 50 }, HttpStatusCode.NotFound, Ct)).Code);
+        Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.ContactList, "gone-campaign", new { order = "activity", campaign_id = Gone, limit = 200 }, HttpStatusCode.NotFound, Ct)).Code);
 
         reads.Answer(
             FakeProviderReads.Result(Seed.Threads(more: false)),
@@ -717,6 +717,10 @@ public class RecordedExchangesTests
                 db.CampaignContacts.Add(new CampaignContact { Campaign = campaigns[0], Contact = person, AddedAt = added, UpdatedAt = added });
             }
 
+            // People in no campaign, so that the People page's two hundred are a full page with one person past it.
+            for (var n = 1; n <= 150; n++)
+                db.Contacts.Add(new Contact { PublicId = $"cnt_01K7QN{n + 800:D20}", FirstName = $"Extra {n:D3}", LastName = "Example", CreatedAt = added, UpdatedAt = added });
+
             await db.SaveChangesAsync(Ct);
         }
 
@@ -737,10 +741,10 @@ public class RecordedExchangesTests
         var next = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "activity-many-next", new { campaign_id = crowded, activity = "added", since = WeekStart, until = Now, limit = 50, cursor = page.NextCursor }, Ct);
         Assert.Equal("Person 51", Assert.Single(next.Items).Contact.FirstName);
 
-        // The same fifty-one on the People screen, which lists fifty at a time and reads on from where a page ended.
-        var people = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "many", new { order = "activity", limit = 50 }, Ct);
-        Assert.Equal(50, people.Items.Count);
-        Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "many-next", new { order = "activity", limit = 50, cursor = people.NextCursor }, Ct)).Items);
+        // The same people on the People screen, which lists two hundred at a time and reads on from where a page ended.
+        var people = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "many", new { order = "activity", limit = 200 }, Ct);
+        Assert.Equal(200, people.Items.Count);
+        Assert.Equal("Extra 150", Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "many-next", new { order = "activity", limit = 200, cursor = people.NextCursor }, Ct)).Items).FirstName);
     }
 
     /// <summary>

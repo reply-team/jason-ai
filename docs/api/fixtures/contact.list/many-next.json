@@ -3,15 +3,15 @@
   "case": "many-next",
   "request": {
     "order": "activity",
-    "limit": 50,
-    "cursor": "YWN0aXZpdHl8fGNudF8wMUs3UU4wMDAwMDAwMDAwMDAwMDAwMDU1MA"
+    "limit": 200,
+    "cursor": "YWN0aXZpdHl8fGNudF8wMUs3UU4wMDAwMDAwMDAwMDAwMDAwMDk0OQ"
   },
   "status": 200,
   "response": {
     "items": [
       {
-        "id": "cnt_51",
-        "first_name": "Person 51",
+        "id": "cnt_201",
+        "first_name": "Extra 150",
         "last_name": "Example",
         "company": null,
         "title": null,
@@ -22,18 +22,7 @@
         "created_at": "2026-10-12T10:00:00.000Z",
         "updated_at": "2026-10-12T10:00:00.000Z",
         "archived_at": null,
-        "campaigns": [
-          {
-            "campaign_id": "cmp_1",
-            "campaign_name": "Campaign 001",
-            "state": "enrolled",
-            "added_at": "2026-10-12T10:00:00.000Z",
-            "updated_at": "2026-10-12T10:00:00.000Z",
-            "standing": [
-              "new"
-            ]
-          }
-        ],
+        "campaigns": [],
         "last_activity": null
       }
     ],

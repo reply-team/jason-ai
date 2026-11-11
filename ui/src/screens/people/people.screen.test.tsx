@@ -135,9 +135,9 @@ describe('People', () => {
         const api = new FakeApi().answer('contact.list', 'contact.list/many', 'contact.list/many-next');
         open(api);
 
-        await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(50));
+        await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(200));
         fireEvent.click(screen.getByRole('button', { name: /loading/ }));
-        await waitFor(() => expect(screen.getByText('Person 51 Example')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Extra 150 Example')).toBeTruthy());
         expect(sentLists(api)[1]).toEqual(fixtures['contact.list/many-next'].request);
     });
 
