@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { clientOf, sourceOf } from '../src/classify.mjs';
-import { BASE, GUIDE, fakeDb, fakeFetch, send } from '../fakes.mjs';
+import { BASE, GUIDE, fakeDb, fakeFetch, send, sqliteDb } from '../fakes.mjs';
 import { INSTALL_PAGE } from '../src/paths.mjs';
 
 const page = () => new Response(GUIDE, { status: 200 });
@@ -150,4 +150,16 @@ test('the stats page and refused requests are never counted', async () => {
   await send('/nothing', { env: { COUNTS: db } });
   await send('/desktop/windows/', { env: { COUNTS: db } });
   assert.equal(db.runs.length, 0);
+});
+
+test('the one statement the handler writes moves a counter on a real table, and a new source is a row of its own', async () => {
+  const db = sqliteDb();
+  for (const path of ['/desktop/windows?ref=news', '/desktop/windows?ref=news', '/desktop/windows?ref=blog']) {
+    await send(path, { env: { COUNTS: db }, headers: { 'user-agent': 'curl/8.7.1' } });
+  }
+  const rows = db.database.prepare('SELECT day, path, ref, client, n FROM counts ORDER BY ref').all().map((row) => ({ ...row }));
+  assert.deepEqual(rows, [
+    { day: '2026-11-12', path: '/desktop/windows', ref: 'blog', client: 'fetcher', n: 1 },
+    { day: '2026-11-12', path: '/desktop/windows', ref: 'news', client: 'fetcher', n: 2 },
+  ]);
 });
