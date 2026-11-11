@@ -17,8 +17,14 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-/** Opens the screen the way an address does: renderApp clears the address, and its late change event must agree with ours. */
+/**
+ * Opens the screen the way an address does: renderApp clears the address, and its late change event must agree with ours.
+ * Beside a list with no search the page asks for its chips' numbers: archived people left out until Archived is ticked.
+ */
 function open(api: FakeApi, filters: PeopleFilters = {}, id?: string, tab: PersonTab = 'timeline') {
+    if (!api.offers('campaign.summary')) {
+        api.answer('campaign.summary', 'campaign.summary/everyone-without-archived', 'campaign.summary/everyone');
+    }
     renderApp(api);
     const to = id ? { screen: 'people' as const, id, tab, filters } : { screen: 'people' as const, tab, filters };
     location.hash = href(to);
@@ -740,6 +746,8 @@ describe('People', () => {
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/gone-campaign', 'contact.list/by-activity')
             .answer('campaign.get', 'campaign.get/gone');
+        // The gone campaign's numbers never come: the address has left it before they could.
+        api.hold('campaign.summary', (body) => (body as { campaign_ids?: string[] }).campaign_ids?.[0] === gone);
         open(api, { campaign: gone });
 
         await waitFor(() => expect(route.value).toEqual({ screen: 'people', tab: 'timeline', filters: {} }));
@@ -782,9 +790,6 @@ describe('People: the stage chips', () => {
         );
         open(api);
         await waitFor(() => expect(screen.getByText('Ada Example')).toBeTruthy());
-        // With Archived off the totals would count people the list leaves out: no number, and none asked for.
-        expect(chipLabels()).toEqual(plain);
-        expect(api.calls.some((c) => c.operation === 'campaign.summary')).toBe(false);
         expect(screen.getByRole('group', { name: 'Stage' })).toBeTruthy();
         expect(chip(/^Waiting/).getAttribute('title')).toBe(
             'An approval or a question about their work is waiting for you.',
@@ -811,30 +816,62 @@ describe('People: the stage chips', () => {
         expect(cells(rowOf('Ada Example')).slice(3, 5)).toEqual(['Waiting', 'Spring+2']);
     });
 
-    it("show the runtime's numbers only with Archived ticked and no search, which is when the list matches them", async () => {
-        const api = new FakeApi()
-            .answer('contact.list', 'contact.list/archived', 'contact.list/by-activity')
-            .answer('campaign.summary', 'campaign.summary/everyone');
-        open(api, { archived: true });
-        await waitFor(() =>
-            expect(chipLabels()).toEqual([
-                'All',
-                'Waiting 3',
-                'Failed 3',
-                'Working 2',
-                'New 4',
-                'Idle 7',
-                'Sequence 2',
-                'Out 6',
-            ]),
-        );
-        expect(api.sent('campaign.summary')).toEqual(fixtures['campaign.summary/everyone'].request);
+    const withoutArchived = ['All', 'Waiting 3', 'Failed 3', 'Working 2', 'New 3', 'Idle 7', 'Sequence 2', 'Out 6'];
+    const withArchived = ['All', 'Waiting 3', 'Failed 3', 'Working 2', 'New 4', 'Idle 7', 'Sequence 2', 'Out 6'];
+    const summaries = (api: FakeApi) => api.calls.filter((c) => c.operation === 'campaign.summary').map((c) => c.body);
 
-        // Unticked, the numbers go at once, before the list answers.
+    it('in the default view a chip shows the number of people it lists, archived people left out as the list leaves them', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-summary-new-without-archived');
+        open(api, { stage: 'new' });
+        await waitFor(() => expect(chipLabels()).toEqual(withoutArchived));
+        expect(api.sent('campaign.summary')).toEqual(fixtures['campaign.summary/everyone-without-archived'].request);
+        expect(sentLists(api)[0]).toEqual(fixtures['contact.list/by-activity-summary-new-without-archived'].request);
+        // The number on New and the rows drawn under New are the same people.
+        await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(3));
+        const rows = document.querySelectorAll('.ptable tbody tr').length;
+        expect(chip(/^New/).textContent?.replace(/\s+/g, ' ').trim()).toBe(`New ${rows}`);
+    });
+
+    it('beside a search no chip shows a number, and none is asked for, because a count knows no search', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-query');
+        open(api, { q: 'mat' });
+        await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
+        expect(chipLabels()).toEqual(plain);
+        expect(summaries(api)).toEqual([]);
+    });
+
+    it('ticking Archived asks for the numbers again and shows the ones that count archived people; unticking asks again', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity', 'contact.list/archived');
+        open(api);
+        await waitFor(() => expect(chipLabels()).toEqual(withoutArchived));
+
         fireEvent.click(screen.getByRole('checkbox', { name: 'Archived' }));
-        await waitFor(() => expect(chipLabels()).toEqual(plain));
-        await waitFor(() => expect(sentLists(api)).toHaveLength(2));
-        expect(api.calls.filter((c) => c.operation === 'campaign.summary')).toHaveLength(1);
+        await waitFor(() => expect(chipLabels()).toEqual(withArchived));
+        expect(summaries(api)).toEqual([
+            fixtures['campaign.summary/everyone-without-archived'].request,
+            fixtures['campaign.summary/everyone'].request,
+        ]);
+
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Archived' }));
+        await waitFor(() => expect(chipLabels()).toEqual(withoutArchived));
+        expect(summaries(api)).toHaveLength(3);
+    });
+
+    it('numbers asked before Archived was ticked that arrive after it are dropped', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity', 'contact.list/archived');
+        const release = api.hold(
+            'campaign.summary',
+            (body) => (body as { exclude_archived_contacts?: boolean }).exclude_archived_contacts === true,
+        );
+        open(api);
+        await waitFor(() => expect(summaries(api)).toHaveLength(1));
+        // The numbers go as soon as the box changes, before anything answers.
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Archived' }));
+        await waitFor(() => expect(chipLabels()).toEqual(withArchived));
+
+        release();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(chipLabels()).toEqual(withArchived);
     });
 
     it('a count that fails to read leaves the list and says so', async () => {
@@ -856,6 +893,8 @@ describe('People: the stage chips', () => {
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/by-campaign')
             .answer('campaign.get', 'campaign.get/unlinked');
+        // This list's own numbers are not what the test reads: they stay on their way.
+        api.hold('campaign.summary');
         open(api, { campaign: unlinked });
         await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
         // Mateo is in two campaigns; the list is of the one, so the row says where they stand there.

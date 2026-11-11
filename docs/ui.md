@@ -134,9 +134,10 @@ Everyone Jason knows, as a table of Name, Company, Channels, Stage, Campaign and
 last happened to first (`jason contact list --order activity`, two hundred at a time, more on request), with a search, a
 campaign filter and the archived on request, all part of the page's address. Under the search sit an All chip and a
 chip for each live count of a campaign's summary, Removed apart (`jason contact list --summary`): a chip keeps the
-people that count counts. A count counts archived people who are still members, whom the list shows only with Archived
-ticked, so a chip shows its number (`jason campaign summary`, one campaign's own when the list is narrowed to it) only
-while Archived is ticked and there is no search, which is when the list matches it; otherwise it shows its word alone.
+people that count counts. A chip shows its number whenever there is no search (`jason campaign summary`, one campaign's
+own when the list is narrowed to it); while Archived is not ticked the page asks it to leave archived people out
+(`--exclude-archived-contacts`), as the list does, so a number is the people its chip lists. Beside a search a chip shows
+its word alone: a count knows no search.
 Stage is where the person stands in the campaign the row shows, each count in its one word with the runtime's own
 definition on hover (`standing` on each campaign of `jason contact get` and `jason contact list`). A person in several
 campaigns shows the one the list is narrowed to, else the one their latest activity is in, else their newest not

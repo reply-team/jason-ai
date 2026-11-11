@@ -144,6 +144,7 @@ import campaignPauseWithReason from '../../../docs/api/fixtures/campaign.pause/w
 import campaignStartAfterPause from '../../../docs/api/fixtures/campaign.start/after-pause.json';
 import campaignSummaryAll from '../../../docs/api/fixtures/campaign.summary/all.json';
 import campaignSummaryEveryone from '../../../docs/api/fixtures/campaign.summary/everyone.json';
+import campaignSummaryEveryoneWithoutArchived from '../../../docs/api/fixtures/campaign.summary/everyone-without-archived.json';
 import campaignSummaryAllAfter from '../../../docs/api/fixtures/campaign.summary/all-after.json';
 import campaignSummaryArchived from '../../../docs/api/fixtures/campaign.summary/archived.json';
 import campaignSummaryInboxAll from '../../../docs/api/fixtures/campaign.summary/inbox-all.json';
@@ -153,6 +154,7 @@ import campaignSummaryMany from '../../../docs/api/fixtures/campaign.summary/man
 import campaignSummaryManyNext from '../../../docs/api/fixtures/campaign.summary/many-next.json';
 import campaignSummarySome from '../../../docs/api/fixtures/campaign.summary/some.json';
 import campaignSummarySomeAfter from '../../../docs/api/fixtures/campaign.summary/some-after.json';
+import campaignSummarySomeWithoutArchived from '../../../docs/api/fixtures/campaign.summary/some-without-archived.json';
 import campaignSummarySummer from '../../../docs/api/fixtures/campaign.summary/summer.json';
 import campaignSummaryUnlinked from '../../../docs/api/fixtures/campaign.summary/unlinked.json';
 import campaignSummaryWithArchived from '../../../docs/api/fixtures/campaign.summary/with-archived.json';
@@ -168,6 +170,7 @@ import contactListByActivity from '../../../docs/api/fixtures/contact.list/by-ac
 import contactListByActivityQuery from '../../../docs/api/fixtures/contact.list/by-activity-query.json';
 import contactListByActivityQueryAguilar from '../../../docs/api/fixtures/contact.list/by-activity-query-aguilar.json';
 import contactListByActivitySeveral from '../../../docs/api/fixtures/contact.list/by-activity-several.json';
+import contactListByActivitySummaryNewWithoutArchived from '../../../docs/api/fixtures/contact.list/by-activity-summary-new-without-archived.json';
 import contactListByActivitySummaryQuery from '../../../docs/api/fixtures/contact.list/by-activity-summary-query.json';
 import contactListByActivitySummaryWaiting from '../../../docs/api/fixtures/contact.list/by-activity-summary-waiting.json';
 import contactListByCampaign from '../../../docs/api/fixtures/contact.list/by-campaign.json';
@@ -587,6 +590,10 @@ export const fixtures = {
         CampaignSummaryRequest,
         CampaignSummaryResponse
     >,
+    'campaign.summary/everyone-without-archived': campaignSummaryEveryoneWithoutArchived satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
     'campaign.summary/all-after': campaignSummaryAllAfter satisfies Exchange<
         CampaignSummaryRequest,
         CampaignSummaryResponse
@@ -614,6 +621,10 @@ export const fixtures = {
     >,
     'campaign.summary/some': campaignSummarySome satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
     'campaign.summary/some-after': campaignSummarySomeAfter satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/some-without-archived': campaignSummarySomeWithoutArchived satisfies Exchange<
         CampaignSummaryRequest,
         CampaignSummaryResponse
     >,
@@ -647,6 +658,8 @@ export const fixtures = {
         ContactListRequest,
         Page<Contact>
     >,
+    'contact.list/by-activity-summary-new-without-archived':
+        contactListByActivitySummaryNewWithoutArchived satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-activity-summary-query': contactListByActivitySummaryQuery satisfies Exchange<
         ContactListRequest,
         Page<Contact>

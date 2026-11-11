@@ -4,6 +4,7 @@ import { session } from '../../api/session';
 import type {
     AddContactsResult,
     CampaignSummary,
+    CampaignSummaryRequest,
     CampaignSummaryResponse,
     Contact,
     JournalEntry,
@@ -50,31 +51,35 @@ export function fail(error: unknown, into = failure): void {
     into.value = error instanceof ApiError ? error.message : String(error);
 }
 
-/**
- * Whether the chips can show their numbers. A count counts everyone in it, archived people included, and knows no
- * search; the list leaves archived people out until they are asked for. The two agree only with Archived ticked and no
- * search, and only then does a chip show a number.
- */
+/** Whether the chips can show their numbers: a count knows no search, so none beside one. */
 export function showsCounts(filters: PeopleFilters): boolean {
-    return !filters.q && filters.archived === true;
+    return !filters.q;
+}
+
+/**
+ * What the chips' numbers are asked with: the campaign the list is narrowed to, and, while Archived is not ticked,
+ * archived people left out, as the list leaves them out, so a number is the people its chip lists.
+ */
+export function countsBody(filters: PeopleFilters): CampaignSummaryRequest {
+    const body: CampaignSummaryRequest = filters.campaign ? { campaign_ids: [filters.campaign] } : {};
+    if (!filters.archived) body.exclude_archived_contacts = true;
+    return body;
 }
 
 let countsGeneration = 0;
 let countsFor: string | null = null;
 
-/** The chips' numbers: the campaign's own row, or every campaign's total; none while they would not match the list. */
+/** The chips' numbers: the campaign's own row, or every campaign's total; none beside a search. */
 async function loadCounts(api: Api, filters: PeopleFilters): Promise<void> {
     const mine = ++countsGeneration;
-    const key = showsCounts(filters) ? (filters.campaign ?? '') : null;
-    // Numbers of another request are never left beside this list.
+    const body = countsBody(filters);
+    const key = showsCounts(filters) ? JSON.stringify(body) : null;
+    // Numbers of another request are never left beside this list: another campaign, or Archived ticked or not.
     if (key !== countsFor) counts.value = null;
     countsFor = key;
     if (key === null) return;
     try {
-        const answer = await api.call<CampaignSummaryResponse>(
-            'campaign.summary',
-            filters.campaign ? { campaign_ids: [filters.campaign] } : {},
-        );
+        const answer = await api.call<CampaignSummaryResponse>('campaign.summary', body);
         if (mine !== countsGeneration) return;
         const row = filters.campaign ? answer.campaigns[0] : answer.total;
         counts.value = row

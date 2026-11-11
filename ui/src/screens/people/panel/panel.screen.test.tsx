@@ -28,6 +28,8 @@ const aguilar = fixtures['contact.get/no-first-name'].response;
 
 /** Opens People with one person beside the list, the way an address does. */
 function open(api: FakeApi, id: string, tab: PersonTab = 'timeline', filters: PeopleFilters = {}) {
+    // The list beside the panel asks for its chips' numbers, archived people left out as the list leaves them out.
+    if (!api.offers('campaign.summary')) api.answer('campaign.summary', 'campaign.summary/everyone-without-archived');
     renderApp(api);
     const to = { screen: 'people' as const, id, tab, filters };
     location.hash = href(to);
@@ -675,7 +677,7 @@ describe('Move', () => {
         expect(asked(api, 'campaign.remove_contacts')).toEqual([recorded('campaign.remove_contacts/move-out')]);
         const order = api.calls
             .map((call) => call.operation)
-            .filter((op) => op.startsWith('campaign.') && op !== 'campaign.list');
+            .filter((op) => op.startsWith('campaign.') && op !== 'campaign.list' && op !== 'campaign.summary');
         expect(order).toEqual(['campaign.add_contacts', 'campaign.remove_contacts']);
         await waitFor(() => expect(membership('Nordic pilot').textContent).toContain('Excluded'));
         expect(membership('Q4 follow-ups').textContent).toContain('Enrolled');
