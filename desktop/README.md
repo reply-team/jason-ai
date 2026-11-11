@@ -86,6 +86,11 @@ with Node. `test/process-guard.test.ts` holds this, and also refuses a `require`
 registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`
 outside the navigation lock in `src/main.ts`.
 
+What the desktop tells Reply about itself is one label in the User-Agent of reply-cli's requests and nothing else:
+`REPLY_CLIENT=jason-harness/<the bundle's version, less any build metadata after a plus sign>`, set in the environment of
+the `reply` the desktop starts and of every agent host's turn in place of any `REPLY_CLIENT` the desktop inherited, and
+neither set nor passed on there by a build that carries no bundle version (`src/reply-client.ts`).
+
 ## Updating and taking it off
 
 Before an update installs, the desktop stops the runtime its own `jason` runs as, with `jason runtime stop`, and goes no
