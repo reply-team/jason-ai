@@ -107,11 +107,11 @@ Uninstalling the desktop on Windows stops the runtime the application carries fi
 runtime does not stop. It then takes off what it put there - the `jason` command it placed on the PATH, Open Jason at
 login, and the runtime's logon start when that start names the application's own folder - and leaves the data
 directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `%LOCALAPPDATA%\jason-desktop-updater`,
-saying so. On Linux, take off first, from the Jason menu, what Jason placed on your word: turn off Open Jason at Login
-and Start the Runtime at Logon, and under Command Line remove `jason` from the PATH. Then `sudo apt remove
-jason-desktop` removes the deb, and deleting the file removes the AppImage. Neither takes off what is named above, nor
-the updater's cache, `~/.cache/jason-desktop-updater`, the data directory (`~/.jason`) or the harness root
-(`~/Jason`).
+saying so. On Linux, choose Remove What Jason Placed… in the Jason menu first: it stops the runtime the application
+carries and takes off what Jason placed, the `jason` command, Open Jason at Login and the runtime's start at logon,
+then says what removes the application. `sudo apt remove jason-desktop` removes the deb, and deleting the file
+removes the AppImage. What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's
+cache, `~/.cache/jason-desktop-updater`.
 
 ## Installing
 

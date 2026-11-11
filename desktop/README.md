@@ -225,8 +225,10 @@ What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), 
   as on macOS. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
   the real folders named as versions under `<data>/desktop/bundle/`, when nothing runs from them, and the folder itself
   once that leaves it empty; a link or anything else there stays, and is named. It then says what removes the
-  application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. When Jason will not
-  start, take off by hand what it placed. Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each
+  application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. What stays after
+  that is the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
+  `Harness:Root` names) and the updater's cache, `~/.cache/jason-desktop-updater`. When Jason will not start, take
+  off by hand what it placed. Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each
   `<data>/desktop/bundle/<version>/jason` for an AppImage:
 
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this

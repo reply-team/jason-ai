@@ -275,6 +275,8 @@ public partial class ReleaseWorkflowTests
             "the application as it was is copied under `~/.jason/desktop/rollback/<version>/`, and the Jason menu names that copy until the next update replaces it.",
             "to go back, quit Jason and put that folder back in the place of the installed application by hand.",
             "Uninstalling the desktop on Windows stops the runtime the application carries first, and removes nothing when that runtime does not stop.",
+            "On Linux, choose Remove What Jason Placed… in the Jason menu first:",
+            "What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `~/.cache/jason-desktop-updater`.",
         ])
         {
             Assert.Contains(said, notes, StringComparison.Ordinal);
@@ -288,6 +290,8 @@ public partial class ReleaseWorkflowTests
             "Installing a desktop update restarts the runtime.",
             "the descriptor's `installed_image` is the application's own `jason`",
             "going back is quitting Jason and putting that folder back in the place of the installed application by hand",
+            "Removing the desktop on Linux starts with Remove What Jason Placed… in the Jason menu,",
+            "and the data directory, the harness root and the updater's cache, `~/.cache/jason-desktop-updater`, stay.",
         ])
         {
             Assert.Contains(said, guide, StringComparison.Ordinal);

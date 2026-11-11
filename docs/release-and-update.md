@@ -131,7 +131,10 @@ Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file the release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. As built, and not yet seen on a real
 machine: a deb update installs with `dpkg` and asks for an administrator's password every time; an AppImage update
-replaces the file where it is. A candidate writes the
+replaces the file where it is. Removing the desktop on Linux starts with Remove What Jason Placed… in the Jason menu,
+which takes off what the desktop placed; then `sudo apt remove jason-desktop` removes the deb, or deleting the file
+removes the AppImage, and the data directory, the harness root and the updater's cache,
+`~/.cache/jason-desktop-updater`, stay. A candidate writes the
 same three feed names a release does, and its release is marked a pre-release, which the latest release never is, so no
 installed desktop reads a candidate's feed: the desktop updates to stable releases only.
 
