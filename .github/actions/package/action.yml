@@ -1052,11 +1052,11 @@ runs:
           echo "The $form started, loaded its window, quit, and its runtime stopped."
         }
 
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends "$dist/jason-desktop-linux-x64.deb"
+        sudo apt-get -o Acquire::Retries=5 update -qq
+        sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends "$dist/jason-desktop-linux-x64.deb"
         if [ -e /etc/apparmor.d/jason-desktop-app ]; then echo "The deb installed its AppArmor profile."; else echo "The deb installed no AppArmor profile: this runner's AppArmor reads none."; fi
         started deb "$RUNNER_TEMP/jason-desktop-deb-data" /opt/Jason/resources/bundle/jason /usr/bin/jason-desktop-app
-        sudo apt-get remove -y jason-desktop
+        sudo apt-get -o Acquire::Retries=5 remove -y jason-desktop
         [ ! -e /opt/Jason/jason-desktop-app ] || { echo "::error title=Desktop::apt remove left /opt/Jason/jason-desktop-app."; exit 1; }
 
         # The AppImage carries no profile, so it runs its sandbox only where the system lets any program make user
