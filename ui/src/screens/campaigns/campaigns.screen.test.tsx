@@ -816,6 +816,27 @@ describe('A campaign’s Sequence', () => {
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(4));
         expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign'].request);
     });
+
+    it('left for another screen and opened again by its address, the campaign starts on All', async () => {
+        const api = timelineApi();
+        const sequence: Route = { ...table, id: 'cmp_1', tab: 'sequence' };
+        open(api, sequence);
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Changes' }));
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(2));
+        expect(await screen.findByText(/Holding the sends over the holiday\./)).toBeTruthy();
+
+        // Another screen takes the page, and the campaign's address brings it back: the campaign opens again.
+        location.hash = href({ screen: 'chat' });
+        route.value = { screen: 'chat' };
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Changes' })).toBeNull());
+        location.hash = href(sequence);
+        route.value = sequence;
+
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(3));
+        expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign'].request);
+        expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+    });
 });
 
 describe('A campaign’s Inbox', () => {
