@@ -229,7 +229,7 @@ package problem, `template_invalid`, which rejects the reload; like `arguments` 
 grants, is optional and additive, and leaves `manifest_version` at `1`.
 
 `audience_definition` says what an audience's definition carries for this provider. The documents of the audience
-operations publish the envelope a search is asked in — how many people, whom to leave out, how many of one company — and
+operations publish the envelope a search is asked in — how many people, how many of one company — and
 two of them carry a definition inside it, `audience.search` and `audience.preview`. The definition is the provider's own
 shape — which industries, which titles, which company sizes, as the provider names them — so the provider declares it
 here, as a schema in the dialect of `docs/contracts/`:
@@ -1241,7 +1241,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements twenty-four of the thirty published
+`plugins/reply/` is the one to read: a marketplace package that implements every one of the thirty published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so

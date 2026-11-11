@@ -308,8 +308,10 @@ Jason does as much as it can on its own, and nothing that should be yours.
   exactly what would be done, until you decide. Approve in the chat or in the browser UI, where you see the person,
   the account it goes from and the full message.
 - **A yes in advance, only if you give one.** You can pre-approve drafted replies to one category of reply in one
-  campaign, such as `interested`, with an expiry and a ceiling if you want them. Only a named person can set it, a role
-  never can, and every message it lets go is logged under that person's name.
+  campaign, such as `interested`, with an expiry and a ceiling if you want them. A search for people sends nothing, but
+  it spends your provider's credits, so the first search for a new audience always waits for you; after it, you can let
+  the searches that top up that audience go without asking, up to a number of people you set. Only a named person can
+  set either, a role never can, and every message or search it lets go is logged under that person's name.
 - **A do-not-contact list that never relaxes.** Work that would reach someone on it fails before it starts.
 - **Blocks stop the line.** If your provider refuses an account (billing, a disconnected channel), Jason holds the work
   until you clear it or a periodic trial gets past the block.
@@ -640,8 +642,9 @@ skills · release notes on every release.
 **Does it ever send on its own?**
 No. Every message to a real person waits for your approval. One nuance, said plainly: if a campaign enrols someone
 into your provider's own sequence, you approve that enrolment once for that person, and the provider then sends the
-sequence's steps. And if you choose to, you can pre-approve drafted replies to one category of reply in one campaign.
-No role can turn that on.
+sequence's steps. And if you choose to, you can pre-approve drafted replies to one category of reply in one campaign,
+and let the searches that top up one of a campaign's audiences find more people up to a number you set: a search sends
+nothing, though it spends your provider's credits. No role can turn either on.
 
 **What if my laptop is closed?**
 Jason pauses. When you're back, it picks up where it left off and checks for new replies. Nothing is lost, and nothing
