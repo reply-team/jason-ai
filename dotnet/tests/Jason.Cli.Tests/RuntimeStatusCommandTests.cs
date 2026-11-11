@@ -354,6 +354,43 @@ public class RuntimeStatusCommandTests
         Assert.DoesNotContain("{", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The file the runtime runs as, as the runtime wrote it into its run file: the one line that tells a person which
+    /// installed copy answered. Only the human view says it; the JSON answer stays the runtime's own, word for word.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_names_the_executable_the_run_file_records()
+    {
+        using var dir = new TempPaths();
+        const string image = "/opt/jason/bin/jason";
+        dir.WriteDescriptor(Descriptor with { InstalledImage = image });
+        var body = InfoJson("rt_LIVE");
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, body)));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains($"{System.Environment.NewLine}Executable: {image}{System.Environment.NewLine}", output.ToString(), StringComparison.Ordinal);
+
+        var (jsonEnv, json, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, body)));
+        Assert.Equal(ExitCodes.Success, await RuntimeStatusCommand.RunAsync(jsonEnv, human: false, CancellationToken.None));
+        Assert.Equal(body + System.Environment.NewLine, json.ToString());
+    }
+
+    /// <summary>A run file with no executable, from a build run from source or an older runtime, says so rather than leave the line out.</summary>
+    [Fact]
+    public async Task Human_mode_says_when_the_run_file_records_no_executable()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE"))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Executable: none recorded: a build run from source, or a runtime older than this CLI", output.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_mode_prints_what_the_dispatcher_is_doing()
     {
