@@ -2,16 +2,14 @@ import { session } from '../api/session';
 import { t } from '../platform/i18n';
 import { registry, textOf } from '../platform/slots';
 import { route } from '../router';
+import { Brand } from './brand';
 import { info } from './shell';
 
 export function Sidebar() {
     const current = route.value.screen;
     return (
         <aside className="sidebar">
-            <div className="wordmark">
-                <span className="glyph" />
-                Jason
-            </div>
+            <Brand />
             <nav className="nav" aria-label={t('nav.aria')}>
                 {registry.list('screen').map((item) => (
                     <a key={item.id} className={current === item.id ? 'active' : ''} href={item.href()}>

@@ -171,7 +171,7 @@ export function configuration({ version, sign = null }) {
                 { target: 'zip', arch: ['arm64', 'x64'] },
             ],
             category: 'public.app-category.business',
-            icon: 'resources/icon.png',
+            icon: 'resources/icon.icns',
             hardenedRuntime: true,
             entitlements: 'installer/entitlements.mac.plist',
             entitlementsInherit: 'installer/entitlements.mac.plist',

@@ -2,16 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jason</title>
 <link rel="stylesheet" href="shell.css">
 </head>
 <body>
-<main>
-<h1>Jason</h1>
+<div class="splash" role="group" aria-label="Starting Jason">
+<svg class="splash-mark" viewBox="0 0 560 560" aria-hidden="true">
+<path fill="#80ADFD" d="M393.514 280C393.514 342.692 342.692 393.513 280 393.513C217.308 393.513 166.487 342.692 166.487 280C166.487 217.308 217.308 166.486 280 166.486C342.692 166.486 393.514 217.308 393.514 280Z"/>
+<g class="splash-orbit">
+<path fill="#005AFF" d="M280 0C224.621 2.42068e-06 170.486 16.4217 124.44 47.1885C78.3947 77.9553 42.5064 121.685 21.3138 172.849C0.121316 224.012 -5.42361 280.311 5.38025 334.625C16.1841 388.94 42.8515 438.831 82.0102 477.99C121.169 517.148 171.06 543.816 225.375 554.62C279.689 565.424 335.988 559.879 387.151 538.686C438.315 517.494 482.045 481.605 512.811 435.559C543.578 389.514 560 335.379 560 280L451.525 280C451.525 313.924 441.465 347.087 422.618 375.294C403.77 403.501 376.982 425.486 345.64 438.468C314.298 451.45 279.81 454.847 246.537 448.229C213.265 441.611 182.702 425.274 158.714 401.286C134.726 377.298 118.389 346.735 111.771 313.463C105.153 280.19 108.55 245.702 121.532 214.36C134.514 183.018 156.499 156.23 184.706 137.382C212.913 118.535 246.076 108.475 280 108.475L280 0Z"/>
+<path fill="#005AFF" d="M560 143.784C560 177.22 532.895 204.324 499.46 204.324C466.024 204.324 438.919 177.22 438.919 143.784C438.919 110.348 466.024 83.2434 499.46 83.2434C532.895 83.2434 560 110.348 560 143.784Z"/>
+</g>
+</svg>
+<picture class="splash-name">
+<source srcset="brand/wordmark-dark.svg" media="(prefers-color-scheme: dark)">
+<img src="brand/wordmark.svg" alt="Jason AI, GTM Harness">
+</picture>
+<div class="splash-bar" aria-hidden="true"><i></i></div>
 <p id="message" role="status">Starting Jason…</p>
-</main>
+</div>
 <script src="starting.js"></script>
 </body>
 </html>

@@ -51,14 +51,14 @@ function resource(...parts: string[]): string {
     return join(app.getAppPath(), 'resources', ...parts);
 }
 
-/** A black outline the menu bar recolours on macOS; the application's icon, small, where a template is not read. */
+/** A black outline the menu bar recolours on macOS; the mark in colour, small, where a template is not read. */
 function trayIcon(): Electron.NativeImage {
     if (process.platform === 'darwin') {
         const icon = nativeImage.createFromPath(resource('tray', 'trayTemplate.png'));
         icon.setTemplateImage(true);
         return icon;
     }
-    return nativeImage.createFromPath(resource('icon.png')).resize({ width: 16, height: 16 });
+    return nativeImage.createFromPath(resource('tray', 'tray.png')).resize({ width: 16, height: 16 });
 }
 
 export class Desk {
