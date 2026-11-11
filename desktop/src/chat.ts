@@ -167,6 +167,14 @@ const listPages = 100;
 /** What a set-up turn's end says of the campaigns it made: the one it handed over to, or the ones to pick from. */
 type HandOver = Extract<ChatEvent, { kind: 'attached' | 'pick' }>;
 
+/** How one start of the host ended; `host` null when it could not be started, `again` when a fresh session follows. */
+interface Attempted {
+    exit: HostExit;
+    result: string | null | undefined;
+    host: HostProcess | null;
+    again: boolean;
+}
+
 /** The campaigns the conversation's last pick named. */
 const candidatesOf = (conversation: Conversation): string[] => {
     for (let i = conversation.entries.length - 1; i >= 0; i--) {
@@ -385,6 +393,8 @@ export class Chat {
         if (this.#running.has(conversation.id)) return refuse(busy);
         const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map() };
         this.#running.set(conversation.id, running);
+        // Any turn that begins while a set-up turn runs could make the campaign that set-up turn would take for its own.
+        for (const [id, each] of this.#setupTurns) if (id !== conversation.id) each.overlapped = true;
         try {
             // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
             // answering while the version is read, so a second send is refused as busy.
@@ -424,7 +434,9 @@ export class Chat {
         const allow = given.allow === true;
         const always = given.always === true;
         const conversation = this.#conversationOf(chatId);
-        const card = conversation === undefined ? undefined : this.#running.get(conversation.id)?.cards.get(requestId);
+        const running = conversation === undefined ? undefined : this.#running.get(conversation.id);
+        // Only the chat the card was put to answers it (the broker's rule): another page chat of the conversation keeps nothing.
+        const card = running?.replyTo === chatId ? running.cards.get(requestId) : undefined;
         if (card !== undefined && card.answer === null) card.answer = !allow ? 'deny' : always ? 'always' : 'allow';
         this.#broker.answer(chatId, requestId, { allow, always });
     }
@@ -496,7 +508,8 @@ export class Chat {
     #cardSaid(chatId: string, event: BrokerEvent): void {
         const conversation = this.#conversationOf(chatId);
         const running = conversation === undefined ? undefined : this.#running.get(conversation.id);
-        if (conversation === undefined || running === undefined) return;
+        // What the broker tells another page chat of the conversation (a card it may not answer is gone for it) is not the card's.
+        if (conversation === undefined || running === undefined || running.replyTo !== chatId) return;
         if (event.kind === 'permission') {
             const card: Extract<KeptEntry, { kind: 'permission' }> = { kind: 'permission', title: event.title, detail: event.detail, answer: null };
             conversation.entries.push(card);
@@ -571,8 +584,8 @@ export class Chat {
     }
 
     /**
-     * At the end of a set-up chat's turn: the campaign the turn made, when it made exactly one and no other set-up turn
-     * ran beside it; otherwise the campaigns it made, for the person to pick from. A campaign counts when it was absent before the turn, is present after it, was created at or after
+     * At the end of a set-up chat's turn: the campaign the turn made, when it made exactly one and no other turn, of any
+     * conversation, ran beside it; otherwise the campaigns it made, for the person to pick from. A campaign counts when it was absent before the turn, is present after it, was created at or after
      * the turn's start, and has no conversation of its own. Every page is read, or nothing is handed over.
      */
     async #handOver(conversation: Conversation, before: Listed | null, since: number): Promise<HandOver | null> {
@@ -597,10 +610,12 @@ export class Chat {
         return { kind: 'attached', campaignId, title: conversation.title };
     }
 
-    /** A set-up turn begins: it, and every set-up turn already running, ran beside another when there is one. */
+    /**
+     * A set-up turn begins: it ran beside another when any other turn runs, of any conversation; a turn that begins
+     * later marks it too (`send`). A campaign a person makes by hand meanwhile cannot be told apart this way.
+     */
     #setupBegun(id: string): void {
-        const beside = this.#setupTurns.size > 0;
-        for (const each of this.#setupTurns.values()) each.overlapped ||= beside;
+        const beside = [...this.#running.keys()].some((each) => each !== id);
         this.#setupTurns.set(id, { overlapped: beside });
     }
 
@@ -731,29 +746,42 @@ export class Chat {
 
         /**
          * One start of the host. A resume the host answers with another session, or one that ends in a failure before
-         * anything was said, falls to a fresh session with the recap: the session is dropped and the host started
-         * again, once. A session that differs is stopped the moment its id is read, and nothing after it is shown.
+         * anything was said, falls to a fresh session with the recap: the host is started again, once. A session that
+         * differs is stopped the moment its id is read, and nothing after it is shown. The record gives up the session
+         * it had only once the fresh session has done something; a fresh session that also ends with nothing said
+         * leaves the record's session as it was, since such a failure (an account signed out, a limit, no network) is
+         * not the session's.
          *
          * What the vendors state, and all this leans on:
          * - Claude Code, https://code.claude.com/docs/en/headless: "json: structured JSON with result, session ID, and
          *   metadata", and its example resumes a captured id: `claude -p "Continue that review" --resume "$session_id"`.
          * - Claude Code, https://code.claude.com/docs/en/sessions: "If the session depended on --mcp-config, --settings,
          *   --plugin-dir, --fallback-model, or directories added with --add-dir, pass them again when you resume", so
-         *   every turn passes them, resumed or not.
+         *   every turn passes them, resumed or not; and "If no stored session matches the ID, Claude Code reports
+         *   `No conversation found with session ID: <session-id>`."
          * - Codex, https://developers.openai.com/codex/noninteractive (served as
          *   https://learn.chatgpt.com/docs/non-interactive-mode): "You can also target a specific session ID with codex
          *   exec resume <SESSION_ID>." and "Event types include thread.started, turn.started, turn.completed,
          *   turn.failed, item.*, and error."
-         * Neither page says what a resume of a session that is not found does, nor, for Codex, that the id to resume is
-         * the `thread_id` of `thread.started`; so a resume that fails, is not found or answers with another id is never
+         * The Codex page does not say what a resume of a session that is not found does, nor that the id to resume is the
+         * `thread_id` of `thread.started`; so a resume that fails, is not found or answers with another id is never
          * trusted, on either host, and falls to a fresh session with the recap.
+         *
+         * A start that throws, before any child exists, is an attempt that could not be started: it never rejects.
          */
-        const attempt = (resumed: string | undefined, recapped: boolean): Promise<{ exit: HostExit; result: string | null | undefined; host: HostProcess; again: boolean }> => {
+        const attempt = async (resumed: string | undefined, recapped: boolean, fallback: boolean): Promise<Attempted> => {
             let result: string | null | undefined;
             let shown = 0;
             let other = false;
+            // The fallback's session, kept aside until the fallback has done something.
+            let pending: string | null = null;
             const seen = new Set<string>();
             let host: HostProcess | null = null;
+            const name = (session: string) => {
+                if (conversation.sessions[resolved.host] === session) return;
+                conversation.sessions[resolved.host] = session;
+                this.#keep(conversation);
+            };
             const said = (line: HostLine) => {
                 if (other) return;
                 if (line.kind === 'session') {
@@ -762,13 +790,15 @@ export class Chat {
                         host?.stop();
                         return;
                     }
-                    if (conversation.sessions[resolved.host] !== line.id) {
-                        conversation.sessions[resolved.host] = line.id;
-                        this.#keep(conversation);
-                    }
+                    if (fallback && shown === 0) pending = line.id;
+                    else name(line.id);
                 } else if (line.kind === 'result') {
                     result = line.error;
                 } else {
+                    if (pending !== null) {
+                        name(pending);
+                        pending = null;
+                    }
                     shown++;
                     if (line.kind === 'step') {
                         steps++;
@@ -779,34 +809,45 @@ export class Chat {
                     this.#options.emit(replyTo, line);
                 }
             };
-            const started = startHost(launch, argsFor(resumed), {
-                cwd: paths.chat,
-                env,
-                stdin: turnInput(head, recapped ? earlier : null, text),
-                onLine: (line) => {
-                    for (const each of resolved.program === 'claude' ? claudeLine(line) : codexLine(line, seen)) said(each);
-                },
-            });
+            let started: HostProcess;
+            try {
+                started = startHost(launch, argsFor(resumed), {
+                    cwd: paths.chat,
+                    env,
+                    stdin: turnInput(head, recapped ? earlier : null, text),
+                    onLine: (line) => {
+                        for (const each of resolved.program === 'claude' ? claudeLine(line) : codexLine(line, seen)) said(each);
+                    },
+                });
+            } catch (error) {
+                // The system's code when it gave one, never its text, which may carry what the start was given.
+                const code = (error as NodeJS.ErrnoException | null)?.code;
+                const why = typeof code === 'string' ? code : error instanceof Error ? error.message : 'unknown';
+                return { exit: { code: null, startError: why }, result: undefined, host: null, again: false };
+            }
             host = started;
             running.process = started;
             this.#options.started?.(resolved.host, resumed !== undefined);
             if (running.stopped) started.stop();
-            return started.exited.then((exit) => {
-                // Every tool use is said as a step before it runs, so a host that said nothing did nothing.
-                const failedSilently = shown === 0 && (exit.code !== 0 || typeof result === 'string');
-                const again = resumed !== undefined && !running.stopped && exit.startError === null && (other || failedSilently);
-                return { exit, result, host: started, again };
-            });
+            const exit = await started.exited;
+            // Every tool use is said as a step before it runs, so a host that said nothing did nothing.
+            const failedSilently = shown === 0 && (exit.code !== 0 || typeof result === 'string');
+            const again = resumed !== undefined && !running.stopped && exit.startError === null && (other || failedSilently);
+            return { exit, result, host: started, again };
         };
 
         void (async () => {
-            let last = await attempt(resume, hostChanged);
-            if (last.again) {
-                delete conversation.sessions[resolved.host];
-                this.#fresh(replyTo, 'not_found');
-                if (!running.stopped) last = await attempt(undefined, true);
-            }
+            let last: Attempted = { exit: { code: null, startError: 'unknown' }, result: undefined, host: null, again: false };
             let handed: HandOver | null = null;
+            try {
+                last = await attempt(resume, hostChanged, false);
+                if (last.again) {
+                    this.#fresh(replyTo, 'not_found');
+                    if (!running.stopped) last = await attempt(undefined, true, true);
+                }
+            } catch {
+                // An attempt never rejects; were one to, the turn still ends below, as one that could not be started.
+            }
             try {
                 await finishFiles();
                 if (setup) handed = await this.#handOver(conversation, before, since);
@@ -832,11 +873,11 @@ export class Chat {
         this.#options.emit(replyTo, { kind: 'fresh', reason });
     }
 
-    #ending(label: string, exit: HostExit, result: string | null | undefined, stopped: boolean, host: HostProcess): string | null {
+    #ending(label: string, exit: HostExit, result: string | null | undefined, stopped: boolean, host: HostProcess | null): string | null {
         if (stopped) return null;
         if (exit.startError !== null) return `${label} could not be started: ${exit.startError}`;
         if (typeof result === 'string') return result;
-        const words = lastWords(host.stderrTail());
+        const words = lastWords(host?.stderrTail() ?? '');
         if (result === null && exit.code === 0) return null;
         if (result === null) return words || `${label} stopped with exit code ${exit.code ?? 'none'}.`;
         if (exit.code === 0) return words || `${label} ended without an answer.`;

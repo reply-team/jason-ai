@@ -225,7 +225,6 @@ for (const host of ['claude', 'codex']) {
             assert.match(fresh.stdin, /<earlier-messages>\nperson: "First words"\nagent: "heard \d+ characters"\n<\/earlier-messages>\n\nSecond words$/);
             assert.deepEqual(said.filter((event) => event.kind === 'fresh'), [{ kind: 'fresh', reason: 'not_found' }]);
             assert.deepEqual(said.at(-1), { kind: 'done', error: null });
-            assert.ok(!JSON.stringify(said).includes('-other'), 'nothing the other session said reached the page');
             const kept = r.chat.open(chat.id).entries.filter((entry) => entry.kind === 'text');
             assert.equal(kept.length, 2, 'one answer per turn is kept, none from the attempt that fell');
         });
@@ -242,6 +241,95 @@ test('a resume that fails after the host said something is the turn\'s error, an
     assert.deepEqual(said.at(-1), { kind: 'done', error: 'Rate limited.' });
     assert.ok(!kinds(said).includes('fresh'));
 });
+
+for (const host of ['claude', 'codex']) {
+    test(`a ${host} resume that fails having said nothing tries a fresh session, and the record gives up its session only when the fresh one did something`, async (t) => {
+        const r = rig(t);
+        const chat = await r.chat.create();
+        await r.turn(chat.id, 'First', { host });
+        const first = r.chat.open(chat.id);
+        const kept = () => readConversations(r.b.paths.conversations).kept.find((each) => each.id === chat.id)?.sessions[host];
+        const earlier = kept();
+        assert.ok(earlier);
+        // An account that is signed out: the resume and the fresh session both end in a failure with nothing said.
+        r.b.env.STUB_HOST_SESSION = 'stub-session-fresh';
+        r.b.env.STUB_SILENT = 'always';
+        plan(r, [{ end: 'error', text: 'Not signed in.' }]);
+        const said = await r.turn(chat.id, 'Second', { host });
+        assert.equal(r.hosts().length, 3, 'the resume, then a fresh session');
+        assert.deepEqual(said.filter((event) => event.kind === 'fresh'), [{ kind: 'fresh', reason: 'not_found' }]);
+        assert.deepEqual(said.at(-1), { kind: 'done', error: 'Not signed in.' });
+        assert.equal(kept(), earlier, 'the record keeps the session it had');
+        assert.equal(r.chat.open(chat.id).entries.length, first.entries.length + 2, 'the words and the error of the turn');
+        // The resume fails the same way, and the fresh session does something: it is the conversation's session now.
+        r.b.env.STUB_SILENT = 'resumed';
+        await r.turn(chat.id, 'Third', { host });
+        assert.equal(r.hosts().length, 5);
+        assert.equal(kept(), 'stub-session-fresh');
+    });
+}
+
+test('a host start that throws ends the turn like any failure: the conversation is free, its set-up mark gone, its files closed, and done said', async (t) => {
+    const r = rig(t);
+    // A value no process can be started with: the start throws before any child exists.
+    const env: Record<string, string | undefined> = { ...r.b.env, PLANTED_START: `a${String.fromCharCode(0)}b` };
+    const chat = r.again({ env });
+    const setup = await chat.create();
+    const said = await r.turn(setup.id, 'Hello', { host: 'claude' }, chat);
+    assert.deepEqual(said.at(-1), { kind: 'done', error: 'Claude Code could not be started: ERR_INVALID_ARG_VALUE' });
+    assert.equal(chat.isRunning(setup.id), false);
+    assert.deepEqual(existsSync(r.b.paths.turns) ? readdirSync(r.b.paths.turns) : [], [], 'the turn\'s file is removed');
+    assert.deepEqual(chat.open(setup.id).entries, [{ kind: 'user', text: 'Hello' }, { kind: 'error', text: 'Claude Code could not be started: ERR_INVALID_ARG_VALUE' }]);
+    // The next turn runs, and no set-up turn is left marked as running beside it: the one campaign it makes is handed over.
+    delete env.PLANTED_START;
+    env.STUB_HOST_PLAN = JSON.stringify([{ campaign: 'Autumn' }]);
+    const next = await r.turn(setup.id, 'Again', { host: 'claude' }, chat);
+    assert.equal(next.at(-2)?.kind, 'attached', JSON.stringify(next));
+});
+
+test('a card\'s answer is kept only from the chat that was asked', async (t) => {
+    const r = rig(t);
+    plan(r, [{ ask: { tool: 'Bash', input: { command: 'git status' } } }]);
+    const chat = await r.chat.create('cmp_01ABC');
+    const done = r.until(chat.id, (event) => event.kind === 'done');
+    const card = r.until(chat.id, (event) => event.kind === 'permission');
+    await r.chat.send(chat.id, 'Look', { host: 'claude' });
+    const asked = (await card) as Extract<ChatEvent, { kind: 'permission' }>;
+    // Another page chat of the same campaign is the same conversation, but not the chat the card was put to.
+    await r.turn('chat-other', 'Beside', { host: 'claude', campaignId: 'cmp_01ABC' });
+    r.chat.answer('chat-other', asked.request, { allow: true, always: true });
+    r.chat.answer(chat.id, asked.request, { allow: false, always: false });
+    await done;
+    assert.deepEqual(r.chat.open(chat.id).entries.filter((entry) => entry.kind === 'permission').map((entry) => entry.kind === 'permission' && entry.answer), ['deny']);
+});
+
+for (const order of ['set-up first', 'campaign first']) {
+    test(`a set-up turn with a campaign conversation's turn beside it (${order}) hands over nothing by itself and offers the pick`, async (t) => {
+        const r = rig(t);
+        const setup = await r.chat.create();
+        const campaign = await r.chat.create('cmp_01ABC');
+        const ends = [r.until(setup.id, (event) => event.kind === 'done'), r.until(campaign.id, (event) => event.kind === 'done')];
+        // Only the campaign's turn makes a campaign, while the set-up turn runs; the set-up turn cannot tell whose it is.
+        if (order === 'set-up first') {
+            plan(r, [{ sleep: 3000 }]);
+            await r.chat.send(setup.id, 'Set one up', { host: 'claude' });
+            plan(r, [{ campaign: 'Copy' }]);
+            await r.chat.send(campaign.id, 'Make a copy of this campaign', { host: 'claude' });
+        } else {
+            plan(r, [{ sleep: 2500 }, { campaign: 'Copy' }]);
+            await r.chat.send(campaign.id, 'Make a copy of this campaign', { host: 'claude' });
+            plan(r, [{ sleep: 4000 }]);
+            await r.chat.send(setup.id, 'Set one up', { host: 'claude' });
+        }
+        await Promise.all(ends);
+        const [made] = (JSON.parse(readFileSync(r.campaigns, 'utf8')) as { id: string }[]).map((each) => each.id);
+        assert.ok(made);
+        const said = r.events.get(setup.id) ?? [];
+        assert.ok(!kinds(said).includes('attached'), JSON.stringify(said));
+        assert.deepEqual(said.at(-2), { kind: 'pick', campaignIds: [made] });
+        assert.equal(r.chat.open(setup.id).campaignId, null);
+    });
+}
 
 test('a set-up chat whose turn made exactly one campaign becomes that campaign\'s conversation, said before the turn\'s end', async (t) => {
     const handed: [number | null, boolean][] = [];
