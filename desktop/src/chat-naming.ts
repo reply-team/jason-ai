@@ -38,6 +38,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { claudeLine, codexLine, type HostLine } from './chat-hosts.ts';
 import { quoted, titleLimit } from './chat-header.ts';
+import type { ModelOffer } from './chat-models.ts';
 import type { Launch } from './program-path.ts';
 import { runFile, type RunResult } from './programs.ts';
 
@@ -55,9 +56,6 @@ export const namingTextLimit = 1000;
 
 /** How long a naming run may take before it is ended and the first words stay. */
 export const namingLimitMs = 30_000;
-
-/** The Haiku that takes an effort, from this version of Claude Code on (`haiku` resolves to Haiku 5.5). */
-export const haikuEffortFrom = '2.1.293';
 
 /**
  * The fastest model each host or provider is asked by, and whether the run asks it for low effort: `always`, `haiku`
@@ -84,9 +82,14 @@ const namingModels: ReadonlyMap<string, NamingModel> = new Map([
 /** OpenAI's fastest model, named on a Codex naming run only when the host's own list offers it. */
 export const codexFastModel = 'gpt-6-luna';
 
-/** The model a Codex naming run names: the fastest one when the host listed it, else none and the host's own default. */
-export function codexNamingModel(listed: readonly string[] | null): string | null {
-    return listed?.includes(codexFastModel) ? codexFastModel : null;
+/**
+ * The model a Codex naming run names, from the list the desktop keeps of what that host id offers (`model-lists.ts`):
+ * the fastest one when the list holds it, with low effort when it takes that level, as a turn's effort is held to what
+ * its model takes; else none, and the host's own default model at its default effort.
+ */
+export function codexNamingModel(offered: readonly ModelOffer[] | null): { model: string; lowEffort: boolean } | null {
+    const fast = offered?.find((each) => each.id === codexFastModel);
+    return fast === undefined ? null : { model: fast.id, lowEffort: fast.efforts.includes('low') };
 }
 
 /** The fastest model of a host or provider, and whether it is asked for low effort; null for one never asked. */
@@ -111,10 +114,11 @@ export function claudeNamingArguments(model: string | null, effort: boolean): st
 export const codexToolsOff: readonly string[] = ['features.shell_tool=false', 'web_search=disabled', 'features.multi_agent=false', 'features.apps=false', 'features.view_image=false'];
 
 /** Codex's command line for a naming run: read-only, nothing kept, the person's configuration not loaded, every tool off. */
-export function codexNamingArguments(model: string | null): string[] {
+export function codexNamingArguments(fast: { model: string; lowEffort: boolean } | null): string[] {
     const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ephemeral', '--ignore-user-config'];
     for (const setting of codexToolsOff) args.push('-c', setting);
-    if (model !== null) args.push('-m', model, '-c', 'model_reasoning_effort=low');
+    if (fast !== null) args.push('-m', fast.model);
+    if (fast?.lowEffort === true) args.push('-c', 'model_reasoning_effort=low');
     args.push('-');
     return args;
 }

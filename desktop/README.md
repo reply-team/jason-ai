@@ -134,7 +134,9 @@ desktop does not narrow, so it may read the records.
 - **A set-up chat named by what it is about.** Once, after a set-up chat's first turn ended without an error and still
   about no campaign, the desktop asks the conversation's own host or provider for a name of two to five words, on its
   fastest model: Claude Code's `haiku` on a sign-in or on Anthropic's key, `deepseek-flash`, `kimi-k2.6`,
-  `glm-5.3-flash` and `MiniMax-M3.1-Flash` on those keys, and Codex's own default model. It is one run with no tool:
+  `glm-5.3-flash` and `MiniMax-M3.1-Flash` on those keys, and on Codex `gpt-6-luna` when the list the desktop keeps of
+  what that host offers holds it, at low effort when it takes that level, else Codex's own default model. It is one run
+  with no tool:
   on Claude Code `--tools ""`, every MCP tool denied, no MCP server, our instruction as the whole system prompt, one
   turn, nothing kept (`--no-session-persistence`); on Codex `exec --ephemeral --ignore-user-config` in its read-only
   sandbox with every tool its configuration reference names turned off. OpenAI states no Codex run with no tool at
@@ -151,8 +153,8 @@ desktop does not narrow, so it may read the records.
   message, with nothing said on the page. A name the model gives is the desktop's: a person's rename still replaces
   it, and so does a later hand-over to a campaign. **Naming costs one small request of the person's plan or key per new
   set-up chat**: on a sign-in it counts against the plan, on a key it is billed to that key. A Codex naming run costs
-  more than Claude Code's: it keeps Codex's built-in instructions, and until the desktop names Codex's fast model on it,
-  it runs on Codex's default model at its default reasoning effort. The log says how each run ended in one word.
+  more than Claude Code's: it keeps Codex's built-in instructions, and when the kept list does not offer Codex's fast
+  model it runs on Codex's default model at its default reasoning effort. The log says how each run ended in one word.
 - **Not a boundary.** The instruction text asks the agent to keep to the conversation's campaign and to create at most
   one campaign in a set-up chat; a command that names another campaign is not refused for being in this conversation.
   What a turn may do is the permission model's to decide, as before.

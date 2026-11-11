@@ -592,3 +592,28 @@ test('a Claude Code whose version cannot be read after the turn runs no naming r
     assert.deepEqual(r.namings(), []);
     assert.deepEqual(r.outcomes, ['held']);
 });
+
+test('a Codex naming run names Codex\'s fast model when the kept list offers it, with low effort when the model takes it', async (t) => {
+    const key = 'sk-test-codex-0123456789abcdef';
+    const luna = (efforts: ('low' | 'medium' | 'high')[]) => ({ askedAt: '2026-11-11T10:00:00.000Z', models: [{ id: 'gpt-6-orion', label: 'GPT-6 Orion', efforts }, { id: 'gpt-6-luna', label: 'GPT-6 Luna', efforts }] });
+    const kept = new Map([
+        ['codex', luna(['low', 'medium'])],
+        ['codex-api-key', luna(['high'])],
+    ]);
+    const r = rig(t, { models: () => kept }, { 'codex-api-key': key });
+    naming(r, { say: 'Dentist outreach plan' });
+    for (const host of ['codex', 'codex-api-key']) {
+        const setup = await r.chat.create();
+        await r.turn(setup.id, 'Help me', { host });
+        await r.chat.idle();
+    }
+    kept.set('codex', { askedAt: '2026-11-11T10:00:00.000Z', models: [{ id: 'gpt-6-orion', label: 'GPT-6 Orion', efforts: ['low'] }] });
+    const unlisted = await r.chat.create();
+    await r.turn(unlisted.id, 'Help me', { host: 'codex' });
+    await r.chat.idle();
+    const [plain, keyed, none] = r.namings();
+    const beforeInput = codexNaming.slice(0, -1);
+    assert.deepEqual(plain?.args, [...beforeInput, '-m', 'gpt-6-luna', '-c', 'model_reasoning_effort=low', '-']);
+    assert.deepEqual(keyed?.args, [...beforeInput, '-m', 'gpt-6-luna', '-']);
+    assert.deepEqual(none?.args, codexNaming);
+});

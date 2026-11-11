@@ -31,12 +31,11 @@ import {
     type KeptEntry,
 } from './chat-conversations.ts';
 import { givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
-import { currentModel, effortRefusal, isEffort, modelRefusal, modelShape, type Effort, type KeptLists } from './chat-models.ts';
+import { currentModel, effortRefusal, haikuEffortFrom, isEffort, modelRefusal, modelShape, type Effort, type KeptLists } from './chat-models.ts';
 import {
     claudeNamingArguments,
     codexNamingArguments,
     codexNamingModel,
-    haikuEffortFrom,
     namingInput,
     namingLimitMs,
     namingModelOf,
@@ -1124,7 +1123,7 @@ export class Chat {
         const answer = await runNaming({
             program: resolved.program,
             launch,
-            args: resolved.program === 'claude' ? claudeNamingArguments(onCommandLine, effort) : codexNamingArguments(codexNamingModel(null)),
+            args: resolved.program === 'claude' ? claudeNamingArguments(onCommandLine, effort) : codexNamingArguments(codexNamingModel(this.#options.models?.().get(resolved.host)?.models ?? null)),
             env,
             stdin: namingInput(resolved.program, first),
             folder: now.folder,
