@@ -16,6 +16,9 @@ repository is for changing Jason.
   maintained documentation only.
 - `ui/` — the browser UI: a React client of the Runtime API, built into the release asset `jason-ui.zip`;
   `ui/README.md` says how it is built and tested.
+- `desktop/` — the desktop application: one more client of the installation, through the CLI and the Runtime API. A
+  release publishes from it the Windows installer, a disk image and an update archive for each Mac architecture, the
+  two update feeds and the block maps, ten files in all; `desktop/README.md` says how it is built and tested.
 - `LICENSE` — MIT, for everything in the repository, the runtime included; every archive carries it as `LICENSE`, beside
   the executable and `THIRD-PARTY-NOTICES`.
 - `global.json` at the root pins the SDK; run every command from the repository root.

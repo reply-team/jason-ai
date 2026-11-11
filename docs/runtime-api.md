@@ -151,7 +151,7 @@ so in one line on stderr, naming the variable and never its value.
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume` and `report.submit` take no
-  such default: given no actor, the CLI refuses all ten itself, before any request, in one sentence that names the
+  such default: given no actor, the CLI refuses all ten itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
   `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
   the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
