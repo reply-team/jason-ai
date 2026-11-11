@@ -323,7 +323,7 @@ const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, pl
 if (uninstalling !== null) {
     // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
     // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
-    void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.quit());
+    void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));
 } else if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {

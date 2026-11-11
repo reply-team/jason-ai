@@ -84,6 +84,12 @@ test('only the uninstaller’s start is an uninstall, and a silent one shows not
     assert.deepEqual(uninstallStart(['Jason.exe', '--uninstall', '--quiet'], installed), { quiet: true });
 });
 
+test('an uninstall start that fails exits 2, never 0, so the uninstaller says what may be left', () => {
+    // app.quit() exits 0, which the uninstaller reads as everything taken off.
+    const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
+    assert.ok(main.includes('void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));'));
+});
+
 test('the uninstall start is honoured only in a packaged application on Windows, where an uninstaller makes it', () => {
     for (const where of [{ packaged: false, platform: 'win32' }, { packaged: true, platform: 'darwin' }, { packaged: false, platform: 'darwin' }, { packaged: true, platform: 'linux' }] as const) {
         assert.equal(uninstallStart(['Jason', '--uninstall'], where), null, JSON.stringify(where));
@@ -262,6 +268,15 @@ test('a removal that fails is named among what is left with its act, the others 
     assert.equal(report.refused, null);
     assert.equal(uninstallExit(report), 0);
     assert.doesNotMatch(uninstallText(report).detail, /planted/);
+
+    // Open Jason at login that cannot be read is said as one that could not be turned off, and the rest still runs.
+    const unknown = bench(t, { registration: { registered: true, executable } });
+    unknown.deps.login = { isOn: () => { throw new Error('planted-login-read-error'); }, set: async () => void unknown.acts.push('login false') };
+    const after = await uninstall(unknown.deps);
+    assert.deepEqual(unknown.acts, ['autostart disable']);
+    assert.ok(after.left.includes('Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it'));
+    assert.equal(uninstallExit(after), 0);
+    assert.doesNotMatch(uninstallText(after).detail, /planted/);
 
     // A registration that cannot be read is said, and nothing is disabled.
     const unread = bench(t);

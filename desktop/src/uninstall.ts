@@ -147,13 +147,13 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
         }
     }
 
-    if (deps.login.isOn()) {
-        try {
+    try {
+        if (deps.login.isOn()) {
             await deps.login.set(false);
             removed.push('Open Jason at login');
-        } catch {
-            left.push('Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it');
         }
+    } catch {
+        left.push('Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it');
     }
 
     let registration: { registered: boolean; executable: string | null } | null = null;
