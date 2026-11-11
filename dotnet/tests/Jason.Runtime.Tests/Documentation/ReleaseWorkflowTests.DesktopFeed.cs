@@ -281,9 +281,11 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// Beyond the four files held to the release's signer by name, the Windows check reads the application manifest out
     /// of the bundled jason.exe as the job read it out of the executable it archives, and holds every program and library
-    /// the application carries to a signature signtool and Windows accept: the release's signer's, or, for a library that
-    /// came signed by Microsoft, Microsoft's own, which the sign hook leaves as it came, and then only from a certificate one
-    /// of Microsoft's own code-signing authorities issued, never one that only names Microsoft. The libraries the installer itself
+    /// the application carries to a signature signtool and Windows accept, its signer the one the file's own signature
+    /// names and never one a catalog of the machine answers with: the release's signer's, or, for a library that came
+    /// signed by Microsoft, Microsoft's own, which the sign hook leaves as it came, and then only from a certificate one
+    /// of Microsoft's own code-signing authorities issued, never one that only names Microsoft. Every file is read before
+    /// the check refuses, once, naming every file it refuses. The libraries the installer itself
     /// loads from its own archive, the nsis plugins electron-builder brings, are listed with their signers as a reading.
     /// </summary>
     [Fact]
@@ -298,13 +300,33 @@ public partial class ReleaseWorkflowTests
 
         Assert.Contains("$carried = @(Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll' } | Sort-Object FullName)", lines);
         Assert.Contains("if ($carried.Count -lt 3) { throw \"The application the installer carries holds $($carried.Count) programs and libraries, fewer than Jason.exe, jason.exe and Electron's libraries.\" }", lines);
-        Assert.Contains("$publisher = if ($by -ceq 'Microsoft Corporation') { 'Microsoft Corporation' } else { 'ReplyApp Inc.' }", lines);
-        var publisher = lines.IndexOf("$publisher = if ($by -ceq 'Microsoft Corporation') { 'Microsoft Corporation' } else { 'ReplyApp Inc.' }");
+        // The signer is the one the file's own signature names, read as the signature script reads it, and nobody when
+        // the file carries none: never the answer a catalog of the machine gives for a library Windows itself ships.
+        var loop = lines.IndexOf("foreach ($file in $carried) {");
+        Assert.True(loop >= 0, "The Windows check never reads each program and library the application carries.");
+        Assert.Equal("$refused = [System.Collections.Generic.List[string]]::new()", lines[loop - 1]);
         Assert.Equal(
-            "if ($by -ceq 'Microsoft Corporation' -and $came.SignerCertificate.Issuer -cnotmatch '^CN=Microsoft [^,]*Code Signing PCA [0-9]{4}, O=Microsoft Corporation, ') { throw \"$($file.Name) names Microsoft Corporation as its signer, and its certificate was issued by $($came.SignerCertificate.Issuer), none of Microsoft's code-signing authorities.\" }",
-            lines[publisher + 1]);
-        Assert.Contains("./.github/scripts/Assert-WindowsSignature.ps1 -Executable $file.FullName -Publisher $publisher", lines);
-        Assert.Contains("if ($LASTEXITCODE -ne 0) { throw \"$($file.Name) is signed by neither ReplyApp Inc. nor, as it came, Microsoft Corporation.\" }", lines);
+            "$own = try { [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([System.Security.Cryptography.X509Certificates.X509Certificate]::CreateFromSignedFile($file.FullName)) } catch { $null }",
+            lines[loop + 1]);
+        Assert.Equal(
+            "$by = if ($own) { $own.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) } else { 'nobody' }",
+            lines[loop + 2]);
+        Assert.Equal("$publisher = if ($by -ceq 'Microsoft Corporation') { 'Microsoft Corporation' } else { 'ReplyApp Inc.' }", lines[loop + 3]);
+        Assert.Equal(
+            "if ($by -ceq 'Microsoft Corporation' -and $own.Issuer -cnotmatch '^CN=Microsoft [^,]*Code Signing PCA [0-9]{4}, O=Microsoft Corporation, ') { $refused.Add(\"$($file.Name) names Microsoft Corporation as its signer, and its certificate was issued by $($own.Issuer), none of Microsoft's code-signing authorities.\"); continue }",
+            lines[loop + 4]);
+        Assert.Equal("./.github/scripts/Assert-WindowsSignature.ps1 -Executable $file.FullName -Publisher $publisher", lines[loop + 5]);
+        Assert.Equal("if ($LASTEXITCODE -ne 0) { $refused.Add(\"$($file.Name) is signed by neither ReplyApp Inc. nor, as it came, Microsoft Corporation.\") }", lines[loop + 6]);
+
+        // Every file is read, and the step refuses once, after the last file, naming every file it refuses: nothing
+        // inside the loop throws, and the throw is the first line after it.
+        var after = lines.IndexOf("}", loop);
+        Assert.Equal(loop + 7, after);
+        Assert.DoesNotContain(lines[loop..after], line => line.Contains("throw", StringComparison.Ordinal) || line.Contains("Get-AuthenticodeSignature", StringComparison.Ordinal));
+        Assert.Equal(
+            "if ($refused.Count -gt 0) { throw \"$($refused.Count) of the $($carried.Count) programs and libraries the application carries are refused:`n$($refused -join \"`n\")\" }",
+            lines[after + 1]);
+        Assert.Equal("Write-Host \"$($carried.Count) programs and libraries the application carries, each signed\"", lines[after + 2]);
 
         // The installer's own plugins are read, never refused: electron-builder brings them, and the installer that
         // loads them is itself held to the release's signer.
