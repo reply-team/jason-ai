@@ -23,7 +23,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { feed, firstCheckMs, keepRefusal, menuItemOf, runtimeRefusal, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
+import { feed, firstCheckMs, installRefusal, keepRefusal, menuItemOf, previousDeb, runtimeRefusal, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -64,13 +64,25 @@ function handTimers() {
 }
 
 /** electron-updater's autoUpdater as far as the desktop uses it, recording what it was told. */
-function fakeUpdater(answers: { latest?: string; fails?: () => boolean } = {}) {
+function fakeUpdater(answers: { latest?: string; fails?: () => boolean; inactive?: boolean; installFails?: boolean } = {}) {
     const set: [string, unknown][] = [];
     const calls: string[] = [];
     const feeds: unknown[] = [];
     const fields: Record<string, unknown> = {};
+    const listeners: ((error: Error) => void)[] = [];
     const updater = {
         calls,
+        listeners,
+        isUpdaterActive: () => answers.inactive !== true,
+        on(event: 'error', listener: (error: Error) => void) {
+            if (event === 'error') listeners.push(listener);
+            return updater;
+        },
+        removeListener(event: 'error', listener: (error: Error) => void) {
+            const at = listeners.indexOf(listener);
+            if (event === 'error' && at >= 0) listeners.splice(at, 1);
+            return updater;
+        },
         set,
         feeds,
         latest: answers.latest ?? '0.34.0',
@@ -89,6 +101,8 @@ function fakeUpdater(answers: { latest?: string; fails?: () => boolean } = {}) {
         },
         quitAndInstall() {
             calls.push('quitAndInstall');
+            // electron-updater's install() returning false: it dispatches the error synchronously and does not quit.
+            if (answers.installFails) for (const listener of [...listeners]) listener(new Error('planted-install-error'));
         },
     };
     for (const name of ['autoDownload', 'autoInstallOnAppQuit', 'allowPrerelease', 'allowDowngrade', 'channel', 'logger']) {
@@ -103,7 +117,11 @@ function fakeUpdater(answers: { latest?: string; fails?: () => boolean } = {}) {
     return updater as typeof updater & FeedUpdater;
 }
 
-function updaterOn(s: ReturnType<typeof scratch>, updater: FeedUpdater, extra: { log?: ReturnType<typeof memoryLog>; stop?: () => Promise<StopOutcome> } = {}) {
+function updaterOn(
+    s: ReturnType<typeof scratch>,
+    updater: FeedUpdater,
+    extra: { log?: ReturnType<typeof memoryLog>; stop?: () => Promise<StopOutcome>; application?: string | null } = {},
+) {
     const timers = handTimers();
     const states: UpdateState[] = [];
     const order: string[] = [];
@@ -112,7 +130,7 @@ function updaterOn(s: ReturnType<typeof scratch>, updater: FeedUpdater, extra: {
     const updates = new Updater({
         updater,
         version: '0.34.0',
-        application: s.application,
+        application: extra.application === undefined ? s.application : extra.application,
         rollback: s.rollback,
         log,
         timers,
@@ -123,6 +141,7 @@ function updaterOn(s: ReturnType<typeof scratch>, updater: FeedUpdater, extra: {
         },
         refused: (why) => void told.push(why),
         beforeInstall: async () => void order.push('beforeInstall'),
+        afterRefused: async () => void order.push('afterRefused'),
         changed: (state) => void states.push(state),
     });
     return { updates, timers, states, order, told, log };
@@ -372,7 +391,7 @@ test('the copy holds no file of <data>, even when <data> lies inside the install
 test('the starting page, when an update did not start, names the kept copy and the installed folder, and says what putting it back does', () => {
     const ruled = 'This puts back the previous application and the Jason it carried; the data directory stays as the newer version left it.';
     const programs = 'The system’s list of installed programs keeps showing the newer version’s number after that.';
-    const windows = keptNotice('The runtime did not start.', 'C:/data/desktop/rollback/0.34.0/Jason', 'C:/Users/someone/AppData/Local/Programs/Jason', 'win32');
+    const windows = keptNotice('The runtime did not start.', { copy: 'C:/data/desktop/rollback/0.34.0/Jason' }, 'C:/Users/someone/AppData/Local/Programs/Jason', 'win32');
     assert.equal(
         windows,
         [
@@ -383,7 +402,7 @@ test('the starting page, when an update did not start, names the kept copy and t
             programs,
         ].join(' '),
     );
-    const mac = keptNotice('The runtime did not start.', '/data/desktop/rollback/0.34.0/Jason.app', '/Applications/Jason.app', 'darwin');
+    const mac = keptNotice('The runtime did not start.', { copy: '/data/desktop/rollback/0.34.0/Jason.app' }, '/Applications/Jason.app', 'darwin');
     assert.ok(mac.includes('in the place of the installed one, /Applications/Jason.app, by hand'));
     assert.ok(mac.endsWith(ruled), 'only Windows keeps a list of programs with a version number');
 });
@@ -406,7 +425,7 @@ test('the new version’s first start settles the record: a start that worked ke
 
     mkdirSync(copy, { recursive: true });
     writeRollback(s.rollback, { pending, rejected: [] });
-    assert.equal(settleStart(s.rollback, '0.35.0', false, log), copy, 'the person is told where the previous version is');
+    assert.deepEqual(settleStart(s.rollback, '0.35.0', false, log), pending, 'the person is told where the previous version is');
     assert.equal(existsSync(copy), true);
     assert.equal(isRejected(readRollback(s.rollback), '0.35.0'), true);
     assert.deepEqual(readRollback(s.rollback), { pending, rejected: ['0.35.0'] }, 'a failed start is settled as before');
@@ -431,13 +450,118 @@ test('while a copy of the previous version is kept, the Jason menu says where, u
 });
 
 test('the menu offers one step at a time, and in a build that is not installed none', () => {
-    assert.deepEqual(menuItemOf({ step: 'idle' }, true), { label: 'Check for Updates…', enabled: true, act: 'check' });
-    assert.deepEqual(menuItemOf({ step: 'checking' }, true), { label: 'Checking for Updates…', enabled: false, act: null });
-    assert.deepEqual(menuItemOf({ step: 'offered', version: '0.35.0' }, true), { label: 'Download Jason 0.35.0', enabled: true, act: 'download' });
-    assert.deepEqual(menuItemOf({ step: 'downloading', version: '0.35.0' }, true), { label: 'Downloading Jason 0.35.0…', enabled: false, act: null });
-    assert.deepEqual(menuItemOf({ step: 'downloaded', version: '0.35.0' }, true), { label: 'Restart Jason and Its Runtime to Install 0.35.0', enabled: true, act: 'install' });
-    assert.deepEqual(menuItemOf({ step: 'installing', version: '0.35.0' }, true), { label: 'Installing Jason 0.35.0…', enabled: false, act: null });
-    assert.deepEqual(menuItemOf({ step: 'idle' }, false), { label: 'Updates Come to an Installed Build', enabled: false, act: null });
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, true), { label: 'Check for Updates…', enabled: true, act: 'check' });
+    assert.deepEqual(menuItemOf({ step: 'checking' }, true, true), { label: 'Checking for Updates…', enabled: false, act: null });
+    assert.deepEqual(menuItemOf({ step: 'offered', version: '0.35.0' }, true, true), { label: 'Download Jason 0.35.0', enabled: true, act: 'download' });
+    assert.deepEqual(menuItemOf({ step: 'downloading', version: '0.35.0' }, true, true), { label: 'Downloading Jason 0.35.0…', enabled: false, act: null });
+    assert.deepEqual(menuItemOf({ step: 'downloaded', version: '0.35.0' }, true, true), { label: 'Restart Jason and Its Runtime to Install 0.35.0', enabled: true, act: 'install' });
+    assert.deepEqual(menuItemOf({ step: 'installing', version: '0.35.0' }, true, true), { label: 'Installing Jason 0.35.0…', enabled: false, act: null });
+    assert.deepEqual(menuItemOf({ step: 'idle' }, false, true), { label: 'Updates Come to an Installed Build', enabled: false, act: null });
+});
+
+test('an updater electron-updater says is not active looks for nothing, and its item says updates come through the package', async (t) => {
+    const s = scratch(t);
+    const updater = fakeUpdater({ latest: '0.35.0', inactive: true });
+    const { updates, timers } = updaterOn(s, updater);
+    updates.start();
+    assert.equal(updates.active, false);
+    assert.deepEqual(timers.pending, [], 'no look is scheduled');
+    await updates.check();
+    assert.deepEqual(updater.calls, [], 'nor made when asked');
+    assert.deepEqual(menuItemOf(updates.current, true, false), { label: 'Updates Come Through the Package', enabled: false, act: null });
+    assert.deepEqual(menuItemOf({ step: 'idle' }, false, false), { label: 'Updates Come to an Installed Build', enabled: false, act: null });
+    assert.equal(updaterOn(s, fakeUpdater()).updates.active, true);
+});
+
+test('an install electron-updater refuses without quitting brings the desk back, keeps the copy, and tells the person', async (t) => {
+    for (const stopped of [true, false]) {
+        const s = scratch(t);
+        const updater = fakeUpdater({ latest: '0.35.0', installFails: true });
+        const { updates, timers, order, told, log } = updaterOn(s, updater, { stop: async () => ({ kind: stopped ? 'stopped' : 'none' }) });
+        updates.start();
+        await timers.fire();
+        await updates.download();
+        assert.equal(await updates.install(), false);
+
+        const copy = join(s.rollback, '0.34.0', 'Jason');
+        assert.deepEqual(order, ['stopRuntime', 'beforeInstall', 'afterRefused'], 'what closed for the installer comes back');
+        assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' }, 'the person can try again');
+        assert.deepEqual(updater.listeners, [], 'the listener does not outlive the install');
+        assert.deepEqual(told, [installRefusal(stopped, copy)]);
+        assert.doesNotMatch(told[0]!, /planted/);
+        assert.equal(existsSync(copy), true, 'the copy kept for the install stays');
+        assert.deepEqual(log.lines.at(-1), { level: 'error', name: 'update_failed', fields: { Step: 'install', Failures: 1 } });
+    }
+    assert.equal(
+        installRefusal(true, '/data/desktop/rollback/0.34.0/Jason.AppImage'),
+        'The update was not installed: the installer stopped before it finished, and Jason stayed open. The runtime this application carries was stopped for the update: jason runtime start starts it again. A copy of this version is kept at /data/desktop/rollback/0.34.0/Jason.AppImage. Choose Restart Jason and Its Runtime to Install to try again.',
+    );
+    assert.equal(
+        installRefusal(false, null),
+        'The update was not installed: the installer stopped before it finished, and Jason stayed open. Choose Restart Jason and Its Runtime to Install to try again.',
+    );
+});
+
+test('on Linux the AppImage file is what is kept aside, and the deb keeps nothing but the record', async (t) => {
+    const s = scratch(t);
+    const image = join(s.root, 'Applications', 'Jason.AppImage');
+    mkdirSync(join(s.root, 'Applications'), { recursive: true });
+    writeFileSync(image, 'the AppImage 0.34.0');
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates, timers } = updaterOn(s, updater, { application: image });
+    updates.start();
+    await timers.fire();
+    await updates.download();
+    assert.equal(await updates.install(), true);
+    const copy = join(s.rollback, '0.34.0', 'Jason.AppImage');
+    assert.equal(readFileSync(copy, 'utf8'), 'the AppImage 0.34.0', 'the copy is the file itself');
+    assert.deepEqual(readRollback(s.rollback), { pending: { fromVersion: '0.34.0', toVersion: '0.35.0', directory: copy }, rejected: [] });
+
+    const deb = scratch(t);
+    mkdirSync(join(deb.rollback, '0.33.0'), { recursive: true });
+    writeFileSync(join(deb.rollback, '0.33.0', 'Jason.AppImage'), 'an earlier copy');
+    const debUpdater = fakeUpdater({ latest: '0.35.0' });
+    const run = updaterOn(deb, debUpdater, { application: null });
+    run.updates.start();
+    await run.timers.fire();
+    await run.updates.download();
+    assert.equal(await run.updates.install(), true);
+    assert.deepEqual(readdirSync(deb.rollback), ['state.json'], 'no copy, and the earlier one is gone');
+    assert.deepEqual(readRollback(deb.rollback), { pending: { fromVersion: '0.34.0', toVersion: '0.35.0', directory: null }, rejected: [] });
+    assert.equal(debUpdater.calls.at(-1), 'quitAndInstall');
+});
+
+test('a record with no copy settles into nothing kept, and the menu names no copy', (t) => {
+    const s = scratch(t);
+    const pending = { fromVersion: '0.34.0', toVersion: '0.35.0', directory: null };
+    assert.deepEqual(parseRollbackState(JSON.stringify({ rejected: [], pending })), { pending, rejected: [] });
+    assert.deepEqual(afterSuccessfulStart({ pending, rejected: [] }), { rejected: [] });
+    assert.equal(keptLine({ pending, rejected: ['0.35.0'] }, '0.35.0', () => true), null);
+    writeRollback(s.rollback, { pending, rejected: [] });
+    assert.deepEqual(settleStart(s.rollback, '0.35.0', false, memoryLog()), pending, 'a failed start is told the version it came from');
+});
+
+test('on Linux the starting page names the kept AppImage file, or the previous release’s deb and the apt line', () => {
+    const ruled = 'This puts back the previous application and the Jason it carried; the data directory stays as the newer version left it.';
+    assert.equal(previousDeb('0.34.0'), 'https://github.com/reply-team/jason-ai/releases/download/v0.34.0/jason-desktop-linux-x64.deb');
+    assert.equal(
+        keptNotice('The runtime did not start.', { copy: '/data/desktop/rollback/0.34.0/Jason.AppImage' }, '/home/someone/Applications/Jason.AppImage', 'linux'),
+        [
+            'The runtime did not start.',
+            'If this version is the cause, the version of Jason it was updated from is kept at /data/desktop/rollback/0.34.0/Jason.AppImage.',
+            'To go back, quit Jason and put that file back in the place of the installed one, /home/someone/Applications/Jason.AppImage, by hand: nothing does it for you.',
+            ruled,
+        ].join(' '),
+    );
+    assert.equal(
+        keptNotice('The runtime did not start.', { package: previousDeb('0.34.0') }, '/opt/Jason', 'linux'),
+        [
+            'The runtime did not start.',
+            'If this version is the cause, the version of Jason it was updated from is published at https://github.com/reply-team/jason-ai/releases/download/v0.34.0/jason-desktop-linux-x64.deb.',
+            'To go back, quit Jason, download that file, and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            ruled,
+        ].join(' '),
+    );
 });
 
 test('the updater’s log lines, read back, carry versions, steps and counts, never an error’s text or a URL', async (t) => {
@@ -446,7 +570,7 @@ test('the updater’s log lines, read back, carry versions, steps and counts, ne
     let failing = true;
     const updater = fakeUpdater({ latest: '0.35.0', fails: () => failing });
     const timers = handTimers();
-    const updates = new Updater({ updater, version: '0.34.0', application: s.application, rollback: s.rollback, log: fileLogger(logs), timers, stopRuntime: async () => ({ kind: 'none' }), refused: () => undefined, beforeInstall: async () => undefined, changed: () => undefined });
+    const updates = new Updater({ updater, version: '0.34.0', application: s.application, rollback: s.rollback, log: fileLogger(logs), timers, stopRuntime: async () => ({ kind: 'none' }), refused: () => undefined, beforeInstall: async () => undefined, afterRefused: async () => undefined, changed: () => undefined });
     updates.start();
     await timers.fire();
     failing = false;

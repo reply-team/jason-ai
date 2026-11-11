@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { launcherOf, linuxPackage } from '../src/linux-package.ts';
+import { keptAsideOf, launcherOf, linuxPackage } from '../src/linux-package.ts';
 import { windowConduct } from '../src/login-item.ts';
 
 test('the package is read as electron-updater reads it: package-type deb first, then an absolute APPIMAGE, else a folder', () => {
@@ -27,4 +27,11 @@ test('on Linux, where no tray can be counted on, the menu bar shows, closing the
     for (const platform of ['win32', 'darwin'] as const) {
         assert.deepEqual(windowConduct(platform), { menuBar: false, closeQuits: false, atLogin: 'hidden' }, `${platform} keeps the tray`);
     }
+});
+
+test('what an update keeps aside: the AppImage file, nothing for the deb, the installed folder for any other form', () => {
+    assert.equal(keptAsideOf('linux', { form: 'appimage', file: '/home/a/Jason.AppImage' }, '/tmp/.mount_Jason/jason-desktop-app'), '/home/a/Jason.AppImage');
+    assert.equal(keptAsideOf('linux', { form: 'deb' }, '/opt/Jason/jason-desktop-app'), null);
+    assert.equal(keptAsideOf('linux', { form: 'folder' }, '/home/a/Jason/jason-desktop-app'), '/home/a/Jason');
+    assert.equal(keptAsideOf('darwin', null, '/Applications/Jason.app/Contents/MacOS/Jason'), '/Applications/Jason.app');
 });

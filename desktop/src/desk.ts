@@ -137,7 +137,7 @@ export class Desk {
     /** The update item, and under it, unclickable, where the previous version is kept while it is. */
     private updateItems(): MenuItemConstructorOptions[] {
         const { updates } = this.deps;
-        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null);
+        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
         let kept: string | null = null;
         try {
             kept = this.deps.kept();

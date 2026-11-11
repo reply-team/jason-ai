@@ -16,6 +16,7 @@
  */
 
 import { isAbsolute } from 'node:path';
+import { applicationFolder } from './rollback.ts';
 
 export type LinuxPackage = { form: 'deb' } | { form: 'appimage'; file: string } | { form: 'folder' };
 
@@ -30,4 +31,14 @@ export function linuxPackage(env: Readonly<Record<string, string | undefined>>, 
 /** What the session starts to open this application: the AppImage file itself, else the executable. */
 export function launcherOf(form: LinuxPackage, executable: string): string {
     return form.form === 'appimage' ? form.file : executable;
+}
+
+/**
+ * What an update keeps aside to go back to (`keepPrevious`): on Linux the AppImage file, nothing for the deb (its previous
+ * release is installed again from its package), and the folder the application is installed as anywhere else.
+ */
+export function keptAsideOf(platform: NodeJS.Platform, form: LinuxPackage | null, executable: string): string | null {
+    if (form?.form === 'appimage') return form.file;
+    if (form?.form === 'deb') return null;
+    return applicationFolder(platform, executable);
 }

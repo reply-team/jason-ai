@@ -17,12 +17,12 @@ import { loggedTurns } from './chat-log.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
-import { launcherOf, linuxPackage, type LinuxPackage } from './linux-package.ts';
+import { keptAsideOf, launcherOf, linuxPackage, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, settleStart } from './rollback.ts';
-import { Updater } from './updates.ts';
+import { previousDeb, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
@@ -224,11 +224,13 @@ async function run(): Promise<void> {
     const autostart = version === null ? null : new RuntimeAutostart({ cli, log });
     // The updater runs only in an installed build: a development build has no installer to hand an update to.
     const rollback = paths.rollback;
+    // What an update keeps aside to go back to: the AppImage file on Linux, nothing for the deb.
+    const aside = keptAsideOf(process.platform, form, process.execPath);
     const updates = app.isPackaged
         ? new Updater({
               updater: autoUpdater,
               version: app.getVersion(),
-              application: applicationFolder(process.platform, process.execPath),
+              application: aside,
               rollback,
               log,
               stopRuntime: () => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)),
@@ -237,6 +239,13 @@ async function run(): Promise<void> {
                   quitting = true;
                   repairer.stop();
                   desk.close();
+              },
+              async afterRefused() {
+                  quitting = false;
+                  desk.open();
+                  desk.watch();
+                  repairer.start();
+                  desk.show();
               },
               changed: () => desk.renderMenu(),
           })
@@ -327,7 +336,10 @@ async function run(): Promise<void> {
         log.error('window_load_failed', { Step: step, Exit: exit });
         const kept = settleStart(rollback, app.getVersion(), false, log);
         const said = error instanceof Error ? error.message : String(error);
-        const notice = kept === null ? said : keptNotice(said, kept, applicationFolder(process.platform, process.execPath), process.platform);
+        const notice =
+            kept === null
+                ? said
+                : keptNotice(said, kept.directory === null ? { package: previousDeb(kept.fromVersion) } : { copy: kept.directory }, aside ?? applicationFolder(process.platform, process.execPath), process.platform);
         if (current !== null) await showStarting(current, notice, true);
     }
 }
