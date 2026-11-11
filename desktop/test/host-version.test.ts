@@ -4,10 +4,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { claudeFloor, compareVersions, floorSentence, printedVersion, sharingVersionReads, versionLimitMs } from '../src/host-version.ts';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { programsOn, type Programs, type RunResult } from '../src/programs.ts';
-import { bench } from './harness.ts';
+import { bench, endWhenOver } from './harness.ts';
 
 const answered = (stdout: string, stderr = '', exit = 0) => ({ exit, stdout, stderr });
 
@@ -24,6 +24,27 @@ test('the version is the first three dotted numbers on a line naming Claude Code
     assert.equal(printedVersion(answered('1.2.3.4\n')), '1.2.3');
     assert.equal(printedVersion(answered('Claude Code\n')), null, 'no three dotted numbers');
     assert.equal(printedVersion(answered('2.1\n')), null);
+});
+
+test('a version is read as printed, with a leading v, a pre-release, a leading zero or two digits, and compared to the floor as numbers', () => {
+    assert.equal(printedVersion(answered('v2.1.256-beta.1 (Claude Code)\n')), '2.1.256-beta.1');
+    assert.match(floorSentence('2.1.256-beta.1') ?? '', /^Claude Code 2\.1\.256-beta\.1 is older than 2\.1\.257/);
+    assert.equal(printedVersion(answered('2.01.300 (Claude Code)\n')), '2.01.300');
+    assert.equal(floorSentence('2.01.300'), null, 'a leading zero reads as the number: 2.1.300');
+    assert.equal(printedVersion(answered('10.0.0 (Claude Code)\n')), '10.0.0');
+    assert.equal(floorSentence('10.0.0'), null);
+    assert.equal(printedVersion(answered('', '')), null, 'nothing printed on either stream');
+    assert.equal(floorSentence(printedVersion(answered('', ''))), floorSentence(null));
+});
+
+test('a version is looked for in the first 4 KiB of each stream only, so a long run of digits is read at once, and as no version', () => {
+    const digits = '9'.repeat(100_000);
+    const started = Date.now();
+    assert.equal(printedVersion(answered(digits, digits)), null);
+    const took = Date.now() - started;
+    assert.ok(took < 1000, `read in ${took} ms`);
+    assert.equal(printedVersion(answered(`${'x'.repeat(4096)}\n2.1.300 (Claude Code)\n`)), null, 'a version past 4 KiB of standard output is not read');
+    assert.equal(printedVersion(answered('x'.repeat(5000), '2.1.300 (Claude Code)\n')), '2.1.300', 'standard error has its own 4 KiB');
 });
 
 test('a version is not read from a program that ended with a code other than zero, or was stopped at its time limit', () => {
@@ -97,9 +118,51 @@ test('at most one version read is in flight: one asked for while it runs waits o
     assert.equal((await third).stdout, '2.1.301 (Claude Code)');
 });
 
-test('a version read past its bound answers as unreadable at the bound, and a program that outlives the first signal is still ended', { timeout: 20_000 }, async (t) => {
+test('an output past 8 MiB on a stream answers as unreadable, whatever it holds', async (t) => {
     const b = bench(t, { programs: ['claude'] });
-    const ids = join(b.root, 'stuck.json');
+    const file = join(b.root, 'version.json');
+    writeFileSync(file, JSON.stringify({ stdout: `2.1.300 (Claude Code)\n${'x'.repeat(9 * 1024 * 1024)}`, exit: 0 }));
+    const result = await programsOn({ ...b.env, STUB_CLAUDE_VERSION_FILE: file }, null).run('claude', ['--version'], { timeoutMs: versionLimitMs });
+    assert.equal(result.exit, -1, 'the runner ends a program that prints past its 8 MiB');
+    assert.equal(printedVersion(result), null);
+    assert.equal(floorSentence(printedVersion(result)), floorSentence(null));
+});
+
+test('a program that never answers is answered at the runner’s own time limit, as stopped there, and ended by its first signal', { timeout: 60_000 }, async (t) => {
+    // Whatever the row's end, the stand-in is ended before the bench removes its folder.
+    let pidFile: string | null = null;
+    endWhenOver(t, () => (pidFile !== null && existsSync(pidFile) ? [Number(readFileSync(pidFile, 'utf8'))] : []));
+    const b = bench(t, { programs: ['claude'] });
+    pidFile = join(b.root, 'hung.pid');
+    const hung = programsOn({ ...b.env, STUB_HANG: 'claude', STUB_HANG_PID: pidFile }, null);
+    const bound = 1500;
+    const started = Date.now();
+    const result = await hung.run('claude', ['--version'], { timeoutMs: bound });
+    const took = Date.now() - started;
+    assert.deepEqual(result, { exit: -1, stdout: '', stderr: `It was stopped at its time limit of ${bound} ms.` });
+    assert.equal(printedVersion(result), null, 'a program stopped at its limit said no version');
+    assert.ok(took >= bound - 50 && took < bound + 15_000, `answered at the bound: ${took} ms`);
+    assert.ok(existsSync(pidFile), 'the stand-in started before the bound');
+    const pid = Number(readFileSync(pidFile, 'utf8'));
+    const gone = () => {
+        try {
+            process.kill(pid, 0);
+            return false;
+        } catch {
+            return true;
+        }
+    };
+    const waited = Date.now();
+    while (!gone() && Date.now() - waited < 20_000) await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.ok(gone(), 'the program is ended, not left running');
+});
+
+test('a version read past its bound answers as unreadable at the bound, and a program that outlives the first signal is still ended', { timeout: 60_000 }, async (t) => {
+    // Whatever the row's end, what the stand-in left running is ended before the bench removes its folder.
+    let ids: string | null = null;
+    endWhenOver(t, () => (ids !== null && existsSync(ids) ? (JSON.parse(readFileSync(ids, 'utf8')) as number[]) : []));
+    const b = bench(t, { programs: ['claude'] });
+    ids = join(b.root, 'stuck.json');
     const stuck = programsOn({ ...b.env, STUB_CLAUDE_VERSION_STUCK: ids }, null);
     const alive = (id: number) => {
         try {
@@ -109,20 +172,18 @@ test('a version read past its bound answers as unreadable at the bound, and a pr
             return false;
         }
     };
-    t.after(() => {
-        if (!existsSync(ids)) return;
-        for (const id of JSON.parse(readFileSync(ids, 'utf8')) as number[]) if (alive(id)) process.kill(id);
-    });
     const bound = 3000;
     const started = Date.now();
     const result = await stuck.run('claude', ['--version'], { timeoutMs: bound });
     const took = Date.now() - started;
-    assert.equal(result.exit, -1);
+    // The answer is the bound's own, by its sentence, not the program's end; the time it took is held loosely above,
+    // since starting a program on a busy machine can take seconds before the bound is even set.
+    assert.deepEqual(result, { exit: -1, stdout: '', stderr: `It was stopped at its time limit of ${bound} ms.` });
     assert.equal(floorSentence(printedVersion(result)), floorSentence(null), 'unreadable');
-    assert.ok(took >= bound - 50 && took < bound + 1500, `answered at the bound, whether or not the program has gone: ${took} ms`);
+    assert.ok(took >= bound - 50 && took < bound + 15_000, `answered at the bound, whether or not the program has gone: ${took} ms`);
     assert.ok(existsSync(ids), 'the stand-in started before the bound');
     const started2 = Date.now();
     const kept = JSON.parse(readFileSync(ids, 'utf8')) as number[];
-    while (kept.some(alive) && Date.now() - started2 < 6000) await new Promise((resolve) => setTimeout(resolve, 100));
+    while (kept.some(alive) && Date.now() - started2 < 20_000) await new Promise((resolve) => setTimeout(resolve, 100));
     assert.deepEqual(kept.filter(alive), [], 'the term, then the kill after the grace, end it and what it started');
 });

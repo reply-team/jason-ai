@@ -5,6 +5,7 @@ import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import { App } from '../../app';
 import { CampaignChat } from './campaign-chat';
+import { stageWord } from '../people/standing';
 import { href, parseRoute, route, type Route } from '../../router';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock, in UTC here.
@@ -451,6 +452,19 @@ describe('A campaign’s people', () => {
         },
     );
 
+    it('a removed person’s badge and the Removed chip say the one word the stage map holds, the badge in outline', async () => {
+        const api = peopleApi('campaign.list_contacts/summary-removed');
+        open(api, people('removed', 'summary'));
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+        const word = stageWord('removed')!.label;
+
+        const badge = (await row('Oli Example')).querySelector('.meta .badge')!;
+        expect(badge.textContent).toBe(word);
+        expect(badge.className).toBe('badge outline');
+        // The chip is the same count, named from the same map.
+        expect(await screen.findByRole('button', { name: new RegExp(`^${word}\\s*1$`), pressed: true })).toBeTruthy();
+    });
+
     it("each row says where the person stands in this campaign, from the runtime's own standing", async () => {
         const api = peopleApi('campaign.list_contacts/everyone');
         open(api, people(undefined, 'summary'));
@@ -816,6 +830,27 @@ describe('A campaign’s Sequence', () => {
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(4));
         expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign'].request);
     });
+
+    it('left for another screen and opened again by its address, the campaign starts on All', async () => {
+        const api = timelineApi();
+        const sequence: Route = { ...table, id: 'cmp_1', tab: 'sequence' };
+        open(api, sequence);
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Changes' }));
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(2));
+        expect(await screen.findByText(/Holding the sends over the holiday\./)).toBeTruthy();
+
+        // Another screen takes the page, and the campaign's address brings it back: the campaign opens again.
+        location.hash = href({ screen: 'chat' });
+        route.value = { screen: 'chat' };
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Changes' })).toBeNull());
+        location.hash = href(sequence);
+        route.value = sequence;
+
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(3));
+        expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign'].request);
+        expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+    });
 });
 
 describe('A campaign’s Inbox', () => {
@@ -1066,7 +1101,7 @@ describe('What the panel does', () => {
 
     const actions = () => document.querySelector('.panel > .panel-actions') as HTMLElement;
     /** The Settings tab's body: the campaign's record, and none of the moves its header offers. */
-    const settings = () => document.querySelector('.campaign-settings') as HTMLElement;
+    const settings = () => document.querySelector('.facts')!.closest('.panel-body') as HTMLElement;
     const moves = ['Start', 'Pause', 'Resume'];
     /** The moves a part of the panel offers, by their names. */
     const offered = (part: HTMLElement) =>
@@ -1144,6 +1179,36 @@ describe('What the panel does', () => {
             ]),
         );
         expect(screen.getByRole('heading', { level: 2, name: 'Autumn' })).toBeTruthy();
+    });
+
+    it('the header’s move is offered and done on a tab other than Settings, and the tab stays', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/some', 'campaign.summary/all')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.list_contacts', 'campaign.list_contacts/everyone')
+            .answer('campaign.pause', 'campaign.pause/with-reason');
+        const people: Route = { ...details, tab: 'people' };
+        open(api, people);
+        await screen.findByRole('heading', { level: 2, name: 'Spring' });
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+
+        expect(offered(actions())).toEqual(['Pause']);
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Pause Spring' });
+        fireEvent.input(within(dialog).getByRole('textbox', { name: 'Reason' }), {
+            target: { value: 'Holding the sends over the holiday.' },
+        });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Pause' }));
+
+        await waitFor(() =>
+            expect(sent(api, 'campaign.pause')).toEqual([written(fixtures['campaign.pause/with-reason'].request)]),
+        );
+        await waitFor(() => expect(offered(actions())).toEqual(['Resume']));
+        expect(route.value).toEqual(people);
+        expect(screen.getByRole('tab', { name: /^People/ }).getAttribute('aria-selected')).toBe('true');
+        // The People tab is read again under the new status, as it was asked for.
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(2));
     });
 
     it("a draft is started from the campaign's header, saying that its work is released for the first time", async () => {

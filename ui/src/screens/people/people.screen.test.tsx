@@ -53,6 +53,25 @@ const rowOf = (name: string) =>
     )!;
 const cells = (row: HTMLElement) => Array.from(row.querySelectorAll('td')).map((td) => td.textContent);
 
+/**
+ * Presses Refresh once it can be pressed. The list's state outlives a row, and a refresh an earlier row started keeps the
+ * button turning, and pressed in vain, for its half second.
+ */
+async function pressRefresh() {
+    const button = screen.getByTitle<HTMLButtonElement>('Refresh');
+    await waitFor(() => expect(button.disabled).toBe(false));
+    fireEvent.click(button);
+}
+
+/** The timeline's reply rows, once the person's own lines have come: lines an earlier row read for them show until then. */
+async function replyRows(count: number) {
+    return waitFor(() => {
+        const rows = screen.getAllByRole('button', { name: /show the thread/ });
+        expect(rows).toHaveLength(count);
+        return rows;
+    });
+}
+
 const rowTitles = () =>
     Array.from(document.querySelectorAll('.panel .rows .row .name')).map((n) => n.textContent?.trim());
 
@@ -104,7 +123,7 @@ describe('People', () => {
 
         // The runtime does not answer a refresh: what the person was reading stays, under the failure.
         const reachable = api.unreachable('contact.list');
-        fireEvent.click(screen.getByTitle('Refresh'));
+        await pressRefresh();
         expect((await screen.findByRole('alert')).textContent).toContain('Failed to fetch');
         expect(screen.getByText('Mateo Ruiz')).toBeTruthy();
         reachable();
@@ -627,7 +646,7 @@ describe('People', () => {
             'journal.list/by-contact-replied-twice',
         ).answer('contact.thread', 'contact.thread/messages');
         open(api, {}, mateo.id);
-        const [newer, older] = await screen.findAllByRole('button', { name: /show the thread/ });
+        const [newer, older] = await replyRows(2);
 
         // The older row's read is still on its way when the newer row takes its place.
         const release = api.hold('contact.thread');
@@ -651,7 +670,7 @@ describe('People', () => {
         );
         open(api, {}, mateo.id);
 
-        const rows = await screen.findAllByRole('button', { name: /show the thread/ });
+        const rows = await replyRows(2);
         expect(rows.map((row) => row.querySelector('.in')?.textContent)).toEqual([
             'LatAm pilot, Re-engage Q2 no-replies',
             'LatAm pilot · mentions a meeting',
@@ -825,7 +844,7 @@ describe('People: the stage chips', () => {
         open(api, { archived: true });
         await waitFor(() => expect(chipLabels()).toContain('Waiting 3'));
         const reachable = api.unreachable('campaign.summary');
-        fireEvent.click(screen.getByTitle('Refresh'));
+        await pressRefresh();
         expect((await screen.findByRole('alert')).textContent).toContain('Failed to fetch');
         expect(chipLabels()).toEqual(plain);
         expect(document.querySelectorAll('.ptable tbody tr').length).toBeGreaterThan(0);
@@ -855,9 +874,7 @@ describe('People: the stage chips', () => {
         expect(chipLabels()).toContain('Idle 1');
         expect(chipLabels()).toContain('Waiting 0');
 
-        // A refresh an earlier test started may still be turning the button.
-        await waitFor(() => expect((screen.getByTitle('Refresh') as HTMLButtonElement).disabled).toBe(false));
-        fireEvent.click(screen.getByTitle('Refresh'));
+        await pressRefresh();
         await waitFor(() => expect(api.calls.filter((c) => c.operation === 'campaign.summary')).toHaveLength(2));
         await waitFor(() => expect(chipLabels()).toContain('New 1'));
     });

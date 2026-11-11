@@ -19,15 +19,21 @@ const versionShape = /\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?/;
 const namesClaudeCode = /claude code/i;
 
 /**
- * The version in what `--version` printed, standard output first, then standard error: the first three dotted numbers
- * on a line that names Claude Code, in any letter case, whatever else stands on it, so another program's version, a
- * date or an address printed before it never stands for it; when no line names Claude Code beside a number, the first
- * three dotted numbers anywhere. A pre-release part after a hyphen is kept. A program that ended with a code other
- * than zero, or was stopped at its time limit, said no version.
+ * How much of each stream the version is looked for in. The pattern is unanchored, and over a long run of digits with no
+ * dot it backtracks for a time that grows with the square of the run, so it is never given more than this.
+ */
+const readWindow = 4096;
+
+/**
+ * The version in what `--version` printed, standard output first, then standard error, each read in its first 4 KiB:
+ * the first three dotted numbers on a line that names Claude Code, in any letter case, whatever else stands on it, so
+ * another program's version, a date or an address printed before it never stands for it; when no line names Claude
+ * Code beside a number, the first three dotted numbers anywhere. A pre-release part after a hyphen is kept. A program
+ * that ended with a code other than zero, or was stopped at its time limit, said no version.
  */
 export function printedVersion(result: RunResult): string | null {
     if (result.exit !== 0) return null;
-    const text = `${result.stdout}\n${result.stderr}`;
+    const text = `${result.stdout.slice(0, readWindow)}\n${result.stderr.slice(0, readWindow)}`;
     const named = text.split(/\r?\n/).find((line) => namesClaudeCode.test(line) && versionShape.test(line));
     return versionShape.exec(named ?? text)?.[0] ?? null;
 }
