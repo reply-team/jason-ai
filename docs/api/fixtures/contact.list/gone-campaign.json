@@ -4,7 +4,7 @@
   "request": {
     "order": "activity",
     "campaign_id": "cmp_3",
-    "limit": 50
+    "limit": 200
   },
   "status": 404,
   "response": {

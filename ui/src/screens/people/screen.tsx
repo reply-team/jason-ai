@@ -10,6 +10,8 @@ import { PeopleList } from './list';
 import { PersonPanel } from './panel/panel';
 import * as store from './store';
 import { Notice } from '../../layout/notice';
+import { Chips } from '../../layout/chips';
+import { stages, stageWord, type Stage } from './standing';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -47,7 +49,7 @@ export function PeopleScreen() {
     const close = () => navigate({ screen: 'people', tab: 'timeline', filters });
 
     const people = store.people.value;
-    const filtered = Boolean(filters.q || filters.campaign || filters.archived);
+    const filtered = Boolean(filters.q || filters.campaign || filters.stage || filters.archived);
     const campaignLabel = filters.campaign
         ? store.campaign.value?.id === filters.campaign
             ? store.campaign.value.name
@@ -89,6 +91,23 @@ export function PeopleScreen() {
                         Archived
                     </label>
                 </FiltersBar>
+                <div className="stage-filter">
+                    <Chips<Stage | ''>
+                        label="Stage"
+                        row="filters"
+                        chips={[
+                            { key: '', label: 'All' },
+                            ...stages.map((stage) => ({
+                                key: stage,
+                                label: stageWord(stage)?.label ?? stage,
+                                ...hint(stage),
+                                count: store.counts.value?.[stage] ?? null,
+                            })),
+                        ]}
+                        on={filters.stage ?? ''}
+                        onChoose={(key) => narrow(withValue(filters, 'stage', key || undefined))}
+                    />
+                </div>
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.loaded.value && people.length === 0 ? (
                     <div className="empty">{filtered ? 'Nobody matches.' : 'Nobody yet.'}</div>
@@ -96,6 +115,7 @@ export function PeopleScreen() {
                     <PeopleList
                         people={people}
                         filters={filters}
+                        drawn={store.drawn.value}
                         tab={asked}
                         selected={selected}
                         more={store.cursor.value ? () => store.more(api, filters) : null}
@@ -118,6 +138,12 @@ export function PeopleScreen() {
         </div>
     );
 }
+
+/** The hover a chip carries: the runtime's own definition of the count. */
+const hint = (stage: Stage) => {
+    const title = stageWord(stage)?.hint;
+    return title ? { title } : {};
+};
 
 /** The filters with one key set, or gone when it is empty: one view, one address. */
 function withValue<K extends keyof PeopleFilters>(

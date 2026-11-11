@@ -340,6 +340,11 @@ export type ContactCampaign = {
     state: string;
     added_at: string;
     updated_at: string;
+    /**
+     * The counts of campaign.summary that count the person in this campaign now; an excluded membership is in removed
+     * alone. Absent from a runtime that does not say where a person stands.
+     */
+    standing?: string[];
 };
 export type Contact = {
     id: string;
@@ -361,6 +366,8 @@ export type ContactListRequest = {
     query?: string;
     campaign_id?: string;
     order?: string;
+    /** Keeps the people one count of campaign.summary counts; refused beside channel or value. */
+    summary?: string;
     include_archived?: boolean;
     limit?: number;
     cursor?: string;

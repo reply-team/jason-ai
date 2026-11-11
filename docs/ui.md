@@ -76,7 +76,7 @@ its people and the provider campaign it is linked to; **Add people** finds peopl
 add-contacts`). A campaign opens on its **Sequence**, which puts what is planned, what waits for you and what is running
 above the now line, and ends with **What happened**, the campaign's journal (`jason journal list --campaign`),
 narrowed by chips to replies, work, decisions or changes; its **People** are listed by the same counts with a search, Removed among them
-(`--summary removed`); in Activity the tab is **People Activity**, and everything it lists is the period's, All being
+(`--summary removed`), each row saying where the person stands in this campaign, its Stage word from `standing`; in Activity the tab is **People Activity**, and everything it lists is the period's, All being
 everyone something happened to (`--activity people`); its **Inbox** shows its latest fifty reply lines in the order
 Jason observed them, the latest first (`jason journal list --campaign --kind inbound_reply_observed`), each reply at the
 moment the provider says its thread moved, the line's own moment only when it names none; the ten people Jason saw
@@ -122,8 +122,19 @@ right there, as on Attention.
 
 ## People
 
-Everyone Jason knows, the person something last happened to first (`jason contact list --order activity`), grouped by
-day, with a search, a campaign filter and the archived on request, all part of the page's address. Opening a person
+Everyone Jason knows, as a table of Name, Company, Channels, Stage, Campaign and Last activity, the person something
+last happened to first (`jason contact list --order activity`, two hundred at a time, more on request), with a search, a
+campaign filter and the archived on request, all part of the page's address. Under the search sit an All chip and a
+chip for each live count of a campaign's summary, Removed apart (`jason contact list --summary`): a chip keeps the
+people that count counts. A count counts archived people who are still members, whom the list shows only with Archived
+ticked, so a chip shows its number (`jason campaign summary`, one campaign's own when the list is narrowed to it) only
+while Archived is ticked and there is no search, which is when the list matches it; otherwise it shows its word alone.
+Stage is where the person stands in the campaign the row shows, each count in its one word with the runtime's own
+definition on hover (`standing` on each campaign of `jason contact get` and `jason contact list`). A person in several
+campaigns shows the one the list is narrowed to, else the one their latest activity is in, else their newest not
+excluded, with "+N" naming the others; under a chip, the first of those that holds the count; a person on no campaign
+shows dashes. While a new list is on its way the rows stay as they were fetched. Last activity is the newest journal
+line about the person, of any kind. Opening a person
 shows where they are and their local time, the campaigns they are on, an excluded one outlined, and **Add to campaign**
 (`jason campaign add-contacts`). The **Timeline** puts their open work above the now line and what happened to them
 below it: the journal's lines about them (`jason journal list --contact`), narrowed by chips to replies, work, decisions

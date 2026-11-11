@@ -159,6 +159,7 @@ public static class ApiFixtures
         "contact.list/by-activity-summary-query",
         "contact.list/by-activity-summary-waiting",
         "contact.list/by-campaign",
+        "contact.list/by-campaign-archived",
         "contact.list/by-campaign-query",
         "contact.list/by-campaign-query-archived",
         "contact.list/by-campaign-query-none",

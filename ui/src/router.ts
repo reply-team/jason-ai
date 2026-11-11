@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals-react';
 import { campaignIdsLimit } from './api/types';
+import { parseStage, type Stage } from './screens/people/standing';
 
 export type Tab = 'now' | 'planned' | 'done';
 export type WorkItemFilters = {
@@ -19,6 +20,8 @@ export type PeopleFilters = {
     /** The search typed into the list: a name, a company, a title or part of a channel value. */
     q?: string;
     campaign?: string;
+    /** One of the counts of campaign.summary: the people it counts, wherever they stand so. */
+    stage?: Stage;
     archived?: boolean;
 };
 
@@ -123,6 +126,8 @@ function people(segments: string[], query: string): Route {
     if (q) filters.q = q;
     const campaign = params.get('campaign');
     if (campaign) filters.campaign = campaign;
+    const stage = parseStage(params.get('stage'));
+    if (stage) filters.stage = stage;
     if (params.get('archived') === '1') filters.archived = true;
     if (id === null) return { screen: 'people', tab: 'timeline', filters };
     const tab = personTabs.find((each) => each === segments[1]) ?? 'timeline';
@@ -211,6 +216,7 @@ function peopleQuery(filters: PeopleFilters): string {
     const parts: string[] = [];
     if (filters.q) parts.push(`q=${encodeURIComponent(filters.q)}`);
     if (filters.campaign) parts.push(`campaign=${encodeURIComponent(filters.campaign)}`);
+    if (filters.stage) parts.push(`stage=${filters.stage}`);
     if (filters.archived) parts.push('archived=1');
     return parts.length > 0 ? `?${parts.join('&')}` : '';
 }
