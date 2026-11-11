@@ -265,4 +265,16 @@ export class RuntimeAutostart {
         const said = result.exit === 0 ? registeredIn(result.stdout) : null;
         return said ?? (await this.registered());
     }
+
+    /**
+     * Registers it again from this start's jason when the person registered it from a jason `stale` names, another
+     * version's copy: the same act as enable. One that is not registered, or names any other jason, is left as it is.
+     */
+    async repoint(stale: (executable: string) => boolean): Promise<boolean> {
+        const registration = await this.registration();
+        if (registration?.registered !== true || registration.executable === null || !stale(registration.executable)) return false;
+        const result = await this.deps.cli.run(['runtime', 'autostart', 'enable']);
+        this.deps.log.info('autostart_repointed', { Exit: result.exit });
+        return result.exit === 0;
+    }
 }

@@ -6,7 +6,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { BundleDiffers, carriedBundle, copiesBundle, differsWords } from '../src/bundle-copy.ts';
+import { BundleDiffers, carriedBundle, copiesBundle, differsWords, isOtherCopy } from '../src/bundle-copy.ts';
 import { rollbackVersions } from '../src/rollback.ts';
 
 function bench(t: { after(fn: () => void): void }) {
@@ -136,4 +136,14 @@ test('the copy the rollback record names stays: the version kept, or the one a p
     assert.deepEqual(rollbackVersions({ kept: { version: '0.34.0', directory: '/c' }, rejected: [] }), ['0.34.0']);
     assert.deepEqual(rollbackVersions({ pending: { fromVersion: '0.34.0', toVersion: '0.35.0', directory: null }, rejected: [] }), ['0.34.0']);
     assert.deepEqual(rollbackVersions({ rejected: ['0.35.0'] }), []);
+});
+
+test('a jason another version’s copy under the bundles folder is told from this start’s copy and from anything outside it', () => {
+    const bundles = join('/data', 'desktop', 'bundle');
+    const current = join(bundles, '0.36.0', 'jason');
+    assert.equal(isOtherCopy(join(bundles, '0.35.0', 'jason'), bundles, current), true);
+    assert.equal(isOtherCopy(current, bundles, current), false, 'this start’s copy is not another');
+    assert.equal(isOtherCopy(join('/opt', 'Jason', 'resources', 'bundle', 'jason'), bundles, current), false, 'a jason outside the bundles folder is left as it is');
+    assert.equal(isOtherCopy(join('/data', 'desktop', 'bundle-old', '0.35.0', 'jason'), bundles, current), false, 'a folder beside it is not under it');
+    assert.equal(isOtherCopy(bundles, bundles, current), false);
 });

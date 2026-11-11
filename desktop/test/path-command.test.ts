@@ -340,3 +340,47 @@ test('the PATH command’s log lines carry no path: only the act, the name and t
     assert.equal(text.includes('planted'), false, 'a path reached the log');
     assert.deepEqual(text.split(/\r?\n/).filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName), ['path_command_set', 'path_command_set']);
 });
+
+test('on an AppImage a wrapper of ours that runs another version’s copy is placed again over this start’s copy; one outside the bundles folder, or none, is left', (t) => {
+    const root = scratch(t);
+    const folder = join(root, 'home', '.local', 'bin');
+    const bundles = '/data/desktop/bundle';
+    const old = `${bundles}/0.35.0/jason`;
+    const exe = `${bundles}/0.36.0/jason`;
+    const otherCopy = (named: string) => named.startsWith(`${bundles}/`) && named !== exe;
+    const deps = { platform: 'linux' as const, folder, dataDirectory: null, path: () => '/usr/bin:/bin', isProgram: (file: string) => existsSync(file) };
+
+    const never = new PathCommand({ ...deps, executable: exe, log: memoryLog() });
+    assert.equal(never.repoint(otherCopy), false, 'a command never placed is not placed by a re-point');
+    assert.equal(existsSync(folder), false, 'nothing is written');
+
+    new PathCommand({ ...deps, executable: old, log: memoryLog() }).place();
+    const log = memoryLog();
+    const command = new PathCommand({ ...deps, executable: exe, log });
+    assert.equal(command.status().state, 'elsewhere');
+    assert.equal(command.repoint(otherCopy), true);
+    assert.equal(readFileSync(join(folder, 'jason'), 'utf8'), `#!/bin/sh\n# Written by the Jason desktop application.\nexec '${exe}' "$@"\n`);
+    assert.equal(command.status().state, 'placed');
+    assert.deepEqual(log.lines, [{ level: 'info', name: 'path_command_repointed', fields: { Name: 'jason', Platform: 'linux' } }]);
+    assert.equal(command.repoint(otherCopy), false, 'a command already running this copy is left');
+
+    const outside = '/opt/Jason/resources/bundle/jason';
+    rmSync(join(folder, 'jason'));
+    new PathCommand({ ...deps, executable: outside, log: memoryLog() }).place();
+    const kept = memoryLog();
+    assert.equal(new PathCommand({ ...deps, executable: exe, log: kept }).repoint(otherCopy), false);
+    assert.equal(readFileSync(join(folder, 'jason'), 'utf8').includes(outside), true, 'a wrapper running a jason outside the bundles folder is left as it is');
+    assert.deepEqual(kept.lines, []);
+});
+
+test('a wrapper of ours that names another data directory is not placed again by a re-point, even over another version’s copy', (t) => {
+    const root = scratch(t);
+    const folder = join(root, 'home', '.local', 'bin');
+    const deps = { platform: 'linux' as const, folder, path: () => '/usr/bin:/bin', isProgram: (file: string) => existsSync(file) };
+    new PathCommand({ ...deps, executable: '/data/desktop/bundle/0.35.0/jason', dataDirectory: '/elsewhere', log: memoryLog() }).place();
+    const before = readFileSync(join(folder, 'jason'), 'utf8');
+    const log = memoryLog();
+    assert.equal(new PathCommand({ ...deps, executable: '/data/desktop/bundle/0.36.0/jason', dataDirectory: null, log }).repoint(() => true), false);
+    assert.equal(readFileSync(join(folder, 'jason'), 'utf8'), before);
+    assert.deepEqual(log.lines, []);
+});

@@ -57,6 +57,9 @@ export const templates = {
     update_failed: 'The updater step {Step} failed, {Failures} times running',
     update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',
     bundle_copy_failed: 'The jason an AppImage carries was not copied out of it; the copy there differs: {Differs}',
+    autostart_repointed: 'Start the runtime at logon named another version’s copy and was registered again from this one: jason runtime autostart exited {Exit}',
+    path_command_repointed: 'The {Name} command on the PATH ran another version’s copy and was placed again over this one on {Platform}',
+    repoint_failed: 'What named another version’s copy could not be re-pointed: {What}',
     // The chat.
     chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}',
     chat_turn_ended: 'A chat turn on {Host} ended with exit {Exit} after {DurationMs} ms: {Steps} steps, {Requests} permission requests',

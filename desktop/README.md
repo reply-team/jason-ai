@@ -143,6 +143,8 @@ What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), 
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
   gives the chat. A copy already there is used only when every file matches the package's; one that differs stops the
   start and is named, to be removed by hand. The copies of other versions go, but the one an update kept to go back to.
+  A start at logon or a PATH command the person set up from another version's copy is set up again from this one at
+  each start, the same act as turning it on; one never set up, or one that names a `jason` elsewhere, is left alone.
 - Updates come to the AppImage and to the deb. An AppImage update keeps the AppImage file itself under
   `<data>/desktop/rollback/<version>/`; a deb update keeps no copy, and if the new version does not start, the page names
   the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says

@@ -12,11 +12,15 @@
  * used nor overwritten, and the start stops naming it (`differsWords`), so the copy never silently differs from what the
  * package carries. The copies of other versions are removed, but the one the rollback record names, which a version put
  * back by hand carries. The deb and an unpacked folder carry their bundle where they are installed, and copy nothing.
+ *
+ * What the person set up from an earlier version names that version's copy: the start at logon and the PATH command.
+ * Each start re-points them to its own copy (`isOtherCopy`), the same act as enabling or placing them, and only those
+ * the person set up; anything that names a jason outside the bundles folder is left as it is.
  */
 
 import { createHash } from 'node:crypto';
 import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, chmodSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import type { LinuxPackage } from './linux-package.ts';
 
 /** Whether this application copies its bundle out of the package: only an AppImage does. */
@@ -81,6 +85,12 @@ function exists(path: string): boolean {
     } catch {
         return false;
     }
+}
+
+/** Whether `named` is a jason under the bundles folder other than `current`: another version's copy, to re-point. */
+export function isOtherCopy(named: string, bundles: string, current: string): boolean {
+    const inside = relative(bundles, named);
+    return named !== current && inside !== '' && !inside.startsWith('..') && !isAbsolute(inside);
 }
 
 export interface BundleCopy {

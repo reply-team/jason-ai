@@ -279,3 +279,57 @@ test('the login items’ log lines, read back, carry the setting and the platfor
     assert.equal(text.includes('planted'), false, 'a path reached the log');
     assert.deepEqual(text.split(/\r?\n/).filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName), ['login_item_set', 'autostart_set']);
 });
+
+/** A CLI whose `runtime autostart status` names `executable` when registered, and whose enable registers its own jason. */
+function registeredCli(registered: boolean, executable: string, own: string): Cli & { asked: string[][] } {
+    const asked: string[][] = [];
+    let now = { registered, executable: registered ? executable : null };
+    return {
+        asked,
+        async run(args): Promise<CliResult> {
+            asked.push([...args]);
+            if (args[2] === 'enable') now = { registered: true, executable: own };
+            return { exit: 0, stdout: `${JSON.stringify({ ...now, platform: 'linux', data_directory: null, executable_exists: true, artifact_path: null })}\n`, stderr: '' };
+        },
+    };
+}
+
+/** Another version's copy under the bundles folder, as main.ts asks it of what a registration names. */
+const otherCopy = (named: string) => named.startsWith('/data/desktop/bundle/') && named !== '/data/desktop/bundle/0.36.0/jason';
+
+test('on an AppImage a start at logon registered with another version’s copy of jason is registered again with this start’s copy', async () => {
+    const cli = registeredCli(true, '/data/desktop/bundle/0.35.0/jason', '/data/desktop/bundle/0.36.0/jason');
+    const log = memoryLog();
+    assert.equal(await new RuntimeAutostart({ cli, log }).repoint(otherCopy), true);
+    assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable']], 'the same act as enable, from this start’s jason');
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_repointed', { Exit: 0 }]]);
+});
+
+test('a start at logon that names a jason outside the bundles folder, or this start’s copy, is left as it is', async () => {
+    for (const named of ['/opt/Jason/resources/bundle/jason', '/home/someone/.local/share/jason/jason', '/data/desktop/bundle/0.36.0/jason']) {
+        const cli = registeredCli(true, named, '/data/desktop/bundle/0.36.0/jason');
+        const log = memoryLog();
+        assert.equal(await new RuntimeAutostart({ cli, log }).repoint(otherCopy), false, named);
+        assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status']], named);
+        assert.deepEqual(log.lines, []);
+    }
+});
+
+test('a start at logon the person never enabled is not registered by a re-point, nor one the CLI did not answer', async () => {
+    const cli = registeredCli(false, '/data/desktop/bundle/0.35.0/jason', '/data/desktop/bundle/0.36.0/jason');
+    assert.equal(await new RuntimeAutostart({ cli, log: memoryLog() }).repoint(() => true), false);
+    assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status']], 'nothing is written');
+    const namingAsked: string[][] = [];
+    const naming: Cli & { asked: string[][] } = {
+        asked: namingAsked,
+        async run(args) {
+            namingAsked.push([...args]);
+            return { exit: 0, stdout: `${JSON.stringify({ registered: false, executable: '/data/desktop/bundle/0.35.0/jason' })}\n`, stderr: '' };
+        },
+    };
+    assert.equal(await new RuntimeAutostart({ cli: naming, log: memoryLog() }).repoint(() => true), false, 'an answer that says not registered is never re-pointed, whatever it names');
+    assert.deepEqual(naming.asked, [['runtime', 'autostart', 'status']]);
+    const refusing = autostartCli(() => true, 1);
+    assert.equal(await new RuntimeAutostart({ cli: refusing, log: memoryLog() }).repoint(() => true), false);
+    assert.deepEqual(refusing.asked, [['runtime', 'autostart', 'status']]);
+});

@@ -14,7 +14,7 @@ import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedTurns } from './chat-log.ts';
-import { BundleDiffers, carriedBundle, copiesBundle } from './bundle-copy.ts';
+import { BundleDiffers, carriedBundle, copiesBundle, isOtherCopy } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
@@ -276,11 +276,23 @@ async function run(): Promise<void> {
         isProgram: (file) => isProgramFile(file, process.platform),
         log,
     });
+    // What the person set up from an earlier version's copy, the PATH command and the start at logon, follows this start's.
+    const otherCopy = copiesBundle(form) && uncopied === null ? (named: string) => isOtherCopy(named, paths.bundle, executable) : null;
+    if (otherCopy !== null) {
+        try {
+            command.repoint(otherCopy);
+        } catch {
+            log.error('repoint_failed', { What: 'path_command' });
+        }
+    }
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
     const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command });
     desk.open();
     showWindow = () => desk.show();
-    void desk.readAutostart();
+    void (async () => {
+        if (otherCopy !== null) await autostart?.repoint(otherCopy).catch(() => log.error('repoint_failed', { What: 'autostart' }));
+        await desk.readAutostart();
+    })();
     updates?.start();
     let runtimeVersion: string | null = null;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);

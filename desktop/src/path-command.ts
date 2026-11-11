@@ -190,7 +190,31 @@ export class PathCommand {
         const looks = this.looksOf(status.name);
         const foreign = looks.find((look) => look.exists && look.target === null);
         if (foreign) throw new Error(`${foreign.file} is there and is not the desktop’s; nothing was placed.`);
-        const files = this.filesOf(status.name);
+        this.write(status.name);
+        this.deps.log.info('path_command_set', { On: true, Name: status.name, Platform: this.deps.platform });
+        return this.status();
+    }
+
+    /**
+     * Places the command again over this start's executable when every file of it is ours, names the data directory
+     * the desktop runs with, and runs either this executable or one `stale` names, another version's copy, which at least
+     * one does: the same act as place. A command not placed, or one that runs any other executable, is left as it is.
+     */
+    repoint(stale: (executable: string) => boolean): boolean {
+        const status = this.status();
+        if (status.state !== 'elsewhere') return false;
+        const looks = this.looksOf(status.name);
+        const ours = looks.every((look) => look.exists && look.target !== null && look.target.dataDirectory === this.deps.dataDirectory);
+        const differing = looks.filter((look) => look.target?.executable !== look.runs).map((look) => look.target?.executable ?? '');
+        if (!ours || differing.length === 0 || !differing.every((executable) => stale(executable))) return false;
+        this.write(status.name);
+        this.deps.log.info('path_command_repointed', { Name: status.name, Platform: this.deps.platform });
+        return true;
+    }
+
+    /** Writes every file of the command by write and rename. */
+    private write(name: Name): void {
+        const files = this.filesOf(name);
         const texts = files.map((file) => file.text());
         mkdirSync(this.deps.folder ?? '', { recursive: true });
         const temporaries = files.map((file) => `${file.file}.jason-desktop.tmp`);
@@ -204,8 +228,6 @@ export class PathCommand {
         } finally {
             for (const temporary of temporaries) rmSync(temporary, { force: true });
         }
-        this.deps.log.info('path_command_set', { On: true, Name: status.name, Platform: this.deps.platform });
-        return this.status();
     }
 
     /** Removes every file of the command that is ours, whatever it points at; a file the desktop did not write stays. */
