@@ -15,7 +15,7 @@ import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention } from './needs';
-import { chats, clock, lines, setupBusy, streamState } from './state';
+import { chats, clock, lines, setup, setupBusy, streamState } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -373,6 +373,28 @@ describe('the console', () => {
             expect(box().value).toBe('Something else');
             expect(waiting()).toBeNull();
             expect(sends(desktop)).toHaveLength(1);
+        });
+
+        it('ends as a turn that could not start when no host is left to send it to, and goes back to the box', async () => {
+            const { desktop, id } = await running();
+            type('Later');
+            enter();
+            await waitFor(() => expect(waiting()).toBeTruthy());
+            setup.value = { ...setup.value!, hosts: [] };
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() =>
+                expect(document.querySelector('.chat-error')?.textContent).toContain(
+                    'No agent host that drives the chat was found on this machine.',
+                ),
+            );
+            expect(sends(desktop)).toHaveLength(1);
+            expect(waiting()).toBeNull();
+            expect(box().value).toBe('Later');
+            expect(chats.value[id]!.running).toBe(false);
+            expect(Array.from(document.querySelectorAll('.thread .m.user'), (each) => each.textContent)).toEqual([
+                'Go',
+                'Later',
+            ]);
         });
 
         it('stays in sight, not sent, when the turn stops or fails while the box holds other words', async () => {
