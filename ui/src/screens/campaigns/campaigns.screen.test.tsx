@@ -1054,8 +1054,15 @@ describe('What the panel does', () => {
     }
 
     const actions = () => document.querySelector('.panel > .panel-actions') as HTMLElement;
-    /** Settings' own row: where a campaign is started, paused and resumed. */
-    const settings = () => document.querySelector('.campaign-tabs-settings') as HTMLElement;
+    /** The Settings tab's body: the campaign's record, and none of the moves its header offers. */
+    const settings = () => document.querySelector('.campaign-settings') as HTMLElement;
+    const moves = ['Start', 'Pause', 'Resume'];
+    /** The moves a part of the panel offers, by their names. */
+    const offered = (part: HTMLElement) =>
+        within(part)
+            .queryAllByRole('button')
+            .map((each) => each.textContent?.trim())
+            .filter((name) => moves.includes(name ?? ''));
 
     /** Chooses a person in the open Add people dialog, searching for them first when the first page does not offer them. */
     async function choose(dialog: HTMLElement, name: string, search?: string) {
@@ -1074,13 +1081,15 @@ describe('What the panel does', () => {
         open(api, details);
         await screen.findByRole('heading', { level: 2, name: 'Spring' });
 
-        fireEvent.click(within(settings()).getByRole('button', { name: 'Pause' }));
+        expect(offered(actions())).toEqual(['Pause']);
+        expect(offered(settings())).toEqual([]);
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
         const left = await screen.findByRole('dialog', { name: 'Pause Spring' });
         await waitFor(() => expect(left.contains(document.activeElement)).toBe(true));
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
-        fireEvent.click(within(settings()).getByRole('button', { name: 'Pause' }));
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
         const dialog = await screen.findByRole('dialog', { name: 'Pause Spring' });
         expect(dialog.textContent).toContain(
             "Jason stops releasing this campaign's work. Work already running finishes. Reply's sequence keeps sending until a role pauses it there. Your reason is recorded.",
@@ -1097,9 +1106,11 @@ describe('What the panel does', () => {
             expect((document.querySelector('.panel-header') as HTMLElement).textContent).toContain('paused'),
         );
 
-        // Pause and Resume are not in the header: Settings holds them, and Add people stays where it was.
-        expect(within(actions()).queryByRole('button', { name: 'Resume' })).toBeNull();
-        fireEvent.click(within(settings()).getByRole('button', { name: 'Resume' }));
+        // The header offers the one move the new status allows, beside Add people; Settings offers none.
+        await waitFor(() => expect(offered(actions())).toEqual(['Resume']));
+        expect(within(actions()).getByRole('button', { name: 'Add people' })).toBeTruthy();
+        expect(offered(settings())).toEqual([]);
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Resume' }));
         const start = await screen.findByRole('dialog', { name: 'Resume Spring' });
         expect(start.textContent).toContain("Jason releases this campaign's work again.");
         // Another campaign is opened while Resume is on its way: the answer, and what is read after it, leave it open.
@@ -1124,7 +1135,7 @@ describe('What the panel does', () => {
         expect(screen.getByRole('heading', { level: 2, name: 'Autumn' })).toBeTruthy();
     });
 
-    it('a draft is started from Settings, saying that its work is released for the first time', async () => {
+    it("a draft is started from the campaign's header, saying that its work is released for the first time", async () => {
         const autumn = fixtures['campaign.get/unlinked'].response;
         const api = new FakeApi()
             .answer('campaign.list', 'campaign.list/screen')
@@ -1133,9 +1144,9 @@ describe('What the panel does', () => {
         open(api, { ...details, id: autumn.id });
         await screen.findByRole('heading', { level: 2, name: autumn.name });
 
-        expect(within(settings()).queryByRole('button', { name: 'Pause' })).toBeNull();
-        expect(within(settings()).queryByRole('button', { name: 'Resume' })).toBeNull();
-        fireEvent.click(within(settings()).getByRole('button', { name: 'Start' }));
+        expect(offered(actions())).toEqual(['Start']);
+        expect(offered(settings())).toEqual([]);
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Start' }));
         const start = await screen.findByRole('dialog', { name: `Start ${autumn.name}` });
         expect(start.textContent).toContain("Jason starts releasing this campaign's work.");
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
@@ -1180,8 +1191,9 @@ describe('What the panel does', () => {
         await screen.findByRole('heading', { level: 2, name: winter.name });
 
         expect(screen.getByText('Raw campaign record')).toBeTruthy();
-        // Settings offers no move to an archived campaign: its row of moves is not drawn at all.
-        expect(settings()).toBeNull();
+        // The header offers no move to an archived campaign, and Settings none either.
+        expect(offered(actions())).toEqual([]);
+        expect(offered(settings())).toEqual([]);
         fireEvent.click(within(actions()).getByRole('button', { name: 'Add people' }));
         const dialog = await screen.findByRole('dialog', { name: `Add people to ${winter.name}` });
         await choose(dialog, 'Hal Example');

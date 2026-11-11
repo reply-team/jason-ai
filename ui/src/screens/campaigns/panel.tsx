@@ -6,6 +6,7 @@ import { useCampaignChat } from './campaign-chat';
 import { ActionsRow } from '../../layout/actions-row';
 import { PanelHeader } from '../../layout/panel-header';
 import { Tabs } from '../../layout/tabs';
+import { transitions, verbs, type Transition } from './pause-dialog';
 
 type At = Extract<Route, { screen: 'campaigns' }>;
 
@@ -13,7 +14,7 @@ type Props = {
     campaign: Campaign;
     at: At;
     counted: CampaignSummaryRow | CampaignActivityRow | null;
-    onAct: (act: 'add') => void;
+    onAct: (act: Transition | 'add') => void;
     onClose: () => void;
 };
 
@@ -72,6 +73,11 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                 <button className="btn" type="button" onClick={() => onAct('add')}>
                     Add people
                 </button>
+                {transitions(campaign).map((move) => (
+                    <button key={move} className="btn" type="button" onClick={() => onAct(move)}>
+                        {verbs[move]}
+                    </button>
+                ))}
             </ActionsRow>
             {row && (
                 <div className="stats">

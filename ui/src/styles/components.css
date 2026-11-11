@@ -458,7 +458,6 @@ details.fold pre {
 .campaign-tabs-chat + .tabs { padding-left: var(--space-4); }
 .campaign-tabs .tabs a { flex: none; white-space: nowrap; }
 .campaign-tabs-happened > .group:first-child { color: var(--text); font-weight: 600; }
-.campaign-tabs-settings { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-5) 0; }
 .campaign-tabs-inbox { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-4) var(--space-5); }
 .campaign-tabs-inbox-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .campaign-tabs-inbox-head .hint, .campaign-tabs-inbox-untied .s { color: var(--text-muted); font-size: var(--text-sm); }
