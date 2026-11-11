@@ -16,9 +16,11 @@ export const titleLimit = 60;
 /**
  * Characters that end a line, steer the direction text is drawn in, or draw nothing: every control (C0, DEL, C1) and
  * every format character (the bidirectional embeddings, overrides, isolates and marks, the zero-width ones, the soft
- * hyphen and the tag characters a model reads as hidden text among them), and the line and paragraph separators.
+ * hyphen and the tag characters a model reads as hidden text among them), the line and paragraph separators, and every
+ * default-ignorable code point, which draws nothing though some are letters or marks (the Hangul fillers, the
+ * combining grapheme joiner, the variation selectors).
  */
-const unseen = /[\p{Cc}\p{Cf}\u2028\u2029]/gu;
+const unseen = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/gu;
 /** The same in a recap, but for the line breaks and tabs of a message, which JSON writes as visible escapes. */
 const unseenInRecap = /(?![\t\n\r])[\p{Cc}\p{Cf}\u2028\u2029]/gu;
 

@@ -128,12 +128,18 @@ export function namingInput(program: 'claude' | 'codex', firstMessage: string): 
     return program === 'claude' ? words : `${namingInstruction}\n\n${words}`;
 }
 
-/** Characters that end a line, steer the direction text is drawn in, or draw nothing; and the two separators. */
-const unseen = /[\p{Cc}\p{Cf}\u2028\u2029]/gu;
+/**
+ * Characters that end a line, steer the direction text is drawn in, or draw nothing, as a title drops them
+ * (`chat-header.ts`): controls, format characters, the two separators, and every default-ignorable code point.
+ */
+const unseen = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/gu;
 /** One pair of enclosing quotes, taken off. */
 const enclosing: readonly [string, string][] = [['"', '"'], ["'", "'"], ['\u201c', '\u201d'], ['\u2018', '\u2019'], ['\u00ab', '\u00bb']];
-/** A word of letters and digits in any script, holding at most one inner `-`, `'` or `&`. */
-const word = /^[\p{L}\p{M}\p{N}]+(?:[-'&][\p{L}\p{M}\p{N}]+)?$/u;
+/**
+ * A word of letters and digits in any script, beginning with a letter or a digit (a mark only after one), holding at
+ * most one inner `-`, `'` or `&`, itself followed by a letter or a digit.
+ */
+const word = /^[\p{L}\p{N}][\p{L}\p{M}\p{N}]*(?:[-'&][\p{L}\p{N}][\p{L}\p{M}\p{N}]*)?$/u;
 
 /**
  * The model's answer as a name, or null when it is not one: made one line, one pair of enclosing quotes and one final

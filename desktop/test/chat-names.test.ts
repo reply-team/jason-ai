@@ -473,3 +473,31 @@ test('closing the chat ends a running naming run as a stop ends a turn\'s host, 
     assert.deepEqual(r.outcomes, ['stopped']);
     assert.deepEqual([titleOf(r, one.id), titleOf(r, two.id)], ['First chat', 'Second chat']);
 });
+
+test('a name that draws nothing is no name: a filler-only answer keeps the first words, and a filler-only rename is refused', async (t) => {
+    const r = rig(t);
+    const fillers = ['\u3164 \u3164', '\u115f\u1160 \uffa0', '\u034f\ufe0f \u2060\u3164', '\u0301 \u0302'];
+    for (const filler of fillers) {
+        naming(r, { say: filler });
+        const setup = await r.chat.create();
+        await r.turn(setup.id, 'Help me reach dentists in Ohio', { host: 'claude' });
+        await r.chat.idle();
+        assert.equal(r.outcomes.at(-1), 'refused', JSON.stringify(filler));
+        assert.equal(titleOf(r, setup.id), 'Help me reach dentists in Ohio', JSON.stringify(filler));
+        // A person's rename is refused only when nothing is left once the title's dropped characters are: marks alone are
+        // kept there, as a person typed them, and refused only as a model's answer, whose words begin with a letter or a digit.
+        if (!filler.startsWith('\u0301')) assert.throws(() => r.chat.rename(setup.id, filler), { message: 'A name needs at least one character that shows.' }, JSON.stringify(filler));
+    }
+    // A word begins with a letter or a digit; a filler between the words of a real name is dropped.
+    naming(r, { say: '\u0301Dentist outreach' });
+    const marked = await r.chat.create();
+    await r.turn(marked.id, 'Help me reach dentists in Ohio', { host: 'claude' });
+    await r.chat.idle();
+    assert.equal(r.outcomes.at(-1), 'refused');
+    naming(r, { say: 'Dentist\u3164 outreach\u2060 plan' });
+    const kept = await r.chat.create();
+    await r.turn(kept.id, 'Help me reach dentists in Ohio', { host: 'claude' });
+    await r.chat.idle();
+    assert.equal(titleOf(r, kept.id), 'Dentist outreach plan');
+    assert.equal(r.chat.rename(kept.id, 'Mine\u3164 \u115fnow').title, 'Mine now');
+});

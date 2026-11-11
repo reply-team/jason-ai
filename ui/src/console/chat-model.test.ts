@@ -51,6 +51,8 @@ describe('a chat as the page keeps it', () => {
         expect(said(newChat('c5', 'claude'), `Find${hidden[0]} leads${hidden[1]} in Berlin${hidden[2]}`).title).toBe(
             'Find leads in Berlin',
         );
+        // And every default-ignorable code point, as the desktop drops it: a filler draws nothing.
+        expect(said(newChat('c6', 'claude'), '\u3164\u115f\ufe0fFind leads').title).toBe('Find leads');
         const about = said(newChat('c3', 'claude', { id: 'cmp_1', name: 'Autumn outreach' }), 'How is it going?');
         expect(about).toMatchObject({ title: 'Autumn outreach', campaignId: 'cmp_1' });
     });
