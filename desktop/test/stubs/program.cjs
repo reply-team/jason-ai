@@ -10,7 +10,20 @@ const stdin = record.readStdin();
 record(name, args, stdin);
 const said = args.join(' ');
 
-if (said === '--version' && name === 'claude' && process.env.STUB_CLAUDE_VERSION_FILE) {
+if (said === '--version' && name === 'claude' && process.env.STUB_CLAUDE_VERSION_STUCK) {
+    // A Claude Code that never answers and outlives the first signal. Elsewhere it ignores SIGTERM. On Windows, where a
+    // signal ends a process outright, it leaves a detached process of its own holding its output open, which outlives it
+    // unless the whole tree is ended. The ids of both are written to the file named, as a JSON array.
+    process.on('SIGTERM', () => undefined);
+    const ids = [process.pid];
+    if (process.platform === 'win32') {
+        const { spawn } = require('node:child_process');
+        const kept = spawn(process.execPath, ['-e', 'setInterval(() => undefined, 60000)'], { stdio: ['ignore', 'inherit', 'inherit'], windowsHide: true, detached: true });
+        ids.push(kept.pid);
+    }
+    writeFileSync(process.env.STUB_CLAUDE_VERSION_STUCK, JSON.stringify(ids));
+    setInterval(() => undefined, 60000);
+} else if (said === '--version' && name === 'claude' && process.env.STUB_CLAUDE_VERSION_FILE) {
     // What Claude Code says of its version, read from the file at each start so a test can change it between two
     // listings: { "stdout": "...", "stderr": "...", "exit": 0 }.
     const answer = JSON.parse(require('node:fs').readFileSync(process.env.STUB_CLAUDE_VERSION_FILE, 'utf8'));

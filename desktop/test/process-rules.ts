@@ -8,7 +8,7 @@
 export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
     'src/programs.ts': 'the programs a Connect card runs: reply, npm, and the version of an agent host or of node',
-    'src/chat-process.ts': "an agent host for one turn of the chat, streamed, and on Windows taskkill from the system folder to end that turn's process tree",
+    'src/chat-process.ts': "an agent host for one turn of the chat, streamed, and on Windows taskkill from the system folder to end that turn's process tree, or a program the programs module ran past its time limit",
     'src/shell-path.ts': "the login shell, on macOS only, for the PATH a program started from the Finder lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
     'scripts/sign-windows.mjs': 'signtool, to sign each file of the Windows package through the Trusted Signing client',
@@ -16,8 +16,8 @@ export const processModules: Readonly<Record<string, string>> = {
 
 /**
  * The two lines that may signal a process, each in its one module: the look whether the process a run file names is
- * running, with signal 0, which delivers nothing, and the end of a chat turn's process group. Anything else that
- * reaches `process.kill` could stop whatever program holds a pid read from a file.
+ * running, with signal 0, which delivers nothing, and the end of a chat turn's process group or of a program run past
+ * its limit. Anything else that reaches `process.kill` could stop whatever program holds a pid read from a file.
  */
 export const signalLines: Readonly<Record<string, string>> = {
     'src/own-runtime.ts': 'process.kill(pid, 0);',
