@@ -59,7 +59,10 @@ public static class UninstallCommand
         A file another program holds open is tried again for up to {InstallationRemovers.HeldFiles.WaitInWords} before it is reported;
         elsewhere than Windows an open file does not stop the removal.
 
-        Kept unless --purge-data:  the data directory. --purge-data removes what Jason keeps there, and the
+        Kept unless --purge-data:  the data directory, the desktop's own files in it included: the transcripts
+                                   of the chat's turns on a provider's key are kept there, under
+                                   desktop/claude-keyed/ and desktop/codex-keyed/. --purge-data removes what
+                                   Jason keeps there, and the
                                    directory once nothing else is in it; it prints what will be deleted and
                                    asks before anything at all is removed, unless --yes. A directory holding a
                                    file-system root, your profile, the temporary directory or the installation
@@ -71,8 +74,8 @@ public static class UninstallCommand
                                    any provider CLI, any model credential, a PATH entry the installer did
                                    not write, another account's logon registration, the notifications
                                    already in the notification center, which are the person's to dismiss,
-                                   the transcripts the agent hosts keep of the desktop's chat, which are
-                                   the hosts' own and stay where each host keeps them,
+                                   the transcripts the agent hosts keep of the desktop's chat in their own
+                                   folders, which are the hosts' own and stay where each host keeps them,
                                    a jason: link registration another program owns, and one whose command is
                                    other than this installation's: it may be another installation's or a
                                    spelling of this one.

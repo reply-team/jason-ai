@@ -150,6 +150,8 @@ public sealed class ExportCommandTests
             "skills/.staging/pack/SKILL.md", "skills/staged/pack/SKILL.md", "ui/default/index.html",
             "replaced-20261101T000000Z/state/jason.db", "autostart/jason-logon.xml", "update/ledger.json",
             "desktop/settings.json", "desktop/conversations/conv_01JD7Q6V2N0000000000000000.json",
+            "desktop/claude-keyed/claude-api-key/projects/chat/4f1c2b3a-0000-4000-8000-000000000001.jsonl",
+            "desktop/codex-keyed/sessions/2026/11/11/rollout-2026-11-11T10-00-00.jsonl",
         ];
         foreach (var file in carried.Concat(left))
         {

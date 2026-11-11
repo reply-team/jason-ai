@@ -1154,6 +1154,36 @@ public sealed class DoctorComposerTests
         Assert.Contains(ConversationsNeverCarried, DoctorComposer.NeverCarried);
     }
 
+    /// <summary>
+    /// A chat turn on a provider's key runs its host in a folder of the desktop's own, <c>desktop/claude-keyed/</c> or
+    /// <c>desktop/codex-keyed/</c> in the data directory, which keeps that host's transcripts of the turn: no bundle
+    /// carries any of it, the folders' names included, the journal asked for or not. A file named as the desktop's log is
+    /// there too, so a bundle that read logs from the wrong folder would carry it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task No_bundle_carries_a_transcript_of_a_chat_turn_on_a_provider_s_key(bool includeJournal)
+    {
+        using var dir = new TempPaths();
+        var claude = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "desktop", "claude-keyed", "claude-api-key", "projects", "chat")).FullName;
+        File.WriteAllText(
+            Path.Combine(claude, "4f1c2b3a-0000-4000-8000-000000000001.jsonl"),
+            """{"type":"user","message":{"role":"user","content":"SENTINEL_KEYED_WORDS"},"sessionId":"SENTINEL_KEYED_SESSION"}""");
+        Write(claude, "desktop-20261004.jsonl", Event(At(0), "SENTINEL_KEYED_LOG_LINE"));
+        var codex = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "desktop", "codex-keyed", "sessions", "2026", "11", "11")).FullName;
+        File.WriteAllText(Path.Combine(codex, "rollout-2026-11-11T10-00-00-SENTINEL_CODEX_THREAD.jsonl"), """{"type":"message","content":"SENTINEL_CODEX_WORDS"}""");
+        var logs = Directory.CreateDirectory(dir.Paths.LogsDirectory).FullName;
+        Write(logs, "desktop-20261004.jsonl", Event(At(0), "desktop line"));
+
+        var file = (await ComposeAsync(dir, Running(dir), includeJournal)).Serialize();
+
+        foreach (var withheld in (string[])["claude-keyed", "codex-keyed", "SENTINEL_KEYED_WORDS", "SENTINEL_KEYED_SESSION", "SENTINEL_KEYED_LOG_LINE", "SENTINEL_CODEX_THREAD", "SENTINEL_CODEX_WORDS"])
+        {
+            Assert.DoesNotContain(withheld, file, StringComparison.Ordinal);
+        }
+    }
+
     private const string ConversationsNeverCarried =
         "the desktop's conversations under desktop/conversations/ in the data directory, and the transcripts the agent hosts keep of the desktop's chat";
 

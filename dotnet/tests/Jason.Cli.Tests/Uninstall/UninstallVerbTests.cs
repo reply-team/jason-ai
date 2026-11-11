@@ -164,9 +164,30 @@ public class UninstallVerbTests
         var never = help.IndexOf("Never touched:", StringComparison.Ordinal);
         var root = help.IndexOf("And the harness root", StringComparison.Ordinal);
         var transcripts = help.IndexOf(
-            "the transcripts the agent hosts keep of the desktop's chat, which are the hosts' own and stay where each host keeps them,",
+            "the transcripts the agent hosts keep of the desktop's chat in their own folders, which are the hosts' own and stay where each host keeps them,",
             StringComparison.Ordinal);
         Assert.True(never >= 0 && transcripts > never && transcripts < root, $"The help page does not name the hosts' transcripts among what is never touched:{Environment.NewLine}{output}");
+    }
+
+    /// <summary>
+    /// The transcripts of the desktop's chat turns on a provider's key are kept in the data directory, in folders of the
+    /// desktop's own: the help page names them with the data directory, which the purge removes.
+    /// </summary>
+    [Fact]
+    public async Task The_help_page_names_the_keyed_turns_transcripts_with_the_data_directory()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["uninstall", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+
+        var help = System.Text.RegularExpressions.Regex.Replace(output.ToString(), @"\s+", " ");
+        var kept = help.IndexOf("Kept unless --purge-data:", StringComparison.Ordinal);
+        var never = help.IndexOf("Never touched:", StringComparison.Ordinal);
+        var keyed = help.IndexOf(
+            "the data directory, the desktop's own files in it included: the transcripts of the chat's turns on a provider's key are kept there, under desktop/claude-keyed/ and desktop/codex-keyed/.",
+            StringComparison.Ordinal);
+        Assert.True(kept >= 0 && keyed > kept && keyed < never, $"The help page does not name the keyed turns' transcripts with the data directory:{Environment.NewLine}{output}");
     }
 
     /// <summary>The wait the help page publishes is the remover's own, not a number written down beside it.</summary>
