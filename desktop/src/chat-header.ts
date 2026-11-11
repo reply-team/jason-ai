@@ -42,10 +42,19 @@ export function titleOf(words: unknown): string {
 }
 
 /**
+ * A name a person gave a conversation: one line, what cannot be seen dropped, white space made single spaces, cut to the
+ * title's cap; empty when nothing that shows is left, which a rename refuses.
+ */
+export function givenTitle(raw: unknown): string {
+    if (typeof raw !== 'string') return '';
+    return Array.from(raw.replace(/\s+/g, ' ').replace(unseen, '').replace(/\s+/g, ' ').trim()).slice(0, titleLimit).join('');
+}
+
+/**
  * A text as one JSON string, with `<` written as its escape, so no tag-like run of characters stands in it, and every
  * control, format character and separator escaped, so none stands in it raw.
  */
-function quoted(text: string): string {
+export function quoted(text: string): string {
     // JSON leaves DEL, the C1 controls, the format characters and the two separators as they are: each is escaped too.
     return JSON.stringify(text).replace(/[<\p{Cc}\p{Cf}\u2028\u2029]/gu, (character) =>
         Array.from({ length: character.length }, (_, i) => `\\u${character.charCodeAt(i).toString(16).padStart(4, '0')}`).join(''),

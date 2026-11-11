@@ -19,7 +19,13 @@ const fence = readFence(join(import.meta.dirname, '..'));
 
 test('the chat’s log carries none of a turn’s words, commands, paths or keys', async (t) => {
     const removals: (() => void)[] = [];
-    t.after(() => removals.forEach((remove) => remove()));
+    let held: Chat | undefined;
+    // A set-up chat's naming run, which a turn that ended well starts, ends before the folder goes.
+    t.after(async () => {
+        held?.closeAll();
+        await held?.idle();
+        removals.forEach((remove) => remove());
+    });
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
     const planted = {
         prompt: 'planted words about the Acme renewal',
@@ -60,7 +66,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         },
         ...loggedTurns(log),
     });
-    t.after(() => chat.closeAll());
+    held = chat;
 
     await named.send('c1', planted.prompt, { host: 'deepseek', campaignId: planted.campaign });
     await done;
@@ -96,7 +102,13 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
 
 test('a missing instruction text is logged once, by a closed line that names the file and nothing of a turn', async (t) => {
     const removals: (() => void)[] = [];
-    t.after(() => removals.forEach((remove) => remove()));
+    let held: Chat | undefined;
+    // A set-up chat's naming run, which a turn that ended well starts, ends before the folder goes.
+    t.after(async () => {
+        held?.closeAll();
+        await held?.idle();
+        removals.forEach((remove) => remove());
+    });
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
     const log = fileLogger(b.paths.logs);
     let ends = 0;
@@ -119,7 +131,7 @@ test('a missing instruction text is logged once, by a closed line that names the
         },
         ...loggedTurns(log),
     });
-    t.after(() => chat.closeAll());
+    held = chat;
     await named.send('c1', 'planted words', { host: 'claude' });
     await done;
     const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
@@ -138,7 +150,13 @@ test('a missing instruction text is logged once, by a closed line that names the
 
 test('an instruction file that cannot be written is logged by a closed line that names the file and its error code, at the start and at the turn it refuses', async (t) => {
     const removals: (() => void)[] = [];
-    t.after(() => removals.forEach((remove) => remove()));
+    let held: Chat | undefined;
+    // A set-up chat's naming run, which a turn that ended well starts, ends before the folder goes.
+    t.after(async () => {
+        held?.closeAll();
+        await held?.idle();
+        removals.forEach((remove) => remove());
+    });
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
     mkdirSync(join(b.paths.chat, 'CLAUDE.md'), { recursive: true });
     const log = fileLogger(b.paths.logs);
@@ -162,7 +180,7 @@ test('an instruction file that cannot be written is logged by a closed line that
         },
         ...loggedTurns(log),
     });
-    t.after(() => chat.closeAll());
+    held = chat;
     await named.send('c1', 'planted words', { host: 'claude' });
     await done;
     assert.equal(said.length, 1);
@@ -187,7 +205,13 @@ test('an instruction file that cannot be written is logged by a closed line that
 
 test('no conversation reaches the log: a planted record, a lost session and a set-up turn leave counts and closed words alone', async (t) => {
     const removals: (() => void)[] = [];
-    t.after(() => removals.forEach((remove) => remove()));
+    let held: Chat | undefined;
+    // A set-up chat's naming run, which a turn that ended well starts, ends before the folder goes.
+    t.after(async () => {
+        held?.closeAll();
+        await held?.idle();
+        removals.forEach((remove) => remove());
+    });
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
     const campaigns = join(b.root, 'campaigns.json');
     writeFileSync(campaigns, '[]');
@@ -226,7 +250,7 @@ test('no conversation reaches the log: a planted record, a lost session and a se
         },
         ...loggedTurns(log),
     });
-    t.after(() => chat.closeAll());
+    held = chat;
     const turn = async (chatId: string, words: string) => {
         const done = new Promise<void>((resolve) => waiting.set(chatId, resolve));
         await chat.send(chatId, words, { host: 'claude' });
@@ -281,4 +305,18 @@ test('an ask of the models Codex offers is logged by its host id and a count, or
         { EventName: 'chat_models_listed', Host: 'codex', Models: 3 },
         { '@l': 'Warning', EventName: 'chat_models_unlisted', Host: 'codex-api-key', Kind: 'bound' },
     ]);
+});
+
+test('a naming run of a set-up chat is logged by how it ended, one word, never the name or the words it was given', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const outcomes = ['named', 'refused', 'failed', 'timed_out', 'held', 'not_started', 'overtaken'] as const;
+    for (const outcome of outcomes) loggedTurns(log).named(outcome);
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_named')
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
+    assert.deepEqual(said, outcomes.map((outcome) => ({ Outcome: outcome })));
 });

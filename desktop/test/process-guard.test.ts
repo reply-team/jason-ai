@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ipcModule, listingCallers, processModules, processViolations, signalLines } from './process-rules.ts';
+import { ipcModule, listingCallers, processModules, processViolations, runFileCalls, signalLines } from './process-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -131,4 +131,19 @@ test('a process is signalled only on two lines: a look whether a process runs, w
         assert.match(found[0] ?? '', /signals a process/);
     }
     assert.notDeepEqual(processViolations('src/chat-process.ts', '(target) => process.kill(target, 0),'), []);
+});
+
+test('the program runner is called with a command line of a module\'s own only by the runner itself and by a set-up chat\'s one naming run', () => {
+    assert.deepEqual(runFileCalls, { 'src/programs.ts': 1, 'src/chat-naming.ts': 1 });
+    assert.match(processModules['src/programs.ts'] ?? '', /an agent host's one naming run of a set-up chat/);
+    for (const [path, calls] of Object.entries(runFileCalls)) {
+        const text = readFileSync(join(root, path), 'utf8');
+        assert.equal([...text.matchAll(/\brunFile\s*\(/g)].length - [...text.matchAll(/function\s+runFile\s*\(/g)].length, calls, `${path} no longer makes its ${calls} call`);
+    }
+    const planted = processViolations('src/chat.ts', "import { runFile } from './programs.ts';\nawait runFile(file, ['--yes'], env);\n");
+    assert.equal(planted.length, 1);
+    assert.match(planted[0] ?? '', /calls the program runner/);
+    assert.notDeepEqual(processViolations('src/chat-naming.ts', 'await runFile(a, b, c);\nawait runFile(a, b, c);\n'), [], 'a second run in the naming module');
+    assert.deepEqual(processViolations('src/chat-naming.ts', 'await runFile(a, b, c);\n'), []);
+    assert.deepEqual(processViolations('src/chat.ts', 'const at = paths.runFile;\nreadRunFile(x);\n'), [], 'the run file is no call of the runner');
 });

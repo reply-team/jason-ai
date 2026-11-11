@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { header, nameLimit, nameOf, recap, recapLimit, titleOf, turnInput } from '../src/chat-header.ts';
+import { givenTitle, header, nameLimit, nameOf, recap, recapLimit, titleLimit, titleOf, turnInput } from '../src/chat-header.ts';
 
 const campaign = (name: string | null, fields: { status?: string; folder?: string | null } = {}) => ({
     campaign: { id: 'cmp_01ABC', name, status: fields.status ?? 'active', folder: fields.folder ?? null },
@@ -119,4 +119,12 @@ test('a recap line and a folder carry no control or format character raw: tags, 
 test('a turn\'s input is the header, the recap when there is one, then the person\'s words as they are', () => {
     assert.equal(turnInput('Head.', null, 'Words\nhere'), 'Head.\n\nWords\nhere');
     assert.equal(turnInput('Head.', 'Recap.', 'Words'), 'Head.\n\nRecap.\n\nWords');
+});
+
+test('a name a person types is one line, with nothing unseen, within the title\'s cap, and nothing when nothing shows', () => {
+    assert.equal(givenTitle('  Spring \n  outreach‮  '), 'Spring outreach');
+    assert.equal(givenTitle('a'.repeat(61)), 'a'.repeat(titleLimit));
+    assert.equal(Array.from(givenTitle('é'.repeat(80))).length, titleLimit);
+    assert.equal(givenTitle('\u0000 x ​'), 'x');
+    for (const empty of ['', '   ', '\n​‮', 42, null]) assert.equal(givenTitle(empty), '', JSON.stringify(empty));
 });

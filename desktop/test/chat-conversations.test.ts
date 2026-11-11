@@ -221,3 +221,19 @@ test('a record whose id is not its file\'s name, or not a conversation id, is no
     assert.equal(parseConversation(serialize({ ...kept, id: 'conv_../../x' }), 'conv_../../x'), null);
     assert.throws(() => writeConversation(tmpdir(), { ...kept, id: '../escape' }), ConversationUnwritten);
 });
+
+test('a name a person gave is kept with its mark, and a record without the mark is one the desktop named', () => {
+    const named = record({ title: 'Spring plan', named_by_person: true });
+    const text = serialize(named);
+    assert.deepEqual(Object.keys(JSON.parse(text) as object), ['id', 'campaign_id', 'title', 'named_by_person', 'created_at', 'updated_at', 'sessions', 'entries', 'dropped']);
+    assert.deepEqual(parseConversation(text, named.id), named);
+    // A record an earlier desktop wrote carries no mark, and is written again without one.
+    const plain = record({ title: 'Help me start' });
+    assert.equal('named_by_person' in (JSON.parse(serialize(plain)) as object), false);
+    assert.equal(parseConversation(serialize(plain), plain.id)?.named_by_person, undefined);
+    // Anything but true is no mark.
+    for (const value of [false, 'yes', 1, null]) {
+        const planted = JSON.stringify({ ...JSON.parse(serialize(plain)), named_by_person: value });
+        assert.equal(parseConversation(planted, plain.id)?.named_by_person, undefined, JSON.stringify(value));
+    }
+});

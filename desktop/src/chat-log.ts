@@ -4,10 +4,10 @@
  * memory file of the chat folder could not be written, by its name and the system's error code. Of the conversations:
  * how many were read at the start and how many files were not records, each record that could not be written by the
  * system's error code, how many new campaigns a set-up turn found and whether it handed over, and why a turn started a
- * fresh session. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
+ * fresh session; how each naming run of a set-up chat ended, as one closed word. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
  * nothing. Never the words of a turn, a tool's input, a command, a path, a session, a campaign, a conversation's
  * title or entries, or a key: the host is an id from the desktop's own tables, the file is the application's own name,
- * the code is the system's (`EPERM`, say), the reason one of two words, the key source one of three, and everything else is a number, a boolean or an
+ * the code is the system's (`EPERM`, say), the reason one of two words, the key source one of three, a naming run's end one of seven, and everything else is a number, a boolean or an
  * outcome.
  */
 
@@ -16,7 +16,7 @@ import type { ChatOptions } from './chat.ts';
 import type { Logger } from './log.ts';
 import type { ModelListsOptions } from './model-lists.ts';
 
-type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource';
+type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named';
 
 export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
     return {
@@ -30,6 +30,7 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
         setupEnded: (found, handedOver) => log.info('chat_setup_ended', { ListRead: found !== null, Found: found ?? 0, HandedOver: handedOver }),
         fresh: (reason) => log.info('chat_turn_fresh', { Cause: reason }),
         keySource: (source) => log.warn('chat_key_source', { Source: source }),
+        named: (outcome) => log.info('chat_named', { Outcome: outcome }),
     };
 }
 

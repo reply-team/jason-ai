@@ -22,6 +22,7 @@ export const invokeChannels = {
     'chat.remove': 'jason:chat.remove',
     'chat.restart': 'jason:chat.restart',
     'chat.attach': 'jason:chat.attach',
+    'chat.rename': 'jason:chat.rename',
 } as const;
 
 /** What the desktop sends the page. */

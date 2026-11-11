@@ -30,8 +30,19 @@ import {
     type Conversation,
     type KeptEntry,
 } from './chat-conversations.ts';
-import { header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
+import { givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
 import { currentModel, effortRefusal, isEffort, modelRefusal, modelShape, type Effort, type KeptLists } from './chat-models.ts';
+import {
+    claudeNamingArguments,
+    codexNamingArguments,
+    codexNamingModel,
+    haikuEffortFrom,
+    namingInput,
+    namingLimitMs,
+    namingModelOf,
+    runNaming,
+    type NamingOutcome,
+} from './chat-naming.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
@@ -41,7 +52,7 @@ import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig 
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import type { Cli } from './cli.ts';
-import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
+import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs } from './programs.ts';
 import { hosts, keyedFolder, keyProvider, providerEnvironment, withoutKey, withoutWholeKey } from './providers-model.ts';
@@ -57,6 +68,8 @@ export type ChatEvent =
     | { kind: 'attached'; campaignId: string; title: string }
     | { kind: 'fresh'; reason: FreshReason }
     | { kind: 'pick'; campaignIds: string[] }
+    /** The conversation's title changed: a person renamed it, or the desktop named a set-up chat by what it is about. */
+    | { kind: 'renamed'; title: string }
     | { kind: 'done'; error: string | null };
 
 /** What a send names besides its conversation and its words: never a campaign, which the conversation's record decides. */
@@ -142,6 +155,10 @@ export interface ChatOptions {
      * say it is the environment's, nor that it is not: the word only (`KeySource`), never what the host printed.
      */
     keySource?(source: Exclude<KeySource, 'environment' | 'elsewhere'>): void;
+    /** Said at the end of each naming run of a set-up chat, or when one is held: how it ended, as a closed word only. */
+    named?(outcome: NamingOutcome): void;
+    /** How long a naming run may take; thirty seconds unless a test shortens it. */
+    namingLimitMs?: number;
     /** How long a card waits for the person; thirty minutes unless a test shortens it. */
     answerWindowMs?: number;
     platform?: Platform;
@@ -222,6 +239,8 @@ type Listed = Map<string, { created: number; name: string }>;
 const chatIdShape = /^[A-Za-z0-9_.:-]{1,200}$/;
 const campaignIdShape = /^cmp_[0-9A-Za-z]{1,64}$/;
 const textLimit = 1_000_000;
+/** The longest text a rename reads before it makes it one line and cuts it to the title's cap. */
+const renameLimit = 10_000;
 const wordsKept = 600;
 /** One page of `campaign list` at the runtime's largest, and how many pages a hand-over reads before it gives up. */
 const listPage = 1000;
@@ -323,6 +342,10 @@ export class Chat {
     #setupTurns = new Map<string, { overlapped: boolean }>();
     /** Whether the missing instruction text was said already. */
     #missingSaid = false;
+    /** The naming runs of set-up chats, one after another across the desktop: the last one asked for, or none. */
+    #naming: Promise<void> = Promise.resolve();
+    /** Whether the window closed: a naming run that waits is then not started. */
+    #closed = false;
 
     constructor(options: ChatOptions) {
         this.#options = options;
@@ -423,6 +446,31 @@ export class Chat {
     }
 
     /**
+     * A person's name for a conversation, a set-up chat's or a campaign's: one line, with nothing unseen, within the
+     * title's cap. It is kept with the mark that a person gave it, and nothing replaces it afterwards: not a hand-over,
+     * not the campaign's name, not a name the desktop asks a model for. The campaign's own name in the runtime is not
+     * changed. Refused while nothing is kept of the conversation, and for a name with nothing that shows. A turn that
+     * runs goes on; its end keeps the name.
+     */
+    rename(id: unknown, title: unknown): ConversationSummary {
+        const conversation = this.#own(id);
+        if (!this.#kept.has(conversation.id)) throw new ChatRefused('Send this chat a message first; then it can be renamed.');
+        if (typeof title === 'string' && title.length > renameLimit) throw new ChatRefused('That name is too long. Keep it to a short line.');
+        const name = givenTitle(title);
+        if (name === '') throw new ChatRefused('A name needs at least one character that shows.');
+        conversation.title = name;
+        conversation.named_by_person = true;
+        this.#keep(conversation);
+        this.#options.emit(conversation.id, { kind: 'renamed', title: name });
+        return this.#summaryOf(conversation);
+    }
+
+    /** Resolves once no naming run of a set-up chat runs or waits. */
+    idle(): Promise<void> {
+        return this.#naming;
+    }
+
+    /**
      * Makes a set-up chat the conversation of a campaign the person picked from the ones its last pick named. Refused for
      * a conversation already about a campaign, one whose turn runs, a campaign that has a conversation, and a campaign
      * the pick did not name.
@@ -445,7 +493,7 @@ export class Chat {
         const after = refusal();
         if (after !== null) throw new ChatRefused(after);
         conversation.campaign_id = campaignId;
-        conversation.title = nameOf(name) || campaignId;
+        if (conversation.named_by_person !== true) conversation.title = nameOf(name) || campaignId;
         this.#keep(conversation);
         this.#options.emit(conversation.id, { kind: 'attached', campaignId, title: conversation.title });
         return this.#summaryOf(conversation);
@@ -538,6 +586,7 @@ export class Chat {
      * running turn's file removed before this returns, since the desktop may quit before a host's exit is seen.
      */
     closeAll(): void {
+        this.#closed = true;
         for (const running of [...this.#running.values()]) {
             running.stopped = true;
             running.process?.stop();
@@ -702,7 +751,7 @@ export class Chat {
         }
         const [campaignId, campaign] = only;
         conversation.campaign_id = campaignId;
-        conversation.title = nameOf(campaign.name) || campaignId;
+        if (conversation.named_by_person !== true) conversation.title = nameOf(campaign.name) || campaignId;
         this.#options.setupEnded?.(1, true);
         return { kind: 'attached', campaignId, title: conversation.title };
     }
@@ -748,7 +797,7 @@ export class Chat {
             about = read.about;
             added = read.added;
             const name = read.about.campaign?.name;
-            if (name) conversation.title = nameOf(name) || conversation.title;
+            if (name && conversation.named_by_person !== true) conversation.title = nameOf(name) || conversation.title;
         } else {
             since = Date.now();
             this.#setupBegun(conversation.id);
@@ -838,8 +887,10 @@ export class Chat {
         });
         let steps = 0;
         const begun = Date.now();
-        // A set-up chat is named by the first sixty characters of its first message, until a campaign names it.
-        if (setup && conversation.title === 'New chat' && !conversation.entries.some((entry) => entry.kind === 'user')) conversation.title = titleOf(text);
+        // A set-up chat is named by the first sixty characters of its first message, until a campaign names it; after its
+        // first turn ends well the desktop asks its model for a better name (`#nameLater`).
+        const firstTurn = setup && !conversation.entries.some((entry) => entry.kind === 'user');
+        if (firstTurn && conversation.title === 'New chat') conversation.title = titleOf(text);
         conversation.entries.push({ kind: 'user', text });
         conversation.chosen = { host: resolved.host, model: resolved.named ?? null, effort: resolved.effort ?? null };
         if (hostChanged) this.#fresh(replyTo, 'host_changed');
@@ -998,8 +1049,80 @@ export class Chat {
                 this.#options.ended?.({ host: resolved.host, exit: last.exit.code ?? -1, durationMs: Date.now() - begun, steps, requests });
                 if (handed !== null) this.#options.emit(replyTo, handed);
                 this.#options.emit(replyTo, { kind: 'done', error });
+                if (firstTurn && error === null && !running.stopped) this.#nameLater(conversation, text, resolved);
             }
         })().catch(() => undefined);
+    }
+
+    /** Whether a set-up chat is still named by the first words of its first message, and still kept: what a naming run may replace. */
+    #namedByFirstWords(conversation: Conversation, firstWords: string): boolean {
+        return (
+            !this.#closed &&
+            this.#conversations.get(conversation.id) === conversation &&
+            this.#kept.has(conversation.id) &&
+            conversation.campaign_id === null &&
+            conversation.named_by_person !== true &&
+            conversation.title === firstWords
+        );
+    }
+
+    /**
+     * Asks, once, after a set-up chat's first turn ended without an error, for a name by what it is about: one naming run
+     * on the conversation's own host or provider (`chat-naming.ts`), after every naming run asked for before it, so one
+     * runs at a time across the desktop. Never for a chat a person named or a campaign's.
+     */
+    #nameLater(conversation: Conversation, first: string, resolved: Resolved): void {
+        const firstWords = titleOf(first);
+        if (!this.#namedByFirstWords(conversation, firstWords)) return;
+        this.#naming = this.#naming.then(() => this.#nameNow(conversation, first, firstWords, resolved)).catch(() => undefined);
+    }
+
+    async #nameNow(conversation: Conversation, first: string, firstWords: string, resolved: Resolved): Promise<void> {
+        const model = namingModelOf(resolved.host);
+        if (model === null || !this.#namedByFirstWords(conversation, firstWords)) return;
+        const said = (outcome: NamingOutcome) => this.#options.named?.(outcome);
+        let effort = model.effort === 'always';
+        if (resolved.program === 'claude') {
+            // The floor holds a naming run as it holds a turn: read again now, never remembered.
+            const version = printedVersion(await this.#options.programs.run('claude', ['--version'], { timeoutMs: versionLimitMs }));
+            if (version === null || floorSentence(version) !== null) return said('held');
+            if (model.effort === 'haiku') effort = compareVersions(version, haikuEffortFrom) >= 0;
+        }
+        if (!this.#namedByFirstWords(conversation, firstWords)) return;
+        const launch = programLaunch(this.#options.env, resolved.program);
+        if ('refused' in launch) return said('not_started');
+        const provider = keyProvider(resolved.host);
+        // A keyed run has its provider's environment as a turn has it, with the fast model in place of the turn's.
+        const provided = provider !== undefined && resolved.key !== null && resolved.folder !== null ? providerEnvironment(provider, resolved.key, model.model ?? '', resolved.folder) : {};
+        const env = hostEnvironment(this.#options.env, {
+            platform: this.#platform,
+            bundle: this.#options.bundle,
+            data: this.#options.dataNamed ? this.#options.paths.data : null,
+            program: resolved.program,
+            keyed: resolved.keyed,
+            provider: provided,
+            bundleVersion: this.#options.bundleVersion,
+        });
+        // An inherited effort would stand over the run's own (Claude Code reads the variable over `--effort`).
+        for (const name of Object.keys(env)) if (name.toUpperCase() === 'CLAUDE_CODE_EFFORT_LEVEL') delete env[name];
+        const onCommandLine = provider?.baseUrl ? null : model.model;
+        const answer = await runNaming({
+            program: resolved.program,
+            launch,
+            args: resolved.program === 'claude' ? claudeNamingArguments(onCommandLine, effort) : codexNamingArguments(codexNamingModel(null)),
+            env,
+            stdin: namingInput(resolved.program, first),
+            turns: this.#options.paths.turns,
+            checksKeySource: resolved.checksKeySource,
+            limitMs: this.#options.namingLimitMs ?? namingLimitMs,
+        });
+        if ('outcome' in answer) return said(answer.outcome);
+        // A person who renamed the chat, a hand-over or a removal while the run ran: their name stands.
+        if (!this.#namedByFirstWords(conversation, firstWords)) return said('overtaken');
+        conversation.title = answer.name;
+        this.#keep(conversation);
+        this.#options.emit(conversation.id, { kind: 'renamed', title: answer.name });
+        said('named');
     }
 
     #fresh(replyTo: string, reason: FreshReason): void {

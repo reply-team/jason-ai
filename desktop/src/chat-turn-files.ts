@@ -55,10 +55,19 @@ export function removeTurnFiles(turns: string, turnId: string): void {
 
 const turnFileShape = /^turn-[0-9a-f]{24}\.mcp\.json$/;
 
+/** The empty folder one naming run of a set-up chat runs in (`chat-naming.ts`), removed after with what it holds. */
+export function namingFolderPath(turns: string, id: string): string {
+    if (!turnIdShape.test(id)) throw new Error('That is not a turn id the desktop made.');
+    return join(turns, `naming-${id}`);
+}
+
+const namingFolderShape = /^naming-[0-9a-f]{24}$/;
+
 /**
- * Removes every turn file in `<data>/desktop/turns/`, at the desktop's start: a desktop that ended mid-turn, or a
- * removal a scanner held, leaves one behind with its secret. Only names of the turn file's own shape there are touched,
- * nothing else under `<data>/desktop`, and a file that cannot be removed is left.
+ * Removes every turn file in `<data>/desktop/turns/`, and every naming run's folder with what is in it, at the desktop's
+ * start: a desktop that ended mid-turn, or a removal a scanner held, leaves one behind, a turn file with its secret. Only
+ * names of those two shapes there are touched, nothing else under `<data>/desktop`, and one that cannot be removed is
+ * left.
  */
 export function sweepTurnFiles(turns: string): void {
     let names: string[];
@@ -68,9 +77,10 @@ export function sweepTurnFiles(turns: string): void {
         return;
     }
     for (const name of names) {
-        if (!turnFileShape.test(name)) continue;
+        const folder = namingFolderShape.test(name);
+        if (!folder && !turnFileShape.test(name)) continue;
         try {
-            rmSync(join(turns, name), { force: true });
+            rmSync(join(turns, name), { force: true, recursive: folder });
         } catch {
             // Left for the next start.
         }

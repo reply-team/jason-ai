@@ -55,6 +55,13 @@ describe('a chat as the page keeps it', () => {
         expect(about).toMatchObject({ title: 'Autumn outreach', campaignId: 'cmp_1' });
     });
 
+    it('takes a new title from the desktop, a person’s rename or the name it asked for, and leaves the thread and the turn as they were', () => {
+        const running = said(newChat('c1', 'claude'), 'Help me reach dentists');
+        const renamed = received(running, { kind: 'renamed', title: 'Dentist outreach' });
+        expect(renamed).toMatchObject({ title: 'Dentist outreach', running: true, entries: running.entries });
+        expect(said(received(renamed, { kind: 'done', error: null }), 'Next').title).toBe('Dentist outreach');
+    });
+
     it('folds the steps between two messages, and keeps the last ones open while the turn runs', () => {
         let chat = said(newChat('c1', 'claude'), 'Go');
         chat = received(chat, { kind: 'step', text: 'Ran a jason command', detail: 'jason status' });

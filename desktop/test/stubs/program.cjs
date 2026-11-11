@@ -9,7 +9,10 @@ const args = process.argv.slice(2);
 // `codex app-server` reads its standard input line by line for as long as it runs, so it is not read whole first.
 const listing = name === 'codex' && args.join(' ') === 'app-server';
 const stdin = listing ? '' : record.readStdin();
-record(name, args, stdin);
+// A run that asks a host to name a set-up chat, told apart by the flag that keeps nothing of it, is recorded by a name of
+// its own, so what a test reads of the chat's turns is the turns alone.
+const naming = (name === 'claude' && args.includes('--no-session-persistence')) || (name === 'codex' && args.includes('--ephemeral'));
+record(naming ? `${name}-naming` : name, args, stdin);
 const said = args.join(' ');
 
 if (process.env.STUB_HANG === name) {
@@ -58,6 +61,8 @@ if (process.env.STUB_HANG === name) {
         mkdirSync(join(process.cwd(), '.agents', 'skills', skill), { recursive: true });
         writeFileSync(join(process.cwd(), '.agents', 'skills', skill, 'SKILL.md'), `# ${skill}\n`);
     }
+} else if (naming) {
+    require('./host.cjs').naming(name, args, stdin);
 } else if (name === 'claude' || name === 'codex') {
     require('./host.cjs')(name, args, stdin);
 } else if (name === 'npm' && args[0] === 'install' && args[1] === '-g') {

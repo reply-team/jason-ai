@@ -337,6 +337,19 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
                 stub.emit(record.id, { kind: 'attached', campaignId: record.campaignId, title: record.title });
                 return summaryOf(record);
             }),
+            rename: answering('chat.rename', (id, title) => {
+                const record = own(id);
+                if (!record) return notKept;
+                if (!listed.has(record.id))
+                    return { refused: 'Send this chat a message first; then it can be renamed.' };
+                const name = typeof title === 'string' ? title.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
+                if (name === '') return { refused: 'A name needs at least one character that shows.' };
+                record.title = name;
+                record.updatedAt = now();
+                // The desktop says the new title before it answers.
+                stub.emit(record.id, { kind: 'renamed', title: name });
+                return summaryOf(record);
+            }),
         },
         setup: {
             status: () => {

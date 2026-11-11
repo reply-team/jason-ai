@@ -7,7 +7,7 @@
  */
 export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
-    'src/programs.ts': 'the programs a Connect card runs: reply, npm, and the version of an agent host or of node',
+    'src/programs.ts': "the programs a Connect card runs: reply, npm, and the version of an agent host or of node; and an agent host's one naming run of a set-up chat, which src/chat-naming.ts gives its command line",
     'src/chat-process.ts': "an agent host for one turn of the chat, streamed, or an agent host's model listing (`codex app-server`, `startListing`), and on Windows taskkill from the system folder to end that turn's process tree, or a program the programs module ran past its time limit",
     'src/shell-path.ts': "the login shell, on macOS and Linux only, for the PATH a program started from the Finder or a session's menu lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
@@ -33,6 +33,16 @@ export const listingCallers: Readonly<Record<string, string>> = {
 };
 
 const listingStart = /\bstartListing\b/;
+
+/**
+ * The modules that call the program runner, `runFile`, with a command line of their own, and how many calls each makes:
+ * the runner's own run of a program the PATH finds, and a set-up chat's one naming run. Anything else starts a program
+ * through `Programs.run`, by a name the desktop knows.
+ */
+export const runFileCalls: Readonly<Record<string, number>> = { 'src/programs.ts': 1, 'src/chat-naming.ts': 1 };
+
+const runFileCall = /\brunFile\s*\(/g;
+const runFileDefinition = /function\s+runFile\s*\(/g;
 
 /** The one module allowed to register an IPC handler, because it checks every sender's origin first. */
 export const ipcModule = 'src/ipc.ts';
@@ -104,6 +114,8 @@ export function processViolations(path: string, text: string): string[] {
     if (listingStart.test(text) && path !== 'src/chat-process.ts' && !(path in listingCallers)) {
         found.push(`${path} starts an agent host's model listing; only ${Object.keys(listingCallers).join(', ')} may`);
     }
+    const runs = [...text.matchAll(runFileCall)].length - [...text.matchAll(runFileDefinition)].length;
+    if (runs > (runFileCalls[path] ?? 0)) found.push(`${path} calls the program runner ${runs} times; only the runner itself and a set-up chat's one naming run may`);
     if (killTaken.test(text)) found.push(`${path} takes kill from process, which hides what it signals`);
     if (openPath.test(text)) found.push(`${path} uses shell.openPath, which opens a file with whatever the system runs it with`);
     const lock = path === 'src/main.ts' ? lockNavigationBody(text) : null;

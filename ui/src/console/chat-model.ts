@@ -77,6 +77,8 @@ export interface Chat {
     dropped: number;
     /** Whether the person asked to remove the conversation and has not yet said again. */
     removing: boolean;
+    /** The name typed while the person renames the conversation; null when no rename is open. */
+    renaming: string | null;
 }
 
 /** How much of a set-up chat's first message names it, as the desktop names it. */
@@ -110,6 +112,7 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         resent: null,
         dropped: 0,
         removing: false,
+        renaming: null,
     };
 }
 
@@ -312,6 +315,8 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             return { ...chat, entries: [...chat.entries, { kind: 'fresh', reason: event.reason }] };
         case 'pick':
             return { ...chat, entries: [...chat.entries, { kind: 'pick', campaignIds: [...event.campaignIds] }] };
+        case 'renamed':
+            return { ...chat, title: event.title };
         case 'done': {
             const over = ended(chat);
             if (event.error === null)

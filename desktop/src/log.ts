@@ -82,6 +82,7 @@ export const templates = {
     chat_key_source: 'A chat turn on a provider key started, and its host named the key source by a value read as {Source}; the turn went on',
     chat_models_listed: 'The models {Host} offers were asked for: {Models} kept',
     chat_models_unlisted: 'The models {Host} offers were asked for and the last list was kept ({Kind})',
+    chat_named: 'A set-up chat was asked a name by its host; the run ended {Outcome}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

@@ -68,4 +68,8 @@ export class NamedChat {
     closeAll(): void {
         this.#chat().closeAll();
     }
+
+    idle(): Promise<void> {
+        return this.#chat().idle();
+    }
 }
