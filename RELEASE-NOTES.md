@@ -244,7 +244,10 @@ Work the desktop's chat queues for a role runs under that role's own execution p
 
 The candidate 0.34.0-rc.1's desktop carries a `jason` without this refusal; `jason update apply` typed into it replaces
 the file inside the application before any code of the new build runs. The new build finishes that update and refuses
-the next one; the desktop's Check for Updates then brings the application to the same version.
+the next one; the desktop's Check for Updates then brings the application to the same version. Such an update that
+stopped at `kept`, before the new file was in place, leaves its record at `~/.jason/update/ledger.json`, in the data
+directory, and every start of the runtime refuses while it is there; the desktop's `jason` once updated refuses to
+finish or roll it back, so removing that file is what lets the runtime start.
 
 The desktop's tray has not been seen on a screen, and the View menu's keys have not been typed at the operating system's
 level; the page receives them, but no run has shown the menu's accelerators fire. A person's run of the installed
