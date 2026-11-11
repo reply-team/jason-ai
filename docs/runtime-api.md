@@ -268,13 +268,19 @@ that is not that attempt does not call them.
 
 - `approval.list`: what is waiting; pending by default.
 - `approval.get`
-- `approval.approve`: the work is let back into the queue, where the claim checks that it is still what was approved.
+- `approval.approve`: the work is let back into the queue, where the claim checks that it is still what was approved. An
+  approval of a search may carry `allow`, which sets the campaign's allowance for the search's audience in the same act;
+  approving a search under another audience than the allowance names takes the allowance back in the same act.
 - `approval.reject`: the work ends, carrying the decision and the person who made it.
 - `approval.set_standing`: a person's word in advance for one campaign and one category of verdict: a drafted reply
-  that answers such a verdict goes without being asked, under the operations, expiry and ceiling it names.
-- `approval.unset_standing`: the person takes it back; what it already let go stays approved.
-- `approval.list_standing`: a campaign's standing approvals, one per category, with how many drafts each let go and
-  whether it is still in force. [`docs/work-execution.md`](work-execution.md), "Standing approvals", is the contract.
+  that answers such a verdict goes without being asked, under the operations, expiry and ceiling it names. With the
+  search operation alone as its `operations`, the campaign's allowance: the searches under one of its audiences go
+  without being asked until the people they ask for reach `max_people`.
+- `approval.unset_standing`: the person takes it back, a category's by its `category` and the allowance by its
+  `operation`; what it already let go stays approved.
+- `approval.list_standing`: a campaign's standing approvals, one per category, and its allowance, with how much each let
+  go — for the allowance, the searches and the people they asked for — and whether it is still in force.
+  [`docs/work-execution.md`](work-execution.md), "Standing approvals", is the contract.
 
 ### `block`
 
@@ -447,7 +453,7 @@ that is not that attempt does not call them.
   performs, its arguments in the context's `input` and checked against the operation's contract
   ([docs/contracts/](contracts/README.md)). Work that reaches a real person waits for a person's approval, however it
   was created, unless a person's standing approval covers it: a drafted reply that names, under `reply_verdict`, the
-  verdict it answers.
+  verdict it answers. A search, which spends, waits the same way unless the campaign's allowance covers it.
 - **A verdict on a reply**, through `reply.record`: what kind of reply it is, how sure the role is, what it decided to
   do and which goal that steers to, kept as the line `reply_classified`, which `journal.append` refuses to anyone else.
 - **A nudge**: `events.signal` asks the runtime to read one account's events sooner, for a program that receives a

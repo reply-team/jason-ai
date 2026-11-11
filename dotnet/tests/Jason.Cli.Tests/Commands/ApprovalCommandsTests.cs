@@ -89,6 +89,31 @@ public class ApprovalCommandsTests
             "{\"approval_id\":\"apr_7\",\"reason\":\"go ahead\",\"actor\":{\"type\":\"human\",\"id\":\"ada@example.test\"}}");
     }
 
+    /// <summary>
+    /// "Approve and allow up to N more people": the approval of a search carries the allowance for its audience, its
+    /// ceiling, cap per search and expiry, in the one request the decision is. A cap or an expiry with no ceiling to go
+    /// with is refused before anything is sent, so the approval never goes out without the allowance its writer meant.
+    /// </summary>
+    [Fact]
+    public async Task Approve_with_allow_sends_the_allowance_with_the_decision()
+    {
+        using var cli = new CliRun(OneApproval);
+        using var capOnly = new CliRun(OneApproval);
+
+        var exit = await cli.RunAsync(
+            "--actor", "human:ada", "approval", "approve", "apr_7", "--allow", "300", "--allow-per-search", "100",
+            "--allow-expires-at", "2026-12-01T00:00:00Z");
+        var refused = await capOnly.RunAsync("--actor", "human:ada", "approval", "approve", "apr_7", "--allow-per-search", "100");
+
+        Assert.Equal((ExitCodes.Usage, (string?)null), (refused, capOnly.Sent));
+        Assert.Contains("--allow", capOnly.Error.ToString(), StringComparison.Ordinal);
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.ApprovalApprove,
+            "{\"approval_id\":\"apr_7\",\"allow\":{\"max_people\":300,\"max_per_search\":100,\"expires_at\":\"2026-12-01T00:00:00Z\"},"
+            + "\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
     [Fact]
     public async Task Reject_sends_the_decision_with_the_person_who_made_it()
     {
@@ -464,6 +489,42 @@ public class ApprovalCommandsTests
         }
         """;
 
+    private const string OneAllowance = """
+        {
+          "campaign_id": "cmp_01K52JR0000000000000000003",
+          "category": null,
+          "operations": ["audience.search"],
+          "audience": {"id": "aud_01K52JR0000000000000000004", "number": 7},
+          "expires_at": null,
+          "max_releases": null,
+          "max_people": 500,
+          "max_per_search": 100,
+          "released": 2,
+          "people": 60,
+          "in_force": true,
+          "set_by": {"type": "human", "id": "ada"},
+          "set_at": "2026-09-14T10:00:00+00:00",
+          "line_id": "jrn_01K52JR0000000000000000010"
+        }
+        """;
+
+    /// <summary>The allowance is set by its operation, the audience's number and the ceiling in people, under the person who gives it.</summary>
+    [Fact]
+    public async Task Set_standing_sends_an_allowance_by_its_audience_and_ceiling_in_people()
+    {
+        using var cli = new CliRun(OneAllowance);
+
+        var exit = await cli.RunAsync(
+            "--actor", "human:ada", "approval", "set-standing", "cmp_7", "--operation", "audience.search", "--audience", "2",
+            "--max-people", "500", "--max-per-search", "100");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.ApprovalSetStanding,
+            "{\"campaign_id\":\"cmp_7\",\"operations\":[\"audience.search\"],\"audience\":2,\"max_people\":500,\"max_per_search\":100,"
+            + "\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
     /// <summary>A standing approval is set with what it covers and its limits, under the person who gives it.</summary>
     [Fact]
     public async Task Set_standing_sends_the_category_its_cover_and_limits_with_the_person()
@@ -497,24 +558,33 @@ public class ApprovalCommandsTests
             "{\"campaign_id\":\"cmp_7\",\"category\":\"interested\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
     }
 
+    /// <summary>A standing approval is taken back by its category, and the allowance by its operation, under the person.</summary>
     [Fact]
-    public async Task Unset_standing_sends_the_category_with_the_person()
+    public async Task Unset_standing_sends_the_category_or_the_allowances_operation_with_the_person()
     {
         using var cli = new CliRun(OneStanding);
+        using var allowance = new CliRun(OneAllowance);
 
         var exit = await cli.RunAsync("--actor", "human:ada", "approval", "unset-standing", "cmp_7", "--category", "interested");
+        var retired = await allowance.RunAsync("--actor", "human:ada", "approval", "unset-standing", "cmp_7", "--operation", "audience.search");
 
-        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal((ExitCodes.Success, ExitCodes.Success), (exit, retired));
         cli.AssertPosted(
             Operations.ApprovalUnsetStanding,
             "{\"campaign_id\":\"cmp_7\",\"category\":\"interested\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+        allowance.AssertPosted(
+            Operations.ApprovalUnsetStanding,
+            "{\"campaign_id\":\"cmp_7\",\"operation\":\"audience.search\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
     }
 
-    /// <summary>The listing, for a person: each category, what it covers, whether it is in force and how much it let go.</summary>
+    /// <summary>
+    /// The listing, for a person: each category, what it covers, whether it is in force and how much it let go; and the
+    /// allowance, by its audience, with the people its searches asked for against its ceiling.
+    /// </summary>
     [Fact]
     public async Task List_standing_renders_one_category_to_a_row()
     {
-        using var cli = new CliRun("{\"items\":[" + OneStanding + "],\"next_cursor\":null}");
+        using var cli = new CliRun("{\"items\":[" + OneAllowance + "," + OneStanding + "],\"next_cursor\":null}");
 
         var exit = await cli.RunAsync("approval", "list-standing", "cmp_7", "--human");
 
@@ -524,6 +594,9 @@ public class ApprovalCommandsTests
         Assert.Contains("conversation.reply, message.send", row, StringComparison.Ordinal);
         Assert.Contains("3 of 20", row, StringComparison.Ordinal);
         Assert.Contains("human:ada", row, StringComparison.Ordinal);
+        var allowance = Assert.Single(cli.Text.Split('\n'), line => line.Contains("audience.search", StringComparison.Ordinal));
+        Assert.Contains(" 7 ", allowance, StringComparison.Ordinal);
+        Assert.Contains("60 of 500", allowance, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -537,5 +610,14 @@ public class ApprovalCommandsTests
         Assert.Contains("Category:      interested", cli.Text, StringComparison.Ordinal);
         Assert.Contains("In force:      yes", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Let go:        3 of 20", cli.Text, StringComparison.Ordinal);
+
+        using var allowance = new CliRun(OneAllowance);
+        await allowance.RunAsync("--actor", "human:ada", "approval", "set-standing", "cmp_7", "--operation", "audience.search", "--human");
+        Assert.Contains("Covers:        audience.search", allowance.Text, StringComparison.Ordinal);
+        Assert.Contains("Audience:      7 (aud_01K52JR0000000000000000004)", allowance.Text, StringComparison.Ordinal);
+        Assert.Contains("People:        60 of 500", allowance.Text, StringComparison.Ordinal);
+        Assert.Contains("Per search:    100", allowance.Text, StringComparison.Ordinal);
+        Assert.Contains("Let go:        2", allowance.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Category:", allowance.Text, StringComparison.Ordinal);
     }
 }

@@ -433,6 +433,14 @@ either, so the key names the audience of the last claim that let it through. The
 `workitem.update` refuse a search that writes it or removes it (`validation_failed` at `context.audience`). On any other
 work it is the caller's own.
 
+**What a search may spend.** A search is `confirm_once`, so the first under an audience, its probe, waits for a person.
+After it, the person's allowance — a standing approval for `audience.search`, named by one audience and capped in people
+([work execution](work-execution.md), "Standing approvals") — lets the top-ups under that audience run without a
+question until the people they ask for reach its ceiling. The allowance is the person's alone: only their acts set, move
+or take it back, approving a search under another audience retires it in the same act, and no role's act holds or moves
+it. A manager tops an audience up as it always does; a top-up the allowance does not cover waits for the person as the
+probe did, its preview saying why.
+
 ### Following a search, and the people it lands
 
 A search the provider takes ends its work item `accepted` with the provider's reference, and its people are learned
@@ -513,3 +521,5 @@ that ended stays as it ended: a later read still lands what it carries, and noth
   audience: `jason campaign list-contacts` names where each member came from, and nothing filters by it.
 - **One search at a time.** Nothing stops a campaign from running two searches at once; a provider may refuse the
   second itself (`search_in_progress`).
+- **Allowing in the browser.** The UI's approval panel approves or rejects a search; allowing more people under its
+  audience is `jason approval approve --allow` or `jason approval set-standing` for now.
