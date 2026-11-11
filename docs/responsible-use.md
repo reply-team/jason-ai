@@ -20,10 +20,11 @@ identifies only the runtime's version, including its build, and a download only 
 the link you followed where it carries one; like any web server, that address also receives your IP address, the time
 of the request and the standard headers of the program that makes it. ReplyApp Inc. uses these records only to operate
 and secure the service and to count downloads in aggregate, keeps them for no longer than 31 days, and does not
-combine them with any other data. That address counts the downloads and install-page reads it answers by day, file and
-the `ref` the followed link names, and keeps nothing of the person in those counts. ReplyApp Inc.'s privacy policy
-(<https://reply.io/privacy-policy/>) applies to them. After the redirect, and when you install skills, which are
-fetched from GitHub directly, GitHub's terms and privacy statement apply.
+combine them with any other data. ReplyApp Inc.'s privacy policy (<https://reply.io/privacy-policy/>) applies to them.
+That address counts the downloads and install-page reads it answers by day, file, the `ref` the followed link names
+and the kind of program that asked (a browser, a command-line or agent fetcher, or a crawler), and keeps nothing of
+the person in those counts. After the redirect, and when you install skills, which are fetched from GitHub directly,
+GitHub's terms and privacy statement apply.
 
 ### Your providers and AI agents
 

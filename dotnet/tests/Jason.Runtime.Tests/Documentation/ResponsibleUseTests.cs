@@ -87,13 +87,14 @@ public sealed partial class ResponsibleUseTests
 
     /// <summary>
     /// What the address keeps, for how long and under which policy is ReplyApp Inc.'s statement, carried as the
-    /// licence made it to the people who installed Jason under it, and what its counts are made of.
+    /// licence made it to the people who installed Jason under it, and then what its counts are made of: every dimension
+    /// they are kept by, after the sentence whose "them" is the records.
     /// </summary>
     [Fact]
     public void The_page_keeps_the_promise_about_the_address_s_records()
     {
         Assert.Contains(
-            "ReplyApp Inc. uses these records only to operate and secure the service and to count downloads in aggregate, keeps them for no longer than 31 days, and does not combine them with any other data. That address counts the downloads and install-page reads it answers by day, file and the `ref` the followed link names, and keeps nothing of the person in those counts. ReplyApp Inc.'s privacy policy (<https://reply.io/privacy-policy/>) applies to them.",
+            "ReplyApp Inc. uses these records only to operate and secure the service and to count downloads in aggregate, keeps them for no longer than 31 days, and does not combine them with any other data. ReplyApp Inc.'s privacy policy (<https://reply.io/privacy-policy/>) applies to them. That address counts the downloads and install-page reads it answers by day, file, the `ref` the followed link names and the kind of program that asked (a browser, a command-line or agent fetcher, or a crawler), and keeps nothing of the person in those counts.",
             Page(),
             StringComparison.Ordinal);
     }
@@ -124,7 +125,7 @@ public sealed partial class ResponsibleUseTests
     /// Jason Runtime Licence and differ from them only in framing, so a change of one word in either is a change to text
     /// legal read. Have the new wording read again first, then put its digest here.
     /// </summary>
-    private const string ReadSections = "d1287920fe21549aab4d7b0320e7a5fab143be2bec7644f4fb7113ad33b7215f";
+    private const string ReadSections = "c69a471ef4cebea676655e8d1e73de4ffed66430df98580d645d217a680dbbf5";
 
     /// <summary>The two sections that carry the earlier licence's words are held whole, not by the sentences quoted above.</summary>
     [Fact]
