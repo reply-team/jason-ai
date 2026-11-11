@@ -73,7 +73,7 @@ export async function runUninstall(quiet: boolean): Promise<number> {
         application: applicationFolder(process.platform, process.execPath),
         dataDirectory: paths.data,
         harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
-        updaterCache: updaterCache(process.env, home),
+        updaterCache: updaterCache(process.env, home, process.platform),
     });
     if (!quiet) {
         const { message, detail } = uninstallText(report);

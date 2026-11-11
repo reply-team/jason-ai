@@ -139,4 +139,6 @@ export const fakeBox: SecretBox = {
     isEncryptionAvailable: () => true,
     encryptString: (text) => Buffer.from([...Buffer.from(text, 'utf8')].map((byte) => byte ^ 0x5a)),
     decryptString: (encrypted) => Buffer.from([...encrypted].map((byte) => byte ^ 0x5a)).toString('utf8'),
+    // A keyring, so the rows read alike on a Linux runner.
+    getSelectedStorageBackend: () => 'gnome_libsecret',
 };

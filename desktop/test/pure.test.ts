@@ -14,7 +14,7 @@ import { hosts, keyProviders, notTheChatYet, providerEnvironment, signInSentence
 import { isFeed, parseSettings } from '../src/settings.ts';
 import { versionsDifferSentence } from '../src/setup.ts';
 import { pluginValid, runtimeVersionIn, statusFacts, versionAtLeast, versionIn } from '../src/setup-model.ts';
-import { loginShellOptions, pathFromOutput, withUsualPlaces } from '../src/shell-path.ts';
+import { loginShell, loginShellOptions, pathFromOutput, withUsualPlaces } from '../src/shell-path.ts';
 
 // ---- One installation ----------------------------------------------------------------------------------------------
 
@@ -200,6 +200,20 @@ test('the login shell’s PATH is read between its two markers, and the usual pl
     assert.ok(path.split(delimiter).includes(join(home, '.local', 'bin')));
 });
 
+test('on Linux the usual places are the same less Homebrew’s macOS folder, with Homebrew on Linux’s own', () => {
+    const home = resolve('/home/x');
+    const entries = withUsualPlaces('/usr/bin', home, 'linux').split(delimiter);
+    assert.deepEqual(entries, ['/usr/bin', join(home, '.local', 'bin'), join(home, '.claude', 'local'), join(home, '.npm-global', 'bin'), '/usr/local/bin', '/home/linuxbrew/.linuxbrew/bin']);
+    assert.ok(withUsualPlaces('/usr/bin', home, 'darwin').split(delimiter).includes('/opt/homebrew/bin'));
+});
+
+test('the login shell is asked on macOS and Linux, its default the one each starts a terminal with when SHELL names none', () => {
+    assert.equal(loginShell('darwin', {}), '/bin/zsh');
+    assert.equal(loginShell('linux', {}), '/bin/sh');
+    assert.equal(loginShell('linux', { SHELL: '/usr/bin/fish' }), '/usr/bin/fish');
+    assert.equal(loginShell('win32', { SHELL: '/usr/bin/bash' }), null);
+});
+
 // ---- Hosts and providers -------------------------------------------------------------------------------------------
 
 test('Claude Code and Codex drive the chat; every other host runs campaign work, not the chat yet', () => {
@@ -247,4 +261,18 @@ test('a failed update check waits a minute, doubles each time, and never longer 
     assert.equal(nextCheckDelay(1), 60_000);
     assert.equal(nextCheckDelay(2), 120_000);
     assert.equal(nextCheckDelay(40), 24 * 60 * 60 * 1000);
+});
+
+test('the login shell’s answer keeps its absolute folders in order and drops the rest; with none left, the inherited PATH stands', () => {
+    const between = (path: string) => `__JASON_PATH__${path}__JASON_PATH_END__`;
+    assert.equal(pathFromOutput(between('/usr/local/bin:/usr/bin:/home/a/.npm-global/bin')), '/usr/local/bin:/usr/bin:/home/a/.npm-global/bin');
+    assert.equal(
+        pathFromOutput(between('/usr/local/bin:.:/usr/bin:./node_modules/.bin:/home/a/bin')),
+        '/usr/local/bin:/usr/bin:/home/a/bin',
+        'a relative entry would be read against the folder a child starts in, the chat’s among them',
+    );
+    assert.equal(pathFromOutput(between('/usr/bin:/bin\u0007x:/sbin')), '/usr/bin:/sbin', 'an entry with a control character is dropped');
+    assert.equal(pathFromOutput(between('.:./node_modules/.bin')), null, 'no absolute entry left');
+    assert.equal(pathFromOutput(between('$PATH')), null, 'a shell that does not expand "$PATH" in double quotes printed it as it is');
+    assert.equal(pathFromOutput(between('[/usr/bin /bin]')), null, 'a shell that prints its PATH as a list');
 });

@@ -46,6 +46,7 @@ export const templates = {
     repair_failed: 'Pairing the window again at {Origin} failed: jason ui open exited {Exit}',
     // The login items.
     login_item_set: 'Open Jason at login was set to {On} on {Platform}',
+    login_item_moved: 'Open Jason at login was moved to the file an update installed on {Platform}',
     autostart_set: 'Start the runtime at logon was set to {On}: jason runtime autostart exited {Exit}',
     // The PATH command.
     path_command_set: 'The {Name} command on the PATH was set to {On} on {Platform}',
@@ -56,6 +57,13 @@ export const templates = {
     update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
     update_failed: 'The updater step {Step} failed, {Failures} times running',
     update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',
+    bundle_copy_failed: 'The jason an AppImage carries was not copied out of it; the copy there differs: {Differs}',
+    autostart_repointed: 'Start the runtime at logon named another version’s copy and was registered again from this one: jason runtime autostart exited {Exit}',
+    path_command_repointed: 'The {Name} command on the PATH ran another version’s copy and was placed again over this one on {Platform}',
+    repoint_failed: 'What named another version’s copy could not be re-pointed: {What}, exit {Exit}',
+    bundle_copies_removed: 'The copies of other versions an AppImage carried were removed: {Count}',
+    bundle_copies_kept: 'The copies of other versions an AppImage carried were kept at this start: {Why}',
+    bundle_copy_removal_failed: 'A copy of another version an AppImage carried could not be removed',
     // The chat.
     chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}',
     chat_turn_ended: 'A chat turn on {Host} ended with exit {Exit} after {DurationMs} ms: {Steps} steps, {Requests} permission requests',

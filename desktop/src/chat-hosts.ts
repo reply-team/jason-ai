@@ -131,9 +131,10 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
 
 /**
  * The desktop folder's own entries but the chat folder, named the same way; `turns` holds every turn's configuration,
- * `rollback` the application an update kept aside and the record the next start acts on.
+ * `rollback` the application an update kept aside and the record the next start acts on, `bundle` an AppImage's copy of
+ * the jason it carries.
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {

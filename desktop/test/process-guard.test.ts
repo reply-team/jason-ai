@@ -51,14 +51,17 @@ test('the shell-starting functions and a whole-module import are refused in a na
     assert.deepEqual(processViolations('src/cli.ts', "import { execFile, spawn } from 'node:child_process';"), []);
 });
 
-test('a shell is named only by the macOS login-shell lookup', () => {
+test('a shell is named only by the login-shell lookup, which returns before it anywhere but macOS and Linux', () => {
     assert.notDeepEqual(processViolations('src/programs.ts', "execFile('cmd.exe', ['/c', 'reply']);"), []);
     assert.notDeepEqual(processViolations('src/cli.ts', 'execFile(process.env.SHELL ?? "", []);'), []);
     assert.notDeepEqual(processViolations('src/shell-path.ts', "execFile(process.env.SHELL ?? '/bin/zsh', ['-ilc', '']);"), []);
     assert.deepEqual(
-        processViolations('src/shell-path.ts', "if (process.platform !== 'darwin') return x;\nexecFile(process.env.SHELL ?? '/bin/zsh', ['-ilc', '']);"),
+        processViolations('src/shell-path.ts', "if (process.platform !== 'darwin' && process.platform !== 'linux') return x;\nexecFile(process.env.SHELL ?? '/bin/sh', ['-ilc', '']);"),
         [],
     );
+    assert.notDeepEqual(processViolations('src/shell-path.ts', "if (process.platform === 'win32') return x;\nexecFile(process.env.SHELL ?? '/bin/sh', ['-ilc', '']);"), []);
+    // The rule names both systems, so a change to either one's side of it is read here first.
+    assert.notDeepEqual(processViolations('src/shell-path.ts', "if (process.platform !== 'darwin') return x;\nexecFile(process.env.SHELL ?? '/bin/zsh', ['-ilc', '']);"), []);
 });
 
 test('a require of child_process is refused even in a named module, destructured or whole, since only an import names what it takes', () => {

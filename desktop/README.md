@@ -32,7 +32,10 @@ cannot be chosen there, and has every chat turn sent to it refused before the ho
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
-- `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`).
+- `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`). On Linux a key
+  is kept and read only where the session offers a keyring (GNOME Keyring or KWallet): where Electron falls back to its
+  `basic_text` store, a fixed key, the card says so and the key is not kept.
+- `<data>/desktop/bundle/<version>/`: on Linux, an AppImage's copy of the `jason` it carries (see "On Linux").
 - `<data>/desktop/electron/`: Electron's own files (its profile, the page's storage, and in `logs/` what Electron itself
   logs), set before anything else, so a second data directory is a second desktop and nothing of it lands outside
   `<data>`.
@@ -85,7 +88,7 @@ forwarder is admitted to); each card's note says where those are set.
 
 Every process is started with a file and arguments, never through a shell, and only by the named modules:
 `src/cli.ts` (the bundled `jason`), `src/programs.ts` (the agent hosts, `reply`, `node` and `npm`), `src/shell-path.ts`
-(on macOS only, the login shell's PATH, read before anything is started) and `scripts/prepare.mjs` (`dotnet publish`).
+(on macOS and Linux only, the login shell's PATH, read before anything is started) and `scripts/prepare.mjs` (`dotnet publish`).
 On Windows, a program npm installed is a batch file; the desktop reads which script it hands to Node and starts that
 with Node. `test/process-guard.test.ts` holds this, and also refuses a `require` of `child_process`, an IPC handler
 registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`
@@ -126,6 +129,32 @@ an update is the whole guard. Before removing Jason.app, take off by hand what i
 
 What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
 `Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`.
+
+## On Linux
+
+- The window keeps its menu bar, which carries the tray's items, since a session may show no tray icon. Closing the
+  window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
+- Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
+  is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as
+  on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path
+  the entry cannot spell, one with a `%` or a control character, leaves the item off. An update that installs the
+  AppImage under a new file name moves an entry that is on to it.
+- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, as on macOS.
+- An AppImage runs from a mount that lasts only while it runs, so each start copies its `jason` to
+  `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
+  gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link
+  at the bundles folder or the version's folder, stops the start and is named, to be removed by hand. Without a copy,
+  Start the Runtime at Logon and the Command Line's acts are not offered. A start at logon or a PATH command the person
+  set up from another version's copy is set up again from this one at each start, the same act as turning it on; one
+  never set up, or one that names a `jason` elsewhere, is left alone. The copies of other versions go after that, but
+  the one an update kept to go back to, one something set up still names, and one the running runtime was started
+  from. No folder of the mount reaches what the desktop starts: the PATH and the libraries it hands on are the
+  session's.
+- Updates come to the AppImage and to the deb. An AppImage update keeps the AppImage file itself under
+  `<data>/desktop/rollback/<version>/`; a deb update keeps no copy, and if the new version does not start, the page names
+  the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says
+  updates come through the package. When the installer stops before it finishes (a refused password, say), Jason stays
+  open and says so. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
 
 ## Building and testing
 

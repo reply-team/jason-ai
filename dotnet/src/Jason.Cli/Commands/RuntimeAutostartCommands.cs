@@ -38,8 +38,9 @@ public static class RuntimeAutostartCommands
         autostart.Subcommands.Add(Verb(
             env,
             "enable",
-            "Register this runtime to start at logon, carrying the data directory it is registered under, and on macOS the "
-            + "search path (PATH) this command runs with, since launchd's own is " + LaunchdSearchPath + ". Nothing is started now.",
+            "Register this runtime to start at logon, carrying the data directory it is registered under, and on macOS and Linux "
+            + "the search path (PATH) this command runs with, since launchd's own is " + LaunchdSearchPath
+            + " and the systemd user manager's reads no shell profile. Nothing is started now.",
             actor,
             human => Enable(env, human)));
 
@@ -54,7 +55,7 @@ public static class RuntimeAutostartCommands
             env,
             "status",
             "Say what is registered to start at logon: the data directory it names, the executable it runs, whether that "
-            + "executable is still there, and on macOS the search path it carries, under path.",
+            + "executable is still there, and on macOS and Linux the search path it carries, under path.",
             actor,
             human => Status(env, human)));
 
@@ -96,7 +97,7 @@ public static class RuntimeAutostartCommands
         {
             if (registrar.Platform is not AutostartPlatform.Unsupported)
             {
-                registrar.Remove(Registration(env, registrar.Platform));
+                registrar.Remove(Removal(env, registrar.Platform));
             }
 
             return Print(env, human, registrar);
@@ -139,13 +140,23 @@ public static class RuntimeAutostartCommands
     /// naming it fails at every logon from then on without saying anything to anybody.
     /// </remarks>
     internal static AutostartRegistration Registration(CliEnvironment env, AutostartPlatform platform) =>
+        Composed(env, platform, env.SearchPath ?? Environment.GetEnvironmentVariable("PATH"));
+
+    /// <summary>
+    /// The registration as a removal composes it: by its file and its name, with no search path. A search path differs
+    /// from terminal to terminal and from one version to the next, and is not what makes a registration this one, so a
+    /// PATH a new registration could not carry never stops <c>disable</c> or <c>jason uninstall</c> taking away what is there.
+    /// </summary>
+    internal static AutostartRegistration Removal(CliEnvironment env, AutostartPlatform platform) => Composed(env, platform, searchPath: null);
+
+    private static AutostartRegistration Composed(CliEnvironment env, AutostartPlatform platform, string? searchPath) =>
         AutostartArtifacts.Compose(
             platform,
             PackageOwner.Of(env) is { } owner ? [owner.StableEntry] : env.InstallPath is { } installed ? [installed] : SelfExecutable.Command,
             env.Paths.Root,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             AutostartRegistrars.ThisAccount(),
-            env.SearchPath ?? Environment.GetEnvironmentVariable("PATH"));
+            searchPath);
 
     /// <summary>The search path launchd starts an agent on when the agent carries none of its own.</summary>
     internal const string LaunchdSearchPath = "/usr/bin:/bin:/usr/sbin:/sbin";
@@ -160,7 +171,7 @@ public static class RuntimeAutostartCommands
             state.Run.Count > 0 ? state.Run[0] : null,
             state.Run.Count > 0 ? File.Exists(state.Run[0]) : null,
             Document(env, registrar, state),
-            registrar.Platform == AutostartPlatform.MacOs ? state.SearchPath : null);
+            registrar.Platform is AutostartPlatform.MacOs or AutostartPlatform.Linux ? state.SearchPath : null);
 
         env.Out.WriteLine(human ? Sentence(answer) : JsonSerializer.Serialize(answer, JasonJson.Options));
         return ExitCodes.Success;
@@ -237,13 +248,16 @@ public static class RuntimeAutostartCommands
             ? $" The executable it runs is not there any more: {answer.Executable}."
             : string.Empty;
 
-        // On macOS the search path is the half of the registration a plugin's program depends on: launchd's own holds
-        // none a package manager installed, so a registration that carries none is said to start on it.
-        var searched = answer.Platform != "macos"
+        // On macOS and Linux the search path is the half of the registration a plugin's program depends on: launchd's own
+        // holds none a package manager installed, and the systemd user manager's reads no shell profile, so a
+        // registration that carries none is said to start on theirs.
+        var searched = answer.Platform is not ("macos" or "linux")
             ? string.Empty
             : answer.Path is { } path
                 ? $", with the search path {path}"
-                : $", with launchd's default search path, {LaunchdSearchPath}";
+                : answer.Platform == "macos"
+                    ? $", with launchd's default search path, {LaunchdSearchPath}"
+                    : ", with the systemd user manager's search path";
 
         return string.Create(
             CultureInfo.InvariantCulture,

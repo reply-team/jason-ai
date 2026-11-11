@@ -814,3 +814,26 @@ test('a provider’s key is kept encrypted under <data>/desktop and removed by a
     assert.throws(() => closed.set('deepseek', 'k'), Refused);
     assert.deepEqual(readdirSync(b.root).includes('k'), false);
 });
+
+test('on Linux a key is neither kept nor read where the store is basic_text or not known, since that encryption is a fixed password', (t) => {
+    const b = bench(t);
+    const file = join(b.root, 'k');
+    new ProviderKeys(file, { ...fakeBox, getSelectedStorageBackend: () => 'gnome_libsecret' }, 'linux').set('moonshot', 'sk-planted-before');
+    assert.equal(new ProviderKeys(file, { ...fakeBox, getSelectedStorageBackend: undefined }, 'linux').keyFor('moonshot'), undefined, 'a box that names no backend on Linux is taken as none');
+    for (const backend of ['basic_text', 'unknown'] as const) {
+        const keys = new ProviderKeys(file, { ...fakeBox, getSelectedStorageBackend: () => backend }, 'linux');
+        assert.throws(
+            () => keys.set('deepseek', 'sk-planted'),
+            (error: unknown) => error instanceof Refused && error.message === 'This session offers no keyring (GNOME Keyring or KWallet) to the desktop, so the key was not kept. Start one in your session and enter the key again.',
+            backend,
+        );
+        assert.equal(keys.keyFor('moonshot'), undefined, `${backend}: a key kept before is not read back`);
+        assert.deepEqual(keys.stored(), [], `${backend}: and is not shown as kept`);
+    }
+    for (const backend of ['gnome_libsecret', 'kwallet', 'kwallet5', 'kwallet6'] as const) {
+        const keys = new ProviderKeys(file, { ...fakeBox, getSelectedStorageBackend: () => backend }, 'linux');
+        assert.equal(keys.keyFor('moonshot'), 'sk-planted-before', backend);
+    }
+    const elsewhere = new ProviderKeys(file, { ...fakeBox, getSelectedStorageBackend: () => 'basic_text' }, 'darwin');
+    assert.equal(elsewhere.keyFor('moonshot'), 'sk-planted-before', 'the backend is Linux’s question only');
+});

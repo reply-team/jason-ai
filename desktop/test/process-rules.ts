@@ -9,7 +9,7 @@ export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
     'src/programs.ts': 'the programs a Connect card runs: reply, npm, and the version of an agent host or of node',
     'src/chat-process.ts': "an agent host for one turn of the chat, streamed, and on Windows taskkill from the system folder to end that turn's process tree, or a program the programs module ran past its time limit",
-    'src/shell-path.ts': "the login shell, on macOS only, for the PATH a program started from the Finder lacks",
+    'src/shell-path.ts': "the login shell, on macOS and Linux only, for the PATH a program started from the Finder or a session's menu lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
     'scripts/sign-windows.mjs': 'signtool, to sign each file of the Windows package through the Trusted Signing client',
 };
@@ -75,10 +75,10 @@ export function processViolations(path: string, text: string): string[] {
     }
     if (shellOption.test(text)) found.push(`${path} sets a shell option, which nothing in the desktop may`);
     if (path !== 'src/shell-path.ts' && (shellName.test(text) || shellVariable.test(text))) {
-        found.push(`${path} names a shell, which only the macOS login-shell lookup in src/shell-path.ts may`);
+        found.push(`${path} names a shell, which only the login-shell lookup of macOS and Linux in src/shell-path.ts may`);
     }
-    if (path === 'src/shell-path.ts' && !/process\.platform\s*!==\s*'darwin'/.test(text)) {
-        found.push(`${path} must return before the login shell anywhere but macOS`);
+    if (path === 'src/shell-path.ts' && !/process\.platform\s*!==\s*'darwin'\s*&&\s*process\.platform\s*!==\s*'linux'\)\s*return/.test(text)) {
+        found.push(`${path} must return before the login shell anywhere but macOS and Linux`);
     }
     if (named && (childProcessRequire.test(text) || childProcessDynamicImport.test(text))) {
         found.push(`${path} requires child_process; a named module imports it by name, so what it starts is read`);

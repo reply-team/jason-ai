@@ -277,21 +277,76 @@ public class AutostartArtifactsTests
     }
 
     /// <summary>
-    /// The logon task and the user unit are composed as they always were, a search path given or not: on Windows the task
-    /// starts with the account's own environment, and the Linux unit's environment is the user manager's, which a later
-    /// change may carry.
+    /// The logon task is composed as it always was, a search path given or not: on Windows the task starts with the
+    /// account's own environment.
     /// </summary>
-    [Theory]
-    [InlineData(AutostartPlatform.Windows)]
-    [InlineData(AutostartPlatform.Linux)]
-    public void Only_the_launch_agent_carries_a_search_path(AutostartPlatform platform)
+    [Fact]
+    public void The_logon_task_carries_no_search_path()
     {
-        var without = AutostartArtifacts.Compose(platform, [Executable], Windows, Home, Sid);
-        var with = AutostartArtifacts.Compose(platform, [Executable], Windows, Home, Sid, "/opt/homebrew/bin:/usr/bin");
+        var without = AutostartArtifacts.Compose(AutostartPlatform.Windows, [Executable], Windows, Home, Sid);
+        var with = AutostartArtifacts.Compose(AutostartPlatform.Windows, [Executable], Windows, Home, Sid, "/opt/homebrew/bin:/usr/bin");
 
         Assert.Equal(without.Artifact, with.Artifact);
         Assert.Null(with.SearchPath);
-        Assert.Null(AutostartArtifacts.SearchPathIn(platform, with.Artifact));
+        Assert.Null(AutostartArtifacts.SearchPathIn(AutostartPlatform.Windows, with.Artifact));
+    }
+
+    /// <summary>
+    /// The user manager starts a unit with an environment of its own, which reads no shell profile, so a program the
+    /// person's PATH finds is missing to a runtime started at logon. The unit carries the search path it was registered
+    /// with as its <c>PATH</c>, the whole assignment quoted so an entry with a space stays one word, a per-cent doubled as
+    /// in the command line, and reads it back unchanged.
+    /// </summary>
+    [Fact]
+    public void The_user_unit_carries_the_search_path_it_was_registered_with()
+    {
+        const string Searched = "/home/ada/.local/bin:/home/ada/My Tools/100% bin:/usr/bin:/bin";
+
+        var unit = AutostartArtifacts.Compose(AutostartPlatform.Linux, ["/home/ada/.local/bin/jason"], Unix, Home, "ada", Searched);
+
+        Assert.Contains(
+            "[Service]\nType=simple\nEnvironment=\"PATH=/home/ada/.local/bin:/home/ada/My Tools/100%% bin:/usr/bin:/bin\"\nExecStart=",
+            unit.Artifact.ReplaceLineEndings("\n"),
+            StringComparison.Ordinal);
+        Assert.Equal(Searched, unit.SearchPath);
+        Assert.Equal(Searched, AutostartArtifacts.SearchPathIn(AutostartPlatform.Linux, unit.Artifact));
+        Assert.Equal(unit.Run, AutostartArtifacts.Read(AutostartPlatform.Linux, unit.Artifact));
+    }
+
+    /// <summary>With no search path given the unit is the one it always was, with no environment line, and none is read back.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void A_user_unit_given_no_search_path_carries_no_environment(string? searched)
+    {
+        var unit = AutostartArtifacts.Compose(AutostartPlatform.Linux, ["/home/ada/.local/bin/jason"], Unix, Home, "ada", searched);
+
+        Assert.DoesNotContain("Environment=", unit.Artifact, StringComparison.Ordinal);
+        Assert.Null(unit.SearchPath);
+        Assert.Null(AutostartArtifacts.SearchPathIn(AutostartPlatform.Linux, unit.Artifact));
+        Assert.Equal(
+            AutostartArtifacts.Compose(AutostartPlatform.Linux, ["/home/ada/.local/bin/jason"], Unix, Home, "ada").Artifact,
+            unit.Artifact);
+    }
+
+    /// <summary>
+    /// A double quote, a backslash or a control character in the search path has no spelling the unit and its reader
+    /// would both agree on, as a double quote has none in the command line: it is refused by name rather than written into
+    /// a unit whose PATH would be other than the one it was given.
+    /// </summary>
+    [Theory]
+    [InlineData("/home/ada/\"q\"/bin:/usr/bin", "\"q\"")]
+    [InlineData("/home/ada/a\\b/bin:/usr/bin", "a\\b")]
+    [InlineData("/home/ada/bin\n[Service]:/usr/bin", "[Service]")]
+    [Critical(Family.I4, "no quoting injection into a registration")]
+    public void A_search_path_the_unit_cannot_carry_is_refused_by_name(string searched, string named)
+    {
+        var refused = Assert.Throws<AutostartException>(
+            () => AutostartArtifacts.Compose(AutostartPlatform.Linux, ["/usr/local/bin/jason"], Unix, Home, "ada", searched));
+
+        Assert.Equal(AutostartCodes.Refused, refused.Code);
+        Assert.Contains("PATH", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(named, refused.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
