@@ -32,6 +32,7 @@ cannot be chosen there, and has every chat turn sent to it refused before the ho
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
+- `<data>/desktop/conversations/`: the chat's conversations, one record each (see below).
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`).
 - `<data>/desktop/electron/`: Electron's own files (its profile, the page's storage, and in `logs/` what Electron itself
   logs), set before anything else, so a second data directory is a second desktop and nothing of it lands outside
@@ -71,6 +72,41 @@ binding declares before anything is written, and an empty one is refused. A card
 
 The desktop never writes an `Env` grant (ntfy's `NTFY_TOKEN`) or a `Subscriptions` grant (the journal kinds the
 forwarder is admitted to); each card's note says where those are set.
+
+## The chat's conversations
+
+A campaign has one conversation, found or made the first time it is opened, and the chat may hold any number of set-up
+chats, which are about no campaign yet. Each is a record, `<data>/desktop/conversations/conv_<id>.json`: the campaign
+it is about, its title, the session each agent host named for it, and what the page drew, kept as text and never as
+markup (the person's words, the agent's, the steps, each card with its answer, the errors). A record is written beside
+its name and renamed over it, readable by this account alone, never through a link, when a host first names its session
+and at the end of each turn; it is kept within 2 MB by dropping its oldest entries, which it counts. A file in the
+folder that is not a record is counted in the log and left as it was. The agent's file rules deny it a read or an edit
+of the folder.
+
+- **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: which campaign the
+  conversation is about, its name quoted on one line, with control, separator and direction characters dropped and cut
+  at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it as they are.
+- **A session per host.** A turn resumes the session its host named for the conversation. When that host has none, or
+  its session is not found or another answers, the turn starts a fresh session given a recap, the last of the person's
+  and the agent's words, at most 16 KB, set apart as earlier messages, and the page is told why (`fresh`).
+- **The hand-over.** A set-up chat's turn reads every page of `jason campaign list --all-projects --include-archived`
+  before and after it; a campaign counts as new when it was absent before, is present after, was created at or after
+  the turn's start, and has no conversation. Exactly one new campaign, from a turn no other set-up turn ran beside, makes
+  the chat that campaign's conversation (`attached`); any other count above none, or turns that overlapped, are offered
+  to the person to pick from (`pick`, kept with the record), and `chat.attach` takes only a campaign the pick named.
+  Nothing is handed over when a page of the list could not be read.
+- **Not a boundary.** The instruction text asks the agent to keep to the conversation's campaign and to create at most
+  one campaign in a set-up chat; a command that names another campaign is not refused for being in this conversation.
+  What a turn may do is the permission model's to decide, as before.
+- A conversation whose turn runs is not removed, started afresh or attached; each is refused with a sentence.
+  "Start afresh" drops the hosts' sessions and keeps the record.
+- **What never carries one.** `jason doctor` carries none of it, its count and size included. The desktop's log says
+  how many were read, how many files were not records, a record's error code when one could not be written, how many
+  new campaigns a set-up turn found and why a turn started afresh, and nothing else. `jason export` carries no part of
+  `<data>/desktop/`, so conversations do not travel to another machine. `jason uninstall --purge-data` removes them
+  with the data directory; the transcripts the agent hosts keep of the chat are theirs, in their own folders, and are
+  never touched.
 
 ## The window
 
