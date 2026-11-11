@@ -1087,7 +1087,7 @@ describe('What the panel does', () => {
 
     const actions = () => document.querySelector('.panel > .panel-actions') as HTMLElement;
     /** The Settings tab's body: the campaign's record, and none of the moves its header offers. */
-    const settings = () => document.querySelector('.campaign-settings') as HTMLElement;
+    const settings = () => document.querySelector('.facts')!.closest('.panel-body') as HTMLElement;
     const moves = ['Start', 'Pause', 'Resume'];
     /** The moves a part of the panel offers, by their names. */
     const offered = (part: HTMLElement) =>
@@ -1165,6 +1165,36 @@ describe('What the panel does', () => {
             ]),
         );
         expect(screen.getByRole('heading', { level: 2, name: 'Autumn' })).toBeTruthy();
+    });
+
+    it('the header’s move is offered and done on a tab other than Settings, and the tab stays', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/some', 'campaign.summary/all')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.list_contacts', 'campaign.list_contacts/everyone')
+            .answer('campaign.pause', 'campaign.pause/with-reason');
+        const people: Route = { ...details, tab: 'people' };
+        open(api, people);
+        await screen.findByRole('heading', { level: 2, name: 'Spring' });
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+
+        expect(offered(actions())).toEqual(['Pause']);
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Pause Spring' });
+        fireEvent.input(within(dialog).getByRole('textbox', { name: 'Reason' }), {
+            target: { value: 'Holding the sends over the holiday.' },
+        });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Pause' }));
+
+        await waitFor(() =>
+            expect(sent(api, 'campaign.pause')).toEqual([written(fixtures['campaign.pause/with-reason'].request)]),
+        );
+        await waitFor(() => expect(offered(actions())).toEqual(['Resume']));
+        expect(route.value).toEqual(people);
+        expect(screen.getByRole('tab', { name: /^People/ }).getAttribute('aria-selected')).toBe('true');
+        // The People tab is read again under the new status, as it was asked for.
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(2));
     });
 
     it("a draft is started from the campaign's header, saying that its work is released for the first time", async () => {

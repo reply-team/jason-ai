@@ -5,9 +5,5 @@ type Props = { campaign: Campaign; now: Date; zone: string };
 
 /** The campaign's record as the runtime keeps it; the moves its status allows are in the campaign's header. */
 export function CampaignSettings({ campaign, now, zone }: Props) {
-    return (
-        <div className="campaign-settings">
-            <Details campaign={campaign} now={now} zone={zone} />
-        </div>
-    );
+    return <Details campaign={campaign} now={now} zone={zone} />;
 }
