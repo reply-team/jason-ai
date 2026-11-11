@@ -110,12 +110,14 @@ inputs:
   desktop:
     description: >
       'true' also builds the desktop's packages with electron-builder from desktop/ of the same tree, carrying the
-      executables the release signed, and signs them as those are signed, while the identity is held: on win-x64 the nsis
+      executables the call published, and signs them as those are signed, while the identity is held: on win-x64 the nsis
       installer, whose Jason.exe, uninstaller and installer are signed through Artifact Signing; on osx-x64, after the
       osx-arm64 call of the same job, a dmg and a zip for each Mac architecture, signed with the Developer ID and
-      notarized. Each is read back and uploaded as jason-desktop-<rid>, which the release publishes. It needs the
-      platform's signing inputs; without them, and on any other platform, it is ignored. The default, 'false', builds no
-      desktop, which is what a pull request's build wants: ci.yml never builds one.
+      notarized. On linux-x64, which signs nothing, a deb and an AppImage, each also started once under a virtual display.
+      Each is read back and uploaded as jason-desktop-<rid>, which the release publishes; a Linux call that names its own
+      artifact uploads them under that name and -desktop instead. Windows and macOS need the platform's signing inputs;
+      without them, and on any other platform, it is ignored. The default, 'false', builds no desktop, which is what a
+      pull request's platform build wants: ci.yml builds the Linux packages in its desktop job alone.
     required: false
     default: 'false'
 
@@ -901,6 +903,162 @@ runs:
           desktop/dist/jason-desktop-macos-x64.zip
           desktop/dist/jason-desktop-macos-x64.zip.blockmap
           desktop/dist/latest-mac.yml
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+
+    # The desktop's Linux packages, built on a linux-x64 call around the executable that call published, the very bytes:
+    # a deb and an AppImage, which nothing signs, so no identity is held here. The build tooling is
+    # desktop/package-lock.json's, installed by npm ci without a package's scripts, on a Node of its own. What
+    # electron-builder fetches as it packs is held to digests that tooling carries: Electron's Linux distribution to the
+    # sha256 the electron package's checksums.json names, which the configuration hands it, and electron-builder's own
+    # tools, the AppImage runtime and fpm among them, to the sha256 its source names.
+    - uses: actions/setup-node@v5
+      if: inputs.rid == 'linux-x64' && inputs.desktop == 'true'
+      with:
+        node-version: 24
+
+    - name: Build the desktop's Linux packages
+      if: inputs.rid == 'linux-x64' && inputs.desktop == 'true'
+      shell: bash
+      working-directory: desktop
+      env:
+        VERSION: ${{ inputs.version }}
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+      run: |
+        npm ci --ignore-scripts
+        node scripts/prepare.mjs --rid linux-x64 --output bundles/x64 --version "$VERSION" --executable "$GITHUB_WORKSPACE/$EXECUTABLE"
+        JASON_VERSION="$VERSION" npm run package -- --linux --x64
+
+    # Each Linux package read back. The deb's control fields name the package, the version as dpkg spells it and the
+    # architecture; unpacked, /opt/Jason is held to the configuration it was built from (its feed, its fuses, and
+    # package-type saying deb, which makes electron-updater's deb updater), and its menu entry starts the program without
+    # --no-sandbox. The AppImage's runtime is linked to no shared library, so it needs no libfuse2; its contents, extracted
+    # by that runtime, are held to the configuration the same way, with no package-type, which makes the AppImage updater.
+    # Each carries the executable this call published, byte for byte and runnable, with its notices, Chromium's, and the
+    # release's version in version.json. The feed's digest and size of each file it names are computed again from the
+    # files as they will be published.
+    - name: Verify the desktop's Linux packages and what they carry
+      if: inputs.rid == 'linux-x64' && inputs.desktop == 'true'
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+      run: |
+        dist=desktop/dist
+        deb="$dist/jason-desktop-linux-x64.deb"
+        appimage="$GITHUB_WORKSPACE/$dist/jason-desktop-linux-x64.AppImage"
+        feed="$dist/latest-linux.yml"
+        published="$GITHUB_WORKSPACE/$EXECUTABLE"
+        cat "$feed"
+        grep -qx "version: $VERSION" "$feed" || { echo "::error title=Desktop::latest-linux.yml does not name $VERSION."; exit 1; }
+
+        # What a Linux package carries in its resources folder beside the program.
+        carries() {
+          bundle="$1/resources/bundle"
+          cmp "$bundle/jason" "$published" || { echo "::error title=Desktop::The $2's jason is not the executable this call published."; return 1; }
+          [ -x "$bundle/jason" ] || { echo "::error title=Desktop::The $2's jason is not executable."; return 1; }
+          for notice in "$bundle/LICENSE" "$bundle/THIRD-PARTY-NOTICES" "$1/resources/notices/LICENSES.chromium.html"; do
+            [ -s "$notice" ] || { echo "::error title=Desktop::The $2 carries no $notice."; return 1; }
+          done
+          grep -q "\"version\": \"$VERSION\"" "$bundle/version.json" || { echo "::error title=Desktop::The $2's version.json does not name $VERSION."; return 1; }
+        }
+
+        dpkg-deb --info "$deb"
+        [ "$(dpkg-deb --field "$deb" Package)" = jason-desktop ] || { echo "::error title=Desktop::The deb is not the package jason-desktop."; exit 1; }
+        [ "$(dpkg-deb --field "$deb" Version)" = "${VERSION//-/\~}" ] || { echo "::error title=Desktop::The deb's version is not $VERSION as dpkg spells it."; exit 1; }
+        [ "$(dpkg-deb --field "$deb" Architecture)" = amd64 ] || { echo "::error title=Desktop::The deb is not for amd64."; exit 1; }
+        opened="$RUNNER_TEMP/jason-desktop-deb"
+        rm -rf "$opened"
+        dpkg-deb --extract "$deb" "$opened"
+        node desktop/scripts/check-package.mjs --app "$opened/opt/Jason" --platform linux --form deb || { echo "::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses or its updater."; exit 1; }
+        carries "$opened/opt/Jason" deb
+        entries=("$opened"/usr/share/applications/*.desktop)
+        [ -f "${entries[0]}" ] || { echo "::error title=Desktop::The deb puts no entry in the applications menu."; exit 1; }
+        grep -H '^Exec=' "${entries[@]}"
+        if grep -q -e '--no-sandbox' "${entries[@]}"; then echo "::error title=Desktop::The deb's menu entry starts the program with --no-sandbox."; exit 1; fi
+
+        readelf --dynamic "$appimage" | grep -E 'NEEDED|INTERP' && { echo "::error title=Desktop::The AppImage's runtime needs shared libraries, libfuse2 among them maybe."; exit 1; }
+        echo "The AppImage's runtime needs no shared library."
+        extracted="$RUNNER_TEMP/jason-desktop-appimage"
+        rm -rf "$extracted"
+        mkdir -p "$extracted"
+        (cd "$extracted" && "$appimage" --appimage-extract > /dev/null)
+        node desktop/scripts/check-package.mjs --app "$extracted/squashfs-root" --platform linux --form appimage || { echo "::error title=Desktop::The AppImage's application is not what it was configured to be: its feed, its fuses or its updater."; exit 1; }
+        carries "$extracted/squashfs-root" AppImage
+
+        pwsh -NoProfile -File .github/scripts/Assert-UpdateFeed.ps1 -Feed "$feed" -Version "$VERSION" -Expect jason-desktop-linux-x64.deb,jason-desktop-linux-x64.AppImage || { echo "::error title=Desktop::latest-linux.yml does not describe the files beside it as they will be published."; exit 1; }
+
+    # Each Linux package started once, as a person starts it, under a virtual display: the deb installed by apt and
+    # started by the link it puts on the PATH, the AppImage run as the file it is, through FUSE where the runner offers it
+    # and by its own runtime's extraction where it does not. Each start has a data directory and a harness root of its
+    # own, holding a UI build of one page, since this release's UI is not published yet; it must log desktop_started and
+    # window_loaded, its program must not run with --no-sandbox, and the runtime it leaves running must stop with the
+    # jason the package carries. The deb is removed after.
+    - name: Start the desktop's Linux packages under a virtual display
+      if: inputs.rid == 'linux-x64' && inputs.desktop == 'true'
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        JASON_Update__CheckEnabled: 'false'
+      run: |
+        dist="$GITHUB_WORKSPACE/desktop/dist"
+        if unshare -Ur true 2> /dev/null; then echo "This runner admits unprivileged user namespaces."; else echo "This runner refuses unprivileged user namespaces."; fi
+
+        # One start of one form: $1 the form, $2 its data directory, $3 the jason it carries, then what starts it.
+        started() {
+          form=$1 data=$2 jason=$3
+          shift 3
+          rm -rf "$data" "$data-harness"
+          mkdir -p "$data/ui/custom"
+          printf '<!doctype html><title>Jason</title>\n' > "$data/ui/custom/index.html"
+          printf '{"version": "%s", "api_version": "v1"}\n' "$VERSION" > "$data/ui/custom/manifest.json"
+          JASON_DATA_DIR="$data" JASON_Harness__Root="$data-harness" xvfb-run --auto-servernum "$@" > "$data.out" 2>&1 &
+          desktop=$!
+          loaded=
+          for _ in $(seq 1 180); do
+            if grep -qs '"EventName":"window_loaded"' "$data"/logs/desktop-*.jsonl; then loaded=yes; break; fi
+            kill -0 "$desktop" 2> /dev/null || break
+            sleep 1
+          done
+          cat "$data"/logs/desktop-*.jsonl || true
+          if [ -z "$loaded" ]; then cat "$data.out"; echo "::error title=Desktop::The $form did not load its window."; return 1; fi
+          grep -qs '"EventName":"desktop_started"' "$data"/logs/desktop-*.jsonl || { echo "::error title=Desktop::The $form logged no desktop_started."; return 1; }
+          main=$(pgrep -o -f -- '/jason-desktop-app( |$)') || { echo "::error title=Desktop::The $form's program is not running once its window loaded."; return 1; }
+          said=$(tr '\0' ' ' < "/proc/$main/cmdline")
+          echo "The $form runs as: $said"
+          case " $said " in *' --no-sandbox '*) echo "::error title=Desktop::The $form runs with --no-sandbox."; return 1 ;; esac
+          pkill -TERM -f -- '/jason-desktop-app( |$)' || true
+          for _ in $(seq 1 30); do kill -0 "$desktop" 2> /dev/null || break; sleep 1; done
+          if kill -0 "$desktop" 2> /dev/null; then echo "::error title=Desktop::The $form did not quit."; return 1; fi
+          JASON_DATA_DIR="$data" "$jason" runtime stop || { echo "::error title=Desktop::The runtime the $form started did not stop with the jason it carries."; return 1; }
+          echo "The $form started, loaded its window, quit, and its runtime stopped."
+        }
+
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends "$dist/jason-desktop-linux-x64.deb"
+        started deb "$RUNNER_TEMP/jason-desktop-deb-data" /opt/Jason/resources/bundle/jason /usr/bin/jason-desktop-app
+        sudo apt-get remove -y jason-desktop
+        [ ! -e /opt/Jason/jason-desktop-app ] || { echo "::error title=Desktop::apt remove left /opt/Jason/jason-desktop-app."; exit 1; }
+
+        if [ -c /dev/fuse ] && { command -v fusermount3 || command -v fusermount; } > /dev/null; then
+          echo "The AppImage starts through FUSE."
+        else
+          echo "This runner offers no FUSE: the AppImage starts by its runtime's extraction."
+          export APPIMAGE_EXTRACT_AND_RUN=1
+        fi
+        data="$RUNNER_TEMP/jason-desktop-appimage-data"
+        started AppImage "$data" "$data/desktop/bundle/$VERSION/jason" "$dist/jason-desktop-linux-x64.AppImage"
+
+    # Uploaded under the name the release's download collects; a call that names its own artifact, which only a run
+    # that is no release makes, uploads them under that name and -desktop, which that download never collects.
+    - uses: actions/upload-artifact@v7
+      if: inputs.rid == 'linux-x64' && inputs.desktop == 'true'
+      with:
+        name: ${{ inputs.artifact != '' && format('{0}-desktop', inputs.artifact) || 'jason-desktop-linux-x64' }}
+        path: |
+          desktop/dist/jason-desktop-linux-x64.deb
+          desktop/dist/jason-desktop-linux-x64.AppImage
+          desktop/dist/latest-linux.yml
         if-no-files-found: error
         retention-days: ${{ inputs.retention-days }}
 
