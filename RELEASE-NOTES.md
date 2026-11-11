@@ -19,146 +19,199 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.33.0
+# Jason 0.34.0
 
-## What is new since 0.32.0
+## What is new since 0.33.0
 
-An installation is taught its role skills as it is installed, from a package of them the release publishes, so a
-machine needs no `git` to receive its skills; `jason status` says what a logon registration means and gives the role
-skills' deployment as fields; and two new verbs move an installation to another machine.
+Jason has a desktop application, a window onto the installation the `jason` command line already uses, with a chat
+that drives Claude Code or Codex on your own machine; the browser UI is rebuilt on React and gains a person panel and a
+campaign made of tabs; the runtime streams its journal, and `jason journal watch` follows it; and a fresh installation
+is told what a provider plugin still needs.
 
-- **The skills are a release asset.** `jason-skills.zip` holds `skills/` at the tag, both packs, and at its root a
-  `source.json` that names the public repository, the tag and its commit. It is listed in `checksums.txt` after the UI's
-  package, and a release is now fourteen files. With no `--source`, `jason skills install` and `jason skills update`
-  take the package of the release this build was published as, from this repository's releases on GitHub, and check it
-  against that release's `checksums.txt` before anything is written, so the machine needs no `git`. `--ref` takes the
-  package of another release's tag; a ref that is not a release's tag is refused before any request, naming
-  `--source <git url> --ref <branch>` instead. `--source <git url>` still clones with `git`, `--source <dir>` reads a
-  checkout where it stands, and `--feed` names "a different release feed: the https address of its manifest.json, or
-  http on this machine". See
-  [Teach it](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/INSTALL.md#4-teach-it).
-- **The install scripts teach the role skills as their last act.** After the PATH step and before the licence lines,
-  `install.sh` and `install.ps1` run the installed executable's `jason skills install --roles-only`, which takes the
-  skills from the release's `jason-skills.zip` and writes them into Jason's data directory and nowhere else, and they
-  show what it prints. The scripts never start the runtime and never register it at logon: both stay yours, and
-  `jason status` names each. When the step fails, with no network say, Jason stays installed and the script still
-  succeeds, ending with one line: "The role skills were not deployed; the lines above say why. Run
-  `jason skills install --roles-only` once that is dealt with; `jason status` names it as well." A script pointed at a
-  feed in a directory, with `--feed` or `-Feed`, leaves the step out and says what to run instead, because the skills
-  verb reads no directory.
-- **`jason status` says what a logon registration does at the next sign-in.** The `autostart` row says "Registered at
-  logon: the runtime starts by itself each time you sign in." or "No logon registration: the next time you sign in, the
-  runtime stays off until it is started by hand.", with the same repair as before; whether the runtime runs now is the
-  `runtime` row's to say. `jason runtime autostart status` opens with the same words: "No logon registration." and, on a
-  machine that cannot register one, "No logon registration, and this machine has no way to register one."
-- **`jason status` gives the role skills' deployment as fields.** In the JSON, the `role_skills` check carries
-  `details`: `ref`, `source`, `commit` (empty where the record names none) and `roles_taught`, how many roles the runtime
-  reports it teaches, which is left out where the runtime did not answer or reported that it could not read its role
-  root. With no record, or one that cannot be read, there are no `details`, and no other check carries any. `--human`
-  prints the facts alone, as before. A `jason doctor` bundle writes a skill source other than the public repository as
-  `<skill-source>` in `details` as it does in the fact, and its ref too unless that is a release tag.
-- **`jason export` and `jason import` move an installation to another machine.** They are the CLI's tenth and eleventh
-  declared exceptions: each changes this installation's files rather than asking the runtime anything, apart from the
-  stop, the start and a link per project folder, and neither reaches a network beyond the runtime's own loopback.
-  - **What travels.** `jason export [<file>]` writes `jason-export-<UTC stamp>.zip` in the folder it runs in, or the
-    file you name, and never over a file that is already there. It carries the database with its `-wal` and `-shm`
-    when they are there; `config/`, `plugins/`, `skills/roles/`, `ui/custom/` and `logs/`, each whole, the role skills'
-    record included; the harness root's tree as it stands, every folder in it whole, a `.git` included; and
-    `export.json`, which names "the Jason version, the moment, the operating system, the data directory, the harness
-    root, the home directory, whether the runtime starts at logon, and every file with its size and SHA-256". Of links,
-    "a link at the top of a carried place, or a harness root that is one, is followed and judged where it leads", and
-    "a link inside is refused by its path". And "A name another system cannot hold, and two names apart only by the
-    case of their letters, are refused by their path, before anything is written", a Windows device name, such as CON
-    or NUL, among them.
-  - **What does not.** The backups under `state/backups/`, `run/`, `work/`, the skills' staging folders, the shipped UI
-    under `ui/default/`, a `replaced-<stamp>/` directory an import moved aside, "and anything outside the data directory
-    and the harness root": the skills deployed into agent hosts among them, which `jason skills install` deploys again.
-  - **Secrets travel whole.** "The archive carries the settings file with everything in it, a token under
-    Plugins:Config included: keep the archive as you keep that file."
-  - **`--stop`.** Without it, both verbs refuse while the runtime runs, naming `jason runtime stop`. With it,
-    `jason export` stops the runtime "and starts it again once the archive is written, and starts none that was not
-    running"; `jason import` stops it and, as every import does, starts the runtime on what it placed.
-  - **`--replace` moves aside and deletes nothing.** Among what `jason import <file>` refuses before anything is
-    written are "an archive that cannot be read", "a name in it that escapes", "a file whose size or SHA-256 is not the
-    one export.json lists" and "an archive a newer Jason wrote, naming the version to install first";
-    `jason import --help` has the whole list. An installation already here, "a database, or a harness root with a
-    marker in it", is refused without `--replace`, naming what it holds. With it, the data directory's parts go into
-    `<data>/replaced-<stamp>/` and the harness root to `<root>.replaced-<stamp>`, each named as yours to remove.
-    Without the flag nothing is written over either: "on a machine with no installation the same parts that stand
-    there, a jason.db-wal or jason.db-shm beside no database among them, and a harness root folder with no marker go
-    aside the same way, with no --replace; each is named as yours to remove."
-  - **The harness root here** is "--root, else JASON_Harness__Root, else the Harness:Root this machine's settings
-    file names, else Jason in the home directory". "The root is held to the runtime's rule for a root before anything
-    is placed, and the placed settings file names it."
-  - **Paths are made this machine's.** In the settings file, "every absolute path under the other machine's home
-    directory, data directory or harness root is rewritten to the same path here, each rewrite said, Harness:Root
-    first; a path outside those three that is not on this machine is said and left as written". Then the runtime
-    starts, and the import asks it to `project.link` each project folder by its marker, with this machine's path; a
-    refused link is said, the folder stays, and the answer's `next` carries
-    `jason project link <id> --path <folder>`. "A project folder outside the harness root does not travel: each project
-    whose recorded folder is not here is said, and listed as folders_not_here."
-  - **The logon registration travels as a fact.** The import "registers at logon when the other machine did, or says
-    this machine cannot". The registration itself is never a file in the archive.
-  - **Left to you**, in this order: `jason skills install`, for this machine's agent hosts;
-    `jason runtime autostart enable`, if the runtime should start at logon here and the import did not register it;
-    `jason status`.
+**The desktop**
 
-  See
-  [Moving the installation to another machine](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/INSTALL.md#8-moving-the-installation-to-another-machine).
-  `operating-the-installation` teaches the same move.
+Jason Desktop is one more client of the installation, as the browser UI is. It finds the data directory as the CLI does
+(`JASON_DATA_DIR`, otherwise `~/.jason`), shows the UI the runtime serves at its loopback address, and changes the
+installation only through `jason` verbs and through the settings file a person would edit. The runtime keeps no state
+for it, and with no desktop installed nothing in the runtime differs.
 
-## Fixed since 0.32.0
+- **Three packages, signed.** A release now publishes the desktop beside the executable: an installer for Windows x64,
+  and a disk image and an update archive for each of Apple silicon and Intel Macs, with the two update feeds
+  (`latest.yml`, `latest-mac.yml`) and the block maps. That is ten files more, so a release is twenty-four files.
+  `checksums.txt` lists twenty of them: the three archives, the seven packages and the desktop's ten; it does not list
+  `manifest.json`, itself or the two install scripts. `manifest.json` is unchanged, since it lists what `jason update`
+  applies. On Windows the installer, its uninstaller and `Jason.exe` are signed, and so is the `jason.exe` the
+  application carries, which is the release's own executable byte for byte. On macOS both packages are signed with a
+  Developer ID, notarized and stapled. Each package carries one version, `LICENSE` and both notices.
+- **One installation.** The desktop asks `jason status` whether a runtime is up and whether it is the same build, and
+  starts one with `jason runtime start` only when none is, never as its own child. It deploys the role skills from the
+  package it carries, and works in a chat folder of its own under `<data>/desktop/chat`. When the runtime is another
+  version, its UI is loaded as it is and the window says the versions differ and names `jason update`.
+- **A window that stays shut.** The page gets `window.jasonDesktop` and nothing else, answered only from the top frame
+  of a page at the runtime's origin. Navigation is locked to that origin; a link that leaves it opens in the system
+  browser, and only when it is `https:`. Electron's own profile, storage and logs live under `<data>/desktop/electron`.
+- **Live chat.** A person talks to Claude Code or Codex, which run on their own machine, and the host works the
+  installation through the same `jason` command a person types. The words go to the host on standard input, never on
+  its command line. For Claude Code the desktop decides what runs without asking, from an allow list of one rule for
+  each of 67 verbs and a deny list of the verbs a chat never runs (everything the CLI reserves for a person,
+  `export` and `import`, `suppression remove`, `route set`, `route unset`, `role set-profile` and `role add`), and
+  asks the person on a card for everything else. Of the Reply CLI the chat may run `reply auth status` and
+  `reply account list` and nothing else. A card's "Allow for this chat" shows exactly the command it covers and is
+  never offered for a program that runs another, for a command with a word the shell would rewrite, or for one that
+  names `reply`. The data directory is refused in every spelling the desktop can read. Codex, in this release, reads
+  and advises with a read-only sandbox and no network, and acts through nothing.
+- **A chat that reads like one.** The agent's answers are drawn as a fixed subset of Markdown (paragraphs, emphasis,
+  code, lists, headings, quotes and simple tables; a link is shown as its text and address, never as a link). A message
+  sent while a turn runs waits under the box and goes when the turn ends well; it can be taken back or replaced. The
+  agent runs nothing in the background, and its steps are described in plain words, such as "Ran a jason command".
+  The desktop writes its five rules for the agent as `CLAUDE.md` and `AGENTS.md` in the chat folder before every turn,
+  so an edit to either does not last.
+- **Needs you, Campaigns, Activity.** The console's home is a chat with dockable panels. Needs you says who an approval
+  reaches, from which account and on which channel, and narrows to approvals or to questions; Campaigns and Activity
+  follow the journal as it is written.
+- **Connect cards.** Slack, Telegram, ntfy and the journal forwarder are configured in one act, which edits only that
+  plugin's keys in `<data>/config/settings.json`, keeps everything else in the file, and refuses a file it cannot parse.
+  Reply is signed in with `reply auth login`, or with a key on standard input, then installed and wired as the default
+  route only where you have set none. A card says "configured" when the runtime accepted it, never "connected".
+- **The tray.** It counts what waits on you, approvals and questions, read through the CLI at most every 30 seconds. A
+  system notification carries the counts alone, never a name or a question's text. When the runtime comes back on
+  another port, the window pairs again by itself. The tray never starts a runtime.
+- **Keys and logon.** The View menu has New Chat and the six screens (`CmdOrCtrl+N`, `CmdOrCtrl+1` to `6`). "Open Jason
+  at login" is the desktop's own and off by default; "Start the runtime at logon" is `jason runtime autostart` and
+  nothing else.
+- **A `jason` command on the PATH,** placed only on your word and only in an installed build. On macOS it is a wrapper
+  in `~/.local/bin`. On Windows it is `jason.cmd` and an extensionless wrapper for Git Bash in
+  `%LOCALAPPDATA%\Microsoft\WindowsApps`, placed only when that folder is on your PATH. A `jason` that is not ours is
+  never shadowed; the command is then named `jason-desktop`. `jason.cmd` passes its arguments through cmd.exe's parser a
+  second time, so a script or an agent that passes JSON uses the executable's full path or Git Bash.
+- **Updates on your word,** from this repository's stable releases only: a candidate's feed is never read. Installing
+  one stops the runtime that the application's own `jason` runs, and a runtime of any other executable is never stopped.
+  Before it replaces the application, the desktop copies the application as it was under
+  `<data>/desktop/rollback/<version>/`, one copy at a time, named in the Jason menu. Nothing puts it back by itself;
+  going back is quitting Jason and putting that folder in place of the installed application, which leaves your data as
+  the newer version left it. See [how the desktop
+  updates](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md).
+- **The Windows installer and uninstaller close the application and nothing else,** by its exact path. A process running
+  from the carried `jason.exe` is stopped through the application's own `--stop-runtime` start, which runs
+  `jason runtime stop`, after your OK where you run the installer; one still found then ends the run before a file is
+  replaced. Uninstalling takes off what the desktop placed, the PATH command, Open Jason at login and the runtime's
+  logon start when it starts this application's `jason`, and names what it leaves: the data directory, the harness root
+  and the updater's cache.
+- **Its log** is `<data>/logs/desktop-YYYYMMDD.jsonl`, in the runtime log's shape and under its limits, and carries no
+  token, path, command or word you typed. `jason logs --source desktop` reads it, and `jason doctor` carries a bounded
+  tail of each log.
 
-- **A plugin that cuts text inside a character keeps its outcome.** A plugin may cut a provider's text at a count of
-  UTF-16 units, as `slice(0, 200)` does, and leave half of a surrogate pair at the end; the plugin host could not read
-  what the plugin handed it, and the work item ended `plugin_no_outcome` instead of the failure or the result the plugin
-  declared. The host now writes such a lone half as U+FFFD, the replacement character, in any string a plugin hands
-  it: a result, an identifier, a failure's message, details or block, a log line's data, a host function's options, a
-  key. A whole pair is written as it is. No package changed. See
-  [the plugins page](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/plugins.md).
-- **`jason update apply` names the packages that are not installed on one line.** Two or more are said on the line
-  where the first of them stands, as `jason status` says them, such as
-  ``plugins: slack and telegram are not installed, so none was placed; `jason plugin install <id>` installs one``; one
-  package keeps a line of its own.
-- **A release candidate's build reads its own release.** A build such as `1.0.0-rc.1` takes its skills from its own
-  tag, which its release publishes, and `jason status` compares its default UI with it, so a stale one is called stale.
-  Only a development build points at the release it is on the way to.
+**The browser UI**
 
-## Upgrading from 0.32.0
+- **React 18.** The UI moves from Preact to React 18.3.1. Its screens, stores and API client behave as they did.
+- **A person panel.** People opens a person beside the list, with tabs Details, Activity, Sequences, Messages (where a
+  provider knows the person's threads), Next and Research. Details edits the record in place and can queue the change
+  for the provider; it also puts the person on or off Jason's own do-not-contact register, address by address or as a
+  whole, asking a reason for taking one off. Sequences excludes a person from a campaign or moves them to another one.
+  Research lists what the researcher role found and can ask it for more.
+- **A campaign is a set of tabs:** Sequence, People, Inbox, Results and Settings. Sequence is where a campaign opens and
+  ends with what happened. Inbox shows the latest replies Jason observed, each at the moment the provider says the
+  thread moved. Results shows four figures as the runtime counts them. Settings holds the record and the moves its
+  status allows: Pause, Resume and Start. An address that named Details opens Settings, and any other tab that is gone
+  opens Sequence.
+- **Needs you and Attention** show the person an approval reaches, the account it goes from and its channel, and say
+  plainly when nothing waits.
+- **Settings and Ukrainian.** The browser gains a Settings screen for the theme and the language, English or Ukrainian,
+  kept in the browser's own storage. A Chat screen says the chat is part of the desktop and links to the releases page.
 
-Nothing stops: no setting is renamed, and no start refuses a setting 0.32.0 took.
+**For a person who scripts the CLI**
+
+- **`jason journal watch [--after <id>] [--human]`** follows the journal until interrupted, one line per frame in the
+  shape `journal.list` answers, over a WebSocket at `GET /v1/journal.stream`, the one `GET` under `/v1/`. Without
+  `--after` it starts with the next line committed; with it, after that id. A resume may send a line once more and never
+  skips one, so drop a repeat by its `id`. Exit 0 on an interrupt, 1 when the runtime refuses the request, 3 when it
+  cannot be reached, refuses the token or ends the stream. The run token or a paired browser's UI token opens it; a
+  browser, which can set no header on a WebSocket, offers its token as a `jason.bearer.` subprotocol, which this route
+  alone accepts.
+- **An argument that names a response file is a usage error (exit 2).** The CLI no longer expands a response file, and a
+  word that starts with an at sign is a word like any other. A script that relied on it passes the arguments itself.
+- **`jason logs` gains `--source runtime|desktop`.** The default is `runtime`, so a script that reads the runtime's log
+  is unchanged.
+- **The runtime's descriptor gains `installed_image`,** the executable the runtime runs as, `null` or absent when that
+  is unknown. A reader of the run file that rejects a field it does not know must be taught this one.
+- **`jason plugin install` says what a plugin still needs.** After a reload that answered, its output carries the
+  plugin's `status`, `problems` with their messages, `capabilities` as the reload answered them (requested and granted)
+  and `settings_file`; `--human` prints each problem and, for each capability granted nothing, the key to set under
+  `Plugins:Grants:<id>`, the file and the reload. `plugin list --human` and `plugin reload --human` print the same lines
+  under their tables.
+- **`jason status` has a new optional check, `plugin_grants`,** that names each plugin asking for a capability and
+  granted nothing of it. It never decides `ready`.
+- **`jason runtime autostart status` reads back `path`,** the `PATH` a macOS logon start carries, `null` on Windows and
+  Linux. The path stays out of `jason status` and out of a `jason doctor` bundle.
+- **A missing program says the repair.** An `executable_missing` problem now ends with "install the program where the
+  runtime can see it and run `jason plugin reload`".
+
+## Fixed since 0.33.0
+
+- **A runtime started at logon on macOS finds what a terminal finds.** launchd starts an agent with
+  `/usr/bin:/bin:/usr/sbin:/sbin`, so a plugin whose program lives elsewhere was `unavailable` after a restart. The
+  LaunchAgent now carries the `PATH` of the terminal that registered it.
+- **A plugin granted nothing no longer looks installed and idle.** A plugin that loaded `valid` with nothing granted, so
+  that every call it made was refused, is now named by `jason plugin install`, `jason plugin list`, `jason plugin
+  reload` and `jason status`, with the setting that grants it.
+- **Where a global npm install is refused with `EACCES`,** the golden path, the Reply package's prerequisites and the
+  operating skill say to install under a prefix of the account's own. The Reply package is 0.14.7.
+
+## Upgrading from 0.33.0
+
+Nothing stops: no setting is renamed, and no start refuses a setting 0.33.0 took.
 
 - **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
-  lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. The
-  install line now ends by deploying the role skills; after it or Homebrew, `jason skills update` and
-  `jason ui install` follow, and `jason plugin install <id> --replace` for each package you installed and did not edit.
-- **Where the skills come from:** the default skills download goes to this repository's releases on GitHub directly,
-  as `git` did before, and not through the address ReplyApp Inc. operates for the runtime's own downloads, so
-  [what the responsible-use page says of it](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/responsible-use.md#update-check-and-downloads)
-  holds word for word and the page is unchanged.
-- **No `git` any more:** an installation whose record names this repository's git address, which every default
-  deployment before 0.33.0 names, is read as the default: from the next `jason update apply` on, or the next
-  `jason skills update`, it takes `jason-skills.zip` and its record names the new default. A deployment made at a tag
-  chosen with `--ref` stays at its ref, a record of any other source keeps it, and a git repository named with
-  `--source` still needs `git`.
-- **The packages:** reply 0.14.6, journal-forwarder 1.2.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0, as in 0.32.0;
-  no package changed in this release. A release is fourteen files, `jason-skills.zip` the new one.
-- **Skills:** the update redeploys them wherever a deployment was recorded. Two skills changed their text and keep
-  `draft`: `operating-the-installation`, which now says what the install script deploys and how to move an
-  installation, and which no agent host has read against 0.33.0; and the `responder` role, whose reason for acting or
-  parking at once now reads "A provider may not detect a contact's later reply unless it answers a message this side
-  sent". The skills marked `draft` are `operating-the-installation`, `researcher-in-session`, `roles/responder`,
-  `troubleshooting-jason` and the nine skills of the business pack.
+  lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. After
+  it, `jason skills update` and `jason ui install` follow, and `jason plugin install <id> --replace` for each package
+  you installed and did not edit.
+- **The desktop is a separate install.** `jason update` does not install it. Download the installer or the disk image
+  for your machine from this release, or, where an earlier desktop is installed, let it offer the update. An Intel Mac
+  gets its `jason` only with the desktop's own update.
+- **The packages:** reply 0.14.7; journal-forwarder 1.2.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0 are as in 0.33.0.
+  A release is twenty-four files: the desktop's ten are new.
+- **Skills:** the update redeploys them wherever a deployment was recorded. `operating-the-installation` changed its
+  text (how a fresh installation connects a provider) and keeps `draft`, and no agent host has read it against 0.34.0.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle
-  stay as they were.
+  stay as they were. The desktop keeps what it writes under `<data>/desktop/`, and `jason uninstall --purge-data`
+  removes that folder with the rest.
 - **Going back:** what `jason update apply --version` to an older release does to a newer plugin package, and how to
-  load one again, is in
-  [Applying an older release](https://github.com/reply-team/jason-ai/blob/v0.33.0/docs/release-and-update.md#applying-an-older-release).
-- **From 0.31.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
+  load one again, is in [Applying an older
+  release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release).
+- **From 0.32.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
   installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
   older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
 
 ## Known issues
+
+A desktop build made before this release does not know the `--stop-runtime` start, so a later installer would start that
+whole application and wait on it. Remove such a build with its own uninstaller first. No published release carries one.
+
+The Mac executable built for Intel is signed and notarized like the Apple silicon one, but the test suite does not run
+on an Intel Mac, so that package is covered by what was built and signed and not by a run. Its `jason` moves only with
+the desktop's own update, because `jason update` publishes no build for it.
+
+There is no desktop package for Linux: the desktop is published for Windows x64 and for Macs only.
+
+The Windows installer ends the run, and installs nothing, when a process from the carried `jason.exe` still runs after
+the stop; the next start of the application says nothing of it. Where PowerShell is not available the installer looks
+for no process: a person is asked to stop the runtime, and an update goes on without a look.
+
+The six libraries the Windows installer unpacks into its temporary folder (nsExec, nsis7z, SpiderBanner, StdUtils,
+System and WinShell) carry no signature of ours. The installer's builder cannot sign them, and they are never installed.
+
+The desktop's chat has been run in tests against stand-ins for Claude Code and Codex; no turn with a real host has been
+watched through the desktop yet.
+
+Codex in the desktop's chat reads and advises and acts through nothing: its sandbox is read-only, with no network.
+Claude Code's chat asks for a card before it reads a path outside its working folders only from 2.1.257 on; an older
+version skips that setting without a word.
+
+What an allowed verb's options open or start, such as a file read into a request, is not yet confined under the chat.
+
+The desktop's tray has not been seen on a screen, and the View menu's keys have not been typed at the operating system's
+level; the page receives them, but no run has shown the menu's accelerators fire. A person's run of the installed
+candidate covers both.
 
 An import on the same machine, into a second data directory, "needs the source harness root moved aside first: the
 records name its folders, and project.link refuses a folder present elsewhere (harness_folder_present)". The import
@@ -171,7 +224,8 @@ is not there any more" with its path.
 On Windows, a campaign's move to another project can be refused for the instant the background import-file sweep writes
 inside that folder, soon after a start; ask again and it succeeds.
 
-`reply skills install --project` does not see an old `reply-adapter@reply-skills` plugin installed at user scope on
+`reply skills install --project` does not see an old `reply-adapter` plugin from the `reply-skills` marketplace
+installed at user scope on
 Claude Code, so that plugin keeps loading beside the project copy of the skills.
 
 `reply skills install --dry-run` and `reply skills update --dry-run` describe what they would do in the past tense, as
