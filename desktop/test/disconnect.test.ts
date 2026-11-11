@@ -59,7 +59,7 @@ function configured(id: 'slack' | 'telegram' | 'ntfy'): Record<string, unknown> 
 
 // ---- The settings edit, pure ---------------------------------------------------------------------------------------
 
-test('Disconnect takes out the plugin’s whole configuration and its binding, and keeps its grant and every other key', () => {
+test('Disconnect takes out the plugin’s whole configuration and its binding; every other key keeps its value, its grant included but for the Http grant derived from a server of its own', () => {
     for (const id of ['slack', 'telegram', 'ntfy'] as const) {
         const plugin = notification(id);
         const before = configured(id);
@@ -70,12 +70,16 @@ test('Disconnect takes out the plugin’s whole configuration and its binding, a
         assert.equal(isConfigured(after, plugin), false, id);
         const plugins = after.Plugins as { Config: Record<string, unknown>; Grants: Record<string, unknown> };
         assert.equal(id in plugins.Config, false, `${id}: nothing under Plugins:Config:${id}`);
-        assert.deepEqual(plugins.Grants, (before.Plugins as { Grants: unknown }).Grants, `${id}: the grants as they were`);
+        const grants = structuredClone((before.Plugins as { Grants: Record<string, Record<string, unknown>> }).Grants);
+        // ntfy's server is its own here, so the Http grant Configure derived from it goes with it; Env stays.
+        if (id === 'ntfy') delete grants.ntfy!.Http;
+        assert.deepEqual(plugins.Grants, grants, `${id}: the grants as they were, but for the derived Http grant`);
         const notifications = after.Notifications as { Plugins: Record<string, unknown> };
         assert.equal(id in notifications.Plugins, false, `${id}: an entry left empty is dropped`);
-        // Everything but the two removals is byte for byte what it was.
-        const expected = structuredClone(before) as { Plugins: { Config: Record<string, unknown> }; Notifications: { Plugins: Record<string, unknown> } };
+        // Every other key keeps its value.
+        const expected = structuredClone(before) as { Plugins: { Config: Record<string, unknown>; Grants: Record<string, Record<string, unknown>> }; Notifications: { Plugins: Record<string, unknown> } };
         delete expected.Plugins.Config[id];
+        if (id === 'ntfy') delete expected.Plugins.Grants.ntfy!.Http;
         delete expected.Notifications.Plugins[id];
         assert.equal(JSON.stringify(after), JSON.stringify(expected), id);
     }
@@ -114,10 +118,40 @@ test('names are found in any letter case, as the runtime’s configuration reads
     };
     assert.equal(isConfigured(before, ntfy), true);
     const after = withPluginDisconnected(before, ntfy);
-    assert.deepEqual(after, { plugins: { grants: { Ntfy: { http: ['ntfy.example.test'] } } } });
+    assert.deepEqual(after, {}, 'the Http grant derived from the server goes with it, and the sections it leaves empty');
     assert.equal(isConfigured(after, ntfy), false);
     const off = { NOTIFICATIONS: { Plugins: { nTfY: { ENABLED: false, binding: { topic: 'alerts' } } } } };
     assert.deepEqual(withPluginDisconnected(off, ntfy), { NOTIFICATIONS: { Plugins: { nTfY: { ENABLED: false } } } });
+});
+
+test('after a Disconnect, ntfy configured again on its public server is granted the public host, not the old server’s', () => {
+    const ntfy = notification('ntfy');
+    const own = withPluginConfigured({}, ntfy, { target: 'jason-alerts', server: 'https://ntfy.example.test' });
+    assert.deepEqual(own, { Notifications: { Plugins: { ntfy: { Binding: { topic: 'jason-alerts', server: 'https://ntfy.example.test' } } } }, Plugins: { Grants: { ntfy: { Http: ['ntfy.example.test'] } } } });
+    const disconnected = withPluginDisconnected(own, ntfy);
+    assert.deepEqual(disconnected, {});
+    const again = withPluginConfigured(disconnected, ntfy, { target: 'jason-alerts' });
+    assert.deepEqual((again.Plugins as { Grants: unknown }).Grants, { ntfy: { Http: ['ntfy.sh'] } });
+});
+
+test('an Http grant a person widened, or one with other keys beside it, survives a Disconnect as it was', () => {
+    const ntfy = notification('ntfy');
+    const binding = { Notifications: { Plugins: { ntfy: { Binding: { topic: 'alerts', server: 'https://ntfy.example.test' } } } } };
+    const widened = { ...binding, Plugins: { Grants: { ntfy: { Http: ['ntfy.example.test', 'ntfy.sh'] } } } };
+    assert.deepEqual(withPluginDisconnected(widened, ntfy), { Plugins: { Grants: { ntfy: { Http: ['ntfy.example.test', 'ntfy.sh'] } } } });
+    const other = { ...binding, Plugins: { Grants: { ntfy: { Http: ['elsewhere.test'] } } } };
+    assert.deepEqual(withPluginDisconnected(other, ntfy), { Plugins: { Grants: { ntfy: { Http: ['elsewhere.test'] } } } });
+    const beside = { ...binding, Plugins: { Grants: { ntfy: { Http: ['ntfy.example.test'], Env: ['NTFY_TOKEN'] } } } };
+    assert.deepEqual(withPluginDisconnected(beside, ntfy), { Plugins: { Grants: { ntfy: { Env: ['NTFY_TOKEN'] } } } }, 'only the derived Http key goes');
+});
+
+test('a plugin with no server of its own keeps its Http grant', () => {
+    const ntfy = notification('ntfy');
+    const public_ = withPluginConfigured({}, ntfy, { target: 'jason-alerts' });
+    assert.deepEqual(withPluginDisconnected(public_, ntfy), { Plugins: { Grants: { ntfy: { Http: ['ntfy.sh'] } } } });
+    const slack = notification('slack');
+    const configuredSlack = withPluginConfigured({}, slack, { token: 'xoxb-1', target: 'C0123ABCD' });
+    assert.deepEqual(withPluginDisconnected(configuredSlack, slack), { Plugins: { Grants: { slack: { Http: ['slack.com'] } } } });
 });
 
 test('a settings file whose path to the binding is not an object is refused and not changed', () => {
@@ -158,7 +192,7 @@ test('Disconnect writes the file once, asks the runtime to reload and reads the 
         assert.deepEqual(changed.filter((path) => !path.startsWith('logs/')), ['config/settings.json'], id);
         assert.deepEqual([...files.keys()].filter((path) => !existsSync(join(data, path))), [], `${id}: nothing removed`);
         const line = log.lines.find((each) => each.name === 'plugin_disconnected');
-        assert.deepEqual(line?.fields, { PluginId: id, Exit: 0, Valid: id === 'slack' }, id);
+        assert.deepEqual(line?.fields, { PluginId: id, Written: true, Exit: 0, Valid: id === 'slack' }, id);
         assert.equal(JSON.stringify(log.lines).includes('xoxb-1'), false);
         assert.equal((await setupOn(b).status()).plugins.find((plugin) => plugin.id === id)?.configured, false, id);
     }
@@ -196,19 +230,33 @@ test('a reload the runtime refuses after a Disconnect is said, and the file keep
     await assert.rejects(setupOn(b, log).disconnectPlugin('slack'), Refused);
     assert.equal(isConfigured(readInstallationSettings(b), notification('slack')), false);
     assert.deepEqual(b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [['plugin', 'reload']]);
-    assert.deepEqual(log.lines.find((each) => each.name === 'plugin_disconnected')?.fields, { PluginId: 'slack', Exit: 1, Valid: false });
+    assert.deepEqual(log.lines.find((each) => each.name === 'plugin_disconnected')?.fields, { PluginId: 'slack', Written: true, Exit: 1, Valid: false });
 });
 
-test('Disconnect with no settings file writes none', async (t) => {
+test('Disconnect with no settings file writes none, and its line says nothing was written', async (t) => {
     const b = bench(t);
-    await setupOn(b).disconnectPlugin('ntfy');
+    const log = memoryLog();
+    await setupOn(b, log).disconnectPlugin('ntfy');
     assert.equal(existsSync(b.paths.installationSettings), false);
     assert.deepEqual(b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [['plugin', 'reload'], ['plugin', 'list']]);
+    assert.deepEqual(log.lines.find((each) => each.name === 'plugin_disconnected')?.fields, { PluginId: 'ntfy', Written: false, Exit: 0, Valid: false });
+});
+
+test('Disconnect over a file whose entry for the plugin is not an object is refused with the words of any file the desktop cannot keep', async (t) => {
+    const b = bench(t);
+    writeInstallationSettings(b, { Notifications: { Plugins: { slack: 'on' } } });
+    const text = readFileSync(b.paths.installationSettings, 'utf8');
+    await assert.rejects(
+        setupOn(b).disconnectPlugin('slack'),
+        (error: unknown) => error instanceof Refused && /as something other than an object/.test(error.message) && error.message.endsWith('Edit it by hand, then press Reload.'),
+    );
+    assert.equal(readFileSync(b.paths.installationSettings, 'utf8'), text);
+    assert.deepEqual(b.record(), [], 'nothing is reloaded');
 });
 
 // ---- Against the real executable --------------------------------------------------------------------------------------
 //
-// Opt-in, since it starts a runtime of its own (its own data directory and harness root, stopped at the end):
+// Opt-in, since it starts a runtime of its own (its own home, data directory and harness root, stopped at the end):
 //
 //   JASON_EXE=<a jason executable> npm test
 
@@ -218,7 +266,17 @@ test('against the real executable, the reload after Disconnect activates a snaps
     const root = mkdtempSync(join(tmpdir(), 'jason-desktop-disconnect-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const data = join(root, 'data');
-    const env: Record<string, string> = { ...(process.env as Record<string, string>), JASON_DATA_DIR: data, JASON_Harness__Root: join(root, 'harness') };
+    const home = join(root, 'home');
+    mkdirSync(home, { recursive: true });
+    const env: Record<string, string> = {
+        ...(process.env as Record<string, string>),
+        // A home of its own, so nothing the runtime makes or reads lands in the person's.
+        HOME: home,
+        USERPROFILE: home,
+        ...(process.platform === 'win32' ? { HOMEDRIVE: home.slice(0, 2), HOMEPATH: home.slice(2), APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local') } : {}),
+        JASON_DATA_DIR: data,
+        JASON_Harness__Root: join(root, 'harness'),
+    };
     const package_ = join(data, 'plugins', 'slack');
     cpSync(join(desktopFolder, '..', 'plugins', 'slack'), package_, { recursive: true });
     const paths = desktopPaths(data);
@@ -255,7 +313,7 @@ test('against the real executable, the reload after Disconnect activates a snaps
 
         const kept = JSON.parse(readFileSync(paths.installationSettings, 'utf8')) as Record<string, unknown>;
         assert.deepEqual(kept, { Plugins: { Grants: { slack: { Http: ['slack.com'] } } } });
-        assert.deepEqual(log.lines.find((each) => each.name === 'plugin_disconnected')?.fields, { PluginId: 'slack', Exit: 0, Valid: true });
+        assert.deepEqual(log.lines.find((each) => each.name === 'plugin_disconnected')?.fields, { PluginId: 'slack', Written: true, Exit: 0, Valid: true });
         const after = await info();
         assert.notEqual(after.plugins.snapshot_id, before.plugins.snapshot_id, 'the runtime read its plugins again');
         assert.equal(after.plugins.last_reload_activated, true, 'and activated what it read');
