@@ -573,6 +573,24 @@ public class RecordedExchangesTests
         // The people Add people offers: the first page as it opens, and Zoe, who is in no campaign yet, as it is searched.
         Assert.Contains(seed.Hal, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "campaign-picker", new { limit = 10 }, Ct)).Items.Select(c => c.Id));
         Assert.Equal([seed.Zoe], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "campaign-picker-zoe", new { query = "zoe", limit = 10 }, Ct)).Items.Select(c => c.Id));
+
+        // Everyone as the People page opens, where each person stands in each campaign: Ada in three campaigns, Ben in two
+        // counts of one, Oli removed, Zoe in none; then the page under a count, under a count and a name, and under a count
+        // in one campaign, and a count beside a channel, refused.
+        string[] Names(Page<ContactDto> page) => [.. page.Items.Select(contact => contact.FirstName!)];
+        var everyone = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-several", new { order = "activity", limit = 200 }, Ct);
+        ContactCampaignDto[] Of(string name) => [.. everyone.Items.Single(contact => contact.FirstName == name).Campaigns!];
+        Assert.Equal(3, Of("Ada").Length);
+        Assert.Equal([CampaignSummaryFilter.Waiting, CampaignSummaryFilter.Idle], Assert.Single(Of("Ben")).Standing);
+        Assert.Equal([CampaignSummaryFilter.Removed], Assert.Single(Of("Oli")).Standing);
+        Assert.Empty(Of("Zoe"));
+        Assert.Equal(
+            ["Ada", "Ben", "Pia"],
+            Names(await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-summary-waiting", new { order = "activity", summary = "waiting", limit = 200 }, Ct)).Order(StringComparer.Ordinal));
+        Assert.Equal(["Ben"], Names(await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-summary-query", new { order = "activity", summary = "waiting", query = "ben", limit = 200 }, Ct)));
+        Assert.Equal(["Ada"], Names(await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-summary", new { order = "activity", summary = "new", campaign_id = seed.Autumn, limit = 200 }, Ct)));
+        Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.ContactList, "summary-with-channel", new { order = "activity", summary = "waiting", channel = "email", limit = 200 }, HttpStatusCode.BadRequest, Ct)).Code);
+        Assert.Empty((await api.RecordAsync<ContactDto>(Operations.ContactGet, "no-campaign", new { contact_id = seed.Zoe }, Ct)).Campaigns!);
         var added = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "several", new { campaign_id = seed.Spring, contacts = new[] { new { contact_id = seed.Zoe }, new { contact_id = seed.Hal } }, reason = "From the partner list.", actor = ada }, Ct);
         Assert.Equal(new AddContactsSummary(1, 1, 0), added.Summary);
         Assert.Equal("campaign_archived", (await api.RecordErrorAsync(Operations.CampaignAddContacts, "to-archived", new { campaign_id = seed.Winter, contacts = new[] { new { contact_id = seed.Hal } }, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
