@@ -13,6 +13,7 @@ import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './ke
 import type { Logger } from './log.ts';
 import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
+import { removeLabel, removePlaced, type RemovalDeps } from './remove-placed.ts';
 import { menuItemOf, type Updater } from './updates.ts';
 
 export interface DeskDeps {
@@ -36,6 +37,11 @@ export interface DeskDeps {
      * this start carries no jason that outlasts it (an AppImage whose copy was not made), when none is offered.
      */
     command: PathCommand | null;
+    /**
+     * Remove What Jason Placed, on macOS and Linux, offered by an installed build only; null where it is not offered:
+     * Windows keeps its uninstaller.
+     */
+    removal: Pick<RemovalDeps, 'scope' | 'remove'> | null;
 }
 
 /** The Command Line submenu's one line where this start carries no jason that outlasts it. */
@@ -60,6 +66,7 @@ export class Desk {
     private tray: Tray | null = null;
     private attention: Attention = { state: 'reading' };
     private autostartOn: boolean | null = null;
+    private removing = false;
     private readonly watcher: AttentionWatcher;
 
     constructor(deps: DeskDeps) {
@@ -203,6 +210,39 @@ export class Desk {
         this.renderMenu();
     }
 
+    /** Remove What Jason Placed: in the Jason menu and the tray's, beside the other acts on the installation. */
+    private removalItems(): MenuItemConstructorOptions[] {
+        if (this.deps.removal === null) return [];
+        return [{ label: removeLabel, enabled: app.isPackaged && !this.removing, click: () => void this.removeAct() }];
+    }
+
+    /** Asks, takes off what the desktop placed on the person's word, says what came of each step, and quits when asked. */
+    private async removeAct(): Promise<void> {
+        const removal = this.deps.removal;
+        if (removal === null || this.removing) return;
+        this.removing = true;
+        this.renderMenu();
+        const box = async (options: Electron.MessageBoxOptions) => {
+            const window = this.deps.window();
+            return (window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options)).response;
+        };
+        try {
+            await removePlaced({
+                scope: () => removal.scope(),
+                remove: () => removal.remove(),
+                ask: (question) => box({ type: 'question', title: 'Jason', ...question }),
+                tell: (closing) => box({ type: closing.quitId === null ? 'warning' : 'info', title: 'Jason', message: closing.message, detail: closing.detail, buttons: closing.buttons, defaultId: closing.defaultId, cancelId: closing.cancelId }),
+                quit: () => app.quit(),
+                log: this.deps.log,
+            });
+        } catch (error) {
+            dialog.showErrorBox('Jason', error instanceof Error ? error.message : String(error));
+        } finally {
+            this.removing = false;
+            this.renderMenu();
+        }
+    }
+
     /** Starts reading the count; called at the first pairing that succeeded (`atFirstPairing`). */
     watch(): void {
         this.watcher.start();
@@ -231,6 +271,7 @@ export class Desk {
             { type: 'separator' },
             ...this.updateItems(),
             this.commandItem(),
+            ...this.removalItems(),
             { type: 'separator' },
             ...(process.platform === 'darwin' ? ([{ role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }] as MenuItemConstructorOptions[]) : []),
             { label: 'Quit Jason', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
@@ -263,6 +304,7 @@ export class Desk {
                 { type: 'separator' },
                 ...this.updateItems(),
                 this.commandItem(),
+                ...this.removalItems(),
                 { type: 'separator' },
                 { label: 'Quit Jason', click: () => app.quit() },
             ]),

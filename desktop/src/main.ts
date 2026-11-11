@@ -14,12 +14,12 @@ import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedTurns } from './chat-log.ts';
-import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
+import { carriedOf, copiesBundle, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
 import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type LinuxPackage } from './linux-package.ts';
-import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
+import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
@@ -36,7 +36,8 @@ import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
 import { Setup } from './setup.ts';
 import { loginPath } from './shell-path.ts';
-import { stopRuntimeStart, uninstallStart } from './uninstall.ts';
+import { removalOffered, removeApplication, type RemovalDeps } from './remove-placed.ts';
+import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstall, uninstallStart, updaterCache } from './uninstall.ts';
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 
 function readText(file: string): string | null {
@@ -257,18 +258,17 @@ async function run(): Promise<void> {
               changed: () => desk.renderMenu(),
           })
         : null;
-    const command = carried.outlives
-        ? new PathCommand({
-              platform: process.platform,
-              folder: commandFolder(process.platform, process.env, home),
-              executable,
-              dataDirectory: process.env['JASON_DATA_DIR'] || null,
-              path: () => process.env.PATH ?? '',
-              pathext: process.env['PATHEXT'],
-              isProgram: (file) => isProgramFile(file, process.platform),
-              log,
-          })
-        : null;
+    const commandDeps: PathCommandDeps = {
+        platform: process.platform,
+        folder: commandFolder(process.platform, process.env, home),
+        executable,
+        dataDirectory: process.env['JASON_DATA_DIR'] || null,
+        path: () => process.env.PATH ?? '',
+        pathext: process.env['PATHEXT'],
+        isProgram: (file) => isProgramFile(file, process.platform),
+        log,
+    };
+    const command = carried.outlives ? new PathCommand(commandDeps) : null;
     // What the person set up from an earlier version's copy, the PATH command and the start at logon, follows this
     // start's; the copies of other versions are removed only after that, by what then still names them.
     const otherCopy = carried.repoints ? (named: string) => isOtherCopy(named, paths.bundle, executable) : null;
@@ -280,7 +280,41 @@ async function run(): Promise<void> {
         }
     }
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command });
+    // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets. A start
+    // that offers neither the PATH command nor the start at logon (an AppImage whose copy was not made) still takes off
+    // what an earlier start placed: a command of ours is removed whatever it runs, and the start at logon is read and
+    // disabled through this start's jason, which registers nothing.
+    const bundles = copiesBundle(form) ? paths.bundle : null;
+    const placedCommand = command ?? new PathCommand(commandDeps);
+    const placedAutostart = autostart ?? (version === null ? null : new RuntimeAutostart({ cli, log }));
+    const removal: Pick<RemovalDeps, 'scope' | 'remove'> | null = removalOffered(process.platform)
+        ? {
+              scope: () => ({
+                  command: placedCommand.status(),
+                  bundles,
+                  dataDirectory: paths.data,
+                  harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
+                  updaterCache: updaterCache(process.env, home, process.platform),
+                  next: removeApplication(process.platform, form, process.execPath),
+              }),
+              remove: () =>
+                  uninstall({
+                      platform: process.platform,
+                      folder: commandFolder(process.platform, process.env, home),
+                      command: placedCommand,
+                      login,
+                      runtime: version === null ? null : { stop: () => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)) },
+                      autostart: placedAutostart === null ? null : { status: () => placedAutostart.registration(), disable: () => placedAutostart.set(false) },
+                      application: applicationFolder(process.platform, process.execPath),
+                      bundles: bundles === null ? null : { folder: bundles, runsFrom: () => processesRunFrom(bundles) },
+                      dataDirectory: paths.data,
+                      harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
+                      updaterCache: updaterCache(process.env, home, process.platform),
+                      log,
+                  }),
+          }
+        : null;
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal });
     desk.open();
     showWindow = () => desk.show();
     const repointed = (async () => {

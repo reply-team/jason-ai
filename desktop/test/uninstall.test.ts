@@ -72,6 +72,8 @@ function bench(
         dataDirectory: 'C:\\Users\\someone\\.jason',
         harnessRoot: 'C:\\Users\\someone\\Jason',
         updaterCache: 'C:\\Users\\someone\\AppData\\Local\\jason-desktop-updater',
+        bundles: null,
+        log: memoryLog(),
     };
     return { folder, deps, acts };
 }
@@ -206,7 +208,7 @@ test('the runtime’s logon registration is taken off only when it starts this a
     assert.ok(report.left.some((line) => line.includes('starts C:\\Users\\someone\\.jason\\bin\\jason.exe, not this application’s')));
 
     const failed = bench(t, { registration: { registered: true, executable }, disabled: null });
-    assert.ok((await uninstall(failed.deps)).left.some((line) => line.includes('could not be taken off')));
+    assert.ok((await uninstall(failed.deps)).failed.some((line) => line.includes('could not be taken off')));
 
     const none = bench(t, { registration: null });
     await uninstall(none.deps);
@@ -268,7 +270,7 @@ test('when the runtime this application carries does not stop, or a runtime did 
         assert.deepEqual(acts, asked, 'nothing else was done');
         assert.deepEqual(readdirSync(folder).sort(), ['jason', 'jason.cmd'], 'the PATH command stays');
         assert.equal(deps.login.isOn(), true, 'Open Jason at login stays');
-        assert.deepEqual([report.removed, report.left], [[], []]);
+        assert.deepEqual([report.removed, report.untouched, report.failed, report.left], [[], [], [], []]);
         assert.equal(uninstallExit(report), 1, 'the uninstaller is told to go no further');
         const { message, detail } = uninstallText(report);
         assert.equal(message, 'Jason was not removed.');
@@ -288,7 +290,7 @@ test('when the runtime this application carries does not stop, or a runtime did 
     );
 });
 
-test('a removal that fails is named among what is left with its act, the others still run, and the uninstall still exits 0', async (t) => {
+test('a removal that fails is named with its act among what could not be taken off, said first among what is left, the others still run, and the uninstall still exits 0', async (t) => {
     const { folder, deps, acts } = bench(t, { loginOn: true, registration: { registered: true, executable } });
     writeFileSync(join(folder, 'jason.cmd'), windowsShim(executable));
     deps.command = { status: deps.command.status.bind(deps.command), remove: () => { throw new Error('planted-remove-error'); } };
@@ -302,8 +304,12 @@ test('a removal that fails is named among what is left with its act, the others 
         'Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it',
         'The runtime’s start at logon, which could not be taken off: jason runtime autostart disable takes it off',
     ]) {
-        assert.ok(report.left.includes(named), named);
+        assert.ok(report.failed.includes(named), named);
+        assert.ok(!report.left.includes(named), named);
     }
+    const shown = uninstallText(report).detail;
+    assert.match(shown, /\n\nLeft in place:\n• Open Jason at login, which could not be turned off/);
+    assert.ok(shown.indexOf('jason.cmd, which could not be taken off') < shown.indexOf('• The data directory'));
     assert.equal(report.refused, null);
     assert.equal(uninstallExit(report), 0);
     assert.doesNotMatch(uninstallText(report).detail, /planted/);
@@ -313,7 +319,7 @@ test('a removal that fails is named among what is left with its act, the others 
     unknown.deps.login = { isOn: () => { throw new Error('planted-login-read-error'); }, set: async () => void unknown.acts.push('login false') };
     const after = await uninstall(unknown.deps);
     assert.deepEqual(unknown.acts, ['autostart disable']);
-    assert.ok(after.left.includes('Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it'));
+    assert.ok(after.failed.includes('Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it'));
     assert.equal(uninstallExit(after), 0);
     assert.doesNotMatch(uninstallText(after).detail, /planted/);
 
@@ -322,8 +328,15 @@ test('a removal that fails is named among what is left with its act, the others 
     unread.deps.autostart = { status: async () => Promise.reject(new Error('planted-status-error')), disable: async () => (unread.acts.push('autostart disable'), false) };
     const read = await uninstall(unread.deps);
     assert.deepEqual(unread.acts, []);
-    assert.ok(read.left.includes('The runtime’s start at logon, which could not be read: jason runtime autostart status says whether it is there'));
+    assert.ok(read.failed.includes('The runtime’s start at logon, which could not be read: jason runtime autostart status says whether it is there'));
     assert.equal(uninstallExit(read), 0);
+
+    // A status the CLI did not answer is one that could not be read, too, and nothing is disabled.
+    const silent = bench(t);
+    silent.deps.autostart = { status: async () => null, disable: async () => (silent.acts.push('autostart disable'), false) };
+    const quiet = await uninstall(silent.deps);
+    assert.deepEqual(silent.acts, []);
+    assert.ok(quiet.failed.includes('The runtime’s start at logon, which could not be read: jason runtime autostart status says whether it is there'));
 });
 
 test('the harness root is read from the settings without regard to the case of its keys, as the runtime reads them', (t) => {
@@ -348,7 +361,8 @@ test('the harness root and the updater’s cache are found as the runtime and el
     assert.equal(harnessRoot({}, home, settings), 'D:\\Work\\Jason');
     assert.equal(harnessRoot({ JASON_Harness__Root: 'E:\\Mine' }, home, settings), 'E:\\Mine');
     assert.equal(updaterCache({ LOCALAPPDATA: 'C:\\Users\\someone\\AppData\\Local' }, home, 'win32'), win32.join('C:\\Users\\someone\\AppData\\Local', 'jason-desktop-updater'));
-    // On Linux as the pinned electron-updater's AppAdapter.getAppCacheDir reads it: XDG_CACHE_HOME, else ~/.cache.
+    // On macOS and Linux as the pinned electron-updater's AppAdapter.getAppCacheDir reads it: ~/Library/Caches; XDG_CACHE_HOME, else ~/.cache.
+    assert.equal(updaterCache({ XDG_CACHE_HOME: '/Users/someone/cache' }, '/Users/someone', 'darwin'), '/Users/someone/Library/Caches/jason-desktop-updater');
     assert.equal(updaterCache({ XDG_CACHE_HOME: '/home/someone/cache' }, '/home/someone', 'linux'), '/home/someone/cache/jason-desktop-updater');
     assert.equal(updaterCache({ XDG_CACHE_HOME: '' }, '/home/someone', 'linux'), '/home/someone/.cache/jason-desktop-updater');
     assert.equal(updaterCache({}, '/home/someone', 'linux'), '/home/someone/.cache/jason-desktop-updater');

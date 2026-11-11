@@ -71,9 +71,12 @@ export async function runUninstall(quiet: boolean): Promise<number> {
         login: new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead: Promise.resolve(), log }),
         autostart: { status: () => autostart.registration(), disable: () => autostart.set(false) },
         application: applicationFolder(process.platform, process.execPath),
+        // Windows carries its jason inside the installed folder: there is no copy of it to take off.
+        bundles: null,
         dataDirectory: paths.data,
         harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
         updaterCache: updaterCache(process.env, home, process.platform),
+        log,
     });
     if (!quiet) {
         const { message, detail } = uninstallText(report);

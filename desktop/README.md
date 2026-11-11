@@ -162,12 +162,17 @@ start at logon when it starts this application's `jason`, and names what it leav
 and the updater's cache.
 
 On macOS there is no installer, so nothing looks when Jason.app is moved to the Trash, and the desktop's own look before
-an update is the whole guard. Before removing Jason.app, take off by hand what it placed:
+an update is the whole guard. Before removing Jason.app, choose Remove What Jason Placed… in the Jason menu (or the
+tray's), which, once confirmed, takes the Windows uninstall's own steps (`src/remove-placed.ts`), stopping the runtime
+first and going no further when it does not stop, says what came of each and what to do by hand for one that failed,
+and offers to quit Jason, after which Jason.app goes to the Trash.
 
-1. In the Jason menu, turn off Open Jason at Login and Start the Runtime at Logon.
-2. Run `jason runtime stop`.
-3. In the same menu, under Command Line, choose Remove jason from the PATH (or Remove jason-desktop from the PATH, by the
-   name it was put there with), then quit Jason.
+When Jason will not start, take off by hand what it placed:
+
+1. Run `jason runtime autostart disable` if `jason runtime autostart status` names this application's `jason`, then run
+   `jason runtime stop`.
+2. Delete `~/Library/LaunchAgents/ai.jasonharness.desktop.plist`, which is Open Jason at Login.
+3. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` that runs `Jason.app/Contents/Resources/bundle/jason`.
 
 What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
 `Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`.
@@ -197,6 +202,12 @@ What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), 
   the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says
   updates come through the package. When the installer stops before it finishes (a refused password, say), Jason stays
   open and says so. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
+- Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which takes the same steps
+  as on macOS, then, for an AppImage, removes the copies of its `jason` under `<data>/desktop/bundle/` when no process
+  runs from them, and says what removes the application itself: `sudo apt remove jason-desktop` for the deb, or deleting
+  the AppImage file. When Jason will not start, take its items off by hand as on macOS, with
+  `~/.config/autostart/ai.jasonharness.desktop.desktop` in place of the LaunchAgent and, for an AppImage,
+  `<data>/desktop/bundle/` deleted as well.
 
 ## Building and testing
 
