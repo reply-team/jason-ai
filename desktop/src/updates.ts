@@ -32,9 +32,12 @@ export const debFile = 'jason-desktop-linux-x64.deb';
 /** Where releases are read: this repository's GitHub releases. */
 export const feed = { provider: 'github', owner: 'reply-team', repo: 'jason-ai' } as const;
 
-/** Where the deb of a release is published: what going back from a deb update installs. */
-export function previousDeb(version: string): string {
-    return `https://github.com/${feed.owner}/${feed.repo}/releases/download/v${version}/${debFile}`;
+/** The product's own address in front of the releases, its releases index: every release request passes it. */
+const releasesIndex = 'https://get.jasonharness.ai/releases/';
+
+/** A release's page, by its tag: where going back from a deb update finds the previous release's deb. */
+export function previousRelease(version: string): string {
+    return `${releasesIndex}tag/v${version}`;
 }
 
 /** The first look waits half a minute after the start, so the start itself is never slowed by it. */

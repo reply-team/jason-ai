@@ -173,12 +173,7 @@ export async function keepPrevious(rollback: string, application: string | null,
 }
 
 /** Where the version an update replaced is: a copy kept here, or the release's package to install again (the deb). */
-export type Previous = { copy: string } | { package: string };
-
-/** The deb's file name: the last part of its URL. */
-function fileOf(url: string): string {
-    return url.split('/').at(-1) ?? url;
-}
+export type Previous = { copy: string } | { release: string; file: string };
 
 /**
  * What the starting page says when an update's first start failed. Nothing puts the previous version back by itself: the
@@ -186,10 +181,10 @@ function fileOf(url: string): string {
  */
 export function keptNotice(said: string, previous: Previous, installed: string, platform: NodeJS.Platform): string {
     const back =
-        'package' in previous
+        'release' in previous
             ? [
-                  `If this version is the cause, the version of Jason it was updated from is published at ${previous.package}.`,
-                  `To go back, quit Jason, download that file, and in the folder it is in run sudo apt install ./${fileOf(previous.package)}: nothing does it for you.`,
+                  `If this version is the cause, the version of Jason it was updated from is published at ${previous.release}.`,
+                  `To go back, quit Jason, download ${previous.file} from that page, and in the folder it is in run sudo apt install ./${previous.file}: nothing does it for you.`,
               ]
             : [
                   `If this version is the cause, the version of Jason it was updated from is kept at ${previous.copy}.`,

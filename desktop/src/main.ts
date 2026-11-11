@@ -23,7 +23,7 @@ import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
-import { previousDeb, Updater } from './updates.ts';
+import { debFile, previousRelease, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
@@ -360,7 +360,7 @@ async function run(): Promise<void> {
         const notice =
             kept === null
                 ? said
-                : keptNotice(said, kept.directory === null ? { package: previousDeb(kept.fromVersion) } : { copy: kept.directory }, aside ?? applicationFolder(process.platform, process.execPath), process.platform);
+                : keptNotice(said, kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory }, aside ?? applicationFolder(process.platform, process.execPath), process.platform);
         if (current !== null) await showStarting(current, notice, true);
     }
 }

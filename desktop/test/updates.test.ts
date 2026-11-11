@@ -23,7 +23,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { feed, firstCheckMs, installRefusal, keepRefusal, menuItemOf, previousDeb, runtimeRefusal, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
+import { debFile, feed, firstCheckMs, installRefusal, keepRefusal, menuItemOf, previousRelease, runtimeRefusal, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -543,7 +543,9 @@ test('a record with no copy settles into nothing kept, and the menu names no cop
 
 test('on Linux the starting page names the kept AppImage file, or the previous release’s deb and the apt line', () => {
     const ruled = 'This puts back the previous application and the Jason it carried; the data directory stays as the newer version left it.';
-    assert.equal(previousDeb('0.34.0'), 'https://github.com/reply-team/jason-ai/releases/download/v0.34.0/jason-desktop-linux-x64.deb');
+    // Through the product's own address, which every release request passes: its release page, by the release's tag.
+    assert.equal(previousRelease('0.34.0'), 'https://get.jasonharness.ai/releases/tag/v0.34.0');
+    assert.equal(debFile, 'jason-desktop-linux-x64.deb');
     assert.equal(
         keptNotice('The runtime did not start.', { copy: '/data/desktop/rollback/0.34.0/Jason.AppImage' }, '/home/someone/Applications/Jason.AppImage', 'linux'),
         [
@@ -554,11 +556,11 @@ test('on Linux the starting page names the kept AppImage file, or the previous r
         ].join(' '),
     );
     assert.equal(
-        keptNotice('The runtime did not start.', { package: previousDeb('0.34.0') }, '/opt/Jason', 'linux'),
+        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', 'linux'),
         [
             'The runtime did not start.',
-            'If this version is the cause, the version of Jason it was updated from is published at https://github.com/reply-team/jason-ai/releases/download/v0.34.0/jason-desktop-linux-x64.deb.',
-            'To go back, quit Jason, download that file, and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            'If this version is the cause, the version of Jason it was updated from is published at https://get.jasonharness.ai/releases/tag/v0.34.0.',
+            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
             ruled,
         ].join(' '),
     );
