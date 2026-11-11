@@ -180,6 +180,18 @@ node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version 0.34.0-rc.
 JASON_VERSION=0.34.0-rc.1 npm run package -- --win --x64   # dist/: the nsis installer, latest.yml, win-unpacked/
 ```
 
+On Linux, where nothing is signed, the same two lines make the deb and the AppImage, and the feed that names both:
+
+```sh
+node scripts/prepare.mjs --rid linux-x64 --output bundles/x64 --version 0.35.0-rc.1
+JASON_VERSION=0.35.0-rc.1 npm run package -- --linux --x64   # dist/: the deb, the AppImage, latest-linux.yml
+```
+
+The program is `jason-desktop-app`, so the deb's `/usr/bin` link never takes `jason-desktop`, the name the PATH command
+falls back to. The AppImage is packed on electron-builder's static AppImage runtime, which needs no libfuse2. The two
+forms are packed at once from one folder, and the deb writes `resources/package-type` into it, which makes
+electron-updater update a package as a deb, so the configuration starts the deb only once the AppImage is built.
+
 The release passes `--executable` with the `jason` it has already built and signed, so the package carries that very
 file, and signs the package itself: a Mac package is never built unsigned. Inside `app.asar` are `lib/`, `shell/`,
 `resources/`, the chat's two lists and its instruction text; beside it, in the package's `resources/`, are `bundle/`
@@ -193,10 +205,13 @@ that does not match, downloaded or cached, stops the pack; its own tools (nsis, 
 dmgbuild) it checks against the sha256 its own source names.
 
 `scripts/check-package.mjs` reads a built package back against this configuration: the feed and, on Windows, the
-publisher its `app-update.yml` names, and the fuses its binary carries. The release runs it on every package it builds:
+publisher its `app-update.yml` names, the fuses its binary carries, and on Linux the updater the form makes: a deb must
+carry `resources/package-type` saying `deb`, an AppImage none. The release runs it on every package it builds:
 
 ```sh
 node scripts/check-package.mjs --app dist/win-unpacked --platform win32
+node scripts/check-package.mjs --app <unpacked deb>/opt/Jason --platform linux --form deb
+node scripts/check-package.mjs --app squashfs-root --platform linux --form appimage   # after the AppImage's --appimage-extract
 ```
 
 To run it against an installation other than your own, set `JASON_DATA_DIR` and `JASON_Harness__Root` in the environment
