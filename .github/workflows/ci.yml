@@ -1685,13 +1685,27 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
 
+      # The system packages the browser asks for come from the Ubuntu package servers, whose names the hosted runners
+      # could not resolve for hours on 2026-11-11; what they install is fonts, the browser's own libraries being on the
+      # image. So an install that cannot reach them is a warning, not a verdict: the browser itself is installed without
+      # them, and the browser smoke after these steps, which carries no condition, is what proves the browser starts.
       - name: Browser
         if: steps.browser.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
+        shell: bash
+        run: |
+          if ! npx playwright install --with-deps chromium; then
+            echo "::warning title=Browser's system packages::The system packages the browser asks for could not be installed; the browser smoke decides."
+            npx playwright install chromium
+          fi
 
       - name: Browser's system libraries
         if: steps.browser.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        shell: bash
+        run: |
+          if ! npx playwright install-deps chromium; then
+            echo "::warning title=Browser's system packages::The system packages the browser asks for could not be installed; the browser smoke decides."
+            npx playwright install chromium
+          fi
 
       - name: Browser smoke
         env:
