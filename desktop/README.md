@@ -112,7 +112,8 @@ desktop does not narrow, so it may read the records.
   What a turn may do is the permission model's to decide, as before.
 - A conversation whose turn runs is not removed, started afresh or attached; each is refused with a sentence.
   "Start afresh" drops the hosts' sessions and keeps the record. `chat.list` and `chat.open` say whether a
-  conversation's turn runs. A conversation is kept from its first turn: one made and never sent to is not listed and
+  conversation's turn runs. When the page is loaded again while a turn runs, the turn shows running with Stop, and a
+  card that waited is drawn as ended, since the record keeps no request to answer it by. A conversation is kept from its first turn: one made and never sent to is not listed and
   leaves no record, and starting it afresh writes nothing.
 - **A refusal is a value.** Each chat call the desktop refuses answers `{ refused }` with its sentence alone, and a
   call with nothing to answer answers null; only what is no refusal rejects. Electron would put "Error invoking remote
