@@ -416,6 +416,20 @@ test('a Codex item says its words and what it acted on', () => {
     assert.deepEqual(one({ type: 'command_execution' }), [{ kind: 'step', text: 'Ran a command' }]);
 });
 
+test('a session that does not begin with a letter or a digit never reaches a command line, and a host line naming one says nothing', () => {
+    const options = ['--dangerously-skip-permissions', '--dangerously-bypass-approvals-and-sandbox', '-', '-x', '.hidden', ':x', ''];
+    for (const resume of options.filter((each) => each !== '')) {
+        assert.throws(() => claudeArguments({ ...turn, resume }), { message: 'That session is not one the desktop passes to a host.' }, resume);
+        assert.throws(() => codexArguments({ resume }), { message: 'That session is not one the desktop passes to a host.' }, resume);
+    }
+    for (const id of options) {
+        assert.deepEqual(claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: id })), [], id);
+        assert.deepEqual(codexLine(JSON.stringify({ type: 'thread.started', thread_id: id }), new Set()), [], id);
+    }
+    assert.equal(valueOf(claudeArguments({ ...turn, resume: '0c1d-ses' }), '--resume'), '0c1d-ses');
+    assert.deepEqual(codexArguments({ resume: 'a' }).slice(-3), ['resume', 'a', '-']);
+});
+
 test('an unreadable line, a tool\'s output and a malformed session say nothing', () => {
     assert.deepEqual(claudeLine(''), []);
     assert.deepEqual(claudeLine('[1,2]'), []);

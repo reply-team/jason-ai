@@ -10,6 +10,8 @@ import {
     bounded,
     conversationIdShape,
     ConversationUnwritten,
+    cutMark,
+    keptTextLimit,
     newConversationId,
     parseConversation,
     readConversations,
@@ -120,9 +122,9 @@ test('a file that is not a record is counted, never read as one, and left byte f
     const planted: Record<string, string> = {
         [`${newConversationId()}.json`]: '{ not json',
         [`${other}.json`]: serialize({ ...record(), id: newConversationId() }),
-        [`${newConversationId()}.json`]: serialize({ ...record(), entries: [{ kind: 'html', text: '<img>' } as never] }),
+        [`${newConversationId()}.json`]: serialize({ ...record(), entries: [{ kind: 'user' } as never] }),
         [`${newConversationId()}.json`]: JSON.stringify({ ...record(), campaign_id: '../cmp_1' }),
-        [`${newConversationId()}.json`]: JSON.stringify({ ...record(), sessions: { claude: 'a b' } }),
+        [`${newConversationId()}.json`]: JSON.stringify({ ...record(), sessions: { '../claude': 'ses-1' } }),
         'notes.txt': 'not a record, and not counted',
     };
     for (const [name, text] of Object.entries(planted)) writeFileSync(join(folder, name), text);
@@ -141,8 +143,51 @@ test('a record within the bound is kept whole, and one over it drops its oldest 
     assert.equal(kept.dropped, 3 + 30 - kept.entries.length);
     const newest = kept.entries.at(-1);
     assert.ok(newest?.kind === 'text' && newest.text.startsWith('29 '), 'the newest stays');
-    const huge = bounded(record({ entries: [{ kind: 'user', text: 'y'.repeat(recordLimit) }] }));
-    assert.deepEqual([huge.entries, huge.dropped], [[], 1], 'an entry over the bound by itself goes as well');
+});
+
+test('an entry too large is cut to fit, keeping its end after the desktop\'s mark, and the newest entries always stay', () => {
+    const bytes = (value: string) => Buffer.byteLength(value, 'utf8');
+    const cut = (text: string, end: string) => text.startsWith(cutMark) && text.endsWith(end) && bytes(JSON.stringify(text)) <= keptTextLimit;
+    const older = [{ kind: 'user' as const, text: 'First' }, { kind: 'text' as const, text: 'An answer' }];
+    // Over the bound by itself: as one character a byte, as three bytes a character, and as characters JSON writes twice.
+    for (const text of ['y'.repeat(recordLimit) + 'END', '字'.repeat(700_000) + 'END', '"\\'.repeat(500_000) + 'END']) {
+        const kept = bounded(record({ entries: [...older, { kind: 'user', text }] }));
+        assert.ok(bytes(serialize(kept)) <= recordLimit);
+        assert.equal(kept.dropped, 0, 'nothing older goes for one large entry');
+        assert.deepEqual(kept.entries.slice(0, 2), older);
+        const last = kept.entries.at(-1);
+        assert.ok(last?.kind === 'user' && cut(last.text, 'END'), 'cut to fit, its end kept after the mark');
+    }
+    const step = bounded(record({ entries: [{ kind: 'step', text: 'Ran a command', detail: 'z'.repeat(recordLimit) + 'END' }] })).entries[0];
+    assert.ok(step?.kind === 'step' && step.text === 'Ran a command' && cut(step.detail ?? '', 'END'), 'a step\'s detail too');
+    const card = bounded(record({ entries: [{ kind: 'permission', title: 'Run a command', detail: 'c'.repeat(recordLimit) + 'END', answer: 'deny' }] })).entries[0];
+    assert.ok(card?.kind === 'permission' && card.answer === 'deny' && cut(card.detail, 'END'), 'and a card\'s');
+    // Many large entries: each is cut, the oldest go to keep the whole within the bound, and the newest stay.
+    const many = bounded(record({ entries: Array.from({ length: 40 }, (_, i) => ({ kind: 'text' as const, text: `${'w'.repeat(recordLimit / 4)} ${i}` })) }));
+    assert.ok(bytes(serialize(many)) <= recordLimit);
+    assert.ok(many.entries.length >= 8, String(many.entries.length));
+    assert.equal(many.dropped, 40 - many.entries.length);
+    const newest = many.entries.at(-1);
+    assert.ok(newest?.kind === 'text' && cut(newest.text, ' 39'));
+    assert.equal(bounded(record({ entries: [{ kind: 'user', text: 'small' }] })).entries[0]?.kind, 'user');
+});
+
+test('an entry of a kind this desktop does not know is skipped and counted as dropped, and the rest of the record is kept', () => {
+    const kept = record({ dropped: 2, entries: [{ kind: 'user', text: 'Hello' }, { kind: 'chart', series: [1, 2] } as never, { kind: 'text', text: 'Hi' }, { kind: 'later' } as never] });
+    const read = parseConversation(serialize(kept), kept.id);
+    assert.deepEqual(read?.entries, [{ kind: 'user', text: 'Hello' }, { kind: 'text', text: 'Hi' }]);
+    assert.equal(read?.dropped, 4);
+    // A known kind that is malformed is no record of this desktop's, nor is an entry with no kind or one that is no object.
+    for (const bad of [{ kind: 'user' }, { kind: 'user', text: 3 }, { text: 'no kind' }, { kind: 7 }, 'text', null]) {
+        const planted = record({ entries: [bad as never] });
+        assert.equal(parseConversation(serialize(planted), planted.id), null, JSON.stringify(bad));
+    }
+});
+
+test('a session that does not begin with a letter or a digit is read as no session for that host, and the record is kept', () => {
+    const kept = record({ sessions: { claude: '--dangerously-skip-permissions', codex: '0199a213-81c0-7800-8aa1-bbab2a035a53', other: '-x', more: 'a b', dot: '.x' } });
+    const read = parseConversation(serialize(kept), kept.id);
+    assert.deepEqual(read, { ...kept, sessions: { codex: '0199a213-81c0-7800-8aa1-bbab2a035a53' } });
 });
 
 test('a record whose id is not its file\'s name, or not a conversation id, is not read', () => {

@@ -3,6 +3,7 @@
 // prints means for the page. Nothing here starts a process or reads a file.
 
 import { posix, win32 } from 'node:path';
+import { sessionShape } from './chat-conversations.ts';
 import { allowRules, denyRules } from './chat-deny.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
 import { confinedVariable, type Platform } from './chat-permission-model.ts';
@@ -71,6 +72,12 @@ export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDire
  */
 export const confinedRule = `Bash(*${confinedVariable}*)`;
 
+/** A session to resume, refused unless it has the shape a host names one in: it never stands where an option would. */
+function resumable(session: string): string {
+    if (!sessionShape.test(session)) throw new Error('That session is not one the desktop passes to a host.');
+    return session;
+}
+
 /**
  * The command line of one Claude Code turn. Never `--bare`, which drops the subscription sign-in and the skills; always
  * `--strict-mcp-config`, so a person's own MCP servers never enter the chat; reads outside the working folders blocked
@@ -86,7 +93,7 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
     args.push('--permission-prompt-tool', promptToolName, '--mcp-config', turn.mcpConfig, '--strict-mcp-config');
     if (turn.model) args.push('--model', turn.model);
-    if (turn.resume) args.push('--resume', turn.resume);
+    if (turn.resume) args.push('--resume', resumable(turn.resume));
     return args;
 }
 
@@ -102,7 +109,7 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
 export function codexArguments(turn: { model?: string | undefined; resume?: string | undefined }): string[] {
     const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check'];
     if (turn.model) args.push('--model', turn.model);
-    if (turn.resume) args.push('resume', turn.resume);
+    if (turn.resume) args.push('resume', resumable(turn.resume));
     args.push('-');
     return args;
 }
@@ -361,8 +368,6 @@ function parsed(line: string): Record<string, unknown> | null {
         return null;
     }
 }
-
-const sessionShape = /^[A-Za-z0-9._:-]{1,200}$/;
 
 /**
  * One line of Claude Code's `stream-json` output: the session it runs as (`system`/`init`), the agent's words and tool
