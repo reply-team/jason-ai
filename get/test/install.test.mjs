@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { fakeDb, fakeFetch, send } from '../fakes.mjs';
+import { GUIDE, fakeDb, fakeFetch, send } from '../fakes.mjs';
 import { wholeLinks } from '../src/install.mjs';
 import { INSTALL_PAGE } from '../src/paths.mjs';
 
@@ -16,20 +16,20 @@ const page = (text) => () => new Response(text, { status: 200, headers: { 'conte
 
 test('the page is read from the one fixed address, which is the install page of main', async () => {
   assert.equal(INSTALL_PAGE, `${rawMain}docs/INSTALL.md`);
-  const fetch = fakeFetch({ [INSTALL_PAGE]: page('# Install\n') });
+  const fetch = fakeFetch({ [INSTALL_PAGE]: page(GUIDE) });
   await send('/install?ref=x&url=https%3A%2F%2Fexample.com%2F', { fetch, headers: { referer: 'https://example.com/' } });
   assert.deepEqual(fetch.asked.map((ask) => ask.address), [INSTALL_PAGE]);
   assert.equal(fetch.asked[0].init.cf.cacheTtl, 300);
 });
 
 test('the page is plain text that is never sniffed, never cached on the way and never a download', async () => {
-  const { response } = await send('/install', { fetch: fakeFetch({ [INSTALL_PAGE]: page('# Install\n') }) });
+  const { response } = await send('/install', { fetch: fakeFetch({ [INSTALL_PAGE]: page(GUIDE) }) });
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('content-type'), 'text/plain; charset=utf-8');
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.equal(response.headers.get('content-disposition'), null);
-  assert.equal(await response.text(), '# Install\n');
+  assert.equal(await response.text(), GUIDE);
 });
 
 test('the page served is the same text whatever source the link names', async () => {
@@ -71,4 +71,45 @@ test('when the page cannot be read, the request goes to the fixed address itself
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.deepEqual(db.runs.map((run) => run.args.slice(1, 3)), [['/install', 'news']]);
   }
+});
+
+test('only the guide is served: a body over 256 KB, or one that does not begin with its first heading, is the redirect', async () => {
+  const heading = GUIDE.split('\n')[0];
+  const bodies = {
+    'another page': 'Not the guide.\n',
+    'a heading of another page': '# Another page\n',
+    'the heading later on': `Preamble.\n${GUIDE}`,
+    'the heading as a prefix of another': `${heading}s and more\n`,
+    'too long': GUIDE + 'x'.repeat(256 * 1024),
+    empty: '',
+  };
+  for (const [why, body] of Object.entries(bodies)) {
+    const db = fakeDb();
+    const { response } = await send('/install', { env: { COUNTS: db }, fetch: fakeFetch({ [INSTALL_PAGE]: page(body) }) });
+    assert.equal(response.status, 302, why);
+    assert.equal(response.headers.get('location'), INSTALL_PAGE, why);
+    assert.equal(db.runs.length, 1, why);
+  }
+  const atTheBound = GUIDE + 'x'.repeat(256 * 1024 - new TextEncoder().encode(GUIDE).length);
+  const { response } = await send('/install', { fetch: fakeFetch({ [INSTALL_PAGE]: page(atTheBound) }) });
+  assert.equal(response.status, 200);
+});
+
+test("the guide's first heading is the constant the handler checks for", async () => {
+  const { INSTALL_HEADING } = await import('../src/paths.mjs');
+  assert.equal(INSTALL_HEADING, installText.split('\n')[0]);
+});
+
+test('the install page writes its links only in the one form the rewriter reads', () => {
+  const lines = installText.split('\n');
+  const findings = [];
+  lines.forEach((line, index) => {
+    const at = `docs/INSTALL.md:${index + 1}`;
+    if (/\]\(\s*</.test(line)) findings.push(`${at} an angle-bracket destination`);
+    if (/\]\([^)\s]+\s+["'(]/.test(line)) findings.push(`${at} a link with a title`);
+    if (/^\s{0,3}\[[^\]]+\]:\s/.test(line)) findings.push(`${at} a reference definition`);
+    if (/\]\(\//.test(line)) findings.push(`${at} a root-relative or scheme-relative target`);
+    if (/\]\[[^\]]*\]/.test(line)) findings.push(`${at} a reference link`);
+  });
+  assert.deepEqual(findings, []);
 });

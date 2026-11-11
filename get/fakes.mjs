@@ -1,7 +1,11 @@
 // Stand-ins for what Cloudflare hands the handler: the D1 binding, the context, the outbound fetch and the clock, and
 // a signer for the tokens Access puts on a request. Not a test file itself, so the runner does not pick it up by name.
 
+import { readFileSync } from 'node:fs';
 import { handle } from './src/index.mjs';
+
+/** A page that begins as the guide does: the first heading of docs/INSTALL.md, read from the tree, and a line. */
+export const GUIDE = [readFileSync(new URL('../docs/INSTALL.md', import.meta.url), 'utf8').split('\n')[0], '', 'A line of the guide.', ''].join('\n');
 
 /** The address the tests send requests to. Written once, so no address of another shape stands in a test file. */
 export const BASE = 'https://get.jasonharness.ai';

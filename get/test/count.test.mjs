@@ -3,10 +3,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { clientOf, sourceOf } from '../src/classify.mjs';
-import { BASE, fakeDb, fakeFetch, send } from '../fakes.mjs';
+import { BASE, GUIDE, fakeDb, fakeFetch, send } from '../fakes.mjs';
 import { INSTALL_PAGE } from '../src/paths.mjs';
 
-const page = () => new Response('# Install\n', { status: 200 });
+const page = () => new Response(GUIDE, { status: 200 });
 
 test('a source is the first ref, lowercased, kept when it is 1 to 40 letters, digits and hyphens', () => {
   const of = (query) => sourceOf(new URLSearchParams(query));
@@ -114,7 +114,7 @@ test('a store that throws, or is missing, still answers the download and the pag
     assert.ok(desktop.ctx.pending.length <= 1);
     const install = await send('/install', { env, fetch: fakeFetch({ [INSTALL_PAGE]: page }) });
     assert.equal(install.response.status, 200);
-    assert.equal(await install.response.text(), '# Install\n');
+    assert.equal(await install.response.text(), GUIDE);
   }
 });
 

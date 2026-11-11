@@ -41,6 +41,22 @@ public sealed partial class DownloadPathsTests
             Installable);
     }
 
+    /// <summary>
+    /// The address serves the install page only when the body it read begins with the guide's first heading, so that
+    /// heading, a constant beside the paths, is the install page's own first line: a retitled page would otherwise make
+    /// every install a redirect.
+    /// </summary>
+    [Fact]
+    public void The_heading_the_address_checks_for_is_the_install_page_s_first_line()
+    {
+        var root = RepositoryTree.Root();
+        var paths = File.ReadAllText(Path.Combine(root, PathsFile.Replace('/', Path.DirectorySeparatorChar)));
+        var install = File.ReadAllText(Path.Combine(root, "docs", "INSTALL.md")).ReplaceLineEndings("\n");
+
+        var heading = Assert.Single(InstallHeading().Matches(paths)).Groups["heading"].Value;
+        Assert.Equal(install[..install.IndexOf('\n', StringComparison.Ordinal)], heading);
+    }
+
     /// <summary>The reader, on texts, before it is trusted with the file.</summary>
     [Theory]
     [InlineData("'/desktop/mac': 'https://get.jasonharness.ai/releases/latest/download/jason-desktop-macos-arm64.dmg',", "jason-desktop-macos-arm64.dmg")]
@@ -57,4 +73,7 @@ public sealed partial class DownloadPathsTests
 
     [GeneratedRegex(@"https://get\.jasonharness\.ai/releases/latest/download/(?<file>[A-Za-z0-9._-]+)")]
     private static partial Regex LatestDownload();
+
+    [GeneratedRegex(@"^export const INSTALL_HEADING = '(?<heading>[^'\r\n]+)';\r?$", RegexOptions.Multiline)]
+    private static partial Regex InstallHeading();
 }

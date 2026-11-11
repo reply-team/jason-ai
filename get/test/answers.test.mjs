@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AUD, TEAM, accessKey, accessToken, certs, fakeDb, fakeFetch, send } from '../fakes.mjs';
+import { AUD, GUIDE, TEAM, accessKey, accessToken, certs, fakeDb, fakeFetch, send } from '../fakes.mjs';
 import { DESKTOP, INSTALL_PAGE } from '../src/paths.mjs';
 
 test('each desktop path is a 302 to its fixed address, never cached on the way', async () => {
@@ -53,7 +53,7 @@ test('nothing a request carries reaches an answer but the fixed location', async
     origin: `https://${MARK}.example.com`,
   };
   const query = `?ref=${MARK}&${MARK}=${MARK}&format=${MARK}`;
-  const fetch = fakeFetch({ [INSTALL_PAGE]: () => new Response('# Install\n'), ...certs(key) });
+  const fetch = fakeFetch({ [INSTALL_PAGE]: () => new Response(GUIDE), ...certs(key) });
   const env = { COUNTS: fakeDb({ rows: [] }), ACCESS_TEAM: TEAM, ACCESS_AUD: AUD };
   const requests = [
     ['GET', `/install${query}`],

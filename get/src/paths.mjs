@@ -7,6 +7,15 @@
  */
 export const INSTALL_PAGE = 'https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md';
 
+/**
+ * The guide's first heading. A body read from the fixed address is served only when it begins with this line, so what
+ * the address serves is the guide or nothing; a test of the runtime's suite holds it to docs/INSTALL.md's first line.
+ */
+export const INSTALL_HEADING = '# Installing Jason';
+
+/** The largest body served as the guide, in bytes. The guide is a few tens of kilobytes. */
+export const INSTALL_MAX_BYTES = 256 * 1024;
+
 export const INSTALL_PATH = '/install';
 
 export const STATS_PATH = '/stats';
