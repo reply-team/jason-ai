@@ -23,6 +23,7 @@ import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, settleStart } from './rollback.ts';
 import { Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
+import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -243,7 +244,8 @@ async function run(): Promise<void> {
     updates?.start();
     let runtimeVersion: string | null = null;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage);
-    const programs = programsOn(env, version);
+    // One runner for the Connect cards and the chat, so a listing and a turn share one read of Claude Code's version.
+    const programs = sharingVersionReads(programsOn(env, version));
     registerSetup(
         new Setup({
             paths,

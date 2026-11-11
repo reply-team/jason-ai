@@ -1,9 +1,9 @@
 // Pure: the oldest Claude Code the chat runs a turn on. A turn's command line carries flags and settings that Claude Code
 // reads from this version on and an older one skips without a word (`claudeArguments`), so a turn on an older host would
 // run without what they hold. The hosts' listing marks such a host and the chat refuses a turn on it; a version that
-// cannot be read is held the same way. Nothing here starts a process.
+// cannot be read is held the same way. Nothing here starts a process; the runner it is given does.
 
-import type { RunResult } from './programs.ts';
+import type { Programs, RunResult } from './programs.ts';
 
 /** The oldest Claude Code the chat runs a turn on. A key provider runs on Claude Code, so it holds for those too. */
 export const claudeFloor = '2.1.257';
@@ -16,14 +16,39 @@ export const versionLimitMs = 30_000;
 
 const versionShape = /\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?/;
 
+const namesClaudeCode = /claude code/i;
+
 /**
- * The version in what `--version` printed: the first three dotted numbers anywhere on standard output, then standard
- * error, whatever stands around them, with a pre-release part after a hyphen. A program that ended with a code other
+ * The version in what `--version` printed, standard output first, then standard error: the first three dotted numbers
+ * on a line that names Claude Code, in any letter case, whatever else stands on it, so another program's version, a
+ * date or an address printed before it never stands for it; when no line names Claude Code beside a number, the first
+ * three dotted numbers anywhere. A pre-release part after a hyphen is kept. A program that ended with a code other
  * than zero, or was stopped at its time limit, said no version.
  */
 export function printedVersion(result: RunResult): string | null {
     if (result.exit !== 0) return null;
-    return versionShape.exec(`${result.stdout}\n${result.stderr}`)?.[0] ?? null;
+    const text = `${result.stdout}\n${result.stderr}`;
+    const named = text.split(/\r?\n/).find((line) => namesClaudeCode.test(line) && versionShape.test(line));
+    return versionShape.exec(named ?? text)?.[0] ?? null;
+}
+
+const isVersionRead = (name: string, args: readonly string[]) => name === 'claude' && args.length === 1 && args[0] === '--version';
+
+/**
+ * The runner with at most one `claude --version` in flight: a read asked for while one runs, by a listing of the hosts
+ * or a turn, waits on that read and takes its answer; once it has answered nothing is kept, and the next is a new read.
+ * Every other program runs as it is asked.
+ */
+export function sharingVersionReads<T extends Pick<Programs, 'run'>>(programs: T): T {
+    let reading: Promise<RunResult> | null = null;
+    const run: Programs['run'] = (name, args, options) => {
+        if (!isVersionRead(name, args)) return programs.run(name, args, options);
+        reading ??= programs.run(name, args, options).finally(() => {
+            reading = null;
+        });
+        return reading;
+    };
+    return { ...programs, run };
 }
 
 function comparePart(a: string, b: string): number {

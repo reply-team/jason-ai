@@ -204,6 +204,11 @@ export class Chat {
             // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
             // answering while the version is read, so a second send is refused as busy.
             const held = resolved.program === 'claude' ? await this.#belowFloor() : null;
+            // A stop or a window close while the version was read: its answer is dropped and nothing of the turn is built.
+            if (running.stopped) {
+                this.#running.delete(chatId);
+                return this.#options.emit(chatId, { kind: 'done', error: null });
+            }
             if (held !== null) {
                 this.#running.delete(chatId);
                 return refuse(held);

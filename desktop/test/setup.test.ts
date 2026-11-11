@@ -6,14 +6,15 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { loggedTurns } from '../src/chat-log.ts';
-import { floorSentence, versionLimitMs } from '../src/host-version.ts';
+import { floorSentence, sharingVersionReads, versionLimitMs } from '../src/host-version.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
-import { Setup, writeAtomically } from '../src/setup.ts';
+import type { Programs, RunResult } from '../src/programs.ts';
+import { Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
 import {
     bundledPlugin,
     defaultRoutePlugin,
@@ -27,8 +28,8 @@ import {
 } from '../src/setup-model.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
 
-function setupOn(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null }) {
-    return new Setup({
+function setupDeps(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null }): SetupDeps {
+    return {
         paths: b.paths,
         cli: loggedCli(b.cli, log),
         programs: b.programs,
@@ -37,7 +38,11 @@ function setupOn(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings 
         bundleVersion: '0.34.0-rc.1',
         runtimeVersion: () => '0.34.0-rc.1',
         settings: () => settings,
-    });
+    };
+}
+
+function setupOn(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null }) {
+    return new Setup(setupDeps(b, log, settings));
 }
 
 function writeInstallationSettings(b: Bench, value: unknown): void {
@@ -743,6 +748,45 @@ test('a Claude Code whose version cannot be read is held as below the floor: a n
     });
     assert.equal((await timedOut.status()).hosts.find((host) => host.id === 'claude')?.belowFloor, unreadable);
     assert.deepEqual(asked.filter((each) => each.name === 'claude'), [{ name: 'claude', args: ['--version'], timeoutMs: versionLimitMs }]);
+});
+
+test('two listings and a chat turn that arrive while Claude Code’s version is read wait on that one read; the next listing reads again', async (t) => {
+    const b = bench(t, { programs: ['claude', 'codex'] });
+    const releases: ((result: RunResult) => void)[] = [];
+    // The desktop's own runner, as main.ts builds it, around a stand-in that holds Claude Code's version read.
+    const programs = sharingVersionReads({
+        find: (name: Parameters<Programs['find']>[0]) => b.programs.find(name),
+        run: (name: Parameters<Programs['run']>[0], args: readonly string[], options?: Parameters<Programs['run']>[2]) =>
+            name === 'claude' && args[0] === '--version' ? new Promise<RunResult>((resolve) => releases.push(resolve)) : b.programs.run(name, args, options),
+    });
+    const setup = new Setup({ ...setupDeps(b), programs });
+    const said: ChatEvent[] = [];
+    const chat = new Chat({
+        paths: b.paths,
+        env: b.env,
+        bundle: join(b.root, 'bin'),
+        dataNamed: true,
+        bundleVersion: null,
+        cli: b.cli,
+        programs,
+        keyFor: () => undefined,
+        fence: () => readFence(join(import.meta.dirname, '..')),
+        emit: (_chatId, event) => void said.push(event),
+    });
+    t.after(() => chat.closeAll());
+    const listings = [setup.status(), setup.status()];
+    const sending = chat.send('c1', 'Which campaigns wait?', { host: 'claude' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(releases.length, 1, 'one read for the two listings and the turn');
+    releases[0]!({ exit: 0, stdout: '2.1.200 (Claude Code)\n', stderr: '' });
+    for (const listed of await Promise.all(listings)) assert.equal(listed.hosts.find((host) => host.id === 'claude')?.belowFloor, floorSentence('2.1.200'));
+    await sending;
+    assert.deepEqual(said, [{ kind: 'done', error: floorSentence('2.1.200') }]);
+    const again = setup.status();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(releases.length, 2, 'nothing is remembered once the read answered');
+    releases[1]!({ exit: 0, stdout: '2.1.300 (Claude Code)\n', stderr: '' });
+    assert.equal((await again).hosts.find((host) => host.id === 'claude')?.belowFloor, null);
 });
 
 test('a missing program is installed with npm on a click, and only where npm is there; Node never', async (t) => {

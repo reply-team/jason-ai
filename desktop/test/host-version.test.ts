@@ -3,15 +3,20 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { claudeFloor, compareVersions, floorSentence, printedVersion, versionLimitMs } from '../src/host-version.ts';
+import { claudeFloor, compareVersions, floorSentence, printedVersion, sharingVersionReads, versionLimitMs } from '../src/host-version.ts';
+import type { Programs, RunResult } from '../src/programs.ts';
 
 const answered = (stdout: string, stderr = '', exit = 0) => ({ exit, stdout, stderr });
 
-test('the version is the first three dotted numbers anywhere in what was printed, on either stream, whatever stands around it', () => {
+test('the version is the first three dotted numbers on a line naming Claude Code, else anywhere in what was printed, on either stream', () => {
     assert.equal(printedVersion(answered('2.1.300 (Claude Code)\n')), '2.1.300');
     assert.equal(printedVersion(answered('Claude Code version v2.1.300, build 7f3e, ready\n')), '2.1.300');
     assert.equal(printedVersion(answered('', 'warning: something\n2.1.300 (Claude Code)\n')), '2.1.300', 'on standard error alone');
-    assert.equal(printedVersion(answered('node 22.11.0 found\n', '2.1.300\n')), '22.11.0', 'the first group of the two streams');
+    assert.equal(printedVersion(answered('node 22.11.0 found\n', '2.1.200 (Claude Code)\n')), '2.1.200', 'another program’s version before it does not win');
+    assert.equal(printedVersion(answered('2026.11.10 12:00 notice\n2.1.200 (CLAUDE CODE)\n')), '2.1.200', 'nor a date, and the name in any letter case');
+    assert.equal(printedVersion(answered('listening on 127.0.0.1\n', 'claude code 2.1.200\n')), '2.1.200');
+    assert.equal(printedVersion(answered('node 22.11.0 found\n', '2.1.300\n')), '22.11.0', 'with no line naming Claude Code, the first group anywhere');
+    assert.equal(printedVersion(answered('Claude Code\n2.1.300\n')), '2.1.300', 'a line naming it without a number leaves the first group anywhere');
     assert.equal(printedVersion(answered('2.1.300-beta.2 (Claude Code)\n')), '2.1.300-beta.2', 'a pre-release part is kept');
     assert.equal(printedVersion(answered('1.2.3.4\n')), '1.2.3');
     assert.equal(printedVersion(answered('Claude Code\n')), null, 'no three dotted numbers');
@@ -61,4 +66,30 @@ test('a version that could not be read is held as below the floor, and the sente
         floorSentence(null),
         'The version of Claude Code could not be read, so the chat does not run on it. Run `claude --version` in a terminal to see it; the chat needs 2.1.257 or newer, and `claude update` updates it. Then check again.',
     );
+});
+
+test('at most one version read is in flight: one asked for while it runs waits on it, and nothing is remembered once it answered', async () => {
+    const pending: ((result: RunResult) => void)[] = [];
+    const others: string[] = [];
+    const programs = sharingVersionReads<Pick<Programs, 'run'>>({
+        run: (name) => {
+            if (name !== 'claude') {
+                others.push(name);
+                return Promise.resolve(answered('0.19.0'));
+            }
+            return new Promise<RunResult>((resolve) => pending.push(resolve));
+        },
+    });
+    const first = programs.run('claude', ['--version'], { timeoutMs: versionLimitMs });
+    const second = programs.run('claude', ['--version'], { timeoutMs: versionLimitMs });
+    assert.equal(pending.length, 1, 'one read for the two');
+    await programs.run('reply', ['--version']);
+    assert.deepEqual(others, ['reply'], 'another program is not held behind it');
+    pending[0]!(answered('2.1.300 (Claude Code)'));
+    assert.deepEqual(await first, answered('2.1.300 (Claude Code)'));
+    assert.deepEqual(await second, answered('2.1.300 (Claude Code)'));
+    const third = programs.run('claude', ['--version'], { timeoutMs: versionLimitMs });
+    assert.equal(pending.length, 2, 'a read asked for after the answer is a new read');
+    pending[1]!(answered('2.1.301 (Claude Code)'));
+    assert.equal((await third).stdout, '2.1.301 (Claude Code)');
 });

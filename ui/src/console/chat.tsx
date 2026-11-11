@@ -64,9 +64,14 @@ export function sendTurn(id: string, text: string, resent = false): void {
     if (!chat || chat.running || !words) return;
     const host = hostOf(chat);
     if (!host) {
+        // A host that was found and is held says what holds it, below the floor or a version not read, in its own mark.
+        const held = chatHosts(setup.value?.hosts ?? []).held[0]?.belowFloor;
         if (resent)
             changeChat(id, (each) =>
-                failed(said(each, words, true), 'No agent host that drives the chat was found on this machine.'),
+                failed(
+                    said(each, words, true),
+                    held ?? 'No agent host that drives the chat was found on this machine.',
+                ),
             );
         return;
     }

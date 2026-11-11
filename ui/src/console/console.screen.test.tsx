@@ -397,6 +397,26 @@ describe('the console', () => {
             ]);
         });
 
+        it('ends with the desktop sentence that holds the host when the only host that drives the chat is held', async () => {
+            const { desktop, id } = await running();
+            type('Later');
+            enter();
+            await waitFor(() => expect(waiting()).toBeTruthy());
+            const unreadable = `The version of Claude Code could not be read, so the chat does not run on it. Run \`claude --version\` in a terminal to see it. ${hostile}`;
+            setup.value = {
+                ...setup.value!,
+                hosts: setup.value!.hosts.map((each) =>
+                    each.id === 'claude' ? { ...each, version: null, belowFloor: unreadable } : each,
+                ),
+            };
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() => expect(document.querySelector('.chat-error')?.textContent).toContain(unreadable));
+            expect(document.querySelector('.chat-error')?.textContent).not.toContain('No agent host');
+            expect(document.querySelector('.chat-error img')).toBeNull();
+            expect(sends(desktop)).toHaveLength(1);
+            expect(box().value).toBe('Later');
+        });
+
         it('stays in sight, not sent, when the turn stops or fails while the box holds other words', async () => {
             const { desktop, id } = await running();
             type('Later');

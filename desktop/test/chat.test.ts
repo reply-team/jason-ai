@@ -439,6 +439,31 @@ test('a second send while Claude Code’s version is read is refused as busy, an
     assert.equal(r.hosts().length, 1);
 });
 
+test('a stop or a window close while Claude Code’s version is read starts no host and writes no turn file; the turn is done with no error', async (t) => {
+    const releases: ((result: RunResult) => void)[] = [];
+    const { programs } = versionSaying(() => new Promise<RunResult>((resolve) => releases.push(resolve)));
+    const r = rig(t, { chat: { programs } });
+    const stopped = r.until('c1', (event) => event.kind === 'done');
+    const sending = r.chat.send('c1', words, { host: 'claude', campaignId: 'cmp_1' });
+    r.chat.stop('c1');
+    const closed = r.until('c2', (event) => event.kind === 'done');
+    const closing = r.chat.send('c2', words, { host: 'claude', campaignId: 'cmp_1' });
+    r.chat.closeAll();
+    // What a turn builds before its host starts would show: the campaign asked for, the instruction text written again.
+    rmSync(join(r.b.paths.chat, 'CLAUDE.md'), { force: true });
+    for (const release of releases) release({ exit: 0, stdout: '2.1.300 (Claude Code)\n', stderr: '' });
+    await Promise.all([sending, closing]);
+    assert.deepEqual(await stopped, { kind: 'done', error: null });
+    assert.deepEqual(await closed, { kind: 'done', error: null });
+    assert.deepEqual(r.events.get('c1'), [{ kind: 'done', error: null }]);
+    assert.deepEqual(r.events.get('c2'), [{ kind: 'done', error: null }]);
+    assert.deepEqual(r.b.record(), [], 'no host and no jason verb ran');
+    assert.deepEqual(r.started, []);
+    assert.deepEqual(existsSync(r.b.paths.turns) ? readdirSync(r.b.paths.turns) : [], [], 'no turn file was written');
+    assert.equal(existsSync(join(r.b.paths.chat, 'CLAUDE.md')), false, 'nothing of the turn was built');
+    assert.equal(r.chat.isRunning('c1') || r.chat.isRunning('c2'), false);
+});
+
 test('what a send gives is checked before a host starts', async (t) => {
     const r = rig(t);
     const cases: [unknown, unknown][] = [
