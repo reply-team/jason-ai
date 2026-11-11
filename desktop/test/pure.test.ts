@@ -10,7 +10,7 @@ import { dataDirectory, desktopPaths } from '../src/paths.ts';
 import { permissionAllowed } from '../src/permissions.ts';
 import { findOnPath, launchOf, npmScript } from '../src/program-path.ts';
 import { pathOf, withPath } from '../src/programs.ts';
-import { hosts, keyedFolder, keyProviders, notTheChatYet, providerEnvironment, signInSentence } from '../src/providers-model.ts';
+import { hosts, keyedFolder, keyProviders, keyWord, notTheChatYet, providerEnvironment, signInSentence, withoutKey } from '../src/providers-model.ts';
 import { isFeed, parseSettings } from '../src/settings.ts';
 import { versionsDifferSentence } from '../src/setup.ts';
 import { pluginValid, runtimeVersionIn, statusFacts, versionAtLeast, versionIn } from '../src/setup-model.ts';
@@ -263,6 +263,25 @@ test('a keyed turn\'s host folder is the desktop\'s own: one per provider for Cl
         assert.equal(keyedFolder(paths, provider), expected, provider.id);
         assert.match(provider.id, /^[a-z0-9-]+$/, 'a folder name from the closed table');
     }
+});
+
+test('on a keyed turn a host error text keeps no part of the key: the whole key, its ends, the masked form OpenAI prints, any key-shaped token', () => {
+    const key = 'sk-proj-PLANTEDkeyMiddle0123456789Wq7Z';
+    const masked = `Incorrect API key provided: sk-proj-${'*'.repeat(40)}Wq7Z. You can find your API key at the dashboard.`;
+    assert.equal(withoutKey(masked, key), `Incorrect API key provided: ${keyWord}. You can find your API key at the dashboard.`);
+    assert.equal(withoutKey(`unexpected status 401 Unauthorized: {"message":"bad key ${key}"}`, key), `unexpected status 401 Unauthorized: {"message":"bad key ${keyWord}"}`);
+    assert.equal(withoutKey('the key ****Wq7Z was refused', key), `the key ${keyWord} was refused`);
+    assert.equal(withoutKey('the key Wq7Z was refused', key), `the key ${keyWord} was refused`);
+    assert.equal(withoutKey('the key sk-pro... was refused', key), `the key ${keyWord} was refused`);
+    // A key of another shape: a compatible endpoint's, by its own first six and last four characters.
+    const zai = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6.Zk9QvPlantedSecret';
+    assert.equal(withoutKey('authentication failed for a1b2c3...cret', zai), `authentication failed for ${keyWord}`);
+    // A token shaped as a provider's key is replaced whoever's it is; a token as long as one, too.
+    assert.equal(withoutKey('header sk-ant-api03-OTHERKEYxx was refused', key), `header ${keyWord} was refused`);
+    assert.equal(withoutKey('bearer eyJhbGciOiJIUzI1NiJ9.e30.abc rejected', key), `bearer ${keyWord} rejected`);
+    assert.equal(withoutKey('token AbCdEfGhIjKlMnOpQrStUvWxYz012345 rejected', key), `token ${keyWord} rejected`);
+    // Words that carry none of it stay as they are.
+    assert.equal(withoutKey('Codex ended the turn: the model is overloaded, status 529.', key), 'Codex ended the turn: the model is overloaded, status 529.');
 });
 
 test('a version is read from what a program printed and compared part by part', () => {

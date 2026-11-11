@@ -14,6 +14,7 @@
 //   { "sleep": 300 }                                  wait that many milliseconds
 //   { "retry": { "status": 401, "error": "..." } }    Claude Code only: report a retry of a failed API request, as system/api_retry
 //   { "end": "refused", "status": 401, "text": "w" }  Claude Code only: end with a failed result naming that HTTP status
+//   { "refusedMessage": "w" }                         Claude Code only: say an assistant message that reports a failed authentication
 // STUB_KEY_SOURCE puts that apiKeySource on Claude Code's init line; without it the line carries none.
 // With no plan the turn says one line and ends well. STUB_RESUME says what a resume does: "missing" fails as a session
 // that is not there (Claude Code on stderr, Codex with an error event) before anything is said, "other" answers with a
@@ -83,7 +84,9 @@ async function claude(args, stdin) {
         if (step.say !== undefined) print({ type: 'assistant', message: { content: [{ type: 'text', text: step.say }] } });
         else if (step.campaign !== undefined) addCampaign(step.campaign);
         else if (step.sleep !== undefined) await new Promise((resolve) => setTimeout(resolve, step.sleep));
-        else if (step.retry !== undefined) {
+        else if (step.refusedMessage !== undefined) {
+            print({ type: 'assistant', error: 'authentication_failed', message: { content: [{ type: 'text', text: step.refusedMessage }] } });
+        } else if (step.retry !== undefined) {
             print({ type: 'system', subtype: 'api_retry', attempt: 1, max_retries: 10, retry_delay_ms: 600, error_status: step.retry.status ?? null, error: step.retry.error ?? 'unknown', session_id: session });
         } else if (step.end === 'refused') {
             print({ type: 'result', subtype: 'success', is_error: true, api_error_status: step.status, result: step.text, session_id: session });

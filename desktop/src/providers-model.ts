@@ -83,13 +83,19 @@ export function keyProvider(id: unknown): KeyProvider | undefined {
 }
 
 /**
- * The folder a turn on a provider's key runs its host with, the desktop's own and holding no sign-in, so a key the host
- * does not take fails the turn instead of running it on the person's own plan:
+ * The folder a turn on a provider's key runs its host with, the desktop's own and holding no login of the person's, so a
+ * key the host does not take is meant to fail the turn instead of running it on the person's own plan (as built; not yet
+ * seen with a real host):
  * - Claude Code, `<data>/desktop/claude-keyed/<provider id>/` as `CLAUDE_CONFIG_DIR`. Anthropic,
  *   https://code.claude.com/docs/en/authentication: "Each directory has its own settings, session history, and ...
- *   login or API key." One folder per provider: a conversation keeps one session per host id, the provider's id for a
- *   key provider (`chat-conversations.ts`), and that session's transcript is in this provider's folder alone, so the two
- *   agree, and a session of one provider is never resumed on another's model.
+ *   login or API key." So no claude.ai login is in the folder. The same page goes on: "Separate directories don't keep
+ *   two Claude Console sign-ins without an API key apart, because Claude Code stores that kind of sign-in outside the
+ *   configuration directory." A Console profile kept under the person's own home is not moved by the folder; the
+ *   environment's key ranks above it ("Anthropic profile and federation credentials" are sixth in the page's
+ *   precedence, the key in the environment second or third), and the variables that name a profile or a federation are
+ *   withheld from a keyed turn (`hostEnvironment`). One folder per provider: a conversation keeps one session per host
+ *   id, the provider's id for a key provider (`chat-conversations.ts`), and that session's transcript is in this
+ *   provider's folder alone, so the two agree, and a session of one provider is never resumed on another's model.
  * - Codex, `<data>/desktop/codex-keyed/` as `CODEX_HOME`. OpenAI,
  *   https://developers.openai.com/codex/config-file/environment-variables (served as
  *   https://learn.chatgpt.com/docs/config-file/environment-variables): "Sets the root for Codex state, including
@@ -98,6 +104,32 @@ export function keyProvider(id: unknown): KeyProvider | undefined {
  */
 export function keyedFolder(paths: Pick<DesktopPaths, 'claudeKeyed' | 'codexKeyed'>, provider: KeyProvider): string {
     return provider.program === 'claude' ? join(paths.claudeKeyed, provider.id) : paths.codexKeyed;
+}
+
+/** The word a part of a key is replaced by in a host's error text (`withoutKey`). */
+export const keyWord = '[key]';
+
+/** A token shaped as a provider's key, masked or not: a key prefix, a run of asterisks, a JSON web token, a long secret. */
+const keyShaped = [/^(?:sk|rk|pk)[-_]/i, /\*{3,}/, /^eyJ[A-Za-z0-9_-]{8,}/, /[A-Za-z0-9_-]{24,}/];
+
+/**
+ * A host's error text on a turn on a provider's key, with every token that holds any part of the key replaced by one fixed
+ * word (`keyWord`): a token holding the key itself, its first six or its last four characters, or the shape of a
+ * provider's key, masked or not (OpenAI's error for a wrong key names it with its last four characters after asterisks,
+ * https://developers.openai.com/api/docs/guides/error-codes: "401 - Incorrect API key provided"). A token is a run of
+ * characters between spaces, quotes and brackets; one mark that ends a sentence after it is kept. Every error
+ * text a keyed turn shows or keeps passes here first; a plain turn's never does.
+ */
+export function withoutKey(text: string, key: string): string {
+    const pieces = key.length >= 10 ? [key, key.slice(0, 6), key.slice(-4)] : key.length > 0 ? [key] : [];
+    return text.replace(/[^\s"'`<>()[\]{},;]+/g, (run) => {
+        // One mark that ends a sentence is kept; dots in a row are a mask's, part of the token.
+        const end = /(?<![.:!?])[.:!?]$/.exec(run);
+        const core = end && end.index > 0 ? run.slice(0, end.index) : run;
+        const after = run.slice(core.length);
+        const holds = pieces.some((piece) => core.includes(piece)) || keyShaped.some((shape) => shape.test(core));
+        return holds ? `${keyWord}${after}` : run;
+    });
 }
 
 /**

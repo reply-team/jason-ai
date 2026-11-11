@@ -211,8 +211,34 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
         'CLAUDE_CODE_OAUTH_TOKEN',
         'CLAUDE_CONFIG_DIR',
         'CLAUDE_CODE_PROJECT_DIR_NAME',
+        // Anthropic, https://code.claude.com/docs/en/authentication#anthropic-profiles-and-federation-credentials (read
+        // 2026-11-11): a named profile, "`ANTHROPIC_PROFILE`", and the federation variables, "`ANTHROPIC_FEDERATION_RULE_ID`
+        // and `ANTHROPIC_ORGANIZATION_ID`, both set", and "the other variables in the WIF reference", which
+        // https://platform.claude.com/docs/en/manage-claude/wif-reference#environment-variables lists.
+        'ANTHROPIC_PROFILE',
+        'ANTHROPIC_FEDERATION_RULE_ID',
+        'ANTHROPIC_ORGANIZATION_ID',
+        'ANTHROPIC_SERVICE_ACCOUNT_ID',
+        'ANTHROPIC_IDENTITY_TOKEN_FILE',
+        'ANTHROPIC_IDENTITY_TOKEN',
+        'ANTHROPIC_WORKSPACE_ID',
     ]),
-    codex: new Set(['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_API_KEY', 'CODEX_HOME', 'CODEX_SQLITE_HOME']),
+    // OpenAI, https://developers.openai.com/codex/config-file/environment-variables, "Authentication and network" (read
+    // 2026-11-11): its credential and identity variables are CODEX_API_KEY, CODEX_ACCESS_TOKEN ("Provides a ChatGPT or
+    // Codex access token for trusted automation."), OPENAI_FEDERATION_RULE_ID, OPENAI_IDENTITY_TOKEN_FILE and
+    // OPENAI_WORKLOAD_IDENTITY_CONTEXT (workload identity); the CA bundle variables there are no credential. Beside them,
+    // OPENAI_API_KEY and OPENAI_BASE_URL, and CODEX_HOME and CODEX_SQLITE_HOME, where Codex keeps its state.
+    codex: new Set([
+        'OPENAI_API_KEY',
+        'OPENAI_BASE_URL',
+        'CODEX_API_KEY',
+        'CODEX_ACCESS_TOKEN',
+        'OPENAI_FEDERATION_RULE_ID',
+        'OPENAI_IDENTITY_TOKEN_FILE',
+        'OPENAI_WORKLOAD_IDENTITY_CONTEXT',
+        'CODEX_HOME',
+        'CODEX_SQLITE_HOME',
+    ]),
 };
 
 /**
@@ -295,29 +321,40 @@ export type HostLine =
     | { kind: 'session'; id: string }
     /** Where Claude Code says the turn's key came from (`keySourceOf`). */
     | { kind: 'key_source'; source: KeySource }
-    /** Claude Code said a request was refused for its credential: a retry of a 401 or 403, or a failed authentication. */
-    | { kind: 'refused' }
+    /**
+     * Claude Code said a request was refused for its credential: a retry of a 401 or 403, or a failed authentication;
+     * `forbidden` when it was a 403 alone, which a proxy or a denied resource answers as well.
+     */
+    | { kind: 'refused'; forbidden?: true }
     | ({ kind: 'step' } & Step)
     | { kind: 'text'; text: string }
     /**
      * The host said the turn is over: `error` null when it succeeded, else the host's own words; `refused` when it ended
-     * on a 401 or 403.
+     * on a 401 or 403, and `forbidden` too when on a 403.
      */
-    | { kind: 'result'; error: string | null; refused?: true };
+    | { kind: 'result'; error: string | null; refused?: true; forbidden?: true };
 
 /**
  * Where Claude Code says a turn's key came from, the `apiKeySource` of its `system/init` line, as a closed word. The
- * values are the page's own list, https://code.claude.com/docs/en/agent-sdk/typescript#apikeysource (read 2026-11-11):
- * "Where the API key for the session's requests came from, reported as `apiKeySource` on the `SDKSystemMessage` init
- * message." `type ApiKeySource = "ANTHROPIC_API_KEY" | "apiKeyHelper" | "/login managed key" | "none" | "user" |
- * "project" | "org" | "temporary" | "oauth";`
+ * page, https://code.claude.com/docs/en/agent-sdk/typescript#apikeysource (read 2026-11-11): "Where the API key for the
+ * session's requests came from, reported as `apiKeySource` on the `SDKSystemMessage` init message." `type ApiKeySource =
+ * "ANTHROPIC_API_KEY" | "apiKeyHelper" | "/login managed key" | "none" | "user" | "project" | "org" | "temporary" |
+ * "oauth";` and "Claude Code reports one of four values:"
+ *   | `ANTHROPIC_API_KEY`  | The key in the `ANTHROPIC_API_KEY` environment variable |
+ *   | `apiKeyHelper`       | The key returned by your `apiKeyHelper` command |
+ *   | `/login managed key` | The key Claude Code stored when you logged in with a Claude Console account |
+ *   | `none`               | No API key. The session authenticates another way, such as a claude.ai login, a bearer token, or a cloud provider |
+ * and "The type also keeps `user`, `project`, `org`, `temporary`, and `oauth` so older code still compiles, and Claude
+ * Code doesn't report them."
  * - `environment`: `ANTHROPIC_API_KEY`, the variable the desktop puts the key in.
- * - `elsewhere`: a value that says the requests do not go on that key: a helper script, a saved sign-in's key, a
- *   subscription's sign-in, or no key at all.
- * - `unexplained`: `user`, `project`, `org`, `temporary`, which the page lists without saying what they mean.
+ * - `elsewhere`: a value whose row says the requests do not go on that key: a helper's key, a Console login's key, or
+ *   `none`, whose row says the session authenticates another way; and `oauth`, kept for older code, whose name says a
+ *   login.
+ * - `unexplained`: `user`, `project`, `org`, `temporary`, kept for older code and not reported, with no row of their own.
  * - `unlisted`: a string the page does not list; `absent`: no string at all.
  * Only `elsewhere` stops a turn; the rest are logged by their word and the turn goes on, since the turn's folder holds no
- * sign-in to fall back to (`keyedFolder`).
+ * claude.ai login to fall back to (`keyedFolder`): a check that refused every key turn because one string changed would
+ * be worse than none.
  */
 export type KeySource = 'environment' | 'elsewhere' | 'unexplained' | 'unlisted' | 'absent';
 
@@ -338,8 +375,6 @@ export function keySourceOf(value: unknown): KeySource {
     return keySources.get(value) ?? 'unlisted';
 }
 
-/** An HTTP status that refuses a credential. */
-const refusedStatus = (status: unknown) => status === 401 || status === 403;
 
 /**
  * One tool use as the page shows it: `text`, fixed words of the desktop's own for what the host did, and `detail`, the
@@ -447,7 +482,8 @@ export function claudeLine(line: string): HostLine[] {
         return [...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }];
     }
     if (event.type === 'system' && event.subtype === 'api_retry') {
-        return refusedStatus(event.error_status) || event.error === 'authentication_failed' ? [{ kind: 'refused' }] : [];
+        if (event.error === 'authentication_failed' || event.error_status === 401) return [{ kind: 'refused' }];
+        return event.error_status === 403 ? [{ kind: 'refused', forbidden: true }] : [];
     }
     if (event.type === 'assistant') {
         const content = (event.message as { content?: unknown } | null)?.content;
@@ -463,7 +499,8 @@ export function claudeLine(line: string): HostLine[] {
         const failed = event.is_error === true || (typeof event.subtype === 'string' && event.subtype !== 'success');
         if (!failed) return [{ kind: 'result', error: null }];
         const words = typeof event.result === 'string' && event.result.trim() !== '' ? event.result.trim() : `Claude Code ended the turn: ${String(event.subtype ?? 'error')}.`;
-        return [refusedStatus(event.api_error_status) ? { kind: 'result', error: words, refused: true } : { kind: 'result', error: words }];
+        if (event.api_error_status === 403) return [{ kind: 'result', error: words, refused: true, forbidden: true }];
+        return [event.api_error_status === 401 ? { kind: 'result', error: words, refused: true } : { kind: 'result', error: words }];
     }
     return [];
 }
@@ -490,6 +527,11 @@ function pathsOf(changes: unknown): string | undefined {
  * One line of `codex exec --json`: the thread it runs as (`thread.started`), the agent's message and its tool items
  * (`item.started`, `item.completed`), and the end (`turn.completed`, `turn.failed`, `error`). A tool item is one step,
  * said when it starts; `seen` holds the items already said, so the item's completion says nothing again.
+ *
+ * No line of Codex's is read as a refused key. OpenAI, https://developers.openai.com/codex/noninteractive (read
+ * 2026-11-11), says only "Event types include thread.started, turn.started, turn.completed, turn.failed, item.*, and
+ * error."; it names no status, code or type an event carries for a refused key. So a keyed Codex turn ends in Codex's own
+ * words, which pass `withoutKey` before the page or the record has them (`chat.ts`).
  */
 export function codexLine(line: string, seen: Set<string>): HostLine[] {
     const event = parsed(line);

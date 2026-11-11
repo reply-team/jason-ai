@@ -651,6 +651,7 @@ test('a keyed folder left open is closed to 0700 again before the turn', { skip:
 });
 
 const refusedSentence = (label: string) => `${label} refused the key. Change it on the ${label} card in Connect, then send again.`;
+const forbiddenSentence = (label: string) => `${label} refused the key or the request (403). Check the key on the ${label} card in Connect, then send again.`;
 
 test('on Anthropic\'s key, a turn whose host says its key came from somewhere else is stopped; one it does not explain goes on and is logged by a word', async (t) => {
     const sources: string[] = [];
@@ -692,12 +693,16 @@ test('on Anthropic\'s key, a turn whose host says its key came from somewhere el
 test('on a keyed turn the first retry of a refused key stops the host and ends the turn with one sentence naming the card', async (t) => {
     const r = rig(t);
     r.keys.deepseek = 'sk-planted-deepseek';
-    for (const retry of [{ status: 401, error: 'unknown' }, { status: 403, error: 'unknown' }, { status: null, error: 'authentication_failed' }]) {
+    for (const [retry, sentence] of [
+        [{ status: 401, error: 'unknown' }, refusedSentence('DeepSeek')],
+        [{ status: 403, error: 'unknown' }, forbiddenSentence('DeepSeek')],
+        [{ status: null, error: 'authentication_failed' }, refusedSentence('DeepSeek')],
+    ] as const) {
         plan(r, [{ retry }, { say: 'never shown' }, { sleep: 20_000 }]);
         const begun = Date.now();
         const said = await r.turn(`c-${String(retry.status)}`, words, { host: 'deepseek' });
         assert.ok(Date.now() - begun < 15_000, 'the host was stopped, not waited out');
-        assert.deepEqual(doneOf(said), { kind: 'done', error: refusedSentence('DeepSeek') }, JSON.stringify(retry));
+        assert.deepEqual(doneOf(said), { kind: 'done', error: sentence }, JSON.stringify(retry));
         assert.ok(!texts(said).includes('never shown'));
     }
     // A retry of another cause is the host's to make.
@@ -724,12 +729,72 @@ test('a refused key on a resumed keyed turn is not tried again as a fresh sessio
     r.keys.deepseek = 'sk-planted-deepseek';
     await r.turn('c1', words, { host: 'deepseek' });
     r.b.env.STUB_SILENT = 'resumed';
+    // A fresh session would be named by another id, which the record would then hold.
+    r.b.env.STUB_HOST_SESSION = 'stub-session-2';
     plan(r, [{ end: 'refused', status: 401, text: 'Invalid API key' }]);
     const said = await r.turn('c1', words, { host: 'deepseek' });
     assert.deepEqual(doneOf(said), { kind: 'done', error: refusedSentence('DeepSeek') });
+    const records = readdirSync(r.b.paths.conversations).map((name) => JSON.parse(readFileSync(join(r.b.paths.conversations, name), 'utf8')) as { sessions: Record<string, string> });
+    assert.deepEqual(records.map((record) => record.sessions), [{ deepseek: 'stub-session-1' }], 'the conversation still holds the session it had');
     assert.ok(!said.some((event) => event.kind === 'fresh'));
     assert.equal(r.hosts().length, 2);
 });
+
+/** Every conversation record on disk, as text. */
+const recordsText = (r: Rig) => readdirSync(r.b.paths.conversations).map((name) => readFileSync(join(r.b.paths.conversations, name), 'utf8')).join('\n');
+
+test('a keyed turn that ends on a host error keeps no part of the key, on the page or in the record; a plain turn is untouched', async (t) => {
+    const r = rig(t);
+    const openai = 'sk-proj-PLANTEDopenaiMiddle0123456789Wq7Z';
+    const deepseek = 'sk-PLANTEDdeepseekMiddle98765432Jt4M';
+    r.keys['codex-api-key'] = openai;
+    r.keys.deepseek = deepseek;
+    const masked = `unexpected status 401 Unauthorized: Incorrect API key provided: sk-proj-${'*'.repeat(40)}Wq7Z.`;
+    plan(r, [{ end: 'error', text: masked }]);
+    const codex = await r.turn('c-codex', words, { host: 'codex-api-key' });
+    plan(r, [{ end: 'error', text: `The key ${deepseek} is not valid for this endpoint` }]);
+    const claude = await r.turn('c-claude', words, { host: 'deepseek' });
+    assert.deepEqual(doneOf(codex), { kind: 'done', error: 'unexpected status 401 Unauthorized: Incorrect API key provided: [key].' });
+    assert.deepEqual(doneOf(claude), { kind: 'done', error: 'The key [key] is not valid for this endpoint' });
+    const kept = recordsText(r);
+    for (const part of [openai, deepseek, 'Wq7Z', 'Jt4M', 'sk-pro', 'sk-PLA', '****']) {
+        assert.ok(!JSON.stringify([codex, claude]).includes(part), `the page never gets ${part}`);
+        assert.ok(!kept.includes(part), `the record never keeps ${part}`);
+    }
+    assert.ok(kept.includes('Incorrect API key provided: [key].'));
+
+    // A plain turn keeps the host's own words as they are.
+    plan(r, [{ end: 'error', text: masked }]);
+    assert.deepEqual(doneOf(await r.turn('c-plain', words, { host: 'codex' })), { kind: 'done', error: masked });
+});
+
+test('a keyed folder that cannot be made refuses the send and starts no host', async (t) => {
+    const r = rig(t);
+    r.keys['claude-api-key'] = 'sk-planted-anthropic';
+    r.keys['codex-api-key'] = 'sk-planted-openai';
+    mkdirSync(r.b.paths.desktop, { recursive: true });
+    writeFileSync(join(r.b.paths.desktop, 'claude-keyed'), 'a file where the folder goes');
+    writeFileSync(join(r.b.paths.desktop, 'codex-keyed'), 'a file where the folder goes');
+    for (const [host, label] of [['claude-api-key', 'Anthropic'], ['codex-api-key', 'OpenAI']] as const) {
+        const said = await r.turn(`c-${host}`, words, { host });
+        const done = doneOf(said);
+        assert.equal(done?.kind, 'done');
+        assert.match((done as { error: string }).error, new RegExp(`^The turn could not be started: the folder for ${label} turns could not be made \\([A-Z]+\\)\\.$`));
+        assert.equal(r.chat.isRunning(`c-${host}`), false);
+    }
+    assert.deepEqual(r.hosts(), []);
+});
+
+test('on a keyed turn the words of an assistant message that reports a failed authentication never reach the page', async (t) => {
+    const r = rig(t);
+    r.keys.deepseek = 'sk-planted-deepseek';
+    plan(r, [{ refusedMessage: 'Invalid API key · Fix external API key' }, { say: 'never shown' }, { sleep: 20_000 }]);
+    const said = await r.turn('c1', words, { host: 'deepseek' });
+    assert.deepEqual(doneOf(said), { kind: 'done', error: refusedSentence('DeepSeek') });
+    assert.ok(!texts(said).some((text) => text.includes('Invalid API key') || text === 'never shown'), JSON.stringify(texts(said)));
+    assert.ok(!recordsText(r).includes('Invalid API key'));
+});
+
 
 test('closing the window stops every turn', async (t) => {
     const r = rig(t);

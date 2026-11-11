@@ -17,10 +17,10 @@ export interface DesktopPaths {
     providerKeys: string;
     /**
      * `<data>/desktop/claude-keyed/`: one Claude Code configuration folder per key provider, `<provider id>/` in it, which
-     * a turn on that provider's key runs with: no sign-in is in it, and it keeps those turns' transcripts.
+     * a turn on that provider's key runs with: no claude.ai login is in it, and it keeps those turns' transcripts.
      */
     claudeKeyed: string;
-    /** `<data>/desktop/codex-keyed/`: the Codex home a turn on the OpenAI key runs with: no sign-in is in it, and it keeps those turns' transcripts. */
+    /** `<data>/desktop/codex-keyed/`: the Codex home a turn on the OpenAI key runs with: no saved login is in it, and it keeps those turns' transcripts. */
     codexKeyed: string;
     /** `<data>/desktop/turns/`: one MCP configuration per running chat turn, with that turn's secret. */
     turns: string;

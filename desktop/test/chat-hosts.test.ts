@@ -293,6 +293,13 @@ const inheritedClaudeProvider: Readonly<Record<string, string>> = {
     CLAUDE_CODE_OAUTH_TOKEN: 'inherited-oauth',
     CLAUDE_CONFIG_DIR: '/inherited/claude-config',
     CLAUDE_CODE_PROJECT_DIR_NAME: 'inherited-project-dir',
+    ANTHROPIC_PROFILE: 'inherited-profile',
+    ANTHROPIC_FEDERATION_RULE_ID: 'inherited-rule',
+    ANTHROPIC_ORGANIZATION_ID: 'inherited-organization',
+    ANTHROPIC_SERVICE_ACCOUNT_ID: 'inherited-service-account',
+    ANTHROPIC_IDENTITY_TOKEN_FILE: '/inherited/identity-token',
+    ANTHROPIC_IDENTITY_TOKEN: 'inherited-identity-token',
+    ANTHROPIC_WORKSPACE_ID: 'inherited-workspace',
 };
 const inheritedCodexProvider: Readonly<Record<string, string>> = {
     OPENAI_API_KEY: 'sk-inherited-openai',
@@ -300,6 +307,10 @@ const inheritedCodexProvider: Readonly<Record<string, string>> = {
     CODEX_API_KEY: 'sk-inherited-codex',
     CODEX_HOME: '/inherited/codex-home',
     CODEX_SQLITE_HOME: '/inherited/codex-sqlite',
+    CODEX_ACCESS_TOKEN: 'inherited-access-token',
+    OPENAI_FEDERATION_RULE_ID: 'inherited-openai-rule',
+    OPENAI_IDENTITY_TOKEN_FILE: '/inherited/openai-identity-token',
+    OPENAI_WORKLOAD_IDENTITY_CONTEXT: 'inherited-workload-context',
 };
 
 test('a key provider\'s turn is started without the provider and credentials the desktop inherited; a plain turn keeps them', () => {
@@ -317,7 +328,7 @@ test('a key provider\'s turn is started without the provider and credentials the
     const openai = hostEnvironment(base, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: true, provider: { CODEX_API_KEY: 'sk-openai', CODEX_HOME: '/d/codex-keyed' } });
     assert.equal(openai.CODEX_API_KEY, 'sk-openai');
     assert.equal(openai.CODEX_HOME, '/d/codex-keyed');
-    for (const name of ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_SQLITE_HOME']) assert.equal(name in openai, false, name + ' is withheld');
+    for (const name of Object.keys(inheritedCodexProvider).filter((each) => each !== 'CODEX_API_KEY' && each !== 'CODEX_HOME')) assert.equal(name in openai, false, name + ' is withheld');
 
     for (const program of ['claude', 'codex'] as const) {
         const plain = hostEnvironment(base, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
@@ -385,7 +396,8 @@ test('the init line says where the turn\'s key came from, by a closed word: the 
 test('a retry Claude Code reports on a 401, a 403 or a failed authentication is a refused key; any other retry says nothing', () => {
     const retry = (fields: Record<string, unknown>) => claudeLine(JSON.stringify({ type: 'system', subtype: 'api_retry', attempt: 1, max_retries: 10, retry_delay_ms: 500, ...fields }));
     assert.deepEqual(retry({ error_status: 401, error: 'unknown' }), [{ kind: 'refused' }]);
-    assert.deepEqual(retry({ error_status: 403, error: 'unknown' }), [{ kind: 'refused' }]);
+    assert.deepEqual(retry({ error_status: 403, error: 'unknown' }), [{ kind: 'refused', forbidden: true }]);
+    assert.deepEqual(retry({ error_status: 403, error: 'authentication_failed' }), [{ kind: 'refused' }]);
     assert.deepEqual(retry({ error_status: null, error: 'authentication_failed' }), [{ kind: 'refused' }]);
     for (const other of [{ error_status: 429, error: 'rate_limit' }, { error_status: 529, error: 'overloaded' }, { error_status: null, error: 'server_error' }, {}]) assert.deepEqual(retry(other), [], JSON.stringify(other));
 });
@@ -394,7 +406,7 @@ test('a turn Claude Code ends on a 401 or 403, or with a failed authentication, 
     assert.deepEqual(claudeLine('{"type":"result","subtype":"success","is_error":true,"api_error_status":401,"result":"Invalid API key · Fix external API key"}'), [
         { kind: 'result', error: 'Invalid API key · Fix external API key', refused: true },
     ]);
-    assert.deepEqual(claudeLine('{"type":"result","subtype":"success","is_error":true,"api_error_status":403,"result":"Forbidden"}'), [{ kind: 'result', error: 'Forbidden', refused: true }]);
+    assert.deepEqual(claudeLine('{"type":"result","subtype":"success","is_error":true,"api_error_status":403,"result":"Forbidden"}'), [{ kind: 'result', error: 'Forbidden', refused: true, forbidden: true }]);
     assert.deepEqual(claudeLine('{"type":"result","subtype":"success","is_error":true,"api_error_status":429,"result":"Limit"}'), [{ kind: 'result', error: 'Limit' }]);
     assert.deepEqual(claudeLine('{"type":"assistant","error":"authentication_failed","message":{"content":[{"type":"text","text":"Invalid API key · Fix external API key"}]}}'), [
         { kind: 'refused' },
