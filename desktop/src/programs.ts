@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import { findOnPath, launchOf, type Launch } from './program-path.ts';
+import { withReplyClient } from './reply-client.ts';
 import { withoutSessionMarkers } from './session-markers.ts';
 
 /**
@@ -107,11 +108,13 @@ export function programLaunch(env: Readonly<Record<string, string | undefined>>,
 
 /**
  * The programs on a PATH. The environment is the desktop's own with that PATH, less a parent Claude Code session's
- * markers (`sessionMarkers`); nothing is added to it.
+ * markers (`sessionMarkers`); nothing is added to it, except that `reply` is given the harness's label built from the
+ * bundle's version (`withReplyClient`) in place of any `REPLY_CLIENT` the desktop inherited.
  */
-export function programsOn(env: Readonly<Record<string, string | undefined>>): Programs {
+export function programsOn(env: Readonly<Record<string, string | undefined>>, bundleVersion: string | null): Programs {
     const path = pathOf(env);
     const childEnv = withPath(withoutSessionMarkers(env), path);
+    const replyEnv = withReplyClient(childEnv, bundleVersion);
     const lookup = { platform: process.platform, path, pathext: env.PATHEXT ?? env.PathExt, isProgram };
     const find = (name: ProgramName) => findOnPath(name, lookup);
     return {
@@ -122,7 +125,7 @@ export function programsOn(env: Readonly<Record<string, string | undefined>>): P
             if (found === null) return { exit: -1, stdout: '', stderr: `${name} is not on the PATH.` };
             const launch = launchOf(found, process.platform, readText, findOnPath('node', lookup), isFile);
             if ('refused' in launch) return { exit: -1, stdout: '', stderr: launch.refused };
-            return runFile(launch.file, [...launch.prefix, ...args], childEnv, options);
+            return runFile(launch.file, [...launch.prefix, ...args], name === 'reply' ? replyEnv : childEnv, options);
         },
     };
 }

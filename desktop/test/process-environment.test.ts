@@ -29,7 +29,7 @@ test('the bundled jason is started without a parent Claude Code session\'s marke
 
 test('a program the desktop runs is started without a parent Claude Code session\'s markers, and with a person\'s configuration', async () => {
     const env = planted();
-    const programs = programsOn(env);
+    const programs = programsOn(env, null);
     assert.ok(programs.find('node') !== null, `no node on ${pathOf(env)}`);
     const result = await programs.run('node', ['-e', printNames]);
     assert.equal(result.exit, 0, result.stderr);
