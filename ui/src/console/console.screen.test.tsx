@@ -188,6 +188,125 @@ describe('the console', () => {
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 
+    it('picks a model and, where the model takes one, an effort beside the host, and sends both with the turn', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
+        expect(model).toHaveProperty('value', '');
+        expect(
+            within(model)
+                .getAllByRole('option')
+                .map((each) => each.textContent),
+        ).toEqual(['Default model', 'Opus', 'Sonnet', 'Haiku', 'Another model…']);
+        // The host's own model takes no effort the desktop knows of: none is offered.
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        fireEvent.change(model, { target: { value: 'opus' } });
+        const effort = await waitFor(() => screen.getByRole('combobox', { name: 'Effort' }));
+        expect(
+            within(effort)
+                .getAllByRole('option')
+                .map((each) => each.textContent),
+        ).toEqual(['Default effort', 'Low', 'Medium', 'High', 'Extra high', 'Max']);
+        fireEvent.change(effort, { target: { value: 'xhigh' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Think hard.' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+            'Think hard.',
+            { host: 'claude', model: 'opus', effort: 'xhigh' },
+        ]);
+        // A model that takes no effort hides the menu, and the next turn names none.
+        fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'haiku' } });
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+    });
+
+    it('takes a model’s full name typed on Claude Code, with no effort', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
+        fireEvent.change(model, { target: { value: 'opus' } });
+        fireEvent.change(await waitFor(() => screen.getByRole('combobox', { name: 'Effort' })), {
+            target: { value: 'high' },
+        });
+        fireEvent.change(model, { target: { value: '-another' } });
+        const name = await waitFor(() => screen.getByRole('textbox', { name: 'Model name' }));
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        // With the name empty the turn is not sent, and Enter sends nothing either.
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
+        fireEvent.keyDown(screen.getByRole('textbox', { name: 'Your message' }), { key: 'Enter' });
+        expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(false);
+        fireEvent.change(name, { target: { value: ' claude-opus-5-5 ' } });
+        expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false);
+        expect(screen.getByRole('combobox', { name: 'Model' })).toHaveProperty('value', '-another');
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+            'Go',
+            { host: 'claude', model: 'claude-opus-5-5' },
+        ]);
+    });
+
+    it('shows no model menu for a host that offers none here, and sends the turn with the host alone', async () => {
+        const fake = pending(new FakeApi());
+        const desktop = stubDesktop({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, found: false }
+                    : each.id === 'codex'
+                      ? { ...each, found: true, version: '0.80.0', install: null, models: [] }
+                      : each,
+            ),
+        });
+        renderConsole(fake, desktop);
+        await waitFor(() =>
+            expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'codex'),
+        );
+        expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+            'Go',
+            { host: 'codex' },
+        ]);
+    });
+
+    it('keeps Codex’s model control where its models could not be read, says so in one line, and sends the turn with the host alone', async () => {
+        const fake = pending(new FakeApi());
+        const sentence = "Codex's models could not be read, so the turn uses its own default model.";
+        const desktop = stubDesktop({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, found: false }
+                    : each.id === 'codex'
+                      ? { ...each, found: true, version: '0.80.0', install: null, models: [], modelsUnread: sentence }
+                      : each,
+            ),
+        });
+        renderConsole(fake, desktop);
+        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
+        expect(model).toHaveProperty('disabled', true);
+        expect(
+            within(model)
+                .getAllByRole('option')
+                .map((each) => each.textContent),
+        ).toEqual(['Default model']);
+        expect(document.querySelector('.composer .model-unread')?.textContent).toBe(sentence);
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+            'Go',
+            { host: 'codex' },
+        ]);
+    });
+
     it('sends a turn to the host that drives the chat, and draws what the agent says as text', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);

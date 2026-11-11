@@ -6,9 +6,13 @@
 // sight as not sent. Two texts are never merged, and neither is dropped.
 import type {
     DesktopChatEvent,
+    DesktopChatOptions,
     DesktopConversation,
     DesktopConversationRecord,
+    DesktopEffort,
+    DesktopHost,
     DesktopKeptEntry,
+    DesktopModel,
 } from '../platform/desktop';
 
 export type Answer = 'allow' | 'always' | 'deny' | 'gone';
@@ -49,6 +53,12 @@ export interface Chat {
     campaignId: string | null;
     /** The host the next turn runs on: a `DesktopHost.id`, or null when none that drives the chat was found. */
     host: string | null;
+    /** The model the next turn names, as the host takes it; null for the host's own. */
+    model: string | null;
+    /** The effort the next turn names, where its model takes it; null for the host's own. */
+    effort: DesktopEffort | null;
+    /** Whether the person chose to type a model's full name, on a host that takes one. */
+    typing: boolean;
     entries: Entry[];
     running: boolean;
     /** What is typed in the message box. */
@@ -87,6 +97,9 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         title: campaign ? campaign.name : 'New chat',
         campaignId: campaign?.id ?? null,
         host,
+        model: null,
+        effort: null,
+        typing: false,
         entries: [],
         running: false,
         draft: '',
@@ -126,8 +139,11 @@ function entryOf(entry: DesktopKeptEntry): Entry {
 
 /** A conversation the desktop kept, opened: what the page drew before, and no turn running. */
 export function fromRecord(record: DesktopConversationRecord, host: string | null): Chat {
+    const chosen = record.chosen;
     return {
-        ...newChat(record.id, host),
+        ...newChat(record.id, chosen?.host ?? host),
+        model: chosen?.model ?? null,
+        effort: chosen?.effort ?? null,
         title: record.title,
         campaignId: record.campaignId,
         entries: record.entries.map(entryOf),
@@ -135,6 +151,105 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         // A turn of it runs: a page loaded again shows it running, with Stop, and its events follow.
         running: record.running,
     };
+}
+
+/**
+ * The hosts as the page reads them: a desktop of an earlier version, whose runtime serves this page, lists none of the
+ * models a host offers, and such a host offers none here and takes no typed name.
+ */
+export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
+    return hosts.map((host) => {
+        const given = host as Partial<Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread'>>;
+        return Array.isArray(given.models) && typeof given.typedModel === 'boolean' && given.modelsUnread !== undefined
+            ? host
+            : {
+                  ...host,
+                  models: Array.isArray(given.models) ? given.models : [],
+                  typedModel: given.typedModel === true,
+                  modelsUnread: typeof given.modelsUnread === 'string' ? given.modelsUnread : null,
+              };
+    });
+}
+
+/** What the model menu's last option stands for: the person types a model's full name. No model is named so. */
+export const anotherModel = '-another';
+
+/** Another host: its own model and effort, until the person chooses others. */
+export const hostChosen = (chat: Chat, host: string): Chat => ({
+    ...chat,
+    host,
+    model: null,
+    effort: null,
+    typing: false,
+});
+
+/**
+ * The chat as it stands on the host its next turn runs on: as it is on the host it names; on another, that host's own
+ * model and effort, so a model is never sent to a host it was not chosen on; one that names no host yet takes it.
+ */
+export const onHost = (chat: Chat, host: string): Chat =>
+    chat.host === host ? chat : chat.host === null ? { ...chat, host } : hostChosen(chat, host);
+
+/** The effort chosen kept when the model takes it too, else the host's own. */
+const effortFor = (effort: DesktopEffort | null, offer: DesktopModel | undefined): DesktopEffort | null =>
+    effort !== null && offer?.efforts.includes(effort) ? effort : null;
+
+/** A choice in the model menu: the host's own (''), a model the host offers, or `anotherModel` to type one. */
+export function modelChosen(chat: Chat, host: DesktopHost, value: string): Chat {
+    if (value === '') return { ...chat, host: host.id, model: null, effort: null, typing: false };
+    if (value === anotherModel) return { ...chat, host: host.id, model: null, effort: null, typing: true };
+    return {
+        ...chat,
+        host: host.id,
+        model: value,
+        effort: effortFor(
+            chat.effort,
+            host.models.find((each) => each.id === value),
+        ),
+        typing: false,
+    };
+}
+
+/** A model's full name as the person types it; the turn takes it trimmed. */
+export const modelTyped = (chat: Chat, text: string): Chat => ({
+    ...chat,
+    model: text === '' ? null : text,
+    effort: null,
+});
+
+/** A choice in the effort menu: the host's own ('') or one of the levels. */
+export const effortChosen = (chat: Chat, value: DesktopEffort | ''): Chat => ({
+    ...chat,
+    effort: value === '' ? null : value,
+});
+
+/**
+ * What the box shows of the chat's model on a host: the host's model it names, if any; whether the person types one;
+ * and a model the host no longer offers and takes no typed name for, which is shown as kept and sent as it is.
+ */
+export function modelView(
+    chat: Chat,
+    host: DesktopHost,
+): { offer: DesktopModel | null; typing: boolean; kept: string | null } {
+    const name = chat.model?.trim() ?? '';
+    const offer = host.models.find((each) => each.id === name) ?? null;
+    const typing = host.typedModel && (chat.typing || (name !== '' && offer === null));
+    return { offer, typing, kept: !host.typedModel && name !== '' && offer === null ? name : null };
+}
+
+/** What a turn is sent with: the host, the model when one is named, and the effort when that model takes it. */
+export function turnOptions(chat: Chat, host: DesktopHost): DesktopChatOptions {
+    const model = chat.model?.trim() ?? '';
+    const offer = host.models.find((each) => each.id === model);
+    // A model the host no longer offers, and takes no typed name for, is not one the desktop takes: the host's own goes.
+    if (model === '' || (offer === undefined && !host.typedModel)) return { host: host.id };
+    const effort = effortFor(chat.effort, offer);
+    return effort === null ? { host: host.id, model } : { host: host.id, model, effort };
+}
+
+/** Whether the send waits: "Another model" is chosen and no name is typed yet. */
+export function sendHeld(chat: Chat, host: DesktopHost): boolean {
+    return modelView(chat, host).typing && (chat.model?.trim() ?? '') === '';
 }
 
 /** The person picked the campaign a set-up chat is about, and the desktop made it that campaign's conversation. */

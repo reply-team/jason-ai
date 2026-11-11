@@ -20,12 +20,38 @@ export type DesktopCommand =
     | 'navigate.settings'
     | 'navigate.connect';
 
+/**
+ * How hard the model thinks, as the host's own flag: one of five levels, the same words on every host. The desktop
+ * passes no other word, `ultracode` and `ultra` among them.
+ */
+export type DesktopEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 /** What `chat.send` takes besides the text: never a campaign, which the conversation the desktop keeps decides. */
 export interface DesktopChatOptions {
     /** The agent host the turn runs on: the `id` of one of `setup.status().hosts` whose `drivesChat` is true. */
     host: string;
     /** A model the host offers, by the name the host takes; absent, the host's own default. */
     model?: string;
+    /**
+     * An effort the model named takes, one of its `DesktopModel.efforts`; absent, the host's own. The desktop refuses a
+     * send whose effort the model does not take, and one with an effort and no model, before any host starts.
+     */
+    effort?: DesktopEffort;
+}
+
+/** A model the chat's box offers on a host: `id` the name the host takes, `label` the words to show, and its efforts. */
+export interface DesktopModel {
+    id: string;
+    label: string;
+    /** The effort levels it takes; empty when it takes none, and then the box shows no effort for it. */
+    efforts: DesktopEffort[];
+}
+
+/** What a conversation's last turn was sent with: its host, its model (null: the host's own) and its effort. */
+export interface DesktopChosen {
+    host: string;
+    model: string | null;
+    effort: DesktopEffort | null;
 }
 
 /**
@@ -72,6 +98,8 @@ export type DesktopKeptEntry =
 export interface DesktopConversationRecord extends DesktopConversation {
     entries: DesktopKeptEntry[];
     dropped: number;
+    /** What its last turn was sent with, for the box to show again; null before its first. */
+    chosen: DesktopChosen | null;
 }
 
 /** One thing a running turn says, in the order the host says it. The chat id it belongs to comes beside it. */
@@ -136,6 +164,18 @@ export interface DesktopHost {
      * runs no turn on it, and the desktop refuses a turn sent to it whatever the page asked.
      */
     belowFloor: string | null;
+    /**
+     * The models the chat's box offers on it: Claude Code's aliases, the models Codex offered when last asked (kept by
+     * the desktop and asked again at most once a day), or a key provider's own; empty for a host that offers none here.
+     */
+    models: DesktopModel[];
+    /** Whether the box also takes a model's full name the person types, with no effort: Claude Code and Anthropic's key. */
+    typedModel: boolean;
+    /**
+     * Where the host's models are asked of it (Codex) and no list was ever read, the desktop's one line saying so, and
+     * that the turn uses the host's own default model; null otherwise. The box then offers the host's default alone.
+     */
+    modelsUnread: string | null;
 }
 
 /** An account Reply holds, as the Reply CLI lists it. */

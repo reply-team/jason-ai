@@ -22,6 +22,7 @@ import {
     bounded,
     conversationIdShape,
     ConversationUnwritten,
+    type Chosen,
     newConversationId,
     readConversations,
     removeConversation,
@@ -30,6 +31,7 @@ import {
     type KeptEntry,
 } from './chat-conversations.ts';
 import { header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
+import { currentModel, effortRefusal, isEffort, modelRefusal, modelShape, type Effort, type KeptLists } from './chat-models.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
@@ -61,6 +63,8 @@ export type ChatEvent =
 export interface ChatSendOptions {
     host: string;
     model?: string;
+    /** One of the five levels, which the model named must take (`effortRefusal`); absent, the host keeps its own. */
+    effort?: Effort;
 }
 
 /** A conversation as `chat.list` lists it: `running` whether a turn of it runs now. */
@@ -83,10 +87,11 @@ export class ChatRefused extends Error {
     }
 }
 
-/** A conversation as `chat.open` answers it: what the page drew, kept as text. */
+/** A conversation as `chat.open` answers it: what the page drew, kept as text, and what its last turn was sent with. */
 export interface ConversationOpened extends ConversationSummary {
     entries: KeptEntry[];
     dropped: number;
+    chosen: Chosen | null;
 }
 
 /** What one turn did, for the log: counts and a duration, never its words. */
@@ -111,6 +116,8 @@ export interface ChatOptions {
     cli: Cli;
     /** The program runner, which reads Claude Code's version before each turn on it. */
     programs: Pick<Programs, 'run'>;
+    /** The models Codex offered when last asked, by host id (`model-lists.ts`); none when not given. */
+    models?(): KeptLists;
     keyFor(providerId: string): string | undefined;
     /** The deny list's commands and operations, the allow list's verbs and the instruction text, read at each turn. */
     fence(): ChatFence;
@@ -160,6 +167,10 @@ interface Resolved {
     keyed: boolean;
     /** The model named on the command line; an Anthropic-compatible endpoint is given its model by the environment instead. */
     model: string | undefined;
+    /** The model the send named, by the name the vendor gives it now (`currentModel`), wherever it goes. */
+    named: string | undefined;
+    /** The effort the send named, which the model named takes. */
+    effort: Effort | undefined;
     /** A key provider's host folder of the desktop's own (`keyedFolder`), made before the turn; null on a plain turn. */
     folder: string | null;
     /** Whether the host's word on where its key came from is read: on Anthropic's own key alone, whose variable the page names. */
@@ -187,7 +198,7 @@ function notTakenSentence(label: string): string {
  * Makes a key provider's host folder, and its parent of the desktop's own, closed to every account but this one where
  * the system has modes: the folder keeps the transcripts of that provider's turns.
  */
-function makePrivate(label: string, parent: string, folder: string): void {
+export function makePrivate(label: string, parent: string, folder: string): void {
     try {
         mkdirSync(folder, { recursive: true, mode: 0o700 });
         if (process.platform === 'win32') return;
@@ -210,7 +221,6 @@ type Listed = Map<string, { created: number; name: string }>;
 
 const chatIdShape = /^[A-Za-z0-9_.:-]{1,200}$/;
 const campaignIdShape = /^cmp_[0-9A-Za-z]{1,64}$/;
-const modelShape = /^[A-Za-z0-9][A-Za-z0-9._:[\]/-]{0,99}$/;
 const textLimit = 1_000_000;
 const wordsKept = 600;
 /** One page of `campaign list` at the runtime's largest, and how many pages a hand-over reads before it gives up. */
@@ -372,7 +382,7 @@ export class Chat {
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
     open(id: unknown): ConversationOpened {
         const conversation = this.#own(id);
-        return { ...this.#summaryOf(conversation), entries: structuredClone(conversation.entries), dropped: conversation.dropped };
+        return { ...this.#summaryOf(conversation), entries: structuredClone(conversation.entries), dropped: conversation.dropped, chosen: conversation.chosen === undefined ? null : { ...conversation.chosen } };
     }
 
     /**
@@ -444,8 +454,12 @@ export class Chat {
     /**
      * Starts a turn. It resolves once the host has started, or once the send was refused; a refusal, like every end, is
      * a `done` with an error in plain words, and no host was started: on Claude Code, one below the floor
-     * (`claudeFloor`) or whose version cannot be read is refused after `claude --version` and before anything else. A chat id the desktop does not take, or a
-     * conversation it does not keep, has no chat to say `done` to, so that send rejects with an Error the page shows.
+     * (`claudeFloor`) or whose version cannot be read is refused after `claude --version` and before anything else, and
+     * so is an effort the model named does not take at that version. An effort that is not one of the five words, or one
+     * the model named does not take by the table or the list kept, is refused the same way, and so is a model the host
+     * does not offer (`modelRefusal`). A chat id the desktop does
+     * not take, or a conversation it does not keep, has no chat to say `done` to, so that send rejects with an Error the
+     * page shows.
      */
     async send(chatId: unknown, text: unknown, options: unknown): Promise<void> {
         if (typeof chatId !== 'string' || !chatIdShape.test(chatId)) throw new ChatRefused('That is not a chat id the desktop takes.');
@@ -457,8 +471,11 @@ export class Chat {
         if (text.length > textLimit) return refuse('That message is too long to send in one turn.');
         const given = (options ?? {}) as Partial<Record<keyof ChatSendOptions, unknown>>;
         if (given.model !== undefined && (typeof given.model !== 'string' || !modelShape.test(given.model))) return refuse('That model name is not one the desktop passes to a host.');
-        const resolved = this.#resolve(given.host, given.model as string | undefined);
+        if (given.effort !== undefined && !isEffort(given.effort)) return refuse('That effort is not one the desktop passes to a host.');
+        const resolved = this.#resolve(given.host, given.model as string | undefined, given.effort as Effort | undefined);
         if (typeof resolved === 'string') return refuse(resolved);
+        const notOffered = modelRefusal(resolved.host, resolved.named, this.#options.models?.() ?? new Map());
+        if (notOffered !== null) return refuse(notOffered);
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
 
@@ -469,8 +486,11 @@ export class Chat {
         for (const [id, each] of this.#setupTurns) if (id !== conversation.id) each.overlapped = true;
         try {
             // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
-            // answering while the version is read, so a second send is refused as busy.
-            const held = resolved.program === 'claude' ? await this.#belowFloor() : null;
+            // answering while the version is read, so a second send is refused as busy. The version read also says
+            // whether the model named takes the effort named.
+            const version = resolved.program === 'claude' ? await this.#claudeVersion() : null;
+            const below = resolved.program === 'claude' ? floorSentence(version) : null;
+            const held = below ?? (resolved.effort === undefined ? null : effortRefusal(resolved.host, resolved.named, resolved.effort, this.#options.models?.() ?? new Map(), version));
             // A stop or a window close while the version was read: its answer is dropped and nothing of the turn is built.
             if (running.stopped) {
                 this.#running.delete(conversation.id);
@@ -526,9 +546,9 @@ export class Chat {
         this.#broker.endAll();
     }
 
-    /** Claude Code's version, read before each turn on it and never remembered, and the sentence when it is below the floor. */
-    async #belowFloor(): Promise<string | null> {
-        return floorSentence(printedVersion(await this.#options.programs.run('claude', ['--version'], { timeoutMs: versionLimitMs })));
+    /** Claude Code's version, read before each turn on it and never remembered; null when it cannot be read. */
+    async #claudeVersion(): Promise<string | null> {
+        return printedVersion(await this.#options.programs.run('claude', ['--version'], { timeoutMs: versionLimitMs }));
     }
 
     #conversationOf(chatId: string): Conversation | undefined {
@@ -583,12 +603,13 @@ export class Chat {
         }
     }
 
-    #resolve(host: unknown, model: string | undefined): Resolved | string {
+    #resolve(host: unknown, given: string | undefined, effort: Effort | undefined): Resolved | string {
         const provider = keyProvider(host);
         if (provider !== undefined) {
             const key = this.#options.keyFor(provider.id);
             if (!key) return `No key is stored for ${provider.label}. Add it on the Connect card, then send again.`;
             const folder = keyedFolder(this.#options.paths, provider);
+            const model = currentModel(provider.id, given);
             const provided = providerEnvironment(provider, key, model ?? '', folder);
             return {
                 host: provider.id,
@@ -597,6 +618,8 @@ export class Chat {
                 provider: provided,
                 keyed: true,
                 model: provider.baseUrl ? undefined : model,
+                named: model,
+                effort,
                 folder,
                 checksKeySource: provider.keyVariable === 'ANTHROPIC_API_KEY',
                 key,
@@ -607,7 +630,8 @@ export class Chat {
         if (!known.drivesChat || (known.program !== 'claude' && known.program !== 'codex')) {
             return `${known.label} runs campaign work, not the chat yet. Choose Claude Code or Codex for the chat.`;
         }
-        return { host: known.id, label: known.label, program: known.program, provider: {}, keyed: false, model, folder: null, checksKeySource: false, key: null };
+        const model = currentModel(known.id, given);
+        return { host: known.id, label: known.label, program: known.program, provider: {}, keyed: false, model, named: model, effort, folder: null, checksKeySource: false, key: null };
     }
 
     async #readJson(args: string[]): Promise<Record<string, unknown> | null> {
@@ -784,9 +808,9 @@ export class Chat {
                 });
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
                 const rules = dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop));
-                argsFor = (resumed) => claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, dataRules: rules, model: resolved.model, resume: resumed });
+                argsFor = (resumed) => claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed });
             } else {
-                argsFor = (resumed) => codexArguments({ model: resolved.model, resume: resumed });
+                argsFor = (resumed) => codexArguments({ model: resolved.model, effort: resolved.effort, resume: resumed });
             }
         } catch (error) {
             // Whatever the turn had opened is closed again: its endpoint, its broker turn and its file.
@@ -810,12 +834,14 @@ export class Chat {
             keyed: resolved.keyed,
             provider: resolved.provider,
             bundleVersion: this.#options.bundleVersion,
+            effortNamed: resolved.effort !== undefined,
         });
         let steps = 0;
         const begun = Date.now();
         // A set-up chat is named by the first sixty characters of its first message, until a campaign names it.
         if (setup && conversation.title === 'New chat' && !conversation.entries.some((entry) => entry.kind === 'user')) conversation.title = titleOf(text);
         conversation.entries.push({ kind: 'user', text });
+        conversation.chosen = { host: resolved.host, model: resolved.named ?? null, effort: resolved.effort ?? null };
         if (hostChanged) this.#fresh(replyTo, 'host_changed');
 
         /**

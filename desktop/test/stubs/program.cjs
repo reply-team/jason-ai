@@ -6,7 +6,9 @@ const record = require('./record.cjs');
 const script = process.argv[1];
 const name = /^index\.c?js$/.test(basename(script)) ? basename(dirname(script)).replace(/-stub$/, '') : basename(script);
 const args = process.argv.slice(2);
-const stdin = record.readStdin();
+// `codex app-server` reads its standard input line by line for as long as it runs, so it is not read whole first.
+const listing = name === 'codex' && args.join(' ') === 'app-server';
+const stdin = listing ? '' : record.readStdin();
 record(name, args, stdin);
 const said = args.join(' ');
 
@@ -15,6 +17,8 @@ if (process.env.STUB_HANG === name) {
     // for. Its id is written to the file STUB_HANG_PID names, so a test can see it has gone.
     if (process.env.STUB_HANG_PID) writeFileSync(process.env.STUB_HANG_PID, String(process.pid));
     setInterval(() => undefined, 60000);
+} else if (listing) {
+    require('./app-server.cjs')();
 } else if (said === '--version' && name === 'claude' && process.env.STUB_CLAUDE_VERSION_STUCK) {
     // A Claude Code that never answers and outlives the first signal. Elsewhere it ignores SIGTERM. On Windows, where a
     // signal ends a process outright, it leaves a detached process of its own holding its output open, which outlives it

@@ -190,6 +190,30 @@ test('a session that does not begin with a letter or a digit is read as no sessi
     assert.deepEqual(read, { ...kept, sessions: { codex: '0199a213-81c0-7800-8aa1-bbab2a035a53' } });
 });
 
+test('the host, model and effort chosen last are kept with the record and read back; one out of shape is read as none, and the record kept', () => {
+    const kept = record({ chosen: { host: 'codex', model: 'gpt-6.1-sol', effort: 'high' } });
+    assert.deepEqual(parseConversation(serialize(kept), kept.id), kept);
+    const plain = record({ chosen: { host: 'claude', model: null, effort: null } });
+    assert.deepEqual(parseConversation(serialize(plain), plain.id), plain);
+    // A name DeepSeek retired is read as the one its page gives now.
+    const retired = record({ chosen: { host: 'deepseek', model: 'deepseek-v4-flash', effort: 'max' } });
+    assert.deepEqual(parseConversation(serialize(retired), retired.id)?.chosen, { host: 'deepseek', model: 'deepseek-flash', effort: 'max' });
+    for (const chosen of [
+        { host: 'claude', model: '--yolo', effort: null },
+        { host: 'claude', model: 'opus', effort: 'ultracode' },
+        { host: '../x', model: null, effort: null },
+        { host: 'claude', model: 7, effort: null },
+        'opus',
+        null,
+    ]) {
+        const text = JSON.stringify({ ...JSON.parse(serialize(record())), chosen });
+        const id = (JSON.parse(text) as { id: string }).id;
+        const read = parseConversation(text, id);
+        assert.ok(read !== null, JSON.stringify(chosen));
+        assert.equal(read?.chosen, undefined, JSON.stringify(chosen));
+    }
+});
+
 test('a record whose id is not its file\'s name, or not a conversation id, is not read', () => {
     const kept = record();
     assert.deepEqual(parseConversation(serialize(kept), kept.id), kept);

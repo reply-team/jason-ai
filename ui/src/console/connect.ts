@@ -1,6 +1,7 @@
 import { effect, signal } from '@preact/signals-react';
 import type { DesktopHost, DesktopPlugin, DesktopReplyAccount, DesktopSetup } from '../platform/desktop';
 import { act, argsOf, define } from './actions';
+import { withModels } from './chat-model';
 import { html, type Html } from './html';
 import { signInSentence } from './live';
 import { here, messageOf, setup, setupBusy, setupError } from './state';
@@ -79,7 +80,8 @@ function grouped(accounts: readonly DesktopReplyAccount[]): [string, DesktopRepl
 
 export async function reload(): Promise<void> {
     try {
-        setup.value = await here().desktop.setup.status();
+        const status = await here().desktop.setup.status();
+        setup.value = { ...status, hosts: withModels(status.hosts) };
     } catch (error) {
         setupError.value = messageOf(error);
     }

@@ -499,6 +499,109 @@ test('what a send gives is checked before a host starts', async (t) => {
     assert.deepEqual(r.hosts(), []);
 });
 
+const codexKept = new Map([
+    ['codex', { askedAt: '2026-11-11T10:00:00.000Z', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] as ('low' | 'high')[] }] }],
+]);
+/** The record of a conversation, read from its file. */
+const recordOf = (r: Rig, name: string) => JSON.parse(readFileSync(join(r.b.paths.conversations, `${String(r.chat.idOf(name))}.json`), 'utf8')) as { chosen?: unknown };
+
+test("a turn names its model and effort as each host's own flags, resumed or not, and the record keeps what was chosen", async (t) => {
+    const r = rig(t, { env: { CLAUDE_CODE_EFFORT_LEVEL: 'max' }, chat: { models: () => codexKept } });
+    await r.turn('c1', words, { host: 'claude', model: 'opus', effort: 'xhigh' });
+    await r.turn('c1', words, { host: 'claude', model: 'opus', effort: 'low' });
+    await r.turn('c2', words, { host: 'codex', model: 'gpt-6.1-sol', effort: 'high' });
+    await r.turn('c2', words, { host: 'codex', model: 'gpt-6.1-sol', effort: 'low' });
+    const [first, resumed, codex, codexResumed] = r.hosts();
+    assert.equal(flagValue(first?.args ?? [], '--effort'), 'xhigh');
+    assert.equal(flagValue(resumed?.args ?? [], '--effort'), 'low');
+    assert.ok(resumed?.args.includes('--resume'));
+    for (const each of [first, resumed]) assert.ok(!('CLAUDE_CODE_EFFORT_LEVEL' in (each?.env ?? {})), 'an inherited level would override the flag');
+    assert.equal(flagValue(codex?.args ?? [], '-c'), 'model_reasoning_effort=high');
+    assert.equal(flagValue(codexResumed?.args ?? [], '-c'), 'model_reasoning_effort=low');
+    assert.ok(codexResumed?.args.includes('resume'));
+    assert.deepEqual(recordOf(r, 'c1').chosen, { host: 'claude', model: 'opus', effort: 'low' });
+    assert.deepEqual(recordOf(r, 'c2').chosen, { host: 'codex', model: 'gpt-6.1-sol', effort: 'low' });
+});
+
+test('a turn that names no effort passes none, keeps the inherited level, and the record keeps the model alone', async (t) => {
+    const r = rig(t, { env: { CLAUDE_CODE_EFFORT_LEVEL: 'max' } });
+    await r.turn('c1', words, { host: 'claude', model: 'claude-opus-5-5' });
+    await r.turn('c2', words, { host: 'codex' });
+    const [claude, codex] = r.hosts();
+    assert.ok(!claude?.args.includes('--effort'));
+    assert.equal(flagValue(claude?.args ?? [], '--model'), 'claude-opus-5-5', 'a full name typed by the person reaches the host');
+    assert.equal(claude?.env.CLAUDE_CODE_EFFORT_LEVEL, 'max');
+    assert.ok(!codex?.args.includes('-c') && !codex?.args.includes('--model'));
+    assert.deepEqual(recordOf(r, 'c1').chosen, { host: 'claude', model: 'claude-opus-5-5', effort: null });
+    assert.deepEqual(recordOf(r, 'c2').chosen, { host: 'codex', model: null, effort: null });
+});
+
+test('an effort the desktop does not pass, or one the model does not take, is refused before any host starts', async (t) => {
+    const r = rig(t, { chat: { models: () => codexKept } });
+    r.keys.moonshot = 'sk-planted-kimi';
+    const notPassed = 'That effort is not one the desktop passes to a host.';
+    const notTaken = 'That effort is not one this model takes.';
+    const cases: [unknown, string][] = [
+        [{ host: 'claude', model: 'opus', effort: 'ultracode' }, notPassed],
+        [{ host: 'codex', model: 'gpt-6.1-sol', effort: 'ultra' }, notPassed],
+        [{ host: 'claude', model: 'opus', effort: 7 }, notPassed],
+        [{ host: 'claude', effort: 'high' }, notTaken],
+        [{ host: 'claude', model: 'claude-opus-5-5', effort: 'high' }, notTaken],
+        [{ host: 'codex', model: 'gpt-6.1-sol', effort: 'max' }, notTaken],
+
+        [{ host: 'moonshot', model: 'kimi-k3', effort: 'max' }, notTaken],
+    ];
+    for (const [options, sentence] of cases) {
+        assert.deepEqual(await r.turn('c1', words, options), [{ kind: 'done', error: sentence }], JSON.stringify(options));
+    }
+    assert.deepEqual(r.hosts(), []);
+    assert.deepEqual(r.started, []);
+});
+
+test("a model the host does not offer is refused before any host starts; a typed name only on Claude Code and Anthropic's key", async (t) => {
+    const r = rig(t, { chat: { models: () => codexKept } });
+    r.keys.deepseek = 'sk-planted-deepseek';
+    r.keys['claude-api-key'] = 'sk-planted-anthropic';
+    r.keys['codex-api-key'] = 'sk-planted-openai';
+    const notOffered = 'That model is not one this host offers.';
+    const cases: unknown[] = [
+        { host: 'codex', model: 'opus' },
+        { host: 'codex', model: 'gpt-6-unlisted' },
+        { host: 'deepseek', model: 'claude-opus-5-5' },
+        { host: 'deepseek', model: 'opus' },
+        { host: 'codex-api-key', model: 'gpt-6.1-sol' },
+    ];
+    for (const options of cases) {
+        assert.deepEqual(await r.turn('c1', words, options), [{ kind: 'done', error: notOffered }], JSON.stringify(options));
+    }
+    assert.deepEqual(r.hosts(), []);
+    for (const options of [{ host: 'claude-api-key', model: 'claude-opus-5-5' }, { host: 'codex', model: 'gpt-6.1-sol' }, { host: 'deepseek', model: 'deepseek-v4-pro' }]) {
+        assert.deepEqual(doneOf(await r.turn('c2', words, options)), { kind: 'done', error: null }, JSON.stringify(options));
+    }
+});
+
+test('haiku takes an effort only on a Claude Code whose version, read before the turn, is 2.1.293 or newer', async (t) => {
+    const below = rig(t, { chat: { programs: versionSaying({ exit: 0, stdout: '2.1.292 (Claude Code)\n', stderr: '' }).programs } });
+    assert.deepEqual(await below.turn('c1', words, { host: 'claude', model: 'haiku', effort: 'low' }), [{ kind: 'done', error: 'That effort is not one this model takes.' }]);
+    assert.deepEqual(below.hosts(), []);
+    const at = rig(t, { chat: { programs: versionSaying({ exit: 0, stdout: '2.1.293 (Claude Code)\n', stderr: '' }).programs } });
+    assert.deepEqual(doneOf(await at.turn('c1', words, { host: 'claude', model: 'haiku', effort: 'low' })), { kind: 'done', error: null });
+    assert.equal(flagValue(at.hosts()[0]?.args ?? [], '--effort'), 'low');
+});
+
+test("on a key provider the effort reaches Claude Code as its flag where the vendor names levels, and DeepSeek's retired name is sent as its new one", async (t) => {
+    const r = rig(t);
+    r.keys.deepseek = 'sk-planted-deepseek';
+    r.keys.minimax = 'sk-planted-minimax';
+    await r.turn('c1', words, { host: 'deepseek', model: 'deepseek-v4-flash', effort: 'max' });
+    await r.turn('c2', words, { host: 'minimax', model: 'MiniMax-M3.1-Flash', effort: 'xhigh' });
+    const [deepseek, minimax] = r.hosts();
+    assert.equal(deepseek?.env.ANTHROPIC_MODEL, 'deepseek-flash');
+    assert.equal(flagValue(deepseek?.args ?? [], '--effort'), 'max');
+    assert.equal(flagValue(minimax?.args ?? [], '--effort'), 'xhigh');
+    assert.deepEqual(recordOf(r, 'c1').chosen, { host: 'deepseek', model: 'deepseek-flash', effort: 'max' });
+});
+
 test('a send with a chat id the desktop does not take rejects with an Error the page shows, and starts nothing', async (t) => {
     const r = rig(t);
     for (const chatId of ['', 'c 1', 'c1/../x', 'x'.repeat(201), 42, null]) {
@@ -574,12 +677,12 @@ test('a provider\'s key reaches the host\'s environment only, and an Anthropic-c
     const r = rig(t);
     r.keys.deepseek = 'sk-planted-deepseek';
     r.keys['claude-api-key'] = 'sk-planted-anthropic';
-    await r.turn('c1', words, { host: 'deepseek', model: 'deepseek-v4-flash' });
+    await r.turn('c1', words, { host: 'deepseek', model: 'deepseek-flash' });
     await r.turn('c2', words, { host: 'claude-api-key', model: 'sonnet' });
     const [compatible, anthropic] = r.hosts();
     assert.equal(compatible?.env.ANTHROPIC_AUTH_TOKEN, 'sk-planted-deepseek');
     assert.equal(compatible?.env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
-    assert.equal(compatible?.env.ANTHROPIC_MODEL, 'deepseek-v4-flash');
+    assert.equal(compatible?.env.ANTHROPIC_MODEL, 'deepseek-flash');
     assert.ok(!compatible?.args.includes('--model'));
     assert.equal(anthropic?.env.ANTHROPIC_API_KEY, 'sk-planted-anthropic');
     assert.equal(flagValue(anthropic?.args ?? [], '--model'), 'sonnet');

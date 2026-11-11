@@ -60,6 +60,9 @@ function standInDesktop(): void {
                             drivesChat: true,
                             install: null,
                             belowFloor: null,
+                            models: [{ id: 'opus', label: 'Opus', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] }],
+                            typedModel: true,
+                            modelsUnread: null,
                         },
                     ],
                     reply: {

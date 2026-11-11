@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import type { DesktopEffort, DesktopHost } from '../platform/desktop';
 import {
+    anotherModel,
     answered,
+    effortChosen,
+    hostChosen,
+    modelChosen,
+    modelTyped,
+    modelView,
+    onHost,
+    sendHeld,
+    turnOptions,
+    withModels,
     failed,
     fromRecord,
     handed,
@@ -120,6 +131,7 @@ describe('a chat as the page keeps it', () => {
                     { kind: 'error', text: 'Claude Code stopped.' },
                     { kind: 'pick', campaignIds: ['cmp_2'] },
                 ],
+                chosen: null,
             },
             'claude',
         );
@@ -266,5 +278,154 @@ describe('a message typed while a turn runs', () => {
             stopping: false,
             draft: 'And then?',
         });
+    });
+});
+
+describe('the model and the effort a chat is sent with', () => {
+    const every: DesktopEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+    const claude: DesktopHost = {
+        id: 'claude',
+        label: 'Claude Code',
+        kind: 'program',
+        found: true,
+        version: '2.1.300',
+        drivesChat: true,
+        install: null,
+        belowFloor: null,
+        models: [
+            { id: 'opus', label: 'Opus', efforts: every },
+            { id: 'haiku', label: 'Haiku', efforts: [] },
+        ],
+        typedModel: true,
+        modelsUnread: null,
+    };
+    const codex: DesktopHost = {
+        ...claude,
+        id: 'codex',
+        label: 'Codex',
+        models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] }],
+        typedModel: false,
+    };
+    const fresh = newChat('conv_1', 'claude');
+
+    it('names no model and no effort until one is chosen, so the host keeps its own', () => {
+        expect(fresh).toMatchObject({ model: null, effort: null, typing: false });
+        expect(turnOptions(fresh, claude)).toEqual({ host: 'claude' });
+    });
+
+    it('names the model chosen, and the effort only where that model takes it', () => {
+        const opus = effortChosen(modelChosen(fresh, claude, 'opus'), 'xhigh');
+        expect(turnOptions(opus, claude)).toEqual({ host: 'claude', model: 'opus', effort: 'xhigh' });
+        // A model that takes none drops the effort chosen before, and sends none.
+        const haiku = modelChosen(opus, claude, 'haiku');
+        expect(haiku.effort).toBeNull();
+        expect(turnOptions(effortChosen(haiku, 'low'), claude)).toEqual({ host: 'claude', model: 'haiku' });
+        // The host's own model again: neither is named.
+        expect(turnOptions(modelChosen(opus, claude, ''), claude)).toEqual({ host: 'claude' });
+        expect(turnOptions(effortChosen(opus, ''), claude)).toEqual({ host: 'claude', model: 'opus' });
+    });
+
+    it('keeps an effort across models that both take it, and drops one the next model does not take', () => {
+        const opus = effortChosen(modelChosen(fresh, claude, 'opus'), 'high');
+        expect(turnOptions(modelChosen(opus, codex, 'gpt-6.1-sol'), codex)).toEqual({
+            host: 'codex',
+            model: 'gpt-6.1-sol',
+            effort: 'high',
+        });
+        const max = effortChosen(modelChosen(fresh, claude, 'opus'), 'max');
+        expect(modelChosen(max, codex, 'gpt-6.1-sol').effort).toBeNull();
+    });
+
+    it('takes a full model name typed on a host that takes one, trimmed, and never with an effort', () => {
+        const typing = modelChosen(fresh, claude, anotherModel);
+        expect(typing).toMatchObject({ typing: true, model: null, effort: null });
+        expect(turnOptions(typing, claude)).toEqual({ host: 'claude' });
+        const named = effortChosen(modelTyped(typing, '  claude-opus-5-5 '), 'high');
+        expect(turnOptions(named, claude)).toEqual({ host: 'claude', model: 'claude-opus-5-5' });
+        expect(modelView(named, claude)).toEqual({ offer: null, typing: true, kept: null });
+        // A typed name that is one of the host's own models is that model, with its efforts.
+        expect(modelView(modelTyped(typing, 'opus'), claude).offer?.id).toBe('opus');
+        // On a host that takes no typed name, a model it no longer offers is shown as kept and still sent.
+        const gone = { ...fresh, host: 'codex', model: 'gpt-5-old' };
+        expect(modelView(gone, codex)).toEqual({ offer: null, typing: false, kept: 'gpt-5-old' });
+        // The desktop takes no model its host no longer offers: the turn goes on the host's own, with no effort.
+        expect(turnOptions({ ...gone, effort: 'high' }, codex)).toEqual({ host: 'codex' });
+    });
+
+    it('holds the send while another model is chosen and its name is empty', () => {
+        const typing = modelChosen(fresh, claude, anotherModel);
+        expect(sendHeld(typing, claude)).toBe(true);
+        expect(sendHeld(modelTyped(typing, '   '), claude)).toBe(true);
+        expect(sendHeld(modelTyped(typing, 'claude-opus-5-5'), claude)).toBe(false);
+        expect(sendHeld(fresh, claude)).toBe(false);
+        expect(sendHeld(modelChosen(fresh, claude, 'opus'), claude)).toBe(false);
+    });
+
+    it('starts again from the host\u2019s own model when the host changes', () => {
+        const opus = effortChosen(modelChosen(fresh, claude, 'opus'), 'high');
+        expect(hostChosen(opus, 'codex')).toMatchObject({ host: 'codex', model: null, effort: null, typing: false });
+    });
+
+    it('never sends a model to a host other than the one it was chosen on, when the turn falls to another host', () => {
+        const onCodex = effortChosen(modelChosen({ ...fresh, host: 'codex' }, codex, 'gpt-6.1-sol'), 'high');
+        // Codex is gone, and the next turn runs on Claude Code: it names none of Codex's choices.
+        expect(turnOptions(onHost(onCodex, 'claude'), claude)).toEqual({ host: 'claude' });
+        expect(modelView(onHost(onCodex, 'claude'), claude)).toEqual({ offer: null, typing: false, kept: null });
+        expect(onHost(onCodex, 'codex')).toBe(onCodex);
+        // A chat that named no host yet takes the one its turn runs on, and a model chosen there sticks.
+        const chosen = modelChosen(onHost(newChat('conv_2', null), 'claude'), claude, 'opus');
+        expect(chosen).toMatchObject({ host: 'claude', model: 'opus' });
+        expect(turnOptions(onHost(chosen, 'claude'), claude)).toEqual({ host: 'claude', model: 'opus' });
+    });
+
+    it('opens a kept conversation on the host, model and effort its last turn was sent with', () => {
+        const record = {
+            id: 'conv_1',
+            campaignId: null,
+            title: 'New chat',
+            updatedAt: '2026-11-11T10:00:00.000Z',
+            running: false,
+            dropped: 0,
+            entries: [],
+        };
+        expect(
+            fromRecord({ ...record, chosen: { host: 'codex', model: 'gpt-6.1-sol', effort: 'high' } }, null),
+        ).toMatchObject({
+            host: 'codex',
+            model: 'gpt-6.1-sol',
+            effort: 'high',
+        });
+        expect(fromRecord({ ...record, chosen: null }, 'claude')).toMatchObject({
+            host: 'claude',
+            model: null,
+            effort: null,
+        });
+    });
+});
+
+describe('the hosts as a desktop of another version answers them', () => {
+    it('reads a host listed without models as one that offers none and takes no typed name', () => {
+        const older = {
+            id: 'claude',
+            label: 'Claude Code',
+            kind: 'program',
+            found: true,
+            version: '2.1.300',
+            drivesChat: true,
+            install: null,
+            belowFloor: null,
+        } as unknown as DesktopHost;
+        const [read] = withModels([older]);
+        expect(read).toMatchObject({ id: 'claude', models: [], typedModel: false, modelsUnread: null });
+        expect(turnOptions(modelChosen(newChat('conv_1', 'claude'), read!, 'opus'), read!)).toEqual({
+            host: 'claude',
+        });
+        const current: DesktopHost = {
+            ...older,
+            models: [{ id: 'opus', label: 'Opus', efforts: ['low'] }],
+            typedModel: true,
+            modelsUnread: null,
+        };
+        expect(withModels([current])[0]).toEqual(current);
     });
 });

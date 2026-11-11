@@ -1,16 +1,24 @@
 import { computed, effect } from '@preact/signals-react';
 import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent } from 'react';
-import type { DesktopHost, DesktopRefusal } from '../platform/desktop';
+import type { DesktopEffort, DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { act, define } from './actions';
 import {
     afresh,
+    anotherModel,
     answered,
+    effortChosen,
     failed,
     fromRecord,
     handed,
+    hostChosen,
     kept,
     lost,
+    modelChosen,
+    modelTyped,
+    modelView,
     newChat,
+    onHost,
+    sendHeld,
     pickedFor,
     replaced,
     said,
@@ -18,6 +26,7 @@ import {
     stopAsked,
     takenBack,
     told,
+    turnOptions,
     typed,
     type Answer,
     type Chat,
@@ -36,9 +45,19 @@ import { changeChat, chats, conversations, conversationsFailure, here, messageOf
 // back as events. The agent's words are drawn as a fixed subset of Markdown, every word of them as text. A message sent
 // while a turn runs waits in the page, and the page hands it to the desktop as the next turn when the turn ends well.
 // Every chat is a conversation the desktop keeps: a campaign's one, or a set-up chat about no campaign yet. The desktop
-// decides which campaign a turn is about, from its record; the page names the conversation and the host, nothing more.
+// decides which campaign a turn is about, from its record; the page names the conversation, the host, and the model and
+// effort chosen in the box, nothing more.
 
 const suggestions = ['What is waiting for me?', 'How are my campaigns doing?', 'Help me start a new campaign.'];
+
+/** The effort levels as the box names them. */
+const effortWords: Readonly<Record<DesktopEffort, string>> = {
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    xhigh: 'Extra high',
+    max: 'Max',
+};
 
 const answerWords: Readonly<Record<Answer, string>> = {
     allow: 'Allowed',
@@ -167,7 +186,7 @@ export function sendTurn(id: string, text: string, resent = false): void {
     }
     changeChat(id, (each) => said(each, words, resent));
     here()
-        .desktop.chat.send(id, words, { host: host.id })
+        .desktop.chat.send(id, words, turnOptions(onHost(chat, host.id), host))
         .then((answer) => {
             if (isRefusal(answer)) return changeChat(id, (each) => failed(each, answer.refused));
             // From its first turn the desktop keeps the conversation, and lists it.
@@ -388,10 +407,17 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
     const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
     const host = hostOf(chat);
+    // The model and effort shown are the ones chosen on the host the next turn runs on (`onHost`).
+    const standing = host ? onHost(chat, host.id) : chat;
+    const picked = host ? modelView(standing, host) : null;
+    const onThisHost = (change: (each: Chat) => Chat) =>
+        changeChat(chatId, (each) => (host ? change(onHost(each, host.id)) : each));
+    // "Another model" with no name typed yet: nothing is sent until a name is, or another choice made.
+    const nameMissing = host !== null && sendHeld(standing, host);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
         const current = chats.value[chatId];
-        if (!current || !host) return;
+        if (!current || !host || sendHeld(onHost(current, host.id), host)) return;
         if (current.running) {
             changeChat(chatId, kept);
             return;
@@ -504,6 +530,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </div>
                     </div>
                 )}
+                {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                 <textarea
                     id="box"
                     rows={2}
@@ -519,7 +546,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         aria-label="Agent host"
                         disabled={chat.removing}
                         value={host?.id ?? ''}
-                        onChange={(event) => changeChat(chatId, (each) => ({ ...each, host: event.target.value }))}
+                        onChange={(event) => changeChat(chatId, (each) => hostChosen(each, event.target.value))}
                     >
                         {drive.map((each) => (
                             <option key={each.id} value={each.id}>
@@ -537,6 +564,68 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                             </option>
                         ))}
                     </select>
+                    {host &&
+                        picked &&
+                        (host.models.length > 0 ||
+                            host.typedModel ||
+                            picked.kept !== null ||
+                            host.modelsUnread !== null) && (
+                            <select
+                                className="model"
+                                aria-label="Model"
+                                disabled={chat.removing || host.modelsUnread !== null}
+                                value={picked.typing ? anotherModel : (picked.offer?.id ?? picked.kept ?? '')}
+                                onChange={(event) => onThisHost((each) => modelChosen(each, host, event.target.value))}
+                            >
+                                <option value="">Default model</option>
+                                {host.models.map((each) => (
+                                    <option key={each.id} value={each.id}>
+                                        {each.label}
+                                    </option>
+                                ))}
+                                {picked.kept !== null && (
+                                    <option value={picked.kept}>
+                                        {picked.kept}: no longer listed, so the turn uses {host.label}'s own model with
+                                        no effort
+                                    </option>
+                                )}
+                                {host.typedModel && <option value={anotherModel}>Another model…</option>}
+                            </select>
+                        )}
+                    {host && picked?.typing && (
+                        <input
+                            className="model-name"
+                            type="text"
+                            aria-label="Model name"
+                            placeholder="Full model name"
+                            spellCheck={false}
+                            disabled={chat.removing}
+                            value={standing.model ?? ''}
+                            onChange={(event) => onThisHost((each) => modelTyped(each, event.target.value))}
+                        />
+                    )}
+                    {picked?.offer && picked.offer.efforts.length > 0 && (
+                        <select
+                            className="effort"
+                            aria-label="Effort"
+                            disabled={chat.removing}
+                            value={
+                                standing.effort !== null && picked.offer.efforts.includes(standing.effort)
+                                    ? standing.effort
+                                    : ''
+                            }
+                            onChange={(event) =>
+                                onThisHost((each) => effortChosen(each, event.target.value as DesktopEffort | ''))
+                            }
+                        >
+                            <option value="">Default effort</option>
+                            {picked.offer.efforts.map((each) => (
+                                <option key={each} value={each}>
+                                    {effortWords[each]}
+                                </option>
+                            ))}
+                        </select>
+                    )}
                     <span className="grow" />
                     {chat.running ? (
                         <>
@@ -544,7 +633,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                                 className="btn sm"
                                 type="submit"
                                 disabled={
-                                    chat.removing || chat.stopping || chat.waiting !== null || chat.draft.trim() === ''
+                                    chat.removing ||
+                                    chat.stopping ||
+                                    chat.waiting !== null ||
+                                    chat.draft.trim() === '' ||
+                                    nameMissing
                                 }
                             >
                                 Send when the turn ends
@@ -566,7 +659,8 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                             type="submit"
                             title="Send"
                             aria-label="Send"
-                            disabled={!host || chat.removing}
+                            disabled={!host || chat.removing || nameMissing}
+                            {...(nameMissing ? { title: 'Type the model name, or choose another model' } : {})}
                         >
                             ↑
                         </button>

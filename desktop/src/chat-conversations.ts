@@ -10,6 +10,7 @@
 import { randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { currentModel, isEffort, modelShape, type Effort } from './chat-models.ts';
 
 export type KeptAnswer = 'allow' | 'always' | 'deny' | 'gone';
 
@@ -25,6 +26,13 @@ export type KeptEntry =
     | { kind: 'error'; text: string }
     | { kind: 'pick'; campaignIds: string[] };
 
+/** What the person chose for the conversation's last turn: the host, the model (null: the host's own) and the effort. */
+export interface Chosen {
+    host: string;
+    model: string | null;
+    effort: Effort | null;
+}
+
 export interface Conversation {
     /** `conv_` and 26 Crockford base-32 characters, made by the desktop. */
     id: string;
@@ -38,6 +46,8 @@ export interface Conversation {
     entries: KeptEntry[];
     /** How many of the oldest entries were dropped to keep the record within its bound. */
     dropped: number;
+    /** What the last turn was sent with; absent until a turn is, and in a record another version wrote. */
+    chosen?: Chosen;
 }
 
 /** The most a record takes on disk; the oldest entries go first to keep within it. */
@@ -105,6 +115,20 @@ function entryOf(value: unknown): KeptEntry | null {
     }
 }
 
+/**
+ * What a record says was chosen, or undefined when it says nothing that passes the shapes: a host id, a model name the
+ * desktop passes to a host or null, and one of the five efforts or null. A model a vendor retired is read as the one it
+ * gives now (`currentModel`). A choice out of shape is no reason to refuse the record.
+ */
+function chosenOf(value: unknown): Chosen | undefined {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const { host, model, effort } = value as Record<string, unknown>;
+    if (!isText(host) || !hostIdShape.test(host)) return undefined;
+    if (model !== null && !(isText(model) && modelShape.test(model))) return undefined;
+    if (effort !== null && !isEffort(effort)) return undefined;
+    return { host, model: model === null ? null : currentModel(host, model), effort };
+}
+
 /** A record read from its file, or null when the text is not one, or not the one its name says. */
 export function parseConversation(text: string, id: string): Conversation | null {
     let value: unknown;
@@ -137,13 +161,15 @@ export function parseConversation(text: string, id: string): Conversation | null
     }
     const given = typeof raw.dropped === 'number' && Number.isSafeInteger(raw.dropped) && raw.dropped >= 0 ? raw.dropped : 0;
     const dropped = given + skipped;
-    return { id, campaign_id: raw.campaign_id as string | null, title: raw.title, created_at: raw.created_at, updated_at: raw.updated_at, sessions, entries, dropped };
+    const chosen = chosenOf(raw.chosen);
+    const read: Conversation = { id, campaign_id: raw.campaign_id as string | null, title: raw.title, created_at: raw.created_at, updated_at: raw.updated_at, sessions, entries, dropped };
+    return chosen === undefined ? read : { ...read, chosen };
 }
 
 /** The record as it is written: its fields in a fixed order. */
 export function serialize(conversation: Conversation): string {
-    const { id, campaign_id, title, created_at, updated_at, sessions, entries, dropped } = conversation;
-    return JSON.stringify({ id, campaign_id, title, created_at, updated_at, sessions, entries, dropped });
+    const { id, campaign_id, title, created_at, updated_at, sessions, entries, dropped, chosen } = conversation;
+    return JSON.stringify({ id, campaign_id, title, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }) });
 }
 
 const bytes = (value: string) => Buffer.byteLength(value, 'utf8');

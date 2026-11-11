@@ -75,8 +75,9 @@ type ConversationsAreTheSeam = [
     Holds<Equal<Extract<ChatEvent, { kind: Conversational }>, Extract<DesktopChatEvent, { kind: Conversational }>>>,
 ];
 
-// A turn names the conversation and the host, and the model; never a campaign, which the conversation's record decides.
-type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model'>>];
+// A turn names the conversation and the host, the model and the effort; never a campaign, which the conversation's
+// record decides.
+type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort'>>];
 
 // A refusal reaches the page as the value the desktop answers it with.
 type RefusalIsTheSeam = Holds<Equal<ChatRefusal, DesktopRefusal>>;

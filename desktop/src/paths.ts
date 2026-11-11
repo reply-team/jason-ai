@@ -24,6 +24,8 @@ export interface DesktopPaths {
     codexKeyed: string;
     /** `<data>/desktop/turns/`: one MCP configuration per running chat turn, with that turn's secret. */
     turns: string;
+    /** `<data>/desktop/models.json`: the models Codex offered when last asked, on the person's sign-in and on the OpenAI key. */
+    models: string;
     /** `<data>/desktop/rollback/`: the previous application an update kept aside, and the record of that update. */
     rollback: string;
     /** `<data>/desktop/bundle/`: on an AppImage, the copy of the jason it carries, one folder per version (`bundle-copy.ts`). */
@@ -62,6 +64,7 @@ export function desktopPaths(data: string): DesktopPaths {
         claudeKeyed: join(desktop, 'claude-keyed'),
         codexKeyed: join(desktop, 'codex-keyed'),
         turns: join(desktop, 'turns'),
+        models: join(desktop, 'models.json'),
         rollback: join(desktop, 'rollback'),
         bundle: join(desktop, 'bundle'),
         electron: join(desktop, 'electron'),

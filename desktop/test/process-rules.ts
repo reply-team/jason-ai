@@ -8,7 +8,7 @@
 export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
     'src/programs.ts': 'the programs a Connect card runs: reply, npm, and the version of an agent host or of node',
-    'src/chat-process.ts': "an agent host for one turn of the chat, streamed, and on Windows taskkill from the system folder to end that turn's process tree, or a program the programs module ran past its time limit",
+    'src/chat-process.ts': "an agent host for one turn of the chat, streamed, or an agent host's model listing (`codex app-server`, `startListing`), and on Windows taskkill from the system folder to end that turn's process tree, or a program the programs module ran past its time limit",
     'src/shell-path.ts': "the login shell, on macOS and Linux only, for the PATH a program started from the Finder or a session's menu lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
     'scripts/sign-windows.mjs': 'signtool, to sign each file of the Windows package through the Trusted Signing client',
@@ -23,6 +23,16 @@ export const signalLines: Readonly<Record<string, string>> = {
     'src/own-runtime.ts': 'process.kill(pid, 0);',
     'src/chat-process.ts': '(target, signal) => process.kill(target, signal),',
 };
+
+/**
+ * The one module that may start an agent host's model listing (`startListing` in src/chat-process.ts, which starts
+ * `codex app-server` and nothing else), with what it starts it for.
+ */
+export const listingCallers: Readonly<Record<string, string>> = {
+    'src/model-lists.ts': "the models Codex offers, asked at most once a day per host id, one ask at a time",
+};
+
+const listingStart = /\bstartListing\b/;
 
 /** The one module allowed to register an IPC handler, because it checks every sender's origin first. */
 export const ipcModule = 'src/ipc.ts';
@@ -90,6 +100,9 @@ export function processViolations(path: string, text: string): string[] {
         const end = text.indexOf('\n', match.index);
         const line = text.slice(text.lastIndexOf('\n', match.index) + 1, end < 0 ? text.length : end).trim();
         if (signalLines[path] !== line) found.push(`${path} signals a process with ${line}; only the two lines the guard names may`);
+    }
+    if (listingStart.test(text) && path !== 'src/chat-process.ts' && !(path in listingCallers)) {
+        found.push(`${path} starts an agent host's model listing; only ${Object.keys(listingCallers).join(', ')} may`);
     }
     if (killTaken.test(text)) found.push(`${path} takes kill from process, which hides what it signals`);
     if (openPath.test(text)) found.push(`${path} uses shell.openPath, which opens a file with whatever the system runs it with`);

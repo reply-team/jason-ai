@@ -1,13 +1,16 @@
 import { execFile, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import type { Writable } from 'node:stream';
 import type { Launch } from './program-path.ts';
 
 /**
  * One chat turn's host process: the agent host the programs module found, started with a file and arguments and no
  * shell, the person's words written to its standard input and closed, its output read line by line as it comes. A stop
  * ends the whole tree the host started, its tools' processes with it: on Windows by `taskkill /T` from the system folder,
- * elsewhere by a signal to the process group the host leads.
+ * elsewhere by a signal to the process group the host leads. Beside it one more start, made the same way: Codex's model
+ * listing, `codex app-server` and nothing else, whose standard input stays open for the lines of its exchange
+ * (`startListing`).
  *
  * This is a module of its own, beside the programs module, because a turn streams for as long as the host runs and is
  * stopped from outside, where the programs module runs a program to its end and buffers what it said.
@@ -87,11 +90,95 @@ export function endProgram(pid: number): void {
     endTree(pid, false);
 }
 
+/** A listing's host process: a turn's, with its standard input kept open for the exchange's lines. */
+export interface ListingProcess extends HostProcess {
+    /** Writes one line, and its line end, to the host's standard input. */
+    write(line: string): void;
+    /** Closes the host's standard input. */
+    endInput(): void;
+}
+
+/** The arguments of the one listing a host is started for: `codex app-server`, over standard input and output. */
+export const listingArguments: readonly string[] = ['app-server'];
+
 export function startHost(
     launch: Exclude<Launch, { refused: string }>,
     args: readonly string[],
     options: { cwd: string; env: Record<string, string>; stdin: string; onLine(line: string): void },
 ): HostProcess {
+    const { input, process: host } = spawnHost(launch, args, options);
+    input.end(options.stdin, 'utf8');
+    return host;
+}
+
+/**
+ * Starts Codex's model listing, `codex app-server` and no other arguments, as a turn's host is started: the file and its
+ * prefix the programs module found, no shell, no window, its own process group elsewhere than Windows, and the same stop.
+ */
+export function startListing(
+    launch: Exclude<Launch, { refused: string }>,
+    options: {
+        cwd: string;
+        env: Record<string, string>;
+        onLine(line: string): void;
+        /** The longest line read, in bytes; past it nothing more is read and `onTooLong` is said once. */
+        lineLimit: number;
+        onTooLong(): void;
+    },
+): ListingProcess {
+    const { input, process: host } = spawnHost(launch, listingArguments, options);
+    return {
+        ...host,
+        write(line) {
+            if (!input.writableEnded) input.write(`${line}\n`, 'utf8');
+        },
+        endInput() {
+            if (!input.writableEnded) input.end();
+        },
+    };
+}
+
+/**
+ * Reads a stream line by line, a line end being a line feed with any carriage return before it dropped, and no line
+ * longer than `limit` bytes: past it, `tooLong` is said once and nothing more is read.
+ */
+function boundedLines(stream: NodeJS.ReadableStream, limit: number, onLine: (line: string) => void, tooLong: () => void): void {
+    let parts: Buffer[] = [];
+    let held = 0;
+    let over = false;
+    const said = (bytes: Buffer) => {
+        const line = bytes.toString('utf8');
+        onLine(line.endsWith('\r') ? line.slice(0, -1) : line);
+    };
+    stream.on('data', (chunk: Buffer) => {
+        if (over) return;
+        let rest = chunk;
+        for (let end = rest.indexOf(10); end >= 0; end = rest.indexOf(10)) {
+            if (held + end > limit) break;
+            said(Buffer.concat([...parts, rest.subarray(0, end)]));
+            parts = [];
+            held = 0;
+            rest = rest.subarray(end + 1);
+            if (over) return;
+        }
+        parts.push(rest);
+        held += rest.length;
+        if (held > limit) {
+            over = true;
+            parts = [];
+            tooLong();
+        }
+    });
+    stream.on('end', () => {
+        if (!over && held > 0) said(Buffer.concat(parts));
+    });
+}
+
+function spawnHost(
+    launch: Exclude<Launch, { refused: string }>,
+    args: readonly string[],
+    options: { cwd: string; env: Record<string, string>; onLine(line: string): void; lineLimit?: number; onTooLong?(): void },
+): { input: Writable; process: HostProcess } {
     const windows = process.platform === 'win32';
     const child = spawn(launch.file, [...launch.prefix, ...args], {
         cwd: options.cwd,
@@ -108,10 +195,13 @@ export function startHost(
     child.stderr.on('data', (chunk: string) => {
         tail = (tail + chunk).slice(-stderrKept);
     });
-    const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
-    lines.on('line', (line) => options.onLine(line));
+    if (options.lineLimit === undefined) {
+        const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
+        lines.on('line', (line) => options.onLine(line));
+    } else {
+        boundedLines(child.stdout, options.lineLimit, options.onLine, () => options.onTooLong?.());
+    }
     child.stdin.on('error', () => undefined);
-    child.stdin.end(options.stdin, 'utf8');
 
     const exited = new Promise<HostExit>((resolve) => {
         child.once('error', (error) => {
@@ -132,12 +222,15 @@ export function startHost(
     }
 
     return {
-        stop() {
-            if (stopped || done) return;
-            stopped = true;
-            stopTree();
+        input: child.stdin,
+        process: {
+            stop() {
+                if (stopped || done) return;
+                stopped = true;
+                stopTree();
+            },
+            exited,
+            stderrTail: () => tail,
         },
-        exited,
-        stderrTail: () => tail,
     };
 }
