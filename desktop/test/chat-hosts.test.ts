@@ -159,7 +159,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     assert.deepEqual(targetsOf(rules), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -171,7 +171,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
 
@@ -181,7 +181,7 @@ test('every entry the desktop names in its folder but the chat folder is a known
     const named = Object.values(paths)
         .filter((path) => dirname(path) === paths.desktop && path !== paths.chat)
         .map((path) => path.slice(paths.desktop.length + 1));
-    assert.ok(named.includes('rollback'), named.join(' '));
+    assert.ok(named.includes('rollback') && named.includes('bundle'), named.join(' '));
     assert.deepEqual(named.filter((name) => !knownDesktopEntries.includes(name)), []);
 });
 

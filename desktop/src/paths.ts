@@ -17,6 +17,8 @@ export interface DesktopPaths {
     turns: string;
     /** `<data>/desktop/rollback/`: the previous application an update kept aside, and the record of that update. */
     rollback: string;
+    /** `<data>/desktop/bundle/`: on an AppImage, the copy of the jason it carries, one folder per version (`bundle-copy.ts`). */
+    bundle: string;
     /**
      * `<data>/desktop/electron/`: Electron's own files (its `userData` and `sessionData`), where the page's storage, the
      * single-instance lock and, on Windows, the key the operating system's encryption of `provider-keys` is made with
@@ -49,6 +51,7 @@ export function desktopPaths(data: string): DesktopPaths {
         providerKeys: join(desktop, 'provider-keys'),
         turns: join(desktop, 'turns'),
         rollback: join(desktop, 'rollback'),
+        bundle: join(desktop, 'bundle'),
         electron: join(desktop, 'electron'),
         electronLogs: join(desktop, 'electron', 'logs'),
         logs: join(data, 'logs'),

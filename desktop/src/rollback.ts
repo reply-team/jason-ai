@@ -72,6 +72,11 @@ export function afterFailedStart(state: RollbackState): RollbackState {
     return { pending: state.pending, rejected: [...new Set([...state.rejected, failed])] };
 }
 
+/** The versions the record names as previous: the copy kept, or the version a pending update came from. */
+export function rollbackVersions(state: RollbackState): string[] {
+    return [...new Set([state.kept?.version, state.pending?.fromVersion].filter((version): version is string => version !== undefined))];
+}
+
 export function isRejected(state: RollbackState, version: string): boolean {
     return state.rejected.includes(version);
 }

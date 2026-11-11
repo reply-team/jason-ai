@@ -14,6 +14,7 @@ import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedTurns } from './chat-log.ts';
+import { BundleDiffers, carriedBundle, copiesBundle } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
@@ -21,7 +22,7 @@ import { keptAsideOf, launcherOf, linuxPackage, type LinuxPackage } from './linu
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
-import { applicationFolder, keptLine, keptNotice, readRollback, settleStart } from './rollback.ts';
+import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
 import { previousDeb, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
@@ -159,8 +160,23 @@ async function run(): Promise<void> {
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
     const form = linuxForm();
     const log = fileLogger(paths.logs, limitsFrom(readText(paths.installationSettings)));
-    const bundle = bundleDirectory();
-    const version = bundleVersion(bundle);
+    const packaged = bundleDirectory();
+    const version = bundleVersion(packaged);
+    // An AppImage's bundle is under a mount that lasts only while it runs: the copy under <data>/desktop/bundle/<version>/
+    // is the jason it carries (`bundle-copy.ts`). Anything else carries the bundle where it is installed.
+    let bundle = packaged;
+    let uncopied: string | null = null;
+    if (version !== null && copiesBundle(form)) {
+        try {
+            bundle = carriedBundle({ source: packaged, bundles: paths.bundle, version, keep: rollbackVersions(readRollback(paths.rollback)) });
+        } catch (error) {
+            uncopied =
+                error instanceof BundleDiffers
+                    ? error.message
+                    : `The jason this application carries could not be copied to ${join(paths.bundle, version)}, so Jason did not start. Check that the data directory can be written to, then start Jason again.`;
+            log.error('bundle_copy_failed', { Differs: error instanceof BundleDiffers });
+        }
+    }
     log.info('desktop_started', { Version: version ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
 
     const conduct = windowConduct(process.platform);
@@ -304,6 +320,11 @@ async function run(): Promise<void> {
     app.on('before-quit', () => chat.closeAll());
 
     await showStarting(window, 'Starting Jason…', false);
+    if (uncopied !== null) {
+        desk.notStarted();
+        await showStarting(window, uncopied, true);
+        return;
+    }
     if (version === null) {
         desk.notStarted();
         await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
