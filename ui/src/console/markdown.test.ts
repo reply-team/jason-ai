@@ -176,11 +176,88 @@ describe('what the subset does not hold', () => {
         expect(blocks).toEqual([plain(`${'>'.repeat(40 - depth)} deep`)]);
     });
 
+    it('stops reading nested lists at the same depth and draws the rest as text', () => {
+        const source = Array.from({ length: 12 }, (_, level) => `${'  '.repeat(level)}- a${level}`).join('\n');
+        let blocks = markdown(source);
+        let depth = 0;
+        while (blocks.at(-1)?.kind === 'list') {
+            const list = blocks.at(-1) as Extract<Block, { kind: 'list' }>;
+            expect(list.items).toHaveLength(1);
+            if (depth < 7) expect(list.items[0]![0]).toEqual(plain(`a${depth}`));
+            blocks = list.items[0]!;
+            depth++;
+        }
+        expect(depth).toBe(8);
+        expect(blocks).toEqual([plain('a7\n- a8\n  - a9\n    - a10\n      - a11')]);
+    });
+
     it('reads a long run of unpaired markers in a moment', () => {
-        const source = '*a _b `c [d '.repeat(20_000);
+        // 192,000 characters: under the length the parser reads, so it is read rather than drawn as it is.
+        const source = '*a _b `c [d '.repeat(16_000);
         const started = performance.now();
-        markdown(source);
+        const read = markdown(source);
         expect(performance.now() - started).toBeLessThan(2_000);
+        expect(source.length).toBe(192_000);
+        expect(read).not.toEqual([plain(source)]);
+        expect(read).toHaveLength(1);
+        expect(read[0]!.kind).toBe('paragraph');
+    });
+
+    it('reads a heading with a long run of spaces inside it in one pass', () => {
+        const spaces = ' '.repeat(100_000);
+        const started = performance.now();
+        const read = markdown(`# a${spaces}x`);
+        expect(performance.now() - started).toBeLessThan(1_000);
+        expect(read).toEqual([{ kind: 'heading', level: 1, children: [text(`a${spaces}x`)] }]);
+    });
+
+    it('reads a heading that ends in a long run of spaces, or of spaces before a closing run of #, in one pass', () => {
+        const spaces = ' '.repeat(90_000);
+        const started = performance.now();
+        expect(markdown(`## b${spaces}`)).toEqual([{ kind: 'heading', level: 2, children: [text('b')] }]);
+        expect(markdown(`## b${spaces}##${spaces}`)).toEqual([{ kind: 'heading', level: 2, children: [text('b')] }]);
+        expect(markdown(`#${spaces}`)).toEqual([{ kind: 'heading', level: 1, children: [] }]);
+        expect(performance.now() - started).toBeLessThan(1_000);
+    });
+
+    it('drops a closing run of # only when it stands alone or after a space', () => {
+        expect(markdown('# a #')).toEqual([{ kind: 'heading', level: 1, children: [text('a')] }]);
+        expect(markdown('# a#')).toEqual([{ kind: 'heading', level: 1, children: [text('a#')] }]);
+        expect(markdown('### ###')).toEqual([{ kind: 'heading', level: 3, children: [] }]);
+        expect(markdown('#\ta\t#\t')).toEqual([{ kind: 'heading', level: 1, children: [text('a')] }]);
+        expect(markdown('#')).toEqual([{ kind: 'heading', level: 1, children: [] }]);
+    });
+
+    it('reads an item with a long run of spaces and a line separator after its marker in one pass', () => {
+        const spaces = ' '.repeat(100_000);
+        const started = performance.now();
+        const read = markdown(`- ${spaces}x\u2028y`);
+        expect(performance.now() - started).toBeLessThan(1_000);
+        expect(read).toEqual([{ kind: 'list', ordered: false, start: 1, items: [[plain('x\u2028y')]] }]);
+    });
+
+    it('reads an item with a very long run of blank lines inside it', () => {
+        const read = markdown(`- a${'\n'.repeat(150_000)}  b`);
+        expect(read).toEqual([{ kind: 'list', ordered: false, start: 1, items: [[plain('a'), plain('b')]] }]);
+    });
+
+    it('reads a long run of blank lines past the depth it reads in one pass', () => {
+        // The deepest item's own line is empty, so what is read past the depth starts with the run of blank lines.
+        const nested = Array.from(
+            { length: 8 },
+            (_, level) => `${'  '.repeat(level)}-${level < 7 ? ` a${level}` : ''}`,
+        ).join('\n');
+        const source = `${nested}${'\n'.repeat(190_000)}${' '.repeat(16)}deep`;
+        const started = performance.now();
+        let blocks = markdown(source);
+        expect(performance.now() - started).toBeLessThan(1_000);
+        let depth = 0;
+        while (blocks.at(-1)?.kind === 'list') {
+            blocks = (blocks.at(-1) as Extract<Block, { kind: 'list' }>).items[0]!;
+            depth++;
+        }
+        expect(depth).toBe(8);
+        expect(blocks).toEqual([plain('deep')]);
     });
 
     it('reads Windows line ends as line ends', () => {
