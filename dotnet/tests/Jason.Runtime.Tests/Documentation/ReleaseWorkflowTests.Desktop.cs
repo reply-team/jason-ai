@@ -277,6 +277,8 @@ public partial class ReleaseWorkflowTests
             "Uninstalling the desktop on Windows stops the runtime the application carries first, and removes nothing when that runtime does not stop.",
             "On Linux, choose Remove What Jason Placed… in the Jason menu first:",
             "What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `~/.cache/jason-desktop-updater`.",
+            "On macOS, choose Remove What Jason Placed… in the Jason menu first, then move Jason.app to the Trash.",
+            "What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `~/Library/Caches/jason-desktop-updater`.",
         ])
         {
             Assert.Contains(said, notes, StringComparison.Ordinal);

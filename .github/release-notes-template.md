@@ -111,7 +111,9 @@ saying so. On Linux, choose Remove What Jason Placed… in the Jason menu first:
 carries and takes off what Jason placed, the `jason` command, Open Jason at Login and the runtime's start at logon,
 then says what removes the application. `sudo apt remove jason-desktop` removes the deb, and deleting the file
 removes the AppImage. What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's
-cache, `~/.cache/jason-desktop-updater`.
+cache, `~/.cache/jason-desktop-updater`. On macOS, choose Remove What Jason Placed… in the Jason menu first, then move
+Jason.app to the Trash. What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's
+cache, `~/Library/Caches/jason-desktop-updater`.
 
 ## Installing
 
