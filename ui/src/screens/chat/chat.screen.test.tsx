@@ -1,12 +1,10 @@
 import { screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { locale } from '../../platform/i18n';
 import { route } from '../../router';
 import { FakeApi } from '../../test/fake-api';
 import { renderApp } from '../../test/render-app';
 
 afterEach(() => {
-    locale.value = 'en';
     delete window.jasonDesktop;
 });
 
@@ -31,11 +29,10 @@ describe('the Chat screen in a browser', () => {
         expect(asked).toBe(0);
     });
 
-    it('is the Chat row of the navigation, in the language chosen', async () => {
+    it('is the Chat row of the navigation', async () => {
         renderApp(new FakeApi());
-        locale.value = 'uk';
         route.value = { screen: 'chat' };
-        await waitFor(() => screen.getByRole('heading', { name: 'Чат' }));
-        expect(screen.getByRole('link', { name: 'Чат' }).getAttribute('href')).toBe('#/chat');
+        await waitFor(() => screen.getByRole('heading', { name: 'Chat' }));
+        expect(screen.getByRole('link', { name: 'Chat' }).getAttribute('href')).toBe('#/chat');
     });
 });

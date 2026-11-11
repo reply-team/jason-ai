@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.34.0-rc.1
+# Jason 0.34.0
 
 ## What is new since 0.33.0
 
@@ -46,7 +46,8 @@ for it, and with no desktop installed nothing in the runtime differs.
 - **One installation.** The desktop asks `jason status` whether a runtime is up and whether it is the same build, and
   starts one with `jason runtime start` only when none is, never as its own child. It deploys the role skills from the
   package it carries, and works in a chat folder of its own under `<data>/desktop/chat`. When the runtime is another
-  version, its UI is loaded as it is and the window says the versions differ and names `jason update`.
+  version, its UI is loaded as it is and the window says the versions differ and names Check for Updates when the
+  runtime runs from the `jason` the desktop carries, and `jason update` otherwise.
 - **A window that stays shut.** The page gets `window.jasonDesktop` and nothing else, answered only from the top frame
   of a page at the runtime's origin. Navigation is locked to that origin; a link that leaves it opens in the system
   browser, and only when it is `https:`. Electron's own profile, storage and logs live under `<data>/desktop/electron`.
@@ -76,6 +77,18 @@ for it, and with no desktop installed nothing in the runtime differs.
   plugin's keys in `<data>/config/settings.json`, keeps everything else in the file, and refuses a file it cannot parse.
   Reply is signed in with `reply auth login`, or with a key on standard input, then installed and wired as the default
   route only where you have set none. A card says "configured" when the runtime accepted it, never "connected".
+- **Accounts and Disconnect.** The Reply card groups the accounts the Reply CLI lists by channel, Email first, then
+  LinkedIn, then any other channel under its own name, and shows each account's state as Reply itself reports it:
+  Connected, Disconnected or Unknown for email; Enabled, Disabled, Signed out or Daily limit reached for LinkedIn. A
+  state the card does not know is shown as Reply wrote it, as plain text. The card does not manage accounts: limits,
+  signatures, pauses and an account's connection stay in Reply, and a link, "Manage accounts in Reply", opens Reply's
+  web app in your browser. The Slack, Telegram and ntfy cards gain Disconnect, which asks once and then edits
+  `<data>/config/settings.json` once: it removes that plugin's configuration and its notification entry, keeps the
+  entry's `Enabled: false` where you had set it off, removes the Http grant that was derived from a server of the
+  plugin's own, and keeps every other key, the rest of the plugin's grants and the installed package. It then reloads
+  plugins. A settings file the desktop cannot parse is refused and left as it is. The journal forwarder has no
+  Disconnect, since removing its receiver while its subscriptions stay granted would fail every line it is handed;
+  ungranting it is its own act.
 - **The tray.** It counts what waits on you, approvals and questions, read through the CLI at most every 30 seconds. A
   system notification carries the counts alone, never a name or a question's text. When the runtime comes back on
   another port, the window pairs again by itself. The tray never starts a runtime.
@@ -119,8 +132,8 @@ for it, and with no desktop installed nothing in the runtime differs.
   opens Sequence.
 - **Needs you and Attention** show the person an approval reaches, the account it goes from and its channel, and say
   plainly when nothing waits.
-- **Settings and Ukrainian.** The browser gains a Settings screen for the theme and the language, English or Ukrainian,
-  kept in the browser's own storage. A Chat screen says the chat is part of the desktop and links to the releases page.
+- **Settings.** The browser gains a Settings screen for the theme, kept in the browser's own storage.
+  A Chat screen says the chat is part of the desktop and links to the releases page.
 
 **For a person who scripts the CLI**
 
@@ -159,6 +172,11 @@ for it, and with no desktop installed nothing in the runtime differs.
   Linux. The path stays out of `jason status` and out of a `jason doctor` bundle.
 - **A missing program says the repair.** An `executable_missing` problem now ends with "install the program where the
   runtime can see it and run `jason plugin reload`".
+- **A `jason` the desktop carries refuses to update or uninstall itself.** Run as the `jason` the desktop application
+  carries (known by the `version.json` beside it), `jason update apply` and `jason update rollback` refuse with
+  `update_carried_by_desktop` and point to the desktop's Check for Updates, and `jason uninstall` refuses with
+  `uninstall_carried_by_desktop` and names the system's way of removing the application. `jason update check` and `jason
+  update status` answer as before.
 
 ## Fixed since 0.33.0
 
@@ -185,7 +203,8 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.33.0 took
 - **The packages:** reply 0.14.8; journal-forwarder 1.2.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0 are as in 0.33.0.
   A release is twenty-four files: the desktop's ten are new.
 - **Skills:** the update redeploys them wherever a deployment was recorded. `operating-the-installation` changed its
-  text (how a fresh installation connects a provider) and keeps `draft`, and no agent host has read it against 0.34.0.
+  text (how a fresh installation connects a provider) and `troubleshooting-jason` changed its text (lifting a
+  suppression names who lifts it with `--actor`); both keep `draft`, and no agent host has read either against 0.34.0.
 - **The data directory:** this release adds no database migration: your projects, campaigns, work items and chronicle
   stay as they were. The desktop keeps what it writes under `<data>/desktop/`, and `jason uninstall --purge-data`
   removes that folder with the rest.
@@ -222,6 +241,13 @@ Claude Code's chat asks for a card before it reads a path outside its working fo
 version skips that setting without a word.
 
 Work the desktop's chat queues for a role runs under that role's own execution profile, not behind the chat's cards.
+
+The candidate 0.34.0-rc.1's desktop carries a `jason` without this refusal; `jason update apply` typed into it replaces
+the file inside the application before any code of the new build runs. The new build finishes that update and refuses
+the next one; the desktop's Check for Updates then brings the application to the same version. Such an update that
+stopped at `kept`, before the new file was in place, leaves its record at `~/.jason/update/ledger.json`, in the data
+directory, and every start of the runtime refuses while it is there; the desktop's `jason` once updated refuses to
+finish or roll it back, so removing that file is what lets the runtime start.
 
 The desktop's tray has not been seen on a screen, and the View menu's keys have not been typed at the operating system's
 level; the page receives them, but no run has shown the menu's accelerators fire. A person's run of the installed

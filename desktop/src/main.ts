@@ -320,6 +320,7 @@ async function run(): Promise<void> {
     });
     updates?.start();
     let runtimeVersion: string | null = null;
+    let runtimeIsOurs = false;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);
     // One runner for the Connect cards and the chat, so a listing and a turn share one read of Claude Code's version.
     const programs = sharingVersionReads(programsOn(env, version));
@@ -340,6 +341,7 @@ async function run(): Promise<void> {
             log,
             bundleVersion: version ?? 'unprepared',
             runtimeVersion: () => runtimeVersion,
+            runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
             models,
         }),
@@ -399,6 +401,9 @@ async function run(): Promise<void> {
             },
         });
         runtimeVersion = started.runtimeVersion;
+        // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
+        // it carries, which `jason update` refuses to change.
+        if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
         await window.loadURL(started.link);
         log.info('window_loaded', { Origin: started.origin });
         settleStart(rollback, app.getVersion(), true, log);

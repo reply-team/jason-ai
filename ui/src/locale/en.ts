@@ -1,7 +1,4 @@
-/** The language's name, in its own words, as the Settings screen offers it. */
-export const name = 'English';
-
-/** The shell's words. A language file must hold every key here; the compiler says when one does not. */
+/** The shell's words. One table, so a language can be added beside it. */
 export const en = {
     'nav.attention': 'Attention',
     'nav.performance': 'Performance',
@@ -24,7 +21,6 @@ export const en = {
     'attention.filter.noneAnswered': 'No question has been answered yet.',
     'settings.title': 'Settings',
     'settings.appearance': 'Appearance',
-    'settings.language': 'Language',
     'settings.theme.system': 'Same as the system',
     'settings.theme.light': 'Light',
     'settings.theme.dark': 'Dark',
