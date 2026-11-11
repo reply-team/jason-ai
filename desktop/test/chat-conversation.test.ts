@@ -126,19 +126,19 @@ test('a campaign\'s conversation is made once, and every turn of it takes the ca
     assert.deepEqual(listed(r), [], 'a campaign\'s conversation reads no campaign list');
 });
 
-test('a send whose chat id the desktop does not know is its campaign\'s conversation when it names one, and a new set-up chat when not', async (t) => {
+test('a send to a chat id the desktop does not keep is refused, whatever campaign it names, and makes no conversation', async (t) => {
     const r = rig(t);
-    await r.turn('chat-a', 'First', { host: 'claude', campaignId: 'cmp_01ABC' });
-    await r.turn('chat-b', 'Second', { host: 'claude', campaignId: 'cmp_01ABC' });
-    await r.turn('chat-c', 'Third', { host: 'claude' });
-    const list = r.chat.list();
-    assert.equal(list.length, 2, JSON.stringify(list));
-    const campaign = list.find((each) => each.campaignId === 'cmp_01ABC');
-    assert.deepEqual(r.chat.open(campaign?.id).entries.filter((entry) => entry.kind === 'user'), [{ kind: 'user', text: 'First' }, { kind: 'user', text: 'Second' }]);
-    assert.equal(flagValue(r.hosts()[1]?.args ?? [], '--resume'), 'stub-session-1', 'the second page chat resumed the one conversation');
-    const setup = list.find((each) => each.campaignId === null);
-    assert.equal(setup?.title, 'Third');
-    assert.match(r.hosts()[2]?.stdin ?? '', /^Jason, not the person, wrote this first paragraph\. This conversation is about no campaign yet/);
+    for (const chatId of ['chat-a', 'conv_01ZZZZZZZZZZZZZZZZZZZZZZZZ']) {
+        await assert.rejects(r.chat.send(chatId, 'First', { host: 'claude', campaignId: 'cmp_01ABC' }), { message: 'That conversation is not one this desktop keeps.' });
+        await assert.rejects(r.chat.send(chatId, 'First', { host: 'claude' }), { message: 'That conversation is not one this desktop keeps.' });
+    }
+    assert.deepEqual(r.chat.list(), []);
+    assert.deepEqual(r.hosts(), []);
+    assert.deepEqual(r.jason(), []);
+    // A conversation the desktop made takes the turn, and its record, never the send, names the campaign.
+    const made = await r.chat.create('cmp_01ABC');
+    await r.turn(made.id, 'Second', { host: 'claude', campaignId: 'cmp_99OTHER' });
+    assert.match(r.hosts()[0]?.stdin ?? '', /about the campaign cmp_01ABC\./);
 });
 
 test('what the page drew is kept, and a conversation reopens with it after a restart and resumes its session', async (t) => {
@@ -287,7 +287,7 @@ test('a host start that throws ends the turn like any failure: the conversation 
     assert.equal(next.at(-2)?.kind, 'attached', JSON.stringify(next));
 });
 
-test('a card\'s answer is kept only from the chat that was asked', async (t) => {
+test('a card\'s answer is kept only from the conversation that was asked', async (t) => {
     const r = rig(t);
     plan(r, [{ ask: { tool: 'Bash', input: { command: 'git status' } } }]);
     const chat = await r.chat.create('cmp_01ABC');
@@ -295,9 +295,9 @@ test('a card\'s answer is kept only from the chat that was asked', async (t) => 
     const card = r.until(chat.id, (event) => event.kind === 'permission');
     await r.chat.send(chat.id, 'Look', { host: 'claude' });
     const asked = (await card) as Extract<ChatEvent, { kind: 'permission' }>;
-    // Another page chat of the same campaign is the same conversation, but not the chat the card was put to.
-    await r.turn('chat-other', 'Beside', { host: 'claude', campaignId: 'cmp_01ABC' });
-    r.chat.answer('chat-other', asked.request, { allow: true, always: true });
+    // Another conversation's answer, by the request's id, is no answer to this card.
+    const other = await r.chat.create();
+    r.chat.answer(other.id, asked.request, { allow: true, always: true });
     r.chat.answer(chat.id, asked.request, { allow: false, always: false });
     await done;
     assert.deepEqual(r.chat.open(chat.id).entries.filter((entry) => entry.kind === 'permission').map((entry) => entry.kind === 'permission' && entry.answer), ['deny']);
@@ -431,9 +431,11 @@ test('a conversation whose turn runs is neither removed nor started afresh, and 
     plan(r, [{ wait: pid }]);
     const chat = await r.chat.create('cmp_01ABC');
     await r.chat.send(chat.id, 'Wait', { host: 'claude' });
-    const refused = r.until('chat-other', (event) => event.kind === 'done');
-    await r.chat.send('chat-other', 'Beside it', { host: 'claude', campaignId: 'cmp_01ABC' });
-    assert.deepEqual(await refused, { kind: 'done', error: 'This chat is still answering. Wait for it to finish, or stop it, then send again.' }, 'another page chat of the same campaign is the same conversation');
+    // The campaign's conversation is the one the page opens again, and a second send to it while it answers is refused.
+    assert.equal((await r.chat.create('cmp_01ABC')).id, chat.id);
+    const refused = r.until(chat.id, (event) => event.kind === 'done' && event.error !== null);
+    await r.chat.send(chat.id, 'Beside it', { host: 'claude' });
+    assert.deepEqual(await refused, { kind: 'done', error: 'This chat is still answering. Wait for it to finish, or stop it, then send again.' });
     assert.throws(() => r.chat.remove(chat.id), { message: 'This conversation is still answering. Wait for it to finish, or stop it, then remove it.' });
     assert.throws(() => r.chat.restart(chat.id), { message: 'This conversation is still answering. Wait for it to finish, or stop it, then start it afresh.' });
     await assert.rejects(r.chat.attach(chat.id, 'cmp_02'), /still answering/);

@@ -93,6 +93,8 @@ desktop does not narrow, so it may read the records.
 - **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: which campaign the
   conversation is about, its name quoted on one line, with every control, format and separator character dropped and
   cut at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it as they are.
+  A turn names its conversation and its host, never a campaign, and a turn sent to a conversation the desktop did not
+  make or keep is refused.
 - **A session per host.** A turn resumes the session its host named for the conversation; a session id begins with a
   letter or a digit, and a record's that does not is read as none. When that host has none, or its session is not
   found, another answers, or the resume fails before saying anything, the turn starts a fresh session given a recap, the

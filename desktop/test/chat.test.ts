@@ -13,6 +13,7 @@ import type { Decided } from '../src/chat-permission-broker.ts';
 import { floorSentence, versionLimitMs } from '../src/host-version.ts';
 import type { RunResult } from '../src/programs.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
+import { NamedChat } from './named-chat.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 const words = 'Which campaigns are waiting on me?';
@@ -21,7 +22,8 @@ const asked = (text: string) => turnInput(header({ campaign: null }), null, text
 
 interface Rig {
     b: Bench;
-    chat: Chat;
+    /** The chat, its conversations called by the rows' own names (`NamedChat`). */
+    chat: NamedChat;
     bundle: string;
     events: Map<string, ChatEvent[]>;
     ended: TurnEnded[];
@@ -50,7 +52,8 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
     const started: { host: string; resumed: boolean }[] = [];
     const keys: Record<string, string> = {};
     options.before?.(b);
-    const chat = new Chat({
+    const named: NamedChat = new NamedChat(() => chat);
+    const chat: Chat = new Chat({
         paths: b.paths,
         env: b.env,
         bundle,
@@ -60,7 +63,8 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
         programs: b.programs,
         keyFor: (id) => keys[id],
         fence: () => fence,
-        emit(chatId, event) {
+        emit(id, event) {
+            const chatId = named.nameOf(id);
             const said = events.get(chatId) ?? [];
             said.push(event);
             events.set(chatId, said);
@@ -77,9 +81,9 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
         ...options.chat,
     });
     t.after(async () => {
-        const running = [...events.keys()].filter((chatId) => chat.isRunning(chatId));
-        chat.closeAll();
-        await settle(() => running.every((chatId) => !chat.isRunning(chatId)));
+        const running = [...events.keys()].filter((chatId) => named.isRunning(chatId));
+        named.closeAll();
+        await settle(() => running.every((chatId) => !named.isRunning(chatId)));
         for (const remove of removals) remove();
     });
     const until = (chatId: string, take: (event: ChatEvent) => boolean) =>
@@ -89,7 +93,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
         });
     return {
         b,
-        chat,
+        chat: named,
         bundle,
         events,
         ended,
@@ -100,7 +104,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
         async turn(chatId, text, sendOptions) {
             const from = events.get(chatId)?.length ?? 0;
             const done = until(chatId, (event) => event.kind === 'done');
-            await chat.send(chatId, text, sendOptions);
+            await named.send(chatId, text, sendOptions);
             await done;
             return (events.get(chatId) ?? []).slice(from);
         },
@@ -452,12 +456,15 @@ test('a stop or a window close while Claude Code’s version is read starts no h
     const releases: ((result: RunResult) => void)[] = [];
     const { programs } = versionSaying(() => new Promise<RunResult>((resolve) => releases.push(resolve)));
     const r = rig(t, { chat: { programs } });
+    // Two campaigns' conversations, made before: the page sends only to a conversation the desktop made.
+    await r.chat.made('c1', 'cmp_1');
+    await r.chat.made('c2', 'cmp_2');
+    const before = r.b.record().length;
     const stopped = r.until('c1', (event) => event.kind === 'done');
-    const sending = r.chat.send('c1', words, { host: 'claude', campaignId: 'cmp_1' });
+    const sending = r.chat.send('c1', words, { host: 'claude' });
     r.chat.stop('c1');
     const closed = r.until('c2', (event) => event.kind === 'done');
-    // Another campaign's conversation: the first campaign's is answering, and a second send to it is refused as busy.
-    const closing = r.chat.send('c2', words, { host: 'claude', campaignId: 'cmp_2' });
+    const closing = r.chat.send('c2', words, { host: 'claude' });
     r.chat.closeAll();
     // What a turn builds before its host starts would show: the campaign asked for, the instruction text written again.
     rmSync(join(r.b.paths.chat, 'CLAUDE.md'), { force: true });
@@ -467,7 +474,7 @@ test('a stop or a window close while Claude Code’s version is read starts no h
     assert.deepEqual(await closed, { kind: 'done', error: null });
     assert.deepEqual(r.events.get('c1'), [{ kind: 'done', error: null }]);
     assert.deepEqual(r.events.get('c2'), [{ kind: 'done', error: null }]);
-    assert.deepEqual(r.b.record(), [], 'no host and no jason verb ran');
+    assert.deepEqual(r.b.record().slice(before), [], 'no host and no jason verb ran');
     assert.deepEqual(r.started, []);
     assert.deepEqual(existsSync(r.b.paths.turns) ? readdirSync(r.b.paths.turns) : [], [], 'no turn file was written');
     assert.equal(existsSync(join(r.b.paths.chat, 'CLAUDE.md')), false, 'nothing of the turn was built');
@@ -483,8 +490,6 @@ test('what a send gives is checked before a host starts', async (t) => {
         ['x'.repeat(1_000_001), { host: 'claude' }],
         [words, { host: 'claude', model: '--dangerously-skip-permissions' }],
         [words, { host: 'claude', model: 7 }],
-        [words, { host: 'claude', campaignId: '../cmp_1' }],
-        [words, { host: 'claude', campaignId: 'cmp_1 --add-dir /' }],
     ];
     for (const [text, options] of cases) {
         const said = await r.turn('c1', text as string, options);
@@ -546,8 +551,10 @@ test('a campaign turn adds the campaign\'s and its project\'s folders when they 
     mkdirSync(project, { recursive: true });
     r.b.env.STUB_CAMPAIGN_FOLDER = campaign;
     r.b.env.STUB_PROJECT_FOLDER = project;
-    await r.turn('c1', words, { host: 'claude', campaignId: 'cmp_01ABC' });
-    const asked = r.b.record().filter((each) => each.name === 'jason').map((each) => each.args.join(' '));
+    await r.chat.made('c1', 'cmp_01ABC');
+    const before = r.b.record().length;
+    await r.turn('c1', words, { host: 'claude' });
+    const asked = r.b.record().slice(before).filter((each) => each.name === 'jason').map((each) => each.args.join(' '));
     assert.deepEqual(asked, ['campaign get cmp_01ABC', 'project get prj_01STUB']);
     const added = r.hosts()[0]?.args.flatMap((arg, i, all) => (all[i - 1] === '--add-dir' ? [arg] : []));
     assert.deepEqual(added, [campaign, project]);

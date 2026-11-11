@@ -20,18 +20,12 @@ export type DesktopCommand =
     | 'navigate.settings'
     | 'navigate.connect';
 
-/** What `chat.send` takes besides the text. */
+/** What `chat.send` takes besides the text: never a campaign, which the conversation the desktop keeps decides. */
 export interface DesktopChatOptions {
     /** The agent host the turn runs on: the `id` of one of `setup.status().hosts` whose `drivesChat` is true. */
     host: string;
     /** A model the host offers, by the name the host takes; absent, the host's own default. */
     model?: string;
-    /**
-     * Superseded by the conversations the desktop keeps (`chat.create`, `chat.open`): read only for a `chatId` the
-     * desktop does not know, which then names that campaign's conversation (found or made), or with no campaign a new
-     * set-up chat. The page stops sending it once it calls `chat.create`.
-     */
-    campaignId?: string;
 }
 
 /**
@@ -220,7 +214,10 @@ export interface JasonDesktop {
     /** Calls `handler` with each command; the function it returns stops that. */
     onCommand(handler: (command: DesktopCommand) => void): () => void;
     chat: {
-        /** Starts a turn of the chat `chatId`, an id the page makes up and keeps for every turn of one chat. */
+        /**
+         * Starts a turn of the conversation `chatId`, an id `chat.create` or `chat.list` gave; one the desktop does not
+         * keep is refused.
+         */
         send(chatId: string, text: string, options: DesktopChatOptions): Promise<void>;
         /** Stops the chat's running turn; a `done` event follows. Nothing running is nothing to stop. */
         stop(chatId: string): Promise<void>;

@@ -6,13 +6,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type {
     DesktopChatEvent,
+    DesktopChatOptions,
     DesktopConversation,
     DesktopConversationRecord,
     DesktopKeptEntry,
     DesktopSetup,
     JasonDesktop,
 } from '../../ui/src/platform/desktop.d.ts';
-import type { ChatEvent, ConversationOpened, ConversationSummary } from '../src/chat.ts';
+import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummary } from '../src/chat.ts';
 import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { SetupState } from '../src/setup.ts';
@@ -72,7 +73,17 @@ type ConversationsAreTheSeam = [
     Holds<Equal<Extract<ChatEvent, { kind: Conversational }>, Extract<DesktopChatEvent, { kind: Conversational }>>>,
 ];
 
-export type SeamHeld = [StatusIsTheSeam, PreloadIsTheSeam, InvokeChannelsAreTheSeam, EventChannelsAreTheSeam, ConversationsAreTheSeam];
+// A turn names the conversation and the host, and the model; never a campaign, which the conversation's record decides.
+type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model'>>];
+
+export type SeamHeld = [
+    StatusIsTheSeam,
+    PreloadIsTheSeam,
+    InvokeChannelsAreTheSeam,
+    EventChannelsAreTheSeam,
+    ConversationsAreTheSeam,
+    SendIsTheSeam,
+];
 
 test('the desktop implements the seam ui/src/platform/desktop.d.ts declares (checked by npm run check)', () => {
     assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged']);

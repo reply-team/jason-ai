@@ -57,11 +57,10 @@ export type ChatEvent =
     | { kind: 'pick'; campaignIds: string[] }
     | { kind: 'done'; error: string | null };
 
+/** What a send names besides its conversation and its words: never a campaign, which the conversation's record decides. */
 export interface ChatSendOptions {
     host: string;
     model?: string;
-    /** Superseded by the conversation's record: read only for a chat id the desktop does not know. */
-    campaignId?: string;
 }
 
 /** A conversation as `chat.list` lists it. */
@@ -255,7 +254,6 @@ export class Chat {
      * A chat id the page made up, before the page knew the desktop's conversations, and the conversation its first send
      * found or made: that campaign's for a send that named one, a new set-up chat for one that named none.
      */
-    #aliases = new Map<string, string>();
     /** The set-up turns that run, by conversation id, and whether another set-up turn ran beside each. */
     #setupTurns = new Map<string, { overlapped: boolean }>();
     /** Whether the missing instruction text was said already. */
@@ -328,7 +326,6 @@ export class Chat {
             throw new Error('The conversation could not be removed. Close anything that has its file open, then try again.');
         }
         this.#conversations.delete(conversation.id);
-        for (const [alias, target] of [...this.#aliases]) if (target === conversation.id) this.#aliases.delete(alias);
     }
 
     /** "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept. One whose turn runs is refused. */
@@ -371,26 +368,24 @@ export class Chat {
     /**
      * Starts a turn. It resolves once the host has started, or once the send was refused; a refusal, like every end, is
      * a `done` with an error in plain words, and no host was started: on Claude Code, one below the floor
-     * (`claudeFloor`) or whose version cannot be read is refused after `claude --version` and before anything else. A chat id the desktop does not take has no chat to
-     * say `done` to, so that send rejects with an Error the page shows.
+     * (`claudeFloor`) or whose version cannot be read is refused after `claude --version` and before anything else. A chat id the desktop does not take, or a
+     * conversation it does not keep, has no chat to say `done` to, so that send rejects with an Error the page shows.
      */
     async send(chatId: unknown, text: unknown, options: unknown): Promise<void> {
         if (typeof chatId !== 'string' || !chatIdShape.test(chatId)) throw new Error('That is not a chat id the desktop takes.');
+        const conversation = this.#conversationOf(chatId);
+        if (conversation === undefined) throw new Error(notAConversation);
         const refuse = (error: string) => this.#options.emit(chatId, { kind: 'done', error });
-        const known = this.#conversationOf(chatId);
-        if (known !== undefined && this.#running.has(known.id)) return refuse(busy);
+        if (this.#running.has(conversation.id)) return refuse(busy);
         if (typeof text !== 'string' || text.trim() === '') return refuse('There is nothing to send.');
         if (text.length > textLimit) return refuse('That message is too long to send in one turn.');
         const given = (options ?? {}) as Partial<Record<keyof ChatSendOptions, unknown>>;
         if (given.model !== undefined && (typeof given.model !== 'string' || !modelShape.test(given.model))) return refuse('That model name is not one the desktop passes to a host.');
-        if (given.campaignId !== undefined && (typeof given.campaignId !== 'string' || !campaignIdShape.test(given.campaignId))) return refuse('That is not a campaign id.');
         const resolved = this.#resolve(given.host, given.model as string | undefined);
         if (typeof resolved === 'string') return refuse(resolved);
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
 
-        const conversation = known ?? this.#adopted(chatId, given.campaignId as string | undefined);
-        if (this.#running.has(conversation.id)) return refuse(busy);
         const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map() };
         this.#running.set(conversation.id, running);
         // Any turn that begins while a set-up turn runs could make the campaign that set-up turn would take for its own.
@@ -460,10 +455,7 @@ export class Chat {
     }
 
     #conversationOf(chatId: string): Conversation | undefined {
-        const own = this.#conversations.get(chatId);
-        if (own !== undefined) return own;
-        const target = this.#aliases.get(chatId);
-        return target === undefined ? undefined : this.#conversations.get(target);
+        return this.#conversations.get(chatId);
     }
 
     #own(id: unknown): Conversation {
@@ -481,13 +473,6 @@ export class Chat {
         const now = new Date().toISOString();
         const conversation: Conversation = { id: newConversationId(), campaign_id: campaignId, title, created_at: now, updated_at: now, sessions: {}, entries: [], dropped: 0 };
         this.#conversations.set(conversation.id, conversation);
-        return conversation;
-    }
-
-    /** The conversation a send with a chat id the desktop does not know is about: its campaign's, or a new set-up chat. */
-    #adopted(chatId: string, campaignId: string | undefined): Conversation {
-        const conversation = campaignId === undefined ? this.#made(null, 'New chat') : (this.#ofCampaign(campaignId) ?? this.#made(campaignId, campaignId));
-        if (chatId !== conversation.id) this.#aliases.set(chatId, conversation.id);
         return conversation;
     }
 
