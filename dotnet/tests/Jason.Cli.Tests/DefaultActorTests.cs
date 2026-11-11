@@ -12,8 +12,9 @@ namespace Jason.Cli.Tests;
 
 /// <summary>
 /// A write given no <c>--actor</c> is made as <c>human:&lt;the account's name&gt;</c>, the name the paired browser writes
-/// as, so one person carries one name in a timeline whichever of the two they used. The verbs that are a person's own word
-/// take no default: they are refused, in one sentence that names the form, unless a person is named.
+/// as, so one person carries one name in a timeline whichever of the two they used. The verbs that take no default actor
+/// are refused, in one sentence that names the form, unless an actor is named or the environment names an attempt: a
+/// person's own word, and the acts the CLI will not put the account's name on by itself.
 /// </summary>
 public class DefaultActorTests
 {
@@ -93,12 +94,13 @@ public class DefaultActorTests
     }
 
     /// <summary>
-    /// The verbs that are a person's own word take no default actor: with none named they are refused before anything is
-    /// sent, in one sentence that names the form — a resume naming whoever ends the wait, a report its reporter.
+    /// A verb that takes no default actor, with none named, is refused before anything is sent, in one sentence that names
+    /// the form: a resume naming whoever ends the wait, a report its reporter, an act the CLI will not put the account's
+    /// name on whoever does it.
     /// </summary>
     [Theory]
-    [MemberData(nameof(PersonsWord))]
-    public async Task A_person_s_own_word_is_refused_without_a_named_actor_in_one_sentence(string[] verb)
+    [MemberData(nameof(TakingNoDefault))]
+    public async Task A_verb_that_takes_no_default_actor_is_refused_without_a_named_actor_in_one_sentence(string[] verb)
     {
         using var cli = new CliRun(accountName: Account);
 
@@ -113,8 +115,8 @@ public class DefaultActorTests
     }
 
     [Theory]
-    [MemberData(nameof(PersonsWord))]
-    public async Task A_person_s_own_word_is_sent_as_the_person_named(string[] verb)
+    [MemberData(nameof(TakingNoDefault))]
+    public async Task A_verb_that_takes_no_default_actor_is_sent_as_the_actor_named(string[] verb)
     {
         using var cli = new CliRun(accountName: Account);
 
@@ -124,15 +126,50 @@ public class DefaultActorTests
         Assert.Equal("{\"type\":\"human\",\"id\":\"ada\"}", JsonNode.Parse(cli.Sent!)!["actor"]!.ToJsonString());
     }
 
+    /// <summary>
+    /// Inside a run nothing changes: the attempt the environment names is the actor, as it is for a resume, and the
+    /// request is sent. The runtime, not the CLI, decides what an attempt may do.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TakingNoDefault))]
+    public async Task Inside_a_run_a_verb_that_takes_no_default_actor_is_sent_as_its_attempt(string[] verb)
+    {
+        var run = await RunEachAsync(verb, new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = "att_01K7QN0000000000000000000R" });
+
+        Assert.True(run.Exit == ExitCodes.Success, $"'jason {VerbOf(verb)}' exited {run.Exit}, saying:{Environment.NewLine}{run.Error}");
+        var (_, body) = Assert.Single(run.Requests);
+        Assert.Equal("{\"type\":\"attempt\",\"id\":\"att_01K7QN0000000000000000000R\"}", JsonNode.Parse(body)!["actor"]!.ToJsonString());
+    }
+
     /// <summary>The help of each of those verbs says the default does not apply to it, and how to name who acts.</summary>
     [Theory]
-    [MemberData(nameof(PersonsWord))]
-    public void A_person_s_own_word_says_in_its_help_that_the_default_does_not_apply(string[] verb)
+    [MemberData(nameof(TakingNoDefault))]
+    public void A_verb_that_takes_no_default_actor_says_in_its_help_that_the_default_does_not_apply(string[] verb)
     {
         var command = Find(verb);
         var (help, _) = Expected(verb);
 
         Assert.Contains(help, command.Description, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The acts the runtime takes from any caller say what is true of them: the CLI will not put the account's name on them
+    /// by itself. Their help and their refusal never say that the runtime refuses them, or that only a person can.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TheRuntimeTakesFromAnyone))]
+    public async Task An_act_the_runtime_takes_from_anyone_never_says_the_runtime_refuses_it(string[] verb)
+    {
+        using var cli = new CliRun(accountName: Account);
+        var exit = await cli.RunAsync(verb);
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        var said = Find(verb).Description + Environment.NewLine + cli.Error;
+        Assert.Contains("will not put this account's name on", said, StringComparison.Ordinal);
+        foreach (var claim in new[] { "runtime refuses", "person's word", "person's own word", "only a person" })
+        {
+            Assert.DoesNotContain(claim, said, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>A report's author is never taken from the machine: a role may report, so the refusal names both forms.</summary>
@@ -157,17 +194,18 @@ public class DefaultActorTests
         Assert.Contains("the paired browser", description, StringComparison.Ordinal);
         Assert.Contains("where that name cannot be read, as a person who gave no name", description, StringComparison.Ordinal);
         Assert.Contains("rewinding a subscription", description, StringComparison.Ordinal);
+        Assert.Contains("lifting a suppression, setting or unsetting a route, setting a role's execution profile", description, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// Every verb that reaches the runtime, run with the account's name set against a runtime that answers <c>{}</c>: each
-    /// request whose type takes an actor carries the account's person, and the eleven that are a person's own word send
+    /// request whose type takes an actor carries the account's person, and the verbs that take no default actor send
     /// nothing at all. Which types take one is read from the runtime's own registration of its operations and from the
     /// contracts, so a write that left the default out is a difference here however its body was built; and every
     /// operation that takes an actor is reached by some verb, so none is left out of the reading.
     /// </summary>
     [Fact]
-    public async Task Every_write_a_verb_makes_carries_the_account_s_person_but_the_eleven()
+    public async Task Every_write_a_verb_makes_carries_the_account_s_person_but_those_that_take_no_default()
     {
         var takesAnActor = OperationsTakingAnActor();
         var reached = new HashSet<string>(StringComparer.Ordinal);
@@ -185,7 +223,7 @@ public class DefaultActorTests
             }
         }
 
-        foreach (var args in TheEleven)
+        foreach (var args in NoDefaultActor)
         {
             var refused = await RunEachAsync(args);
             Assert.True(refused.Exit == ExitCodes.Usage && refused.Requests.Count == 0, $"'jason {VerbOf(args)}' was not refused: exit {refused.Exit}, {refused.Requests.Count} request(s)");
@@ -222,7 +260,7 @@ public class DefaultActorTests
     }
 
     /// <summary>
-    /// The verbs above are every verb: each is run there, is one of the eleven, or says here why it is not run, so a verb
+    /// The verbs above are every verb: each is run there, takes no default actor, or says here why it is not run, so a verb
     /// added later is a difference in this row before it is a write nobody ran.
     /// </summary>
     [Fact]
@@ -234,7 +272,7 @@ public class DefaultActorTests
 
         Assert.Equal(
             leaves.Order(StringComparer.Ordinal),
-            Runs.Concat(TheEleven).Select(VerbOf).Concat(NotRun.Keys).Order(StringComparer.Ordinal));
+            Runs.Concat(NoDefaultActor).Select(VerbOf).Concat(NotRun.Keys).Order(StringComparer.Ordinal));
 
         void Walk(Command command, string path)
         {
@@ -250,10 +288,16 @@ public class DefaultActorTests
         }
     }
 
-    public static TheoryData<string[]> PersonsWord() => [.. TheEleven];
+    public static TheoryData<string[]> TakingNoDefault() => [.. NoDefaultActor];
 
-    /// <summary>The verbs that are a person's own word: no default actor applies to any of them.</summary>
-    internal static readonly string[][] TheEleven =
+    public static TheoryData<string[]> TheRuntimeTakesFromAnyone() =>
+        [.. NoDefaultActor.Where(args => RuntimeTakesFromAnyone.Contains(VerbOf(args)))];
+
+    /// <summary>
+    /// The verbs no default actor applies to: a person's own word, which the runtime refuses too when nobody is named, and
+    /// the acts the runtime takes from any caller but the CLI will not put the account's name on by itself.
+    /// </summary>
+    internal static readonly string[][] NoDefaultActor =
     [
         ["approval", "approve", "apr_A"],
         ["approval", "reject", "apr_A"],
@@ -266,7 +310,17 @@ public class DefaultActorTests
         ["workitem", "resume", "wi_A"],
         ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
+        ["suppression", "remove", "--channel", "email", "--value", "someone@example.com", "--reason", "asked again"],
+        ["route", "set", "--campaign", "cmp_A", "--plugin", "fake-provider", "--operation", "campaign.get"],
+        ["route", "unset", "--campaign", "cmp_A", "--operation", "campaign.get"],
+        ["role", "set-profile", "researcher", "--execution-profile", "local-claude"],
     ];
+
+    /// <summary>
+    /// Of those, the acts the runtime takes from any caller: lifting someone's opt-out, moving which account acts for a
+    /// campaign, and changing which agent host runs a role. The CLI alone asks who does them.
+    /// </summary>
+    internal static readonly string[] RuntimeTakesFromAnyone = ["suppression remove", "route set", "route unset", "role set-profile"];
 
     /// <summary>One invocation of every other verb that reaches the runtime.</summary>
     internal static readonly string[][] Runs =
@@ -311,7 +365,6 @@ public class DefaultActorTests
         ["workitem", "wait", "wi_A", "--attempt", "att_A", "--until", "2026-10-13T00:00:00Z"],
         ["role", "list"],
         ["role", "add", "researcher", "--execution-profile", "local-claude"],
-        ["role", "set-profile", "researcher", "--execution-profile", "local-claude"],
         ["rolenote", "get", "--role", "researcher", "--campaign", "cmp_A"],
         ["rolenote", "set", "--role", "researcher", "--campaign", "cmp_A", "--note", "{\"voice\":\"short sentences\"}"],
         ["rolenote", "list"],
@@ -336,14 +389,11 @@ public class DefaultActorTests
         ["journal", "list"],
         ["journal", "kinds"],
         ["suppression", "add", "--channel", "email", "--value", "someone@example.com"],
-        ["suppression", "remove", "--channel", "email", "--value", "someone@example.com", "--reason", "asked again"],
         ["suppression", "list"],
         ["plugin", "list"],
         ["plugin", "reload"],
         ["route", "resolve", "--campaign", "cmp_A", "--operation", "campaign.get"],
         ["route", "list"],
-        ["route", "set", "--campaign", "cmp_A", "--plugin", "fake-provider", "--operation", "campaign.get"],
-        ["route", "unset", "--campaign", "cmp_A", "--operation", "campaign.get"],
         ["events", "sources"],
         ["events", "backfill", "--source", "evs_A", "--from", "2026-10-12T00:00:00Z", "--to", "2026-10-13T00:00:00Z"],
         ["events", "signal", "--source", "evs_A"],
@@ -419,7 +469,7 @@ public class DefaultActorTests
             .ToHashSet(StringComparer.Ordinal);
     }
 
-    internal static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(string[] args)
+    internal static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(string[] args, IReadOnlyDictionary<string, string>? variables = null)
     {
         using var paths = new TempPaths();
         paths.WriteDescriptor(Live);
@@ -435,6 +485,7 @@ public class DefaultActorTests
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
             }),
             new StringReader("[{\"first_name\":\"Ada\"}]"),
+            Variables: variables ?? new Dictionary<string, string>(),
             AccountName: Account);
 
         var exit = await CliApp.RunAsync(args, environment, TestContext.Current.CancellationToken);
@@ -468,6 +519,7 @@ public class DefaultActorTests
     private static (string Help, string Form) Expected(string[] verb) => VerbOf(verb) switch
     {
         "workitem resume" => (ActorOption.NoDefaultForResume, "name who ends it, e.g. --actor human:<Name>"),
+        "suppression remove" or "route set" or "route unset" or "role set-profile" => (ActorOption.NoDefaultForAnAct, "name who does it, e.g. --actor human:<Name>"),
         "report submit" => (ActorOption.NoDefaultForReport, "write --actor human:<Name> or --actor role:<id>"),
         _ => (ActorOption.NoDefault, "write --actor human:<Name>"),
     };

@@ -50,7 +50,7 @@ the answers are:
 Keeping the global exception inside `cmp_A` takes an explicit campaign override:
 
 ```sh
-jason route set --campaign cmp_A --operation campaign.get --plugin provider-c
+jason route set --campaign cmp_A --operation campaign.get --plugin provider-c --actor human:you@example.com
 ```
 
 The alternative — merging the levels — would mean a campaign that named its provider could still have
@@ -93,12 +93,16 @@ Routes:     snapshot rts_01M2M7H79NXYND9TAPQFDEQTHY | default fake-provider | 0 
 ## 4. A campaign's own routes
 
 ```sh
-jason route set   --campaign cmp_… --plugin acme-provider --binding '{"workspace":"latam"}'
-jason route set   --campaign cmp_… --operation campaign.get --plugin other-provider
-jason route unset --campaign cmp_… --operation campaign.get
+jason route set   --campaign cmp_… --plugin acme-provider --binding '{"workspace":"latam"}' --actor human:you@example.com
+jason route set   --campaign cmp_… --operation campaign.get --plugin other-provider --actor human:you@example.com
+jason route unset --campaign cmp_… --operation campaign.get --actor human:you@example.com
 jason route list  --campaign cmp_…
 jason route resolve --campaign cmp_… --operation list_membership.add --human
 ```
+
+`route set` and `route unset` take no default actor: the CLI will not put this account's name on a change of route
+by itself, so a command typed outside a run names who makes it with `--actor human:<Name>`, and one an executor runs
+is its attempt. The API takes the write from any caller, as before.
 
 A write takes effect at once: the row is written and a new route snapshot is activated in the same
 act, under the same gate a reload takes. **It never re-reads `settings.json`** — the new snapshot
@@ -243,7 +247,7 @@ manifest declares two optional fields, and a campaign somebody routed to it acts
 binding names — one of the profiles that package's own vendor CLI already holds a credential for:
 
 ```sh
-jason route set --campaign cmp_… --plugin reply --binding '{"profile":"outbound"}'
+jason route set --campaign cmp_… --plugin reply --binding '{"profile":"outbound"}' --actor human:you@example.com
 ```
 
 Nothing here knows which provider `reply` is or what a `profile` selects. Both are what an operator

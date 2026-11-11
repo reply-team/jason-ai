@@ -516,7 +516,7 @@ Which plugin performs an operation for a campaign, and which account of that pro
 with that reason's own code; what ran is recorded on the attempt:
 
 ```sh
-jason route set --campaign <id> --plugin acme-provider --binding '{"workspace":"latam"}'
+jason route set --campaign <id> --plugin acme-provider --binding '{"workspace":"latam"}' --actor human:you@example.com
 jason route resolve --campaign <id> --operation list_membership.add --human
 jason route list --human
 ```
