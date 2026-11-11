@@ -1,7 +1,9 @@
 using System.CommandLine;
 using System.Reflection;
 using Jason.Cli;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 
 namespace Jason.Cli.Tests;
 
@@ -167,6 +169,20 @@ public class DesktopDenyListTests
         var missing = TheChatsOwnWord.Where(verb => !listed.Contains(verb)).ToList();
 
         Assert.Empty(missing);
+    }
+
+    /// <summary>
+    /// The desktop spells the confining variable once, in its permission model, and sets it in every host's environment
+    /// by that declaration; it is the CLI's own name, so the jason the chat runs is the jason that reads it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_confining_variable_is_the_cli_s()
+    {
+        var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
+
+        var declared = Regex.Matches(model, @"^export const confinedVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
+
+        Assert.Equal(Confinement.Variable, Assert.Single(declared).Groups["name"].Value);
     }
 
     /// <summary>An entry covers a verb when the entry's words begin the verb's: <c>runtime</c> covers <c>runtime stop</c>.</summary>
