@@ -48,6 +48,18 @@ test('the file\'s second section names the operations the denied verbs call, eac
     assert.ok(!list.operations.some((operation) => operation.startsWith('runtime.')));
 });
 
+// On Linux Claude Code's environment scrub runs a Bash command in a PID namespace of its own, where ps and kill cannot
+// see the host's processes: jason runtime start would read a running runtime's process as gone and start another over
+// it, which dies with the namespace; jason runtime stop would see it gone at once. jason status asks over the loopback
+// and reads no process, so it stays allowed. Whatever a later change allows elsewhere, runtime stays refused there.
+test('runtime stays refused to the chat, since on Linux its commands would misread the runtime from the scrub’s PID namespace', () => {
+    assert.ok(entries.includes('runtime'), 'runtime is no longer on the deny list');
+    assert.ok(denyRules(entries).includes('Bash(jason runtime:*)'));
+    const allowed = parseAllowList(readFileSync(join(desktop, allowListFile), 'utf8'));
+    assert.ok(!allowed.some((verb) => verb === 'runtime' || verb.startsWith('runtime ')), 'a runtime verb is allowed');
+    assert.ok(allowed.includes('status'), 'jason status reads no process and stays allowed');
+});
+
 test('the allow list is one file of jason verbs, none of them covered by the deny list, and not doctor', () => {
     const allowed = parseAllowList(readFileSync(join(desktop, allowListFile), 'utf8'));
     assert.ok(allowed.length > 40);
