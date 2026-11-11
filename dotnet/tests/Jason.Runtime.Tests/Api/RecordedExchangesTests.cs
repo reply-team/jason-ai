@@ -295,7 +295,7 @@ public class RecordedExchangesTests
         Assert.Equal(3, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "first-page", new { limit = 10 }, Ct)).Items.Count);
         Assert.NotEmpty((await api.RecordAsync<JsonObject>(Operations.RoleList, "all", null, Ct))["items"]!.AsArray());
         Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "query-email", new { query = "aguilar@", limit = 10 }, Ct)).Items);
-        Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "query-phone", new { query = "+48 601 234 567", limit = 10 }, Ct)).Items);
+        Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "query-phone", new { query = "+1 312 555 0118", limit = 10 }, Ct)).Items);
         Assert.Equal("Ada", (await api.RecordAsync<ContactDto>(Operations.ContactGet, "one", new { contact_id = seed.Ada }, Ct)).FirstName);
 
         // What the tabs ask under their filters: one day on Done, a campaign, its role work, one role and its provider
@@ -1097,7 +1097,7 @@ public class RecordedExchangesTests
                     return person;
                 }
 
-                var ada = Person(1, "Ada", "Lovelace", "Kavali", "CTO", ("email", "ada@kavali.example"), ("phone", "+48601234567"));
+                var ada = Person(1, "Ada", "Lovelace", "Kavali", "CTO", ("email", "ada@kavali.example"), ("phone", "+13125550118"));
                 var tomas = Person(3, "Tomás", "Aguilar", "Andina Tech", "Director of Sales", ("email", "t.aguilar@andina.example"));
 
                 WorkItem Role(int n, Campaign campaign, string role, Contact? contact, WorkItemStatus status, Action<WorkItem>? more = null)

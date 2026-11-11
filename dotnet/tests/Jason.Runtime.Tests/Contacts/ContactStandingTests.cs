@@ -138,6 +138,7 @@ public class ContactStandingTests
     [Theory]
     [InlineData("{\"summary\":\"waiting\",\"channel\":\"email\"}")]
     [InlineData("{\"summary\":\"out\",\"channel\":\"email\",\"value\":\"ada@spring.example\"}")]
+    [InlineData("{\"summary\":\"new\",\"value\":\"ada@spring.example\"}")]
     public async Task A_count_with_a_channel_or_a_value_is_refused(string body)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
@@ -148,12 +149,26 @@ public class ContactStandingTests
         Assert.Contains("summary", error.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>A count is one of the Summary's eight words; any other is refused before anything is read.</summary>
+    [Theory]
+    [InlineData("\"stage\"")]
+    [InlineData("3")]
+    public async Task A_count_the_summary_does_not_have_is_refused(string count)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(Operations.ContactList, JsonNode.Parse($"{{\"summary\":{count}}}"), HttpStatusCode.BadRequest, Ct);
+
+        Assert.Equal("invalid_request", error.Code);
+        Assert.False(error.Retryable);
+    }
+
     /// <summary>
     /// A page of everyone costs the database the same number of commands as a page of two, with a count and without: where
     /// each person stands is read once for the page, never once per person or per campaign.
     /// </summary>
     [Fact]
-    public async Task A_page_of_two_hundred_costs_as_many_commands_as_a_page_of_two()
+    public async Task A_page_of_everyone_costs_as_many_commands_as_a_page_of_two()
     {
         using var database = new TestDatabase();
         await using (var seed = database.Open())

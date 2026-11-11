@@ -335,8 +335,12 @@ internal static partial class CampaignPeople
 
     /// <summary>
     /// Every Summary count each membership of a page's people stands in now, from the same conditions, as one bit per
-    /// count in the definitions' order: <c>{0}</c> is the campaigns of those memberships and <c>{1}</c> the people, so the
-    /// read grows with the page and never with the campaigns.
+    /// count in the definitions' order: <c>{0}</c> is the campaigns of those memberships and <c>{1}</c> the people. Every
+    /// part keeps only the page's people, but not every part finds its rows by them: memberships, work items and
+    /// suppressions are found by person, while the approvals and questions are found by their campaign and the reply and
+    /// event lines by their campaign and kind, each then kept to the page's people. So the read grows with the page's
+    /// people and their work, and with their campaigns' approvals, questions and reply and event lines.
+    /// <c>CampaignPeoplePlanTests</c> holds which index each part reads by.
     /// </summary>
     internal static readonly string StandingSql =
         $"SELECT f.contact_id AS ContactId, f.campaign_id AS CampaignId, {Bits(SummaryDefinitions)} AS Counts "
