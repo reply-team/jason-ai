@@ -676,7 +676,8 @@ test('a command that names JASON_CONFINED is refused in any letter case, on ever
         for (const scope of [windows(), mac(), linux]) {
             const judged = run(scope, command);
             assert.equal(judged.verdict, 'deny', `${scope.platform} ${command}`);
-            assert.match(judged.verdict === 'deny' ? judged.message : '', /confine/, command);
+            assert.equal(judged.verdict === 'deny' ? judged.message : '',
+                'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.', command);
         }
     }
     // A longer name that only begins or ends like it is not it.
