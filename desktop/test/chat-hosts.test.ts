@@ -223,7 +223,7 @@ test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE
 test('a desktop started from inside a Claude Code session hands the host none of that session\'s markers, and keeps a person\'s configuration', () => {
     const env = hostEnvironment({ PATH: '/x', ...plantedMarkers, claudecode: '1', ...plantedConfiguration }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed: false, provider: {} });
     assert.deepEqual(markersIn(Object.keys(env)), []);
-    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', ...Object.keys(plantedConfiguration)].sort());
+    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ...Object.keys(plantedConfiguration)].sort());
     for (const [name, value] of Object.entries(plantedConfiguration)) assert.equal(env[name], value, name);
     assert.ok(!JSON.stringify(env).includes('planted-messaging-token'));
 });
@@ -280,6 +280,16 @@ test('every Claude Code turn asks the host to scrub credentials from the command
     }
 });
 
+test('every Claude Code turn asks the host to run nothing in the background, and a Codex turn is left as it was', () => {
+    const name = 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS';
+    for (const keyed of [false, true]) {
+        const env = hostEnvironment({ PATH: '/x', [name]: '0', [name.toLowerCase()]: '0' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
+        assert.deepEqual(Object.entries(env).filter(([each]) => each.toUpperCase() === name), [[name, '1']]);
+    }
+    const codex = hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} });
+    assert.deepEqual(Object.keys(codex), ['PATH']);
+});
+
 test('every Claude Code turn asks the host to run each command in the chat folder, so a cd does not carry to the next one', () => {
     const name = 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR';
     for (const keyed of [false, true]) {
@@ -293,9 +303,9 @@ test('a recorded Claude Code turn maps to its session, its words and one step pe
     assert.deepEqual(lines, [
         { kind: 'session', id: '0b6f3c1e-2d4a-4c8e-9f10-5a7b8c9d0e1f' },
         { kind: 'text', text: 'Let me look at what is waiting.' },
-        { kind: 'step', text: 'jason approval list' },
-        { kind: 'step', text: 'Read a file' },
-        { kind: 'step', text: 'Ran a command' },
+        { kind: 'step', text: 'Ran a jason command', detail: 'jason approval list --json' },
+        { kind: 'step', text: 'Read a file', detail: '/data/desktop/chat/notes.md' },
+        { kind: 'step', text: 'Ran a command', detail: 'git log --oneline -5 /home/someone/private' },
         { kind: 'text', text: 'Nothing is waiting for you.' },
         { kind: 'result', error: null },
     ] satisfies HostLine[]);
@@ -308,14 +318,59 @@ test('a Claude Code turn that ended in an error ends with the host\'s own words'
     assert.deepEqual(claudeLine('{"type":"result","subtype":"error_during_execution"}'), [{ kind: 'result', error: 'Claude Code ended the turn: error_during_execution.' }]);
 });
 
-test('a step never carries a command\'s arguments or a path', () => {
-    assert.equal(claudeStep('Bash', { command: 'jason campaign get cmp_01J' }), 'jason campaign get');
-    assert.equal(claudeStep('Bash', { command: 'jason status' }), 'jason status');
-    assert.equal(claudeStep('Bash', { command: 'jason --actor human:x approval approve' }), 'Ran a command');
-    assert.equal(claudeStep('Bash', { command: 'cat /home/someone/secret.txt' }), 'Ran a command');
-    assert.equal(claudeStep('Read', { file_path: '/home/someone/secret.txt' }), 'Read a file');
-    assert.equal(claudeStep('mcp__x__y', { path: '/p' }), 'Used a tool');
-    assert.equal(claudeStep(undefined, null), 'Used a tool');
+test('a step says in plain words what the tool did, with the command, path or query beneath it as text', () => {
+    assert.deepEqual(claudeStep('Bash', { command: 'jason campaign get cmp_01J' }), { text: 'Ran a jason command', detail: 'jason campaign get cmp_01J' });
+    assert.deepEqual(claudeStep('PowerShell', { command: 'jason status' }), { text: 'Ran a jason command', detail: 'jason status' });
+    assert.deepEqual(claudeStep('Bash', { command: 'cat notes.md' }), { text: 'Ran a command', detail: 'cat notes.md' });
+    assert.deepEqual(claudeStep('Bash', { command: 'jasonx status' }), { text: 'Ran a command', detail: 'jasonx status' });
+    assert.deepEqual(claudeStep('Read', { file_path: '/home/someone/notes.md' }), { text: 'Read a file', detail: '/home/someone/notes.md' });
+    assert.deepEqual(claudeStep('Edit', { file_path: 'draft.md' }), { text: 'Changed a file', detail: 'draft.md' });
+    assert.deepEqual(claudeStep('Grep', { pattern: 'TODO' }), { text: 'Looked through files', detail: 'TODO' });
+    assert.deepEqual(claudeStep('WebSearch', { query: 'acme pricing' }), { text: 'Searched the web', detail: 'acme pricing' });
+    assert.deepEqual(claudeStep('WebFetch', { url: 'https://example.com/a' }), { text: 'Read a web page', detail: 'https://example.com/a' });
+    assert.deepEqual(claudeStep('Skill', { skill: 'campaign-launch' }), { text: 'Used a skill', detail: 'campaign-launch' });
+    assert.deepEqual(claudeStep('TodoWrite', { todos: [{ content: 'x' }] }), { text: 'Updated its task list' });
+    // A tool the table does not know is named as text under a neutral label, never as the label itself.
+    assert.deepEqual(claudeStep('mcp__x__y', { path: '/p' }), { text: 'Used a tool', detail: 'mcp__x__y' });
+    assert.deepEqual(claudeStep(undefined, null), { text: 'Used a tool' });
+    assert.deepEqual(claudeStep('Read', null), { text: 'Read a file' });
+    assert.deepEqual(claudeStep('Read', { file_path: 42 }), { text: 'Read a file' });
+    // A long command is cut, never dropped.
+    const long = claudeStep('Bash', { command: `echo ${'x'.repeat(1000)}` });
+    assert.equal(long.text, 'Ran a command');
+    assert.ok(long.detail !== undefined && long.detail.length <= 300 && long.detail.endsWith('…'), String(long.detail?.length));
+});
+
+test('a step of a tool that reads the task list says so, and one that changes it says it was updated', () => {
+    assert.deepEqual(claudeStep('TaskGet', { taskId: '1' }), { text: 'Read its task list' });
+    assert.deepEqual(claudeStep('TaskList', {}), { text: 'Read its task list' });
+    assert.deepEqual(claudeStep('TaskCreate', { subject: 'x' }), { text: 'Updated its task list' });
+    assert.deepEqual(claudeStep('TaskUpdate', { taskId: '1' }), { text: 'Updated its task list' });
+});
+
+test('a long detail is cut between two characters, never inside one written as two code units', () => {
+    const face = String.fromCodePoint(0x1f600);
+    // The cut falls between the two halves of the first face; the face goes whole.
+    const cut = claudeStep('Bash', { command: `echo ${'x'.repeat(293)}${face.repeat(10)}` });
+    assert.equal(cut.detail, `echo ${'x'.repeat(293)}…`);
+    const whole = claudeStep('Bash', { command: `echo ${'x'.repeat(292)}${face.repeat(10)}` });
+    assert.equal(whole.detail, `echo ${'x'.repeat(292)}${face}…`);
+});
+
+test('the table of step words answers only its own names: an inherited name is a tool it does not know', () => {
+    for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
+        assert.deepEqual(claudeStep(name, { file_path: 'x' }), { text: 'Used a tool', detail: name }, name);
+        assert.deepEqual(codexLine(JSON.stringify({ type: 'item.started', item: { id: `i-${name}`, type: name } }), new Set()), [], name);
+    }
+});
+
+test('a Codex item says its words and what it acted on', () => {
+    const one = (item: Record<string, unknown>) => codexLine(JSON.stringify({ type: 'item.started', item: { id: 'i1', ...item } }), new Set());
+    assert.deepEqual(one({ type: 'web_search', query: 'acme pricing' }), [{ kind: 'step', text: 'Searched the web', detail: 'acme pricing' }]);
+    assert.deepEqual(one({ type: 'file_change', changes: [{ path: 'a.md', kind: 'add' }, { path: 'b.md', kind: 'update' }] }), [{ kind: 'step', text: 'Changed files', detail: 'a.md, b.md' }]);
+    assert.deepEqual(one({ type: 'mcp_tool_call', server: 'jason', tool: 'status' }), [{ kind: 'step', text: 'Used a tool', detail: 'status' }]);
+    assert.deepEqual(one({ type: 'todo_list', items: [] }), [{ kind: 'step', text: 'Updated its task list' }]);
+    assert.deepEqual(one({ type: 'command_execution' }), [{ kind: 'step', text: 'Ran a command' }]);
 });
 
 test('an unreadable line, a tool\'s output and a malformed session say nothing', () => {
@@ -331,8 +386,8 @@ test('a recorded Codex turn maps to its thread, one step per command said once, 
     const lines = fixture('codex-turn.jsonl').flatMap((line) => codexLine(line, seen));
     assert.deepEqual(lines, [
         { kind: 'session', id: '0199a213-81c0-7800-8aa1-bbab2a035a53' },
-        { kind: 'step', text: 'jason campaign list' },
-        { kind: 'step', text: 'Ran a command' },
+        { kind: 'step', text: 'Ran a jason command', detail: 'jason campaign list --json' },
+        { kind: 'step', text: 'Ran a command', detail: "bash -lc 'cat /home/someone/secret.txt'" },
         { kind: 'text', text: 'You have no campaigns yet.' },
         { kind: 'result', error: null },
     ] satisfies HostLine[]);

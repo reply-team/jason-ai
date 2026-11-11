@@ -2,7 +2,7 @@
 
 export const signer: string;
 export const fuses: Readonly<Record<string, boolean>>;
-export const chatLists: readonly string[];
+export const chatFiles: readonly string[];
 export function electronChecksums(): Record<string, string>;
 export function bundleFiles(platform: string): string[];
 export function releaseVersion(value: string | undefined): string;

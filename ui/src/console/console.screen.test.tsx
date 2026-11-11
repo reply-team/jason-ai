@@ -15,7 +15,7 @@ import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention } from './needs';
-import { chats, clock, lines, setupBusy, streamState } from './state';
+import { chats, clock, lines, setup, setupBusy, streamState } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -203,13 +203,232 @@ describe('the console', () => {
         expect(sent.args.slice(1)).toEqual(['What waits?', { host: 'claude' }]);
         const id = sent.args[0] as string;
         flush(() => {
-            desktop.emit(id, { kind: 'step', text: 'Ran jason approval list' });
+            desktop.emit(id, { kind: 'step', text: 'Ran a jason command', detail: `jason approval list ${hostile}` });
+            desktop.emit(id, {
+                kind: 'step',
+                text: 'Used a tool',
+                detail: '<b onclick="window.hit=1">constructor</b>',
+            });
             desktop.emit(id, { kind: 'text', text: hostile });
             desktop.emit(id, { kind: 'done', error: null });
         });
         await waitFor(() => screen.getByText(hostile));
         expect(document.querySelector('.thread img')).toBeNull();
-        expect(screen.getByText('1 action')).toBeTruthy();
+        expect(screen.getByText('2 actions')).toBeTruthy();
+        // Each step is its plain words, with what it acted on beneath them as text.
+        const steps = [...document.querySelectorAll('.vstep')];
+        expect(steps.map((step) => step.querySelector('.chat-step-text')?.textContent)).toEqual([
+            'Ran a jason command',
+            'Used a tool',
+        ]);
+        expect(steps.map((step) => step.querySelector('.chat-step-detail')?.textContent)).toEqual([
+            `jason approval list ${hostile}`,
+            '<b onclick="window.hit=1">constructor</b>',
+        ]);
+        expect(document.querySelector('.vsteps b, .vsteps img, .vsteps [onclick]')).toBeNull();
+    });
+
+    it("draws the agent's Markdown as its subset, and everything else in it as text", async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Draft it' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+        const reply = [
+            '## The draft',
+            '- first **point**',
+            '> Hi Ana, a *quoted* line',
+            '| Name | Stage |',
+            '|---|---|',
+            '| Ana | `sent` |',
+            '```',
+            hostile,
+            '```',
+            'See [the guide](javascript:window.hit=1) <script>window.hit=1</script>',
+            '',
+            '<iframe srcdoc="<script>parent.hit=1</script>"></iframe>',
+            '',
+            '> ```',
+            '> <svg onload="window.hit=1"></svg>',
+            '> ```',
+            '',
+            '| Cell |',
+            '|---|',
+            '| <b onclick="window.hit=1">bold</b> |',
+        ].join('\n');
+        flush(() => {
+            desktop.emit(id, { kind: 'text', text: reply });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        const drawn = await waitFor(() => {
+            const element = document.querySelector<HTMLElement>('.thread .chat-md');
+            expect(element).toBeTruthy();
+            return element!;
+        });
+        expect(within(drawn).getByRole('heading', { name: 'The draft', level: 2 })).toBeTruthy();
+        expect(within(drawn).getByRole('listitem').textContent).toBe('first point');
+        expect(drawn.querySelector('blockquote em')?.textContent).toBe('quoted');
+        expect(within(drawn).getByRole('cell', { name: 'sent' }).querySelector('code')).toBeTruthy();
+        expect(drawn.querySelector('pre code')?.textContent).toBe(hostile);
+        expect(words(drawn)).toContain('See the guide (javascript:window.hit=1) <script>window.hit=1</script>');
+        expect(words(drawn)).toContain('<iframe srcdoc="<script>parent.hit=1</script>"></iframe>');
+        expect(drawn.querySelector('blockquote pre code')?.textContent).toBe('<svg onload="window.hit=1"></svg>');
+        expect(within(drawn).getByRole('cell', { name: '<b onclick="window.hit=1">bold</b>' })).toBeTruthy();
+        expect(drawn.querySelectorAll('a, b, img, script, iframe, svg, [href], [src]')).toHaveLength(0);
+        const handlers = Array.from(drawn.querySelectorAll('*')).flatMap((element) =>
+            element.getAttributeNames().filter((name) => name.startsWith('on')),
+        );
+        expect(handlers).toEqual([]);
+        expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
+    describe('a message typed while a turn runs', () => {
+        const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
+        const type = (text: string) => fireEvent.change(box(), { target: { value: text } });
+        const enter = () => fireEvent.keyDown(box(), { key: 'Enter' });
+        const sends = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.send');
+        const waiting = () => screen.queryByRole('status', { name: 'Waiting message' });
+
+        /** A chat whose first turn, "Go", runs. */
+        async function running(): Promise<{ desktop: StubDesktop; id: string }> {
+            const { desktop } = renderConsole(pending(new FakeApi()));
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            type('Go');
+            fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+            return { desktop, id: sends(desktop)[0]!.args[0] as string };
+        }
+
+        it('waits, one at a time, and is sent once as the next turn when the turn ends', async () => {
+            const { desktop, id } = await running();
+            flush(() => desktop.emit(id, { kind: 'step', text: 'Ran jason status' }));
+            const steps = await waitFor(() => {
+                const element = document.querySelector('.thread details');
+                expect(element).toBeTruthy();
+                return element!;
+            });
+            type('And then?');
+            fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
+            await waitFor(() => expect(waiting()).toBeTruthy());
+            expect(waiting()!.textContent).toContain('And then?');
+            expect(box().value).toBe('');
+            // Typing does not draw the thread again.
+            type('Third');
+            expect(document.querySelector('.thread details')).toBe(steps);
+            enter();
+            expect(box().value).toBe('Third');
+            expect(waiting()!.textContent).toContain('And then?');
+            expect(sends(desktop)).toHaveLength(1);
+            flush(() => {
+                desktop.emit(id, { kind: 'done', error: null });
+                desktop.emit(id, { kind: 'done', error: null });
+            });
+            await waitFor(() => expect(sends(desktop)).toHaveLength(2));
+            expect(sends(desktop)[1]!.args).toEqual([id, 'And then?', { host: 'claude' }]);
+            expect(waiting()).toBeNull();
+            expect(box().value).toBe('Third');
+            expect(Array.from(document.querySelectorAll('.thread .m.user'), (each) => each.textContent)).toEqual([
+                'Go',
+                'And then?',
+            ]);
+        });
+
+        it('is swapped with the box by Replace, and taken back only into an empty box', async () => {
+            const { desktop, id } = await running();
+            type('First');
+            enter();
+            await waitFor(() => expect(waiting()).toBeTruthy());
+            expect(screen.queryByRole('button', { name: 'Replace' })).toBeNull();
+            type('Second');
+            fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
+            await waitFor(() => expect(waiting()!.textContent).toContain('Second'));
+            expect(box().value).toBe('First');
+            // Take back never overwrites the box: it waits for the box to be empty.
+            expect(screen.getByRole('button', { name: 'Take back' })).toHaveProperty('disabled', true);
+            type('');
+            fireEvent.click(screen.getByRole('button', { name: 'Take back' }));
+            await waitFor(() => expect(waiting()).toBeNull());
+            expect(box().value).toBe('Second');
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            expect(sends(desktop)).toHaveLength(1);
+        });
+
+        it('goes back to the box the moment the person stops the turn, and the end sends nothing', async () => {
+            const { desktop, id } = await running();
+            type('Later');
+            enter();
+            await waitFor(() => expect(waiting()).toBeTruthy());
+            fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+            expect(desktop.calls.some((each) => each.name === 'chat.stop')).toBe(true);
+            await waitFor(() => expect(box().value).toBe('Later'));
+            expect(waiting()).toBeNull();
+            expect(screen.getByRole('button', { name: 'Send when the turn ends' })).toHaveProperty('disabled', true);
+            // The person types again before the stopped turn's end arrives.
+            type('Something else');
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            expect(box().value).toBe('Something else');
+            expect(waiting()).toBeNull();
+            expect(sends(desktop)).toHaveLength(1);
+        });
+
+        it('ends as a turn that could not start when no host is left to send it to, and goes back to the box', async () => {
+            const { desktop, id } = await running();
+            type('Later');
+            enter();
+            await waitFor(() => expect(waiting()).toBeTruthy());
+            setup.value = { ...setup.value!, hosts: [] };
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() =>
+                expect(document.querySelector('.chat-error')?.textContent).toContain(
+                    'No agent host that drives the chat was found on this machine.',
+                ),
+            );
+            expect(sends(desktop)).toHaveLength(1);
+            expect(waiting()).toBeNull();
+            expect(box().value).toBe('Later');
+            expect(chats.value[id]!.running).toBe(false);
+            expect(Array.from(document.querySelectorAll('.thread .m.user'), (each) => each.textContent)).toEqual([
+                'Go',
+                'Later',
+            ]);
+        });
+
+        it('stays in sight, not sent, when the turn stops or fails while the box holds other words', async () => {
+            const { desktop, id } = await running();
+            type('Later');
+            enter();
+            await waitFor(() => expect(waiting()).toBeTruthy());
+            type('More');
+            fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+            await waitFor(() => expect(waiting()!.textContent).toContain('Not sent'));
+            expect(waiting()!.textContent).toContain('Later');
+            expect(box().value).toBe('More');
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            expect(waiting()!.textContent).toContain('Later');
+            expect(sends(desktop)).toHaveLength(1);
+
+            type('');
+            fireEvent.click(screen.getByRole('button', { name: 'Take back' }));
+            await waitFor(() => expect(box().value).toBe('Later'));
+            fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => expect(sends(desktop)).toHaveLength(2));
+            type('Then this');
+            enter();
+            await waitFor(() => expect(waiting()).toBeTruthy());
+            type('And more');
+            flush(() => desktop.emit(id, { kind: 'done', error: `Not logged in ${hostile}` }));
+            await waitFor(() => expect(waiting()!.textContent).toContain('Not sent'));
+            expect(waiting()!.textContent).toContain('Then this');
+            expect(box().value).toBe('And more');
+            expect(screen.getByRole('button', { name: 'Take back' })).toHaveProperty('disabled', true);
+            expect(sends(desktop)).toHaveLength(2);
+            expect(document.querySelector('.chat-error')!.textContent).toContain(`Not logged in ${hostile}`);
+        });
     });
 
     it('answers a permission once, and says so when the desktop no longer holds it', async () => {

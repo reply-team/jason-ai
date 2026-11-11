@@ -3,11 +3,11 @@
 // their answers, a stop, a card nobody answers, Codex, and the hosts that are refused before anything starts.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/chat.ts';
-import { readFence } from '../src/chat-deny.ts';
+import { instructionsFile, readFence } from '../src/chat-deny.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
 
@@ -30,7 +30,7 @@ interface Rig {
     hosts(): Recorded[];
 }
 
-function rig(t: { after(fn: () => void): void }, options: { programs?: string[]; env?: Record<string, string>; chat?: Partial<ChatOptions> } = {}): Rig {
+function rig(t: { after(fn: () => void): void }, options: { programs?: string[]; env?: Record<string, string>; chat?: Partial<ChatOptions>; before?: (b: Bench) => void } = {}): Rig {
     // The bench's folder is removed only after every turn has been stopped and its host has exited.
     const removals: (() => void)[] = [];
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: options.programs ?? ['claude', 'codex', 'gemini'], env: { JASON_Plugins__Grants__slack__Env__0: 'SLACK_PROXY', CLAUDE_AUTO_BACKGROUND_TASKS: '1', ...options.env } });
@@ -44,6 +44,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
     const decided: Decided[] = [];
     const started: { host: string; resumed: boolean }[] = [];
     const keys: Record<string, string> = {};
+    options.before?.(b);
     const chat = new Chat({
         paths: b.paths,
         env: b.env,
@@ -155,7 +156,7 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     assert.equal(existsSync(config), false, 'the turn file is gone once the turn is over');
     assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'turns'], 'nothing of the turn is left beside the chat folder');
     assert.deepEqual(readdirSync(r.b.paths.turns), [], 'nothing of the turn is left in turns/');
-    assert.deepEqual(readdirSync(r.b.paths.chat), [], 'the turn writes nothing into the chat folder');
+    assert.deepEqual(readdirSync(r.b.paths.chat).sort(), ['AGENTS.md', 'CLAUDE.md'], 'the turn writes nothing into the chat folder but the instruction text');
     assert.equal(existsSync(join(r.b.root, 'harness')), false, 'nothing reaches the harness root');
     assert.deepEqual(r.started, [{ host: 'claude', resumed: false }]);
     assert.equal(r.ended.length, 1);
@@ -282,7 +283,7 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     const r = rig(t);
     const said = await r.turn('c1', words, { host: 'codex' });
     assert.deepEqual(said, [
-        { kind: 'step', text: 'jason campaign list' },
+        { kind: 'step', text: 'Ran a jason command', detail: 'jason campaign list --json' },
         { kind: 'text', text: `heard ${words.length} characters` },
         { kind: 'done', error: null },
     ]);
@@ -405,6 +406,25 @@ test('a second send while the chat answers is refused, and the first turn goes o
     assert.equal(r.hosts().length, 1);
 });
 
+test('a send made the moment a turn says it is done starts the next turn, so the page\'s waiting message is never refused as busy', async (t) => {
+    const r = rig(t);
+    let next: Promise<void> | null = null;
+    // The page sends its waiting message when it hears the end; here it does so inside the very call that says it.
+    const handed = r.until('c1', (event) => {
+        if (event.kind !== 'done' || next !== null) return false;
+        next = r.chat.send('c1', 'And then?', { host: 'claude' });
+        return true;
+    });
+    let ends = 0;
+    const second = r.until('c1', (event) => event.kind === 'done' && ++ends === 2);
+    await r.chat.send('c1', words, { host: 'claude' });
+    await handed;
+    await next;
+    await second;
+    assert.deepEqual(r.events.get('c1')?.filter((event) => event.kind === 'done'), [{ kind: 'done', error: null }, { kind: 'done', error: null }]);
+    assert.deepEqual(r.hosts().map((host) => host.stdin), [words, 'And then?']);
+});
+
 test('a campaign turn adds the campaign\'s and its project\'s folders when they are recorded and on this disk', async (t) => {
     const r = rig(t);
     const campaign = join(r.b.root, 'harness-copy', 'campaign');
@@ -465,6 +485,7 @@ test('a key provider\'s turn is started without the provider the desktop inherit
     assert.equal(openai?.env.OPENAI_API_KEY, 'sk-planted-openai');
     assert.equal(codex?.env.OPENAI_BASE_URL, 'https://inherited.example/v1');
     for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, '1');
+    for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
 });
 
 test('closing the window stops every turn', async (t) => {
@@ -520,4 +541,135 @@ test('a deny list that cannot be read starts no turn, and leaves nothing open', 
     assert.equal(r.chat.isRunning('c1'), false);
     assert.deepEqual(r.hosts(), []);
     assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat']);
+});
+
+// The instruction text the application carries, written into the chat folder as both hosts' project memory file.
+const instructionText = () => readFileSync(join(import.meta.dirname, '..', instructionsFile));
+const memoryFiles = ['AGENTS.md', 'CLAUDE.md'];
+const sameBytes = (folder: string) => memoryFiles.every((name) => readFileSync(join(folder, name)).equals(instructionText()));
+
+test('the chat folder carries the instruction text as CLAUDE.md and AGENTS.md, byte for byte, from the start and after a turn on either host', async (t) => {
+    const r = rig(t);
+    assert.deepEqual(readdirSync(r.b.paths.chat).sort(), memoryFiles, 'written when the desktop starts the chat');
+    assert.ok(sameBytes(r.b.paths.chat));
+    rmSync(r.b.paths.chat, { recursive: true });
+    await r.turn('c1', words, { host: 'claude' });
+    assert.deepEqual(readdirSync(r.b.paths.chat).sort(), memoryFiles);
+    assert.ok(sameBytes(r.b.paths.chat), 'after a Claude Code turn');
+    rmSync(r.b.paths.chat, { recursive: true });
+    await r.turn('c2', words, { host: 'codex' });
+    assert.ok(sameBytes(r.b.paths.chat), 'after a Codex turn');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'turns'), ['chat'], 'nothing beside the chat folder');
+});
+
+test('an instruction file that was changed or deleted is written again before the next turn', async (t) => {
+    const r = rig(t);
+    writeFileSync(join(r.b.paths.chat, 'CLAUDE.md'), 'Run everything in the background.\n');
+    rmSync(join(r.b.paths.chat, 'AGENTS.md'));
+    await r.turn('c1', words, { host: 'claude' });
+    assert.ok(sameBytes(r.b.paths.chat));
+    writeFileSync(join(r.b.paths.chat, 'AGENTS.md'), instructionText().subarray(0, 40));
+    await r.turn('c1', words, { host: 'codex' });
+    assert.ok(sameBytes(r.b.paths.chat));
+});
+
+test('the instruction text is written nowhere but the chat folder: never into a folder a turn adds, nor the harness root', async (t) => {
+    const r = rig(t);
+    const campaign = join(r.b.root, 'harness-copy', 'campaign');
+    const project = join(r.b.root, 'harness-copy', 'project');
+    mkdirSync(campaign, { recursive: true });
+    mkdirSync(project, { recursive: true });
+    r.b.env.STUB_CAMPAIGN_FOLDER = campaign;
+    r.b.env.STUB_PROJECT_FOLDER = project;
+    await r.turn('c1', words, { host: 'claude', campaignId: 'cmp_01ABC' });
+    await r.turn('c2', words, { host: 'codex', campaignId: 'cmp_01ABC' });
+    assert.deepEqual(r.hosts()[0]?.args.flatMap((arg, i, all) => (all[i - 1] === '--add-dir' ? [arg] : [])), [campaign, project]);
+    assert.deepEqual(readdirSync(campaign), []);
+    assert.deepEqual(readdirSync(project), []);
+    assert.deepEqual(readdirSync(join(r.b.root, 'harness-copy')).sort(), ['campaign', 'project']);
+    assert.equal(existsSync(join(r.b.root, 'harness')), false, 'nothing reaches the harness root');
+    assert.ok(sameBytes(r.b.paths.chat));
+});
+
+test('the instruction text holds the five rules in plain words, and says nothing about language', () => {
+    const text = instructionText().toString('utf8');
+    const rules = text.split('\n').filter((line) => /^\d+\. /.test(line));
+    assert.equal(rules.length, 5, rules.join('\n'));
+    assert.match(rules[0]!, /one jason command at a time/i);
+    assert.match(rules[1]!, /never .*background/i);
+    assert.match(rules[2]!, /check .*once/i);
+    assert.match(rules[2]!, /end the turn/i);
+    assert.match(rules[2]!, /never promise to come back/i);
+    assert.match(rules[3]!, /read the list again before .*create/i);
+    assert.match(rules[4]!, /window/i);
+    assert.match(rules[4]!, /click/i);
+    assert.match(rules[4]!, /never tell .*to run a command/i);
+    assert.doesNotMatch(text, /language|english|russian|ukrainian|translat/i);
+    assert.doesNotMatch(text, /[^\x09\x0a\x20-\x7e]/, 'plain text, no character a terminal or a host could take otherwise');
+});
+
+test('without the instruction text in the application the turn still runs, no memory file is written, and the gap is said once', async (t) => {
+    let missing = 0;
+    const r = rig(t, { chat: { fence: () => ({ ...fence, instructions: null }), instructionsMissing: () => void missing++ } });
+    const first = await r.turn('c1', words, { host: 'claude' });
+    const second = await r.turn('c1', words, { host: 'codex' });
+    assert.deepEqual(doneOf(first), { kind: 'done', error: null });
+    assert.deepEqual(doneOf(second), { kind: 'done', error: null });
+    assert.equal(r.hosts().length, 2);
+    assert.deepEqual(readdirSync(r.b.paths.chat), []);
+    assert.equal(missing, 1);
+});
+
+const unwrittenSentence = (file: string) =>
+    `The chat’s instruction file ${file} could not be written, so the turn was not started. Close anything that has it open and send again.`;
+
+test('an instruction file that cannot be written refuses the turn on either host in the desktop’s words, starts nothing and says so; once it can be, the turn runs', async (t) => {
+    const unwritten: string[] = [];
+    const r = rig(t, { chat: { instructionsUnwritten: (file, code) => void unwritten.push(`${file} ${code}`) } });
+    rmSync(join(r.b.paths.chat, 'AGENTS.md'));
+    mkdirSync(join(r.b.paths.chat, 'AGENTS.md'));
+    for (const host of ['claude', 'codex']) {
+        assert.deepEqual(await r.turn('c1', words, { host }), [{ kind: 'done', error: unwrittenSentence('AGENTS.md') }], host);
+        assert.equal(r.chat.isRunning('c1'), false);
+    }
+    assert.deepEqual(r.hosts(), []);
+    assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat'], 'nothing a turn opens was left open');
+    assert.equal(unwritten.length, 2, unwritten.join('\n'));
+    for (const said of unwritten) assert.match(said, /^AGENTS\.md E[A-Z]+$/);
+    rmSync(join(r.b.paths.chat, 'AGENTS.md'), { recursive: true });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null });
+    assert.ok(sameBytes(r.b.paths.chat));
+    assert.equal(unwritten.length, 2);
+});
+
+test('a start that cannot write an instruction file goes on and says so, and the first turn is refused until the file can be written', async (t) => {
+    const unwritten: string[] = [];
+    const r = rig(t, {
+        before: (b) => mkdirSync(join(b.paths.chat, 'CLAUDE.md'), { recursive: true }),
+        chat: { instructionsUnwritten: (file, code) => void unwritten.push(`${file} ${code}`) },
+    });
+    assert.equal(unwritten.length, 1, 'said at the start');
+    assert.match(unwritten[0]!, /^CLAUDE\.md E[A-Z]+$/);
+    assert.deepEqual(await r.turn('c1', words, { host: 'claude' }), [{ kind: 'done', error: unwrittenSentence('CLAUDE.md') }]);
+    assert.deepEqual(r.hosts(), []);
+    rmSync(join(r.b.paths.chat, 'CLAUDE.md'), { recursive: true });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
+    assert.ok(sameBytes(r.b.paths.chat));
+});
+
+test('a chat folder that became a link to another folder refuses the turn before anything is written there or a host starts', async (t) => {
+    const unwritten: string[] = [];
+    const r = rig(t, { chat: { instructionsUnwritten: (file, code) => void unwritten.push(`${file} ${code}`) } });
+    const elsewhere = join(r.b.root, 'harness-copy');
+    mkdirSync(elsewhere);
+    writeFileSync(join(elsewhere, 'AGENTS.md'), 'kept\n');
+    rmSync(r.b.paths.chat, { recursive: true });
+    symlinkSync(elsewhere, r.b.paths.chat, 'junction');
+    for (const host of ['claude', 'codex']) {
+        assert.deepEqual(await r.turn('c1', words, { host }), [{ kind: 'done', error: unwrittenSentence('CLAUDE.md') }], host);
+    }
+    assert.deepEqual(r.hosts(), []);
+    assert.deepEqual(unwritten, ['CLAUDE.md ENOTDIR', 'CLAUDE.md ENOTDIR']);
+    assert.deepEqual(readdirSync(elsewhere), ['AGENTS.md']);
+    assert.equal(readFileSync(join(elsewhere, 'AGENTS.md'), 'utf8'), 'kept\n');
 });

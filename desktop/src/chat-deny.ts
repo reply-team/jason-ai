@@ -1,8 +1,9 @@
 // The fence around the chat agent's jason commands, two files beside the desktop's package, read by the desktop at each
-// turn and by the CLI's tests. The deny list names the jason commands the agent never runs (the verbs that are a person's
-// own word and the verbs that change the installation) and the Runtime API operations those verbs call. The allow list
-// names the verbs it runs without asking: every verb of the CLI the deny list does not cover, written from the CLI's
-// command tree by its tests. Any other jason command goes to the person's card.
+// turn and by the CLI's tests, and a third file beside them: the instruction text the chat folder carries for the hosts.
+// The deny list names the jason commands the agent never runs (the verbs that are a person's own word and the verbs that
+// change the installation) and the Runtime API operations those verbs call. The allow list names the verbs it runs
+// without asking: every verb of the CLI the deny list does not cover, written from the CLI's command tree by its tests.
+// Any other jason command goes to the person's card.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,6 +13,9 @@ export const denyListFile = 'chat-deny-list.txt';
 
 /** The allow list's file, relative to the desktop's application directory. */
 export const allowListFile = 'chat-allow-list.txt';
+
+/** The chat's instruction text, relative to the desktop's application directory. */
+export const instructionsFile = 'chat-instructions.md';
 
 const command = /^[a-z][a-z-]*( [a-z][a-z-]*)*$/;
 const operation = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
@@ -57,16 +61,58 @@ export function parseAllowList(text: string): string[] {
     return verbs;
 }
 
-/** The fence of one turn: the deny list's commands and operations, and the allow list's verbs. */
+/**
+ * The fence of one turn: the deny list's commands and operations, the allow list's verbs, and the instruction text the
+ * chat folder carries as the hosts' memory file, or null when the application carries none.
+ */
 export interface ChatFence extends DenyList {
     allowed: readonly string[];
+    instructions: string | null;
 }
 
-/** Reads the fence from the folder that carries the two files; a file that cannot be read or parsed throws. */
+/** A file of the fence that could not be read or parsed, by its name; the error it met is its cause. */
+export class FenceUnreadable extends Error {
+    readonly file: string;
+
+    constructor(file: string, cause: unknown) {
+        super(`The chat file ${file} could not be read.`, { cause });
+        this.name = 'FenceUnreadable';
+        this.file = file;
+    }
+}
+
+/**
+ * Reads the fence from the folder that carries its files. A list that cannot be read or parsed throws; an instruction
+ * text that is not there is null, since a turn runs without it, and one that is there and cannot be read throws. What
+ * throws is a `FenceUnreadable` that names the file.
+ */
 export function readFence(directory: string): ChatFence {
-    const denied = parseDenyList(readFileSync(join(directory, denyListFile), 'utf8'));
-    const allowed = parseAllowList(readFileSync(join(directory, allowListFile), 'utf8'));
-    return { ...denied, allowed };
+    const read = <T>(file: string, take: (path: string) => T): T => {
+        try {
+            return take(join(directory, file));
+        } catch (error) {
+            throw new FenceUnreadable(file, error);
+        }
+    };
+    const denied = read(denyListFile, (path) => parseDenyList(readFileSync(path, 'utf8')));
+    const allowed = read(allowListFile, (path) => parseAllowList(readFileSync(path, 'utf8')));
+    return { ...denied, allowed, instructions: read(instructionsFile, readIfThere) };
+}
+
+/** The sentence a turn is refused with when the fence cannot be read: which of its files failed, in the desktop's words. */
+export function fenceRefusal(error: unknown): string {
+    return error instanceof FenceUnreadable && error.file === instructionsFile
+        ? 'The chat’s instruction text could not be read.'
+        : 'The chat’s allow and deny lists could not be read.';
+}
+
+function readIfThere(file: string): string | null {
+    try {
+        return readFileSync(file, 'utf8');
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw error;
+    }
 }
 
 /**

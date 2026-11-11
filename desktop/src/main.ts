@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
-import { readFence, type ChatFence } from './chat-deny.ts';
+import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedTurns } from './chat-log.ts';
 import { cliAt } from './cli.ts';
@@ -44,12 +44,12 @@ function readText(file: string): string | null {
     }
 }
 
-/** The chat's fence the application carries, read at every turn; a list that cannot be read starts no turn. */
+/** The chat's fence the application carries, read at every turn; a file of it that cannot be read starts no turn, and says which. */
 function chatFence(): ChatFence {
     try {
         return readFence(app.getAppPath());
-    } catch {
-        throw new Error('The chat’s allow and deny lists could not be read.');
+    } catch (error) {
+        throw new Error(fenceRefusal(error));
     }
 }
 

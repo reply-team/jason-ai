@@ -9,7 +9,7 @@
 import { mkdirSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute } from 'node:path';
-import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine } from './chat-hosts.ts';
+import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type Step } from './chat-hosts.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
@@ -17,6 +17,7 @@ import { startHost, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
+import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import type { Cli } from './cli.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch } from './programs.ts';
@@ -24,7 +25,7 @@ import { hosts, keyProvider, providerEnvironment } from './providers-model.ts';
 
 /** What the page is told, by the chat it belongs to: U2's `DesktopChatEvent`. */
 export type ChatEvent =
-    | { kind: 'step'; text: string }
+    | ({ kind: 'step' } & Step)
     | { kind: 'text'; text: string }
     | BrokerEvent
     | { kind: 'done'; error: string | null };
@@ -54,12 +55,16 @@ export interface ChatOptions {
     dataNamed: boolean;
     cli: Cli;
     keyFor(providerId: string): string | undefined;
-    /** The deny list's commands and operations and the allow list's verbs, read at each turn. */
+    /** The deny list's commands and operations, the allow list's verbs and the instruction text, read at each turn. */
     fence(): ChatFence;
     emit(chatId: string, event: ChatEvent): void;
     started?(host: string, resumed: boolean): void;
     ended?(turn: TurnEnded): void;
     decided?(decided: Decided): void;
+    /** Said once, the first time the application is found to carry no instruction text; the turns run without it. */
+    instructionsMissing?(): void;
+    /** Said each time a memory file cannot be written, at the start or before a turn, which is then refused. */
+    instructionsUnwritten?(file: string, code: string): void;
     /** How long a card waits for the person; thirty minutes unless a test shortens it. */
     answerWindowMs?: number;
     platform?: Platform;
@@ -141,11 +146,21 @@ export class Chat {
     #running = new Map<string, Running>();
     /** Per chat id, the host it last ran on and the session that host named; in memory only. */
     #sessions = new Map<string, { host: string; session: string }>();
+    /** Whether the missing instruction text was said already. */
+    #missingSaid = false;
 
     constructor(options: ChatOptions) {
         this.#options = options;
         this.#platform = options.platform ?? currentPlatform();
         sweepTurnFiles(options.paths.turns);
+        // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
+        // turn's to refuse, and a file that cannot be written now is said and written again before that turn. The start
+        // never stops for either.
+        try {
+            this.#placeInstructions(options.fence());
+        } catch {
+            // Nothing more to do until a turn starts.
+        }
         this.#broker = new PermissionBroker({
             emit: (chatId, event) => options.emit(chatId, event),
             ...(options.decided ? { decided: options.decided } : {}),
@@ -183,7 +198,8 @@ export class Chat {
             await this.#turn(chatId, text, resolved, launch, given.campaignId as string | undefined, running);
         } catch (error) {
             this.#running.delete(chatId);
-            refuse(`The turn could not be started: ${error instanceof Error ? error.message : String(error)}`);
+            if (error instanceof InstructionsUnwritten) refuse(error.message);
+            else refuse(`The turn could not be started: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
@@ -257,6 +273,25 @@ export class Chat {
         return folders;
     }
 
+    /**
+     * Writes the instruction text into the chat folder where a memory file does not hold it. With no text in the
+     * application, nothing is written and the gap is said once; a file that cannot be written is said and thrown, and
+     * the turn it was written for is refused in the desktop's words.
+     */
+    #placeInstructions(fence: ChatFence): void {
+        if (fence.instructions === null) {
+            if (!this.#missingSaid) this.#options.instructionsMissing?.();
+            this.#missingSaid = true;
+            return;
+        }
+        try {
+            placeInstructions(this.#options.paths.chat, fence.instructions);
+        } catch (error) {
+            if (error instanceof InstructionsUnwritten) this.#options.instructionsUnwritten?.(error.file, error.code);
+            throw error;
+        }
+    }
+
     async #turn(
         chatId: string,
         text: string,
@@ -286,9 +321,12 @@ export class Chat {
             }
         };
         try {
+            const fence = this.#options.fence();
+            // First of all a turn does: the chat folder is found to be the desktop's own, and its memory files written,
+            // before the turn's file, its endpoint or the host that starts in that folder.
+            this.#placeInstructions(fence);
             if (resolved.program === 'claude') {
                 const id = newTurnId();
-                const fence = this.#options.fence();
                 turnId = id;
                 running.turnId = id;
                 const scope: ChatScope = {

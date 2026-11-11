@@ -32,8 +32,11 @@ export interface DesktopChatOptions {
 
 /** One thing a running turn says, in the order the host says it. The chat id it belongs to comes beside it. */
 export type DesktopChatEvent =
-    /** A step the agent took: a tool it ran, in one line, as the host named it. */
-    | { kind: 'step'; text: string }
+    /**
+     * A step the agent took: `text` is the desktop's own plain words for it ("Ran a jason command", "Read a file"), and
+     * `detail` the command, path, query or tool name it acted on, shown beneath them as text.
+     */
+    | { kind: 'step'; text: string; detail?: string }
     /** A message of the agent's, whole: shown as its own bubble, as text. */
     | { kind: 'text'; text: string }
     /**

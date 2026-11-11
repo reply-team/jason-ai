@@ -59,6 +59,8 @@ export const templates = {
     chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}',
     chat_turn_ended: 'A chat turn on {Host} ended with exit {Exit} after {DurationMs} ms: {Steps} steps, {Requests} permission requests',
     chat_request_decided: 'A permission request of the chat was {Outcome} by the {By}',
+    chat_instructions_missing: 'The chat instruction text {File} is not in the application; turns run without it',
+    chat_instructions_unwritten: 'The chat instruction file {File} could not be written ({Code}); turns are refused until it is',
 } as const;
 
 export type TemplateName = keyof typeof templates;

@@ -25,7 +25,8 @@ and names `jason update`. A `feed` in the desktop's settings is passed to every 
 
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, and the version whose skills were last deployed).
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
-  Claude Code and in `.agents/skills/` for Codex.
+  Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
+  text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`).
 - `<data>/desktop/electron/`: Electron's own files (its profile, the page's storage, and in `logs/` what Electron itself
   logs), set before anything else, so a second data directory is a second desktop and nothing of it lands outside
@@ -135,10 +136,10 @@ JASON_VERSION=0.34.0-rc.1 npm run package -- --win --x64   # dist/: the nsis ins
 
 The release passes `--executable` with the `jason` it has already built and signed, so the package carries that very
 file, and signs the package itself: a Mac package is never built unsigned. Inside `app.asar` are `lib/`, `shell/`,
-`resources/` and the chat's two lists; beside it, in the package's `resources/`, are `bundle/` (the executable with
-`LICENSE` and `THIRD-PARTY-NOTICES`, the skills and `version.json`) and `notices/` (the repository's `LICENSE`, this
-folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package carries no UI: `jason ui install`
-places the UI of the runtime's own release.
+`resources/`, the chat's two lists and its instruction text; beside it, in the package's `resources/`, are `bundle/`
+(the executable with `LICENSE` and `THIRD-PARTY-NOTICES`, the skills and `version.json`) and `notices/` (the
+repository's `LICENSE`, this folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package
+carries no UI: `jason ui install` places the UI of the runtime's own release.
 
 electron-builder fetches Electron's distribution for each platform and architecture it packs. The configuration hands it
 the sha256 of each file from the `checksums.json` the `electron` package carries, which `package-lock.json` pins, so a zip
