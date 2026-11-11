@@ -4,8 +4,8 @@ namespace Jason.Contracts.Execution;
 /// The variable that confines one call of the CLI. Set to any non-empty value, an option of an operation verb that reads a
 /// file's content into a request takes only standard input, and <c>status --provider-cli</c> runs only a program it finds
 /// by a bare name in a fully qualified entry of the search path. It confines the call it is set on and nothing that call
-/// starts: a runtime the CLI starts, and the role work a runtime launches, never carry it. The CLI and the runtime read the
-/// name from here, and nothing else spells it.
+/// starts: a runtime the CLI starts, the role work a runtime launches, and the terminal a session is opened in never
+/// carry it. The CLI and the runtime read the name from here, and nothing else spells it.
 /// </summary>
 public static class Confinement
 {

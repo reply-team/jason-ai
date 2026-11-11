@@ -1,4 +1,6 @@
 using Jason.Cli.Session;
+using Jason.Cli.Tests.Process;
+using Jason.Contracts.Execution;
 
 namespace Jason.Cli.Tests.Session;
 
@@ -274,5 +276,38 @@ public sealed class TerminalPlanTests : IDisposable
         }
 
         return path;
+    }
+}
+
+/// <summary>
+/// <c>JASON_CONFINED</c> confines the CLI call it is set on and nothing that call starts: the terminal a person's agent
+/// host is opened in never carries it, on any operating system, even where this process holds it. The row sets it in this
+/// process's own environment, so it runs apart from every other test in the assembly.
+/// </summary>
+[Collection(ConfinementEnvironmentCollection.Name)]
+public sealed class TerminalStartConfinementTests
+{
+    [Theory]
+    [InlineData(TerminalPlatform.Linux)]
+    [InlineData(TerminalPlatform.MacOs)]
+    [InlineData(TerminalPlatform.Windows)]
+    public void The_terminal_does_not_carry_the_variable(TerminalPlatform os)
+    {
+        var original = Environment.GetEnvironmentVariable(Confinement.Variable);
+        bool carried;
+        try
+        {
+            Environment.SetEnvironmentVariable(Confinement.Variable, "1");
+            var start = TerminalStartInfo.For(os, ["/usr/bin/x-terminal-emulator", "-e", "/usr/local/bin/codex"], "/home/marta/Jason");
+
+            // The start's environment is read from this process when it is first asked for, so it is asked while the variable is set.
+            carried = start.Environment.ContainsKey(Confinement.Variable);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Confinement.Variable, original);
+        }
+
+        Assert.False(carried, "The terminal was handed the variable.");
     }
 }

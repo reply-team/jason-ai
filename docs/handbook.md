@@ -415,11 +415,12 @@ environment variable).
 `JASON_CONFINED`, set to any value but empty, confines the one call of the CLI it is set on, for a host that checks
 what a command reads and runs. An option that reads a file's content into a request (`--file`, `--value-file`,
 `--note-file`, `--result-file`) then takes only `-`, so the content comes by standard input, as
-`--file - < contacts.json` or a here-document, and any other value is refused before the file is opened and before any request,
-exit 1. `jason status --provider-cli <program>` runs a bare name only, found in a fully qualified entry of PATH.
-Options that name a path for another reason are not under the rule: `project link --path`, `doctor --output`, `export`
-and `import`, and `logs`, which takes no path. The variable confines the call and nothing that call starts: a runtime
-it starts, and the role work a runtime launches, never carry it. Unset or empty, nothing changes.
+`--file - < contacts.json` or a here-document, and any other value is refused before the file is opened and before
+any request, exit 1. `jason status --provider-cli <program>` runs a bare name only, found in a fully qualified entry
+of PATH. Options that name a path for another reason are not under the rule: `project link --path`, `doctor --output`,
+`export` and `import`, and `logs`, which takes no path. The variable confines the call and nothing that call starts: a
+runtime it starts, the role work a runtime launches, and the terminal `jason session open` opens never carry it. Unset
+or empty, nothing changes.
 
 A work item moves through one set of statuses: a dispatcher claims it under a lease, with at most one live
 attempt at a time, and whatever performs it reports what happened through the same API; `jason workitem get
