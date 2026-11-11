@@ -2,6 +2,7 @@ using Jason.Cli;
 using Jason.Cli.Tests.Documentation;
 using Jason.Cli.Tests.Process;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
@@ -19,9 +20,19 @@ namespace Jason.App.Tests.Skills;
 /// logon is left null, which the production code answers with a refusal rather than by reaching for the
 /// machine. It is therefore never <see cref="ModeRouter.RunAsync"/>: that builds the real environment,
 /// which is the one path that would register something on a developer's machine and on three CI runners.
+/// <para>
+/// A page under <c>skills/runtime/roles/</c> is a role's page: a role's agent reads it inside a run, so the lines it
+/// prints are typed under a run's environment, an attempt and a work item named by made-up ids. Every other page is
+/// typed outside a run. The folder decides, never a list of pages; so a role's page that prints a line the CLI refuses
+/// inside a run fails here, as a person's page that prints a line the CLI refuses outside one does.
+/// </para>
 /// </remarks>
 public class DocumentedSkillCommandsTests
 {
+    private const string Attempt = "att_01K7QN0000000000000000000R";
+
+    private const string WorkItem = "wi_01K7QN0000000000000000000W";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -36,12 +47,52 @@ public class DocumentedSkillCommandsTests
         {
             foreach (var command in SkillPack.PrintedCommands(await File.ReadAllLinesAsync(skill.File, Ct)))
             {
-                await AssertUnderstoodAsync(command, skill.File);
+                await AssertUnderstoodAsync(command, skill);
                 printed++;
             }
         }
 
         Assert.True(printed > 0, "The pack printed no commands at all, so this guard asserted nothing.");
+    }
+
+    /// <summary>
+    /// The manager's page prints lifting a suppression without <c>--actor</c>, which the CLI refuses outside a run and
+    /// sends as the attempt inside one. The page is a role's, so its line is typed inside a run and understood; the
+    /// same line typed outside a run is refused, which is what this guard said of every page before it read the folder.
+    /// </summary>
+    [Fact]
+    public async Task A_role_page_s_line_is_typed_inside_a_run_where_the_attempt_names_who_acts()
+    {
+        var manager = SkillPack.Find("manager");
+        Assert.True(manager.IsRole);
+        var line = Assert.Single(
+            SkillPack.PrintedCommands(manager.File),
+            command => command.StartsWith("jason suppression remove ", StringComparison.Ordinal));
+        Assert.DoesNotContain("--actor", line, StringComparison.Ordinal);
+
+        await AssertUnderstoodAsync(line, manager);
+
+        var outside = await Assert.ThrowsAsync<Xunit.Sdk.TrueException>(
+            () => AssertUnderstoodAsync(line, manager.File));
+        Assert.Contains("suppression remove needs --actor", outside.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A page outside <c>roles/</c> is a person's, and its lines are typed outside a run: a line that needs an actor
+    /// and names none is refused there, whatever a run would have made of it.
+    /// </summary>
+    [Fact]
+    public async Task A_page_outside_roles_is_typed_outside_a_run_where_a_line_without_an_actor_is_refused()
+    {
+        var page = SkillPack.Find("troubleshooting-jason");
+        Assert.False(page.IsRole);
+        const string Line =
+            "jason suppression remove --channel email --value someone@example.com --reason \"a made-up case\"";
+
+        var refused = await Assert.ThrowsAsync<Xunit.Sdk.TrueException>(() => AssertUnderstoodAsync(Line, page));
+        Assert.Contains("suppression remove needs --actor", refused.Message, StringComparison.Ordinal);
+
+        await AssertUnderstoodAsync("jason --actor human:ada " + Line["jason ".Length..], page);
     }
 
     /// <summary>
@@ -100,7 +151,35 @@ public class DocumentedSkillCommandsTests
     /// method: a second copy with its own environment is how a documentation guard starts a process on three
     /// CI runners.
     /// </summary>
-    internal static async Task AssertUnderstoodAsync(string command, string source)
+    internal static Task AssertUnderstoodAsync(string command, string source) =>
+        AssertUnderstoodAsync(command, source, variables: null);
+
+    /// <summary>
+    /// A line a page of the pack prints, typed as that page's reader types it: inside a run for a role's page.
+    /// </summary>
+    private static Task AssertUnderstoodAsync(string command, PackSkill page) =>
+        AssertUnderstoodAsync(command, page.File, page.IsRole ? ARun() : null);
+
+    /// <summary>
+    /// The environment of a run, as the launcher hands it to a role's agent: this process's own variables, which a
+    /// child inherits, and the attempt and the work item it runs for.
+    /// </summary>
+    private static Dictionary<string, string> ARun()
+    {
+        var variables = new Dictionary<string, string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            variables[(string)entry.Key] = entry.Value as string ?? string.Empty;
+        }
+
+        variables[ExecutionEnvironment.AttemptIdVariable] = Attempt;
+        variables[ExecutionEnvironment.WorkItemIdVariable] = WorkItem;
+        return variables;
+    }
+
+    private static async Task AssertUnderstoodAsync(
+        string command, string source, IReadOnlyDictionary<string, string>? variables)
     {
         // The splitter drops the program's own name, so what is left is what the program is handed — which
         // is what ModeRouter reads to decide which of its modes answers at all.
@@ -134,7 +213,8 @@ public class DocumentedSkillCommandsTests
                 using (var tree = new TempTree())
                 {
                     var error = new StringWriter();
-                    var exit = await CliApp.RunAsync(Named(arguments, tree.Root), Machine(tree, error), Ct);
+                    var machine = Machine(tree, error) with { Variables = variables };
+                    var exit = await CliApp.RunAsync(Named(arguments, tree.Root), machine, Ct);
 
                     Assert.True(
                         exit != ExitCodes.Usage,
