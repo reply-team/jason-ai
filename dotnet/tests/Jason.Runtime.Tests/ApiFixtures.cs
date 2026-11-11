@@ -127,6 +127,7 @@ public static class ApiFixtures
         "campaign.summary/all",
         "campaign.summary/all-after",
         "campaign.summary/archived",
+        "campaign.summary/everyone",
         "campaign.summary/inbox-all",
         "campaign.summary/inbox-one",
         "campaign.summary/inbox-quiet",

@@ -532,6 +532,14 @@ public class RecordedExchangesTests
         Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some", new { campaign_ids = new[] { seed.Spring } }, Ct)).Campaigns);
         Assert.Equal(4, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "with-archived", new { campaign_ids = everything.Items.Select(c => c.Id) }, Ct)).Campaigns.Count);
 
+        // Asked for nothing, the summary answers every campaign not archived, Winter left out, and a total in which Ada,
+        // a member of three of them, counts once.
+        var unasked = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "everyone", new { }, Ct);
+        Assert.Equal(all.Campaigns, unasked.Campaigns);
+        Assert.DoesNotContain(seed.Winter, unasked.Campaigns.Select(c => c.CampaignId));
+        Assert.Equal(all.Total, unasked.Total);
+        Assert.True(unasked.Total.People < unasked.Campaigns.Sum(c => c.People), "A person in several campaigns would count once per campaign.");
+
         var week = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "last-7-days", new { campaign_ids = listed, since = WeekStart, until = Now }, Ct);
         Assert.Equal(new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1), week.Campaigns[0]);
         var today = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "today", new { campaign_ids = listed, since = "2026-10-16T00:00:00.000Z", until = Now }, Ct);
