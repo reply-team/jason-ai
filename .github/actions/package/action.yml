@@ -932,7 +932,8 @@ runs:
     # Each Linux package read back. The deb's control fields name the package, the version as dpkg spells it and the
     # architecture; unpacked, /opt/Jason is held to the configuration it was built from (its feed, its fuses, and
     # package-type saying deb, which makes electron-updater's deb updater), and its menu entry starts the program without
-    # --no-sandbox. The AppImage's runtime is linked to no shared library, so it needs no libfuse2; its contents, extracted
+    # --no-sandbox; its AppArmor profile lets the program make user namespaces, and its after-install loads that profile.
+    # The AppImage's runtime is linked to no shared library, so it needs no libfuse2; its contents, extracted
     # by that runtime, are held to the configuration the same way, with no package-type, which makes the AppImage updater.
     # Each carries the executable this call published, byte for byte and runnable, with its notices, Chromium's, and the
     # release's version in version.json. The feed's digest and size of each file it names are computed again from the
@@ -970,7 +971,11 @@ runs:
         opened="$RUNNER_TEMP/jason-desktop-deb"
         rm -rf "$opened"
         dpkg-deb --extract "$deb" "$opened"
-        node desktop/scripts/check-package.mjs --app "$opened/opt/Jason" --platform linux --form deb || { echo "::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses or its updater."; exit 1; }
+        node desktop/scripts/check-package.mjs --app "$opened/opt/Jason" --platform linux --form deb || { echo "::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses, its updater or its AppArmor profile."; exit 1; }
+        control="$RUNNER_TEMP/jason-desktop-deb-control"
+        rm -rf "$control"
+        dpkg-deb --control "$deb" "$control"
+        grep -q 'apparmor_parser --replace' "$control/postinst" || { echo "::error title=Desktop::The deb's after-install loads no AppArmor profile for its sandbox."; exit 1; }
         carries "$opened/opt/Jason" deb
         entries=("$opened"/usr/share/applications/*.desktop)
         [ -f "${entries[0]}" ] || { echo "::error title=Desktop::The deb puts no entry in the applications menu."; exit 1; }
@@ -993,7 +998,9 @@ runs:
     # and by its own runtime's extraction where it does not. Each start has a data directory and a harness root of its
     # own, holding a UI build of one page, since this release's UI is not published yet; it must log desktop_started and
     # window_loaded, its program must not run with --no-sandbox, and the runtime it leaves running must stop with the
-    # jason the package carries. The deb is removed after.
+    # jason the package carries. The deb is removed after. The deb starts on the runner as shipped, its sandbox resting on
+    # the AppArmor profile it installs; the AppImage, which carries none, starts once the runner allows any program user
+    # namespaces, by the system's setting where the runner restricts them.
     - name: Start the desktop's Linux packages under a virtual display
       if: inputs.rid == 'linux-x64' && inputs.desktop == 'true'
       shell: bash
@@ -1036,10 +1043,20 @@ runs:
 
         sudo apt-get update -qq
         sudo apt-get install -y --no-install-recommends "$dist/jason-desktop-linux-x64.deb"
+        if [ -e /etc/apparmor.d/jason-desktop-app ]; then echo "The deb installed its AppArmor profile."; else echo "The deb installed no AppArmor profile: this runner's AppArmor reads none."; fi
         started deb "$RUNNER_TEMP/jason-desktop-deb-data" /opt/Jason/resources/bundle/jason /usr/bin/jason-desktop-app
         sudo apt-get remove -y jason-desktop
         [ ! -e /opt/Jason/jason-desktop-app ] || { echo "::error title=Desktop::apt remove left /opt/Jason/jason-desktop-app."; exit 1; }
 
+        # The AppImage carries no profile, so it runs its sandbox only where the system lets any program make user
+        # namespaces. Where this runner refuses them, this run allows them by the system's own setting, for this run
+        # alone, and never by the switch, which the desktop refuses anyway.
+        if ! unshare -Ur true 2> /dev/null; then
+          [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ] || { echo "::error title=Desktop::This runner refuses unprivileged user namespaces, and has no AppArmor setting to allow them."; exit 1; }
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          unshare -Ur true || { echo "::error title=Desktop::This runner refuses unprivileged user namespaces with AppArmor's restriction off."; exit 1; }
+          echo "Unprivileged user namespaces are allowed for this run, so the AppImage can run its sandbox."
+        fi
         if [ -c /dev/fuse ] && { command -v fusermount3 || command -v fusermount; } > /dev/null; then
           echo "The AppImage starts through FUSE."
         else

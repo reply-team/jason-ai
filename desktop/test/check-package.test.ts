@@ -61,6 +61,9 @@ const updaterFile = (platform: Kind) => [
     '',
 ].join('\n');
 
+/** The AppArmor profile a deb carries, as app-builder-lib's apparmor-profile.tpl writes it for this program. */
+const appArmorProfile = ['abi <abi/4.0>,', 'include <tunables/global>', '', 'profile "jason-desktop-app" "/opt/Jason/jason-desktop-app" flags=(unconfined) {', '  userns,', '', '  include if exists <local/jason-desktop-app>', '}', ''].join('\n');
+
 /** The menu entry an AppImage carries at its root, as electron-builder writes it for the static runtime. */
 const menuEntry = (exec: string) => ['[Desktop Entry]', 'Name=Jason', `Exec=${exec}`, 'Terminal=false', 'Type=Application', 'Icon=jason-desktop-app', ''].join('\n');
 
@@ -72,7 +75,7 @@ const menuEntry = (exec: string) => ['[Desktop Entry]', 'Name=Jason', `Exec=${ex
 async function made(
     t: { after(fn: () => void): void },
     platform: Kind,
-    options: { length?: number; copies?: number; updater?: string | null; packageType?: string | null; appRun?: boolean; exec?: string } = {},
+    options: { length?: number; copies?: number; updater?: string | null; packageType?: string | null; appRun?: boolean; exec?: string | null; profile?: string | null } = {},
 ): Promise<string> {
     const folder = temporary(t);
     const app = platform === 'win32' ? join(folder, 'win-unpacked') : platform === 'darwin' ? join(folder, 'mac-arm64', 'Jason.app') : join(folder, platform === 'linux-deb' ? 'Jason' : 'squashfs-root');
@@ -88,7 +91,8 @@ async function made(
     const packageType = options.packageType === undefined ? (platform === 'linux-deb' ? 'deb\n' : null) : options.packageType;
     if (packageType !== null) writeFileSync(join(app, 'resources', 'package-type'), packageType);
     if (options.appRun ?? platform === 'linux-appimage') writeFileSync(join(app, 'AppRun'), '#!/usr/bin/env bash\n');
-    if (platform === 'linux-appimage') writeFileSync(join(app, 'jason-desktop-app.desktop'), menuEntry(options.exec ?? 'AppRun %U'));
+    if (platform === 'linux-appimage' && options.exec !== null) writeFileSync(join(app, 'jason-desktop-app.desktop'), menuEntry(options.exec ?? 'AppRun %U'));
+    if (platform === 'linux-deb' && options.profile !== null) writeFileSync(join(app, 'resources', 'apparmor-profile'), options.profile ?? appArmorProfile);
     return app;
 }
 
@@ -225,6 +229,22 @@ test('linux: each form is what it says: an AppImage has AppRun at its root, and 
 test('linux: an AppImage whose menu entry starts the program with --no-sandbox is refused', async (t) => {
     const app = await made(t, 'linux-appimage', { exec: 'AppRun --no-sandbox %U' });
     assert.throws(() => check(app, 'linux-appimage'), /jason-desktop-app\.desktop starts the program with --no-sandbox/);
+});
+
+test('linux: an AppImage with no menu entry at its root is refused, since there would be no Exec to read', async (t) => {
+    const app = await made(t, 'linux-appimage', { exec: null });
+    assert.throws(() => check(app, 'linux-appimage'), /holds no \.desktop menu entry at its root/);
+});
+
+test('linux: a deb carries the AppArmor profile that lets its program make user namespaces, which its sandbox uses', async (t) => {
+    const app = await made(t, 'linux-deb');
+    assert.ok(check(app, 'linux-deb').includes('apparmor-profile: userns for /opt/Jason/jason-desktop-app'));
+    const none = await made(t, 'linux-deb', { profile: null });
+    assert.throws(() => check(none, 'linux-deb'), /holds no resources\/apparmor-profile/);
+    const other = await made(t, 'linux-deb', { profile: appArmorProfile.replace('/opt/Jason/jason-desktop-app', '/opt/Jason/jason-desktop') });
+    assert.throws(() => check(other, 'linux-deb'), /apparmor-profile does not let \/opt\/Jason\/jason-desktop-app make user namespaces/);
+    const without = await made(t, 'linux-deb', { profile: appArmorProfile.replace('  userns,\n', '') });
+    assert.throws(() => check(without, 'linux-deb'), /apparmor-profile does not let \/opt\/Jason\/jason-desktop-app make user namespaces/);
 });
 
 test('linux: the form is required and is one of deb and appimage, and only Linux has one', async (t) => {
