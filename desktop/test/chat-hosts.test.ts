@@ -304,7 +304,7 @@ test('every Claude Code turn asks the host to run nothing in the background, and
         assert.deepEqual(Object.entries(env).filter(([each]) => each.toUpperCase() === name), [[name, '1']]);
     }
     const codex = hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} });
-    assert.deepEqual(Object.keys(codex), ['PATH']);
+    assert.deepEqual(Object.keys(codex), ['PATH', 'JASON_CONFINED']);
 });
 
 test('every Claude Code turn asks the host to run each command in the chat folder, so a cd does not carry to the next one', () => {
