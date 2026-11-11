@@ -68,7 +68,7 @@ public static class RoleNoteCommands
             + Environment.NewLine + Level.OlderForm("set"));
         var level = new Level(command, "set");
         var note = new Option<string?>("--note") { Description = "The whole note, as a JSON object." };
-        var noteFile = new Option<string?>("--note-file")
+        var noteFile = new RequestFileOption("--note-file")
         {
             Description = "The whole note, read from a file holding a JSON object — or - for standard input.",
         };
@@ -151,7 +151,7 @@ public static class RoleNoteCommands
 
         return inline is not null
             ? VerbOptions.Object(inline, "--note")
-            : await RequestBody.FromFileAsync(file!, env.In ?? TextReader.Null, arrayProperty: null, cancellationToken).ConfigureAwait(false);
+            : await RequestBody.FromFileAsync(env, "--note-file", file!, arrayProperty: null, cancellationToken).ConfigureAwait(false);
     }
 
     private static Option<string?> CampaignOption(string whose = "note this is") =>

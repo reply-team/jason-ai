@@ -33,7 +33,7 @@ public static class PreferenceCommands
             "Set a preference's value whole, as the person said it. The value is checked against the key's published schema. " + ActorOption.NoDefault);
         var key = KeyArgument();
         var value = new Option<string?>("--value") { Description = "The whole value, as a JSON object." };
-        var valueFile = new Option<string?>("--value-file")
+        var valueFile = new RequestFileOption("--value-file")
         {
             Description = "The whole value, read from a file holding a JSON object — or - for standard input.",
         };
@@ -131,7 +131,7 @@ public static class PreferenceCommands
 
         return inline is not null
             ? VerbOptions.Object(inline, "--value")
-            : await RequestBody.FromFileAsync(file!, env.In ?? TextReader.Null, arrayProperty: null, cancellationToken).ConfigureAwait(false);
+            : await RequestBody.FromFileAsync(env, "--value-file", file!, arrayProperty: null, cancellationToken).ConfigureAwait(false);
     }
 
     private static Argument<string> KeyArgument() =>

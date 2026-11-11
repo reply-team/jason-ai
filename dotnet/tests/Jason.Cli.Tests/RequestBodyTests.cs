@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Cli;
+using Jason.Contracts.Discovery;
 
 namespace Jason.Cli.Tests;
 
@@ -18,7 +19,7 @@ public class RequestBodyTests
     {
         using var file = new TempFile("{\"name\":\"from the file\",\"reason\":\"kept\"}");
 
-        var body = await RequestBody.FromFileAsync(file.Path, TextReader.Null, null, TestContext.Current.CancellationToken);
+        var body = await RequestBody.FromFileAsync(Env(TextReader.Null), "--file", file.Path, null, TestContext.Current.CancellationToken);
         body.Set("name", "from the option");
 
         Assert.Equal("{\"name\":\"from the option\",\"reason\":\"kept\"}", RequestBody.Serialize(body));
@@ -29,7 +30,7 @@ public class RequestBodyTests
     {
         using var file = new TempFile("[{\"contact_id\":\"cnt_A\"},{\"first_name\":\"Ada\"}]");
 
-        var body = await RequestBody.FromFileAsync(file.Path, TextReader.Null, "contacts", TestContext.Current.CancellationToken);
+        var body = await RequestBody.FromFileAsync(Env(TextReader.Null), "--file", file.Path, "contacts", TestContext.Current.CancellationToken);
 
         Assert.Equal("{\"contacts\":[{\"contact_id\":\"cnt_A\"},{\"first_name\":\"Ada\"}]}", RequestBody.Serialize(body));
     }
@@ -37,7 +38,7 @@ public class RequestBodyTests
     [Fact]
     public async Task A_dash_reads_standard_input()
     {
-        var body = await RequestBody.FromFileAsync("-", new StringReader("{\"name\":\"piped\"}"), null, TestContext.Current.CancellationToken);
+        var body = await RequestBody.FromFileAsync(Env(new StringReader("{\"name\":\"piped\"}")), "--file", "-", null, TestContext.Current.CancellationToken);
 
         Assert.Equal("{\"name\":\"piped\"}", RequestBody.Serialize(body));
     }
@@ -47,7 +48,7 @@ public class RequestBodyTests
     {
         using var file = new TempFile("[1,2]");
 
-        var failure = await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync(file.Path, TextReader.Null, null, TestContext.Current.CancellationToken));
+        var failure = await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync(Env(TextReader.Null), "--file", file.Path, null, TestContext.Current.CancellationToken));
 
         Assert.Contains("JSON object", failure.Message, StringComparison.Ordinal);
     }
@@ -57,7 +58,7 @@ public class RequestBodyTests
     {
         using var file = new TempFile("42");
 
-        await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync(file.Path, TextReader.Null, "contacts", TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync(Env(TextReader.Null), "--file", file.Path, "contacts", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -65,7 +66,7 @@ public class RequestBodyTests
     {
         using var file = new TempFile("{ not json");
 
-        await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync(file.Path, TextReader.Null, null, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync(Env(TextReader.Null), "--file", file.Path, null, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -73,7 +74,7 @@ public class RequestBodyTests
     {
         var missing = Path.Combine(Path.GetTempPath(), "jason-cli-tests", Guid.NewGuid().ToString("N"), "absent.json");
 
-        var failure = await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync(missing, TextReader.Null, null, TestContext.Current.CancellationToken));
+        var failure = await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync(Env(TextReader.Null), "--file", missing, null, TestContext.Current.CancellationToken));
 
         Assert.Contains("absent.json", failure.Message, StringComparison.Ordinal);
     }
@@ -81,7 +82,7 @@ public class RequestBodyTests
     [Fact]
     public async Task Empty_standard_input_is_a_usage_error()
     {
-        await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync("-", new StringReader(string.Empty), null, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<UsageException>(() => RequestBody.FromFileAsync(Env(new StringReader(string.Empty)), "--file", "-", null, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -105,6 +106,9 @@ public class RequestBodyTests
             RequestBody.Serialize(RequestBody.Empty().SetActor(ActorOption.Parse("role:planner", null))));
         Assert.Equal("{}", RequestBody.Serialize(RequestBody.Empty().SetActor(null)));
     }
+
+    private static CliEnvironment Env(TextReader input) =>
+        new(TextWriter.Null, TextWriter.Null, new JasonPaths("unused"), In: input, Variables: new Dictionary<string, string>());
 }
 
 /// <summary>A JSON file that exists only for the duration of one test.</summary>
