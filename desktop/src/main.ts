@@ -247,7 +247,7 @@ async function run(): Promise<void> {
         new Setup({
             paths,
             cli,
-            programs: programsOn(env),
+            programs: programsOn(env, version),
             keys,
             log,
             bundleVersion: version ?? 'unprepared',
@@ -263,6 +263,7 @@ async function run(): Promise<void> {
         env,
         bundle,
         dataNamed: Boolean(process.env.JASON_DATA_DIR?.trim()),
+        bundleVersion: version,
         cli,
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,

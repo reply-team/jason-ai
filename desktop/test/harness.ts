@@ -62,7 +62,7 @@ function nodeOnly(folder: string): void {
     }
 }
 
-export function bench(t: { after(fn: () => void): void }, options: { programs?: string[]; env?: Record<string, string> } = {}): Bench {
+export function bench(t: { after(fn: () => void): void }, options: { programs?: string[]; env?: Record<string, string>; bundleVersion?: string } = {}): Bench {
     const root = mkdtempSync(join(tmpdir(), 'jason-desktop-test-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const data = join(root, 'data');
@@ -87,7 +87,7 @@ export function bench(t: { after(fn: () => void): void }, options: { programs?: 
         paths: desktopPaths(data),
         env,
         cli: cliAt(process.execPath, env, [join(stubs, 'jason.cjs')]),
-        programs: programsOn(env),
+        programs: programsOn(env, options.bundleVersion ?? null),
         record() {
             try {
                 return readFileSync(recordFile, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as Recorded);

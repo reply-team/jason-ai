@@ -303,7 +303,7 @@ test('against the real executable, the reload after Disconnect activates a snaps
         await new Setup({
             paths,
             cli: loggedCli(cli, log),
-            programs: programsOn(env),
+            programs: programsOn(env, null),
             keys: new ProviderKeys(join(root, 'provider-keys'), fakeBox),
             log,
             bundleVersion: before.runtime_version,

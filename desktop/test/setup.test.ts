@@ -344,6 +344,7 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
             env: b.env,
             bundle: join(b.root, 'bin'),
             dataNamed: true,
+            bundleVersion: null,
             cli: loggedCli(b.cli, log),
             keyFor: () => undefined,
             fence: () => readFence(join(import.meta.dirname, '..')),

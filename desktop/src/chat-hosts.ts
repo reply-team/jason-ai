@@ -6,6 +6,7 @@ import { posix, win32 } from 'node:path';
 import { allowRules, denyRules } from './chat-deny.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
 import { confinedVariable, type Platform } from './chat-permission-model.ts';
+import { withReplyClient } from './reply-client.ts';
 import { isSessionMarker } from './session-markers.ts';
 
 /**
@@ -221,7 +222,10 @@ const noBackground = 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS';
  * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and
  * `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`. Every host's turn carries `JASON_CONFINED=1`, whatever the desktop
  * inherited, so the jason it runs reads a request's content from standard input only and runs a provider check's
- * program by a bare name only; the desktop's own calls of jason do not carry it.
+ * program by a bare name only; the desktop's own calls of jason do not carry it. Every host's turn also carries the
+ * harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
+ * desktop inherited, and none at all when the build carries no bundle version. It is a label the reply-cli the host
+ * runs may put in its User-Agent; nothing defends it.
  */
 export function hostEnvironment(
     base: Readonly<Record<string, string | undefined>>,
@@ -233,6 +237,8 @@ export function hostEnvironment(
         /** Whether the turn runs on a key provider. */
         keyed: boolean;
         provider: Readonly<Record<string, string>>;
+        /** The bundle's version, from which the label for reply-cli is built; null when the build carries none. */
+        bundleVersion: string | null;
     },
 ): Record<string, string> {
     const env: Record<string, string> = {};
@@ -259,7 +265,7 @@ export function hostEnvironment(
         env[maintainFolder] = '1';
         env[noBackground] = '1';
     }
-    return env;
+    return withReplyClient(env, options.bundleVersion);
 }
 
 /** What one line a host prints means. */

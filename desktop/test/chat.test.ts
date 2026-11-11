@@ -50,6 +50,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
         env: b.env,
         bundle,
         dataNamed: true,
+        bundleVersion: null,
         cli: b.cli,
         keyFor: (id) => keys[id],
         fence: () => fence,
@@ -176,6 +177,17 @@ test('the host is started with the bundle first on its PATH and the data directo
     assert.equal(host.env.JASON_DATA_DIR, r.b.paths.data);
     assert.ok(!names.some((name) => name.toUpperCase().startsWith('JASON_PLUGINS__')), names.join(' '));
     assert.ok(!names.some((name) => name.toUpperCase() === 'CLAUDE_AUTO_BACKGROUND_TASKS'));
+});
+
+test('the host of either kind is started with the harness\'s label for reply-cli, from the bundle\'s version', async (t) => {
+    const r = rig(t, { env: { reply_client: 'someone-else/1.0' }, chat: { bundleVersion: '0.35.0+4f2a9c1' } });
+    await r.turn('c1', words, { host: 'claude' });
+    await r.turn('c2', words, { host: 'codex' });
+    const hosts = r.hosts();
+    assert.deepEqual(hosts.map((host) => host.name), ['claude', 'codex']);
+    for (const host of hosts) {
+        assert.deepEqual(Object.entries(host.env).filter(([name]) => name.toUpperCase() === 'REPLY_CLIENT').map(([, value]) => value), ['jason-harness/0.35.0'], host.name);
+    }
 });
 
 test('a request the model settles makes no card, and the host reads the answer', async (t) => {
@@ -523,7 +535,7 @@ test('a start removes the turn files a desktop that ended mid-turn left in turns
     // Under <data>/desktop itself nothing is touched, a name of the turn file's own shape included.
     const beside = ['turn-00112233445566778899aabb.mcp.json', 'settings.json'];
     for (const name of beside) writeFileSync(join(r.b.paths.desktop, name), '{}');
-    new Chat({ paths: r.b.paths, env: r.b.env, bundle: r.bundle, dataNamed: true, cli: r.b.cli, keyFor: () => undefined, fence: () => fence, emit: () => undefined });
+    new Chat({ paths: r.b.paths, env: r.b.env, bundle: r.bundle, dataNamed: true, bundleVersion: null, cli: r.b.cli, keyFor: () => undefined, fence: () => fence, emit: () => undefined });
     assert.deepEqual(readdirSync(r.b.paths.turns).sort(), [...kept].sort());
     assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'chat' && name !== 'turns').sort(), [...beside].sort());
 });

@@ -206,21 +206,39 @@ test('every top-level entry the runtime\'s paths and the command line write in t
 });
 
 test('the host\'s environment puts the bundled jason first on PATH and names the data directory', () => {
-    const env = hostEnvironment({ Path: '/usr/bin:/bin', HOME: '/h', JASON_DATA_DIR: '/old' }, { platform: 'darwin', bundle: '/app/bundle', data: '/d', program: 'codex', keyed: false, provider: {} });
+    const env = hostEnvironment({ Path: '/usr/bin:/bin', HOME: '/h', JASON_DATA_DIR: '/old' }, { platform: 'darwin', bundleVersion: null, bundle: '/app/bundle', data: '/d', program: 'codex', keyed: false, provider: {} });
     assert.equal(env.PATH, '/app/bundle:/usr/bin:/bin');
     assert.equal(Object.keys(env).filter((name) => name.toUpperCase() === 'PATH').length, 1);
     assert.equal(env.JASON_DATA_DIR, '/d');
     assert.equal(env.HOME, '/h');
-    assert.equal(hostEnvironment({ PATH: 'C:\\w' }, { platform: 'win32', bundle: 'C:\\b', data: null, program: 'codex', keyed: false, provider: {} }).PATH, 'C:\\b;C:\\w');
-    assert.equal('JASON_DATA_DIR' in hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} }), false);
+    assert.equal(hostEnvironment({ PATH: 'C:\\w' }, { platform: 'win32', bundleVersion: null, bundle: 'C:\\b', data: null, program: 'codex', keyed: false, provider: {} }).PATH, 'C:\\b;C:\\w');
+    assert.equal('JASON_DATA_DIR' in hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} }), false);
 });
 
 test('every host runs the CLI confined: the environment sets JASON_CONFINED whatever the desktop inherited', () => {
     for (const program of ['claude', 'codex'] as const) {
         for (const inherited of [{}, { JASON_CONFINED: '' }, { jason_confined: '0' }, { Jason_Confined: '' }]) {
-            const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform: 'win32', bundle: '/b', data: null, program, keyed: false, provider: {} });
+            const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform: 'win32', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
             assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), [['JASON_CONFINED', '1']], `${program} ${JSON.stringify(inherited)}`);
         }
+    }
+});
+
+test('every host\'s environment carries the harness\'s label for reply-cli, built from the bundle\'s version, in place of an inherited one in any letter case', () => {
+    for (const program of ['claude', 'codex'] as const) {
+        for (const keyed of [false, true]) {
+            for (const inherited of [{}, { REPLY_CLIENT: 'someone-else/1.0' }, { reply_client: 'someone-else/1.0' }, { Reply_Client: 'other/2', REPLY_CLIENT: 'someone-else/1.0' }]) {
+                const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform: 'win32', bundleVersion: '0.35.0-rc.1+4f2a9c1', bundle: '/b', data: null, program, keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
+                assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'REPLY_CLIENT'), [['REPLY_CLIENT', 'jason-harness/0.35.0-rc.1']], `${program} ${keyed} ${JSON.stringify(inherited)}`);
+            }
+        }
+    }
+});
+
+test('with no bundle version a host\'s environment carries no label for reply-cli, not even an inherited one', () => {
+    for (const program of ['claude', 'codex'] as const) {
+        const env = hostEnvironment({ PATH: '/x', REPLY_CLIENT: 'someone-else/1.0', reply_client: 'other/2' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
+        assert.deepEqual(Object.keys(env).filter((name) => name.toUpperCase() === 'REPLY_CLIENT'), [], program);
     }
 });
 
@@ -231,14 +249,14 @@ test('a Claude turn is denied, by the host itself, any command that names JASON_
 test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE_AUTO_BACKGROUND_TASKS', () => {
     const env = hostEnvironment(
         { PATH: '/x', JASON_Plugins__slack__Token: 'xoxb-planted', jason_plugins__grants__reply: 'y', CLAUDE_AUTO_BACKGROUND_TASKS: '1', claude_auto_background_tasks: '1', JASON_Harness__Root: '/h/Jason' },
-        { platform: 'darwin', bundle: '/b', data: '/d', program: 'codex', keyed: false, provider: {} },
+        { platform: 'darwin', bundleVersion: null, bundle: '/b', data: '/d', program: 'codex', keyed: false, provider: {} },
     );
     assert.deepEqual(Object.keys(env).sort(), ['JASON_CONFINED', 'JASON_DATA_DIR', 'JASON_Harness__Root', 'PATH']);
     assert.ok(!JSON.stringify(env).includes('xoxb-planted'));
 });
 
 test('a desktop started from inside a Claude Code session hands the host none of that session\'s markers, and keeps a person\'s configuration', () => {
-    const env = hostEnvironment({ PATH: '/x', ...plantedMarkers, claudecode: '1', ...plantedConfiguration }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed: false, provider: {} });
+    const env = hostEnvironment({ PATH: '/x', ...plantedMarkers, claudecode: '1', ...plantedConfiguration }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed: false, provider: {} });
     assert.deepEqual(markersIn(Object.keys(env)), []);
     assert.deepEqual(Object.keys(env).sort(), ['PATH', 'JASON_CONFINED', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ...Object.keys(plantedConfiguration)].sort());
     for (const [name, value] of Object.entries(plantedConfiguration)) assert.equal(env[name], value, name);
@@ -246,7 +264,7 @@ test('a desktop started from inside a Claude Code session hands the host none of
 });
 
 test('a key provider\'s variables are added to the host\'s environment over the desktop\'s own', () => {
-    const env = hostEnvironment({ PATH: '/x', ANTHROPIC_BASE_URL: 'https://elsewhere' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed: true, provider: { ANTHROPIC_AUTH_TOKEN: 'k', ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic' } });
+    const env = hostEnvironment({ PATH: '/x', ANTHROPIC_BASE_URL: 'https://elsewhere' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed: true, provider: { ANTHROPIC_AUTH_TOKEN: 'k', ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic' } });
     assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'k');
     assert.equal(env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
 });
@@ -271,7 +289,7 @@ const inheritedCodexProvider: Readonly<Record<string, string>> = { OPENAI_API_KE
 test('a key provider\'s turn is started without the provider and credentials the desktop inherited; a plain turn keeps them', () => {
     const base = { PATH: '/x', HOME: '/h', ...inheritedClaudeProvider, ...inheritedCodexProvider };
     const deepseek = { ANTHROPIC_AUTH_TOKEN: 'sk-deepseek', ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic', ANTHROPIC_MODEL: 'deepseek-v4-pro' };
-    const keyed = hostEnvironment({ ...base, anthropic_api_key: 'sk-lower', claude_code_use_bedrock: '1' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed: true, provider: deepseek });
+    const keyed = hostEnvironment({ ...base, anthropic_api_key: 'sk-lower', claude_code_use_bedrock: '1' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed: true, provider: deepseek });
     for (const name of Object.keys(inheritedClaudeProvider)) {
         const kept = Object.keys(keyed).filter((each) => each.toUpperCase() === name);
         if (name in deepseek) assert.deepEqual(kept.map((each) => keyed[each]), [deepseek[name as keyof typeof deepseek]], name);
@@ -280,19 +298,19 @@ test('a key provider\'s turn is started without the provider and credentials the
     for (const value of [...Object.values(inheritedClaudeProvider).filter((each) => each !== '1'), 'sk-lower']) assert.ok(!Object.values(keyed).includes(value), value);
     assert.equal(keyed.HOME, '/h');
 
-    const openai = hostEnvironment(base, { platform: 'darwin', bundle: '/b', data: null, program: 'codex', keyed: true, provider: { OPENAI_API_KEY: 'sk-openai' } });
+    const openai = hostEnvironment(base, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: true, provider: { OPENAI_API_KEY: 'sk-openai' } });
     assert.equal(openai.OPENAI_API_KEY, 'sk-openai');
     assert.equal('OPENAI_BASE_URL' in openai, false);
 
     for (const program of ['claude', 'codex'] as const) {
-        const plain = hostEnvironment(base, { platform: 'darwin', bundle: '/b', data: null, program, keyed: false, provider: {} });
+        const plain = hostEnvironment(base, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
         for (const [name, value] of Object.entries({ ...inheritedClaudeProvider, ...inheritedCodexProvider })) assert.equal(plain[name], value, program + ' keeps ' + name);
     }
 });
 
 test('every Claude Code turn asks the host to scrub credentials from the commands it runs', () => {
     for (const keyed of [false, true]) {
-        const env = hostEnvironment({ PATH: '/x', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0', claude_code_subprocess_env_scrub: '0' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
+        const env = hostEnvironment({ PATH: '/x', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0', claude_code_subprocess_env_scrub: '0' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
         assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'), [['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', '1']]);
     }
 });
@@ -300,17 +318,17 @@ test('every Claude Code turn asks the host to scrub credentials from the command
 test('every Claude Code turn asks the host to run nothing in the background, and a Codex turn is left as it was', () => {
     const name = 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS';
     for (const keyed of [false, true]) {
-        const env = hostEnvironment({ PATH: '/x', [name]: '0', [name.toLowerCase()]: '0' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
+        const env = hostEnvironment({ PATH: '/x', [name]: '0', [name.toLowerCase()]: '0' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
         assert.deepEqual(Object.entries(env).filter(([each]) => each.toUpperCase() === name), [[name, '1']]);
     }
-    const codex = hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} });
+    const codex = hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} });
     assert.deepEqual(Object.keys(codex), ['PATH', 'JASON_CONFINED']);
 });
 
 test('every Claude Code turn asks the host to run each command in the chat folder, so a cd does not carry to the next one', () => {
     const name = 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR';
     for (const keyed of [false, true]) {
-        const env = hostEnvironment({ PATH: '/x', [name]: '0', [name.toLowerCase()]: '0' }, { platform: 'darwin', bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
+        const env = hostEnvironment({ PATH: '/x', [name]: '0', [name.toLowerCase()]: '0' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
         assert.deepEqual(Object.entries(env).filter(([each]) => each.toUpperCase() === name), [[name, '1']]);
     }
 });

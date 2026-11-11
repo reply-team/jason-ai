@@ -53,6 +53,8 @@ export interface ChatOptions {
     bundle: string;
     /** Whether the desktop runs with a data directory `JASON_DATA_DIR` names, which the host is then given too. */
     dataNamed: boolean;
+    /** The bundle's version, from which a host's label for reply-cli is built (`hostEnvironment`); null when there is none. */
+    bundleVersion: string | null;
     cli: Cli;
     keyFor(providerId: string): string | undefined;
     /** The deny list's commands and operations, the allow list's verbs and the instruction text, read at each turn. */
@@ -376,6 +378,7 @@ export class Chat {
             program: resolved.program,
             keyed: resolved.keyed,
             provider: resolved.provider,
+            bundleVersion: this.#options.bundleVersion,
         });
         let steps = 0;
         let result: string | null | undefined;
