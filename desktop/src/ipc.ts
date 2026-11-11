@@ -12,6 +12,7 @@ export const invokeChannels = {
     'setup.setProviderKey': 'jason:setup.setProviderKey',
     'setup.installProgram': 'jason:setup.installProgram',
     'setup.configurePlugin': 'jason:setup.configurePlugin',
+    'setup.disconnectPlugin': 'jason:setup.disconnectPlugin',
     'chat.send': 'jason:chat.send',
     'chat.stop': 'jason:chat.stop',
     'chat.answer': 'jason:chat.answer',

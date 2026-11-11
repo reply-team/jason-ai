@@ -51,7 +51,7 @@ export const setupFound: DesktopSetup = {
         user: 'person@example.test',
         wired: true,
         accounts: [
-            { id: 'acc_1', channel: 'email', name: 'Sales inbox', address: 'sales@example.test', status: 'active' },
+            { id: 'acc_1', channel: 'email', name: 'Sales inbox', address: 'sales@example.test', status: 'connected' },
         ],
     },
     runtimeVersion: '0.34.0',
@@ -150,6 +150,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
             setProviderKey: call('setup.setProviderKey'),
             installProgram: call('setup.installProgram'),
             configurePlugin: call('setup.configurePlugin'),
+            disconnectPlugin: call('setup.disconnectPlugin'),
             onChanged(handler) {
                 changeHandlers.add(handler);
                 return () => changeHandlers.delete(handler);

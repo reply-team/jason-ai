@@ -79,6 +79,10 @@ export interface DesktopReplyAccount {
     channel: string;
     name: string;
     address: string;
+    /**
+     * The state Reply reports for the account, as Reply wrote it (email: `connected`, `disconnected`, `unknown`;
+     * LinkedIn: `enabled`, `disabled`, `cookieInvalid`, `dailyLimitReached`; or another word); empty when it reported none.
+     */
     status: string;
 }
 
@@ -201,6 +205,16 @@ export interface JasonDesktop {
             pluginId: string,
             settings: { token?: string; target?: string; server?: string },
         ): Promise<void>;
+        /**
+         * Disconnects one of the three notification plugins (slack, telegram, ntfy; the journal forwarder and any other
+         * id are refused), so that it is no longer a channel that is on: `Plugins:Config:<id>` and the entry under
+         * `Notifications:Plugins:<id>` are removed whole, except that an entry whose `Enabled` is false keeps it and loses
+         * only its `Binding`, and a section left empty is dropped. Its grant, `Plugins:Grants:<id>`, stays, except the
+         * Http grant derived from a server of the plugin's own, which goes with the server; every other key and its
+         * package stay. Then the runtime reads its plugins again, as after `configurePlugin`; a settings file the desktop
+         * cannot parse or keep is refused, never overwritten.
+         */
+        disconnectPlugin(pluginId: string): Promise<void>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

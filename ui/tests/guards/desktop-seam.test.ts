@@ -22,6 +22,7 @@ const setup = {
     setProviderKey: true,
     installProgram: true,
     configurePlugin: true,
+    disconnectPlugin: true,
     onChanged: true,
 } as const satisfies Record<keyof JasonDesktop['setup'], true>;
 // What setup.status answers is the seam too: the desktop's main process fills each field.
@@ -62,6 +63,7 @@ describe('the desktop seam', () => {
             'setup.setProviderKey',
             'setup.installProgram',
             'setup.configurePlugin',
+            'setup.disconnectPlugin',
             'setup.onChanged',
         ]);
         expect(Object.keys(status)).toEqual([

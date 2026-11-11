@@ -32,6 +32,7 @@ import {
     versionAtLeast,
     versionIn,
     withPluginConfigured,
+    withPluginDisconnected,
     withReplyWired,
     type PluginRuntime,
     type PluginValues,
@@ -423,6 +424,40 @@ export class Setup {
                 await this.#placeAndEdit(plugin.id, (settings) => withPluginConfigured(settings, plugin, wanted));
             }
             await this.#reload(plugin.id, wanted);
+        });
+    }
+
+    /**
+     * Disconnects one of the three notification plugins: its configuration and its notification binding are taken out
+     * of the installation's settings, with the Http grant derived from a server of its own; the rest of its grant and
+     * its package stay, and the runtime is asked to load its plugins again and, when that reload exits 0, the plugins
+     * are read back. The id is checked against the desktop's own table before the settings file is read, and the
+     * journal forwarder is refused there too. A settings file the desktop cannot read or keep is refused and left as it
+     * is; one the edit would not change is not written.
+     */
+    disconnectPlugin(pluginId: unknown): Promise<void> {
+        return this.#serial(async () => {
+            const plugin = bundledPlugin(pluginId);
+            if (plugin === undefined || plugin.target.where !== 'binding') throw new Refused('That is not a plugin the desktop disconnects.');
+            const settings = this.#readForEdit();
+            let next: Record<string, unknown>;
+            try {
+                next = withPluginDisconnected(settings, plugin);
+            } catch (error) {
+                throw error instanceof Refused ? new Refused(`${error.message} ${editByHand}`) : error;
+            }
+            const written = JSON.stringify(next) !== JSON.stringify(settings);
+            if (written) writeAtomically(this.#deps.paths.installationSettings, `${JSON.stringify(next, null, 2)}\n`);
+            const reload = await this.#reloadPlugins();
+            const listed = reload.exit === 0 ? await this.#deps.cli.run(['plugin', 'list']) : null;
+            this.#deps.log.info('plugin_disconnected', {
+                PluginId: plugin.id,
+                Written: written,
+                Exit: reload.exit,
+                Valid: listed !== null && listed.exit === 0 && (pluginRuntimes(listed.stdout).get(plugin.id)?.valid ?? false),
+            });
+            this.#changed();
+            if (reload.exit !== 0) throw this.#reloadRefused(reload);
         });
     }
 

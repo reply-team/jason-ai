@@ -32,6 +32,7 @@ const desktop = {
         setProviderKey: (providerId: string, key: string) => ipcRenderer.invoke('jason:setup.setProviderKey', providerId, key),
         installProgram: (programId: string) => ipcRenderer.invoke('jason:setup.installProgram', programId),
         configurePlugin: (pluginId: string, values: unknown) => ipcRenderer.invoke('jason:setup.configurePlugin', pluginId, values),
+        disconnectPlugin: (pluginId: string) => ipcRenderer.invoke('jason:setup.disconnectPlugin', pluginId),
         onChanged: (handler: Handler) => subscribe('jason:setup.changed', handler),
     },
 };

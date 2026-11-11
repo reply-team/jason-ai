@@ -1,4 +1,5 @@
-import type { DesktopHost, DesktopPlugin, DesktopSetup } from '../platform/desktop';
+import { effect, signal } from '@preact/signals-react';
+import type { DesktopHost, DesktopPlugin, DesktopReplyAccount, DesktopSetup } from '../platform/desktop';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
 import { signInSentence } from './live';
@@ -9,6 +10,72 @@ import { here, messageOf, setup, setupBusy, setupError } from './state';
 
 /** Keys and tokens being typed, held only until they are handed to the desktop. */
 const typed = new Map<string, string>();
+
+/** The plugin whose Disconnect waits on the person's confirmation; null when none does. */
+const confirming = signal<string | null>(null);
+
+// A confirmation is forgotten once the plugin it names is no longer configured, so configuring it again asks afresh.
+effect(() => {
+    const id = confirming.value;
+    if (id !== null && !setup.value?.plugins.some((each) => each.id === id && each.configured)) confirming.value = null;
+});
+
+/**
+ * Reply's web app, where an account's limits, signature, pauses and connection are managed. The desktop manages none of
+ * them; the card links there instead.
+ */
+export const replyAccountsAddress = 'https://run.reply.io/';
+
+/** The channels the Reply CLI lists accounts for, in the order the card shows them, with their headings. */
+const channels: readonly (readonly [string, string])[] = [
+    ['email', 'Email'],
+    ['linkedin', 'LinkedIn'],
+];
+
+type Tone = 'green' | 'amber' | 'red' | 'gray';
+
+/**
+ * The state Reply reports for an account (`reply_status` in `reply account list --json`, see the Reply CLI's
+ * `src/operations/accounts.ts`), in words, by channel. A word not here is shown as Reply wrote it, in a neutral pill.
+ */
+const states: Record<string, Record<string, readonly [string, Tone]>> = {
+    email: {
+        connected: ['Connected', 'green'],
+        disconnected: ['Disconnected', 'red'],
+        unknown: ['Unknown', 'gray'],
+    },
+    linkedin: {
+        enabled: ['Enabled', 'green'],
+        disabled: ['Disabled', 'gray'],
+        cookieInvalid: ['Signed out', 'red'],
+        dailyLimitReached: ['Daily limit reached', 'amber'],
+    },
+};
+
+/** Text the card did not write, cut to forty characters so a long one cannot crowd the row; never inside one. */
+const cap = (text: string): string => {
+    const characters = [...text];
+    return characters.length > 40 ? `${characters.slice(0, 40).join('')}…` : text;
+};
+
+function stateOf(account: DesktopReplyAccount): readonly [string, Tone] {
+    if (!account.status) return ['State unknown', 'gray'];
+    const known = Object.hasOwn(states, account.channel) ? states[account.channel]! : {};
+    return Object.hasOwn(known, account.status) ? known[account.status]! : [cap(account.status), 'gray'];
+}
+
+/** The accounts by channel: the known channels in their order, then any other under its own name, as it first comes. */
+function grouped(accounts: readonly DesktopReplyAccount[]): [string, DesktopReplyAccount[]][] {
+    const others = [...new Set(accounts.map((each) => each.channel))].filter(
+        (channel) => !channels.some(([known]) => known === channel),
+    );
+    return [...channels, ...others.map((channel) => [channel, cap(channel)] as const)]
+        .map(([channel, heading]): [string, DesktopReplyAccount[]] => [
+            heading,
+            accounts.filter((each) => each.channel === channel),
+        ])
+        .filter(([, members]) => members.length > 0);
+}
 
 export async function reload(): Promise<void> {
     try {
@@ -91,6 +158,20 @@ define('connect.pluginServerClear', ([id]) => {
         void doing(`Configuring ${plugin.label}…`, () =>
             here().desktop.setup.configurePlugin(plugin.id, { server: '' }),
         );
+});
+
+define('connect.disconnect', ([id]) => {
+    if (typeof id === 'string') confirming.value = id;
+});
+
+define('connect.disconnectCancel', () => {
+    confirming.value = null;
+});
+
+define('connect.disconnectConfirm', ([id]) => {
+    const plugin = setup.value?.plugins.find((each) => each.id === id);
+    confirming.value = null;
+    if (plugin) void doing(`Disconnecting ${plugin.label}…`, () => here().desktop.setup.disconnectPlugin(plugin.id));
 });
 
 // Reload is the configure call with no values: it writes nothing, has the runtime read its plugins again, and reads
@@ -183,15 +264,27 @@ function reply(state: DesktopSetup['reply'], busy: Html | null): Html {
                       </div>`
                     : null
             }
-            ${state.accounts.map(
-                (account) =>
-                    html`<div class="setrow acct">
-                        <div class="grow">
-                            <b>${account.name}</b> <span class="meta">${account.channel} · ${account.address}</span>
-                        </div>
-                        <span class="pillc">${account.status}</span>
+            ${grouped(state.accounts).map(
+                ([heading, members]) =>
+                    html`<div class="acct-group">
+                        <div class="setrow meta acct-hd">${heading}</div>
+                        ${members.map((account) => {
+                            const [words, tone] = stateOf(account);
+                            return html`<div class="setrow acct">
+                                <div class="grow">
+                                    <b>${account.name}</b> <span class="meta">${account.address}</span>
+                                </div>
+                                <span class="pillc ${tone}">${words}</span>
+                            </div>`;
+                        })}
                     </div>`,
             )}
+            <div class="setrow">
+                <div class="grow meta">
+                    Limits, signatures, pauses and an account's connection are set in Reply.
+                    <a href="${replyAccountsAddress}" target="_blank" rel="noreferrer">Manage accounts in Reply</a>
+                </div>
+            </div>
         </div>
     </div>`;
 }
@@ -236,8 +329,29 @@ function plugin(each: DesktopPlugin, busy: Html | null, refused: boolean): Html 
                                 </button>`
                               : null
                       }
-                      <button class="btn sm" type="button" ${busy} ${act('connect.plugin', each.id)}>Configure</button>`
+                      <button class="btn sm" type="button" ${busy} ${act('connect.plugin', each.id)}>Configure</button>
+                      ${disconnect(each, busy)}`
         }
+    </div>`;
+}
+
+/**
+ * Disconnect, on a configured notification plugin only: the forwarder (the plugin with no binding) has none, since
+ * without its receiver it would fail every journal line it is still granted. It asks once before the desktop acts.
+ */
+function disconnect(each: DesktopPlugin, busy: Html | null): Html | null {
+    if (each.binding === null || !each.configured) return null;
+    if (confirming.value !== each.id)
+        return html`<button class="btn sm" type="button" ${busy} ${act('connect.disconnect', each.id)}>
+            Disconnect
+        </button>`;
+    return html`<div class="note am" role="alertdialog" aria-label="Disconnect ${each.label}">
+        Disconnect ${each.label}? Every value under its configuration in the settings file and its notification target
+        are removed. Jason stops sending notifications there. The plugin stays installed.
+        <button class="btn sm" type="button" ${busy} ${act('connect.disconnectConfirm', each.id)}>
+            Disconnect ${each.label}
+        </button>
+        <button class="btn sm" type="button" ${act('connect.disconnectCancel')}>Cancel</button>
     </div>`;
 }
 

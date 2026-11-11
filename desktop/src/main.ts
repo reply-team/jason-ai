@@ -130,6 +130,7 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
         ['setup.setProviderKey', (id, key) => setup.setProviderKey(id, key)],
         ['setup.installProgram', (id) => setup.installProgram(id)],
         ['setup.configurePlugin', (id, values) => setup.configurePlugin(id, values)],
+        ['setup.disconnectPlugin', (id) => setup.disconnectPlugin(id)],
     ];
     for (const [member, handler] of members) handle(ipcMain, member, origin, handler, refused);
     setup.onChanged(() => window()?.webContents.send(eventChannels['setup.changed']));

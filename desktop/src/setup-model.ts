@@ -236,6 +236,69 @@ export function withPluginConfigured(settings: Json, plugin: BundledPlugin, valu
     return next;
 }
 
+/**
+ * Takes the key `name` out of the object at `path` and then every object on that path the removal left empty, innermost
+ * first; an object that was empty before is left as it was. Names are found as the runtime's configuration reads them,
+ * in any letter case.
+ */
+function removeAndPrune(root: Json, path: readonly string[], name: string): void {
+    const objects = [root];
+    for (let depth = 1; depth <= path.length; depth++) {
+        const found = existing(root, path.slice(0, depth));
+        if (found === undefined) return;
+        objects.push(found);
+    }
+    const here = objects[objects.length - 1]!;
+    const key = keyOf(here, name);
+    if (!(key in here)) return;
+    delete here[key];
+    for (let depth = path.length; depth > 0; depth--) {
+        if (Object.keys(objects[depth]!).length > 0) return;
+        const parent = objects[depth - 1]!;
+        delete parent[keyOf(parent, path[depth - 1]!)];
+    }
+}
+
+/**
+ * The installation's settings with one notification plugin disconnected: its whole configuration, `Plugins:Config:<id>`,
+ * is removed, and so is its entry under `Notifications:Plugins:<id>`, since a plugin named there is a channel that is on
+ * unless its entry says `Enabled` false, and one left on with no binding would fail every send. An entry whose `Enabled`
+ * is the JSON false keeps it, a person's off staying theirs, and loses only its `Binding`. Its grant,
+ * `Plugins:Grants:<id>`, stays, except the Http grant derived from a server of the plugin's own, which goes with the
+ * server: where the binding names a server and `Http` is exactly the one host Configure derives from it, so a later
+ * Configure derives the grant again as it does on a fresh file; any other `Http`, a widened one included, stays. A
+ * section the removal left empty is dropped. `Routes` and every other key keep their values, and the input is not
+ * changed. The journal forwarder has no Disconnect: without its receiver it would fail every journal line it is still
+ * granted.
+ */
+export function withPluginDisconnected(settings: Json, plugin: BundledPlugin): Json {
+    if (plugin.target.where !== 'binding') {
+        throw new Refused(`${plugin.label} has no Disconnect: without its receiver it would fail every journal line it is still granted.`);
+    }
+    const next = structuredClone(settings);
+    const entry = existing(next, ['Notifications', 'Plugins', plugin.id]);
+    const derived = derivedHost(grantSource(next, plugin));
+    if (entry !== undefined && entry[keyOf(entry, 'Enabled')] === false) removeAndPrune(next, ['Notifications', 'Plugins', plugin.id], 'Binding');
+    else removeAndPrune(next, ['Notifications', 'Plugins'], plugin.id);
+    removeAndPrune(next, ['Plugins', 'Config'], plugin.id);
+    if (derived !== null) {
+        const grants = existing(next, ['Plugins', 'Grants', plugin.id]);
+        const http = grants === undefined ? undefined : grants[keyOf(grants, 'Http')];
+        if (Array.isArray(http) && http.length === 1 && http[0] === derived) removeAndPrune(next, ['Plugins', 'Grants', plugin.id], 'Http');
+    }
+    return next;
+}
+
+/** The one host Configure grants for a server of the plugin's own, or null where there is no server it could read. */
+function derivedHost(server: unknown): string | null {
+    if (typeof server !== 'string' || server === '') return null;
+    try {
+        return new URL(server).host;
+    } catch {
+        return null;
+    }
+}
+
 /** The Reply plugin's binding as the golden path writes it: the reply-cli profile the route acts as. */
 export interface ReplyWiring {
     settings: Json;
@@ -341,6 +404,11 @@ export interface ReplyAccount {
     channel: string;
     name: string;
     address: string;
+    /**
+     * The state Reply reports for the account, its `reply_status` as Reply wrote it (email: connected, disconnected,
+     * unknown; LinkedIn: enabled, disabled, cookieInvalid, dailyLimitReached; or another word); empty when Reply reported
+     * none. The CLI's own `status` summarises it into four words and is not read.
+     */
     status: string;
 }
 
@@ -389,7 +457,7 @@ export function parseReplyAccounts(stdout: string): ReplyAccount[] {
             channel: String(item['channel'] ?? ''),
             name: String(item['name'] ?? ''),
             address: String(item['address'] ?? ''),
-            status: String(item['status'] ?? ''),
+            status: typeof item['reply_status'] === 'string' ? item['reply_status'] : '',
         }));
     } catch {
         return [];
