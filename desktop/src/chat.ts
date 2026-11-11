@@ -14,7 +14,7 @@
  * acts for the person across the installation, as the permission model and the allow list let it.
  */
 
-import { chmodSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute } from 'node:path';
 import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
@@ -48,7 +48,7 @@ import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
-import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
+import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import type { Cli } from './cli.ts';
@@ -346,6 +346,8 @@ export class Chat {
     #naming: Promise<void> = Promise.resolve();
     /** Whether the window closed: a naming run that waits is then not started. */
     #closed = false;
+    /** The naming run that runs now, its stop and its folder; null while none runs. */
+    #namingNow: { stop: AbortController; folder: string } | null = null;
 
     constructor(options: ChatOptions) {
         this.#options = options;
@@ -583,7 +585,9 @@ export class Chat {
 
     /**
      * The window closed: every turn is stopped, every waiting request refused, every "always" forgotten, and every
-     * running turn's file removed before this returns, since the desktop may quit before a host's exit is seen.
+     * running turn's file removed before this returns, since the desktop may quit before a host's exit is seen. A naming
+     * run that runs is ended as a stop ends a turn's host and its folder removed when it can be now (else when its host
+     * has let go of it, or at the next start); one that waits never starts.
      */
     closeAll(): void {
         this.#closed = true;
@@ -591,6 +595,15 @@ export class Chat {
             running.stopped = true;
             running.process?.stop();
             if (running.turnId !== null) removeQuietly(this.#options.paths.turns, running.turnId);
+        }
+        const naming = this.#namingNow;
+        if (naming !== null) {
+            naming.stop.abort();
+            try {
+                rmSync(naming.folder, { recursive: true, force: true });
+            } catch {
+                // The host still holds it: removed once it lets go (`runNaming`), or at the next start.
+            }
         }
         this.#broker.endAll();
     }
@@ -1106,15 +1119,20 @@ export class Chat {
         // An inherited effort would stand over the run's own (Claude Code reads the variable over `--effort`).
         for (const name of Object.keys(env)) if (name.toUpperCase() === 'CLAUDE_CODE_EFFORT_LEVEL') delete env[name];
         const onCommandLine = provider?.baseUrl ? null : model.model;
+        const now = { stop: new AbortController(), folder: namingFolderPath(this.#options.paths.turns, newTurnId()) };
+        this.#namingNow = now;
         const answer = await runNaming({
             program: resolved.program,
             launch,
             args: resolved.program === 'claude' ? claudeNamingArguments(onCommandLine, effort) : codexNamingArguments(codexNamingModel(null)),
             env,
             stdin: namingInput(resolved.program, first),
-            turns: this.#options.paths.turns,
+            folder: now.folder,
             checksKeySource: resolved.checksKeySource,
             limitMs: this.#options.namingLimitMs ?? namingLimitMs,
+            signal: now.stop.signal,
+        }).finally(() => {
+            this.#namingNow = null;
         });
         if ('outcome' in answer) return said(answer.outcome);
         // A person who renamed the chat, a hand-over or a removal while the run ran: their name stands.

@@ -38,12 +38,11 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { claudeLine, codexLine, type HostLine } from './chat-hosts.ts';
 import { quoted, titleLimit } from './chat-header.ts';
-import { namingFolderPath, newTurnId } from './chat-turn-files.ts';
 import type { Launch } from './program-path.ts';
 import { runFile, type RunResult } from './programs.ts';
 
 /** How a naming run ended, as a closed word for the log: never the answer, the person's words or the host's text. */
-export type NamingOutcome = 'named' | 'refused' | 'failed' | 'timed_out' | 'held' | 'not_started' | 'overtaken';
+export type NamingOutcome = 'named' | 'refused' | 'failed' | 'timed_out' | 'stopped' | 'held' | 'not_started' | 'overtaken';
 
 /** What the model is told, the same for every host: on Claude Code its whole system prompt, on Codex before the message. */
 export const namingInstruction =
@@ -215,39 +214,57 @@ export function namingAnswer(program: 'claude' | 'codex', stdout: string, checks
     return name === null ? { outcome: 'refused' } : { name };
 }
 
-/** What `runNaming` is given: the host's start, its command line, environment and input, and where its folder goes. */
+/** What `runNaming` is given: the host's start, its command line, environment and input, and its folder. */
 export interface NamingRun {
     program: 'claude' | 'codex';
     launch: Extract<Launch, { file: string }>;
     args: readonly string[];
     env: Record<string, string>;
     stdin: string;
-    /** `<data>/desktop/turns/`, in which the run's own empty folder is made and removed after. */
-    turns: string;
+    /** The run's own empty folder under `<data>/desktop/turns/` (`namingFolderPath`), made here and removed after. */
+    folder: string;
     checksKeySource: boolean;
     limitMs: number;
+    /** Ends the run as a stop ends a turn's host, when the chat's turns end (`Chat.closeAll`). */
+    signal: AbortSignal;
+}
+
+/** How long the folder's removal is tried again while the ended host lets go of it, and how often. */
+const removalTries = 40;
+const removalPauseMs = 200;
+
+/**
+ * Removes the run's folder with what is in it; on Windows a host that is being ended still holds it a moment, so it is
+ * tried again until it goes, and one that does not is the next start's to remove.
+ */
+async function removeFolder(folder: string): Promise<void> {
+    for (let tried = 1; ; tried++) {
+        try {
+            rmSync(folder, { recursive: true, force: true });
+            return;
+        } catch {
+            if (tried >= removalTries) return;
+            await new Promise((resolve) => setTimeout(resolve, removalPauseMs));
+        }
+    }
 }
 
 /**
- * The one naming run: in a new empty folder under `turns/`, started without a shell through the program runner, ended
- * at its bound, and its folder removed after with whatever the host left in it; a folder that cannot be removed now is
- * the next start's to remove. It never rejects.
+ * The one naming run: in its own empty folder under `turns/`, started without a shell through the program runner, ended
+ * at its bound or when the chat's turns end, and its folder removed after with whatever the host left in it. It never
+ * rejects.
  */
 export async function runNaming(run: NamingRun): Promise<{ name: string } | { outcome: Exclude<NamingOutcome, 'named' | 'held' | 'overtaken'> }> {
-    const folder = namingFolderPath(run.turns, newTurnId());
     let result: RunResult;
     try {
-        mkdirSync(folder, { recursive: true, mode: 0o700 });
-        result = await runFile(run.launch.file, [...run.launch.prefix, ...run.args], run.env, { stdin: run.stdin, timeoutMs: run.limitMs, cwd: folder });
+        mkdirSync(run.folder, { recursive: true, mode: 0o700 });
+        result = await runFile(run.launch.file, [...run.launch.prefix, ...run.args], run.env, { stdin: run.stdin, timeoutMs: run.limitMs, cwd: run.folder, signal: run.signal });
     } catch {
+        await removeFolder(run.folder);
         return { outcome: 'not_started' };
-    } finally {
-        try {
-            rmSync(folder, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-        } catch {
-            // Left for the next start.
-        }
     }
+    await removeFolder(run.folder);
+    if (run.signal.aborted) return { outcome: 'stopped' };
     if (result.exit === -1 && result.stdout === '' && result.stderr.startsWith('It was stopped at its time limit')) return { outcome: 'timed_out' };
     if (result.exit !== 0) return { outcome: 'failed' };
     return namingAnswer(run.program, result.stdout, run.checksKeySource);

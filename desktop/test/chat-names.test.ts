@@ -436,3 +436,40 @@ test('deny by default: a Codex item that is not the agent\'s message or its reas
         assert.equal(titleOf(r, setup.id), outcome === 'named' ? say : 'Help me reach dentists in Ohio', `${host} ${JSON.stringify(answer)}`);
     }
 });
+
+test('closing the chat ends a running naming run as a stop ends a turn\'s host, drops one that waits, and leaves nothing of either', { timeout: 60_000 }, async (t) => {
+    const r = rig(t);
+    const ids = join(r.b.root, 'stuck.json');
+    const alive = (id: number) => {
+        try {
+            process.kill(id, 0);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+    t.after(() => {
+        if (!existsSync(ids)) return;
+        for (const id of JSON.parse(readFileSync(ids, 'utf8')) as number[]) if (alive(id)) process.kill(id);
+    });
+    naming(r, { stuck: ids });
+    const one = await r.chat.create();
+    const two = await r.chat.create();
+    await Promise.all([r.turn(one.id, 'First chat', { host: 'claude' }), r.turn(two.id, 'Second chat', { host: 'claude' })]);
+    const until = async (done: () => boolean, ms: number) => {
+        const end = Date.now() + ms;
+        while (!done() && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 100));
+    };
+    await until(() => existsSync(ids), 10_000);
+    assert.ok(existsSync(ids), 'the stuck run started');
+    const started = JSON.parse(readFileSync(ids, 'utf8')) as number[];
+    r.chat.closeAll();
+    await r.chat.idle();
+    await until(() => !started.some(alive), 8000);
+    assert.deepEqual(started.filter(alive), [], 'the run and what it started are ended, past the first signal');
+    await until(() => readdirSync(r.b.paths.turns).length === 0, 8000);
+    assert.deepEqual(readdirSync(r.b.paths.turns), [], 'its folder is gone');
+    assert.equal(r.namings().length, 1, 'the run that waited never started');
+    assert.deepEqual(r.outcomes, ['stopped']);
+    assert.deepEqual([titleOf(r, one.id), titleOf(r, two.id)], ['First chat', 'Second chat']);
+});

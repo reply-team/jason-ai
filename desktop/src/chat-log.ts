@@ -7,7 +7,7 @@
  * fresh session; how each naming run of a set-up chat ended, as one closed word. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
  * nothing. Never the words of a turn, a tool's input, a command, a path, a session, a campaign, a conversation's
  * title or entries, or a key: the host is an id from the desktop's own tables, the file is the application's own name,
- * the code is the system's (`EPERM`, say), the reason one of two words, the key source one of three, a naming run's end one of seven, and everything else is a number, a boolean or an
+ * the code is the system's (`EPERM`, say), the reason one of two words, the key source one of three, a naming run's end one of eight, and everything else is a number, a boolean or an
  * outcome.
  */
 

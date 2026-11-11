@@ -312,7 +312,7 @@ test('a naming run of a set-up chat is logged by how it ended, one word, never t
     t.after(() => removals.forEach((remove) => remove()));
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
     const log = fileLogger(b.paths.logs);
-    const outcomes = ['named', 'refused', 'failed', 'timed_out', 'held', 'not_started', 'overtaken'] as const;
+    const outcomes = ['named', 'refused', 'failed', 'timed_out', 'stopped', 'held', 'not_started', 'overtaken'] as const;
     for (const outcome of outcomes) loggedTurns(log).named(outcome);
     const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
     const said = lines0(text)
