@@ -19,7 +19,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             stop: (...args) => void calls.push(['stop', ...args]),
             answer: (...args) => void calls.push(['answer', ...args]),
             list: (...args) => (calls.push(['list', ...args]), []),
-            open: (...args) => (calls.push(['open', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false, entries: [], dropped: 0 }),
+            open: (...args) => (calls.push(['open', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false, entries: [], dropped: 0, chosen: null }),
             create: async (...args) => (calls.push(['create', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false }),
             remove: (...args) => void calls.push(['remove', ...args]),
             restart: (...args) => void calls.push(['restart', ...args]),

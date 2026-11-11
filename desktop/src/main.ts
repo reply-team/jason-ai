@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
-import { loggedTurns } from './chat-log.ts';
+import { loggedModels, loggedTurns } from './chat-log.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
@@ -36,6 +36,7 @@ import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
 import { Setup } from './setup.ts';
+import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
 import { processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
@@ -322,6 +323,14 @@ async function run(): Promise<void> {
     const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);
     // One runner for the Connect cards and the chat, so a listing and a turn share one read of Claude Code's version.
     const programs = sharingVersionReads(programsOn(env, version));
+    const dataNamed = Boolean(process.env.JASON_DATA_DIR?.trim());
+    // The models Codex offers: shown from what is kept, asked again in the background when the hosts are listed.
+    const models = new ModelLists({
+        file: paths.models,
+        ask: codexAsker({ paths, env, bundle, dataNamed, bundleVersion: version, keyFor: (id) => keys.keyFor(id) }),
+        changed: () => current?.webContents.send(eventChannels['setup.changed']),
+        ...loggedModels(log),
+    });
     registerSetup(
         new Setup({
             paths,
@@ -332,6 +341,7 @@ async function run(): Promise<void> {
             bundleVersion: version ?? 'unprepared',
             runtimeVersion: () => runtimeVersion,
             settings: () => settings,
+            models,
         }),
         origin,
         log,
@@ -341,10 +351,11 @@ async function run(): Promise<void> {
         paths,
         env,
         bundle,
-        dataNamed: Boolean(process.env.JASON_DATA_DIR?.trim()),
+        dataNamed,
         bundleVersion: version,
         cli,
         programs,
+        models: () => models.lists(),
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),

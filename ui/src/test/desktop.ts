@@ -1,6 +1,7 @@
 import type { JournalEntry } from '../api/types';
 import type {
     DesktopChatEvent,
+    DesktopChatOptions,
     DesktopCommand,
     DesktopConversation,
     DesktopConversationRecord,
@@ -16,6 +17,9 @@ import { fixtures } from './fixtures';
 // their first turn, listed newest first, refused in the desktop's sentences and answered as a value, a turn running
 // from its send to its `done`, and a pick taken only from the conversation's last one.
 
+/** Every effort level, as Claude Code's aliases take them. */
+const every = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
 export const setupFound: DesktopSetup = {
     hosts: [
         {
@@ -27,6 +31,12 @@ export const setupFound: DesktopSetup = {
             drivesChat: true,
             install: null,
             belowFloor: null,
+            models: [
+                { id: 'opus', label: 'Opus', efforts: [...every] },
+                { id: 'sonnet', label: 'Sonnet', efforts: [...every] },
+                { id: 'haiku', label: 'Haiku', efforts: [] },
+            ],
+            typedModel: true,
         },
         {
             id: 'codex',
@@ -37,6 +47,8 @@ export const setupFound: DesktopSetup = {
             drivesChat: true,
             install: 'codex',
             belowFloor: null,
+            models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] }],
+            typedModel: false,
         },
         {
             id: 'gemini',
@@ -47,6 +59,8 @@ export const setupFound: DesktopSetup = {
             drivesChat: false,
             install: null,
             belowFloor: null,
+            models: [],
+            typedModel: false,
         },
         {
             id: 'deepseek',
@@ -57,6 +71,11 @@ export const setupFound: DesktopSetup = {
             drivesChat: true,
             install: null,
             belowFloor: null,
+            models: [
+                { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', efforts: ['low', 'high', 'max'] },
+                { id: 'deepseek-flash', label: 'deepseek-flash', efforts: ['low', 'high', 'max'] },
+            ],
+            typedModel: false,
         },
     ],
     reply: {
@@ -188,6 +207,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
             running: false,
             entries: [],
             dropped: 0,
+            chosen: null,
             ...record,
         };
         kept.set(full.id, full);
@@ -211,9 +231,12 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
             return () => commandHandlers.delete(handler);
         },
         chat: {
-            send: answering('chat.send', (id) => {
+            send: answering('chat.send', (id, _text, options) => {
                 const record = own(id);
                 if (!record) return notKept;
+                // What the desktop keeps of a send: the host, the model and the effort it named.
+                const { host, model, effort } = options as DesktopChatOptions;
+                record.chosen = { host, model: model ?? null, effort: effort ?? null };
                 record.running = true;
                 record.updatedAt = now();
                 listed.add(record.id);

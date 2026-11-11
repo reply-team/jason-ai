@@ -26,6 +26,7 @@ import {
     withPluginConfigured,
     withReplyWired,
 } from '../src/setup-model.ts';
+import { claudeCodeModels } from '../src/chat-models.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
 
 function setupDeps(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null }): SetupDeps {
@@ -670,13 +671,42 @@ test('every host is listed, found or not; the missing ones name an install only 
     const b = bench(t, { programs: ['claude', 'gemini', 'npm'] });
     const { hosts } = await setupOn(b).status();
     const byId = new Map(hosts.map((host) => [host.id, host]));
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null, models: claudeCodeModels('10.9.2'), typedModel: true });
     assert.equal(byId.get('codex')?.found, false);
     assert.equal(byId.get('codex')?.install, 'codex');
     assert.equal(byId.get('gemini')?.found, true);
     assert.equal(byId.get('gemini')?.drivesChat, false);
     assert.equal(byId.get('copilot')?.install, null, 'the desktop installs only the hosts it names an npm package for');
     assert.equal(byId.get('deepseek')?.kind, 'provider');
+});
+
+test('each host carries the models it offers with their efforts, and a listing asks Codex again only for a host found or a key stored', async (t) => {
+    const b = bench(t, { programs: ['claude', 'codex', 'gemini'] });
+    const refreshed: string[][] = [];
+    const kept = new Map([['codex', { askedAt: '2026-11-11T10:00:00.000Z', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low' as const] }] }]]);
+    const setup = new Setup({ ...setupDeps(b), models: { lists: () => kept, refresh: (ids) => void refreshed.push([...ids]) } });
+    const every = ['low', 'medium', 'high', 'xhigh', 'max'];
+    let byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
+    assert.deepEqual(byId.get('claude')?.models, [
+        { id: 'opus', label: 'Opus', efforts: every },
+        { id: 'sonnet', label: 'Sonnet', efforts: every },
+        { id: 'haiku', label: 'Haiku', efforts: every },
+        { id: 'fable', label: 'Fable', efforts: every },
+    ]);
+    assert.equal(byId.get('claude')?.typedModel, true);
+    assert.equal(byId.get('claude-api-key')?.typedModel, true);
+    assert.deepEqual(byId.get('codex')?.models, [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low'] }]);
+    assert.equal(byId.get('codex')?.typedModel, false);
+    assert.deepEqual(byId.get('codex-api-key')?.models, []);
+    assert.deepEqual(byId.get('deepseek')?.models.map((model) => [model.id, model.efforts.join(',')]), [['deepseek-v4-pro', 'low,high,max'], ['deepseek-flash', 'low,high,max']]);
+    assert.deepEqual(byId.get('gemini')?.models, []);
+    assert.equal(byId.get('gemini')?.typedModel, false);
+    assert.deepEqual(refreshed, [['codex']]);
+    await setup.setProviderKey('codex-api-key', 'sk-o');
+    byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
+    assert.deepEqual(refreshed.at(-1), ['codex', 'codex-api-key']);
+    // With nothing kept the hosts still list, and Codex offers no model of its own until it has been asked.
+    assert.deepEqual((await setupOn(b).status()).hosts.find((host) => host.id === 'codex')?.models, []);
 });
 
 // ---- Claude Code's version and its floor ---------------------------------------------------------------------------
@@ -700,7 +730,7 @@ test('a Claude Code below the floor is listed and marked with the version found,
     const byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
     const sentence = floorSentence('2.1.200');
     assert.ok(sentence);
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence, models: claudeCodeModels('2.1.200'), typedModel: true });
     assert.equal(byId.get('claude-api-key')?.belowFloor, sentence, 'a key provider runs on that same claude');
     assert.equal(byId.get('deepseek')?.belowFloor, sentence);
     assert.equal(byId.get('codex')?.belowFloor, null, 'only Claude Code has a floor');

@@ -120,6 +120,7 @@ describe('a chat as the page keeps it', () => {
                     { kind: 'error', text: 'Claude Code stopped.' },
                     { kind: 'pick', campaignIds: ['cmp_2'] },
                 ],
+                chosen: null,
             },
             'claude',
         );

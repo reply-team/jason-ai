@@ -14,6 +14,7 @@
 import { instructionsFile } from './chat-deny.ts';
 import type { ChatOptions } from './chat.ts';
 import type { Logger } from './log.ts';
+import type { ModelListsOptions } from './model-lists.ts';
 
 type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource';
 
@@ -29,5 +30,17 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
         setupEnded: (found, handedOver) => log.info('chat_setup_ended', { ListRead: found !== null, Found: found ?? 0, HandedOver: handedOver }),
         fresh: (reason) => log.info('chat_turn_fresh', { Cause: reason }),
         keySource: (source) => log.warn('chat_key_source', { Source: source }),
+    };
+}
+
+/**
+ * What an ask of the models Codex offers tells the log: the host id it was asked under, from the desktop's own table,
+ * and how many models it kept, or the kind of failure that kept the last list (`AskFailure`). Never a model's name or
+ * what the host said.
+ */
+export function loggedModels(log: Logger): Required<Pick<ModelListsOptions, 'listed' | 'failed'>> {
+    return {
+        listed: (hostId, count) => log.info('chat_models_listed', { Host: hostId, Models: count }),
+        failed: (hostId, kind) => log.warn('chat_models_unlisted', { Host: hostId, Kind: kind }),
     };
 }

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ipcModule, processModules, processViolations, signalLines } from './process-rules.ts';
+import { ipcModule, listingCallers, processModules, processViolations, signalLines } from './process-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -102,6 +102,18 @@ test('the chat\'s host module is named, and the shell and whole-module rules hol
     assert.notDeepEqual(processViolations('src/chat-process.ts', "import { exec } from 'node:child_process';"), []);
     assert.notDeepEqual(processViolations('src/chat-process.ts', "execFile('cmd.exe', ['/c', 'taskkill']);"), []);
     assert.notDeepEqual(processViolations('src/chat.ts', "import { spawn } from 'node:child_process';"), []);
+});
+
+test("an agent host's model listing is one call: codex app-server, started only by the module that keeps the lists", () => {
+    assert.match(processModules['src/chat-process.ts'] ?? '', /an agent host's model listing/);
+    const text = readFileSync(join(root, 'src/chat-process.ts'), 'utf8');
+    assert.ok(text.includes("export const listingArguments: readonly string[] = ['app-server'];"), 'the listing names its one call');
+    assert.ok(/spawnHost\(launch, listingArguments, options\)/.test(text), 'the listing starts with those arguments and no others');
+    assert.deepEqual(Object.keys(listingCallers), ['src/model-lists.ts']);
+    assert.deepEqual(processViolations('src/model-lists.ts', 'startListing(launch, { cwd, env, onLine });'), []);
+    for (const path of ['src/chat.ts', 'src/setup.ts', 'src/main.ts']) {
+        assert.notDeepEqual(processViolations(path, "import { startListing } from './chat-process.ts';"), [], path);
+    }
 });
 
 test('a process is signalled only on two lines: a look whether a process runs, with signal 0, and the end of a chat turn', () => {

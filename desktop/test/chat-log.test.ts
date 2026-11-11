@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
-import { loggedTurns } from '../src/chat-log.ts';
+import { loggedModels, loggedTurns } from '../src/chat-log.ts';
 import { newConversationId, writeConversation, type Conversation } from '../src/chat-conversations.ts';
 import { loggedCli } from '../src/installation.ts';
 import { fileLogger } from '../src/log.ts';
@@ -263,4 +263,22 @@ test('a key source that stops nothing is logged by its word alone', (t) => {
         .filter((line) => line.EventName === 'chat_key_source')
         .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
     assert.deepEqual(said, (['unexplained', 'unlisted', 'absent'] as const).map((source) => ({ '@l': 'Warning', Source: source })));
+});
+
+test('an ask of the models Codex offers is logged by its host id and a count, or the kind of its failure, and nothing the host said', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const logged = loggedModels(log);
+    logged.listed('codex', 3);
+    logged.failed('codex-api-key', 'bound');
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => typeof line.EventName === 'string' && line.EventName.startsWith('chat_models_'))
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
+    assert.deepEqual(said, [
+        { EventName: 'chat_models_listed', Host: 'codex', Models: 3 },
+        { '@l': 'Warning', EventName: 'chat_models_unlisted', Host: 'codex-api-key', Kind: 'bound' },
+    ]);
 });

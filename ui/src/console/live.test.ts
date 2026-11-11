@@ -23,6 +23,8 @@ const host = (fields: Partial<DesktopHost>): DesktopHost => ({
     version: '2.1.300',
     drivesChat: true,
     install: null,
+    models: [],
+    typedModel: false,
     belowFloor: null,
     ...fields,
 });

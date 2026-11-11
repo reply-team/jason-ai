@@ -33,6 +33,8 @@ cannot be chosen there, and has every chat turn sent to it refused before the ho
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
 - `<data>/desktop/conversations/`: the chat's conversations, one record each (see below).
+- `<data>/desktop/models.json`: the models Codex offered when last asked, on the person's sign-in and on the OpenAI
+  key (see "Models and effort").
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`). On Linux a key
   is kept and read only where the session offers a keyring (GNOME Keyring or KWallet): where Electron falls back to its
   `basic_text` store, a fixed key, the card says so and the key is not kept.
@@ -141,6 +143,38 @@ desktop does not narrow, so it may read the records.
   key. `jason uninstall --purge-data` removes both with the data directory; the transcripts the agent hosts keep of the
   chat's other turns are theirs, in their own folders, and are never touched.
 
+## Models and effort
+
+The chat's box picks the host, a model the host offers, and where that model takes one an effort; each reaches the
+turn as the host's own flag, and none is passed when none is chosen, so the host keeps its own default. The conversation's
+record keeps what its last turn was sent with, and the box shows it again when the conversation is opened.
+
+| Host | The models offered | Effort |
+| --- | --- | --- |
+| Claude Code, and Anthropic's key | the vendor's aliases `opus`, `sonnet`, `haiku`, `fable`, which follow the vendor's newest version; beside them a model's full name the person types, passed as it is, with no effort | `--effort`: the five levels on each alias; on `haiku` only from Claude Code 2.1.293, before which the alias names a model that takes none |
+| Codex, on the person's sign-in and on the OpenAI key | what `codex app-server` answers to `model/list`, kept per host id (see below) | `-c model_reasoning_effort=<level>`: the levels each model lists among the five |
+| DeepSeek, MiniMax, Kimi, GLM | the desktop's table of each provider's models | `--effort` where the vendor's guide names levels: DeepSeek `low`, `high`, `max`; MiniMax the five; Kimi and GLM none |
+
+The effort is one of five words, `low`, `medium`, `high`, `xhigh`, `max`, and the desktop passes no other: never
+`ultracode` or `ultra`, which run more agents rather than set a level. A send whose effort is another word, or one the
+model named does not take by the table or the list kept (the host's own default model, a typed name and a model no list
+names take none), is refused before any host starts; on Claude Code that is decided after the version is read, as the
+floor is. A turn that names an effort is started without an inherited `CLAUDE_CODE_EFFORT_LEVEL`, which Claude Code ranks
+above `--effort`. DeepSeek's retired `deepseek-v4-flash` is sent, and read from a record, as `deepseek-flash`, the name
+its page gives now.
+
+Claude Code documents no command that lists its models, so its list is the desktop's own table of the aliases. Codex's
+list is asked of the host: `codex app-server` is started with no message, as a turn of that host id is started (found
+on the PATH, no shell, the chat folder, the turn's environment, and on the OpenAI key the key and the desktop's own Codex
+folder), and sent `initialize`, `initialized` and `model/list` page by page, each after the answer before it; no thread
+or turn is started, so nothing reaches a model. The lists are kept in `<data>/desktop/models.json`, one per host id
+since OpenAI says an API key's models follow its organization and project, shown at once from what is kept, and asked
+again in the background when the hosts are listed, at most once a day per host id and one ask at a time, only for a
+Codex on the PATH and an OpenAI key stored. An ask that is refused, answers what cannot be read, ends early or passes 30
+seconds keeps the last list and is logged by its kind alone. A list the desktop cannot read whole is not shown, and an
+entry is shown only when its name is one the desktop passes to a host. On a Claude Code turn the desktop's file rules
+deny the agent the file.
+
 ## The window
 
 - The page is the runtime's own, at `http://127.0.0.1:<port>`; navigation is locked to that origin. A link or
@@ -153,8 +187,9 @@ desktop does not narrow, so it may read the records.
 ## Processes
 
 Every process is started with a file and arguments, never through a shell, and only by the named modules:
-`src/cli.ts` (the bundled `jason`), `src/programs.ts` (the agent hosts, `reply`, `node` and `npm`), `src/shell-path.ts`
-(on macOS and Linux only, the login shell's PATH, read before anything is started) and `scripts/prepare.mjs` (`dotnet publish`).
+`src/cli.ts` (the bundled `jason`), `src/programs.ts` (the agent hosts, `reply`, `node` and `npm`),
+`src/chat-process.ts` (a chat turn's host, and Codex's model listing, `codex app-server`, which only
+`src/model-lists.ts` starts), `src/shell-path.ts` (on macOS and Linux only, the login shell's PATH, read before anything is started) and `scripts/prepare.mjs` (`dotnet publish`).
 On Windows, a program npm installed is a batch file; the desktop reads which script it hands to Node and starts that
 with Node. `test/process-guard.test.ts` holds this, and also refuses a `require` of `child_process`, an IPC handler
 registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`

@@ -4,6 +4,7 @@
 
 import { posix, win32 } from 'node:path';
 import { sessionShape } from './chat-conversations.ts';
+import { isEffort, type Effort } from './chat-models.ts';
 import { allowRules, denyRules } from './chat-deny.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
 import { confinedVariable, searchVariables, type Platform } from './chat-permission-model.ts';
@@ -52,6 +53,8 @@ export interface ClaudeTurn {
     /** The host's file rules for the installation's data outside the chat folder (`dataRules`). */
     dataRules: readonly string[];
     model?: string | undefined;
+    /** The effort the turn names (`--effort`); absent, the host keeps its own. */
+    effort?: Effort | undefined;
     /** The session the previous turn of this chat reported; absent on a chat's first turn. */
     resume?: string | undefined;
 }
@@ -79,6 +82,15 @@ function resumable(session: string): string {
 }
 
 /**
+ * An effort, refused unless it is one of the five words (`efforts`): never `ultracode` nor `ultra`, nor anything that
+ * would stand where an option would.
+ */
+function effortWord(effort: Effort): string {
+    if (!isEffort(effort)) throw new Error('That effort is not one the desktop passes to a host.');
+    return effort;
+}
+
+/**
  * The host's own refusal of any Bash command that assigns a variable the shell finds a program by (`searchVariables`),
  * anywhere in it, plainly or by `+=`: such a command could start a `jason` the agent wrote. The host's documentation
  * says such an assignment asks; these rules refuse it whether or not it would. They also refuse a longer name that ends
@@ -101,6 +113,7 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
     args.push('--permission-prompt-tool', promptToolName, '--mcp-config', turn.mcpConfig, '--strict-mcp-config');
     if (turn.model) args.push('--model', turn.model);
+    if (turn.effort !== undefined) args.push('--effort', effortWord(turn.effort));
     if (turn.resume) args.push('--resume', resumable(turn.resume));
     return args;
 }
@@ -113,10 +126,15 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
  * card and no fence of the desktop's applies to it: it reads the chat folder, the folders added to it and its skills in
  * `.agents/skills`, and answers. Its sandbox has no network by default and so may keep it from the runtime's loopback
  * address, so a Codex turn reads and advises and acts through nothing.
+ *
+ * An effort is the configuration key `model_reasoning_effort`, set for the run by `-c`. OpenAI,
+ * https://developers.openai.com/codex/cli/reference, `exec`: "-c, --config key=value Inline configuration override for
+ * the non-interactive run (repeatable)." and "Values parse as TOML if possible; otherwise the literal string is used."
  */
-export function codexArguments(turn: { model?: string | undefined; resume?: string | undefined }): string[] {
+export function codexArguments(turn: { model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
     const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check'];
     if (turn.model) args.push('--model', turn.model);
+    if (turn.effort !== undefined) args.push('-c', `model_reasoning_effort=${effortWord(turn.effort)}`);
     if (turn.resume) args.push('resume', resumable(turn.resume));
     args.push('-');
     return args;
@@ -147,12 +165,12 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
 /**
  * The desktop folder's own entries but the chat folder, named the same way; `turns` holds every turn's configuration,
  * `rollback` the application an update kept aside and the record the next start acts on, `bundle` an AppImage's copy of
- * the jason it carries, `conversations` the record of every conversation, `claude-keyed` and `codex-keyed` the hosts'
- * folders for the turns on a provider's key with those turns' transcripts, which these rules keep a Claude Code turn from
- * reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox, which the desktop does
+ * the jason it carries, `conversations` the record of every conversation, `models.json` the models Codex offered when
+ * last asked, `claude-keyed` and `codex-keyed` the hosts' folders for the turns on a provider's key with those turns'
+ * transcripts, which these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox, which the desktop does
  * not narrow, holds it (`codexArguments`).
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {
@@ -262,6 +280,13 @@ const maintainFolder = 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR';
 const noBackground = 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS';
 
 /**
+ * Withheld from a turn that names an effort: Anthropic, https://code.claude.com/docs/en/env-vars (read 2026-11-11):
+ * "`CLAUDE_CODE_EFFORT_LEVEL` overrides `--effort` and `/effort`", so an inherited one would stand for the person's
+ * choice.
+ */
+const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
+
+/**
  * The host's environment: the desktop's own, with the bundled `jason`'s folder first on PATH, the data directory named
  * when the desktop runs with one, and a key provider's variables. Nothing of a plugin's configuration is passed on, and
  * `CLAUDE_AUTO_BACKGROUND_TASKS`, which would let the host move a waiting permission call to the background, is removed,
@@ -273,7 +298,8 @@ const noBackground = 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS';
  * program by a bare name only; the desktop's own calls of jason do not carry it. Every host's turn also carries the
  * harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
  * desktop inherited, and none at all when the build carries no bundle version. It is a label the reply-cli the host
- * runs may put in its User-Agent; nothing defends it.
+ * runs may put in its User-Agent; nothing defends it. A turn that names an effort is started without an inherited
+ * `CLAUDE_CODE_EFFORT_LEVEL` (`effortNamed`), which would override it.
  */
 export function hostEnvironment(
     base: Readonly<Record<string, string | undefined>>,
@@ -287,6 +313,8 @@ export function hostEnvironment(
         provider: Readonly<Record<string, string>>;
         /** The bundle's version, from which the label for reply-cli is built; null when the build carries none. */
         bundleVersion: string | null;
+        /** Whether the turn names an effort, which an inherited `CLAUDE_CODE_EFFORT_LEVEL` would override. */
+        effortNamed?: boolean;
     },
 ): Record<string, string> {
     const env: Record<string, string> = {};
@@ -296,6 +324,7 @@ export function hostEnvironment(
         if (value === undefined || withheld(name)) continue;
         const upper = name.toUpperCase();
         if (replaced.has(upper) || upper === scrub || upper === maintainFolder || upper === noBackground) continue;
+        if (options.effortNamed === true && upper === effortLevel) continue;
         if (name.toUpperCase() === 'PATH') {
             path = value;
             continue;

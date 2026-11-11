@@ -144,6 +144,36 @@ test('a Codex turn runs exec with JSON events in the read-only sandbox, resumed 
     ]);
 });
 
+test('an effort reaches each host as its own flag on every turn that names one, resumed or not, and nothing when none is named', () => {
+    for (const resume of [undefined, 'ses-1']) {
+        const args = claudeArguments({ ...turn, model: 'opus', effort: 'xhigh', resume });
+        assert.equal(valueOf(args, '--effort'), 'xhigh');
+        assert.equal(args.filter((arg) => arg === '--effort').length, 1);
+    }
+    assert.ok(!claudeArguments({ ...turn, model: 'opus' }).includes('--effort'));
+    assert.deepEqual(codexArguments({ model: 'gpt-6.1-sol', effort: 'high', resume: 'thr-1' }), [
+        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', 'resume', 'thr-1', '-',
+    ]);
+    assert.ok(!codexArguments({ model: 'gpt-6.1-sol' }).includes('-c'));
+});
+
+test('a word outside the five levels never reaches a host, ultracode and ultra among them', () => {
+    for (const effort of ['ultracode', 'ultra', 'HIGH', '--yolo', '']) {
+        assert.throws(() => claudeArguments({ ...turn, model: 'opus', effort: effort as never }), { message: 'That effort is not one the desktop passes to a host.' }, effort);
+        assert.throws(() => codexArguments({ model: 'gpt-6.1-sol', effort: effort as never }), { message: 'That effort is not one the desktop passes to a host.' }, effort);
+    }
+});
+
+test('an inherited CLAUDE_CODE_EFFORT_LEVEL, which overrides --effort, is withheld from a turn that names an effort and kept on one that does not', () => {
+    const base = { PATH: '/x', CLAUDE_CODE_EFFORT_LEVEL: 'max', claude_code_effort_level: 'low' };
+    for (const program of ['claude', 'codex'] as const) {
+        const named = hostEnvironment(base, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {}, effortNamed: true });
+        assert.ok(!Object.keys(named).some((name) => name.toUpperCase() === 'CLAUDE_CODE_EFFORT_LEVEL'), program);
+        const plain = hostEnvironment(base, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
+        assert.equal(plain.CLAUDE_CODE_EFFORT_LEVEL, 'max', program);
+    }
+});
+
 test('an absolute path is spelled as Claude Code\'s file rules spell one, on both platforms', () => {
     assert.equal(rulePath('win32', 'C:\\Users\\a b\\.jason\\config'), '//c/Users/a b/.jason/config');
     assert.equal(rulePath('win32', 'd:/x/'), '//d/x');
@@ -159,7 +189,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     assert.deepEqual(targetsOf(rules), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -171,7 +201,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
 

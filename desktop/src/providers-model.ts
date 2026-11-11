@@ -5,6 +5,7 @@
  */
 
 import { join } from 'node:path';
+import type { Effort } from './chat-models.ts';
 import type { DesktopPaths } from './paths.ts';
 import type { ProgramName } from './programs.ts';
 
@@ -45,15 +46,21 @@ export interface KeyProvider {
     /** An endpoint that speaks Anthropic's API, which Claude Code is pointed at instead of Anthropic's own. */
     baseUrl?: string;
     models: readonly string[];
+    /**
+     * The effort levels every model of the table takes, where the vendor's guide names them; absent where it names none,
+     * and for the two providers whose models are Claude Code's or the list kept of Codex's (`offeredModels`).
+     */
+    efforts?: readonly Effort[];
 }
 
-const compatible = (id: string, label: string, baseUrl: string, models: readonly string[]): KeyProvider => ({
+const compatible = (id: string, label: string, baseUrl: string, models: readonly string[], efforts?: readonly Effort[]): KeyProvider => ({
     id,
     label,
     program: 'claude',
     keyVariable: 'ANTHROPIC_AUTH_TOKEN',
     baseUrl,
     models,
+    ...(efforts === undefined ? {} : { efforts }),
 });
 
 /**
@@ -68,14 +75,23 @@ const compatible = (id: string, label: string, baseUrl: string, models: readonly
  *   "Set all model names to MiniMax-M3.1-Flash".
  * The `[1m]` suffix asks for a one-million-token window, which both guides set beside `CLAUDE_CODE_AUTO_COMPACT_WINDOW`;
  * the desktop names the models without it.
+ * - DeepSeek, https://api-docs.deepseek.com/quick_start/pricing: "Use deepseek-flash as the model name. The legacy names
+ *   deepseek-v4-flash and deepseek-v4-flash-vision-exp are still accepted, but the corresponding models have been
+ *   retired" (`currentModel` reads a kept `deepseek-v4-flash` as `deepseek-flash`).
+ * The effort levels, only where a vendor's guide names them; Claude Code passes them as `--effort`:
+ * - MiniMax, the page above: "Choose from low, medium, high, xhigh, or max." and "You can also start with claude --effort
+ *   <level>, which applies to that session only."
+ * - DeepSeek, https://api-docs.deepseek.com/guides/thinking_mode: `{"output_config": {"effort": "low/high/max"}}`.
+ * - Kimi's guide names one value only, "Set to max; lower values may reduce quality on complex tasks", and Z.ai's none,
+ *   so neither offers a level.
  */
 export const keyProviders: readonly KeyProvider[] = [
-    { id: 'claude-api-key', label: 'Anthropic', program: 'claude', keyVariable: 'ANTHROPIC_API_KEY', models: ['opus', 'sonnet', 'haiku'] },
+    { id: 'claude-api-key', label: 'Anthropic', program: 'claude', keyVariable: 'ANTHROPIC_API_KEY', models: ['opus', 'sonnet', 'haiku', 'fable'] },
     { id: 'codex-api-key', label: 'OpenAI', program: 'codex', keyVariable: 'CODEX_API_KEY', models: [] },
-    compatible('deepseek', 'DeepSeek', 'https://api.deepseek.com/anthropic', ['deepseek-v4-pro', 'deepseek-v4-flash']),
+    compatible('deepseek', 'DeepSeek', 'https://api.deepseek.com/anthropic', ['deepseek-v4-pro', 'deepseek-flash'], ['low', 'high', 'max']),
     compatible('moonshot', 'Kimi (Moonshot)', 'https://api.moonshot.ai/anthropic', ['kimi-k3']),
     compatible('zai', 'GLM (Z.ai)', 'https://api.z.ai/api/anthropic', ['glm-5.3', 'glm-5.3-flash']),
-    compatible('minimax', 'MiniMax', 'https://api.minimax.io/anthropic', ['MiniMax-M3.1-Flash']),
+    compatible('minimax', 'MiniMax', 'https://api.minimax.io/anthropic', ['MiniMax-M3.1-Flash'], ['low', 'medium', 'high', 'xhigh', 'max']),
 ];
 
 export function keyProvider(id: unknown): KeyProvider | undefined {

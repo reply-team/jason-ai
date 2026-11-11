@@ -80,6 +80,8 @@ export const templates = {
     chat_setup_ended: 'A set-up chat turn ended: the campaign list read {ListRead}, {Found} new campaigns, handed over {HandedOver}',
     chat_turn_fresh: 'A chat turn started a fresh session of its host ({Cause})',
     chat_key_source: 'A chat turn on a provider key started, and its host named the key source by a value read as {Source}; the turn went on',
+    chat_models_listed: 'The models {Host} offers were asked for: {Models} kept',
+    chat_models_unlisted: 'The models {Host} offers were asked for and the last list was kept ({Kind})',
 } as const;
 
 export type TemplateName = keyof typeof templates;
