@@ -70,7 +70,7 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-desktop-macos-x64.zip.blockmap` | that zip's block map |
 | `latest-mac.yml` | the Mac desktop's update feed: the version, each zip's name and its SHA-512 |
 | `jason-desktop-linux-x64.deb` | the desktop for Linux on x64 as a deb, not signed, carrying the linux-x64 executable; it installs to `/opt/Jason` |
-| `jason-desktop-linux-x64.AppImage` | the same application as one AppImage file, not signed, on the AppImage runtime that needs no libfuse2, its block map inside it |
+| `jason-desktop-linux-x64.AppImage` | the same application as one AppImage file, not signed, on the AppImage runtime that needs no libfuse2, its block map inside it; it needs a system that lets it run its sandbox, and on Ubuntu 24.04 and later names the deb instead |
 | `latest-linux.yml` | the Linux desktop's update feed: the version, the deb's and the AppImage's names and their SHA-512 |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
@@ -123,11 +123,15 @@ osx-x64 executable for the Intel package alone, signed, notarized and assessed a
 published as an archive, so on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason`
 the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.
 The Linux job, which signs nothing, builds the deb and the AppImage around the linux-x64 executable it archives, reads
-each back, and starts each once under a virtual display. Neither is signed. Checked beside the deb,
+each back, and starts each once under a virtual display, sandboxed. The desktop never runs without Chromium's sandbox,
+so the AppImage needs a system that lets it run its sandbox: on Ubuntu 24.04 and later, as shipped, it says so and
+names the deb, whose AppArmor profile lets the program make the user namespaces its sandbox uses. Neither is signed.
+Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file the release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. A deb update installs with `dpkg` and asks
-for an administrator's password every time; an AppImage update replaces the file where it is. A candidate writes the same three feed names a release does, and its release is marked a pre-release, which the latest
-release never is, so no installed desktop reads a candidate's feed: the desktop updates to stable releases only.
+for an administrator's password every time; an AppImage update replaces the file where it is. A candidate writes the
+same three feed names a release does, and its release is marked a pre-release, which the latest release never is, so no
+installed desktop reads a candidate's feed: the desktop updates to stable releases only.
 
 Installing a desktop update restarts the runtime. The desktop stops the runtime its own `jason` runs as, with `jason
 runtime stop`, before the installer replaces that file, and the new version starts it again when it opens; it knows the

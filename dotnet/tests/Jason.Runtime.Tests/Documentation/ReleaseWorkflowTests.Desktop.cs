@@ -375,6 +375,27 @@ public partial class ReleaseWorkflowTests
         Assert.Contains("[ \"${said%%+*}\" = \"$VERSION\" ] || { echo \"::error title=osx-x64::The osx-x64 executable says '$said', and the tag says $VERSION.\"; exit 1; }", release, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The deb's file name, wherever the desktop names it to a person (the update's going-back notice and the sandbox
+    /// refusal both take <c>debFile</c> from <c>desktop/src/updates.ts</c>, and the README's apt line), is the name of a
+    /// file a release publishes.
+    /// </summary>
+    [Fact]
+    public void The_deb_the_desktop_names_is_a_file_a_release_publishes()
+    {
+        var updates = Read(["desktop", "src", "updates.ts"]);
+        var named = Regex.Match(updates, "^export const debFile = '([^']+)';$", RegexOptions.Multiline);
+        Assert.True(named.Success, "desktop/src/updates.ts names no debFile.");
+        Assert.Contains(named.Groups[1].Value, ReleaseAssets.Published);
+
+        var readme = Read(["desktop", "README.md"]);
+        var apt = Regex.Matches(readme, @"sudo apt install \./(?<file>[A-Za-z0-9._-]+\.deb)");
+        Assert.NotEmpty(apt);
+        Assert.All(apt, match => Assert.Contains(match.Groups["file"].Value, ReleaseAssets.Published));
+
+        Assert.Contains("${debFile}", Read(["desktop", "src", "sandbox.ts"]), StringComparison.Ordinal);
+    }
+
     // --- the Linux packages: what the check reads back, how each is started, and CI's desktop job ---------------------
 
     private static List<string> LinuxLines(string step) =>
@@ -417,7 +438,9 @@ public partial class ReleaseWorkflowTests
             "[ \"$(dpkg-deb --field \"$deb\" Version)\" = \"${VERSION//-/\\~}\" ] || { echo \"::error title=Desktop::The deb's version is not $VERSION as dpkg spells it.\"; exit 1; }",
             "[ \"$(dpkg-deb --field \"$deb\" Architecture)\" = amd64 ] || { echo \"::error title=Desktop::The deb is not for amd64.\"; exit 1; }",
             "dpkg-deb --extract \"$deb\" \"$opened\"",
-            "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses or its updater.\"; exit 1; }",
+            "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses, its updater or its AppArmor profile.\"; exit 1; }",
+            "dpkg-deb --control \"$deb\" \"$control\"",
+            "grep -q 'apparmor_parser --replace' \"$control/postinst\" || { echo \"::error title=Desktop::The deb's after-install loads no AppArmor profile for its sandbox.\"; exit 1; }",
             "carries \"$opened/opt/Jason\" deb",
             "if grep -q -e '--no-sandbox' \"${entries[@]}\"; then echo \"::error title=Desktop::The deb's menu entry starts the program with --no-sandbox.\"; exit 1; fi",
             "readelf --dynamic \"$appimage\" | grep -E 'NEEDED|INTERP' && { echo \"::error title=Desktop::The AppImage's runtime needs shared libraries, libfuse2 among them maybe.\"; exit 1; }",
@@ -466,8 +489,12 @@ public partial class ReleaseWorkflowTests
             "if kill -0 \"$desktop\" 2> /dev/null; then echo \"::error title=Desktop::The $form did not quit.\"; return 1; fi",
             "JASON_DATA_DIR=\"$data\" \"$jason\" runtime stop || { echo \"::error title=Desktop::The runtime the $form started did not stop with the jason it carries.\"; return 1; }",
             "sudo apt-get install -y --no-install-recommends \"$dist/jason-desktop-linux-x64.deb\"",
+            "if [ -e /etc/apparmor.d/jason-desktop-app ]; then echo \"The deb installed its AppArmor profile.\"; else echo \"The deb installed no AppArmor profile: this runner's AppArmor reads none.\"; fi",
             "started deb \"$RUNNER_TEMP/jason-desktop-deb-data\" /opt/Jason/resources/bundle/jason /usr/bin/jason-desktop-app",
             "sudo apt-get remove -y jason-desktop",
+            "if ! unshare -Ur true 2> /dev/null; then",
+            "sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0",
+            "unshare -Ur true || { echo \"::error title=Desktop::This runner refuses unprivileged user namespaces with AppArmor's restriction off.\"; exit 1; }",
             "export APPIMAGE_EXTRACT_AND_RUN=1",
             "started AppImage \"$data\" \"$data/desktop/bundle/$VERSION/jason\" \"$dist/jason-desktop-linux-x64.AppImage\"",
         ],
@@ -475,6 +502,11 @@ public partial class ReleaseWorkflowTests
         Assert.All(lines.Where(line => line.Contains("JASON_DATA_DIR=", StringComparison.Ordinal)), line => Assert.Contains("\"$data\"", line, StringComparison.Ordinal));
         Assert.Contains("data=\"$RUNNER_TEMP/jason-desktop-appimage-data\"", lines);
         Assert.DoesNotContain(lines, line => Regex.IsMatch(line, @"\$HOME|~/"));
+        Assert.DoesNotContain(lines, line => line.Contains("--no-sandbox", StringComparison.Ordinal) && !line.StartsWith("case ", StringComparison.Ordinal) && !line.StartsWith("#", StringComparison.Ordinal));
+        Assert.True(
+            lines.FindIndex(line => line.StartsWith("sudo sysctl", StringComparison.Ordinal)) > lines.FindIndex(line => line.StartsWith("started deb ", StringComparison.Ordinal)),
+            "The runner's restriction is lifted before the deb starts as shipped.");
+        Assert.Single(lines, line => line.StartsWith("sudo sysctl", StringComparison.Ordinal));
     }
 
     /// <summary>

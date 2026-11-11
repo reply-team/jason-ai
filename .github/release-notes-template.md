@@ -44,7 +44,7 @@ at this version and released only after its tests passed.
 | `jason-desktop-macos-x64.zip.blockmap` | what the Mac desktop's updater reads to download only the parts of the Intel zip that changed |
 | `latest-mac.yml` | the Mac desktop's update feed: this version, each zip's name and its SHA-512 |
 | `jason-desktop-linux-x64.deb` | Jason Desktop for Linux on x64, as a package for Debian and Ubuntu: `sudo apt install ./jason-desktop-linux-x64.deb` |
-| `jason-desktop-linux-x64.AppImage` | the same application for Linux on x64 as one file, to make executable and run from wherever you keep it |
+| `jason-desktop-linux-x64.AppImage` | the same application for Linux on x64 as one file, to make executable and run from wherever you keep it, on a system that lets it run its sandbox |
 | `latest-linux.yml` | the Linux desktop's update feed: this version, the deb's and the AppImage's names and their SHA-512 |
 
 Each archive holds the executable, `LICENSE` (the MIT licence, which covers the whole repository, the runtime
@@ -75,9 +75,9 @@ Rosetta where the release's runner has it; the test suite does not run on an Int
 On Linux, install the deb with `sudo apt install ./jason-desktop-linux-x64.deb`; it puts Jason in `/opt/Jason` and
 in the applications menu. Or make the AppImage executable, `chmod +x jason-desktop-linux-x64.AppImage`, and run it
 from wherever you keep it; it is built on the AppImage runtime that needs no libfuse2. Jason never runs without
-Chromium's sandbox: where the system does not let the AppImage use it, the AppImage says so and does not start, and the
-deb is the package to install. Neither is signed, and neither is
-the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
+Chromium's sandbox, so the AppImage needs a system that lets it run its sandbox: on Ubuntu 24.04 and later, as
+shipped, it says so, does not start, and names the deb, whose install sets up what its sandbox needs there. Neither is
+signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file this release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. The `jason` they carry needs the ICU
 library (`libicu`), as the archive's does.

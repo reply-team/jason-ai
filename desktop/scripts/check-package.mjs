@@ -153,12 +153,27 @@ function checkForm(app, form) {
         if (type === null) throw new Error(`${app} holds no resources/package-type, so electron-updater would make its AppImage updater for a deb.`);
         if (type !== 'deb') throw new Error(`${typed}: package-type says ${type}, and a deb's must say deb.`);
         said.push('package-type: deb, so electron-updater makes its deb updater');
+        // The deb's sandbox where the system restricts user namespaces (Ubuntu 24.04 and later): its after-install copies
+        // this profile into /etc/apparmor.d where AppArmor reads it (app-builder-lib 26.18.0,
+        // templates/linux/after-install.tpl), and the profile lets the program make user namespaces
+        // (templates/linux/apparmor-profile.tpl: `profile "${executable}" "/opt/${sanitizedProductName}/${executable}"
+        // flags=(unconfined) { userns, ... }`).
+        const profiled = join(app, 'resources', 'apparmor-profile');
+        if (!existsSync(profiled)) throw new Error(`${app} holds no resources/apparmor-profile, so the deb installs no profile for its sandbox.`);
+        const program = `/opt/${built.productName}/${built.linux.executableName}`;
+        const profile = readFileSync(profiled, 'utf8');
+        if (!profile.includes(`"${program}"`) || !/^\s*userns,\s*$/m.test(profile)) {
+            throw new Error(`resources/apparmor-profile does not let ${program} make user namespaces, which its sandbox uses.`);
+        }
+        said.push(`apparmor-profile: userns for ${program}`);
         return said;
     }
     if (!appRun) throw new Error(`${app} holds no AppRun; it is not an AppImage's contents.`);
     if (type !== null) throw new Error(`The AppImage carries resources/package-type saying ${type}, so electron-updater would update it as a ${type}.`);
     said.push('package-type: none, so electron-updater makes its AppImage updater');
-    for (const entry of readdirSync(app).filter((name) => name.endsWith('.desktop')).sort()) {
+    const entries = readdirSync(app).filter((name) => name.endsWith('.desktop')).sort();
+    if (entries.length === 0) throw new Error(`${app} holds no .desktop menu entry at its root, so there is no Exec to read.`);
+    for (const entry of entries) {
         const exec = readFileSync(join(app, entry), 'utf8').split(/\r?\n/).find((line) => line.startsWith('Exec=')) ?? 'Exec=';
         if (/(^|\s)--no-sandbox(\s|$)/.test(exec.slice('Exec='.length))) throw new Error(`${entry} starts the program with --no-sandbox: ${exec}`);
         said.push(`${entry}: ${exec}`);
