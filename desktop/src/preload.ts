@@ -24,6 +24,12 @@ const desktop = {
         stop: (chatId: string) => ipcRenderer.invoke('jason:chat.stop', chatId),
         answer: (chatId: string, requestId: string, decision: unknown) => ipcRenderer.invoke('jason:chat.answer', chatId, requestId, decision),
         onEvent: (handler: Handler) => subscribe('jason:chat.event', handler),
+        list: () => ipcRenderer.invoke('jason:chat.list'),
+        open: (chatId: string) => ipcRenderer.invoke('jason:chat.open', chatId),
+        create: (campaignId?: string) => ipcRenderer.invoke('jason:chat.create', campaignId),
+        remove: (chatId: string) => ipcRenderer.invoke('jason:chat.remove', chatId),
+        restart: (chatId: string) => ipcRenderer.invoke('jason:chat.restart', chatId),
+        attach: (chatId: string, campaignId: string) => ipcRenderer.invoke('jason:chat.attach', chatId, campaignId),
     },
     setup: {
         status: () => ipcRenderer.invoke('jason:setup.status'),

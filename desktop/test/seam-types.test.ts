@@ -4,7 +4,16 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { DesktopSetup, JasonDesktop } from '../../ui/src/platform/desktop.d.ts';
+import type {
+    DesktopChatEvent,
+    DesktopConversation,
+    DesktopConversationRecord,
+    DesktopKeptEntry,
+    DesktopSetup,
+    JasonDesktop,
+} from '../../ui/src/platform/desktop.d.ts';
+import type { ChatEvent, ConversationOpened, ConversationSummary } from '../src/chat.ts';
+import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
@@ -54,7 +63,16 @@ type EventChannelsAreTheSeam = [
     Holds<Equal<(typeof eventChannelOf)[keyof typeof eventChannelOf], keyof typeof eventChannels>>,
 ];
 
-export type SeamHeld = [StatusIsTheSeam, PreloadIsTheSeam, InvokeChannelsAreTheSeam, EventChannelsAreTheSeam];
+// A conversation, its kept entries and the events of the conversations reach the page exactly as the desktop makes them.
+type Conversational = 'attached' | 'fresh' | 'pick';
+type ConversationsAreTheSeam = [
+    Holds<Equal<ConversationSummary, DesktopConversation>>,
+    Holds<Equal<ConversationOpened, DesktopConversationRecord>>,
+    Holds<Equal<KeptEntry, DesktopKeptEntry>>,
+    Holds<Equal<Extract<ChatEvent, { kind: Conversational }>, Extract<DesktopChatEvent, { kind: Conversational }>>>,
+];
+
+export type SeamHeld = [StatusIsTheSeam, PreloadIsTheSeam, InvokeChannelsAreTheSeam, EventChannelsAreTheSeam, ConversationsAreTheSeam];
 
 test('the desktop implements the seam ui/src/platform/desktop.d.ts declares (checked by npm run check)', () => {
     assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged']);

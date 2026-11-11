@@ -62,6 +62,10 @@ export const templates = {
     chat_request_decided: 'A permission request of the chat was {Outcome} by the {By}',
     chat_instructions_missing: 'The chat instruction text {File} is not in the application; turns run without it',
     chat_instructions_unwritten: 'The chat instruction file {File} could not be written ({Code}); turns are refused until it is',
+    chat_conversations_read: 'The chat read {Conversations} conversations; {Unreadable} files of its folder were not records and were left as they were',
+    chat_conversation_unwritten: 'A chat conversation could not be written or removed ({Code})',
+    chat_setup_ended: 'A set-up chat turn ended: the campaign list read {ListRead}, {Found} new campaigns, handed over {HandedOver}',
+    chat_turn_fresh: 'A chat turn started a fresh session of its host ({Cause})',
 } as const;
 
 export type TemplateName = keyof typeof templates;
