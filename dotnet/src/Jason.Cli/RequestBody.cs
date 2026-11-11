@@ -14,20 +14,14 @@ public static class RequestBody
     public static JsonObject Empty() => new();
 
     /// <summary>
-    /// Reads the file, or standard input when the path is <c>-</c>. A JSON object is the body itself; a JSON
+    /// Reads the file <paramref name="option"/> names, or standard input when the path is <c>-</c>, through
+    /// <see cref="RequestFile"/>, the one reader every file option goes through. A JSON object is the body itself; a JSON
     /// array is wrapped under <paramref name="arrayProperty"/> when the verb accepts one (add-contacts holds a
     /// list of items); anything else, and anything unreadable, is a usage error.
     /// </summary>
-    public static async Task<JsonObject> FromFileAsync(string path, TextReader stdin, string? arrayProperty, CancellationToken cancellationToken)
+    public static async Task<JsonObject> FromFileAsync(CliEnvironment env, string option, string path, string? arrayProperty, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(path);
-        ArgumentNullException.ThrowIfNull(stdin);
-
-        var isStdin = string.Equals(path, "-", StringComparison.Ordinal);
-        var text = isStdin
-            ? await stdin.ReadToEndAsync(cancellationToken).ConfigureAwait(false)
-            : await ReadFileAsync(path, cancellationToken).ConfigureAwait(false);
-        var source = isStdin ? "Standard input" : $"'{path}'";
+        var (text, source) = await RequestFile.ReadAsync(env, option, path, namesOption: false, cancellationToken).ConfigureAwait(false);
 
         JsonNode? node;
         try
@@ -81,30 +75,6 @@ public static class RequestBody
     {
         ArgumentNullException.ThrowIfNull(body);
         return body.ToJsonString(JasonJson.Options);
-    }
-
-    private static async Task<string> ReadFileAsync(string path, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        }
-        catch (FileNotFoundException)
-        {
-            throw new UsageException($"No such file: '{path}'.");
-        }
-        catch (DirectoryNotFoundException)
-        {
-            throw new UsageException($"No such file: '{path}'.");
-        }
-        catch (IOException ex)
-        {
-            throw new UsageException($"'{path}' could not be read: {ex.Message}");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            throw new UsageException($"'{path}' could not be read: {ex.Message}");
-        }
     }
 }
 
