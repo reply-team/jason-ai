@@ -501,3 +501,94 @@ test('a name that draws nothing is no name: a filler-only answer keeps the first
     assert.equal(titleOf(r, kept.id), 'Dentist outreach plan');
     assert.equal(r.chat.rename(kept.id, 'Mine\u3164 \u115fnow').title, 'Mine now');
 });
+
+/** Resolves once the condition holds, or after `ms`. */
+async function until(done: () => boolean, ms = 10_000): Promise<void> {
+    const end = Date.now() + ms;
+    while (!done() && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+test('a rename, a removal or a hand-over while the naming run is out stands: the late name replaces nothing', async (t) => {
+    const r = rig(t);
+    const log = join(r.b.root, 'naming.log');
+    r.b.env.STUB_NAMING_LOG = log;
+    const started = (count: number) => () => existsSync(log) && readFileSync(log, 'utf8').split('\n').filter((line) => line.startsWith('start')).length >= count;
+    naming(r, { say: 'Dentist outreach plan', sleep: 1500 });
+
+    const renamed = await r.chat.create();
+    await r.turn(renamed.id, 'First chat', { host: 'claude' });
+    await until(started(1));
+    r.chat.rename(renamed.id, 'Mine while it ran');
+    await r.chat.idle();
+    assert.equal(titleOf(r, renamed.id), 'Mine while it ran');
+    assert.equal(r.outcomes.at(-1), 'overtaken');
+
+    const removed = await r.chat.create();
+    await r.turn(removed.id, 'Second chat', { host: 'claude' });
+    await until(started(2));
+    r.chat.remove(removed.id);
+    await r.chat.idle();
+    assert.equal(r.outcomes.at(-1), 'overtaken');
+    assert.equal(r.chat.list().some((each) => each.id === removed.id), false);
+    assert.equal(existsSync(join(r.b.paths.conversations, `${removed.id}.json`)), false, 'no record written again');
+
+    const handed = await r.chat.create();
+    await r.turn(handed.id, 'Third chat', { host: 'claude' });
+    await until(started(3));
+    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ campaign: { id: 'cmp_ONE', name: 'One' } }]);
+    await r.turn(handed.id, 'Make it', { host: 'claude' });
+    await r.chat.idle();
+    assert.equal(r.outcomes.at(-1), 'overtaken');
+    assert.equal(titleOf(r, handed.id), 'One');
+    assert.ok(!(r.events.get(handed.id) ?? []).some((event) => event.kind === 'renamed'), 'the page never heard the late name');
+});
+
+test('a turn sent while the naming run is out is neither held for it nor disturbed by the late name', async (t) => {
+    const r = rig(t);
+    naming(r, { say: 'Dentist outreach plan', sleep: 4000 });
+    const setup = await r.chat.create();
+    await r.turn(setup.id, 'First chat', { host: 'claude' });
+    const sent = Date.now();
+    const said = await r.turn(setup.id, 'And next?', { host: 'claude' });
+    assert.ok(Date.now() - sent < 3500, 'the turn did not wait for the naming run');
+    assert.deepEqual(said.map((event) => event.kind), ['text', 'done']);
+    assert.equal(titleOf(r, setup.id), 'First chat', 'not named yet');
+    await r.chat.idle();
+    assert.deepEqual(r.events.get(setup.id)?.at(-1), { kind: 'renamed', title: 'Dentist outreach plan' });
+    const kept = keptOf(r, setup.id);
+    assert.equal(kept?.title, 'Dentist outreach plan');
+    assert.deepEqual(kept?.entries.filter((entry) => entry.kind === 'user').map((entry) => (entry as { text: string }).text), ['First chat', 'And next?']);
+    assert.equal(kept?.entries.at(-1)?.kind, 'text', 'the late name added no entry');
+});
+
+test('a keyed Codex naming run has the provider\'s environment as its turn has it, and none of the person\'s', async (t) => {
+    const key = 'sk-test-codex-0123456789abcdef';
+    const r = rig(t, {}, { 'codex-api-key': key }, { OPENAI_API_KEY: 'sk-inherited-0000000000000000', CODEX_HOME: join(tmpdir(), 'a-person-s-codex-home') });
+    naming(r, { say: 'Dentist outreach plan' });
+    const setup = await r.chat.create();
+    await r.turn(setup.id, 'Help me', { host: 'codex-api-key' });
+    await r.chat.idle();
+    const [run] = r.namings();
+    assert.equal(run?.name, 'codex-naming');
+    assert.deepEqual(run?.args, codexNaming);
+    assert.equal(run?.env.CODEX_API_KEY, key);
+    assert.equal(run?.env.CODEX_HOME, r.b.paths.codexKeyed);
+    assert.equal(run?.env.OPENAI_API_KEY, undefined);
+    assert.ok(!run?.args.some((arg) => arg.includes(key)) && !run?.stdin.includes(key));
+    assert.equal(titleOf(r, setup.id), 'Dentist outreach plan');
+});
+
+test('a Claude Code whose version cannot be read after the turn runs no naming run', async (t) => {
+    const version = versionFile(t, '2.1.300');
+    const r = rig(t, {}, {}, { STUB_CLAUDE_VERSION_FILE: version });
+    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ sleep: 300 }]);
+    naming(r, { say: 'Dentists in Ohio' });
+    const setup = await r.chat.create();
+    const done = r.turn(setup.id, 'Help me reach dentists', { host: 'claude' });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    writeFileSync(version, JSON.stringify({ stdout: 'no version here' }));
+    await done;
+    await r.chat.idle();
+    assert.deepEqual(r.namings(), []);
+    assert.deepEqual(r.outcomes, ['held']);
+});
