@@ -236,6 +236,46 @@ export function withPluginConfigured(settings: Json, plugin: BundledPlugin, valu
     return next;
 }
 
+/**
+ * Takes the key `name` out of the object at `path` and then every object on that path the removal left empty, innermost
+ * first; an object that was empty before is left as it was. Names are found as the runtime's configuration reads them,
+ * in any letter case.
+ */
+function removeAndPrune(root: Json, path: readonly string[], name: string): void {
+    const objects = [root];
+    for (let depth = 1; depth <= path.length; depth++) {
+        const found = existing(root, path.slice(0, depth));
+        if (found === undefined) return;
+        objects.push(found);
+    }
+    const here = objects[objects.length - 1]!;
+    const key = keyOf(here, name);
+    if (!(key in here)) return;
+    delete here[key];
+    for (let depth = path.length; depth > 0; depth--) {
+        if (Object.keys(objects[depth]!).length > 0) return;
+        const parent = objects[depth - 1]!;
+        delete parent[keyOf(parent, path[depth - 1]!)];
+    }
+}
+
+/**
+ * The installation's settings with one notification plugin disconnected: its whole configuration, `Plugins:Config:<id>`,
+ * is removed, and under `Notifications:Plugins:<id>` its `Binding` and nothing else, so an `Enabled` a person wrote stays;
+ * a section the removal left empty is dropped. Its grant, `Plugins:Grants:<id>`, `Routes` and every other key stay as
+ * they were, and the input is not changed. The journal forwarder has no Disconnect: without its receiver it would fail
+ * every journal line it is still granted.
+ */
+export function withPluginDisconnected(settings: Json, plugin: BundledPlugin): Json {
+    if (plugin.target.where !== 'binding') {
+        throw new Refused(`${plugin.label} has no Disconnect: without its receiver it would fail every journal line it is still granted.`);
+    }
+    const next = structuredClone(settings);
+    removeAndPrune(next, ['Notifications', 'Plugins', plugin.id], 'Binding');
+    removeAndPrune(next, ['Plugins', 'Config'], plugin.id);
+    return next;
+}
+
 /** The Reply plugin's binding as the golden path writes it: the reply-cli profile the route acts as. */
 export interface ReplyWiring {
     settings: Json;

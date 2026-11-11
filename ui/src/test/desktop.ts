@@ -150,6 +150,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
             setProviderKey: call('setup.setProviderKey'),
             installProgram: call('setup.installProgram'),
             configurePlugin: call('setup.configurePlugin'),
+            disconnectPlugin: call('setup.disconnectPlugin'),
             onChanged(handler) {
                 changeHandlers.add(handler);
                 return () => changeHandlers.delete(handler);

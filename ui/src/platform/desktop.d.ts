@@ -201,6 +201,14 @@ export interface JasonDesktop {
             pluginId: string,
             settings: { token?: string; target?: string; server?: string },
         ): Promise<void>;
+        /**
+         * Disconnects one of the three notification plugins (slack, telegram, ntfy; the journal forwarder and any other
+         * id are refused): `Plugins:Config:<id>` is removed whole and `Binding` under `Notifications:Plugins:<id>`, an
+         * `Enabled` there staying, and a section left empty is dropped. Its grant, `Plugins:Grants:<id>`, every other key
+         * and its package stay. Then the runtime reads its plugins again, as after `configurePlugin`; a settings file the
+         * desktop cannot parse is refused, never overwritten.
+         */
+        disconnectPlugin(pluginId: string): Promise<void>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

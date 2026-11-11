@@ -112,6 +112,7 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             setProviderKey: 'function',
             installProgram: 'function',
             configurePlugin: 'function',
+            disconnectPlugin: 'function',
             onChanged: 'function',
         },
     });
@@ -130,6 +131,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['setup.setProviderKey', ['deepseek', 'k']],
         ['setup.installProgram', ['claude']],
         ['setup.configurePlugin', ['slack', { token: 't', target: 'C1' }]],
+        ['setup.disconnectPlugin', ['slack']],
     ];
     for (const [member, args] of calls) {
         const [group, name] = member.split('.') as [string, string];
