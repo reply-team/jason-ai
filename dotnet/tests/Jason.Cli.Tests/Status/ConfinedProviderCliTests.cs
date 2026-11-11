@@ -8,8 +8,8 @@ namespace Jason.Cli.Tests.Status;
 
 /// <summary>
 /// Under <c>JASON_CONFINED</c>, <c>status --provider-cli</c> runs a program named by a bare name only, and looks that name
-/// up in the fully qualified entries of the search path alone: a value with a directory in it is not looked up and
-/// nothing is started, and a relative or drive-relative entry is skipped, so a working folder is never searched by name.
+/// up in the fully qualified entries of the search path alone: a path, a value naming a drive among them, is not
+/// looked up and nothing is started, and a relative or drive-relative entry is skipped, so a working folder is never searched by name.
 /// The check says so in the body and <c>status</c> keeps its contract. Unset or empty, nothing changes.
 /// </summary>
 public class ConfinedProviderCliTests
@@ -99,6 +99,130 @@ public class ConfinedProviderCliTests
         Assert.Equal(unset.Exit, empty.Exit);
         Assert.Equal(Asked(unset), Asked(empty));
         Assert.Equal(program, Assert.Single(unset.Runner.Requested).Program);
+    }
+
+    public static TheoryData<bool> CurrentFolderForms() => [false, true];
+
+    /// <summary>
+    /// A value with a drive in it names a folder too: <c>C:acme-sdr</c> is <c>acme-sdr</c> in the current folder of drive
+    /// C, which under the chat is the chat's folder. Under the variable it gets the path answer and nothing is looked up,
+    /// though a program of that name stands on the search path and, apart, a program or npm's shim for it stands in the
+    /// current folder. Windows alone has a drive; the win-x64 leg of CI runs this row.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CurrentFolderForms))]
+    public async Task Confined_a_name_with_a_drive_is_a_path_and_starts_nothing(bool shim)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows names a drive.");
+        using var dir = new TempPaths();
+        using var programs = new TestPrograms();
+        using var current = new CurrentFolderFiles();
+        programs.AddProgram(current.Name);
+        programs.Add("node.exe");
+        if (shim)
+        {
+            current.AddShim();
+        }
+        else
+        {
+            current.AddProgram();
+        }
+
+        var value = current.DriveRelative;
+        var confined = await StatusAsync(dir, value, programs.Root, Set("1"));
+
+        Assert.Empty(confined.Runner.Requested);
+        Assert.Equal(CheckState.Unknown, confined.Check.State);
+        Assert.Equal(
+            $"This environment cannot run a program named by a path, so '{value} --version' was not run: {Confinement.Variable} is set. "
+                + "Name a program on the search path, or run it in a terminal.",
+            confined.Check.Fact);
+    }
+
+    /// <summary>
+    /// Without the variable the same value is a path as well: it is looked for in the folder it names, the current folder
+    /// of its drive, and the search path is not read for it. Windows alone has a drive; the win-x64 leg of CI runs this
+    /// row.
+    /// </summary>
+    [Fact]
+    public async Task Unconfined_a_name_with_a_drive_is_looked_for_as_a_path()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows names a drive.");
+        using var dir = new TempPaths();
+        using var programs = new TestPrograms();
+        using var current = new CurrentFolderFiles();
+        var program = current.AddProgram();
+
+        var plain = await StatusAsync(dir, current.DriveRelative, programs.Root, Unset);
+
+        Assert.Equal(program, Assert.Single(plain.Runner.Requested).Program, ignoreCase: true);
+        Assert.Equal(CheckState.Ok, plain.Check.State);
+        Assert.DoesNotContain("It read the CLI's PATH", plain.Check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Files of one name made in the process's current folder for one row and taken off after it. The name is new to
+    /// every row, so rows running beside each other never meet, and nothing moves the current folder itself.
+    /// </summary>
+    private sealed class CurrentFolderFiles : IDisposable
+    {
+        private readonly string _folder = Directory.GetCurrentDirectory();
+        private readonly List<string> _made = [];
+
+        public string Name { get; } = "acme-sdr-" + Guid.NewGuid().ToString("N");
+
+        /// <summary>The name with the current folder's drive before it, and no separator anywhere.</summary>
+        public string DriveRelative => $"{_folder[0]}:{Name}";
+
+        public string AddProgram() => Write(Name + ".exe", "not a real program");
+
+        public string AddShim()
+        {
+            var package = Path.Combine(_folder, "node_modules", Name + "-cli");
+            Directory.CreateDirectory(Path.Combine(package, "dist"));
+            _made.Add(package);
+            File.WriteAllText(Path.Combine(package, "dist", "index.js"), "// the entry point");
+            File.WriteAllText(Path.Combine(package, "package.json"), $"{{\"name\":\"{Name}-cli\",\"bin\":{{\"{Name}\":\"dist/index.js\"}}}}");
+            return Write(Name + ".cmd", TestPrograms.NpmShim(Name + "-cli", @"dist\index.js"));
+        }
+
+        private string Write(string fileName, string content)
+        {
+            var path = Path.Combine(_folder, fileName);
+            File.WriteAllText(path, content);
+            _made.Add(path);
+            return path;
+        }
+
+        public void Dispose()
+        {
+            foreach (var made in _made)
+            {
+                try
+                {
+                    if (Directory.Exists(made))
+                    {
+                        Directory.Delete(made, recursive: true);
+                    }
+                    else
+                    {
+                        File.Delete(made);
+                    }
+                }
+                catch (IOException)
+                {
+                }
+            }
+
+            try
+            {
+                Directory.Delete(Path.Combine(_folder, "node_modules"));
+            }
+            catch (IOException)
+            {
+                // Another row's package is still there, or the folder was never made.
+            }
+        }
     }
 
     /// <summary>The verb's help says the rule.</summary>

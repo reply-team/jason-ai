@@ -45,4 +45,33 @@ public class ProgramLookupTests : IDisposable
         Assert.Equal(file, found.Path, ignoreCase: OperatingSystem.IsWindows());
         Assert.Empty(found.Launch);
     }
+
+    /// <summary>
+    /// The lookup never leaves the entry it walks. A name with a drive in it is no file name: joined to an entry it
+    /// stays itself, and <c>C:tool</c> is the current folder of drive C, so the walk would answer with whatever stands
+    /// there, whatever the search path says. It is not found, though a file of that name stands in the current folder.
+    /// Windows alone has a drive; the win-x64 leg of CI runs this row.
+    /// </summary>
+    [Fact]
+    public void A_drive_relative_name_is_not_found_though_a_file_of_that_name_stands_in_the_current_folder()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows names a drive.");
+        var current = Directory.GetCurrentDirectory();
+        var name = "tool-" + Guid.NewGuid().ToString("N");
+        var stray = Path.Combine(current, name + ".exe");
+        File.WriteAllText(stray, "not a real program");
+        try
+        {
+            var onPath = new ProgramSearchPath(_directory, ".COM;.EXE;.BAT;.CMD");
+            var found = ProgramLookup.Find($"{current[0]}:{name}", onPath, onPath);
+
+            Assert.Equal(ProgramLookupOutcome.NotFound, found.Outcome);
+            Assert.Null(found.Path);
+            Assert.Null(found.File);
+        }
+        finally
+        {
+            File.Delete(stray);
+        }
+    }
 }
