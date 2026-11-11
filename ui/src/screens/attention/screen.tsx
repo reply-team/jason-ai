@@ -87,9 +87,17 @@ export function AttentionScreen() {
                         <Segmented
                             label={t('attention.filter.label')}
                             options={[
-                                { value: 'all', label: t('attention.filter.all') },
-                                { value: 'approvals', label: t('attention.filter.approvals') },
-                                { value: 'questions', label: t('attention.filter.questions') },
+                                { value: 'all', label: t('attention.filter.all'), count },
+                                {
+                                    value: 'approvals',
+                                    label: t('attention.filter.approvals'),
+                                    count: store.approvals.value.length,
+                                },
+                                {
+                                    value: 'questions',
+                                    label: t('attention.filter.questions'),
+                                    count: store.questions.value.length,
+                                },
                             ]}
                             value={shows}
                             onChange={setShows}

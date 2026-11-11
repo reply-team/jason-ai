@@ -149,7 +149,7 @@ describe('Attention', () => {
     describe('the filter row', () => {
         const row = () => screen.getByRole('group', { name: 'Approvals or questions' });
         const show = (name: 'All' | 'Approvals' | 'Questions') =>
-            fireEvent.click(within(row()).getByRole('button', { name }));
+            fireEvent.click(within(row()).getByRole('button', { name: new RegExp(`^${name}( [0-9]+)?$`) }));
         const pressed = () =>
             within(row())
                 .getAllByRole('button', { pressed: true })
@@ -160,7 +160,7 @@ describe('Attention', () => {
             const fake = pendingFake();
             renderApp(fake);
             await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
-            expect(pressed()).toEqual(['✓ All']);
+            expect(pressed()).toEqual(['✓ All 4']);
             expect(status().textContent).toBe('Shown: 4');
             const asked = fake.calls.length;
             const hash = location.hash;
@@ -169,7 +169,7 @@ describe('Attention', () => {
             show('Questions');
             await waitFor(() => expect(screen.queryByText('Enroll Ada Lovelace')).toBeNull());
             expect(screen.getByText('Pause outreach to Vireo Labs until their funding news?')).toBeTruthy();
-            expect(pressed()).toEqual(['✓ Questions']);
+            expect(pressed()).toEqual(['✓ Questions 2']);
             expect(status().textContent).toBe('Shown: 2');
 
             show('Approvals');
@@ -200,6 +200,23 @@ describe('Attention', () => {
             expect(status().textContent).toBe('Shown: 0');
         });
 
+        it('counts each kind beside its option, so questions are seen to wait under an empty Approvals', async () => {
+            renderApp(
+                new FakeApi()
+                    .answer('approval.list', 'approval.list/empty')
+                    .answer('decision.list', 'decision.list/pending'),
+            );
+            await waitFor(() => screen.getByText('Pause outreach to Vireo Labs until their funding news?'));
+            const questions = store.questions.value.length;
+            expect(questions).toBe(2);
+            show('Approvals');
+            await waitFor(() => expect(screen.getByText('No approvals waiting.')).toBeTruthy());
+            const labels = within(row())
+                .getAllByRole('button')
+                .map((each) => each.textContent?.replace(/\s+/g, ' ').trim());
+            expect(labels).toEqual(['All 2', '✓ Approvals 0', 'Questions 2']);
+        });
+
         it('shows everything again once nothing was listed, so an approval that arrives then is shown', async () => {
             renderApp(
                 new FakeApi()
@@ -215,7 +232,7 @@ describe('Attention', () => {
             await waitFor(() => expect(screen.getByText(/nothing needs you/i)).toBeTruthy());
             store.approvals.value = listed;
             await waitFor(() => expect(screen.getByText('Enroll Ada Lovelace')).toBeTruthy());
-            expect(pressed()).toEqual(['✓ All']);
+            expect(pressed()).toEqual(['✓ All 2']);
         });
 
         it('is not drawn when nothing waits at all', async () => {
