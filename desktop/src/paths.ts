@@ -11,6 +11,8 @@ export interface DesktopPaths {
     settings: string;
     /** `<data>/desktop/chat/`: the chat's working folder. */
     chat: string;
+    /** `<data>/desktop/conversations/`: one record per conversation of the chat, the desktop's alone. */
+    conversations: string;
     /** `<data>/desktop/provider-keys`: the AI providers' keys, encrypted by the operating system. */
     providerKeys: string;
     /** `<data>/desktop/turns/`: one MCP configuration per running chat turn, with that turn's secret. */
@@ -48,6 +50,7 @@ export function desktopPaths(data: string): DesktopPaths {
         desktop,
         settings: join(desktop, 'settings.json'),
         chat: join(desktop, 'chat'),
+        conversations: join(desktop, 'conversations'),
         providerKeys: join(desktop, 'provider-keys'),
         turns: join(desktop, 'turns'),
         rollback: join(desktop, 'rollback'),

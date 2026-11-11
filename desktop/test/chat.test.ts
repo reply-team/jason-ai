@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/chat.ts';
 import { instructionsFile, readFence } from '../src/chat-deny.ts';
+import { header, turnInput } from '../src/chat-header.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { floorSentence, versionLimitMs } from '../src/host-version.ts';
 import type { RunResult } from '../src/programs.ts';
@@ -15,6 +16,8 @@ import { bench, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 const words = 'Which campaigns are waiting on me?';
+/** What a set-up chat's turn writes on the host's standard input: the desktop's header, then the person's words. */
+const asked = (text: string) => turnInput(header({ campaign: null }), null, text);
 
 interface Rig {
     b: Bench;
@@ -140,12 +143,12 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     const r = rig(t);
     const said = await r.turn('c1', words, { host: 'claude' });
     assert.deepEqual(kinds(said), ['text', 'done']);
-    assert.deepEqual(texts(said), [`heard ${words.length} characters`]);
+    assert.deepEqual(texts(said), [`heard ${asked(words).length} characters`]);
     assert.deepEqual(doneOf(said), { kind: 'done', error: null });
 
     const [host] = r.hosts();
     assert.ok(host);
-    assert.equal(host.stdin, words);
+    assert.equal(host.stdin, asked(words));
     assert.ok(host.args.every((arg) => !arg.includes(words)), 'the words are never on the command line');
     assert.ok(same(host.cwd, r.b.paths.chat), `started in ${host.cwd}`);
     for (const flag of ['-p', '--strict-mcp-config', '--permission-prompt-tool', '--mcp-config', '--setting-sources', '--settings', '--allowedTools', '--disallowedTools']) assert.ok(host.args.includes(flag), flag);
@@ -158,7 +161,7 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     const config = flagValue(host.args, '--mcp-config');
     assert.ok(same(join(config, '..'), r.b.paths.turns), 'the turn file is in desktop/turns, outside the chat folder');
     assert.equal(existsSync(config), false, 'the turn file is gone once the turn is over');
-    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'turns'], 'nothing of the turn is left beside the chat folder');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations', 'turns'], 'nothing of the turn is left beside the chat folder but the conversation it belongs to');
     assert.deepEqual(readdirSync(r.b.paths.turns), [], 'nothing of the turn is left in turns/');
     assert.deepEqual(readdirSync(r.b.paths.chat).sort(), ['AGENTS.md', 'CLAUDE.md'], 'the turn writes nothing into the chat folder but the instruction text');
     assert.equal(existsSync(join(r.b.root, 'harness')), false, 'nothing reaches the harness root');
@@ -299,16 +302,16 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     const said = await r.turn('c1', words, { host: 'codex' });
     assert.deepEqual(said, [
         { kind: 'step', text: 'Ran a jason command', detail: 'jason campaign list --json' },
-        { kind: 'text', text: `heard ${words.length} characters` },
+        { kind: 'text', text: `heard ${asked(words).length} characters` },
         { kind: 'done', error: null },
     ]);
     await r.turn('c1', words, { host: 'codex' });
     const [first, second] = r.hosts();
     assert.deepEqual(first?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-']);
     assert.deepEqual(second?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', 'resume', '0199a213-81c0-7800-8aa1-bbab2a035a53', '-']);
-    assert.equal(first?.stdin, words);
+    assert.equal(first?.stdin, asked(words));
     assert.ok(same(first?.cwd ?? '', r.b.paths.chat));
-    assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat'], 'a Codex turn writes no turn file');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations'], 'a Codex turn writes no turn file');
 });
 
 test('a Codex turn that reported an error and then completed ends with no error', async (t) => {
@@ -333,14 +336,20 @@ test('a turn whose file cannot be removed still ends: it is no longer running, i
     assert.equal(r.ended.length, 2);
 });
 
-test('a turn resumes only on the host that named the session', async (t) => {
+test('a conversation keeps a session per host: a turn resumes its own host\'s, and a host that has not seen it starts afresh with a recap', async (t) => {
     const r = rig(t);
     await r.turn('c1', words, { host: 'claude' });
-    await r.turn('c1', words, { host: 'codex' });
-    await r.turn('c1', words, { host: 'claude' });
+    const switched = await r.turn('c1', 'And on Codex?', { host: 'codex' });
+    await r.turn('c1', 'Back on Claude Code', { host: 'claude' });
     const [, codex, claude] = r.hosts();
-    assert.ok(!codex?.args.includes('resume'));
-    assert.ok(!claude?.args.includes('--resume'));
+    assert.ok(!codex?.args.includes('resume'), 'Codex has no session of this conversation');
+    assert.deepEqual(switched[0], { kind: 'fresh', reason: 'host_changed' }, 'the page is told first');
+    const recapped = ['<earlier-messages>', `person: "${words}"`, /agent: "heard \d+ characters"/.source, '</earlier-messages>', '', 'And on Codex?'];
+    const lines = (codex?.stdin ?? '').split('\n').slice(-6);
+    assert.equal(lines.length, 6, codex?.stdin);
+    lines.forEach((line, i) => assert.ok(i === 2 ? new RegExp(`^${recapped[i]}$`).test(line) : line === recapped[i], `${line} / ${recapped[i]}`));
+    assert.equal(flagValue(claude?.args ?? [], '--resume'), 'stub-session-1', 'Claude Code resumes its own session');
+    assert.ok(!(claude?.stdin ?? '').includes('earlier-messages'), 'a resumed session is given no recap');
 });
 
 test('a failed turn says the host\'s last words: an error result, a Codex failure, an exit with no result', async (t) => {
@@ -447,7 +456,8 @@ test('a stop or a window close while Claude Code’s version is read starts no h
     const sending = r.chat.send('c1', words, { host: 'claude', campaignId: 'cmp_1' });
     r.chat.stop('c1');
     const closed = r.until('c2', (event) => event.kind === 'done');
-    const closing = r.chat.send('c2', words, { host: 'claude', campaignId: 'cmp_1' });
+    // Another campaign's conversation: the first campaign's is answering, and a second send to it is refused as busy.
+    const closing = r.chat.send('c2', words, { host: 'claude', campaignId: 'cmp_2' });
     r.chat.closeAll();
     // What a turn builds before its host starts would show: the campaign asked for, the instruction text written again.
     rmSync(join(r.b.paths.chat, 'CLAUDE.md'), { force: true });
@@ -525,7 +535,7 @@ test('a send made the moment a turn says it is done starts the next turn, so the
     await next;
     await second;
     assert.deepEqual(r.events.get('c1')?.filter((event) => event.kind === 'done'), [{ kind: 'done', error: null }, { kind: 'done', error: null }]);
-    assert.deepEqual(r.hosts().map((host) => host.stdin), [words, 'And then?']);
+    assert.deepEqual(r.hosts().map((host) => host.stdin), [asked(words), asked('And then?')]);
 });
 
 test('a campaign turn adds the campaign\'s and its project\'s folders when they are recorded and on this disk', async (t) => {
@@ -662,7 +672,7 @@ test('the chat folder carries the instruction text as CLAUDE.md and AGENTS.md, b
     rmSync(r.b.paths.chat, { recursive: true });
     await r.turn('c2', words, { host: 'codex' });
     assert.ok(sameBytes(r.b.paths.chat), 'after a Codex turn');
-    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'turns'), ['chat'], 'nothing beside the chat folder');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'turns').sort(), ['chat', 'conversations'], 'nothing beside the chat folder but the conversations');
 });
 
 test('an instruction file that was changed or deleted is written again before the next turn', async (t) => {

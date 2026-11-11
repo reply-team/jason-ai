@@ -26,8 +26,48 @@ export interface DesktopChatOptions {
     host: string;
     /** A model the host offers, by the name the host takes; absent, the host's own default. */
     model?: string;
-    /** The campaign the chat is about, when it was opened from one: `cmp_` and its ULID. */
+    /**
+     * Superseded by the conversations the desktop keeps (`chat.create`, `chat.open`): read only for a `chatId` the
+     * desktop does not know, which then names that campaign's conversation (found or made), or with no campaign a new
+     * set-up chat. The page stops sending it once it calls `chat.create`.
+     */
     campaignId?: string;
+}
+
+/**
+ * One conversation the desktop keeps under its data directory: a campaign's, one per campaign, or a set-up chat about
+ * no campaign yet, any number of them. Its id is the `chatId` every other chat call takes.
+ */
+export interface DesktopConversation {
+    /** `conv_` and 26 Crockford base-32 characters, made by the desktop. */
+    id: string;
+    /** The campaign it is about: `cmp_` and its ULID; null for a set-up chat. */
+    campaignId: string | null;
+    /**
+     * The campaign's name, one line; a set-up chat's first sixty characters of the person's first message, or
+     * "New chat". A person's text, shown as text.
+     */
+    title: string;
+    /** When it last changed, ISO-8601 UTC. */
+    updatedAt: string;
+}
+
+/**
+ * One thing the page drew, as the desktop kept it: text only, never markup, drawn by the same code as the live event it
+ * stands for. A card keeps the answer it was given: `gone` when it no longer waited, null when it was never answered.
+ */
+export type DesktopKeptEntry =
+    | { kind: 'user'; text: string }
+    | { kind: 'text'; text: string }
+    | { kind: 'step'; text: string; detail?: string }
+    | { kind: 'permission'; title: string; detail: string; answer: 'allow' | 'always' | 'deny' | 'gone' | null }
+    | { kind: 'error'; text: string }
+    | { kind: 'pick'; campaignIds: string[] };
+
+/** A conversation with what the page drew, oldest first, within 2 MB: `dropped` counts the oldest entries let go. */
+export interface DesktopConversationRecord extends DesktopConversation {
+    entries: DesktopKeptEntry[];
+    dropped: number;
 }
 
 /** One thing a running turn says, in the order the host says it. The chat id it belongs to comes beside it. */
@@ -50,6 +90,21 @@ export type DesktopChatEvent =
      * it after this changes nothing.
      */
     | { kind: 'permission_gone'; request: string }
+    /**
+     * The set-up chat became the conversation of `campaignId`, named `title`: its turn made exactly that one campaign,
+     * or the person picked it (`chat.attach`). Said before the turn's `done`.
+     */
+    | { kind: 'attached'; campaignId: string; title: string }
+    /**
+     * The turn starts a fresh session of the host, given a recap of the conversation's earlier messages: the host has
+     * not seen this conversation (`host_changed`), or its session could not be resumed (`not_found`).
+     */
+    | { kind: 'fresh'; reason: 'host_changed' | 'not_found' }
+    /**
+     * The set-up chat's turn made campaigns the desktop does not hand over by itself: more than one, or while another
+     * set-up chat's turn ran. The person picks one of `campaignIds` (`chat.attach`), or none. Said before `done`.
+     */
+    | { kind: 'pick'; campaignIds: string[] }
     /** The turn is over: `error` is null when it ended well, else the host's own words for why it did not. */
     | { kind: 'done'; error: string | null };
 
@@ -177,6 +232,25 @@ export interface JasonDesktop {
         answer(chatId: string, requestId: string, decision: { allow: boolean; always: boolean }): Promise<void>;
         /** Calls `handler` with every event of every chat; the function it returns stops that. */
         onEvent(handler: (chatId: string, event: DesktopChatEvent) => void): () => void;
+        /** The conversations the desktop keeps, the one changed last first. */
+        list(): Promise<DesktopConversation[]>;
+        /** One conversation with what the page drew; an id the desktop does not keep is refused. */
+        open(chatId: string): Promise<DesktopConversationRecord>;
+        /**
+         * A conversation to start in: with a campaign, that campaign's own conversation, found or made with its name;
+         * without one, a new set-up chat.
+         */
+        create(campaignId?: string): Promise<DesktopConversation>;
+        /** Removes a conversation and its record. Refused while its turn runs. */
+        remove(chatId: string): Promise<void>;
+        /** "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept. Refused while its turn runs. */
+        restart(chatId: string): Promise<void>;
+        /**
+         * Makes a set-up chat the conversation of a campaign its last `pick` named; an `attached` event follows. Refused
+         * while its turn runs, for a conversation already about a campaign, for a campaign that has a conversation, and
+         * for one the pick did not name.
+         */
+        attach(chatId: string, campaignId: string): Promise<DesktopConversation>;
     };
     setup: {
         status(): Promise<DesktopSetup>;

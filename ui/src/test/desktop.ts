@@ -1,5 +1,12 @@
 import type { JournalEntry } from '../api/types';
-import type { DesktopChatEvent, DesktopCommand, DesktopSetup, JasonDesktop } from '../platform/desktop';
+import type {
+    DesktopChatEvent,
+    DesktopCommand,
+    DesktopConversation,
+    DesktopConversationRecord,
+    DesktopSetup,
+    JasonDesktop,
+} from '../platform/desktop';
 import { JournalStream, type StreamSocket } from '../platform/journal-stream';
 import { fixtures } from './fixtures';
 
@@ -126,6 +133,19 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
             const reason = refuse.get(name);
             return reason === undefined ? Promise.resolve() : Promise.reject(new Error(reason));
         };
+    const answering =
+        <T>(name: string, value: (...args: unknown[]) => T) =>
+        (...args: unknown[]): Promise<T> => {
+            calls.push({ name, args });
+            const reason = refuse.get(name);
+            return reason === undefined ? Promise.resolve(value(...args)) : Promise.reject(new Error(reason));
+        };
+    const conversation = (id: unknown, campaignId: unknown): DesktopConversation => ({
+        id: typeof id === 'string' ? id : 'conv_01JD0000000000000000000000',
+        campaignId: typeof campaignId === 'string' ? campaignId : null,
+        title: 'New chat',
+        updatedAt: '2026-11-11T00:00:00.000Z',
+    });
     const stub: StubDesktop = {
         platform: 'win32',
         calls,
@@ -143,6 +163,16 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
                 chatHandlers.add(handler);
                 return () => chatHandlers.delete(handler);
             },
+            list: answering('chat.list', (): DesktopConversation[] => []),
+            open: answering('chat.open', (id): DesktopConversationRecord => ({
+                ...conversation(id, null),
+                entries: [],
+                dropped: 0,
+            })),
+            create: answering('chat.create', (campaignId) => conversation(undefined, campaignId)),
+            remove: call('chat.remove'),
+            restart: call('chat.restart'),
+            attach: answering('chat.attach', (id, campaignId) => conversation(id, campaignId)),
         },
         setup: {
             status: () => {

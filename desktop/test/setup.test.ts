@@ -336,8 +336,10 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     await act('Reload', () => setup.configurePlugin('slack', {}), [], []);
 
     // A chat turn writes one file, its MCP configuration in desktop/turns/ beside the chat folder, and removes it when
-    // the turn is over; the chat writes the instruction text into the chat folder as the hosts' two memory files.
+    // the turn is over; the chat writes the instruction text into the chat folder as the hosts' two memory files, and
+    // keeps the conversation's record in desktop/conversations/, written when the host names its session and at the end.
     const instructionFiles = ['desktop/chat/CLAUDE.md', 'desktop/chat/AGENTS.md'];
+    const conversationFile = /^desktop\/conversations\/conv_[0-9A-HJKMNP-TV-Z]{26}\.json$/;
     const turnFile = /^desktop\/turns\/turn-[0-9a-f]{24}\.mcp\.json$/;
     let during: string[] = [];
     await act('a chat turn', async () => {
@@ -366,8 +368,9 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
         });
         await chat.send('c1', 'hello', { host: 'claude' });
         await done;
-    }, instructionFiles, []);
-    const turnFiles = during.filter((path) => !instructionFiles.includes(path));
+    }, [...instructionFiles, conversationFile], []);
+    const turnFiles = during.filter((path) => !instructionFiles.includes(path) && !conversationFile.test(path));
+    assert.equal([...snapshot(b.paths.data).keys()].filter((path) => conversationFile.test(path)).length, 1, 'one conversation kept');
     assert.equal(turnFiles.length, 1, `while the turn waited: ${during.join(', ')}`);
     assert.match(turnFiles[0] ?? '', turnFile);
     assert.ok(![...snapshot(b.paths.data).keys()].some((path) => turnFile.test(path)), 'the turn file is gone once the turn is over');

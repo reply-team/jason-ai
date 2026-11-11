@@ -67,6 +67,14 @@ describe('a chat as the page keeps it', () => {
         expect(lost(allowed, 'req_1').entries[1]).toMatchObject({ answer: 'gone' });
     });
 
+    it('is not changed by what the desktop says of its conversations: a hand-over, a fresh session, a pick', () => {
+        const chat = asking(said(newChat('c1', 'claude'), 'Go'));
+        expect(received(chat, { kind: 'attached', campaignId: 'cmp_1', title: 'Autumn outreach' })).toBe(chat);
+        expect(received(chat, { kind: 'fresh', reason: 'not_found' })).toBe(chat);
+        expect(received(chat, { kind: 'fresh', reason: 'host_changed' })).toBe(chat);
+        expect(received(chat, { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] })).toBe(chat);
+    });
+
     it('ends a turn with the host own words when it failed, and with every request it held gone', () => {
         const chat = asking(said(newChat('c1', 'claude'), 'Go'));
         const over = received(chat, { kind: 'done', error: 'Not logged in' });
