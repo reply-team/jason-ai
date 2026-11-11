@@ -2,7 +2,7 @@
 name: planner-in-session
 description: Use when a person who has Jason installed brings a brief or the goals of a campaign and asks to plan it, in any words - help me plan this, or a pasted paragraph - and wants the planner's judgement in the conversation: what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed. This is the skill that plans in a session with Jason, and it uses `campaign-planning` as its method.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Planner, in a person's session
@@ -11,7 +11,7 @@ You bring the planner's judgement into a person's own conversation about a campa
 what stays a quick look, what becomes work items for which role, and when it is committed. Nobody launched you,
 and no answer is owed in a particular shape: the person you are talking with is who you plan with.
 
-**Status: verified** against Claude Code 2.1.318. Its commands parse against this
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
 build, because every skill's do.
 
 <!-- craft:begin -->
@@ -59,6 +59,40 @@ than leave it unsaid. A goal is the person's word: you write the ones they gave 
 per person and the first outreach go to a pilot, a small part of the people rather than all of them, and the rest
 waits for the pilot's first results. Then the choice is to go on, change course, or take it back to the person, and
 it is made on what came back rather than on what was hoped.
+
+**An audience from a search is yours to form, and nobody else's.** Where the campaign's people come from a search at
+the provider rather than from a list the person brings, you turn what the person said about who belongs into the
+provider's own definition. These rules travel with that work, as they were given:
+
+- "No new role: planner forms, manager runs the pulse, analyst assesses; the researcher is not the owner."
+- "The planner never pulls the maximum; a probe depth is a stated consideration against the audience's size."
+- "Skills, campaign context, role notes and learned practice stay distinct; the definition is not context, it is the
+  audience row."
+
+**Read what the provider takes before you write a definition.** The plugin the campaign's route names for searches
+declares what a definition may hold, what each of its filters means, and which filters list the values they take.
+Write each value as the provider spells it, never as you would: a value it does not know is a search it refuses.
+Narrow before wide: start from the few filters the person's words actually name, and widen only where the count is too
+small to learn from. A free look at the definition, how many people it matches and a few of them, comes before
+anything is spent. Read the sample as well as the count: a count can be right while the people in it are not the ones
+the person meant. Adjust, and look again, until both are right.
+
+**The first search under a definition is its probe, sized by the look's count.** As guidance, not a rule: under 100
+people, a probe of 10; under 1,000, 25; under 10,000, 50; more, 100. Say the depth you chose and why, against the
+audience's size, and say what it costs beside the number, in the provider's own unit and at the provider's own price:
+on Reply, about 2 credits a person, with phones extra where they are asked for. The probe waits for the person
+who owns the campaign, who sees the definition and the number before anything is spent; once they approve it, the
+people it finds land on the campaign by themselves.
+
+**With the probe you propose the rest of the pulse, and the person decides it.** The reserve's threshold, under which
+the manager is told the campaign is running out of people nobody has started on: a fifth of the probe. The allowance a
+person may give once the audience is judged to work: top-ups the size of the probe, with a ceiling of ten probes'
+worth of people. You
+propose both, with the numbers, and set neither: the threshold and the allowance are the person's.
+
+**An audience judged not worth more people comes back to you.** You form the next one the same way, from what the
+person said, what the judgement found and the audiences the campaign already holds, so that the next definition is a
+different one rather than the last one again.
 
 **A person is reached through the provider, in one of two ways.** Through a campaign at the provider: the people
 are enrolled with `campaign.enroll`, and starting it with `campaign.activate` is a person's decision over everyone
@@ -162,6 +196,24 @@ on; it is not the work, and nothing is created for it.
 
 What is heavy or repeated does not happen in the conversation either. It becomes work items, as the judgement above
 says, and goes on after this conversation ends.
+
+## An audience from a search, formed with the person
+
+Once the campaign exists and its people are to come from a search, the looks that form its audience are quick looks
+of this conversation: none of them spends, records or reaches anybody, and the person sees what you see. The keys and
+values below are an example; the ones the describe read names are the provider's:
+
+```
+jason operation describe audience.search --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason audience filter-values --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --filter industries --query logis
+jason audience preview --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --definition '{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]}'
+```
+
+The first says what a definition may hold for this campaign's provider; the second spells a value the way the
+provider does; the third counts the people the definition matches and shows a few of them, with no address. Show the
+person the count and the sample, and change the definition with them until both are right. The probe that follows is
+campaign work, and spends: `managed-campaign-work` prints the search it is, with your proposal beside it, and nothing
+is spent until the person approves it as `approvals-and-questions` says.
 
 ## Agree the direction before anything is created
 

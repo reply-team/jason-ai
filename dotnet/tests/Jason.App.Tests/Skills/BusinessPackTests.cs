@@ -296,14 +296,19 @@ public class BusinessPackTests
     /// <summary>
     /// The skill's definition of a standing approval is mapped onto Jason's: per campaign and category, its operations, its
     /// expiry and ceiling, how it is read, what each act it authorised leaves, and that only a person sets one. The sentence
-    /// on which categories to set it on is the decided one, and the principle it follows from is stated with it.
+    /// on which categories to set it on is the decided one, and the principle it follows from is stated with it. The
+    /// campaign's allowance for searches is the other kind, capped in people.
     /// </summary>
     [Fact]
     public void The_approval_boundaries_map_a_standing_approval_onto_a_campaign_and_a_category_of_reply()
     {
         var skill = Flat("approval-boundaries");
 
-        Assert.Contains("**In Jason, a standing approval is set per campaign and per category of reply.**", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "**In Jason, a standing approval is set per campaign, for one category of reply or for the searches under one audience.**",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("**For searches, it is the campaign's allowance, and it is capped in people.**", skill, StringComparison.Ordinal);
         Assert.Contains("carries an `expires_at` where the person set one and a `max_releases` ceiling where they set one", skill, StringComparison.Ordinal);
         Assert.Contains("It is read with `jason approval list-standing`", skill, StringComparison.Ordinal);
         Assert.Contains(

@@ -2,7 +2,7 @@
 name: managed-campaign-work
 description: Use when a person wants Jason to start outbound work for them, such as getting meetings or running a campaign, and asks what to do first, and when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them; and when a person wants Jason to answer somebody who wrote back - answering a conversation in its own thread, filing, closing or reopening it - or says stop it or not yet about work Jason holds - stopping or holding work, from cancelling one work item to pausing the provider's campaign.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Managed campaign work
@@ -12,7 +12,7 @@ the Jason CLI has not happened: it will not survive the session, will not be dis
 anybody, and will leave no history. This skill is the managed path — how to put work where the runtime can
 perform it, and what to do while it waits.
 
-**Status: verified** against Claude Code 2.1.318. It covers the operations this build
+**Status: draft.** No agent host has read this text in the state it ships in. It covers the operations this build
 publishes and nothing else.
 
 ## What you are responsible for, and what the runtime is
@@ -193,9 +193,36 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 
 The arguments are validated when the item is created, so a refusal here is about what you asked for, not about
 the provider. Read the operation's own document before you invent a field: it is the same document the runtime
-enforces, and it is published with the project's source, under `docs/contracts/operations/`. **No verb prints
-one**, so on a machine with no copy of the source you cannot read it from here — ask the operator for it rather
-than guessing a field, because a guess is refused at `workitem.create` anyway.
+enforces, and it is published with the project's source, under `docs/contracts/operations/`. Its arguments are also a
+read away for a campaign, `jason operation describe <operation> --campaign <campaign-id>`, which prints the schema they
+are checked against; never guess a field, because a guess is refused at `workitem.create` anyway.
+
+**People from a search are an audience, and the planner forms it.** Where the campaign's people come from a search at
+the provider rather than from a list the person brings, the definition of who belongs is the planner's to write, by the
+looks `planner-in-session` takes with the person, or by a launched planner's item. The first search under a definition
+is its probe: a work item naming `audience.search`, with the definition, the count chosen for it and the planner's
+proposal beside it under `proposal`. It parks for the person's approval, which `approvals-and-questions` presents, and
+once approved its people land on the campaign by themselves, each named in `campaign list-contacts` by the audience
+they came from:
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"definition":{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]},"count":25}' --context '{"proposal":"The definition matches about 640 people, so a probe of 25, about 50 credits on Reply. Once they land, a reserve threshold of 5; once the audience works, top-ups of 25 up to 250."}' --idempotency-key q3-latam-probe-logistics
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner --context '{"brief":"form the audience from the campaign context and create its probe"}' --idempotency-key q3-latam-form-audience
+jason campaign audience cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+A person may also top an audience up themselves, on their word, naming it by its number rather than by a definition;
+it parks for their approval unless their allowance covers it:
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"audience":1,"count":25}' --reason "the person asked for 25 more of audience 1" --idempotency-key q3-latam-topup-1-first
+```
+
+The reserve's threshold is the campaign's own field, which the person sets once the probe's people have landed, the
+planner's proposal being a fifth of the probe: `jason campaign update <campaign-id> --audience-threshold <n>`. Under it, the campaign's manager is told the reserve is
+low, and the top-ups after the probe are the manager's, run under the allowance the person gave
+(`approvals-and-questions`). The definition is the audience's row, never the context: the context keeps the person's
+own words about who belongs.
 
 Work that needs a model rather than a provider is an `ai_role` item, named for the role that should do it:
 
@@ -427,9 +454,11 @@ one item for both.
 
 **A person may have decided it in advance, for one kind of reply.** A standing approval is a person's own act, set per
 campaign and per category of reply, with an end and a ceiling where they chose one; it releases a drafted answer
-without a question each time, and nothing else. You do not set one: it is theirs, in `approvals-and-questions`, and an
-agent sets one only on a person's explicit word, naming them. When a drafted reply has gone out without a question, the
-chronicle says which standing approval let it:
+without a question each time, and nothing else. A campaign may also hold one more, its allowance for searches: set
+for one of its audiences and capped in people, it lets the top-ups under that audience go without a question until
+the people they ask for reach its ceiling, and releases no reply. You do not set one: it is theirs, in
+`approvals-and-questions`, and an agent sets one only on a person's explicit word, naming them. When a drafted reply or
+a top-up has gone out without a question, the chronicle says which standing approval let it:
 
 ```
 jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
