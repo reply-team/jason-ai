@@ -33,8 +33,8 @@ import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
 import { Setup } from './setup.ts';
 import { loginPath } from './shell-path.ts';
-import { uninstallStart } from './uninstall.ts';
-import { runUninstall } from './uninstall-start.ts';
+import { stopRuntimeStart, uninstallStart } from './uninstall.ts';
+import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 
 function readText(file: string): string | null {
     try {
@@ -324,6 +324,10 @@ if (uninstalling !== null) {
     // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
     // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
     void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));
+} else if (stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform })) {
+    // The nsis installer's and uninstaller's start when a runtime runs from the carried jason.exe: it stops that runtime
+    // through jason runtime stop and exits, and opens no window; the installer looks again rather than read the code.
+    void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));
 } else if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {

@@ -1,8 +1,12 @@
 /**
- * The start the nsis uninstaller makes (`uninstall.ts`): no window, no runtime started, no single-instance lock, since
- * the uninstaller has already closed the running application. It stops the runtime this application carries when that
- * is the one running, takes off what the desktop placed, shows what it took and left unless the uninstall is silent,
- * and exits; the uninstaller then removes the application's folder, unless the exit says to go no further.
+ * The starts the nsis installer and uninstaller make (`uninstall.ts`): no window, no runtime started, no single-instance
+ * lock, since the installer has already closed the running application.
+ *
+ * - `--uninstall` stops the runtime this application carries when that is the one running, takes off what the desktop
+ *   placed, shows what it took and left unless the uninstall is silent, and exits; the uninstaller then removes the
+ *   application's folder, unless the exit says to go no further.
+ * - `--stop-runtime` stops the runtime this application carries when that is the one running, and exits; it shows
+ *   nothing, removes nothing and writes nothing but the log lines of the CLI it runs.
  */
 
 import { app, dialog } from 'electron';
@@ -18,7 +22,7 @@ import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { dataDirectory, desktopPaths } from './paths.ts';
 import { pathOf, withPath } from './programs.ts';
 import { applicationFolder } from './rollback.ts';
-import { harnessRoot, uninstall, uninstallExit, uninstallText, updaterCache } from './uninstall.ts';
+import { harnessRoot, stopRuntimeCode, uninstall, uninstallExit, uninstallText, updaterCache } from './uninstall.ts';
 
 function readText(file: string): string | null {
     try {
@@ -28,16 +32,27 @@ function readText(file: string): string | null {
     }
 }
 
-/** Returns the start's exit code (`uninstallExit`). */
-export async function runUninstall(quiet: boolean): Promise<number> {
+/** The installation both starts act on: the data directory this start was given, the carried executable and its CLI. */
+function carried() {
     const home = homedir();
     const paths = desktopPaths(dataDirectory(process.env, home));
     const log = fileLogger(paths.logs, limitsFrom(readText(paths.installationSettings)));
     const executable = join(process.resourcesPath, 'bundle', process.platform === 'win32' ? 'jason.exe' : 'jason');
     const cli = loggedCli(cliAt(executable, withPath(process.env, pathOf(process.env))), log);
+    const own = ownRuntimeDeps(process.platform, executable, paths.runFile, cli);
+    return { home, paths, log, executable, cli, own };
+}
+
+/** Returns the start's exit code (`stopRuntimeCode`). */
+export async function runStopRuntime(): Promise<number> {
+    return stopRuntimeCode(() => stopOwnRuntime(carried().own));
+}
+
+/** Returns the start's exit code (`uninstallExit`). */
+export async function runUninstall(quiet: boolean): Promise<number> {
+    const { home, paths, log, executable, cli, own } = carried();
     const folder = commandFolder(process.platform, process.env, home);
     const autostart = new RuntimeAutostart({ cli, log });
-    const own = ownRuntimeDeps(process.platform, executable, paths.runFile, cli);
     const report = await uninstall({
         platform: process.platform,
         runtime: { stop: () => stopOwnRuntime(own) },

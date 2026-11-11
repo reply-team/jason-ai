@@ -40,6 +40,34 @@ export function uninstallStart(argv: readonly string[], where: { packaged: boole
     return argv.includes(uninstallFlag) ? { quiet: argv.includes(quietFlag) } : null;
 }
 
+/**
+ * On the command line of the start the nsis installer and uninstaller make when they find a runtime running from the
+ * carried `jason.exe`: it stops that runtime the way the uninstall start does, through `jason runtime stop`, and does
+ * nothing else. Later installers make it of the version they replace, so its name and its exits are kept.
+ */
+export const stopRuntimeFlag = '--stop-runtime';
+
+/** Whether this start is the installer's stop of the carried runtime: on Windows, packaged, and an uninstall beside it wins. */
+export function stopRuntimeStart(argv: readonly string[], where: { packaged: boolean; platform: NodeJS.Platform }): boolean {
+    if (!where.packaged || where.platform !== 'win32') return false;
+    return argv.includes(stopRuntimeFlag) && !argv.includes(uninstallFlag);
+}
+
+/**
+ * The exit of that start: 0 when no runtime of this application's runs any more (none, another installation's, or
+ * stopped), 1 when one may still run (a stop that failed, or a runtime that did not answer), and 2 when the start
+ * itself failed. The installer reads none of them: it looks again, and the look decides.
+ */
+export async function stopRuntimeCode(stop: () => Promise<StopOutcome>): Promise<number> {
+    let outcome: StopOutcome;
+    try {
+        outcome = await stop();
+    } catch {
+        return 2;
+    }
+    return outcome.kind === 'failed' || outcome.kind === 'unanswered' ? 1 : 0;
+}
+
 /** The value of a key read as the runtime's configuration reads keys: without regard to case. */
 function keyed(record: unknown, key: string): unknown {
     if (typeof record !== 'object' || record === null || Array.isArray(record)) return undefined;

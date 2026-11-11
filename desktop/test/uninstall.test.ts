@@ -14,7 +14,7 @@ import { gitBashWrapper, windowsShim } from '../src/command-line.ts';
 import { RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { harnessRoot, inside, runtimeRefusal, uninstall, uninstallExit, uninstallStart, uninstallText, updaterCache, type UninstallDeps } from '../src/uninstall.ts';
+import { harnessRoot, inside, runtimeRefusal, stopRuntimeCode, stopRuntimeFlag, stopRuntimeStart, uninstall, uninstallExit, uninstallStart, uninstallText, updaterCache, type UninstallDeps } from '../src/uninstall.ts';
 import { memoryLog } from './harness.ts';
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -82,6 +82,45 @@ test('only the uninstaller’s start is an uninstall, and a silent one shows not
     assert.equal(uninstallStart(['Jason.exe', '--opened-at-login'], installed), null);
     assert.deepEqual(uninstallStart(['Jason.exe', '--uninstall'], installed), { quiet: false });
     assert.deepEqual(uninstallStart(['Jason.exe', '--uninstall', '--quiet'], installed), { quiet: true });
+});
+
+test('the installer’s start that stops the carried runtime is honoured only in a packaged application on Windows, and an uninstall beside it wins', () => {
+    const installed = { packaged: true, platform: 'win32' } as const;
+    assert.equal(stopRuntimeFlag, '--stop-runtime');
+    assert.equal(stopRuntimeStart(['Jason.exe', '--stop-runtime'], installed), true);
+    assert.equal(stopRuntimeStart(['Jason.exe'], installed), false, 'the flag absent');
+    assert.equal(stopRuntimeStart(['Jason.exe', '--opened-at-login'], installed), false);
+    assert.equal(stopRuntimeStart(['Jason.exe', '--stop-runtime', '--uninstall'], installed), false, 'the uninstall wins');
+    assert.deepEqual(uninstallStart(['Jason.exe', '--stop-runtime', '--uninstall'], installed), { quiet: false });
+    assert.equal(uninstallStart(['Jason.exe', '--stop-runtime'], installed), null);
+    for (const where of [{ packaged: false, platform: 'win32' }, { packaged: true, platform: 'darwin' }, { packaged: false, platform: 'darwin' }, { packaged: true, platform: 'linux' }] as const) {
+        assert.equal(stopRuntimeStart(['Jason', '--stop-runtime'], where), false, JSON.stringify(where));
+    }
+});
+
+test('the start that stops the carried runtime exits 0 when none of its own runs any more, 1 when one may still run, and 2 when it failed', async () => {
+    const cases: { name: string; stop: () => Promise<StopOutcome>; exit: number }[] = [
+        { name: 'none', stop: async () => ({ kind: 'none' }), exit: 0 },
+        { name: 'another installation’s', stop: async () => ({ kind: 'another' }), exit: 0 },
+        { name: 'stopped', stop: async () => ({ kind: 'stopped' }), exit: 0 },
+        { name: 'failed', stop: async () => ({ kind: 'failed', exit: 1 }), exit: 1 },
+        { name: 'did not finish', stop: async () => ({ kind: 'failed', exit: -1 }), exit: 1 },
+        { name: 'unanswered', stop: async () => ({ kind: 'unanswered', pid: 4242, runFile: 'C:/data/run/runtime.json' }), exit: 1 },
+        { name: 'unreadable', stop: async () => ({ kind: 'unanswered', pid: null, runFile: 'C:/data/run/runtime.json', unreadable: true }), exit: 1 },
+        { name: 'a rejection', stop: async () => Promise.reject(new Error('planted-stop-error')), exit: 2 },
+    ];
+    for (const one of cases) assert.equal(await stopRuntimeCode(one.stop), one.exit, one.name);
+
+    // The packaged executable makes this start without a window, a lock or a dialog, and a rejection anywhere exits 2.
+    const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
+    const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
+    const branch = main.slice(main.indexOf('const uninstalling = uninstallStart('), main.indexOf('} else if (!app.requestSingleInstanceLock()) {'));
+    assert.ok(branch.includes('} else if (stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform })) {'));
+    assert.ok(branch.includes('void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));'));
+    const from = start.indexOf('export async function runStopRuntime(');
+    const run = start.slice(from, start.indexOf('\n}\n', from));
+    assert.ok(run.includes('return stopRuntimeCode(() => stopOwnRuntime(carried().own));'));
+    assert.doesNotMatch(run, /dialog|BrowserWindow|requestSingleInstanceLock/);
 });
 
 test('an uninstall start that fails exits 2, never 0, so the uninstaller says what may be left', () => {
