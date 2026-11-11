@@ -414,3 +414,25 @@ test('naming runs go one at a time across the desktop, and one past its bound ke
     // The run ended at its bound is ended by the system a moment later; its folder goes with the test's.
     await new Promise((resolve) => setTimeout(resolve, 1500));
 });
+
+test('deny by default: a Codex item that is not the agent\'s message or its reasoning, and a Claude Code block that is not text or thinking, refuses the name, known type or not', async (t) => {
+    const r = rig(t);
+    const say = 'Dentist outreach plan';
+    const cases: [string, Record<string, unknown>, NamingOutcome][] = [
+        ['codex', { item: 'collab_tool_call', say }, 'refused'],
+        ['codex', { item: 'image_view', say }, 'refused'],
+        ['codex', { item: 'a_tool_a_later_codex_adds', say }, 'refused'],
+        ['codex', { item: 'reasoning', say }, 'named'],
+        ['claude', { block: 'server_tool_use', say }, 'refused'],
+        ['claude', { block: 'a_block_a_later_claude_code_adds', say }, 'refused'],
+        ['claude', { block: 'thinking', say }, 'named'],
+    ];
+    for (const [host, answer, outcome] of cases) {
+        naming(r, answer);
+        const setup = await r.chat.create();
+        await r.turn(setup.id, 'Help me reach dentists in Ohio', { host });
+        await r.chat.idle();
+        assert.equal(r.outcomes.at(-1), outcome, `${host} ${JSON.stringify(answer)}`);
+        assert.equal(titleOf(r, setup.id), outcome === 'named' ? say : 'Help me reach dentists in Ohio', `${host} ${JSON.stringify(answer)}`);
+    }
+});

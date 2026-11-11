@@ -154,10 +154,43 @@ export function nameFromAnswer(answer: string): string | null {
     return Array.from(text).length <= titleLimit ? text : null;
 }
 
+/** What a naming run may say besides its end: on Codex the agent's message and its reasoning, nothing else. */
+const codexWords: ReadonlySet<string> = new Set(['agent_message', 'reasoning']);
+/** What a naming run may say besides its end: on Claude Code text and thinking blocks, nothing else. */
+const claudeWords: ReadonlySet<string> = new Set(['text', 'thinking']);
+
+/**
+ * Whether one line of the run's output is anything but words, by deny by default: a Codex item whose type is not the
+ * agent's message or its reasoning, or a Claude Code assistant content block that is not text or thinking, whether or not
+ * the turn's reading knows its type. A tool a host keeps, or one a later version adds, never yields a name.
+ */
+function moreThanWords(program: 'claude' | 'codex', line: string): boolean {
+    let event: unknown;
+    try {
+        event = JSON.parse(line);
+    } catch {
+        return false;
+    }
+    if (event === null || typeof event !== 'object' || Array.isArray(event)) return false;
+    const fields = event as { type?: unknown; item?: unknown; message?: unknown };
+    if (program === 'codex') {
+        if (typeof fields.type !== 'string' || !fields.type.startsWith('item.')) return false;
+        const type = (fields.item as { type?: unknown } | null)?.type;
+        return typeof type !== 'string' || !codexWords.has(type);
+    }
+    if (fields.type !== 'assistant') return false;
+    const content = (fields.message as { content?: unknown } | null)?.content;
+    if (!Array.isArray(content)) return false;
+    return content.some((block: unknown) => {
+        const type = (block as { type?: unknown } | null)?.type;
+        return typeof type !== 'string' || !claudeWords.has(type);
+    });
+}
+
 /**
  * What the run's output says: the name when the host said only words that make one and ended well, else why not. Any
- * step refuses the name, and so does a key the host says it did not take from its environment, on a run whose host says
- * where its key came from.
+ * line that is more than words refuses the name (`moreThanWords`), and so does a key the host says it did not take from
+ * its environment, on a run whose host says where its key came from.
  */
 export function namingAnswer(program: 'claude' | 'codex', stdout: string, checksKeySource: boolean): { name: string } | { outcome: 'refused' | 'failed' } {
     const seen = new Set<string>();
@@ -166,6 +199,7 @@ export function namingAnswer(program: 'claude' | 'codex', stdout: string, checks
     let ended: string | null | undefined;
     let refusedKey = false;
     for (const line of stdout.split(/\r?\n/)) {
+        if (moreThanWords(program, line)) stepped = true;
         const said: HostLine[] = program === 'claude' ? claudeLine(line) : codexLine(line, seen);
         for (const each of said) {
             if (each.kind === 'step') stepped = true;
