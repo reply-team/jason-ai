@@ -61,7 +61,7 @@ means today.
 
 ```text
 Install Jason on this machine. The instructions are
-<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>: read the whole file
+<https://get.jasonharness.ai/install>: read the whole file
 first, then follow it in order from section 2, installing from a release and building nothing. Before
 you run anything, tell me in a few words what you will install and where, and wait for my yes; ask me
 again before each act the guide marks "Ask first". At the end, tell me whether Jason can start work and
