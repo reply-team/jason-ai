@@ -437,3 +437,18 @@ test('a grant of a command never allows one longer than the card shows, nor one 
     await settle();
     assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Change instructions an agent reads', detail: 'cp notes.md CLAUDE.md', remember: null });
 });
+
+test('a grant of a command never covers one whose word names a guarded file outside the working folders', async () => {
+    const { broker, sent, turn } = bench();
+    turn('chat_a', 'turn_1');
+    const first = broker.ask('turn_1', 'Bash', { command: 'cp notes.md backup.md' });
+    await settle();
+    broker.answer('chat_a', 'req_1', { allow: true, always: true });
+    await first;
+    for (const [at, target] of ['/Users/someone/CLAUDE.md', '/Users/someone/Jason/AGENTS.md', '/Users/someone/.claude/settings.json'].entries()) {
+        void broker.ask('turn_1', 'Bash', { command: `cp notes.md ${target}` });
+        await settle();
+        assert.equal(sent.at(-1)?.event.request, `req_${at + 2}`, target);
+        assert.equal(sent.at(-1)?.event.remember, null, target);
+    }
+});

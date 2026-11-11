@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { commandPrefix, isCompound, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
+import { commandPrefix, isCompound, judge, type ChatScope, type Judgement, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
 import { memoryFiles } from '../src/chat-instructions.ts';
@@ -102,7 +102,7 @@ test('a read or a write inside an added folder is allowed without a card', () =>
 });
 
 test('a write to the host\'s own settings folder inside a working folder gets a card, a read of it does not', () => {
-    const card = write(windows(), '.claude\\settings.json');
+    const card = write(windows(), 'C:\\Users\\someone\\Jason\\Northwind\\.claude\\settings.json');
     assert.equal(card.verdict, 'ask');
     assert.deepEqual(read(windows(), '.claude\\skills\\x\\SKILL.md'), { verdict: 'allow' });
     assert.equal(write(mac(), '/Users/someone/Jason/Northwind/.claude/settings.json').verdict, 'ask');
@@ -971,13 +971,13 @@ test('a write under a guarded name anywhere else in a working folder is a card e
         [windows(), `${winProject}\\agents.md`, instructions],
         [windows(), `${winCampaign}\\GEMINI.md`, instructions],
         [windows(), `${winCampaign}\\CLAUDE.md`, instructions],
-        [windows(), `${winChat}\\.agents\\skills\\x\\SKILL.md`, loads],
+        [windows(), `${winCampaign}\\.agents\\skills\\x\\SKILL.md`, loads],
         [windows(), `${winCampaign}\\.codex\\config.toml`, loads],
         [mac(), `${macProject}/AGENTS.md`, instructions],
         [mac(), `${macProject}/.jason/marker.json`, marker],
         [mac(), `${macChat}/notes/claude.md`, instructions],
-        [mac(), `${macChat}/.agents/skills/x/SKILL.md`, loads],
-        [mac(), `${macChat}/.codex/config.toml`, loads],
+        [mac(), `${macProject}/.agents/skills/x/SKILL.md`, loads],
+        [mac(), `${macProject}/.codex/config.toml`, loads],
     ] as const) {
         for (const tool of ['Write', 'Edit', 'MultiEdit']) {
             const judged = judge(tool, { file_path: path, content: 'x' }, scope);
@@ -1034,4 +1034,137 @@ test('on macOS, a write in the chat folder spelled in another case is read below
     const keeping: ChatScope = { ...mac(), real: (path) => (mac().real(path) === null ? null : path) };
     assert.deepEqual(write(keeping, '/users/SOMEONE/.jason/desktop/chat/a.md'), { verdict: 'allow' });
     assert.deepEqual(write(keeping, '/users/SOMEONE/.jason/desktop/CHAT/Claude.md'), { verdict: 'deny', message: instructionsRefusal });
+});
+
+// ---- The guard, as the volume folds a name, everywhere ----------------------------------------------------------------
+
+const settingsTitle = 'Change the agent\'s own settings';
+const markerTitle = 'Change a folder\'s Jason marker';
+const loadsTitle = 'Change the skills or settings an agent loads';
+const instructionsTitle = 'Change instructions an agent reads';
+const guardCard = (title: string, detail: string): Judgement => ({ verdict: 'ask', title, detail, remember: null });
+
+test('a name the volume folds to a guarded name is that name: compatibility forms, marks, ignorable characters and case both ways', () => {
+    const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
+    for (const [scope, path, title] of [
+        [mac(), `${macProject}/.agent\u017f/skills/x/SKILL.md`, loadsTitle],
+        [windows(), `${winCampaign}\\AGENT\u017f.override.md`, instructionsTitle],
+        [windows(), `${winCampaign}\\GEM\u0131NI.md`, instructionsTitle],
+        [mac(), `${macProject}/.g\u0131t/config`, 'Change a repository\'s own files'],
+        [mac(), `${macProject}/.ja\u015Bon/marker.json`, markerTitle],
+        [windows(), `${winProject}\\\uFF0Ecodex\\config.toml`, loadsTitle],
+    ] as const) {
+        assert.deepEqual(write(scope, path), guardCard(title, path), path);
+    }
+    for (const [scope, path] of [[mac(), `${macChat}/AGENT\u017f.override.md`], [mac(), `${macChat}/CLA\u200CUDE.md`], [windows(), `${winChat}\\CLAUDE.LOCAL.MD`],
+        [windows(), `${winChat}\\c\u0301laude.md`]] as const) {
+        assert.deepEqual(write(scope, path), { verdict: 'deny', message: instructionsRefusal }, path);
+    }
+    // Linux compares names exactly.
+    assert.deepEqual(write(linux, `${macChat}/.agent\u017f/skills/x/SKILL.md`), { verdict: 'allow' });
+    assert.deepEqual(run(mac(), 'cp notes.md AGENT\u017f.md'), guardCard(instructionsTitle, 'cp notes.md AGENT\u017f.md'));
+});
+
+test('on Windows a guarded name with a trailing dot or space or a stream suffix is the guarded name, and the chat\'s own is refused so', () => {
+    for (const path of [`${winChat}\\CLAUDE.local.md.`, `${winChat}\\AGENTS.override.md `, `${winChat}\\CLAUDE.md::$DATA`, `${winChat}\\AGENTS.md. .`, 'CLAUDE.local.md:x']) {
+        assert.deepEqual(write(windows(), path), { verdict: 'deny', message: instructionsRefusal }, path);
+    }
+    assert.deepEqual(write(windows(), `${winCampaign}\\.jason.\\marker.json`), guardCard(markerTitle, `${winCampaign}\\.jason.\\marker.json`));
+    assert.deepEqual(write(windows(), `${winCampaign}\\AGENTS.md:stream`), guardCard(instructionsTitle, `${winCampaign}\\AGENTS.md:stream`));
+    // Any other name so spelled keeps the spelling's card.
+    assert.equal((write(windows(), `${winChat}\\notes.md.`) as { title?: string }).title, 'Use a path Windows reads as another name');
+    assert.deepEqual(run(windows(), 'cp notes.md CLAUDE.local.md.'), guardCard(instructionsTitle, 'cp notes.md CLAUDE.local.md.'));
+    // macOS and Linux read a trailing dot as part of the name.
+    assert.deepEqual(write(mac(), `${macChat}/CLAUDE.md.`), { verdict: 'allow' });
+});
+
+test('the guard holds everywhere on the machine: a write or a command word under a guarded name outside the working folders takes its card', () => {
+    for (const [scope, path, title] of [
+        [mac(), '/Users/someone/CLAUDE.md', instructionsTitle],
+        [mac(), '/Users/someone/Jason/AGENTS.md', instructionsTitle],
+        [mac(), '/Users/someone/Jason/.jason/marker.json', markerTitle],
+        [mac(), '/Users/someone/.agents/skills/x/SKILL.md', loadsTitle],
+        [windows(), 'C:\\elsewhere\\.claude\\settings.json', settingsTitle],
+    ] as const) {
+        assert.deepEqual(write(scope, path), guardCard(title, path), path);
+        const command = `cp notes.md ${path}`;
+        assert.deepEqual(run(scope, command), guardCard(title, command), command);
+    }
+    // Outside every folder and under no guarded name, a write keeps its own card.
+    assert.equal((write(mac(), '/Users/someone/notes/plan.md') as { title?: string }).title, 'Change a file outside the chat\'s folders');
+});
+
+const jasonFileTitle = 'Write or run a jason that is not the desktop\'s';
+
+test('a file named jason, with or without a program\'s extension, directly in a working folder is a card of its own', () => {
+    const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
+    for (const [scope, path] of [[windows(), `${winChat}\\jason.cmd`], [windows(), `${winChat}\\JASON.exe`], [windows(), `${winCampaign}\\jason.ps1`],
+        [windows(), `${winChat}\\jason.bat.`], [mac(), `${macChat}/jason`], [mac(), `${macProject}/Jason`], [linux, `${macChat}/jason`]] as const) {
+        assert.deepEqual(write(scope, path), guardCard(jasonFileTitle, path), `${scope.platform} ${path}`);
+    }
+    for (const [scope, path] of [[mac(), `${macChat}/notes/jason`], [mac(), `${macChat}/jason.md`], [linux, `${macChat}/Jason`], [mac(), `${macChat}/jasonx`]] as const) {
+        assert.deepEqual(write(scope, path), { verdict: 'allow' }, `${scope.platform} ${path}`);
+    }
+    // A command word that names such a file by a folder or an extension takes the same card; the bare program name does not.
+    for (const [scope, command] of [[mac(), 'cp x.sh ./jason'], [mac(), './jason status'], [windows(), 'cmd /c jason.cmd status'], [windows(), 'copy x.js .\\jason.js'], [windows(), 'copy x.vbs jason.vbs']] as const) {
+        assert.deepEqual(run(scope, command), guardCard(jasonFileTitle, command), command);
+    }
+    assert.equal((run(mac(), 'jason status') as { title?: string }).title, 'Run a command');
+});
+
+test('the other spellings that change the program search are refused, and a command naming PATH or PATHEXT otherwise is its own card', () => {
+    const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
+    for (const command of ['unset PATH; jason status', 'unset -v X PATH; jason status', 'env -u PATH jason status', 'env --unset=PATHEXT jason status',
+        'export "PATH"=.; jason status', 'declare \'PATH\'=.; jason status', 'PATH[0]=. jason status', 'read PATH < p.txt; jason status',
+        'printf -v PATH .; jason status', 'path .;%PATH% & jason status', 'cd x && path=.;%PATH% && jason status', 'Set-Item Env:/PATH x']) {
+        for (const scope of [windows(), mac(), linux]) assert.deepEqual(run(scope, command), { verdict: 'deny', message: searchRefusal }, `${scope.platform} ${command}`);
+    }
+    for (const scope of [windows(), mac(), linux]) {
+        for (const command of ['echo $PATH', 'printenv PATHEXT', 'git log --grep PATH', 'jason status PATH']) {
+            assert.deepEqual(run(scope, command), guardCard('Change where the shell finds programs', command), `${scope.platform} ${command}`);
+        }
+    }
+    // Lower case, a longer name, and a prompt or a folder that holds the word are not it.
+    for (const command of ['echo $path', 'echo $MYPATH', 'read -p "Enter path:" x', 'ls path/x']) {
+        assert.notEqual((run(mac(), command) as { title?: string }).title, 'Change where the shell finds programs', command);
+        assert.equal(run(mac(), command).verdict, 'ask', command);
+    }
+});
+
+test('the folders and files the other hosts read are guarded too', () => {
+    for (const [path, title] of [[`${macChat}/.gemini/settings.json`, loadsTitle], [`${macChat}/.cursor/rules/x.mdc`, loadsTitle],
+        [`${macProject}/.copilot/config.json`, loadsTitle], [`${macProject}/.cursorrules`, instructionsTitle],
+        [`${macProject}/.github/copilot-instructions.md`, instructionsTitle], [`${macChat}/.GitHub/Copilot-Instructions.md`, instructionsTitle]] as const) {
+        assert.deepEqual(write(mac(), path), guardCard(title, path), path);
+    }
+    // Only the instruction file of .github is guarded: a workflow there is not the host's.
+    assert.deepEqual(write(mac(), `${macProject}/.github/workflows/ci.yml`), { verdict: 'allow' });
+    assert.deepEqual(write(mac(), `${macProject}/copilot-instructions.md`), { verdict: 'allow' });
+});
+
+const configurationRefusal = 'That folder is the chat\'s own agent settings and skills, which the desktop keeps: the chat never changes it. Nothing was done.';
+
+test('in the chat folder itself a write under .claude, .agents or .codex is refused; in a campaign\'s or a project\'s folder it is a card', () => {
+    const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
+    for (const [scope, chat, sep] of [[windows(), winChat, '\\'], [mac(), macChat, '/'], [linux, macChat, '/']] as const) {
+        for (const rest of ['.claude/settings.json', '.claude/skills/x/SKILL.md', '.agents/skills/x/SKILL.md', '.codex/config.toml', '.claude']) {
+            const path = `${chat}${sep}${rest.split('/').join(sep)}`;
+            assert.deepEqual(write(scope, path), { verdict: 'deny', message: configurationRefusal }, `${scope.platform} ${path}`);
+            assert.deepEqual(judge('Edit', { file_path: path, old_string: 'a', new_string: 'b' }, scope), { verdict: 'deny', message: configurationRefusal }, `${scope.platform} ${path}`);
+        }
+    }
+    // As the volume folds the name, and with Windows' other spellings of it.
+    assert.deepEqual(write(windows(), `${winChat}\\.CLAUDE.\\settings.json`), { verdict: 'deny', message: configurationRefusal });
+    assert.deepEqual(write(mac(), `${macChat}/.agentſ/skills/x/SKILL.md`), { verdict: 'deny', message: configurationRefusal });
+    // Deeper in the chat folder, and in the person's own folders, it stays a card with no "always".
+    for (const [scope, path] of [[mac(), `${macChat}/notes/.claude/settings.json`], [windows(), `${winCampaign}\\.claude\\settings.json`],
+        [windows(), `${winCampaign}\\.claude\\skills\\x\\SKILL.md`], [mac(), `${macProject}/.claude/settings.json`], [mac(), `${macProject}/.codex/config.toml`]] as const) {
+        const judged = write(scope, path);
+        assert.ok(judged.verdict === 'ask' && judged.remember === null, path);
+    }
+    // A shell word naming them takes the guard's title and is never remembered: the shell is never refused by a word.
+    for (const [scope, command, title] of [[mac(), 'cp x.json .claude/settings.json', settingsTitle], [windows(), 'copy x.md .claude\\skills\\x\\SKILL.md', settingsTitle],
+        [mac(), `cp x.json ${macProject}/.claude/settings.json`, settingsTitle], [mac(), 'mkdir -p .codex', loadsTitle]] as const) {
+        assert.deepEqual(run(scope, command), guardCard(title, command), command);
+    }
 });
