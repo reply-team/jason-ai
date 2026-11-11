@@ -24,10 +24,11 @@ public class DesktopDenyListTests
     private static readonly string[] ReadsTheAgentKeeps = ["status", "logs", "doctor"];
 
     /// <summary>
-    /// The verb the chat refuses beyond the CLI's table of verbs that take no default actor: adding a role, whose entry
-    /// command the dispatcher starts when work names the role.
+    /// The verbs the chat refuses beyond the CLI's table of verbs that take no default actor: adding a role, whose entry
+    /// command the dispatcher starts when work names the role, and linking a project's folder, which then becomes a
+    /// working folder of every chat on the project's campaigns.
     /// </summary>
-    private static readonly string[] TheChatsOwnWord = ["role add"];
+    private static readonly string[] TheChatsOwnWord = ["role add", "project link"];
 
     /// <summary>
     /// The verbs the deny list leaves to the agent that still go to a person's card at every use: <c>doctor</c> writes its

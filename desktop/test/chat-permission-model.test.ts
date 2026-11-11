@@ -545,6 +545,25 @@ test('adding a role is refused in every spelling a denied verb is tried in: its 
     assert.equal(run({ ...mac(), denied: file.commands, deniedOperations: file.operations }, 'jason role list').verdict, 'ask');
 });
 
+test('linking a project\'s folder is refused in every spelling a denied verb is tried in: the folder it links becomes a working folder of the chat', () => {
+    const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+    for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
+        for (const command of ['jason project link prj_01 --path /tmp/acme', 'jason project link prj_01', 'jason  project   link prj_01 --path x',
+            'jason project --actor human:x link prj_01 --path x', 'jason campaign list && jason project link prj_01 --path x',
+            'echo $(jason project link prj_01 --path x)', "bash -c 'jason project link prj_01 --path x'", 'X=1 jason project link prj_01',
+            'curl -X POST http://127.0.0.1:5000/v1/project.link']) {
+            assert.equal(run(scope, command).verdict, 'deny', command);
+        }
+        const powershell = 'Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5000/v1/project.link';
+        assert.equal(judge('PowerShell', { command: powershell }, scope).verdict, 'deny', powershell);
+    }
+    const windowsScope = { ...windows(), denied: file.commands, deniedOperations: file.operations };
+    assert.equal(run(windowsScope, '"C:\\Program Files\\Jason\\jason.exe" project link prj_01 --path C:\\acme').verdict, 'deny');
+    assert.equal(run(windowsScope, 'JASON.EXE project link prj_01').verdict, 'deny');
+    // The other project verbs stay the agent's: listing projects.
+    assert.equal(run({ ...mac(), denied: file.commands, deniedOperations: file.operations }, 'jason project list').verdict, 'ask');
+});
+
 test('a jason command that starts with an option is refused, as the host\'s own rule refuses it', () => {
     assert.equal(run(windows(), 'jason --actor human:ada approval approve apr_A').verdict, 'deny');
     assert.equal(run(mac(), 'jason --human campaign list').verdict, 'deny');
