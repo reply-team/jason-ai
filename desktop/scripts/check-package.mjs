@@ -174,7 +174,8 @@ function checkForm(app, form) {
     const entries = readdirSync(app).filter((name) => name.endsWith('.desktop')).sort();
     if (entries.length === 0) throw new Error(`${app} holds no .desktop menu entry at its root, so there is no Exec to read.`);
     for (const entry of entries) {
-        const exec = readFileSync(join(app, entry), 'utf8').split(/\r?\n/).find((line) => line.startsWith('Exec=')) ?? 'Exec=';
+        const exec = readFileSync(join(app, entry), 'utf8').split(/\r?\n/).find((line) => line.startsWith('Exec='));
+        if (exec === undefined) throw new Error(`${entry} has no Exec line, so what the menu starts cannot be read.`);
         if (/(^|\s)--no-sandbox(\s|$)/.test(exec.slice('Exec='.length))) throw new Error(`${entry} starts the program with --no-sandbox: ${exec}`);
         said.push(`${entry}: ${exec}`);
     }
