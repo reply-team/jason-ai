@@ -1414,9 +1414,9 @@ public class CiRunsTests
 
     /// <summary>
     /// The download address's short paths, <c>get/</c>, are tested by Node's own runner in the desktop job, which already
-    /// has a node of 22 or later: a step of its own, in its own folder, after the node is set up, which neither fails
-    /// quietly nor is skipped. <c>get/</c> has no dependencies, so nothing is installed for it. Pinned by its text: node
-    /// may be absent where these tests run.
+    /// has a node of 22.13 or later, the first 22 to run <c>node:sqlite</c> without a flag: a step of its own, in its own
+    /// folder, after the node is set up, which neither fails quietly nor is skipped. <c>get/</c> has no dependencies, so
+    /// nothing is installed for it. Pinned by its text: node may be absent where these tests run.
     /// </summary>
     [Fact]
     public void The_download_address_is_tested_by_node_in_the_desktop_job()

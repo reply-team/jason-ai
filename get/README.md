@@ -53,8 +53,10 @@ down never holds or fails a download or the page.
 
 `/stats` shows the last 90 days, per UTC day and source: the install page's reads that are not bots as the headline,
 with fetchers and browsers beside it; the desktop downloads per system, bots left out; and the bots of every path in a
-column of their own. `/stats?format=csv` is the same as CSV. Every number is an upper bound: link previews and mail
-scanners that present themselves as browsers or fetchers are counted with them, and the page says so.
+column of their own. `/stats?format=csv` is the same as CSV, with a last row whose source is `(truncated)` when the
+read stopped at its limit; both answers carry the number of folded sources in an `X-Folded-Sources` header. Every
+number is an upper bound: link previews and mail scanners that present themselves as browsers or fetchers are counted
+with them, and the page says so.
 
 A source is whatever a link says, so the read is bounded: the 200 sources with the most requests in the window are
 shown by name, every other is folded into one row, `(rest)`, and the page says how many it folded; the read stops at
@@ -73,10 +75,11 @@ cd get
 node --test
 ```
 
-Node's own runner, Node 22 or later, no dependencies: [`fakes.mjs`](fakes.mjs) stands in for the D1 binding (over
-Node's own SQLite, with the table made from `schema.sql`, so the page's SQL runs as written), the context, the outbound
-fetch, the clock and Access's keys. CI runs the same command as a step of the desktop job. The
-tests also read [`wrangler.template.toml`](wrangler.template.toml) and hold its routes to the three below.
+Node's own runner, Node 22.13 or later (the first 22 to run `node:sqlite` without a flag), no dependencies:
+[`fakes.mjs`](fakes.mjs) stands in for the D1 binding (over Node's own SQLite, with the table made from `schema.sql`,
+so the write and the page's read run as written), the context, the outbound fetch, the clock and Access's keys. CI
+runs the same command as a step of the desktop job. The tests also read
+[`wrangler.template.toml`](wrangler.template.toml) and hold its routes to the three below.
 
 ## Routes
 
@@ -116,12 +119,16 @@ the address in the Worker's place. The install scripts' own addresses, `/release
    `[[d1_databases]]`. The copy differs from the template by that one line and nothing else.
 5. The application's audience tag and the team's name as secrets: `npx wrangler@4.152.0 secret put ACCESS_AUD`,
    `npx wrangler@4.152.0 secret put ACCESS_TEAM`. The team's name is used lowercased, as Access writes it.
-6. `npx wrangler@4.152.0 deploy`.
+6. `npx wrangler@4.152.0 deploy`, then set each of the three routes' failure mode to fail closed.
 7. Check, before a release that names the address is published: `curl -sI https://get.jasonharness.ai/install`
    answers 200 with `content-type: text/plain; charset=utf-8`, and
    `curl -sI https://get.jasonharness.ai/releases/latest/download/manifest.json` still answers the redirect to this
    repository's releases on GitHub. The install prompt names the first address, so it must answer before the prompt is
    published.
+
+A change under `src/` is live only once it is deployed. The install page is served only while it begins with the heading
+in `src/paths.mjs`, so a release that retitles `docs/INSTALL.md` needs a deployment of that change, or `/install`
+answers the redirect to the raw file from then on.
 
 Redirect rules answer before a Worker does. No redirect rule may stand on the Worker's paths: a rule put on one of them
 for a while is removed in the same step that routes the Worker. The rule for `/releases/` and the root stays as it is.
