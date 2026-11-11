@@ -1,9 +1,10 @@
-// The fence around the chat agent's jason commands, two files beside the desktop's package, read by the desktop at each
-// turn and by the CLI's tests, and a third file beside them: the instruction text the chat folder carries for the hosts.
+// The fence around the chat agent's jason commands, three files beside the desktop's package, read by the desktop at each
+// turn and by the CLI's tests, and a fourth file beside them: the instruction text the chat folder carries for the hosts.
 // The deny list names the jason commands the agent never runs (the verbs that are a person's own word and the verbs that
 // change the installation) and the Runtime API operations those verbs call. The allow list names the verbs it runs
 // without asking: every verb of the CLI the deny list does not cover, written from the CLI's command tree by its tests.
-// Any other jason command goes to the person's card.
+// Any other jason command goes to the person's card. The plan list names the allow list's verbs that change nothing,
+// the only jason commands a chat in Plan only runs, written by the same tests from a declaration of each verb.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,6 +14,9 @@ export const denyListFile = 'chat-deny-list.txt';
 
 /** The allow list's file, relative to the desktop's application directory. */
 export const allowListFile = 'chat-allow-list.txt';
+
+/** The plan list's file, relative to the desktop's application directory. */
+export const planListFile = 'chat-plan-list.txt';
 
 /** The chat's instruction text, relative to the desktop's application directory. */
 export const instructionsFile = 'chat-instructions.md';
@@ -62,11 +66,24 @@ export function parseAllowList(text: string): string[] {
 }
 
 /**
- * The fence of one turn: the deny list's commands and operations, the allow list's verbs, and the instruction text the
- * chat folder carries as the hosts' memory file, or null when the application carries none.
+ * The verbs the plan list names, in its order, read as the allow list is; a verb that is not on the allow list refuses
+ * the whole file, so the plan list never lets through what the allow list does not.
+ */
+export function parsePlanList(text: string, allowed: readonly string[]): string[] {
+    const verbs = parseAllowList(text);
+    const stray = verbs.find((verb) => !allowed.includes(verb));
+    if (stray !== undefined) throw new Error(`The plan list names "${stray}", which is not on the allow list.`);
+    return verbs;
+}
+
+/**
+ * The fence of one turn: the deny list's commands and operations, the allow list's verbs, the plan list's verbs, and the
+ * instruction text the chat folder carries as the hosts' memory file, or null when the application carries none.
  */
 export interface ChatFence extends DenyList {
     allowed: readonly string[];
+    /** The allow list's verbs that change nothing: the only jason commands a chat in Plan only runs. */
+    reads: readonly string[];
     instructions: string | null;
 }
 
@@ -96,7 +113,8 @@ export function readFence(directory: string): ChatFence {
     };
     const denied = read(denyListFile, (path) => parseDenyList(readFileSync(path, 'utf8')));
     const allowed = read(allowListFile, (path) => parseAllowList(readFileSync(path, 'utf8')));
-    return { ...denied, allowed, instructions: read(instructionsFile, readIfThere) };
+    const reads = read(planListFile, (path) => parsePlanList(readFileSync(path, 'utf8'), allowed));
+    return { ...denied, allowed, reads, instructions: read(instructionsFile, readIfThere) };
 }
 
 /** The sentence a turn is refused with when the fence cannot be read: which of its files failed, in the desktop's words. */

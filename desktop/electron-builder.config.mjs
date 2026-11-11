@@ -43,8 +43,8 @@ export function electronChecksums() {
     return JSON.parse(readFileSync(join(desktop, 'node_modules', 'electron', 'checksums.json'), 'utf8'));
 }
 
-/** The chat's two lists and its instruction text, packaged inside the application beside package.json. */
-export const chatFiles = Object.freeze(['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-instructions.md']);
+/** The chat's three lists and its instruction text, packaged inside the application beside package.json. */
+export const chatFiles = Object.freeze(['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-plan-list.txt', 'chat-instructions.md']);
 
 /** What a pack of one architecture finds in its bundle folder: the executable, its two notices and the skills. */
 export function bundleFiles(platform) {
