@@ -548,6 +548,7 @@
 .jc-console .chat-md-link {
     overflow-wrap: anywhere;
 }
+/* A step's detail beneath its words: what the agent acted on, as text. */
 .jc-console .chat-step-detail {
     font-family: var(--m);
     font-size: 12px;

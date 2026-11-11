@@ -273,11 +273,18 @@ export interface Step {
 /** The longest detail a step carries; a longer one is cut and ends with an ellipsis. */
 const detailLimit = 300;
 
-/** A value a step can show beneath its words: a non-blank string, cut to the limit; anything else is no detail. */
+/**
+ * A value a step can show beneath its words: a non-blank string, cut to the limit; anything else is no detail. The cut
+ * falls between two characters: a character written as two code units is kept whole or left out whole.
+ */
 function detailOf(value: unknown): string | undefined {
     if (typeof value !== 'string' || value.trim() === '') return undefined;
     const text = value.trim();
-    return text.length > detailLimit ? `${text.slice(0, detailLimit - 1)}…` : text;
+    if (text.length <= detailLimit) return text;
+    let end = detailLimit - 1;
+    const last = text.charCodeAt(end - 1);
+    if (last >= 0xd800 && last <= 0xdbff) end--;
+    return `${text.slice(0, end)}…`;
 }
 
 function step(text: string, detail: unknown): Step {
@@ -316,6 +323,8 @@ const claudeSteps: ReadonlyMap<string, { text: string; detail?: Field }> = new M
     ['TodoWrite', { text: 'Updated its task list' }],
     ['TaskCreate', { text: 'Updated its task list' }],
     ['TaskUpdate', { text: 'Updated its task list' }],
+    ['TaskGet', { text: 'Read its task list' }],
+    ['TaskList', { text: 'Read its task list' }],
 ]);
 
 /** A tool use as a step, in the desktop's words for what it did. */

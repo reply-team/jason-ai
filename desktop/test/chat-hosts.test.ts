@@ -341,6 +341,22 @@ test('a step says in plain words what the tool did, with the command, path or qu
     assert.ok(long.detail !== undefined && long.detail.length <= 300 && long.detail.endsWith('…'), String(long.detail?.length));
 });
 
+test('a step of a tool that reads the task list says so, and one that changes it says it was updated', () => {
+    assert.deepEqual(claudeStep('TaskGet', { taskId: '1' }), { text: 'Read its task list' });
+    assert.deepEqual(claudeStep('TaskList', {}), { text: 'Read its task list' });
+    assert.deepEqual(claudeStep('TaskCreate', { subject: 'x' }), { text: 'Updated its task list' });
+    assert.deepEqual(claudeStep('TaskUpdate', { taskId: '1' }), { text: 'Updated its task list' });
+});
+
+test('a long detail is cut between two characters, never inside one written as two code units', () => {
+    const face = String.fromCodePoint(0x1f600);
+    // The cut falls between the two halves of the first face; the face goes whole.
+    const cut = claudeStep('Bash', { command: `echo ${'x'.repeat(293)}${face.repeat(10)}` });
+    assert.equal(cut.detail, `echo ${'x'.repeat(293)}…`);
+    const whole = claudeStep('Bash', { command: `echo ${'x'.repeat(292)}${face.repeat(10)}` });
+    assert.equal(whole.detail, `echo ${'x'.repeat(292)}${face}…`);
+});
+
 test('the table of step words answers only its own names: an inherited name is a tool it does not know', () => {
     for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
         assert.deepEqual(claudeStep(name, { file_path: 'x' }), { text: 'Used a tool', detail: name }, name);
