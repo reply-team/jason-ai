@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { claudeFloor, compareVersions, floorSentence, printedVersion, sharingVersionReads, versionLimitMs } from '../src/host-version.ts';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { programsOn, type Programs, type RunResult } from '../src/programs.ts';
 import { bench } from './harness.ts';
@@ -24,6 +24,27 @@ test('the version is the first three dotted numbers on a line naming Claude Code
     assert.equal(printedVersion(answered('1.2.3.4\n')), '1.2.3');
     assert.equal(printedVersion(answered('Claude Code\n')), null, 'no three dotted numbers');
     assert.equal(printedVersion(answered('2.1\n')), null);
+});
+
+test('a version is read as printed, with a leading v, a pre-release, a leading zero or two digits, and compared to the floor as numbers', () => {
+    assert.equal(printedVersion(answered('v2.1.256-beta.1 (Claude Code)\n')), '2.1.256-beta.1');
+    assert.match(floorSentence('2.1.256-beta.1') ?? '', /^Claude Code 2\.1\.256-beta\.1 is older than 2\.1\.257/);
+    assert.equal(printedVersion(answered('2.01.300 (Claude Code)\n')), '2.01.300');
+    assert.equal(floorSentence('2.01.300'), null, 'a leading zero reads as the number: 2.1.300');
+    assert.equal(printedVersion(answered('10.0.0 (Claude Code)\n')), '10.0.0');
+    assert.equal(floorSentence('10.0.0'), null);
+    assert.equal(printedVersion(answered('', '')), null, 'nothing printed on either stream');
+    assert.equal(floorSentence(printedVersion(answered('', ''))), floorSentence(null));
+});
+
+test('a version is looked for in the first 4 KiB of each stream only, so a long run of digits is read at once, and as no version', () => {
+    const digits = '9'.repeat(100_000);
+    const started = Date.now();
+    assert.equal(printedVersion(answered(digits, digits)), null);
+    const took = Date.now() - started;
+    assert.ok(took < 1000, `read in ${took} ms`);
+    assert.equal(printedVersion(answered(`${'x'.repeat(4096)}\n2.1.300 (Claude Code)\n`)), null, 'a version past 4 KiB of standard output is not read');
+    assert.equal(printedVersion(answered('x'.repeat(5000), '2.1.300 (Claude Code)\n')), '2.1.300', 'standard error has its own 4 KiB');
 });
 
 test('a version is not read from a program that ended with a code other than zero, or was stopped at its time limit', () => {
@@ -95,6 +116,16 @@ test('at most one version read is in flight: one asked for while it runs waits o
     assert.equal(pending.length, 2, 'a read asked for after the answer is a new read');
     pending[1]!(answered('2.1.301 (Claude Code)'));
     assert.equal((await third).stdout, '2.1.301 (Claude Code)');
+});
+
+test('an output past 8 MiB on a stream answers as unreadable, whatever it holds', async (t) => {
+    const b = bench(t, { programs: ['claude'] });
+    const file = join(b.root, 'version.json');
+    writeFileSync(file, JSON.stringify({ stdout: `2.1.300 (Claude Code)\n${'x'.repeat(9 * 1024 * 1024)}`, exit: 0 }));
+    const result = await programsOn({ ...b.env, STUB_CLAUDE_VERSION_FILE: file }, null).run('claude', ['--version'], { timeoutMs: versionLimitMs });
+    assert.equal(result.exit, -1, 'the runner ends a program that prints past its 8 MiB');
+    assert.equal(printedVersion(result), null);
+    assert.equal(floorSentence(printedVersion(result)), floorSentence(null));
 });
 
 test('a version read past its bound answers as unreadable at the bound, and a program that outlives the first signal is still ended', { timeout: 20_000 }, async (t) => {
