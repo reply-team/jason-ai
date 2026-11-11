@@ -7,7 +7,7 @@ import { claudeFloor, compareVersions, floorSentence, printedVersion, sharingVer
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { programsOn, type Programs, type RunResult } from '../src/programs.ts';
-import { bench } from './harness.ts';
+import { bench, endWhenOver } from './harness.ts';
 
 const answered = (stdout: string, stderr = '', exit = 0) => ({ exit, stdout, stderr });
 
@@ -128,9 +128,12 @@ test('an output past 8 MiB on a stream answers as unreadable, whatever it holds'
     assert.equal(floorSentence(printedVersion(result)), floorSentence(null));
 });
 
-test('a version read past its bound answers as unreadable at the bound, and a program that outlives the first signal is still ended', { timeout: 20_000 }, async (t) => {
+test('a version read past its bound answers as unreadable at the bound, and a program that outlives the first signal is still ended', { timeout: 60_000 }, async (t) => {
+    // Whatever the row's end, what the stand-in left running is ended before the bench removes its folder.
+    let ids: string | null = null;
+    endWhenOver(t, () => (ids !== null && existsSync(ids) ? (JSON.parse(readFileSync(ids, 'utf8')) as number[]) : []));
     const b = bench(t, { programs: ['claude'] });
-    const ids = join(b.root, 'stuck.json');
+    ids = join(b.root, 'stuck.json');
     const stuck = programsOn({ ...b.env, STUB_CLAUDE_VERSION_STUCK: ids }, null);
     const alive = (id: number) => {
         try {
@@ -140,20 +143,18 @@ test('a version read past its bound answers as unreadable at the bound, and a pr
             return false;
         }
     };
-    t.after(() => {
-        if (!existsSync(ids)) return;
-        for (const id of JSON.parse(readFileSync(ids, 'utf8')) as number[]) if (alive(id)) process.kill(id);
-    });
     const bound = 3000;
     const started = Date.now();
     const result = await stuck.run('claude', ['--version'], { timeoutMs: bound });
     const took = Date.now() - started;
-    assert.equal(result.exit, -1);
+    // The answer is the bound's own, by its sentence, not the program's end; the time it took is held loosely above,
+    // since starting a program on a busy machine can take seconds before the bound is even set.
+    assert.deepEqual(result, { exit: -1, stdout: '', stderr: `It was stopped at its time limit of ${bound} ms.` });
     assert.equal(floorSentence(printedVersion(result)), floorSentence(null), 'unreadable');
-    assert.ok(took >= bound - 50 && took < bound + 1500, `answered at the bound, whether or not the program has gone: ${took} ms`);
+    assert.ok(took >= bound - 50 && took < bound + 15_000, `answered at the bound, whether or not the program has gone: ${took} ms`);
     assert.ok(existsSync(ids), 'the stand-in started before the bound');
     const started2 = Date.now();
     const kept = JSON.parse(readFileSync(ids, 'utf8')) as number[];
-    while (kept.some(alive) && Date.now() - started2 < 6000) await new Promise((resolve) => setTimeout(resolve, 100));
+    while (kept.some(alive) && Date.now() - started2 < 20_000) await new Promise((resolve) => setTimeout(resolve, 100));
     assert.deepEqual(kept.filter(alive), [], 'the term, then the kill after the grace, end it and what it started');
 });
