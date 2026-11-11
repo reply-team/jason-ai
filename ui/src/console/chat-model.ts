@@ -159,13 +159,14 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
  */
 export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
     return hosts.map((host) => {
-        const given = host as Partial<Pick<DesktopHost, 'models' | 'typedModel'>>;
-        return Array.isArray(given.models) && typeof given.typedModel === 'boolean'
+        const given = host as Partial<Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread'>>;
+        return Array.isArray(given.models) && typeof given.typedModel === 'boolean' && given.modelsUnread !== undefined
             ? host
             : {
                   ...host,
                   models: Array.isArray(given.models) ? given.models : [],
                   typedModel: given.typedModel === true,
+                  modelsUnread: typeof given.modelsUnread === 'string' ? given.modelsUnread : null,
               };
     });
 }
@@ -239,12 +240,16 @@ export function modelView(
 /** What a turn is sent with: the host, the model when one is named, and the effort when that model takes it. */
 export function turnOptions(chat: Chat, host: DesktopHost): DesktopChatOptions {
     const model = chat.model?.trim() ?? '';
-    if (model === '') return { host: host.id };
-    const effort = effortFor(
-        chat.effort,
-        host.models.find((each) => each.id === model),
-    );
+    const offer = host.models.find((each) => each.id === model);
+    // A model the host no longer offers, and takes no typed name for, is not one the desktop takes: the host's own goes.
+    if (model === '' || (offer === undefined && !host.typedModel)) return { host: host.id };
+    const effort = effortFor(chat.effort, offer);
     return effort === null ? { host: host.id, model } : { host: host.id, model, effort };
+}
+
+/** Whether the send waits: "Another model" is chosen and no name is typed yet. */
+export function sendHeld(chat: Chat, host: DesktopHost): boolean {
+    return modelView(chat, host).typing && (chat.model?.trim() ?? '') === '';
 }
 
 /** The person picked the campaign a set-up chat is about, and the desktop made it that campaign's conversation. */

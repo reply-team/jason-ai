@@ -171,6 +171,11 @@ export interface DesktopHost {
     models: DesktopModel[];
     /** Whether the box also takes a model's full name the person types, with no effort: Claude Code and Anthropic's key. */
     typedModel: boolean;
+    /**
+     * Where the host's models are asked of it (Codex) and no list was ever read, the desktop's one line saying so, and
+     * that the turn uses the host's own default model; null otherwise. The box then offers the host's default alone.
+     */
+    modelsUnread: string | null;
 }
 
 /** An account Reply holds, as the Reply CLI lists it. */

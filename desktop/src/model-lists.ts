@@ -12,10 +12,10 @@
  * inherited. It sends no message: the exchange starts no thread and no turn (`ListingExchange`).
  */
 
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { hostEnvironment } from './chat-hosts.ts';
-import { keptListsText, ListingExchange, listedHosts, parseKeptLists, type KeptList, type KeptLists, type ModelOffer } from './chat-models.ts';
+import { keptListsText, ListingExchange, listedHosts, modelLimit, parseKeptLists, type KeptList, type KeptLists, type ModelOffer } from './chat-models.ts';
 import type { Platform } from './chat-permission-model.ts';
 import { startListing, type ListingProcess } from './chat-process.ts';
 import { makePrivate } from './chat.ts';
@@ -29,12 +29,24 @@ export const askEveryMs = 24 * 60 * 60 * 1000;
 /** How long one ask may take before its host is ended and the last list kept. */
 export const askLimitMs = 30_000;
 
+/** How long after a failed ask its host is asked again while the desktop runs; a start asks again at once. */
+export const askAgainMs = 60 * 60 * 1000;
+
+/** The longest line of a listing read, in bytes; a longer one ends the ask as unreadable. */
+export const lineLimit = 1024 * 1024;
+
+/**
+ * The largest kept file read: more than the two lists of `modelLimit` models each could take, each model's name, words
+ * and levels at their longest; a larger file was not written by the desktop and is not read.
+ */
+export const keptFileLimit = 2 * modelLimit * 1024 + 4096;
+
 /**
  * Why an ask kept the last list, as a word for the log: the host refused a request, answered what cannot be read, ended
  * before it answered, met the bound, could not be started, is not on the PATH, has no key stored, its folder could not
  * be made, or the host id is not one whose list is asked.
  */
-export type AskFailure = 'refused' | 'unreadable' | 'ended' | 'bound' | 'start' | 'not_found' | 'no_key' | 'folder' | 'not_listed';
+export type AskFailure = 'refused' | 'unreadable' | 'ended' | 'bound' | 'start' | 'not_found' | 'no_key' | 'folder' | 'not_listed' | 'closed';
 
 export type AskResult = { models: ModelOffer[] } | { failed: AskFailure };
 
@@ -44,10 +56,20 @@ const leaveMs = 2000;
 /**
  * One ask over a listing process the caller starts: the exchange's lines written one at a time, each after the answer
  * before it. Once the exchange has ended, the host's standard input is closed and the host given a moment to leave
- * before it is ended; at the bound it is ended at once. Resolves once the host is gone or ended; never rejects.
+ * before it is ended. At the bound, on a line past its limit, and when `signal` ends the ask (the desktop quits), it is
+ * ended at once, as a turn's host is. Resolves once the host is gone or ended; never rejects.
  */
-export function askOver(start: (onLine: (line: string) => void) => ListingProcess, version: string, limitMs = askLimitMs): Promise<AskResult> {
+export function askOver(
+    start: (onLine: (line: string) => void, tooLong: () => void) => ListingProcess,
+    version: string,
+    limitMs = askLimitMs,
+    signal?: AbortSignal,
+): Promise<AskResult> {
     return new Promise((resolve) => {
+        if (signal?.aborted) {
+            resolve({ failed: 'closed' });
+            return;
+        }
         const exchange = new ListingExchange(version);
         let host: ListingProcess | null = null;
         let settled = false;
@@ -61,8 +83,8 @@ export function askOver(start: (onLine: (line: string) => void) => ListingProces
                 resolve(result);
                 return;
             }
-            const atBound = 'failed' in result && result.failed === 'bound';
-            if (atBound) started.stop();
+            const atOnce = 'failed' in result && (result.failed === 'bound' || result.failed === 'closed' || result.failed === 'unreadable');
+            if (atOnce) started.stop();
             else started.endInput();
             let grace: ReturnType<typeof setTimeout> | undefined;
             const left = new Promise<void>((done) => {
@@ -81,12 +103,13 @@ export function askOver(start: (onLine: (line: string) => void) => ListingProces
             if (outcome !== undefined) end(outcome);
         };
         try {
-            host = start(heard);
+            host = start(heard, () => end({ failed: 'unreadable' }));
         } catch {
             end({ failed: 'start' });
             return;
         }
         bound = setTimeout(() => end({ failed: 'bound' }), limitMs);
+        signal?.addEventListener('abort', () => end({ failed: 'closed' }), { once: true });
         void host.exited.then((exit) => end({ failed: exit.startError !== null ? 'start' : 'ended' }));
         for (const line of exchange.start()) host.write(line);
     });
@@ -109,8 +132,8 @@ function currentPlatform(): Platform {
 }
 
 /** Asks Codex for its models under a host id: `codex`, or `codex-api-key` with the OpenAI key stored. */
-export function codexAsker(options: CodexAskerOptions): (hostId: string) => Promise<AskResult> {
-    return async (hostId) => {
+export function codexAsker(options: CodexAskerOptions): (hostId: string, signal?: AbortSignal) => Promise<AskResult> {
+    return async (hostId, signal) => {
         if (!(listedHosts as readonly string[]).includes(hostId)) return { failed: 'not_listed' };
         const provider = keyProvider(hostId);
         let provided: Record<string, string> = {};
@@ -141,16 +164,22 @@ export function codexAsker(options: CodexAskerOptions): (hostId: string) => Prom
             provider: provided,
             bundleVersion: options.bundleVersion,
         });
-        return askOver((onLine) => startListing(launch, { cwd: options.paths.chat, env, onLine }), options.bundleVersion ?? '0.0.0', options.limitMs);
+        return askOver(
+            (onLine, onTooLong) => startListing(launch, { cwd: options.paths.chat, env, onLine, lineLimit, onTooLong }),
+            options.bundleVersion ?? '0.0.0',
+            options.limitMs,
+            signal,
+        );
     };
 }
 
 export interface ModelListsOptions {
     /** `<data>/desktop/models.json`. */
     file: string;
-    ask(hostId: string): Promise<AskResult>;
+    /** Asks a host for its list; `signal` ends the ask when the desktop quits. */
+    ask(hostId: string, signal: AbortSignal): Promise<AskResult>;
     now?(): number;
-    /** Said when an ask brought a list, so the page reads the hosts again. */
+    /** Said when an ask ended, read or failed, so the page reads the hosts again. */
     changed?(): void;
     /** Said when an ask brought a list: the host id and how many models it kept. */
     listed?(hostId: string, count: number): void;
@@ -160,6 +189,7 @@ export interface ModelListsOptions {
 
 function readKept(file: string): Map<string, KeptList> {
     try {
+        if (statSync(file).size > keptFileLimit) return new Map();
         return parseKeptLists(readFileSync(file, 'utf8'));
     } catch {
         return new Map();
@@ -179,6 +209,11 @@ function writeKept(file: string, lists: KeptLists): void {
     }
 }
 
+/**
+ * The lists, and their asks. Only a list read counts for the day: a failed ask leaves the last list read as it was, with
+ * its moment, and is kept in memory alone, so its host is asked again at the next start, or after an hour while the
+ * desktop runs. A host whose list was never read says so (`unread`), and its turns go on its own default model.
+ */
 export class ModelLists {
     #options: ModelListsOptions;
     #lists: Map<string, KeptList>;
@@ -186,6 +221,11 @@ export class ModelLists {
     #queue: string[] = [];
     #asking: string | null = null;
     #drained: Promise<void> = Promise.resolve();
+    /** By host id, when its last ask failed, since this start. */
+    #failedAt = new Map<string, number>();
+    /** Ends the ask that runs; set while one does. */
+    #running: AbortController | null = null;
+    #closed = false;
 
     constructor(options: ModelListsOptions) {
         this.#options = options;
@@ -197,17 +237,40 @@ export class ModelLists {
         return this.#lists;
     }
 
-    /** Asks again, in the background, each host id given whose list is asked and is a day old or was never asked. */
+    /**
+     * Whether a host's models are unread: `waiting` before its first ask of this start has ended, `failed` once it has
+     * failed, and null when a list is kept, or for a host whose list is not asked.
+     */
+    unread(hostId: string): 'waiting' | 'failed' | null {
+        if (!(listedHosts as readonly string[]).includes(hostId) || this.#lists.has(hostId)) return null;
+        return this.#failedAt.has(hostId) ? 'failed' : 'waiting';
+    }
+
+    /**
+     * Asks again, in the background, each host id given whose list is asked: one never read or read a day ago, unless
+     * its last ask of this start failed less than an hour ago.
+     */
     refresh(hostIds: readonly string[]): void {
+        if (this.#closed) return;
         const now = this.#now();
+        const within = (since: number, span: number) => !Number.isNaN(since) && now - since >= 0 && now - since < span;
         for (const hostId of hostIds) {
             if (!(listedHosts as readonly string[]).includes(hostId) || this.#queue.includes(hostId) || this.#asking === hostId) continue;
-            const askedAt = Date.parse(this.#lists.get(hostId)?.askedAt ?? '');
-            const elapsed = now - askedAt;
-            if (!Number.isNaN(askedAt) && elapsed >= 0 && elapsed < askEveryMs) continue;
+            if (within(Date.parse(this.#lists.get(hostId)?.askedAt ?? ''), askEveryMs)) continue;
+            if (within(this.#failedAt.get(hostId) ?? Number.NaN, askAgainMs)) continue;
             this.#queue.push(hostId);
         }
         if (this.#asking === null && this.#queue.length > 0) this.#drained = this.#drain();
+    }
+
+    /**
+     * The desktop quits, or its last window closes: the ask that runs is ended as a turn's host is, the ones that wait are
+     * dropped, and nothing is asked after.
+     */
+    close(): void {
+        this.#closed = true;
+        this.#queue = [];
+        this.#running?.abort();
     }
 
     /** Resolves once no ask waits or runs. */
@@ -218,26 +281,31 @@ export class ModelLists {
     async #drain(): Promise<void> {
         for (let hostId = this.#queue.shift(); hostId !== undefined; hostId = this.#queue.shift()) {
             this.#asking = hostId;
+            const running = new AbortController();
+            this.#running = running;
             let result: AskResult;
             try {
-                result = await this.#options.ask(hostId);
+                result = await this.#options.ask(hostId, running.signal);
             } catch {
                 result = { failed: 'start' };
             }
-            const askedAt = new Date(this.#now()).toISOString();
-            if ('models' in result) this.#lists.set(hostId, { askedAt, models: result.models });
-            else this.#lists.set(hostId, { askedAt, models: this.#lists.get(hostId)?.models ?? [] });
-            try {
-                writeKept(this.#options.file, this.#lists);
-            } catch {
-                // The lists stand in memory; the next start asks again.
-            }
+            this.#running = null;
+            // A close is no failure of the host's: nothing is kept of it.
+            if (running.signal.aborted || ('failed' in result && result.failed === 'closed')) continue;
             if ('models' in result) {
+                this.#lists.set(hostId, { askedAt: new Date(this.#now()).toISOString(), models: result.models });
+                this.#failedAt.delete(hostId);
+                try {
+                    writeKept(this.#options.file, this.#lists);
+                } catch {
+                    // The lists stand in memory; the next start asks again.
+                }
                 this.#options.listed?.(hostId, result.models.length);
-                this.#options.changed?.();
             } else {
+                this.#failedAt.set(hostId, this.#now());
                 this.#options.failed?.(hostId, result.failed);
             }
+            this.#options.changed?.();
         }
         this.#asking = null;
     }

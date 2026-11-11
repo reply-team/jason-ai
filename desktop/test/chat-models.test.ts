@@ -12,6 +12,8 @@ import {
     keptListsText,
     ListingExchange,
     listedHosts,
+    modelLimit,
+    modelRefusal,
     offeredModels,
     parseKeptLists,
     type KeptList,
@@ -206,4 +208,31 @@ test('a hidden entry, or one whose name a host would read as an option, is not o
             : [page(message.id, [{ ...sol, hidden: true }, { ...luna, model: '--yolo' }, { ...luna, displayName: undefined }], null)],
     );
     assert.deepEqual(outcome, { models: [{ id: 'gpt-6-luna', label: 'gpt-6-luna', efforts: ['max'] }] });
+});
+
+test('a listing keeps at most two hundred models, and a kept list of more is not read', () => {
+    const entry = (at: number) => ({ id: `m-${at}`, model: `m-${at}`, displayName: `M ${at}`, hidden: false, supportedReasoningEfforts: [] });
+    const answer = (count: number) =>
+        exchange((message) => (message.method === 'initialize' ? [{ id: message.id, result: {} }] : [page(message.id, Array.from({ length: count }, (_, at) => entry(at)), null)]));
+    assert.equal((answer(200).outcome as { models: unknown[] }).models.length, 200);
+    assert.deepEqual(answer(201).outcome, { failed: 'unreadable' });
+    const kept = (count: number) =>
+        parseKeptLists(JSON.stringify({ hosts: { codex: { asked_at: '2026-11-11T10:00:00.000Z', models: Array.from({ length: count }, (_, at) => ({ id: `m-${at}`, label: 'x', efforts: [] })) } } }));
+    assert.equal(kept(200).get('codex')?.models.length, 200);
+    assert.equal(kept(201).size, 0);
+    assert.equal(modelLimit, 200);
+});
+
+test('a model is taken only where the host offers it, or as a typed name of the model shape on Claude Code and the Anthropic key', () => {
+    const kept = lists([['codex', codexList]]);
+    const refused = 'That model is not one this host offers.';
+    assert.equal(modelRefusal('codex', undefined, kept), null);
+    assert.equal(modelRefusal('codex', 'gpt-6.1-sol', kept), null);
+    assert.equal(modelRefusal('codex', 'opus', kept), refused);
+    assert.equal(modelRefusal('codex-api-key', 'gpt-6.1-sol', kept), refused);
+    assert.equal(modelRefusal('claude', 'claude-opus-5-5', kept), null);
+    assert.equal(modelRefusal('claude-api-key', 'opus', kept), null);
+    assert.equal(modelRefusal('deepseek', 'deepseek-flash', kept), null);
+    assert.equal(modelRefusal('deepseek', 'claude-opus-5-5', kept), refused);
+    assert.equal(modelRefusal('gemini', 'gemini-9', kept), refused);
 });

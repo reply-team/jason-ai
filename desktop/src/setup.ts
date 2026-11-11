@@ -63,6 +63,11 @@ export interface HostState {
     models: ModelOffer[];
     /** Whether the box also takes a model's full name typed by the person: on Claude Code and on Anthropic's key. */
     typedModel: boolean;
+    /**
+     * Where the host's models are asked of it and no list was ever read, the desktop's one line saying so and that the
+     * turn uses the host's own default model; null otherwise.
+     */
+    modelsUnread: string | null;
 }
 
 export interface ReplyState {
@@ -115,7 +120,7 @@ export interface SetupDeps {
     settings(): DesktopSettings;
     clock?: () => number;
     /** The models Codex offered when last asked, and the background ask of the ones a day old (`model-lists.ts`). */
-    models?: { lists(): KeptLists; refresh(hostIds: readonly string[]): void };
+    models?: { lists(): KeptLists; refresh(hostIds: readonly string[]): void; unread(hostId: string): 'waiting' | 'failed' | null };
 }
 
 const signInLimit = 5 * 60_000;
@@ -171,6 +176,13 @@ export function versionsDifferSentence(runtimeVersion: string | null, bundleVers
     const bare = (version: string) => version.split('+')[0];
     if (runtimeVersion === null || bare(runtimeVersion) === bare(bundleVersion)) return null;
     return `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is. Run \`jason update\` to bring them to one version.`;
+}
+
+/** The line a host whose models were never read shows instead of its list. */
+export function unreadSentence(label: string, unread: 'waiting' | 'failed' | null): string | null {
+    if (unread === 'failed') return `${label}'s models could not be read, so the turn uses its own default model.`;
+    if (unread === 'waiting') return `${label}'s models are being read; until then the turn uses its own default model.`;
+    return null;
 }
 
 export class Setup {
@@ -232,9 +244,9 @@ export class Setup {
         const stored = new Set(keys.stored());
         const claude = programs.find('claude') !== null ? await this.#claude() : null;
         const kept = this.#deps.models?.lists() ?? new Map();
-        const offered = (id: string) => {
+        const offered = (id: string, label: string) => {
             const { models, typed } = offeredModels(id, kept, claude?.version ?? null);
-            return { models, typedModel: typed };
+            return { models, typedModel: typed, modelsUnread: unreadSentence(label, this.#deps.models?.unread(id) ?? null) };
         };
         const programHosts: HostState[] = [];
         for (const host of hosts) {
@@ -249,7 +261,7 @@ export class Setup {
                 drivesChat: host.drivesChat,
                 install: found ? null : this.#installable(host.program),
                 belowFloor: own?.belowFloor ?? null,
-                ...offered(host.id),
+                ...offered(host.id, host.label),
             });
         }
         const providerHosts: HostState[] = keyProviders.map((provider) => ({
@@ -261,7 +273,7 @@ export class Setup {
             drivesChat: hosts.find((host) => host.program === provider.program)?.drivesChat ?? false,
             install: null,
             belowFloor: provider.program === 'claude' ? (claude?.belowFloor ?? null) : null,
-            ...offered(provider.id),
+            ...offered(provider.id, provider.label),
         }));
         // Shown from what is kept; Codex is asked again in the background where it is on the PATH or its key is stored.
         this.#deps.models?.refresh([

@@ -2,12 +2,15 @@
 // "jsonrpc" header left out as the vendor's page says. A request other than `initialize` sent before the `initialized`
 // notification is answered with an error, as the page says the server does. STUB_APP_SERVER says what it does:
 //   { "pages": [[entry, ...], [entry, ...]] }  answers model/list page by page, each naming the next by a cursor
-//   { "hang": true }                           answers nothing, and outlives the first signal elsewhere than Windows
+//   { "hang": true }                           answers nothing, reads nothing, ignores the end of its input, and
+//                                              outlives the first signal elsewhere than Windows
+//   { "long": n }                              answers initialize with one line of n characters
+//   "pidFile" beside any of them               writes the stand-in's process id to that file first
 //   { "refuse": true }                         answers initialize with an error
 //   { "garbage": true }                        answers model/list with a result that holds no list
 //   { "leave": true }                          exits once it has answered initialize
 // Every line it reads is appended to STUB_APP_SERVER_LOG, and when its standard input ends it says so there.
-const { appendFileSync } = require('node:fs');
+const { appendFileSync, writeFileSync } = require('node:fs');
 const { createInterface } = require('node:readline');
 
 module.exports = function appServer() {
@@ -16,6 +19,7 @@ module.exports = function appServer() {
     const print = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
     let initialized = false;
     setInterval(() => undefined, 60_000);
+    if (plan.pidFile) writeFileSync(plan.pidFile, String(process.pid));
     if (plan.hang) {
         process.on('SIGTERM', () => undefined);
         return;
@@ -34,6 +38,7 @@ module.exports = function appServer() {
         }
         if (message.method === 'initialize') {
             if (plan.refuse) return print({ id: message.id, error: { code: -32600, message: 'refused' } });
+            if (plan.long) return process.stdout.write(`${'x'.repeat(plan.long)}\n`);
             print({ method: 'configWarning', params: { summary: 'a notification before the answer' } });
             print({ id: message.id, result: { userAgent: 'codex_stub/0.0.0', platformFamily: 'stub', platformOs: 'stub' } });
             if (plan.leave) process.exit(0);

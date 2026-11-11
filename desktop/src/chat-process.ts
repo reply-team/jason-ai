@@ -117,7 +117,14 @@ export function startHost(
  */
 export function startListing(
     launch: Exclude<Launch, { refused: string }>,
-    options: { cwd: string; env: Record<string, string>; onLine(line: string): void },
+    options: {
+        cwd: string;
+        env: Record<string, string>;
+        onLine(line: string): void;
+        /** The longest line read, in bytes; past it nothing more is read and `onTooLong` is said once. */
+        lineLimit: number;
+        onTooLong(): void;
+    },
 ): ListingProcess {
     const { input, process: host } = spawnHost(launch, listingArguments, options);
     return {
@@ -131,10 +138,46 @@ export function startListing(
     };
 }
 
+/**
+ * Reads a stream line by line, a line end being a line feed with any carriage return before it dropped, and no line
+ * longer than `limit` bytes: past it, `tooLong` is said once and nothing more is read.
+ */
+function boundedLines(stream: NodeJS.ReadableStream, limit: number, onLine: (line: string) => void, tooLong: () => void): void {
+    let parts: Buffer[] = [];
+    let held = 0;
+    let over = false;
+    const said = (bytes: Buffer) => {
+        const line = bytes.toString('utf8');
+        onLine(line.endsWith('\r') ? line.slice(0, -1) : line);
+    };
+    stream.on('data', (chunk: Buffer) => {
+        if (over) return;
+        let rest = chunk;
+        for (let end = rest.indexOf(10); end >= 0; end = rest.indexOf(10)) {
+            if (held + end > limit) break;
+            said(Buffer.concat([...parts, rest.subarray(0, end)]));
+            parts = [];
+            held = 0;
+            rest = rest.subarray(end + 1);
+            if (over) return;
+        }
+        parts.push(rest);
+        held += rest.length;
+        if (held > limit) {
+            over = true;
+            parts = [];
+            tooLong();
+        }
+    });
+    stream.on('end', () => {
+        if (!over && held > 0) said(Buffer.concat(parts));
+    });
+}
+
 function spawnHost(
     launch: Exclude<Launch, { refused: string }>,
     args: readonly string[],
-    options: { cwd: string; env: Record<string, string>; onLine(line: string): void },
+    options: { cwd: string; env: Record<string, string>; onLine(line: string): void; lineLimit?: number; onTooLong?(): void },
 ): { input: Writable; process: HostProcess } {
     const windows = process.platform === 'win32';
     const child = spawn(launch.file, [...launch.prefix, ...args], {
@@ -152,8 +195,12 @@ function spawnHost(
     child.stderr.on('data', (chunk: string) => {
         tail = (tail + chunk).slice(-stderrKept);
     });
-    const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
-    lines.on('line', (line) => options.onLine(line));
+    if (options.lineLimit === undefined) {
+        const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
+        lines.on('line', (line) => options.onLine(line));
+    } else {
+        boundedLines(child.stdout, options.lineLimit, options.onLine, () => options.onTooLong?.());
+    }
     child.stdin.on('error', () => undefined);
 
     const exited = new Promise<HostExit>((resolve) => {

@@ -37,6 +37,7 @@ export const setupFound: DesktopSetup = {
                 { id: 'haiku', label: 'Haiku', efforts: [] },
             ],
             typedModel: true,
+            modelsUnread: null,
         },
         {
             id: 'codex',
@@ -49,6 +50,7 @@ export const setupFound: DesktopSetup = {
             belowFloor: null,
             models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] }],
             typedModel: false,
+            modelsUnread: null,
         },
         {
             id: 'gemini',
@@ -61,6 +63,7 @@ export const setupFound: DesktopSetup = {
             belowFloor: null,
             models: [],
             typedModel: false,
+            modelsUnread: null,
         },
         {
             id: 'deepseek',
@@ -76,6 +79,7 @@ export const setupFound: DesktopSetup = {
                 { id: 'deepseek-flash', label: 'deepseek-flash', efforts: ['low', 'high', 'max'] },
             ],
             typedModel: false,
+            modelsUnread: null,
         },
     ],
     reply: {
@@ -130,6 +134,25 @@ export const setupFound: DesktopSetup = {
     versionsDiffer: null,
     settingsRefused: null,
 };
+
+const efforts: readonly string[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+const modelShape = /^[A-Za-z0-9][A-Za-z0-9._:[\]/-]{0,99}$/;
+
+/**
+ * Why the desktop refuses a send's model or effort before any host starts, in its own sentences; null when it takes
+ * them: an effort outside the five words, a model the host neither lists nor takes typed, an effort the model named
+ * does not take.
+ */
+function refusalOf(status: DesktopSetup, { host, model, effort }: DesktopChatOptions): string | null {
+    if (effort !== undefined && !efforts.includes(effort))
+        return 'That effort is not one the desktop passes to a host.';
+    const listed = status.hosts.find((each) => each.id === host);
+    const offer = listed?.models.find((each) => each.id === model);
+    if (model !== undefined && offer === undefined && !(listed?.typedModel === true && modelShape.test(model)))
+        return 'That model is not one this host offers.';
+    if (effort !== undefined && !offer?.efforts.includes(effort)) return 'That effort is not one this model takes.';
+    return null;
+}
 
 export interface StubDesktop extends JasonDesktop {
     calls: { name: string; args: unknown[] }[];
@@ -234,8 +257,14 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
             send: answering('chat.send', (id, _text, options) => {
                 const record = own(id);
                 if (!record) return notKept;
-                // What the desktop keeps of a send: the host, the model and the effort it named.
+                // The desktop refuses what it does not pass to a host with a `done` that says why, and keeps nothing.
                 const { host, model, effort } = options as DesktopChatOptions;
+                const why = refusalOf(stub.status, options as DesktopChatOptions);
+                if (why !== null) {
+                    chatHandlers.forEach((handler) => handler(record.id, { kind: 'done', error: why }));
+                    return null;
+                }
+                // What the desktop keeps of a send: the host, the model and the effort it named.
                 record.chosen = { host, model: model ?? null, effort: effort ?? null };
                 record.running = true;
                 record.updatedAt = now();

@@ -9,6 +9,7 @@ import {
     modelTyped,
     modelView,
     onHost,
+    sendHeld,
     turnOptions,
     withModels,
     failed,
@@ -296,6 +297,7 @@ describe('the model and the effort a chat is sent with', () => {
             { id: 'haiku', label: 'Haiku', efforts: [] },
         ],
         typedModel: true,
+        modelsUnread: null,
     };
     const codex: DesktopHost = {
         ...claude,
@@ -346,7 +348,17 @@ describe('the model and the effort a chat is sent with', () => {
         // On a host that takes no typed name, a model it no longer offers is shown as kept and still sent.
         const gone = { ...fresh, host: 'codex', model: 'gpt-5-old' };
         expect(modelView(gone, codex)).toEqual({ offer: null, typing: false, kept: 'gpt-5-old' });
-        expect(turnOptions(gone, codex)).toEqual({ host: 'codex', model: 'gpt-5-old' });
+        // The desktop takes no model its host no longer offers: the turn goes on the host's own, with no effort.
+        expect(turnOptions({ ...gone, effort: 'high' }, codex)).toEqual({ host: 'codex' });
+    });
+
+    it('holds the send while another model is chosen and its name is empty', () => {
+        const typing = modelChosen(fresh, claude, anotherModel);
+        expect(sendHeld(typing, claude)).toBe(true);
+        expect(sendHeld(modelTyped(typing, '   '), claude)).toBe(true);
+        expect(sendHeld(modelTyped(typing, 'claude-opus-5-5'), claude)).toBe(false);
+        expect(sendHeld(fresh, claude)).toBe(false);
+        expect(sendHeld(modelChosen(fresh, claude, 'opus'), claude)).toBe(false);
     });
 
     it('starts again from the host\u2019s own model when the host changes', () => {
@@ -404,15 +416,15 @@ describe('the hosts as a desktop of another version answers them', () => {
             belowFloor: null,
         } as unknown as DesktopHost;
         const [read] = withModels([older]);
-        expect(read).toMatchObject({ id: 'claude', models: [], typedModel: false });
+        expect(read).toMatchObject({ id: 'claude', models: [], typedModel: false, modelsUnread: null });
         expect(turnOptions(modelChosen(newChat('conv_1', 'claude'), read!, 'opus'), read!)).toEqual({
             host: 'claude',
-            model: 'opus',
         });
         const current: DesktopHost = {
             ...older,
             models: [{ id: 'opus', label: 'Opus', efforts: ['low'] }],
             typedModel: true,
+            modelsUnread: null,
         };
         expect(withModels([current])[0]).toEqual(current);
     });

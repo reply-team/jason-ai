@@ -363,8 +363,15 @@ async function run(): Promise<void> {
     });
     registerChat(ipcMain, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     // A turn never outlives the window: closing it stops every host and forgets every "always".
-    window.on('closed', () => chat.closeAll());
-    app.on('before-quit', () => chat.closeAll());
+    // Nor does a listing of Codex's models: it is ended the way a turn's host is, and the asks that wait are dropped.
+    window.on('closed', () => {
+        chat.closeAll();
+        models.close();
+    });
+    app.on('before-quit', () => {
+        chat.closeAll();
+        models.close();
+    });
 
     await showStarting(window, 'Starting Jason…', false);
     if (uncopied !== null) {

@@ -231,7 +231,13 @@ describe('the console', () => {
         fireEvent.change(model, { target: { value: '-another' } });
         const name = await waitFor(() => screen.getByRole('textbox', { name: 'Model name' }));
         expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        // With the name empty the turn is not sent, and Enter sends nothing either.
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
+        fireEvent.keyDown(screen.getByRole('textbox', { name: 'Your message' }), { key: 'Enter' });
+        expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(false);
         fireEvent.change(name, { target: { value: ' claude-opus-5-5 ' } });
+        expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false);
         expect(screen.getByRole('combobox', { name: 'Model' })).toHaveProperty('value', '-another');
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -259,6 +265,38 @@ describe('the console', () => {
             expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'codex'),
         );
         expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+            'Go',
+            { host: 'codex' },
+        ]);
+    });
+
+    it('keeps Codex’s model control where its models could not be read, says so in one line, and sends the turn with the host alone', async () => {
+        const fake = pending(new FakeApi());
+        const sentence = "Codex's models could not be read, so the turn uses its own default model.";
+        const desktop = stubDesktop({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, found: false }
+                    : each.id === 'codex'
+                      ? { ...each, found: true, version: '0.80.0', install: null, models: [], modelsUnread: sentence }
+                      : each,
+            ),
+        });
+        renderConsole(fake, desktop);
+        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
+        expect(model).toHaveProperty('disabled', true);
+        expect(
+            within(model)
+                .getAllByRole('option')
+                .map((each) => each.textContent),
+        ).toEqual(['Default model']);
+        expect(document.querySelector('.composer .model-unread')?.textContent).toBe(sentence);
         expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));

@@ -31,7 +31,7 @@ import {
     type KeptEntry,
 } from './chat-conversations.ts';
 import { header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
-import { currentModel, effortRefusal, isEffort, modelShape, type Effort, type KeptLists } from './chat-models.ts';
+import { currentModel, effortRefusal, isEffort, modelRefusal, modelShape, type Effort, type KeptLists } from './chat-models.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
@@ -456,7 +456,8 @@ export class Chat {
      * a `done` with an error in plain words, and no host was started: on Claude Code, one below the floor
      * (`claudeFloor`) or whose version cannot be read is refused after `claude --version` and before anything else, and
      * so is an effort the model named does not take at that version. An effort that is not one of the five words, or one
-     * the model named does not take by the table or the list kept, is refused the same way. A chat id the desktop does
+     * the model named does not take by the table or the list kept, is refused the same way, and so is a model the host
+     * does not offer (`modelRefusal`). A chat id the desktop does
      * not take, or a conversation it does not keep, has no chat to say `done` to, so that send rejects with an Error the
      * page shows.
      */
@@ -473,6 +474,8 @@ export class Chat {
         if (given.effort !== undefined && !isEffort(given.effort)) return refuse('That effort is not one the desktop passes to a host.');
         const resolved = this.#resolve(given.host, given.model as string | undefined, given.effort as Effort | undefined);
         if (typeof resolved === 'string') return refuse(resolved);
+        const notOffered = modelRefusal(resolved.host, resolved.named, this.#options.models?.() ?? new Map());
+        if (notOffered !== null) return refuse(notOffered);
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
 

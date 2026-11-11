@@ -548,7 +548,7 @@ test('an effort the desktop does not pass, or one the model does not take, is re
         [{ host: 'claude', effort: 'high' }, notTaken],
         [{ host: 'claude', model: 'claude-opus-5-5', effort: 'high' }, notTaken],
         [{ host: 'codex', model: 'gpt-6.1-sol', effort: 'max' }, notTaken],
-        [{ host: 'codex', model: 'gpt-6-unlisted', effort: 'low' }, notTaken],
+
         [{ host: 'moonshot', model: 'kimi-k3', effort: 'max' }, notTaken],
     ];
     for (const [options, sentence] of cases) {
@@ -556,6 +556,28 @@ test('an effort the desktop does not pass, or one the model does not take, is re
     }
     assert.deepEqual(r.hosts(), []);
     assert.deepEqual(r.started, []);
+});
+
+test("a model the host does not offer is refused before any host starts; a typed name only on Claude Code and Anthropic's key", async (t) => {
+    const r = rig(t, { chat: { models: () => codexKept } });
+    r.keys.deepseek = 'sk-planted-deepseek';
+    r.keys['claude-api-key'] = 'sk-planted-anthropic';
+    r.keys['codex-api-key'] = 'sk-planted-openai';
+    const notOffered = 'That model is not one this host offers.';
+    const cases: unknown[] = [
+        { host: 'codex', model: 'opus' },
+        { host: 'codex', model: 'gpt-6-unlisted' },
+        { host: 'deepseek', model: 'claude-opus-5-5' },
+        { host: 'deepseek', model: 'opus' },
+        { host: 'codex-api-key', model: 'gpt-6.1-sol' },
+    ];
+    for (const options of cases) {
+        assert.deepEqual(await r.turn('c1', words, options), [{ kind: 'done', error: notOffered }], JSON.stringify(options));
+    }
+    assert.deepEqual(r.hosts(), []);
+    for (const options of [{ host: 'claude-api-key', model: 'claude-opus-5-5' }, { host: 'codex', model: 'gpt-6.1-sol' }, { host: 'deepseek', model: 'deepseek-v4-pro' }]) {
+        assert.deepEqual(doneOf(await r.turn('c2', words, options)), { kind: 'done', error: null }, JSON.stringify(options));
+    }
 });
 
 test('haiku takes an effort only on a Claude Code whose version, read before the turn, is 2.1.293 or newer', async (t) => {

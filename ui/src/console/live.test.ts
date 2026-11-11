@@ -25,6 +25,7 @@ const host = (fields: Partial<DesktopHost>): DesktopHost => ({
     install: null,
     models: [],
     typedModel: false,
+    modelsUnread: null,
     belowFloor: null,
     ...fields,
 });

@@ -5,7 +5,7 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -137,6 +137,67 @@ describe('the desktop’s conversations', () => {
             { host: 'claude', model: 'sonnet', effort: 'low' },
         ]);
         expect(desktop.kept.get(id)?.chosen).toEqual({ host: 'claude', model: 'sonnet', effort: 'low' });
+    });
+
+    it('reopens on a model its host no longer lists, says so in the control, and sends the turn with the host’s own and no effort', async () => {
+        const desktop = stubDesktop({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, found: false }
+                    : each.id === 'codex'
+                      ? { ...each, found: true, version: '0.80.0', install: null }
+                      : each,
+            ),
+        });
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000D1',
+            campaignId: 'cmp_1',
+            title: 'Spring',
+            chosen: { host: 'codex', model: 'gpt-5-old', effort: 'high' },
+        });
+        renderConsole(desktop);
+        await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        const panel = hero.closest<HTMLElement>('.chat-panel')!;
+        const model = await waitFor(() => within(panel).getByRole('combobox', { name: 'Model' }));
+        expect(model).toHaveProperty('value', 'gpt-5-old');
+        expect(within(model).getByRole('option', { selected: true }).textContent).toBe(
+            "gpt-5-old: no longer listed, so the turn uses Codex's own model with no effort",
+        );
+        expect(within(panel).queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        const id = await send(desktop, 'And now?', panel);
+        expect(calls(desktop, 'chat.send').at(-1)!.args).toEqual([id, 'And now?', { host: 'codex' }]);
+    });
+
+    it('the stand-in refuses what the desktop refuses, keeping the record as it was', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000E1',
+            title: 'Kept',
+            chosen: { host: 'claude', model: 'opus', effort: 'low' },
+        });
+        const said: { chatId: string; event: unknown }[] = [];
+        desktop.chat.onEvent((chatId, event) => said.push({ chatId, event }));
+        for (const [options, sentence] of [
+            [{ host: 'codex', model: 'opus' }, 'That model is not one this host offers.'],
+            [{ host: 'claude', model: 'haiku', effort: 'low' }, 'That effort is not one this model takes.'],
+            [{ host: 'claude', effort: 'low' }, 'That effort is not one this model takes.'],
+            [
+                { host: 'claude', model: 'opus', effort: 'ultra' },
+                'That effort is not one the desktop passes to a host.',
+            ],
+        ] as const) {
+            expect(await desktop.chat.send('conv_01JDKEPT0000000000000000E1', 'x', options as never)).toBeNull();
+            await waitFor(() => expect(said.at(-1)?.event).toEqual({ kind: 'done', error: sentence }));
+        }
+        expect(desktop.kept.get('conv_01JDKEPT0000000000000000E1')?.chosen).toEqual({
+            host: 'claude',
+            model: 'opus',
+            effort: 'low',
+        });
+        expect(desktop.kept.get('conv_01JDKEPT0000000000000000E1')?.running).toBe(false);
     });
 
     it('reads the list again when a turn ends, so what the desktop changed meanwhile is listed', async () => {

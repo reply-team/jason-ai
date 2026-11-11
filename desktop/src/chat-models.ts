@@ -105,6 +105,21 @@ export function currentModel<T extends string | undefined>(hostId: string, model
     return (renamed[hostId]?.get(model) ?? model) as T;
 }
 
+/** The sentence a send is refused with when its model is not one its host offers. */
+export const modelRefused = 'That model is not one this host offers.';
+
+/**
+ * Null when the host offers the model named, by the table or the list kept, or takes it as a typed name (Claude Code
+ * and Anthropic's key alone, a name of the model shape); null too when none is named. Else the sentence the send is
+ * refused with: a model chosen on one host never reaches another.
+ */
+export function modelRefusal(hostId: string, model: string | undefined, kept: KeptLists): string | null {
+    if (model === undefined) return null;
+    const offered = offeredModels(hostId, kept, null);
+    if (offered.models.some((each) => each.id === model)) return null;
+    return offered.typed && modelShape.test(model) ? null : modelRefused;
+}
+
 /** The sentence a send is refused with when its effort is not one its model takes. */
 export const effortRefused = 'That effort is not one this model takes.';
 
@@ -165,7 +180,7 @@ export function parseKeptLists(text: string): Map<string, KeptList> {
     for (const host of listedHosts) {
         const list = value.hosts[host];
         if (!isObject(list) || typeof list.asked_at !== 'string' || Number.isNaN(Date.parse(list.asked_at)) || !Array.isArray(list.models)) continue;
-        if (!list.models.every(isObject)) continue;
+        if (!list.models.every(isObject) || list.models.length > modelLimit) continue;
         lists.set(host, { askedAt: list.asked_at, models: offersOf(list.models as { id: unknown; label: unknown; efforts: unknown }[]) });
     }
     return lists;
@@ -182,6 +197,9 @@ export type ListingOutcome = { models: ModelOffer[] } | { failed: 'refused' | 'u
 
 /** The most pages of `model/list` read; a list that names a page past them is not read whole. */
 const pageLimit = 20;
+
+/** The most models a host's list holds; a listing past them, and a kept list of more, is not read. */
+export const modelLimit = 200;
 
 /**
  * One ask of `codex app-server` for its models, as the protocol it speaks over standard input and output: `initialize`,
@@ -235,6 +253,7 @@ export class ListingExchange {
             const levels = Array.isArray(entry.supportedReasoningEfforts) ? entry.supportedReasoningEfforts.map((each: unknown) => (isObject(each) ? each.reasoningEffort : undefined)) : [];
             this.#models.push({ id: entry.model, label: entry.displayName, efforts: levels });
         }
+        if (this.#models.length > modelLimit) return this.#end({ failed: 'unreadable' });
         if (typeof nextCursor !== 'string') return this.#end({ models: offersOf(this.#models) });
         if (++this.#pages >= pageLimit) return this.#end({ failed: 'unreadable' });
         return [this.#request('model/list', { includeHidden: false, cursor: nextCursor })];

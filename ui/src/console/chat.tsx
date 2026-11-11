@@ -18,6 +18,7 @@ import {
     modelView,
     newChat,
     onHost,
+    sendHeld,
     pickedFor,
     replaced,
     said,
@@ -411,10 +412,12 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const picked = host ? modelView(standing, host) : null;
     const onThisHost = (change: (each: Chat) => Chat) =>
         changeChat(chatId, (each) => (host ? change(onHost(each, host.id)) : each));
+    // "Another model" with no name typed yet: nothing is sent until a name is, or another choice made.
+    const nameMissing = host !== null && sendHeld(standing, host);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
         const current = chats.value[chatId];
-        if (!current || !host) return;
+        if (!current || !host || sendHeld(onHost(current, host.id), host)) return;
         if (current.running) {
             changeChat(chatId, kept);
             return;
@@ -527,6 +530,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </div>
                     </div>
                 )}
+                {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                 <textarea
                     id="box"
                     rows={2}
@@ -560,24 +564,34 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                             </option>
                         ))}
                     </select>
-                    {host && picked && (host.models.length > 0 || host.typedModel || picked.kept !== null) && (
-                        <select
-                            className="model"
-                            aria-label="Model"
-                            disabled={chat.removing}
-                            value={picked.typing ? anotherModel : (picked.offer?.id ?? picked.kept ?? '')}
-                            onChange={(event) => onThisHost((each) => modelChosen(each, host, event.target.value))}
-                        >
-                            <option value="">Default model</option>
-                            {host.models.map((each) => (
-                                <option key={each.id} value={each.id}>
-                                    {each.label}
-                                </option>
-                            ))}
-                            {picked.kept !== null && <option value={picked.kept}>{picked.kept}</option>}
-                            {host.typedModel && <option value={anotherModel}>Another model…</option>}
-                        </select>
-                    )}
+                    {host &&
+                        picked &&
+                        (host.models.length > 0 ||
+                            host.typedModel ||
+                            picked.kept !== null ||
+                            host.modelsUnread !== null) && (
+                            <select
+                                className="model"
+                                aria-label="Model"
+                                disabled={chat.removing || host.modelsUnread !== null}
+                                value={picked.typing ? anotherModel : (picked.offer?.id ?? picked.kept ?? '')}
+                                onChange={(event) => onThisHost((each) => modelChosen(each, host, event.target.value))}
+                            >
+                                <option value="">Default model</option>
+                                {host.models.map((each) => (
+                                    <option key={each.id} value={each.id}>
+                                        {each.label}
+                                    </option>
+                                ))}
+                                {picked.kept !== null && (
+                                    <option value={picked.kept}>
+                                        {picked.kept}: no longer listed, so the turn uses {host.label}'s own model with
+                                        no effort
+                                    </option>
+                                )}
+                                {host.typedModel && <option value={anotherModel}>Another model…</option>}
+                            </select>
+                        )}
                     {host && picked?.typing && (
                         <input
                             className="model-name"
@@ -619,7 +633,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                                 className="btn sm"
                                 type="submit"
                                 disabled={
-                                    chat.removing || chat.stopping || chat.waiting !== null || chat.draft.trim() === ''
+                                    chat.removing ||
+                                    chat.stopping ||
+                                    chat.waiting !== null ||
+                                    chat.draft.trim() === '' ||
+                                    nameMissing
                                 }
                             >
                                 Send when the turn ends
@@ -641,7 +659,8 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                             type="submit"
                             title="Send"
                             aria-label="Send"
-                            disabled={!host || chat.removing}
+                            disabled={!host || chat.removing || nameMissing}
+                            {...(nameMissing ? { title: 'Type the model name, or choose another model' } : {})}
                         >
                             ↑
                         </button>

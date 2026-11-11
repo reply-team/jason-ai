@@ -4,10 +4,11 @@
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { ModelOffer } from '../src/chat-models.ts';
-import { askEveryMs, codexAsker, ModelLists, type AskResult } from '../src/model-lists.ts';
+import { askAgainMs, askEveryMs, codexAsker, keptFileLimit, ModelLists, type AskResult } from '../src/model-lists.ts';
 import { bench, type Bench } from './harness.ts';
 
 const sol: ModelOffer = { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'medium', 'high'] };
@@ -30,6 +31,22 @@ function asks() {
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+const gone = (pid: number) => {
+    try {
+        process.kill(pid, 0);
+        return false;
+    } catch {
+        return true;
+    }
+};
+async function settle(check: () => boolean, ms = 10_000): Promise<boolean> {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+        if (check()) return true;
+        await delay(50);
+    }
+    return check();
+}
 
 function folder(t: { after(fn: () => void): void }): Bench {
     return bench(t);
@@ -83,11 +100,11 @@ test('a list is asked again at most once a day per host id, one ask at a time ac
     assert.deepEqual(again.lists().get('codex-api-key')?.models, [luna]);
 });
 
-test('a failed ask keeps the last list, is said by its kind alone, and is not asked again within the day', async (t) => {
+test('a failed ask keeps the last list read and is said by its kind alone; only a list read counts for the day', async (t) => {
     const b = folder(t);
     let now = start;
     const failures: [string, string][] = [];
-    const results: AskResult[] = [{ models: [sol] }, { failed: 'bound' }];
+    const results: AskResult[] = [{ models: [sol] }, { failed: 'bound' }, { failed: 'refused' }, { models: [luna] }];
     const asked: string[] = [];
     const lists = new ModelLists({
         file: b.paths.models,
@@ -100,20 +117,88 @@ test('a failed ask keeps the last list, is said by its kind alone, and is not as
     });
     lists.refresh(['codex']);
     await lists.settled();
-    now += askEveryMs;
+    // A list read stands for the day.
+    now += askEveryMs - 1;
     lists.refresh(['codex']);
     await lists.settled();
-    assert.deepEqual(lists.lists().get('codex')?.models, [sol]);
+    assert.deepEqual(asked, ['codex']);
+    now += 1;
+    lists.refresh(['codex']);
+    await lists.settled();
+    assert.deepEqual(lists.lists().get('codex'), { askedAt: new Date(start).toISOString(), models: [sol] }, 'the last list read stays, with its moment');
     assert.deepEqual(failures, [['codex', 'bound']]);
+    // A failure is not asked again within the hour, and is once the hour has passed.
+    now += askAgainMs - 1;
     lists.refresh(['codex']);
     await lists.settled();
     assert.deepEqual(asked, ['codex', 'codex']);
+    now += 1;
+    lists.refresh(['codex']);
+    await lists.settled();
+    assert.deepEqual(asked, ['codex', 'codex', 'codex']);
+    assert.deepEqual(failures, [['codex', 'bound'], ['codex', 'refused']]);
+    assert.equal(lists.unread('codex'), null, 'a list is kept, so the host offers it');
     // An ask that throws is a failed one too, and the desktop goes on.
     const throwing = new ModelLists({ file: join(b.root, 'other.json'), ask: () => Promise.reject(new Error('no')), now: () => now, failed: (hostId, kind) => void failures.push([hostId, kind]) });
+    assert.equal(throwing.unread('codex'), 'waiting');
     throwing.refresh(['codex']);
     await throwing.settled();
     assert.deepEqual(failures.at(-1), ['codex', 'start']);
-    assert.deepEqual(throwing.lists().get('codex')?.models, []);
+    assert.equal(throwing.lists().get('codex'), undefined, 'a failure keeps no list where none was read');
+    assert.equal(throwing.unread('codex'), 'failed');
+    assert.equal(throwing.unread('gemini'), null);
+});
+
+test('a failure where no list was ever read is asked again at the next start, and a success is not asked again within the day', async (t) => {
+    const b = folder(t);
+    const asked: string[] = [];
+    const first = new ModelLists({ file: b.paths.models, ask: async (hostId) => (asked.push(hostId), { failed: 'ended' }), now: () => start });
+    first.refresh(['codex']);
+    await first.settled();
+    first.refresh(['codex']);
+    await first.settled();
+    assert.deepEqual(asked, ['codex']);
+    assert.equal(existsSync(b.paths.models), false, 'nothing of a failure is kept on disk');
+    // The next start, a minute later: asked again, and this time read.
+    const second = new ModelLists({ file: b.paths.models, ask: async (hostId) => (asked.push(hostId), { models: [sol] }), now: () => start + 60_000 });
+    second.refresh(['codex']);
+    await second.settled();
+    assert.deepEqual(asked, ['codex', 'codex']);
+    // The start after that, within the day: what was read stands and nothing is asked.
+    const third = new ModelLists({ file: b.paths.models, ask: async (hostId) => (asked.push(hostId), { models: [luna] }), now: () => start + askEveryMs / 2 });
+    third.refresh(['codex']);
+    await third.settled();
+    assert.deepEqual(asked, ['codex', 'codex']);
+    assert.deepEqual(third.lists().get('codex')?.models, [sol]);
+});
+
+test('closing the lists ends a running ask as a turn is ended and drops the ones that wait; nothing is asked after', async (t) => {
+    const b = folder(t);
+    const asked: string[] = [];
+    const signals: AbortSignal[] = [];
+    let failures = 0;
+    const lists = new ModelLists({
+        file: b.paths.models,
+        ask: (hostId, signal) =>
+            new Promise<AskResult>((resolve) => {
+                asked.push(hostId);
+                signals.push(signal);
+                signal.addEventListener('abort', () => resolve({ failed: 'closed' }));
+            }),
+        now: () => start,
+        failed: () => void failures++,
+    });
+    lists.refresh(['codex', 'codex-api-key']);
+    await tick();
+    assert.deepEqual(asked, ['codex']);
+    lists.close();
+    await lists.settled();
+    assert.equal(signals[0]?.aborted, true);
+    assert.deepEqual(asked, ['codex'], 'the ask that waited is dropped');
+    assert.equal(failures, 0, 'a close is no failure of the host');
+    lists.refresh(['codex']);
+    await lists.settled();
+    assert.deepEqual(asked, ['codex']);
 });
 
 test('a list the file holds is not shown unless it was read whole, and a file that cannot be written leaves the lists in memory', async (t) => {
@@ -133,6 +218,16 @@ test('a list the file holds is not shown unless it was read whole, and a file th
     await kept.settled();
     assert.deepEqual(kept.lists().get('codex')?.models, [sol]);
     assert.equal(count, 1);
+});
+
+test('a kept file larger than two hundred models a host could reach is not read at all', (t) => {
+    const b = folder(t);
+    mkdirSync(b.paths.desktop, { recursive: true });
+    const one = { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low'] };
+    writeFileSync(b.paths.models, JSON.stringify({ hosts: { codex: { asked_at: new Date(start).toISOString(), models: [one] } } }) + ' '.repeat(keptFileLimit));
+    assert.equal(new ModelLists({ file: b.paths.models, ask: async () => ({ models: [] }), now: () => start }).lists().size, 0);
+    writeFileSync(b.paths.models, JSON.stringify({ hosts: { codex: { asked_at: new Date(start).toISOString(), models: [one] } } }));
+    assert.equal(new ModelLists({ file: b.paths.models, ask: async () => ({ models: [] }), now: () => start }).lists().size, 1);
 });
 
 const page = (entries: unknown[]) => entries;
@@ -186,10 +281,36 @@ test('an ask that is refused, answered with no list, left early or never answere
     assert.deepEqual(await asker(b)('codex'), { failed: 'unreadable' });
     b.env.STUB_APP_SERVER = JSON.stringify({ leave: true });
     assert.deepEqual(await asker(b)('codex'), { failed: 'ended' });
-    b.env.STUB_APP_SERVER = JSON.stringify({ hang: true });
+    const pidFile = join(b.root, 'app-server.pid');
+    b.env.STUB_APP_SERVER = JSON.stringify({ hang: true, pidFile });
     const began = Date.now();
     assert.deepEqual(await asker(b, {}, 1500)('codex'), { failed: 'bound' });
     assert.ok(Date.now() - began < 10_000);
+    assert.ok(await settle(() => gone(Number(readFileSync(pidFile, 'utf8')))), 'the stand-in that ignored its end is gone');
+});
+
+test('a listing past two hundred models, or with a line past 1 MB, is not read', async (t) => {
+    const b = bench(t, { programs: ['codex'] });
+    const many = Array.from({ length: 201 }, (_, at) => ({ id: `m-${at}`, model: `m-${at}`, displayName: `M ${at}`, hidden: false, supportedReasoningEfforts: [] }));
+    b.env.STUB_APP_SERVER = JSON.stringify({ pages: [many.slice(0, 150), many.slice(150)] });
+    assert.deepEqual(await asker(b)('codex'), { failed: 'unreadable' });
+    b.env.STUB_APP_SERVER = JSON.stringify({ pages: [many.slice(0, 200)] });
+    assert.equal(((await asker(b)('codex')) as { models: unknown[] }).models.length, 200);
+    b.env.STUB_APP_SERVER = JSON.stringify({ long: 1024 * 1024 + 1 });
+    assert.deepEqual(await asker(b)('codex'), { failed: 'unreadable' });
+});
+
+test('quitting while an ask runs ends the stand-in, one that ignores the end of its input included: nothing of it is left', async (t) => {
+    const b = bench(t, { programs: ['codex'] });
+    const pidFile = join(b.root, 'app-server.pid');
+    b.env.STUB_APP_SERVER = JSON.stringify({ hang: true, pidFile });
+    const lists = new ModelLists({ file: b.paths.models, ask: asker(b), now: () => start });
+    lists.refresh(['codex']);
+    assert.ok(await settle(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8') !== ''));
+    lists.close();
+    await lists.settled();
+    assert.ok(await settle(() => gone(Number(readFileSync(pidFile, 'utf8')))), 'the listing was ended');
+    assert.equal(lists.lists().size, 0);
 });
 
 test('an ask for a Codex that is not on the PATH starts nothing', async (t) => {
