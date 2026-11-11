@@ -94,7 +94,8 @@ public static partial class ProgramLookup
     /// Whether a program as written is a path rather than a plain file name: it holds a directory separator, it is
     /// rooted, or on Windows it holds a colon. The colon is the form the separators miss: <c>C:acme</c> names
     /// <c>acme</c> in the current folder of drive C, and joined to any directory it stays itself. A path is looked for
-    /// in the directory it names, never on a search path; every caller that tells the two apart asks this.
+    /// in the directory it names, never on a search path. The provider check asks this, and <see cref="Find"/> refuses
+    /// such a name itself, so every caller of the lookup gets the same floor.
     /// </summary>
     public static bool IsPath(string program)
     {
