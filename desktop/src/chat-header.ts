@@ -14,10 +14,13 @@ export const recapLimit = 16 * 1024;
 export const titleLimit = 60;
 
 /**
- * Characters that end a line, steer the direction text is drawn in, or draw nothing: controls (C0, DEL, C1), the
- * line and paragraph separators, the bidirectional embeddings, overrides and isolates, and the zero-width ones.
+ * Characters that end a line, steer the direction text is drawn in, or draw nothing: every control (C0, DEL, C1) and
+ * every format character (the bidirectional embeddings, overrides, isolates and marks, the zero-width ones, the soft
+ * hyphen and the tag characters a model reads as hidden text among them), and the line and paragraph separators.
  */
-const unseen = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069\u200b-\u200f\u2060\ufeff]/g;
+const unseen = /[\p{Cc}\p{Cf}\u2028\u2029]/gu;
+/** The same in a recap, but for the line breaks and tabs of a message, which JSON writes as visible escapes. */
+const unseenInRecap = /(?![\t\n\r])[\p{Cc}\p{Cf}\u2028\u2029]/gu;
 
 /** A person's short text as one line: what cannot be seen dropped, white space made single spaces, then cut. */
 function oneLine(raw: unknown, limit: number): string {
@@ -38,9 +41,15 @@ export function titleOf(words: unknown): string {
     return characters.length === 0 ? 'New chat' : characters.slice(0, titleLimit).join('');
 }
 
-/** A text as one JSON string, with `<` written as its escape, so no tag-like run of characters stands in it. */
+/**
+ * A text as one JSON string, with `<` written as its escape, so no tag-like run of characters stands in it, and every
+ * control, format character and separator escaped, so none stands in it raw.
+ */
 function quoted(text: string): string {
-    return JSON.stringify(text).replaceAll('<', '\\u003c');
+    // JSON leaves DEL, the C1 controls, the format characters and the two separators as they are: each is escaped too.
+    return JSON.stringify(text).replace(/[<\p{Cc}\p{Cf}\u2028\u2029]/gu, (character) =>
+        Array.from({ length: character.length }, (_, i) => `\\u${character.charCodeAt(i).toString(16).padStart(4, '0')}`).join(''),
+    );
 }
 
 /** What a header says about the campaign; `campaign` null for a set-up chat. */
@@ -89,9 +98,10 @@ export function recap(entries: readonly KeptEntry[], limit = recapLimit): string
         const entry = entries[i];
         if (entry === undefined || (entry.kind !== 'user' && entry.kind !== 'text')) continue;
         const who = entry.kind === 'user' ? 'person' : 'agent';
-        let line = `${who}: ${quoted(entry.text)}\n`;
+        const text = entry.text.replace(unseenInRecap, '');
+        let line = `${who}: ${quoted(text)}\n`;
         if (bytes(line) > left) {
-            const characters = Array.from(entry.text);
+            const characters = Array.from(text);
             let cut = characters.length;
             // Halving toward the bound, then one character at a time: the message's end is what is kept.
             while (cut > 0 && bytes(`${who}: ${quoted(`…${characters.slice(characters.length - cut).join('')}`)}\n`) > left) cut = cut > 64 ? Math.floor(cut / 2) : cut - 1;
