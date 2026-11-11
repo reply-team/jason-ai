@@ -655,7 +655,7 @@ public class CampaignCommandsTests
             Moment,
             Moment,
             null,
-            Campaigns: [new ContactCampaignDto("cmp_A", "Spring", MembershipState.Enrolled, Moment, Moment), new ContactCampaignDto("cmp_B", "Autumn", MembershipState.Enrolled, Moment, Moment)]);
+            Campaigns: [new ContactCampaignDto("cmp_A", "Spring", MembershipState.Enrolled, Moment, Moment, [CampaignSummaryFilter.New]), new ContactCampaignDto("cmp_B", "Autumn", MembershipState.Enrolled, Moment, Moment, [CampaignSummaryFilter.Idle])]);
         var worked = new MembershipWhy("activity", null, "researcher", Moment, null, null);
         var page = JsonSerializer.Serialize(
             new Page<MembershipItemDto>([new MembershipItemDto(contact, MembershipState.Enrolled, Moment, Moment, worked, [new CountedIn("cmp_B", worked), new CountedIn("cmp_A")])], null),

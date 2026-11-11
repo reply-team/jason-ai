@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Runtime.Events;
 using Jason.Runtime.Persistence;
@@ -27,9 +28,15 @@ namespace Jason.Runtime.Campaigns;
 /// not.
 /// </para>
 /// </remarks>
-internal static class CampaignPeople
+internal static partial class CampaignPeople
 {
     private const string Asked = "(SELECT value FROM json_each({0}))";
+
+    /// <summary>
+    /// Where a part reads the rows of one page's people only, the column that names the person follows this mark: a
+    /// count reads its campaigns' rows whole and drops the mark, a page's standing reads the page's people's rows, <c>{1}</c>.
+    /// </summary>
+    private const string OfThePage = " /* of the page: ";
 
     /// <summary>
     /// The operations whose reach is act and that address a person: what Contacted counts. The counts, the series and the
@@ -59,7 +66,7 @@ internal static class CampaignPeople
                               OR (w.status = 'failed' AND json_extract(w.last_error_json, '$.code') IS NOT 'approval_rejected')
                          THEN w.finished_at END) AS last_failure
         FROM work_items AS w
-        WHERE w.campaign_id IN {{Asked}} AND w.contact_id IS NOT NULL
+        WHERE w.campaign_id IN {{Asked}} AND w.contact_id IS NOT NULL{{OfThePage}}w.contact_id */
         GROUP BY w.campaign_id, w.contact_id
         """;
 
@@ -70,27 +77,27 @@ internal static class CampaignPeople
     private const string WaitingOn = $$"""
         SELECT w.campaign_id, w.contact_id
         FROM approvals AS a JOIN work_items AS w ON w.id = a.work_item_id
-        WHERE a.campaign_id IN {{Asked}} AND +a.status = 'pending' AND w.contact_id IS NOT NULL
+        WHERE a.campaign_id IN {{Asked}} AND +a.status = 'pending' AND w.contact_id IS NOT NULL{{OfThePage}}w.contact_id */
         UNION
         SELECT w.campaign_id, w.contact_id
         FROM decisions AS d JOIN work_items AS w ON w.id = d.work_item_id
-        WHERE d.campaign_id IN {{Asked}} AND +d.status = 'pending' AND w.contact_id IS NOT NULL
+        WHERE d.campaign_id IN {{Asked}} AND +d.status = 'pending' AND w.contact_id IS NOT NULL{{OfThePage}}w.contact_id */
         UNION
         SELECT w.campaign_id, w.contact_id
         FROM decisions AS d CROSS JOIN json_each(d.references_json) AS r CROSS JOIN work_items AS w
         WHERE d.campaign_id IN {{Asked}} AND +d.status = 'pending' AND json_extract(r.value, '$.kind') = 'work_item'
-          AND w.public_id = json_extract(r.value, '$.id') AND w.campaign_id = d.campaign_id AND w.contact_id IS NOT NULL
+          AND w.public_id = json_extract(r.value, '$.id') AND w.campaign_id = d.campaign_id AND w.contact_id IS NOT NULL{{OfThePage}}w.contact_id */
         """;
 
     // One arm per kind, so each reads its campaigns' lines of that kind through the kind's own index.
     private const string OutLines = $$"""
         SELECT jl.campaign_id, jl.contact_id
         FROM journal AS jl
-        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'inbound_reply_observed' AND jl.contact_id IS NOT NULL
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'inbound_reply_observed' AND jl.contact_id IS NOT NULL{{OfThePage}}jl.contact_id */
         UNION
         SELECT jl.campaign_id, jl.contact_id
         FROM journal AS jl
-        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'provider_event_observed' AND jl.contact_id IS NOT NULL
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'provider_event_observed' AND jl.contact_id IS NOT NULL{{OfThePage}}jl.contact_id */
           AND (json_extract(jl.new_json, '$.kind') = 'reply_detected'
                OR (json_extract(jl.new_json, '$.kind') = 'bounce' AND json_extract(jl.new_json, '$.bounce') = 'hard'))
         """;
@@ -100,7 +107,7 @@ internal static class CampaignPeople
         FROM campaign_contacts AS m
         JOIN contact_channels AS ch ON ch.contact_id = m.contact_id
         JOIN suppressions AS s ON s.channel = ch.channel AND s.value = ch.value
-        WHERE m.campaign_id IN {{Asked}}
+        WHERE m.campaign_id IN {{Asked}}{{OfThePage}}m.contact_id */
         """;
 
     private const string ReAdded = $$"""
@@ -226,6 +233,9 @@ internal static class CampaignPeople
         definition => definition.Filter,
         definition => $"SELECT * FROM ({Facts(definition.Parts, SummaryMembers)}) AS f WHERE {definition.Condition}");
 
+    // A page's people's memberships, every one: Removed stands for the removed ones, every other count for the members.
+    private const string PageMembers = "cc.contact_id IN (SELECT value FROM json_each({1}))";
+
     /// <summary>Every Summary count per campaign, from the same conditions the lists filter by.</summary>
     internal static readonly string SummaryCountsSql =
         $"SELECT f.campaign_id AS CampaignId, sum(CASE WHEN {Current} THEN 1 ELSE 0 END) AS People, {Sums(SummaryDefinitions)} "
@@ -323,6 +333,15 @@ internal static class CampaignPeople
         $"SELECT 0 AS CampaignId, count(DISTINCT CASE WHEN {Current} THEN f.contact_id END) AS People, {Distincts(SummaryDefinitions)} "
         + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), SummaryMembers)}) AS f";
 
+    /// <summary>
+    /// Every Summary count each membership of a page's people stands in now, from the same conditions, as one bit per
+    /// count in the definitions' order: <c>{0}</c> is the campaigns of those memberships and <c>{1}</c> the people, so the
+    /// read grows with the page and never with the campaigns.
+    /// </summary>
+    internal static readonly string StandingSql =
+        $"SELECT f.contact_id AS ContactId, f.campaign_id AS CampaignId, {Bits(SummaryDefinitions)} AS Counts "
+        + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), PageMembers, page: true)}) AS f";
+
     internal static readonly string ActivityTotalSql =
         $"SELECT 0 AS CampaignId, {Distincts(ActivityDefinitions)} "
         + $"FROM ({Facts(ActivityDefinitions.SelectMany(definition => definition.Parts), ActivityMembers)}) AS f";
@@ -339,6 +358,21 @@ internal static class CampaignPeople
     {
         ArgumentNullException.ThrowIfNull(db);
         return db.Database.SqlQueryRaw<SummaryCounts>(SummaryCountsSql, Keys(campaignIds)).ToDictionaryAsync(counts => counts.CampaignId, ct);
+    }
+
+    /// <summary>
+    /// Where each membership of these people stands now: the Summary counts that count the person in that campaign, in the
+    /// counts' order, keyed by the person and the campaign. <paramref name="campaignIds"/> are the campaigns of those
+    /// memberships. One read for the whole page, never one per person.
+    /// </summary>
+    public static async Task<Dictionary<(int ContactId, int CampaignId), IReadOnlyList<CampaignSummaryFilter>>> StandingAsync(
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, IReadOnlyCollection<int> contactIds, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var rows = await db.Database.SqlQueryRaw<StandingRow>(StandingSql, Keys(campaignIds), Keys(contactIds)).ToListAsync(ct).ConfigureAwait(false);
+        return rows.ToDictionary(
+            row => (row.ContactId, row.CampaignId),
+            row => (IReadOnlyList<CampaignSummaryFilter>)[.. SummaryDefinitions.Where((_, bit) => (row.Counts & (1 << bit)) != 0).Select(definition => definition.Filter)]);
     }
 
     /// <summary>Every Activity count of each campaign asked that has had people, in one read.</summary>
@@ -399,21 +433,34 @@ internal static class CampaignPeople
         where TFilter : struct, Enum =>
         string.Join(", ", definitions.Select(definition => $"count(DISTINCT CASE WHEN {definition.Condition} THEN f.contact_id END) AS {definition.Filter}"));
 
+    private static string Bits<TFilter>(Definition<TFilter>[] definitions)
+        where TFilter : struct, Enum =>
+        string.Join(" + ", definitions.Select((definition, bit) => $"(CASE WHEN {definition.Condition} THEN {1 << bit} ELSE 0 END)"));
+
     private static string Sums<TFilter>(Definition<TFilter>[] definitions)
         where TFilter : struct, Enum =>
         string.Join(", ", definitions.Select(definition => $"sum(CASE WHEN {definition.Condition} THEN 1 ELSE 0 END) AS {definition.Filter}"));
 
-    /// <summary>The memberships asked about, each with the facts these parts say about them, every part joined once.</summary>
-    private static string Facts(IEnumerable<Part> parts, string members)
+    /// <summary>
+    /// The memberships asked about, each with the facts these parts say about them, every part joined once; for a page, each
+    /// part reads its page's people's rows only.
+    /// </summary>
+    private static string Facts(IEnumerable<Part> parts, string members, bool page = false)
     {
         var used = parts.Distinct().ToList();
         var columns = string.Concat(used.Select(part => ", " + part.Columns));
-        var joins = string.Concat(used.Select(part => $" LEFT JOIN ({part.Sql}) AS {part.Alias} ON "
+        var joins = string.Concat(used.Select(part => $" LEFT JOIN ({Scoped(part.Sql, page)}) AS {part.Alias} ON "
             + (part.ByPerson
                 ? $"{part.Alias}.contact_id = cc.contact_id"
                 : $"{part.Alias}.campaign_id = cc.campaign_id AND {part.Alias}.contact_id = cc.contact_id")));
         return $"SELECT cc.*{columns} FROM campaign_contacts AS cc{joins} WHERE {members}";
     }
+
+    private static string Scoped(string sql, bool page) =>
+        PageMark().Replace(sql, mark => page ? $" AND {mark.Groups[1].Value} IN (SELECT value FROM json_each({{1}}))" : string.Empty);
+
+    [GeneratedRegex(@" /\* of the page: ([a-z_.]+) \*/")]
+    private static partial Regex PageMark();
 
     /// <summary>One table of facts about people, joined by campaign and person, or by person alone for what holds across campaigns.</summary>
     private sealed record Part(string Alias, string Sql, bool ByPerson, string Columns);
@@ -429,6 +476,9 @@ internal static class CampaignPeople
 
     private static DateTime Utc(DateTime moment) => moment.Kind == DateTimeKind.Utc ? moment : moment.ToUniversalTime();
 }
+
+/// <summary>Where one membership stands: one bit per Summary count, as <see cref="CampaignPeople.StandingAsync"/> reads it.</summary>
+internal sealed record StandingRow(int ContactId, int CampaignId, int Counts);
 
 /// <summary>One happening of a count: whose, and when, in Unix milliseconds.</summary>
 internal sealed record Moment(int ContactId, long Ms);

@@ -25,7 +25,7 @@ public partial class CampaignPeoplePlanTests
         await db.Database.OpenConnectionAsync(Ct);
         var scans = new StringBuilder();
 
-        string[] counts = [CampaignPeople.SummaryCountsSql, CampaignPeople.ActivityCountsSql, CampaignPeople.SummaryTotalSql, CampaignPeople.ActivityTotalSql];
+        string[] counts = [CampaignPeople.SummaryCountsSql, CampaignPeople.ActivityCountsSql, CampaignPeople.SummaryTotalSql, CampaignPeople.ActivityTotalSql, CampaignPeople.StandingSql];
         string[] why = [CampaignWhy.FirstReplies, CampaignWhy.FinishedWork, CampaignWhy.Additions, CampaignWhy.Removals, CampaignWhy.OptOuts];
         foreach (var sql in CampaignPeople.Summary.Values.Concat(counts).Concat(CampaignPeople.Moments.Values).Concat(CampaignPeople.PeopleByMoment.Values).Concat(why))
         {
@@ -68,6 +68,14 @@ public partial class CampaignPeoplePlanTests
         foreach (var page in moments)
         {
             await using var command = page.CreateDbCommand();
+            await PlanAsync(command, scans);
+        }
+
+        // The people a Summary count counts, as contact.list reads them in the order of activity: the count's people first,
+        // each then found by their key and their newest line through their own index.
+        var counted = ContactService.Counted(db, db.Contacts.Where(contact => contact.ArchivedAt == null), campaign, CampaignSummaryFilter.Waiting);
+        await using (var command = ContactActivity.Ordered(ContactActivity.Rows(counted, db)).Take(201).CreateDbCommand())
+        {
             await PlanAsync(command, scans);
         }
 
