@@ -10,35 +10,61 @@ const page = () => new Response('# Install\n', { status: 200 });
 
 test('a source is the first ref, lowercased, kept when it is 1 to 40 letters, digits and hyphens', () => {
   const of = (query) => sourceOf(new URLSearchParams(query));
-  assert.equal(of(''), 'none');
-  assert.equal(of('ref='), 'none');
+  assert.equal(of(''), '(none)');
+  assert.equal(of('ref='), '(none)');
   assert.equal(of('ref=linkedin'), 'linkedin');
   assert.equal(of('ref=LinkedIn-Ads-2026'), 'linkedin-ads-2026');
   assert.equal(of('ref=a&ref=b'), 'a');
   assert.equal(of(`ref=${'a'.repeat(40)}`), 'a'.repeat(40));
-  assert.equal(of(`ref=${'a'.repeat(41)}`), 'other');
-  assert.equal(of('ref=news_letter'), 'other');
-  assert.equal(of('ref=%3Cscript%3E'), 'other');
-  assert.equal(of('ref=caf%C3%A9'), 'other');
-  assert.equal(of('utm_source=x'), 'none');
+  assert.equal(of(`ref=${'a'.repeat(41)}`), '(other)');
+  assert.equal(of('ref=news_letter'), '(other)');
+  assert.equal(of('ref=%3Cscript%3E'), '(other)');
+  assert.equal(of('ref=caf%C3%A9'), '(other)');
+  assert.equal(of('ref=(none)'), '(other)');
+  assert.equal(of('utm_source=x'), '(none)');
 });
 
-test('a client is a bot first, then a fetcher by its own word, then a browser, and a fetcher without a word', () => {
+test('a source named none or other is a source of its own, never the reserved rows', () => {
+  const of = (query) => sourceOf(new URLSearchParams(query));
+  assert.equal(of('ref=none'), 'none');
+  assert.equal(of('ref=other'), 'other');
+  assert.notEqual(of('ref=none'), of(''));
+  assert.notEqual(of('ref=other'), of('ref=bad_one'));
+});
+
+// The agents' own fetchers, by the strings their makers publish, fetched from these pages on 2026-11-11:
+// - OpenAI, https://platform.openai.com/docs/bots : ChatGPT-User's full string, which ends in a URL with "bot" in it.
+// - Perplexity, https://docs.perplexity.ai/guides/bots : Perplexity-User's example string ("the version number may change").
+// - Anthropic, https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler :
+//   names the agent "Claude-User" ("it may access websites using a Claude-User agent") and publishes no fuller string,
+//   so the row is that name alone.
+const published = [
+  ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot', 'fetcher'],
+  ['Mozilla/5.0 (compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)', 'fetcher'],
+  ['Claude-User', 'fetcher'],
+];
+
+test("an agent's own fetcher, by its maker's published string, is a fetcher even where the string names a bot", () => {
+  for (const [agent, expected] of published) assert.equal(clientOf(agent), expected, agent);
+});
+
+test("a client is an agent's named fetcher first, then a bot, then a command line's fetcher, then a browser", () => {
+  // Shapes of the rule rather than vendors' strings: each row is written to land on one branch.
   const rows = [
     [null, 'fetcher'],
     ['', 'fetcher'],
-    ['Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'bot'],
+    ['Mozilla/5.0 (compatible; Claude-User/1.0; +https://example.com/bot)', 'fetcher'],
+    ['claude-code/2.1.0 (+https://example.com/bot)', 'fetcher'],
+    ['codex_cli_rs/0.40.0', 'fetcher'],
+    ['Mozilla/5.0 (compatible; ExampleBot/2.1; +https://example.com/bot.html)', 'bot'],
     ['facebookexternalhit/1.1', 'bot'],
     ['Slackbot-LinkExpanding 1.0', 'bot'],
     ['WhatsApp/2.23', 'bot'],
-    ['Mozilla/5.0 (compatible; GPTBot/1.2)', 'bot'],
-    ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Claude-User/1.0', 'fetcher'],
-    ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ChatGPT-User/1.0)', 'fetcher'],
-    ['claude-code/2.1.0', 'fetcher'],
-    ['codex_cli_rs/0.40.0', 'fetcher'],
+    ['python-requests/2.32.3 examplebot', 'bot'],
+    ['Go-http-client/2.0 (crawler)', 'bot'],
     ['curl/8.7.1', 'fetcher'],
     ['Wget/1.21.4', 'fetcher'],
-    ['Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26100; en-US) PowerShell/7.5.0', 'fetcher'],
+    ['Mozilla/5.0 (Windows NT 10.0; en-US) PowerShell/7.5.0', 'fetcher'],
     ['python-requests/2.32.3', 'fetcher'],
     ['node', 'fetcher'],
     ['undici', 'fetcher'],
@@ -67,7 +93,7 @@ test('a GET of a desktop path is counted once, and the day is the UTC day', asyn
     headers: { 'user-agent': 'Mozilla/5.0 (Macintosh) Safari/605.1.15' },
     now: new Date('2026-11-12T23:59:59-07:00'),
   });
-  assert.deepEqual(db.runs.map((run) => run.args), [['2026-11-13', '/desktop/mac-intel', 'none', 'browser']]);
+  assert.deepEqual(db.runs.map((run) => run.args), [['2026-11-13', '/desktop/mac-intel', '(none)', 'browser']]);
 });
 
 test('HEAD is answered as GET is and never counted', async () => {
