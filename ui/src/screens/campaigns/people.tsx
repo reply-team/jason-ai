@@ -4,7 +4,7 @@ import { Search } from '../../lists/search';
 import { replace, type Route } from '../../router';
 import { when } from '../../time/format';
 import { displayName, entryLabel } from '../people/labels';
-import { stageWords } from '../people/standing';
+import { stageWord, stageWords } from '../people/standing';
 import { activityColumns, atTheProvider, everyone, summaryColumns } from './labels';
 import { happened } from './why';
 import { Notice } from '../../layout/notice';
@@ -29,6 +29,9 @@ type Props = {
     /** Opens anybody not waiting for you in the person panel, from this campaign. */
     onPerson: (contactId: string) => void;
 };
+
+/** A person taken out of the campaign, in the Removed count's own word. */
+const removed = stageWord('removed')?.label;
 
 /** Why a person is in the count they were listed under, in the few words a row has room for. */
 function why(person: MembershipItem, filter: string | undefined, me: string, now: Date, zone: string): string | null {
@@ -146,7 +149,7 @@ export function CampaignPeople({
                             </span>
                             <span className="meta">
                                 {person.state === 'excluded' ? (
-                                    <span className="badge outline">Removed</span>
+                                    <span className="badge outline">{removed}</span>
                                 ) : (
                                     stageWords(
                                         person.contact.campaigns?.find((c) => c.campaign_id === at.id)?.standing ?? [],

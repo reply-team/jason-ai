@@ -5,6 +5,7 @@ import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import { App } from '../../app';
 import { CampaignChat } from './campaign-chat';
+import { stageWord } from '../people/standing';
 import { href, parseRoute, route, type Route } from '../../router';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock, in UTC here.
@@ -450,6 +451,19 @@ describe('A campaign’s people', () => {
             expect(new Set(counted.map((body) => JSON.stringify(body))).size).toBe(2);
         },
     );
+
+    it('a removed person’s badge and the Removed chip say the one word the stage map holds, the badge in outline', async () => {
+        const api = peopleApi('campaign.list_contacts/summary-removed');
+        open(api, people('removed', 'summary'));
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+        const word = stageWord('removed')!.label;
+
+        const badge = (await row('Oli Example')).querySelector('.meta .badge')!;
+        expect(badge.textContent).toBe(word);
+        expect(badge.className).toBe('badge outline');
+        // The chip is the same count, named from the same map.
+        expect(await screen.findByRole('button', { name: new RegExp(`^${word}\\s*1$`), pressed: true })).toBeTruthy();
+    });
 
     it("each row says where the person stands in this campaign, from the runtime's own standing", async () => {
         const api = peopleApi('campaign.list_contacts/everyone');
