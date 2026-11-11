@@ -112,7 +112,7 @@ test('a campaign\'s conversation is made once, and every turn of it takes the ca
     r.b.env.STUB_CAMPAIGN_FOLDER = folder;
     const made = await r.chat.create('cmp_01ABC');
     assert.match(made.id, /^conv_[0-9A-HJKMNP-TV-Z]{26}$/);
-    assert.deepEqual({ ...made, updatedAt: '' }, { id: made.id, campaignId: 'cmp_01ABC', title: 'Spring', updatedAt: '' });
+    assert.deepEqual({ ...made, updatedAt: '' }, { id: made.id, campaignId: 'cmp_01ABC', title: 'Spring', updatedAt: '', running: false });
     assert.equal((await r.chat.create('cmp_01ABC')).id, made.id, 'a campaign has one conversation');
     // The page's own campaignId on a known conversation is not read: the record decides.
     await r.turn(made.id, 'How is it doing?', { host: 'claude', campaignId: 'cmp_99OTHER' });
@@ -456,4 +456,37 @@ test('a conversation whose turn runs is neither removed nor started afresh, and 
     assert.throws(() => r.chat.open(chat.id), { message: 'That conversation is not one this desktop keeps.' });
     for (const bad of ['', 'conv_../x', 42, null]) assert.throws(() => r.chat.open(bad), { message: 'That conversation is not one this desktop keeps.' });
     await assert.rejects(r.chat.create('../cmp'), { message: 'That is not a campaign id.' });
+});
+
+test('a conversation that never had a turn is not listed and leaves no record, and Start afresh on it writes nothing', async (t) => {
+    const r = rig(t);
+    const setup = await r.chat.create();
+    const campaign = await r.chat.create('cmp_01ABC');
+    assert.deepEqual(r.chat.list(), []);
+    r.chat.restart(setup.id);
+    r.chat.restart(campaign.id);
+    assert.deepEqual(existsSync(r.b.paths.conversations) ? readdirSync(r.b.paths.conversations) : [], []);
+    assert.deepEqual(r.chat.list(), []);
+    assert.equal(r.chat.open(setup.id).id, setup.id, 'the window that made it still opens it');
+    // Its first turn keeps it: it is listed from the turn's start.
+    const done = r.until(setup.id, (event) => event.kind === 'done');
+    await r.chat.send(setup.id, 'Hello', { host: 'claude' });
+    assert.deepEqual(r.chat.list().map((each) => each.id), [setup.id]);
+    await done;
+    assert.deepEqual(readdirSync(r.b.paths.conversations), [`${setup.id}.json`]);
+});
+
+test('list and open say whether a conversation\'s turn runs, so a page loaded again finds it running', async (t) => {
+    const r = rig(t);
+    plan(r, [{ wait: join(r.b.root, 'host.pid') }]);
+    const chat = await r.chat.create('cmp_01ABC');
+    assert.equal(r.chat.open(chat.id).running, false);
+    await r.chat.send(chat.id, 'Wait', { host: 'claude' });
+    assert.equal(r.chat.open(chat.id).running, true);
+    assert.deepEqual(r.chat.list().map((each) => [each.id, each.running]), [[chat.id, true]]);
+    const done = r.until(chat.id, (event) => event.kind === 'done');
+    r.chat.stop(chat.id);
+    await done;
+    assert.equal(r.chat.open(chat.id).running, false);
+    assert.deepEqual(r.chat.list().map((each) => [each.id, each.running]), [[chat.id, false]]);
 });

@@ -129,6 +129,8 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         campaignId: record.campaignId,
         entries: record.entries.map(entryOf),
         dropped: record.dropped,
+        // A turn of it runs: a page loaded again shows it running, with Stop, and its events follow.
+        running: record.running,
     };
 }
 

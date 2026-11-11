@@ -10,11 +10,13 @@ import type {
     DesktopConversation,
     DesktopConversationRecord,
     DesktopKeptEntry,
+    DesktopRefusal,
     DesktopSetup,
     JasonDesktop,
 } from '../../ui/src/platform/desktop.d.ts';
 import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummary } from '../src/chat.ts';
 import type { KeptEntry } from '../src/chat-conversations.ts';
+import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
@@ -76,7 +78,11 @@ type ConversationsAreTheSeam = [
 // A turn names the conversation and the host, and the model; never a campaign, which the conversation's record decides.
 type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model'>>];
 
+// A refusal reaches the page as the value the desktop answers it with.
+type RefusalIsTheSeam = Holds<Equal<ChatRefusal, DesktopRefusal>>;
+
 export type SeamHeld = [
+    RefusalIsTheSeam,
     StatusIsTheSeam,
     PreloadIsTheSeam,
     InvokeChannelsAreTheSeam,

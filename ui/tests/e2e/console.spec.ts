@@ -6,27 +6,46 @@ import { expect, test } from './fixtures';
 function standInDesktop(): void {
     const quiet = () => () => undefined;
     const done = () => Promise.resolve();
-    // The one conversation the window opens on, a set-up chat the desktop made.
-    const made = {
-        id: 'conv_01JD0000000000000000000001',
-        campaignId: null,
-        title: 'New chat',
-        updatedAt: '2026-11-11T00:00:00.000Z',
-    };
+    // The conversations as the desktop answers for them: made by create, listed once sent to, and a refusal answered
+    // as a value with the desktop's sentence, never a rejected promise.
+    type Made = { id: string; campaignId: string | null; title: string; updatedAt: string; running: boolean };
+    const made = new Map<string, Made>();
+    const sent = new Set<string>();
+    let count = 0;
+    const notKept = { refused: 'That conversation is not one this desktop keeps.' };
+    const kept = (id: unknown) => (typeof id === 'string' ? made.get(id) : undefined);
     (window as unknown as { jasonDesktop: unknown }).jasonDesktop = {
         platform: 'win32',
         onCommand: quiet,
         chat: {
-            send: done,
+            send: (id: unknown) => Promise.resolve(kept(id) ? (sent.add(id as string), null) : notKept),
             stop: done,
             answer: done,
             onEvent: quiet,
-            list: () => Promise.resolve([made]),
-            open: () => Promise.resolve({ ...made, entries: [], dropped: 0 }),
-            create: () => Promise.resolve(made),
-            remove: done,
-            restart: done,
-            attach: () => Promise.resolve(made),
+            list: () => Promise.resolve([...made.values()].filter((each) => sent.has(each.id))),
+            open: (id: unknown) => {
+                const found = kept(id);
+                return Promise.resolve(found ? { ...found, entries: [], dropped: 0 } : notKept);
+            },
+            create: (campaignId?: string) => {
+                const found = [...made.values()].find(
+                    (each) => campaignId !== undefined && each.campaignId === campaignId,
+                );
+                if (found) return Promise.resolve(found);
+                const one: Made = {
+                    id: `conv_01JD${String(++count).padStart(22, '0')}`,
+                    campaignId: campaignId ?? null,
+                    title: campaignId ?? 'New chat',
+                    updatedAt: '2026-11-11T00:00:00.000Z',
+                    running: false,
+                };
+                made.set(one.id, one);
+                return Promise.resolve(one);
+            },
+            remove: (id: unknown) => Promise.resolve(kept(id) && made.delete(id as string) ? null : notKept),
+            restart: (id: unknown) => Promise.resolve(kept(id) ? null : notKept),
+            attach: () =>
+                Promise.resolve({ refused: 'That campaign is not one this chat made. Open it from the campaign.' }),
         },
         setup: {
             status: () =>

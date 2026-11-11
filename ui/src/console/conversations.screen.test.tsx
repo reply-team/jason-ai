@@ -40,6 +40,11 @@ function renderConsole(desktop: StubDesktop = stubDesktop()): { desktop: StubDes
 
 const side = () => document.querySelector<HTMLElement>('.side')!;
 const listed = () => within(side()).getByRole('navigation', { name: 'Conversations' });
+/** What the sidebar's list says, in its order. */
+const names = () =>
+    within(listed())
+        .getAllByRole('button')
+        .map((each) => each.textContent?.trim());
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
 const thread = () =>
     document.querySelector<HTMLElement>('.dv-active-group .thread') ?? document.querySelector<HTMLElement>('.thread')!;
@@ -85,14 +90,9 @@ describe('the desktop’s conversations', () => {
         });
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000A2', title: hostile });
         renderConsole(desktop);
-        // The set-up chat the window opens on is the newest; the two kept ones follow, newest first.
-        await waitFor(() =>
-            expect(
-                within(listed())
-                    .getAllByRole('button')
-                    .map((each) => each.textContent?.trim()),
-            ).toEqual(['New chat', hostile, 'Spring']),
-        );
+        // The two kept ones, newest first; the set-up chat the window opens on is not listed until its first turn.
+        await waitFor(() => expect(names()).toEqual([hostile, 'Spring']));
+        expect(Object.keys(chats.value)).toHaveLength(1);
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         await waitFor(() => screen.getByText('Claude Code stopped.'));
         expect(calls(desktop, 'chat.open').map((each) => each.args)).toEqual([['conv_01JDKEPT0000000000000000A1']]);
@@ -113,26 +113,20 @@ describe('the desktop’s conversations', () => {
         expect(calls(desktop, 'chat.open')).toHaveLength(1);
     });
 
-    it('reads the list again when a turn ends, so the conversation the desktop moved up is listed first', async () => {
+    it('reads the list again when a turn ends, so what the desktop changed meanwhile is listed', async () => {
         const desktop = stubDesktop();
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000B1', campaignId: 'cmp_1', title: 'Spring' });
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000B2', campaignId: 'cmp_2', title: 'Autumn' });
         renderConsole(desktop);
         await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         const id = await send(desktop, 'How is it doing?', hero.closest<HTMLElement>('.chat-panel')!);
-        // The desktop keeps the turn: Spring is its newest conversation now.
-        const spring = desktop.kept.get(id)!;
-        desktop.kept.delete(id);
-        desktop.kept.set(id, spring);
+        await waitFor(() => expect(names()).toEqual(['Spring', 'Autumn']));
+        // While the turn runs, the desktop renames Autumn after its campaign; the list says so once the turn ends.
+        desktop.kept.get('conv_01JDKEPT0000000000000000B2')!.title = 'Autumn outreach';
         flush(() => desktop.emit(id, { kind: 'done', error: null }));
-        await waitFor(() =>
-            expect(
-                within(listed())
-                    .getAllByRole('button')
-                    .map((each) => each.textContent?.trim()),
-            ).toEqual(['Spring', 'New chat']),
-        );
+        await waitFor(() => expect(names()).toEqual(['Spring', 'Autumn outreach']));
     });
 
     it('sends a turn with the host alone: the conversation the desktop keeps decides the campaign', async () => {
@@ -272,5 +266,102 @@ describe('the desktop’s conversations', () => {
             ),
         );
         expect(chats.value[id]).toBeDefined();
+    });
+
+    it('opens a conversation whose turn still runs as running, with Stop, and the turn’s events reach it', async () => {
+        const desktop = stubDesktop();
+        // A page loaded again while the desktop runs a turn of Spring's conversation.
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000R1',
+            campaignId: 'cmp_1',
+            title: 'Spring',
+            running: true,
+            entries: [{ kind: 'user', text: 'How is it doing?' }],
+        });
+        renderConsole(desktop);
+        await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        await waitFor(() => screen.getByText('How is it doing?'));
+        const panel = screen.getByText('How is it doing?').closest<HTMLElement>('.chat-panel')!;
+        expect(within(panel).getByRole('button', { name: 'Stop' })).toBeTruthy();
+        expect(within(panel).getByText('Thinking…')).toBeTruthy();
+        expect(within(panel).getByRole('button', { name: 'Remove' })).toHaveProperty('disabled', true);
+        fireEvent.click(within(panel).getByRole('button', { name: 'Stop' }));
+        expect(calls(desktop, 'chat.stop').map((each) => each.args)).toEqual([['conv_01JDKEPT0000000000000000R1']]);
+        flush(() => {
+            desktop.emit('conv_01JDKEPT0000000000000000R1', { kind: 'text', text: 'Twelve replies.' });
+            desktop.emit('conv_01JDKEPT0000000000000000R1', { kind: 'done', error: null });
+        });
+        await waitFor(() => within(panel).getByText('Twelve replies.'));
+        expect(within(panel).queryByRole('button', { name: 'Stop' })).toBeNull();
+        expect(within(panel).getByRole('button', { name: 'Send' })).toBeTruthy();
+    });
+
+    it('says in the sidebar, in the desktop’s words, a list that failed, a conversation it would not open and one it would not make', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000F1', campaignId: 'cmp_1', title: 'Spring' });
+        desktop.refuse.set('chat.list', 'The desktop could not read its conversations.');
+        renderConsole(desktop);
+        await waitFor(() => within(side()).getByText('The desktop could not read its conversations.'));
+        desktop.refuse.delete('chat.list');
+        // The list read again with the next turn's end: the note goes, the conversation is there.
+        const id = await send(desktop, 'Go');
+        await waitFor(() =>
+            expect(within(side()).queryByText('The desktop could not read its conversations.')).toBeNull(),
+        );
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        desktop.refuse.set('chat.open', 'That conversation is not one this desktop keeps.');
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        await waitFor(() => within(side()).getByText('That conversation is not one this desktop keeps.'));
+        expect(screen.queryByRole('heading', { name: 'What should Jason do in Spring?' })).toBeNull();
+        desktop.refuse.set('chat.create', 'That is not a campaign id.');
+        fireEvent.click(within(side()).getByRole('button', { name: 'New chat' }));
+        await waitFor(() => within(side()).getByText('That is not a campaign id.'));
+        expect(Object.keys(chats.value)).toEqual([id]);
+    });
+
+    it('says in the chat, in the desktop’s words, a Start afresh it refused and a turn sent to a conversation it does not keep', async () => {
+        const { desktop } = renderConsole();
+        const id = await send(desktop, 'Go');
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        desktop.refuse.set(
+            'chat.restart',
+            'This conversation is still answering. Wait for it to finish, or stop it, then start it afresh.',
+        );
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Start afresh' })).toHaveProperty('disabled', false),
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Start afresh' }));
+        await waitFor(() =>
+            screen.getByText(
+                'This conversation is still answering. Wait for it to finish, or stop it, then start it afresh.',
+            ),
+        );
+        expect(screen.queryByText(/^Started afresh/)).toBeNull();
+        // The desktop no longer keeps it, removed elsewhere: its next turn is refused, said as the turn's error.
+        desktop.kept.delete(id);
+        await send(desktop, 'Again');
+        await waitFor(() => screen.getByText('That conversation is not one this desktop keeps.'));
+        expect(chats.value[id]).toMatchObject({ running: false });
+        expect(chats.value[id]?.entries.slice(-2)).toEqual([
+            { kind: 'user', text: 'Again' },
+            { kind: 'error', text: 'That conversation is not one this desktop keeps.' },
+        ]);
+        expect(document.querySelector('.chat-error')?.textContent).not.toMatch(/Error invoking|remote method/);
+    });
+
+    it('opens one conversation for two quick clicks on a campaign’s Chat', async () => {
+        const { desktop } = renderConsole();
+        await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+        fireEvent.click(within(side()).getByRole('button', { name: 'Campaigns' }));
+        const spring = await waitFor(() => screen.getByText('Spring', { selector: 'b' }).closest('tr')!);
+        fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
+        fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
+        await waitFor(() =>
+            expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_1')).toHaveLength(2),
+        );
+        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        expect(Object.values(chats.value).filter((chat) => chat.campaignId === 'cmp_1')).toHaveLength(1);
+        expect(screen.getAllByText('Spring', { selector: '.dv-default-tab-content' })).toHaveLength(1);
     });
 });

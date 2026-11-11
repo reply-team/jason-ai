@@ -44,6 +44,16 @@ export interface DesktopConversation {
     title: string;
     /** When it last changed, ISO-8601 UTC. */
     updatedAt: string;
+    /** Whether a turn of it runs now, so a page loaded again shows it running, with Stop. */
+    running: boolean;
+}
+
+/**
+ * A call the desktop refused, answered as a value: `refused` is the desktop's sentence alone, for the page to show as
+ * it is. A promise of the seam rejects only for what is no refusal.
+ */
+export interface DesktopRefusal {
+    refused: string;
 }
 
 /**
@@ -215,10 +225,11 @@ export interface JasonDesktop {
     onCommand(handler: (command: DesktopCommand) => void): () => void;
     chat: {
         /**
-         * Starts a turn of the conversation `chatId`, an id `chat.create` or `chat.list` gave; one the desktop does not
-         * keep is refused.
+         * Starts a turn of the conversation `chatId`, an id `chat.create` or `chat.list` gave; null once started, or a
+         * refusal for a conversation the desktop does not keep. Every other end of a turn, a refused one included, is a
+         * `done` event.
          */
-        send(chatId: string, text: string, options: DesktopChatOptions): Promise<void>;
+        send(chatId: string, text: string, options: DesktopChatOptions): Promise<DesktopRefusal | null>;
         /** Stops the chat's running turn; a `done` event follows. Nothing running is nothing to stop. */
         stop(chatId: string): Promise<void>;
         /**
@@ -229,25 +240,28 @@ export interface JasonDesktop {
         answer(chatId: string, requestId: string, decision: { allow: boolean; always: boolean }): Promise<void>;
         /** Calls `handler` with every event of every chat; the function it returns stops that. */
         onEvent(handler: (chatId: string, event: DesktopChatEvent) => void): () => void;
-        /** The conversations the desktop keeps, the one changed last first. */
+        /** The conversations the desktop keeps, the one changed last first; one never sent to is not kept. */
         list(): Promise<DesktopConversation[]>;
         /** One conversation with what the page drew; an id the desktop does not keep is refused. */
-        open(chatId: string): Promise<DesktopConversationRecord>;
+        open(chatId: string): Promise<DesktopConversationRecord | DesktopRefusal>;
         /**
          * A conversation to start in: with a campaign, that campaign's own conversation, found or made with its name;
          * without one, a new set-up chat.
          */
-        create(campaignId?: string): Promise<DesktopConversation>;
-        /** Removes a conversation and its record. Refused while its turn runs. */
-        remove(chatId: string): Promise<void>;
-        /** "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept. Refused while its turn runs. */
-        restart(chatId: string): Promise<void>;
+        create(campaignId?: string): Promise<DesktopConversation | DesktopRefusal>;
+        /** Removes a conversation and its record: null once done. Refused while its turn runs. */
+        remove(chatId: string): Promise<DesktopRefusal | null>;
         /**
-         * Makes a set-up chat the conversation of a campaign its last `pick` named; an `attached` event follows. Refused
-         * while its turn runs, for a conversation already about a campaign, for a campaign that has a conversation, and
-         * for one the pick did not name.
+         * "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept; null once done. Refused
+         * while its turn runs.
          */
-        attach(chatId: string, campaignId: string): Promise<DesktopConversation>;
+        restart(chatId: string): Promise<DesktopRefusal | null>;
+        /**
+         * Makes a set-up chat the conversation of a campaign its last `pick` named; its `attached` event comes before
+         * this answers. Refused while its turn runs, for a conversation already about a campaign, for a campaign that has
+         * a conversation, and for one the pick did not name.
+         */
+        attach(chatId: string, campaignId: string): Promise<DesktopConversation | DesktopRefusal>;
     };
     setup: {
         status(): Promise<DesktopSetup>;

@@ -1,6 +1,6 @@
 import { computed, effect } from '@preact/signals-react';
 import { useCallback, useMemo, type FormEvent, type KeyboardEvent } from 'react';
-import type { DesktopConversation, DesktopHost } from '../platform/desktop';
+import type { DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { act, define } from './actions';
 import {
     afresh,
@@ -47,6 +47,16 @@ const answerWords: Readonly<Record<Answer, string>> = {
     gone: 'This request has ended',
 };
 
+/** Whether the desktop answered a call with a refusal: its sentence, as a value, never a thrown error. */
+export const isRefusal = (answer: unknown): answer is DesktopRefusal =>
+    typeof answer === 'object' && answer !== null && typeof (answer as { refused?: unknown }).refused === 'string';
+
+/** A refusal the desktop answered, thrown on as an Error whose message is the sentence alone. */
+function unless<T>(answer: T | DesktopRefusal): T {
+    if (isRefusal(answer)) throw new Error(answer.refused);
+    return answer;
+}
+
 /** Lists the conversations the desktop keeps again; one it could not list is said in the sidebar. */
 export async function reloadConversations(): Promise<void> {
     try {
@@ -61,7 +71,7 @@ export async function reloadConversations(): Promise<void> {
 /** Holds a conversation in the console, read from the desktop once: what the page drew before comes with it. */
 async function hold(id: string): Promise<string> {
     if (chats.value[id]) return id;
-    const record = await here().desktop.chat.open(id);
+    const record = unless(await here().desktop.chat.open(id));
     if (!chats.value[record.id]) chats.value = { ...chats.value, [record.id]: fromRecord(record, null) };
     return record.id;
 }
@@ -74,9 +84,9 @@ export async function startChat(campaign?: { id: string; name: string }): Promis
     try {
         let id: string;
         if (campaign) {
-            id = await hold((await here().desktop.chat.create(campaign.id)).id);
+            id = await hold(unless(await here().desktop.chat.create(campaign.id)).id);
         } else {
-            const made: DesktopConversation = await here().desktop.chat.create();
+            const made = unless(await here().desktop.chat.create());
             chats.value = { ...chats.value, [made.id]: { ...newChat(made.id, null), title: made.title } };
             id = made.id;
         }
@@ -105,7 +115,12 @@ export async function openConversation(id: string): Promise<string | null> {
 export function restartChat(id: string): void {
     here()
         .desktop.chat.restart(id)
-        .then(() => changeChat(id, afresh))
+        .then((answer) => {
+            if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
+            changeChat(id, afresh);
+            // The desktop keeps the conversation changed now: the list says it first.
+            void reloadConversations();
+        })
         .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 }
 
@@ -114,7 +129,8 @@ export function removeChat(id: string): void {
     changeChat(id, (chat) => ({ ...chat, removing: false }));
     here()
         .desktop.chat.remove(id)
-        .then(() => {
+        .then((answer) => {
+            if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
             here().dock.closeChat(id);
             chats.value = Object.fromEntries(Object.entries(chats.value).filter(([each]) => each !== id));
             void reloadConversations();
@@ -152,6 +168,11 @@ export function sendTurn(id: string, text: string, resent = false): void {
     changeChat(id, (each) => said(each, words, resent));
     here()
         .desktop.chat.send(id, words, { host: host.id })
+        .then((answer) => {
+            if (isRefusal(answer)) return changeChat(id, (each) => failed(each, answer.refused));
+            // From its first turn the desktop keeps the conversation, and lists it.
+            void reloadConversations();
+        })
         .catch((error: unknown) => changeChat(id, (each) => failed(each, messageOf(error))));
 }
 
@@ -183,6 +204,7 @@ define('chat.attach', ([id, campaignId]) => {
     here()
         .desktop.chat.attach(id, campaignId)
         .then((conversation) => {
+            if (isRefusal(conversation)) return changeChat(id, (chat) => told(chat, conversation.refused));
             changeChat(id, (chat) => pickedFor(chat, conversation));
             void reloadConversations();
         })

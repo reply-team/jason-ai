@@ -90,6 +90,7 @@ describe('a chat as the page keeps it', () => {
             campaignId: 'cmp_2',
             title: 'Winter',
             updatedAt: '2026-11-11T10:00:00.000Z',
+            running: false,
         });
         expect(picked).toMatchObject({ campaignId: 'cmp_2', title: 'Winter' });
         expect(said(picked, 'Next').title).toBe('Winter');
@@ -102,6 +103,7 @@ describe('a chat as the page keeps it', () => {
                 campaignId: 'cmp_1',
                 title: 'Spring',
                 updatedAt: '2026-11-11T10:00:00.000Z',
+                running: false,
                 dropped: 3,
                 entries: [
                     { kind: 'user', text: 'How is it doing?' },
