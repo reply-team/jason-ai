@@ -347,7 +347,11 @@ test('the harness root and the updater’s cache are found as the runtime and el
     writeFileSync(settings, JSON.stringify({ Harness: { Root: 'D:\\Work\\Jason' } }));
     assert.equal(harnessRoot({}, home, settings), 'D:\\Work\\Jason');
     assert.equal(harnessRoot({ JASON_Harness__Root: 'E:\\Mine' }, home, settings), 'E:\\Mine');
-    assert.equal(updaterCache({ LOCALAPPDATA: 'C:\\Users\\someone\\AppData\\Local' }, home), win32.join('C:\\Users\\someone\\AppData\\Local', 'jason-desktop-updater'));
+    assert.equal(updaterCache({ LOCALAPPDATA: 'C:\\Users\\someone\\AppData\\Local' }, home, 'win32'), win32.join('C:\\Users\\someone\\AppData\\Local', 'jason-desktop-updater'));
+    // On Linux as the pinned electron-updater's AppAdapter.getAppCacheDir reads it: XDG_CACHE_HOME, else ~/.cache.
+    assert.equal(updaterCache({ XDG_CACHE_HOME: '/home/someone/cache' }, '/home/someone', 'linux'), '/home/someone/cache/jason-desktop-updater');
+    assert.equal(updaterCache({ XDG_CACHE_HOME: '' }, '/home/someone', 'linux'), '/home/someone/.cache/jason-desktop-updater');
+    assert.equal(updaterCache({}, '/home/someone', 'linux'), '/home/someone/.cache/jason-desktop-updater');
     // electron-updater names the cache after the package's name.
     assert.equal(JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8')).name, 'jason-desktop');
 });

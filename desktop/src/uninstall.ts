@@ -91,8 +91,13 @@ export function harnessRoot(env: Readonly<Record<string, string | undefined>>, h
     return join(home, 'Jason');
 }
 
-/** The updater's cache: electron-updater keeps a downloaded update in `<LOCALAPPDATA>/<package name>-updater`. */
-export function updaterCache(env: Readonly<Record<string, string | undefined>>, home: string): string {
+/**
+ * The updater's cache: electron-updater keeps a downloaded update in `<cache>/<package name>-updater`, `<cache>` being
+ * `<LOCALAPPDATA>` on Windows and on Linux `$XDG_CACHE_HOME`, else `~/.cache` (the pinned electron-updater's
+ * `AppAdapter.getAppCacheDir`: `process.env["XDG_CACHE_HOME"] || path.join(homedir, ".cache")`).
+ */
+export function updaterCache(env: Readonly<Record<string, string | undefined>>, home: string, platform: NodeJS.Platform): string {
+    if (platform === 'linux') return posix.join(env['XDG_CACHE_HOME'] || posix.join(home, '.cache'), 'jason-desktop-updater');
     return win32.join(env['LOCALAPPDATA'] ?? win32.join(home, 'AppData', 'Local'), 'jason-desktop-updater');
 }
 
