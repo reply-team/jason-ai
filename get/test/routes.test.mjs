@@ -65,15 +65,17 @@ test('the template names no account, zone or database by its identifier', () => 
   assert.doesNotMatch(template, /\b[0-9a-f]{32}\b/i);
 });
 
-test('each desktop path redirects to a whole literal address of the latest release', () => {
-  assert.deepEqual(Object.keys(DESKTOP), [
-    '/desktop/windows',
-    '/desktop/mac',
-    '/desktop/mac-intel',
-    '/desktop/linux-deb',
-    '/desktop/linux-appimage',
-  ]);
-  for (const location of Object.values(DESKTOP)) {
-    assert.match(location, /^https:\/\/get\.jasonharness\.ai\/releases\/latest\/download\/jason-desktop-[a-z0-9-]+\.[A-Za-z]+$/);
-  }
+test("each desktop path redirects to its own system's file of the latest release, by a whole literal address", () => {
+  // The whole table, path by path: a swap of two rows (the Intel image sent to Apple silicon, say) passes a check of
+  // the paths alone and a check of the file names alone.
+  assert.deepEqual(
+    { ...DESKTOP },
+    {
+      '/desktop/windows': 'https://get.jasonharness.ai/releases/latest/download/jason-desktop-windows-x64-setup.exe',
+      '/desktop/mac': 'https://get.jasonharness.ai/releases/latest/download/jason-desktop-macos-arm64.dmg',
+      '/desktop/mac-intel': 'https://get.jasonharness.ai/releases/latest/download/jason-desktop-macos-x64.dmg',
+      '/desktop/linux-deb': 'https://get.jasonharness.ai/releases/latest/download/jason-desktop-linux-x64.deb',
+      '/desktop/linux-appimage': 'https://get.jasonharness.ai/releases/latest/download/jason-desktop-linux-x64.AppImage',
+    },
+  );
 });

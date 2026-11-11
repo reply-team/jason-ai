@@ -2,6 +2,7 @@
 // a signer for the tokens Access puts on a request. Not a test file itself, so the runner does not pick it up by name.
 
 import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { handle } from './src/index.mjs';
 
 /** A page that begins as the guide does: the first heading of docs/INSTALL.md, read from the tree, and a line. */
@@ -33,6 +34,42 @@ export function fakeDb({ rows = [], failing = false } = {}) {
             async all() {
               reads.push({ sql, args });
               return { results: rows };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+/**
+ * A D1 binding over a real SQLite database in memory, made from schema.sql, so a statement is run as written. D1 numbers
+ * its parameters (?1, ?2); this SQLite takes them by position, so each occurrence is bound in order.
+ */
+export function sqliteDb() {
+  const database = new DatabaseSync(':memory:');
+  database.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
+  const reads = [];
+  return {
+    reads,
+    database,
+    prepare(sql) {
+      return {
+        bind(...args) {
+          const ordered = [];
+          const positional = sql.replace(/\?(\d+)/g, (_, index) => {
+            ordered.push(args[Number(index) - 1]);
+            return '?';
+          });
+          const statement = database.prepare(positional);
+          return {
+            async run() {
+              statement.run(...ordered);
+              return { success: true };
+            },
+            async all() {
+              reads.push({ sql, args });
+              return { results: statement.all(...ordered).map((row) => ({ ...row })) };
             },
           };
         },

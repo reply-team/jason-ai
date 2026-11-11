@@ -31,18 +31,43 @@ export function firstDay(now) {
   return dayOf(new Date(now.getTime() - (DAYS - 1) * 24 * 60 * 60 * 1000));
 }
 
-export async function readCounts(db, now) {
-  const statement = db.prepare('SELECT day, path, ref, client, n FROM counts WHERE day >= ?1');
-  const { results } = await statement.bind(firstDay(now)).all();
-  return results ?? [];
+/** How many sources the page keeps by name; every other is folded into one row. */
+export const KEPT_SOURCES = 200;
+
+/** The row a folded source is counted in: in parentheses, which a source can never hold. */
+export const FOLDED_SOURCE = '(rest)';
+
+/** At most this many rows are read, newest days first, whatever was written. */
+export const ROW_LIMIT = 20000;
+
+/**
+ * The window's counts, the sources with the most requests by name and every other source folded into one row, so a flood
+ * of made-up sources costs the page one row; then the read's own limit as a backstop.
+ */
+const READ = `WITH totals AS (SELECT ref, SUM(n) AS total FROM counts WHERE day >= ?1 GROUP BY ref),
+kept AS (SELECT ref FROM totals ORDER BY total DESC, ref LIMIT ?2)
+SELECT day, path, CASE WHEN ref IN (SELECT ref FROM kept) THEN ref ELSE '${FOLDED_SOURCE}' END AS source, client, SUM(n) AS n
+FROM counts WHERE day >= ?1
+GROUP BY day, path, source, client
+ORDER BY day DESC, path, source, client
+LIMIT ?3`;
+
+const SOURCES = 'SELECT COUNT(DISTINCT ref) AS sources FROM counts WHERE day >= ?1';
+
+/** The rows of the window, how many sources were folded, and whether the read stopped at its limit. */
+export async function readCounts(db, now, { kept = KEPT_SOURCES, limit = ROW_LIMIT } = {}) {
+  const first = firstDay(now);
+  const { results: rows = [] } = await db.prepare(READ).bind(first, kept, limit).all();
+  const { results: [sources = { sources: 0 }] = [] } = await db.prepare(SOURCES).bind(first).all();
+  return { rows: rows ?? [], folded: Math.max(0, Number(sources.sources) - kept), truncated: (rows ?? []).length >= limit, limit };
 }
 
 /** One line per day and source, newest day first, then the most installs. */
 export function tabulate(rows) {
   const lines = new Map();
-  for (const { day, path, ref, client, n } of rows) {
-    const key = JSON.stringify([day, ref]);
-    if (!lines.has(key)) lines.set(key, { day: String(day), source: String(ref), ...Object.fromEntries(COLUMNS.map(([name]) => [name, 0])) });
+  for (const { day, path, source, client, n } of rows) {
+    const key = JSON.stringify([day, source]);
+    if (!lines.has(key)) lines.set(key, { day: String(day), source: String(source), ...Object.fromEntries(COLUMNS.map(([name]) => [name, 0])) });
     const line = lines.get(key);
     const count = Number(n) || 0;
     if (client === 'bot') {
@@ -84,7 +109,19 @@ export function renderCsv(lines) {
   return [header.join(','), ...body].join('\n') + '\n';
 }
 
-export function renderHtml(lines, now) {
+/** What the page says of the read: the folded sources, and the limit when the read stopped at it. */
+function aboutTheRead({ folded = 0, truncated = false, limit = ROW_LIMIT } = {}) {
+  const fold =
+    folded === 0
+      ? 'No source was folded.'
+      : folded === 1
+        ? `1 source with fewer requests is folded into the row ${FOLDED_SOURCE}.`
+        : `${folded} sources with fewer requests are folded into the row ${FOLDED_SOURCE}.`;
+  const stop = truncated ? ` The read stopped at its limit of ${limit} rows, so the oldest days shown are incomplete.` : '';
+  return `The ${KEPT_SOURCES} sources with the most requests in the window are shown by name. ${fold}${stop}`;
+}
+
+export function renderHtml(lines, now, read = {}) {
   const head = ['Day (UTC)', 'Source', ...COLUMNS.map(([, title]) => title)].map((title) => `<th>${escapeHtml(title)}</th>`).join('');
   const body = lines
     .map((line) => `<tr><td>${escapeHtml(line.day)}</td><td>${escapeHtml(line.source)}</td>${COLUMNS.map(([name]) => `<td>${escapeHtml(line[name])}</td>`).join('')}</tr>`)
@@ -106,6 +143,8 @@ td:nth-child(3) { font-weight: 600; }
 <body>
 <h1>Downloads by source</h1>
 <p>The last ${DAYS} days to ${escapeHtml(dayOf(now))}, per UTC day and the source a link named. The install page's reads that are not bots are the headline; fetchers and browsers are beside it. Bots are counted apart and in no other column.</p>
+<p>Every number is an upper bound: link previews and mail scanners that present themselves as browsers or fetchers are counted with them.</p>
+<p>${escapeHtml(aboutTheRead(read))}</p>
 <table>
 <thead><tr>${head}</tr></thead>
 <tbody>

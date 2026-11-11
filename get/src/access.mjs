@@ -60,9 +60,10 @@ async function keyFor(team, kid, fetch, now) {
 /** Whether the request carries a token Access signed for this application, from this team, valid now. */
 export async function accessAllows(request, env, { fetch, now }) {
   try {
-    const team = env.ACCESS_TEAM;
+    // Lowercased before use: Access writes the team domain in lowercase in the issuer it signs.
+    const team = typeof env.ACCESS_TEAM === 'string' ? env.ACCESS_TEAM.toLowerCase() : null;
     const audience = env.ACCESS_AUD;
-    if (typeof team !== 'string' || !TEAM.test(team) || typeof audience !== 'string' || audience === '') return false;
+    if (team === null || !TEAM.test(team) || typeof audience !== 'string' || audience === '') return false;
 
     const token = request.headers.get('cf-access-jwt-assertion');
     if (!token) return false;
