@@ -720,6 +720,18 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
+    /// What a first start shows: a Campaigns list and a People list that hold nothing yet, asked as the screens and the
+    /// desktop's console ask them.
+    /// </summary>
+    [Fact]
+    public async Task Empty_lists_of_a_first_start()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        Assert.Empty((await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "screen-empty", new { limit = 100 }, Ct)).Items);
+        Assert.Empty((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-empty", new { order = "activity", limit = 200 }, Ct)).Items);
+    }
+
+    /// <summary>
     /// An installation past a page: a hundred and one campaigns, which the screen lists a hundred at a time — the most one
     /// read of their counts takes — asking for each page's counts with that page; and fifty-one people added to the first
     /// in the week, whose People tab lists fifty at a time under the period it was opened with.
