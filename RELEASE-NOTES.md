@@ -131,8 +131,8 @@ for it, and with no desktop installed nothing in the runtime differs.
   opens Sequence.
 - **Needs you and Attention** show the person an approval reaches, the account it goes from and its channel, and say
   plainly when nothing waits.
-- **Settings and Ukrainian.** The browser gains a Settings screen for the theme and the language, English or Ukrainian,
-  kept in the browser's own storage. A Chat screen says the chat is part of the desktop and links to the releases page.
+- **Settings.** The browser gains a Settings screen for the theme, kept in the browser's own storage.
+  A Chat screen says the chat is part of the desktop and links to the releases page.
 
 **For a person who scripts the CLI**
 
