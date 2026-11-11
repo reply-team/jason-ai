@@ -4,6 +4,7 @@ import { Search } from '../../lists/search';
 import { replace, type Route } from '../../router';
 import { when } from '../../time/format';
 import { displayName, entryLabel } from '../people/labels';
+import { stageWords } from '../people/standing';
 import { activityColumns, atTheProvider, everyone, summaryColumns } from './labels';
 import { happened } from './why';
 import { Notice } from '../../layout/notice';
@@ -143,11 +144,19 @@ export function CampaignPeople({
                                     {line ?? about(person)}
                                 </span>
                             </span>
-                            {person.state === 'excluded' && (
-                                <span className="meta">
+                            <span className="meta">
+                                {person.state === 'excluded' ? (
                                     <span className="badge outline">Removed</span>
-                                </span>
-                            )}
+                                ) : (
+                                    stageWords(
+                                        person.contact.campaigns?.find((c) => c.campaign_id === at.id)?.standing ?? [],
+                                    ).map((word) => (
+                                        <span key={word.key} className={`stage ${word.key}`} title={word.hint}>
+                                            {word.label}
+                                        </span>
+                                    ))
+                                )}
+                            </span>
                         </a>
                     );
                 })}

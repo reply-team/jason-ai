@@ -468,6 +468,26 @@ details.fold pre {
 .campaign-tabs-results .tile, .campaign-tabs-results .tile:hover { cursor: default; background: var(--bg); }
 @media (max-width: 640px) { .campaign-tabs-results .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
+/* People: one row per person, the stage chips under the search. */
+.stage-filter { padding: var(--space-2) var(--space-4) 0; }
+.ptable { width: 100%; border-collapse: collapse; }
+.ptable th { position: sticky; top: 0; background: var(--bg); text-align: left; font-weight: 500; font-size: var(--text-sm); color: var(--text-secondary); padding: 8px var(--space-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ptable td { height: var(--row-h); padding: 0 var(--space-2); border-left: 2px solid transparent; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.ptable th:first-child, .ptable td:first-child { padding-left: var(--space-4); }
+.ptable tr:hover td { background: var(--bg-hover); }
+.ptable tr.sel td { background: var(--accent-bg); }
+.ptable tr.sel td:first-child { border-left-color: var(--accent); }
+.ptable td.name a { color: var(--text); font-weight: 500; }
+.ptable td.name a:hover { text-decoration: none; }
+.ptable tr.quiet td.name a { font-weight: 400; color: var(--text-secondary); }
+.ptable .stage, .row .meta .stage { display: inline-block; margin-right: var(--space-1); padding: 0 6px; border-radius: 4px; background: var(--bg-muted); color: var(--text-secondary); font-size: var(--text-sm); cursor: help; }
+.ptable .stage.waiting, .row .meta .stage.waiting { background: var(--warning-bg); color: var(--warning); }
+.ptable .stage.failed, .row .meta .stage.failed { background: var(--danger-bg); color: var(--danger); }
+.ptable .also { margin-left: 6px; color: var(--text-muted); font-size: var(--text-sm); cursor: help; }
+.ptable td.activity { color: var(--text-secondary); font-size: var(--text-sm); }
+.ptable td.activity time { margin-left: var(--space-2); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .ptable .wide { display: none; } }
+
 /* The people an Add people dialog will add, each with its way out. */
 .picked { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
 .picked .badge .iconbtn { width: 16px; height: 16px; font-size: 12px; }

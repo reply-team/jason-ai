@@ -34,6 +34,15 @@ export const uk: Record<MessageKey, string> = {
         'Чат з вашим агентом є частиною настільного застосунку. Він запускає агента на цьому компʼютері й питає вас, перш ніж агент щось зробить, а вкладка браузера цього не вміє.',
     'chat.get': 'Завантажити Jason Desktop зі сторінки випусків',
     'chat.agent': 'Усе, що є тут, працює й із сесії з вашим агентом у терміналі, з навичками, які розгорнув Jason.',
+    'people.col.name': 'Імʼя',
+    'people.col.company': 'Компанія',
+    'people.col.channels': 'Канали',
+    'people.col.stage': 'Етап',
+    'people.col.campaign': 'Кампанія',
+    'people.col.activity': 'Остання активність',
+    'people.stages': 'Етап',
+    'people.stage.all': 'Усі',
+    'people.also': 'Також у: {names}',
     'shell.version':
         'Цей інтерфейс зібрано для API {ui}, а runtime працює з {runtime}. Перевстановіть інтерфейс із відповідного випуску.',
 };

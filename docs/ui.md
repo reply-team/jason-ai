@@ -122,8 +122,16 @@ right there, as on Attention.
 
 ## People
 
-Everyone Jason knows, the person something last happened to first (`jason contact list --order activity`), grouped by
-day, with a search, a campaign filter and the archived on request, all part of the page's address. Opening a person
+Everyone Jason knows, as a table of Name, Company, Channels, Stage, Campaign and Last activity, the person something
+last happened to first (`jason contact list --order activity`, two hundred at a time, more on request), with a search, a
+campaign filter and the archived on request, all part of the page's address. Under the search, a chip for each count of
+a campaign's summary (`jason contact list --summary`) keeps the people that count counts; a chip shows its number
+(`jason campaign summary`) only while the list under it would match it, so none beside a search or archived people.
+Stage is where the person stands in the campaign the row shows, each count in its one word with the runtime's own
+definition on hover (`standing` on each campaign of `jason contact get` and `jason contact list`); a person in several
+campaigns shows the one the list is narrowed to, else the one their latest activity is in, else their newest not
+excluded, with "+N" naming the others; a person on no campaign shows dashes. Last activity is the newest journal line
+about the person, of any kind. Opening a person
 shows where they are and their local time, the campaigns they are on, an excluded one outlined, and **Add to campaign**
 (`jason campaign add-contacts`). The **Timeline** puts their open work above the now line and what happened to them
 below it: the journal's lines about them (`jason journal list --contact`), narrowed by chips to replies, work, decisions

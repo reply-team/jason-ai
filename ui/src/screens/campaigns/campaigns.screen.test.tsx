@@ -279,7 +279,7 @@ describe('The campaign panel', () => {
     it('drops a campaign the runtime no longer knows, and says so', async () => {
         const api = new FakeApi()
             .answer('campaign.list', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/everyone')
             .answer('campaign.get', 'campaign.get/unknown')
             .answer('contact.list', 'contact.list/by-activity');
         open(api, { ...table, id: fixtures['campaign.get/unknown'].request.campaign_id, tab: 'sequence' });
@@ -450,6 +450,17 @@ describe('A campaign’s people', () => {
             expect(new Set(counted.map((body) => JSON.stringify(body))).size).toBe(2);
         },
     );
+
+    it("each row says where the person stands in this campaign, from the runtime's own standing", async () => {
+        const api = peopleApi('campaign.list_contacts/everyone');
+        open(api, people(undefined, 'summary'));
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+        const stage = async (name: string) =>
+            Array.from((await row(name)).querySelectorAll('.stage')).map((s) => s.textContent);
+        expect(await stage('Ada Example')).toEqual(['Waiting']);
+        expect(await stage('Ben Example')).toEqual(['Waiting', 'Idle']);
+        expect(await stage('Pia Example')).toEqual(['Waiting', 'Failed']);
+    });
 
     it('in Activity, the tab is People Activity, and All lists everyone something happened to in the period', async () => {
         const api = peopleApi('campaign.list_contacts/activity-people');

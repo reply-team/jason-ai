@@ -143,6 +143,7 @@ import campaignListContactsUnlinked from '../../../docs/api/fixtures/campaign.li
 import campaignPauseWithReason from '../../../docs/api/fixtures/campaign.pause/with-reason.json';
 import campaignStartAfterPause from '../../../docs/api/fixtures/campaign.start/after-pause.json';
 import campaignSummaryAll from '../../../docs/api/fixtures/campaign.summary/all.json';
+import campaignSummaryEveryone from '../../../docs/api/fixtures/campaign.summary/everyone.json';
 import campaignSummaryAllAfter from '../../../docs/api/fixtures/campaign.summary/all-after.json';
 import campaignSummaryArchived from '../../../docs/api/fixtures/campaign.summary/archived.json';
 import campaignSummaryInboxAll from '../../../docs/api/fixtures/campaign.summary/inbox-all.json';
@@ -166,10 +167,14 @@ import contactListArchived from '../../../docs/api/fixtures/contact.list/archive
 import contactListByActivity from '../../../docs/api/fixtures/contact.list/by-activity.json';
 import contactListByActivityQuery from '../../../docs/api/fixtures/contact.list/by-activity-query.json';
 import contactListByActivityQueryAguilar from '../../../docs/api/fixtures/contact.list/by-activity-query-aguilar.json';
+import contactListByActivitySeveral from '../../../docs/api/fixtures/contact.list/by-activity-several.json';
+import contactListByActivitySummaryQuery from '../../../docs/api/fixtures/contact.list/by-activity-summary-query.json';
+import contactListByActivitySummaryWaiting from '../../../docs/api/fixtures/contact.list/by-activity-summary-waiting.json';
 import contactListByCampaign from '../../../docs/api/fixtures/contact.list/by-campaign.json';
 import contactListByCampaignQuery from '../../../docs/api/fixtures/contact.list/by-campaign-query.json';
 import contactListByCampaignQueryArchived from '../../../docs/api/fixtures/contact.list/by-campaign-query-archived.json';
 import contactListByCampaignQueryNone from '../../../docs/api/fixtures/contact.list/by-campaign-query-none.json';
+import contactListByCampaignSummary from '../../../docs/api/fixtures/contact.list/by-campaign-summary.json';
 import contactListCampaignPicker from '../../../docs/api/fixtures/contact.list/campaign-picker.json';
 import contactListCampaignPickerZoe from '../../../docs/api/fixtures/contact.list/campaign-picker-zoe.json';
 import contactListFirstPage from '../../../docs/api/fixtures/contact.list/first-page.json';
@@ -577,6 +582,10 @@ export const fixtures = {
     'campaign.pause/with-reason': campaignPauseWithReason satisfies Exchange<CampaignTransitionRequest, Campaign>,
     'campaign.start/after-pause': campaignStartAfterPause satisfies Exchange<CampaignTransitionRequest, Campaign>,
     'campaign.summary/all': campaignSummaryAll satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
+    'campaign.summary/everyone': campaignSummaryEveryone satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
     'campaign.summary/all-after': campaignSummaryAllAfter satisfies Exchange<
         CampaignSummaryRequest,
         CampaignSummaryResponse
@@ -633,6 +642,18 @@ export const fixtures = {
         ContactListRequest,
         Page<Contact>
     >,
+    'contact.list/by-activity-several': contactListByActivitySeveral satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
+    'contact.list/by-activity-summary-query': contactListByActivitySummaryQuery satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
+    'contact.list/by-activity-summary-waiting': contactListByActivitySummaryWaiting satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
     'contact.list/by-campaign': contactListByCampaign satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-campaign-query': contactListByCampaignQuery satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-campaign-query-archived': contactListByCampaignQueryArchived satisfies Exchange<
@@ -640,6 +661,10 @@ export const fixtures = {
         Page<Contact>
     >,
     'contact.list/by-campaign-query-none': contactListByCampaignQueryNone satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
+    'contact.list/by-campaign-summary': contactListByCampaignSummary satisfies Exchange<
         ContactListRequest,
         Page<Contact>
     >,
