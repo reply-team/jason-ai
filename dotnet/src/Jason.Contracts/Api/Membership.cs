@@ -51,6 +51,8 @@ public sealed record RemoveContactsResult(string CampaignId, RemoveContactsSumma
 /// people one count of <c>campaign.summary</c> counts, and <c>activity</c>, with its <c>since</c> and <c>until</c>, the
 /// people one count of <c>campaign.activity</c> counts, removed ones included, the latest to whom it happened first; one
 /// of the two at most, and neither takes a <c>state</c>. <c>query</c> finds people as <c>contact.list</c> does.
+/// <c>audience</c>, the number of one of the campaign's audiences, lists only the people a search landed under it, with or
+/// without a count; an audience is one campaign's, so the request then names that campaign alone.
 /// </summary>
 public sealed record ListContactsRequest(
     string? CampaignId,
@@ -62,7 +64,8 @@ public sealed record ListContactsRequest(
     DateTimeOffset? Since = null,
     DateTimeOffset? Until = null,
     string? Query = null,
-    IReadOnlyList<string>? CampaignIds = null);
+    IReadOnlyList<string>? CampaignIds = null,
+    int? Audience = null);
 
 /// <summary>
 /// A person listed once, with the whole contact so an agent listing a campaign avoids a get per member. <c>counted</c>

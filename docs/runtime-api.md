@@ -204,6 +204,15 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   not included, whole.
 - `campaign.activity_by_period`: one count across the campaigns asked, a bucket at a time.
 
+  The four take `audience`, the number of one of the campaign's audiences, and then read only the people a search landed
+  under it, each count by its own definition, in the one campaign they name; an audience nobody landed under answers
+  zeros, and a number the campaign holds none under is `audience_unknown`.
+- `campaign.audience`: where one campaign's audience stands, read from Jason's own records: how many members nobody has
+  started on against the reserve's threshold, the allowance and how much of it is used, and a page of the campaign's
+  audiences, the newest first, each with its definition, how many people its searches landed, how many searches the
+  provider took under it, and the latest of them (`search_limit`, 10 when absent), with what each asked for, found and
+  landed and how it ended.
+
 ### `project`
 
 - `project.create`: makes a project; the same create sent again is refused as `project_exists`, naming the project the
@@ -407,7 +416,8 @@ that is not that attempt does not call them.
 ## What a program can read
 
 - **Campaigns**: `campaign.list` and `campaign.get`; `campaign.summary` for counts, `campaign.activity` and
-  `campaign.activity_by_period` for what happened over a span; `campaign.list_contacts` for who is in one.
+  `campaign.activity_by_period` for what happened over a span; `campaign.list_contacts` for who is in one; each of the
+  four for one audience's people alone with `audience`; `campaign.audience` for where the campaign's audience stands.
 - **People**: `contact.list` and `contact.get`, with a contact's channels and custom fields; `contact.threads` and
   `contact.thread` for their conversations, read from the provider when asked and kept nowhere.
 - **Work**: `workitem.list`, `workitem.get` and `workitem.count`.

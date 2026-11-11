@@ -89,7 +89,7 @@ for a role that sits with a person, the judgement it shares with its session fil
 - [`roles/researcher`](roles/researcher/SKILL.md) — **verified.** What a brief asks about an account or a person,
   found and verified: what counts as established, why anything from outside Jason is the host's doing and never
   the runtime's promise, an answer that says what was established and what was not, and what belongs in its note.
-- [`roles/manager`](roles/manager/SKILL.md) — **verified.** The review a manager
+- [`roles/manager`](roles/manager/SKILL.md) — **draft.** The review a manager
   is launched for: why it was
   woken, what a noticed reply or provider-event line asks of it and whose thread it is, what it reads and in which
   order, what it may decide alone, how it asks a person the one question it cannot answer, and the line it leaves in
@@ -112,7 +112,7 @@ for a role that sits with a person, the judgement it shares with its session fil
   the data file beside the skill and by the person's own, the verdict is recorded first, and the reaction is an
   act of its own, a question for the person, or an answer in the person's own thread as a draft, which a person
   approves or a standing approval they set for its category releases.
-- [`roles/analyst`](roles/analyst/SKILL.md) — **verified.** What is working in a campaign, read off the four things
+- [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the four things
   this runtime keeps — the work items, the chronicle, the reports and the campaign's activity, with the replies counted by category over a window — and honest about
   where the record runs out.
 - [`roles/deliverability-specialist`](roles/deliverability-specialist/SKILL.md) — **verified.** What the
@@ -125,14 +125,14 @@ SHA-256 of the text it read.
 
 | role | status | host that read it | Jason | the text it read |
 |---|---|---|---|---|
-| `manager` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:d4b45e6f8d2470757427eb87bed9bbb4669d087dcbb29f91b145aad9f51bffb1` |
+| `manager` | draft | — | — | — |
 | `planner` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:8e4f5ddb1a2b72a220c9cc83ad45d6ada9a6f308da405ef39f641d1afcbe1610` |
 | `researcher` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:767f398c45154333ba92825004f302571fa1b0e31e2c4080a538ab8e067692dd` |
 | `copywriter` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:2e39996997d944484db6a8a08169be0ba543901c2a7094bec23e27bc6a1aa7b4` |
 | `personalizer` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:1b322d94a7d22e9bace3d0a139c87d47bab5e6c1f78d22d38a01b35dee38c3dd` |
 | `critic` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:049652d75c7460fd7520cb9352735e272736cc2ef8873cc7736d61427aed526c` |
 | `responder` | draft | — | — | — |
-| `analyst` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:95cf6cc2709682e71efdc8193efc29e94c1e9ab3411c3c043104873cf053f0af` |
+| `analyst` | draft | — | — | — |
 | `deliverability-specialist` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:d1ce3497f7b5420c8a465e9471598461bf64ff7f7409f142b77fb76983756585` |
 
 These are not read from here at run time. An operator composes the directory the runtime hands out,

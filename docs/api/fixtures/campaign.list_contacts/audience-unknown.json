@@ -1,0 +1,16 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "audience-unknown",
+  "request": {
+    "campaign_id": "cmp_2",
+    "audience": 1
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "audience_unknown",
+      "message": "Campaign 'cmp_2' holds no audience under 1: a campaign numbers its audiences from 1, in the order their first searches were claimed, so name one it holds.",
+      "retryable": false
+    }
+  }
+}

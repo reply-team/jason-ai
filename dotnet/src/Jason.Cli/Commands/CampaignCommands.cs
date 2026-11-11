@@ -39,6 +39,7 @@ public static class CampaignCommands
         campaign.Subcommands.Add(Summary(env, actor));
         campaign.Subcommands.Add(Activity(env, actor));
         campaign.Subcommands.Add(ActivityByPeriod(env, actor));
+        campaign.Subcommands.Add(Audience(env, actor));
         return campaign;
     }
 
@@ -376,6 +377,7 @@ public static class CampaignCommands
         var since = VerbOptions.Moment("--since", "With --activity: the period's start, included, as ISO-8601 UTC, or now.");
         var until = VerbOptions.Moment("--until", "With --activity: the period's end, not included, as ISO-8601 UTC, or now.");
         var query = new Option<string?>("--query") { Description = "Only people found by this text: a name, company, title or any channel value." };
+        var audience = AudienceOption();
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
@@ -386,6 +388,7 @@ public static class CampaignCommands
         command.Options.Add(since);
         command.Options.Add(until);
         command.Options.Add(query);
+        command.Options.Add(audience);
         command.Options.Add(limit);
         command.Options.Add(cursor);
         command.Options.Add(human);
@@ -401,6 +404,7 @@ public static class CampaignCommands
                 .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
                 .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System))
                 .Set("query", parseResult.GetValue(query))
+                .Set("audience", parseResult.GetValue(audience))
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
 
@@ -417,14 +421,16 @@ public static class CampaignCommands
             "How many of each campaign's people are waiting on you, failed, working, new, idle, in the sequence, out or removed, now. "
             + "A person may be in several counts; campaign list-contacts --summary lists who.");
         var ids = CampaignIds();
+        var audience = AudienceOption();
         var human = VerbOptions.Human();
         command.Arguments.Add(ids);
+        command.Options.Add(audience);
         command.Options.Add(human);
 
         command.SetAction((parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
-            var body = RequestBody.Empty().Set("campaign_ids", Ids(parseResult.GetValue(ids)));
+            var body = RequestBody.Empty().Set("campaign_ids", Ids(parseResult.GetValue(ids))).Set("audience", parseResult.GetValue(audience));
             return OperationRunner.RunAsync(env, Operations.CampaignSummary, body, Named(env, parseResult.GetValue(human), CampaignRenderers.Summary), cancellationToken);
         });
 
@@ -443,10 +449,12 @@ public static class CampaignCommands
         since.Required = true;
         var until = VerbOptions.Moment("--until", "The period's end, not included, as ISO-8601 UTC, or now.");
         until.Required = true;
+        var audience = AudienceOption();
         var human = VerbOptions.Human();
         command.Arguments.Add(ids);
         command.Options.Add(since);
         command.Options.Add(until);
+        command.Options.Add(audience);
         command.Options.Add(human);
 
         command.SetAction((parseResult, cancellationToken) =>
@@ -455,7 +463,8 @@ public static class CampaignCommands
             var body = RequestBody.Empty()
                 .Set("campaign_ids", Ids(parseResult.GetValue(ids)))
                 .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
-                .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System));
+                .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System))
+                .Set("audience", parseResult.GetValue(audience));
             return OperationRunner.RunAsync(env, Operations.CampaignActivity, body, Named(env, parseResult.GetValue(human), CampaignRenderers.Activity), cancellationToken);
         });
 
@@ -484,6 +493,7 @@ public static class CampaignCommands
         {
             Description = "The IANA time zone the hours, days and weeks are cut in, such as Europe/Kyiv; this machine's when absent.",
         };
+        var audience = AudienceOption();
         var human = VerbOptions.Human();
         command.Arguments.Add(ids);
         command.Options.Add(count);
@@ -491,6 +501,7 @@ public static class CampaignCommands
         command.Options.Add(since);
         command.Options.Add(until);
         command.Options.Add(zone);
+        command.Options.Add(audience);
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
         {
@@ -501,10 +512,72 @@ public static class CampaignCommands
                 .Set("period", parseResult.GetValue(period))
                 .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
                 .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System))
-                .Set("zone", parseResult.GetValue(zone) ?? ThisMachinesZone());
+                .Set("zone", parseResult.GetValue(zone) ?? ThisMachinesZone())
+                .Set("audience", parseResult.GetValue(audience));
             return OperationRunner.RunAsync(env, Operations.CampaignActivityByPeriod, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.ActivityByPeriod), cancellationToken);
         });
         return command;
+    }
+
+    private static Command Audience(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "audience",
+            "Where the campaign's audience stands: how many members nobody has started on against the reserve's threshold, the "
+            + "allowance and how much of it is used, and its audiences, the newest first, each with its definition, how many "
+            + "people its searches landed, how many searches the provider took under it and the latest of them. "
+            + "'campaign list-contacts --audience N' lists one audience's people.");
+        var id = CampaignId();
+        var limit = VerbOptions.Limit();
+        var cursor = VerbOptions.Cursor();
+        var searchLimit = new Option<int?>("--search-limit")
+        {
+            Description = "How many of each audience's searches to list, the newest first: 1 to 100, 10 when absent.",
+        };
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(limit);
+        command.Options.Add(cursor);
+        command.Options.Add(searchLimit);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
+            var campaign = parseResult.GetValue(id);
+            var body = RequestBody.Empty()
+                .Set("campaign_id", campaign)
+                .Set("limit", parseResult.GetValue(limit))
+                .Set("cursor", parseResult.GetValue(cursor))
+                .Set("search_limit", parseResult.GetValue(searchLimit));
+            var options = new RunOptions(parseResult.GetValue(human))
+            {
+                RenderHumanAsync = async (json, ct) => AudienceRenderers.CampaignAudience(json, await DefinitionSchemaAsync(env, campaign, json, ct).ConfigureAwait(false)),
+            };
+            return OperationRunner.RunAsync(env, Operations.CampaignAudience, body, options, cancellationToken);
+        });
+
+        return command;
+    }
+
+    /// <summary>
+    /// What the plugin the campaign's route for searches declares an audience's definition to be, read from
+    /// <c>operation.describe</c> to lay the definitions out by; null where the view shows no audience or the description
+    /// cannot be read, and the definitions are then shown as stored.
+    /// </summary>
+    private static async Task<JsonObject?> DefinitionSchemaAsync(CliEnvironment env, string? campaign, string json, CancellationToken cancellationToken)
+    {
+        if (RenderText.Read<CampaignAudienceResponse>(json) is not { Audiences.Count: > 0 })
+        {
+            return null;
+        }
+
+        var body = RequestBody.Empty().Set("campaign_id", campaign).Set("operation", "audience.search");
+        var (_, response) = await OperationRunner.SendAsync(env with { Out = TextWriter.Null }, Operations.OperationDescribe, body, cancellationToken)
+            .ConfigureAwait(false);
+        return response is { IsSuccess: true } && RenderText.Read<OperationDescriptionDto>(response.Body) is { Definition: { } definition }
+            ? definition
+            : null;
     }
 
     /// <summary>The days a person at this machine lives by: its zone's IANA id, or UTC when it has none.</summary>
@@ -597,6 +670,13 @@ public static class CampaignCommands
     };
 
     private static Argument<string> CampaignId() => new("campaign-id") { Description = "The campaign, as cmp_...." };
+
+    /// <summary>One of the campaign's audiences, by the number the campaign knows it by; never a bare <c>--version</c>, which names nothing.</summary>
+    private static Option<int?> AudienceOption() => new("--audience")
+    {
+        Description = "Only the people a search landed under this audience of the campaign, by its number, each count by its own "
+            + "definition; name that one campaign alone. 'jason campaign audience <campaign-id>' lists its audiences.",
+    };
 
     /// <summary><c>--project</c> takes a project's id, as every verb that names a project does.</summary>
     private static Option<string?> ProjectOption(string description) => new("--project") { Description = description };

@@ -2,7 +2,7 @@
 name: analyst
 description: Use when Jason launches you as the analyst role on an ai_role work item — say what is working in this campaign from what this runtime actually records, and answer in the shape the item asks for.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Analyst
@@ -10,7 +10,7 @@ metadata:
 You say what is working in this campaign and what is not, from what this runtime actually records, and you say
 plainly where the record runs out.
 
-**Status: verified** against Claude Code 2.1.318. Its commands parse against this
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
 build, because every skill's do.
 
 ## What this build gives you, and what it does not
@@ -37,6 +37,21 @@ counts over time is a day or a week at a time:
 ```
 jason campaign activity-by-period cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --count replied --period day --since 2026-10-09T00:00:00Z --until now
 ```
+
+**One audience's people, on their own.** A campaign's members may have come from several audiences — the definitions
+its searches ran under — and those added by hand from none. `campaign audience` lists the audiences, the newest first,
+each with its definition, when it was made, how many people its searches landed and its latest searches. `--audience`
+keeps `campaign summary`, `campaign activity`, `campaign activity-by-period` and `campaign list-contacts` to the people
+one audience's searches landed, each count by its own definition:
+
+```
+jason campaign audience cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason campaign activity cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --audience 2 --since 2026-10-09T00:00:00Z --until now
+jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --audience 2 --activity replied --since 2026-10-09T00:00:00Z --until now
+```
+
+`engagement.summarize` stays the whole campaign's: the provider counts every message the campaign sent, whoever's
+audience the person came from, so say so wherever its numbers stand beside one audience's.
 
 **Replies by category are the responder's reading, and you count them from the chronicle.** The responder records one
 verdict on each reply it handles, a `reply_classified` line whose `new` names the reply (`plugin`, `thread`,

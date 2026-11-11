@@ -41,14 +41,14 @@ public class OperationFamiliesTests
         string[] reads =
         [
             "approval.get", "approval.list", "approval.list_standing", "block.get", "block.list", "campaign.activity",
-            "campaign.activity_by_period", "campaign.get", "campaign.list", "campaign.list_contacts", "campaign.summary",
+            "campaign.activity_by_period", "campaign.audience", "campaign.get", "campaign.list", "campaign.list_contacts", "campaign.summary",
             "contact.get", "contact.list", "decision.get", "decision.list", "events.sources", "journal.kinds", "journal.list",
             "operation.describe", "plugin.list", "preference.list", "profile.get", "profile.list", "project.get", "project.list", "report.get",
             "report.list", "role.list", "rolenote.get", "rolenote.list", "route.list", "route.resolve", "subscription.list",
             "suppression.list", "workitem.count", "workitem.get", "workitem.list",
         ];
 
-        Assert.Equal(37, reads.Length);
+        Assert.Equal(38, reads.Length);
         Assert.Equal(reads, OperationFamilies.OperationsOf([OperationFamilies.Read]).Order(StringComparer.Ordinal));
     }
 
