@@ -12,8 +12,10 @@
  * `quitAndInstall` starts the downloaded installer from inside `node_modules` (electron-updater's own spawn), the one
  * start the desktop makes that the process guard cannot see. When its install step fails it does not quit: the pinned
  * electron-updater's `BaseUpdater.quitAndInstall` quits only when `install()` returns true, and every way `install()`
- * returns false after it was first called dispatches an `error` event first, synchronously (`BaseUpdater.install`,
- * `AppImageUpdater.doInstall`, `DebUpdater.doInstall`). That event is what tells the desktop to come back.
+ * returns false dispatches an `error` event first, synchronously (`BaseUpdater.install`, `AppImageUpdater.doInstall`,
+ * `DebUpdater.doInstall`), but one: a call after an earlier one returned true (`quitAndInstallCalled` stays set), which only
+ * `autoInstallOnAppQuit` or a second `quitAndInstall` makes. This desktop makes neither: the first is off, and it calls
+ * `quitAndInstall` once per download, from the one `downloaded` state. That event is what tells the desktop to come back.
  *
  * On Linux electron-updater is active only where it can replace what runs: the AppImage, which it knows by the
  * `APPIMAGE` variable (`AppImageUpdater.isUpdaterActive`), and the deb. Anywhere else the updater looks for nothing and

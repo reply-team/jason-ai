@@ -262,3 +262,12 @@ test('a failed update check waits a minute, doubles each time, and never longer 
     assert.equal(nextCheckDelay(2), 120_000);
     assert.equal(nextCheckDelay(40), 24 * 60 * 60 * 1000);
 });
+
+test('the login shell’s answer is taken only when it is a list of absolute folders; a shell that printed anything else leaves the inherited PATH', () => {
+    const between = (path: string) => `__JASON_PATH__${path}__JASON_PATH_END__`;
+    assert.equal(pathFromOutput(between('/usr/local/bin:/usr/bin:/home/a/.npm-global/bin')), '/usr/local/bin:/usr/bin:/home/a/.npm-global/bin');
+    assert.equal(pathFromOutput(between('$PATH')), null, 'a shell that does not expand "$PATH" in double quotes printed it as it is');
+    assert.equal(pathFromOutput(between('[/usr/bin /bin]')), null, 'a shell that prints its PATH as a list');
+    assert.equal(pathFromOutput(between('/usr/bin:relative/bin')), null);
+    assert.equal(pathFromOutput(between('/usr/bin:/bin\n/sbin')), null, 'a control character is no folder of a list');
+});

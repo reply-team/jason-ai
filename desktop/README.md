@@ -136,15 +136,20 @@ What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), 
   window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
   is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as
-  on only while that line is there and the entry is not hidden. A path the entry cannot spell, one with a `%` or a
-  control character, leaves the item off.
+  on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path
+  the entry cannot spell, one with a `%` or a control character, leaves the item off. An update that installs the
+  AppImage under a new file name moves an entry that is on to it.
 - The Command Line submenu places a `jason` wrapper in `~/.local/bin`, as on macOS.
 - An AppImage runs from a mount that lasts only while it runs, so each start copies its `jason` to
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
-  gives the chat. A copy already there is used only when every file matches the package's; one that differs stops the
-  start and is named, to be removed by hand. The copies of other versions go, but the one an update kept to go back to.
-  A start at logon or a PATH command the person set up from another version's copy is set up again from this one at
-  each start, the same act as turning it on; one never set up, or one that names a `jason` elsewhere, is left alone.
+  gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link
+  at the bundles folder or the version's folder, stops the start and is named, to be removed by hand. Without a copy,
+  Start the Runtime at Logon and the Command Line's acts are not offered. A start at logon or a PATH command the person
+  set up from another version's copy is set up again from this one at each start, the same act as turning it on; one
+  never set up, or one that names a `jason` elsewhere, is left alone. The copies of other versions go after that, but
+  the one an update kept to go back to, one something set up still names, and one the running runtime was started
+  from. No folder of the mount reaches what the desktop starts: the PATH and the libraries it hands on are the
+  session's.
 - Updates come to the AppImage and to the deb. An AppImage update keeps the AppImage file itself under
   `<data>/desktop/rollback/<version>/`; a deb update keeps no copy, and if the new version does not start, the page names
   the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says

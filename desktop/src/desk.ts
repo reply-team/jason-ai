@@ -31,9 +31,15 @@ export interface DeskDeps {
     updates: Updater | null;
     /** Where the previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
     kept(): string | null;
-    /** The jason command on the PATH: placed and removed by an installed build only, each on the person's word. */
-    command: PathCommand;
+    /**
+     * The jason command on the PATH: placed and removed by an installed build only, each on the person's word; null where
+     * this start carries no jason that outlasts it (an AppImage whose copy was not made), when none is offered.
+     */
+    command: PathCommand | null;
 }
+
+/** The Command Line submenu's one line where this start carries no jason that outlasts it. */
+export const uncarriedLine = 'No jason command is offered: this start carries no copy of jason to name, as the starting page says.';
 
 function resource(...parts: string[]): string {
     return join(app.getAppPath(), 'resources', ...parts);
@@ -163,9 +169,11 @@ export class Desk {
      * state allows. A development build shows it and places nothing: its executable is the checkout's, not an install's.
      */
     private commandItem(): MenuItemConstructorOptions {
+        const command = this.deps.command;
+        if (command === null) return { label: 'Command Line', submenu: [{ label: uncarriedLine, enabled: false }] };
         let status: CommandStatus;
         try {
-            status = this.deps.command.status();
+            status = command.status();
         } catch {
             status = { state: 'unsupported', executable: '' };
         }
@@ -187,8 +195,8 @@ export class Desk {
         const answer = window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options);
         if (answer.response !== 0) return;
         try {
-            if (act === 'place') this.deps.command.place();
-            else this.deps.command.remove();
+            if (act === 'place') this.deps.command?.place();
+            else this.deps.command?.remove();
         } catch (error) {
             dialog.showErrorBox('The jason command', error instanceof Error ? error.message : String(error));
         }

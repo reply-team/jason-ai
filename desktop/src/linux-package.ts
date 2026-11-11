@@ -15,7 +15,7 @@
  * read as a folder.
  */
 
-import { isAbsolute } from 'node:path';
+import { isAbsolute, posix } from 'node:path';
 import { applicationFolder } from './rollback.ts';
 
 export type LinuxPackage = { form: 'deb' } | { form: 'appimage'; file: string } | { form: 'folder' };
@@ -41,4 +41,35 @@ export function keptAsideOf(platform: NodeJS.Platform, form: LinuxPackage | null
     if (form?.form === 'appimage') return form.file;
     if (form?.form === 'deb') return null;
     return applicationFolder(platform, executable);
+}
+
+/** The mount an AppImage runs from, `APPDIR`, when this application is an AppImage and it names an absolute folder. */
+export function mountOf(form: LinuxPackage | null, env: Readonly<Record<string, string | undefined>>): string | undefined {
+    const appdir = env['APPDIR'];
+    return form?.form === 'appimage' && appdir && posix.isAbsolute(appdir) ? appdir : undefined;
+}
+
+/** The lists the pinned app-builder-lib's AppRun puts the mount's folders on (`appImageUtil.js`, `generateAppRunScript`). */
+const mountLists = ['PATH', 'LD_LIBRARY_PATH', 'XDG_DATA_DIRS', 'GSETTINGS_SCHEMA_DIR'] as const;
+
+/**
+ * Pure: the environment every child is given, with no folder of the AppImage's mount on any list the AppRun put it on.
+ * The mount lasts only while the application runs, and a runtime it starts outlasts it: the PATH a unit records, the
+ * PATH the chat and the Connect cards' programs search, and the libraries a child loads are the person's own. A list
+ * left empty is dropped. With no mount the environment is returned as it is.
+ */
+export function withoutMount<T extends Readonly<Record<string, string | undefined>>>(env: T, mount: string | undefined): T {
+    if (mount === undefined) return env;
+    const trimmed = (entry: string): string => (entry.endsWith('/') && entry.length > 1 ? trimmed(entry.slice(0, -1)) : entry);
+    const root = trimmed(mount);
+    const under = (entry: string) => trimmed(entry) === root || entry.startsWith(`${root}/`);
+    const next: Record<string, string | undefined> = { ...env };
+    for (const name of mountLists) {
+        const value = next[name];
+        if (value === undefined) continue;
+        const kept = value.split(':').filter((entry) => entry !== '' && !under(entry));
+        if (kept.length === 0) delete next[name];
+        else next[name] = kept.join(':');
+    }
+    return next as T;
 }

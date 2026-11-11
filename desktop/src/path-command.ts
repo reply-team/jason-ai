@@ -212,6 +212,12 @@ export class PathCommand {
         return true;
     }
 
+    /** The executables the files of a command of ours run, under either name; a file that is not ours names none. */
+    named(): string[] {
+        const names: Name[] = ['jason', 'jason-desktop'];
+        return names.flatMap((name) => this.looksOf(name).flatMap((look) => (look.target === null ? [] : [look.target.executable])));
+    }
+
     /** Writes every file of the command by write and rename. */
     private write(name: Name): void {
         const files = this.filesOf(name);

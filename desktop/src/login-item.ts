@@ -13,7 +13,7 @@
  */
 
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { Cli } from './cli.ts';
 import type { Logger } from './log.ts';
 
@@ -166,7 +166,9 @@ export class LoginItem {
             if (!this.supported) return false;
             try {
                 const lines = readFileSync(this.entryFile(), 'utf8').split('\n').map((line) => line.trim());
-                return !lines.includes('Hidden=true') && lines.includes(autostartExec(this.deps.executable) ?? '');
+                // Hidden=true is the specification's off; X-GNOME-Autostart-enabled=false is the one GNOME's session reads.
+                const off = lines.includes('Hidden=true') || lines.includes('X-GNOME-Autostart-enabled=false');
+                return !off && lines.includes(autostartExec(this.deps.executable) ?? '');
             } catch {
                 return false;
             }
@@ -182,6 +184,31 @@ export class LoginItem {
         return false;
     }
 
+    /** Writes the autostart entry for a launcher by write and rename. */
+    private writeEntry(file: string, launcher: string): void {
+        mkdirSync(dirname(file), { recursive: true });
+        const temporary = `${file}.jason-desktop.tmp`;
+        try {
+            writeFileSync(temporary, autostartEntry(launcher));
+            renameSync(temporary, file);
+        } finally {
+            rmSync(temporary, { force: true });
+        }
+    }
+
+    /**
+     * On Linux, moves an entry that is on to the file an update installed the AppImage as: the pinned electron-updater
+     * installs under the downloaded file's name, and removes the old file, when the old name carries a version
+     * (`AppImageUpdater.doInstall`, which then emits appimage-filename-updated). An entry that is off stays off, and a
+     * launcher the entry cannot spell leaves it as it is. Whether it moved is returned.
+     */
+    relocate(launcher: string): boolean {
+        if (this.deps.platform !== 'linux' || !this.isOn() || autostartExec(launcher) === null) return false;
+        this.writeEntry(this.entryFile(), launcher);
+        this.deps.log.info('login_item_moved', { Platform: this.deps.platform });
+        return true;
+    }
+
     /** Turns it on or off, on the person's word. */
     async set(on: boolean): Promise<void> {
         if (!this.supported) return;
@@ -189,14 +216,7 @@ export class LoginItem {
         if (this.deps.platform === 'linux') {
             const file = this.entryFile();
             if (on) {
-                mkdirSync(dirname(file), { recursive: true });
-                const temporary = `${file}.jason-desktop.tmp`;
-                try {
-                    writeFileSync(temporary, autostartEntry(this.deps.executable));
-                    renameSync(temporary, file);
-                } finally {
-                    rmSync(temporary, { force: true });
-                }
+                this.writeEntry(file, this.deps.executable);
             } else {
                 rmSync(file, { force: true });
             }
@@ -216,11 +236,15 @@ export class LoginItem {
 }
 
 /** What the answer of `jason runtime autostart status` says is registered and what it starts, or null when it says nothing. */
-function registrationIn(stdout: string): { registered: boolean; executable: string | null } | null {
+function registrationIn(stdout: string): { registered: boolean; executable: string | null; dataDirectory: string | null } | null {
     try {
-        const said = JSON.parse(stdout) as { registered?: unknown; executable?: unknown };
+        const said = JSON.parse(stdout) as { registered?: unknown; executable?: unknown; data_directory?: unknown };
         if (typeof said.registered !== 'boolean') return null;
-        return { registered: said.registered, executable: typeof said.executable === 'string' ? said.executable : null };
+        return {
+            registered: said.registered,
+            executable: typeof said.executable === 'string' ? said.executable : null,
+            dataDirectory: typeof said.data_directory === 'string' ? said.data_directory : null,
+        };
     } catch {
         return null;
     }
@@ -251,6 +275,12 @@ export class RuntimeAutostart {
 
     /** Whether the runtime is registered to start at logon and which executable it starts, or null when the CLI did not say. */
     async registration(): Promise<{ registered: boolean; executable: string | null } | null> {
+        const read = await this.read();
+        return read === null ? null : { registered: read.registered, executable: read.executable };
+    }
+
+    /** What `jason runtime autostart status` says, the data directory included, or null when the CLI did not say. */
+    private async read(): Promise<{ registered: boolean; executable: string | null; dataDirectory: string | null } | null> {
         const status = await this.deps.cli.run(['runtime', 'autostart', 'status']);
         return status.exit === 0 ? registrationIn(status.stdout) : null;
     }
@@ -268,13 +298,20 @@ export class RuntimeAutostart {
 
     /**
      * Registers it again from this start's jason when the person registered it from a jason `stale` names, another
-     * version's copy: the same act as enable. One that is not registered, or names any other jason, is left as it is.
+     * version's copy, for this desktop's data directory: the same act as enable. One that is not registered, names any
+     * other jason or another data directory is left as it is. An enable the CLI refuses is logged as failed with its
+     * exit, and the registration then still names the other copy, which therefore stays (`removeOtherCopies`).
      */
-    async repoint(stale: (executable: string) => boolean): Promise<boolean> {
-        const registration = await this.registration();
+    async repoint(stale: (executable: string) => boolean, dataDirectory: string): Promise<boolean> {
+        const registration = await this.read();
         if (registration?.registered !== true || registration.executable === null || !stale(registration.executable)) return false;
+        if (registration.dataDirectory === null || resolve(registration.dataDirectory) !== resolve(dataDirectory)) return false;
         const result = await this.deps.cli.run(['runtime', 'autostart', 'enable']);
+        if (result.exit !== 0) {
+            this.deps.log.error('repoint_failed', { What: 'autostart', Exit: result.exit });
+            return false;
+        }
         this.deps.log.info('autostart_repointed', { Exit: result.exit });
-        return result.exit === 0;
+        return true;
     }
 }

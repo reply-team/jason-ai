@@ -35,7 +35,9 @@ export function loginShell(platform: NodeJS.Platform, env: Readonly<Record<strin
 
 /**
  * Pure: the PATH the login shell printed between the two markers, or null when it printed no such pair. What a logout
- * script prints after the closing marker is cut off.
+ * script prints after the closing marker is cut off. It is taken only when it is a list of absolute folders: a shell
+ * that does not expand `"$PATH"` in double quotes (nushell, say) prints it as it is, and one that prints its PATH as a
+ * list prints no colon-separated one; then the inherited PATH stands.
  */
 export function pathFromOutput(stdout: string): string | null {
     const at = stdout.lastIndexOf(marker);
@@ -43,7 +45,9 @@ export function pathFromOutput(stdout: string): string | null {
     const end = stdout.indexOf(closing, at + marker.length);
     if (end < 0) return null;
     const path = stdout.slice(at + marker.length, end).trim();
-    return path === '' ? null : path;
+    if (path === '') return null;
+    const folders = path.split(':').filter((entry) => entry !== '');
+    return folders.length > 0 && folders.every((entry) => entry.startsWith('/') && !/[\u0000-\u001f\u007f]/.test(entry)) ? path : null;
 }
 
 /**

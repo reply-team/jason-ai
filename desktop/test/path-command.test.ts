@@ -384,3 +384,18 @@ test('a wrapper of ours that names another data directory is not placed again by
     assert.equal(readFileSync(join(folder, 'jason'), 'utf8'), before);
     assert.deepEqual(log.lines, []);
 });
+
+test('the executables a command of ours runs are read back, under either name, and a file that is not ours names none', (t) => {
+    const root = scratch(t);
+    const folder = join(root, 'home', '.local', 'bin');
+    const deps = { platform: 'linux' as const, folder, dataDirectory: null, path: () => '/usr/bin:/bin', isProgram: (file: string) => existsSync(file) };
+    const exe = '/data/desktop/bundle/0.35.0/jason';
+    const command = new PathCommand({ ...deps, executable: '/data/desktop/bundle/0.36.0/jason', log: memoryLog() });
+    assert.deepEqual(command.named(), []);
+    new PathCommand({ ...deps, executable: exe, log: memoryLog() }).place();
+    assert.deepEqual(command.named(), [exe]);
+    rmSync(join(folder, 'jason'));
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, 'jason'), '#!/bin/sh\nexec /usr/lib/jason/jason "$@"\n');
+    assert.deepEqual(command.named(), [], 'a jason the desktop did not write names nothing of ours');
+});

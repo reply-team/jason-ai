@@ -281,15 +281,19 @@ test('the login items’ log lines, read back, carry the setting and the platfor
 });
 
 /** A CLI whose `runtime autostart status` names `executable` when registered, and whose enable registers its own jason. */
-function registeredCli(registered: boolean, executable: string, own: string): Cli & { asked: string[][] } {
+function registeredCli(registered: boolean, executable: string, own: string, options: { dataDirectory?: string; enableExit?: number } = {}): Cli & { asked: string[][] } {
     const asked: string[][] = [];
-    let now = { registered, executable: registered ? executable : null };
+    const data = options.dataDirectory ?? '/data';
+    let now = { registered, executable: registered ? executable : null, data_directory: registered ? data : null };
     return {
         asked,
         async run(args): Promise<CliResult> {
             asked.push([...args]);
-            if (args[2] === 'enable') now = { registered: true, executable: own };
-            return { exit: 0, stdout: `${JSON.stringify({ ...now, platform: 'linux', data_directory: null, executable_exists: true, artifact_path: null })}\n`, stderr: '' };
+            if (args[2] === 'enable') {
+                if (options.enableExit) return { exit: options.enableExit, stdout: '', stderr: 'refused' };
+                now = { registered: true, executable: own, data_directory: '/data' };
+            }
+            return { exit: 0, stdout: `${JSON.stringify({ ...now, platform: 'linux', executable_exists: true, artifact_path: null })}\n`, stderr: '' };
         },
     };
 }
@@ -300,7 +304,7 @@ const otherCopy = (named: string) => named.startsWith('/data/desktop/bundle/') &
 test('on an AppImage a start at logon registered with another version’s copy of jason is registered again with this start’s copy', async () => {
     const cli = registeredCli(true, '/data/desktop/bundle/0.35.0/jason', '/data/desktop/bundle/0.36.0/jason');
     const log = memoryLog();
-    assert.equal(await new RuntimeAutostart({ cli, log }).repoint(otherCopy), true);
+    assert.equal(await new RuntimeAutostart({ cli, log }).repoint(otherCopy, '/data'), true);
     assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable']], 'the same act as enable, from this start’s jason');
     assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_repointed', { Exit: 0 }]]);
 });
@@ -309,7 +313,7 @@ test('a start at logon that names a jason outside the bundles folder, or this st
     for (const named of ['/opt/Jason/resources/bundle/jason', '/home/someone/.local/share/jason/jason', '/data/desktop/bundle/0.36.0/jason']) {
         const cli = registeredCli(true, named, '/data/desktop/bundle/0.36.0/jason');
         const log = memoryLog();
-        assert.equal(await new RuntimeAutostart({ cli, log }).repoint(otherCopy), false, named);
+        assert.equal(await new RuntimeAutostart({ cli, log }).repoint(otherCopy, '/data'), false, named);
         assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status']], named);
         assert.deepEqual(log.lines, []);
     }
@@ -317,19 +321,63 @@ test('a start at logon that names a jason outside the bundles folder, or this st
 
 test('a start at logon the person never enabled is not registered by a re-point, nor one the CLI did not answer', async () => {
     const cli = registeredCli(false, '/data/desktop/bundle/0.35.0/jason', '/data/desktop/bundle/0.36.0/jason');
-    assert.equal(await new RuntimeAutostart({ cli, log: memoryLog() }).repoint(() => true), false);
+    assert.equal(await new RuntimeAutostart({ cli, log: memoryLog() }).repoint(() => true, '/data'), false);
     assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status']], 'nothing is written');
     const namingAsked: string[][] = [];
     const naming: Cli & { asked: string[][] } = {
         asked: namingAsked,
         async run(args) {
             namingAsked.push([...args]);
-            return { exit: 0, stdout: `${JSON.stringify({ registered: false, executable: '/data/desktop/bundle/0.35.0/jason' })}\n`, stderr: '' };
+            return { exit: 0, stdout: `${JSON.stringify({ registered: false, executable: '/data/desktop/bundle/0.35.0/jason', data_directory: '/data' })}\n`, stderr: '' };
         },
     };
-    assert.equal(await new RuntimeAutostart({ cli: naming, log: memoryLog() }).repoint(() => true), false, 'an answer that says not registered is never re-pointed, whatever it names');
+    assert.equal(await new RuntimeAutostart({ cli: naming, log: memoryLog() }).repoint(() => true, '/data'), false, 'an answer that says not registered is never re-pointed, whatever it names');
     assert.deepEqual(naming.asked, [['runtime', 'autostart', 'status']]);
     const refusing = autostartCli(() => true, 1);
-    assert.equal(await new RuntimeAutostart({ cli: refusing, log: memoryLog() }).repoint(() => true), false);
+    assert.equal(await new RuntimeAutostart({ cli: refusing, log: memoryLog() }).repoint(() => true, '/data'), false);
     assert.deepEqual(refusing.asked, [['runtime', 'autostart', 'status']]);
+});
+
+test('a re-point whose enable the CLI refuses is logged as failed with its exit, never as registered again', async () => {
+    const cli = registeredCli(true, '/data/desktop/bundle/0.35.0/jason', '/data/desktop/bundle/0.36.0/jason', { enableExit: 1 });
+    const log = memoryLog();
+    assert.equal(await new RuntimeAutostart({ cli, log }).repoint(otherCopy, '/data'), false);
+    assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable']]);
+    assert.deepEqual(log.lines.map((line) => [line.level, line.name, line.fields]), [['error', 'repoint_failed', { What: 'autostart', Exit: 1 }]]);
+});
+
+test('a start at logon registered for another data directory is not re-pointed to this desktop’s', async () => {
+    const cli = registeredCli(true, '/data/desktop/bundle/0.35.0/jason', '/data/desktop/bundle/0.36.0/jason', { dataDirectory: '/srv/other-jason' });
+    const log = memoryLog();
+    assert.equal(await new RuntimeAutostart({ cli, log }).repoint(otherCopy, '/data'), false);
+    assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status']]);
+    assert.deepEqual(log.lines, []);
+});
+
+test('on Linux an entry GNOME is told to skip, X-GNOME-Autostart-enabled=false, reads as off', (t) => {
+    const home = scratch(t);
+    const file = autostartEntryFile(home, {});
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${autostartEntry('/home/someone/Apps/Jason.AppImage')}X-GNOME-Autostart-enabled=false\n`);
+    const item = new LoginItem({ platform: 'linux', home, executable: '/home/someone/Apps/Jason.AppImage', electron: electronLogin(), pathRead, log: memoryLog(), env: {} });
+    assert.equal(item.isOn(), false);
+});
+
+test('on Linux an update that installs the AppImage under a new file name moves an entry that was on to that file, and writes none that was off', (t) => {
+    const home = scratch(t);
+    const file = autostartEntryFile(home, {});
+    const old = '/home/someone/Apps/Jason-0.35.0.AppImage';
+    const renamed = '/home/someone/Apps/Jason-0.36.0.AppImage';
+    const log = memoryLog();
+    const item = new LoginItem({ platform: 'linux', home, executable: old, electron: electronLogin(), pathRead, log, env: {} });
+
+    assert.equal(item.relocate(renamed), false, 'an entry that is off stays off');
+    assert.equal(existsSync(file), false);
+
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, autostartEntry(old));
+    assert.equal(item.relocate(renamed), true);
+    assert.equal(readFileSync(file, 'utf8'), autostartEntry(renamed));
+    assert.deepEqual(readdirSync(dirname(file)), ['ai.jasonharness.desktop.desktop'], 'written by rename, no temporary left');
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['login_item_moved', { Platform: 'linux' }]]);
 });

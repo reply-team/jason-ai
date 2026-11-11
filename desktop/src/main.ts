@@ -14,13 +14,13 @@ import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedTurns } from './chat-log.ts';
-import { BundleDiffers, carriedBundle, copiesBundle, isOtherCopy } from './bundle-copy.ts';
+import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
-import { keptAsideOf, launcherOf, linuxPackage, type LinuxPackage } from './linux-package.ts';
+import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
-import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
+import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
 import { debFile, previousRelease, Updater } from './updates.ts';
@@ -155,28 +155,19 @@ async function run(): Promise<void> {
     // finds it.
     const pathRead = loginPath(pathOf(process.env), home);
     process.env.PATH = await pathRead;
-    const env = withPath(process.env, process.env.PATH);
+    const form = linuxForm();
+    // Every child gets the person's PATH and libraries: nothing of an AppImage's mount, which the AppRun put on them.
+    const env = withoutMount(withPath(process.env, process.env.PATH), mountOf(form, process.env));
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
-    const form = linuxForm();
     const log = fileLogger(paths.logs, limitsFrom(readText(paths.installationSettings)));
     const packaged = bundleDirectory();
     const version = bundleVersion(packaged);
-    // An AppImage's bundle is under a mount that lasts only while it runs: the copy under <data>/desktop/bundle/<version>/
-    // is the jason it carries (`bundle-copy.ts`). Anything else carries the bundle where it is installed.
-    let bundle = packaged;
-    let uncopied: string | null = null;
-    if (version !== null && copiesBundle(form)) {
-        try {
-            bundle = carriedBundle({ source: packaged, bundles: paths.bundle, version, keep: rollbackVersions(readRollback(paths.rollback)) });
-        } catch (error) {
-            uncopied =
-                error instanceof BundleDiffers
-                    ? error.message
-                    : `The jason this application carries could not be copied to ${join(paths.bundle, version)}, so Jason did not start. Check that the data directory can be written to, then start Jason again.`;
-            log.error('bundle_copy_failed', { Differs: error instanceof BundleDiffers });
-        }
-    }
+    // What this start carries (`bundle-copy.ts`): an AppImage's copy under <data>/desktop/bundle/<version>/, the bundle
+    // where it is installed for anything else; with no copy, nothing that outlasts the run names the mount's jason.
+    const carried = carriedOf({ form, packaged, version, bundles: paths.bundle });
+    if (carried.failure !== null) log.error('bundle_copy_failed', { Differs: carried.failure.differs });
+    const { bundle, uncopied } = carried;
     log.info('desktop_started', { Version: version ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
 
     const conduct = windowConduct(process.platform);
@@ -237,7 +228,7 @@ async function run(): Promise<void> {
     const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)), paired: begin });
     // On Linux the session starts the launcher: the AppImage file itself, whose mount lasts only while it runs.
     const login = new LoginItem({ platform: process.platform, home, executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead, log, env: process.env });
-    const autostart = version === null ? null : new RuntimeAutostart({ cli, log });
+    const autostart = version === null || !carried.outlives ? null : new RuntimeAutostart({ cli, log });
     // The updater runs only in an installed build: a development build has no installer to hand an update to.
     const rollback = paths.rollback;
     // What an update keeps aside to go back to: the AppImage file on Linux, nothing for the deb.
@@ -266,33 +257,44 @@ async function run(): Promise<void> {
               changed: () => desk.renderMenu(),
           })
         : null;
-    const command = new PathCommand({
-        platform: process.platform,
-        folder: commandFolder(process.platform, process.env, home),
-        executable,
-        dataDirectory: process.env['JASON_DATA_DIR'] || null,
-        path: () => process.env.PATH ?? '',
-        pathext: process.env['PATHEXT'],
-        isProgram: (file) => isProgramFile(file, process.platform),
-        log,
-    });
-    // What the person set up from an earlier version's copy, the PATH command and the start at logon, follows this start's.
-    const otherCopy = copiesBundle(form) && uncopied === null ? (named: string) => isOtherCopy(named, paths.bundle, executable) : null;
-    if (otherCopy !== null) {
+    const command = carried.outlives
+        ? new PathCommand({
+              platform: process.platform,
+              folder: commandFolder(process.platform, process.env, home),
+              executable,
+              dataDirectory: process.env['JASON_DATA_DIR'] || null,
+              path: () => process.env.PATH ?? '',
+              pathext: process.env['PATHEXT'],
+              isProgram: (file) => isProgramFile(file, process.platform),
+              log,
+          })
+        : null;
+    // What the person set up from an earlier version's copy, the PATH command and the start at logon, follows this
+    // start's; the copies of other versions are removed only after that, by what then still names them.
+    const otherCopy = carried.repoints ? (named: string) => isOtherCopy(named, paths.bundle, executable) : null;
+    if (otherCopy !== null && command !== null) {
         try {
             command.repoint(otherCopy);
         } catch {
-            log.error('repoint_failed', { What: 'path_command' });
+            log.error('repoint_failed', { What: 'path_command', Exit: -1 });
         }
     }
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
     const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command });
     desk.open();
     showWindow = () => desk.show();
-    void (async () => {
-        if (otherCopy !== null) await autostart?.repoint(otherCopy).catch(() => log.error('repoint_failed', { What: 'autostart' }));
+    const repointed = (async () => {
+        if (otherCopy !== null) await autostart?.repoint(otherCopy, paths.data).catch(() => log.error('repoint_failed', { What: 'autostart', Exit: -1 }));
         await desk.readAutostart();
     })();
+    // An update that installs the AppImage under a new file name moves Open Jason at Login to it.
+    autoUpdater.on('appimage-filename-updated', (file) => {
+        try {
+            login.relocate(file);
+        } catch {
+            log.error('repoint_failed', { What: 'login_item', Exit: -1 });
+        }
+    });
     updates?.start();
     let runtimeVersion: string | null = null;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);
@@ -374,6 +376,25 @@ async function run(): Promise<void> {
                 ? said
                 : keptNotice(said, kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory }, aside ?? applicationFolder(process.platform, process.execPath), process.platform);
         if (current !== null) await showStarting(current, notice, true);
+    }
+    if (otherCopy !== null && version !== null) {
+        const named = async (): Promise<readonly string[] | null> => {
+            const registration = autostart === null ? { registered: false, executable: null } : await autostart.registration();
+            if (registration === null) return null;
+            return [...(registration.registered && registration.executable !== null ? [registration.executable] : []), ...(command?.named() ?? [])];
+        };
+        void repointed
+            .then(() =>
+                removeOtherCopies({
+                    bundles: paths.bundle,
+                    version,
+                    keep: rollbackVersions(readRollback(paths.rollback)),
+                    named,
+                    whose: async (other) => (await whoseRuntime(ownRuntimeDeps(process.platform, other, paths.runFile, cli))).whose,
+                    log,
+                }),
+            )
+            .catch(() => log.error('bundle_copy_removal_failed', {}));
     }
 }
 
