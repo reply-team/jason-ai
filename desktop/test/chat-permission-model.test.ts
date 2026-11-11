@@ -1116,7 +1116,7 @@ test('the other spellings that change the program search are refused, and a comm
     const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
     for (const command of ['unset PATH; jason status', 'unset -v X PATH; jason status', 'env -u PATH jason status', 'env --unset=PATHEXT jason status',
         'export "PATH"=.; jason status', 'declare \'PATH\'=.; jason status', 'PATH[0]=. jason status', 'read PATH < p.txt; jason status',
-        'printf -v PATH .; jason status', 'path .;%PATH% & jason status', 'cd x && path=.;%PATH% && jason status', 'Set-Item Env:/PATH x']) {
+        'printf -v PATH .; jason status', 'cmd /c path .;%PATH% & jason status', 'cd x && path=.;%PATH% && jason status', 'Set-Item Env:/PATH x']) {
         for (const scope of [windows(), mac(), linux]) assert.deepEqual(run(scope, command), { verdict: 'deny', message: searchRefusal }, `${scope.platform} ${command}`);
     }
     for (const scope of [windows(), mac(), linux]) {
@@ -1167,4 +1167,14 @@ test('in the chat folder itself a write under .claude, .agents or .codex is refu
         [mac(), `cp x.json ${macProject}/.claude/settings.json`, settingsTitle], [mac(), 'mkdir -p .codex', loadsTitle]] as const) {
         assert.deepEqual(run(scope, command), guardCard(title, command), command);
     }
+});
+
+test('cmd\'s path command is refused only as the command handed to cmd; a line of prose or a Bash word named path is not it', () => {
+    const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
+    for (const command of ['cmd /c path C:\\x', 'cmd.exe /c "path=C:\\x"', 'CMD /K Path .;%PATH%', 'cmd /s /c "path C:\\x & jason status"', 'cmd.exe /C path']) {
+        for (const scope of [windows(), mac(), linux]) assert.deepEqual(run(scope, command), { verdict: 'deny', message: searchRefusal }, `${scope.platform} ${command}`);
+    }
+    const prose = 'cat <<\'END\' > notes.md\nPath forward is clear\nEND';
+    for (const scope of [windows(), mac()]) assert.notDeepEqual(run(scope, prose), { verdict: 'deny', message: searchRefusal }, `${scope.platform} prose`);
+    for (const scope of [windows(), mac()]) assert.deepEqual(run(scope, 'echo x; path y'), { verdict: 'ask', title: 'Run a command', detail: 'echo x; path y', remember: null }, scope.platform);
 });

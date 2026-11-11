@@ -563,8 +563,9 @@ const searchName = `(?:${searchVariables.join('|')})`;
 /**
  * What changes where the shell finds a program, read over the whole text in any letter case: an assignment to a search
  * variable in any shell's form (`NAME=`, `NAME+=`, `${NAME:=}`, `NAME[0]=`; leading, or after `export`, `declare`,
- * `env` or `set`, the name quoted or not), `unset` and `env -u`, `read` and `printf -v` into it, cmd's `path` command at a
- * command's start and its `setx`, PowerShell's environment drive and .NET's setter; and a function, an alias or a hash
+ * `env` or `set`, the name quoted or not), `unset` and `env -u`, `read` and `printf -v` into it, cmd's `path` command
+ * as the command handed to cmd by `/c` or `/k` (the chat's shell is Bash, where a word path is no such command) and
+ * cmd's `setx`, PowerShell's environment drive and .NET's setter; and a function, an alias or a hash
  * entry for jason. A longer name that only ends like one (`MYPATH=`, `PYTHONPATH=`), a read of `$PATH`, an option named
  * path (`--path=`) and a prompt that holds the word are not it. A spelling that builds the name is not refused here; a
  * command that names either variable in capitals otherwise is a card of its own (`namesSearch`).
@@ -578,7 +579,7 @@ const searchChanges: readonly RegExp[] = [
     new RegExp(String.raw`(?<![A-Za-z0-9_.-])env\b[^;&|\n]*?(?:\s-u\s*|\s--unset[=\s]\s*)["']?${searchName}(?![A-Za-z0-9_])`, 'i'),
     new RegExp(String.raw`(?<![A-Za-z0-9_.-])(?:read|readarray|mapfile)\b[^;&|\n<>]*?\s["']?${searchName}["']?(?=[\s;&|<>]|$)`, 'i'),
     new RegExp(String.raw`(?<![A-Za-z0-9_.-])printf\s+(?:-\S+\s+)*?-v\s*["']?${searchName}(?![A-Za-z0-9_])`, 'i'),
-    /(?:^|[;&|(\n])\s*path\s+[^\s/]/i,
+    /(?<![A-Za-z0-9_.-])cmd(?:\.exe)?['"]?(?:\s+\/[a-z])*?\s+\/[ck]\s+['"]?path(?![A-Za-z0-9_.-])/i,
     /(?<![A-Za-z0-9_.-])jason(?:\.[a-z]+)?\s*\(\s*\)/i,
     /(?<![A-Za-z0-9_.-])function\s+jason(?![A-Za-z0-9_-])/i,
     /(?<![A-Za-z0-9_.-])(?:alias|doskey)\s+(?:-\S+\s+)*['"]?jason(?:\.[a-z]+)?['"]?=/i,
