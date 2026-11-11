@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Execution;
 using Jason.Contracts.Update;
 using OperatingSystemProcess = System.Diagnostics.Process;
 
@@ -132,6 +133,9 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
             startInfo.Environment.Remove(UpdateLaunch.Variable);
         }
 
+        // The confinement is the call's that started this runtime, never the runtime's: a runtime lives on past that call.
+        startInfo.Environment.Remove(Confinement.Variable);
+
         return startInfo;
     }
 
@@ -162,11 +166,14 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         return new ProcessHandle(process, said);
     }
 
-    public async Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken)
+    /// <summary>
+    /// What <see cref="RunAsync"/> hands the operating system: the command and the data directory, and never the update's
+    /// mark or the confinement of the call that runs it, since the command starts a runtime.
+    /// </summary>
+    public static ProcessStartInfo RunStart(JasonPaths paths, IReadOnlyList<string> command)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(command);
-        ArgumentNullException.ThrowIfNull(error);
         if (command.Count == 0)
         {
             throw new ArgumentException("A command cannot be run from nothing.", nameof(command));
@@ -182,6 +189,14 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
 
         startInfo.Environment[JasonPaths.DataDirectoryVariable] = paths.Root;
         startInfo.Environment.Remove(UpdateLaunch.Variable);
+        startInfo.Environment.Remove(Confinement.Variable);
+        return startInfo;
+    }
+
+    public async Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        var startInfo = RunStart(paths, command);
 
         // The child starts a runtime, which outlives it: neither may hold the streams of whoever is reading this process.
         StandardStreams.KeepOutOfChildren();
