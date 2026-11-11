@@ -123,7 +123,7 @@ export function removalText(report: UninstallReport, next: string): Closing {
     if (report.failed.length > 0) parts.push(`Could not be taken off, and what does it by hand:\n${list(report.failed)}`);
     parts.push(`Left in place:\n${list(report.left)}`);
     // On an AppImage the jason this start runs went with its copies: nothing in Jason works on but quitting.
-    const copiesGone = report.steps.some((one) => one.step === 'bundle' && one.outcome === 'removed');
+    const copiesGone = copiesWent(report);
     parts.push(`${copiesGone ? 'The jason this Jason ran went with its copies, so it does not work on until you quit it. ' : ''}To finish, quit Jason, then ${next}.`);
     const message = report.failed.length === 0 ? 'Jason took off what it placed.' : 'Jason took off what it could; some of it is left.';
     return { message, detail: parts.join('\n\n'), buttons: ['Quit Jason', 'Not Now'], defaultId: 0, cancelId: 1, quitId: 0 };
@@ -140,6 +140,32 @@ export interface RemovalDeps {
     tell(closing: Closing): Promise<number>;
     quit(): void;
     log: Logger;
+    /** Called once the person confirmed, before the first step: what runs the carried jason on its own stops. */
+    pause?(): void;
+    /** Called after the last step, unless the copies of the jason it would run went (`copiesWent`). */
+    resume?(): void;
+}
+
+/** Whether the act took off the copies of jason this start runs: then nothing that runs it starts again. */
+export function copiesWent(report: UninstallReport): boolean {
+    return report.steps.some((one) => one.step === 'bundle' && one.outcome === 'removed');
+}
+
+/**
+ * The tray's count while the act runs: it starts the carried jason on its own every half minute, so it is stopped from
+ * the first step to the last, and read again after only when it was reading and the copies did not go.
+ */
+export function quietWatcher(watcher: () => { readonly reading: boolean; start(): void; stop(): void }): Required<Pick<RemovalDeps, 'pause' | 'resume'>> {
+    let was = false;
+    return {
+        pause: () => {
+            was = watcher().reading;
+            watcher().stop();
+        },
+        resume: () => {
+            if (was) watcher().start();
+        },
+    };
 }
 
 /** The act: asks, takes the steps on the person's word alone, says what came of each, and quits when asked to. */
@@ -150,7 +176,15 @@ export async function removePlaced(deps: RemovalDeps): Promise<UninstallReport |
     const confirmed = answer !== question.cancelId && question.buttons[answer] === 'Remove';
     deps.log.info('removal_asked', { Answer: confirmed ? 'remove' : 'cancel' });
     if (!confirmed) return null;
-    const report = await deps.remove();
+    deps.pause?.();
+    let report: UninstallReport;
+    try {
+        report = await deps.remove();
+    } catch (error) {
+        deps.resume?.();
+        throw error;
+    }
+    if (!copiesWent(report)) deps.resume?.();
     const closing = removalText(report, scope.next);
     const chosen = await deps.tell(closing);
     if (closing.quitId !== null && chosen === closing.quitId) deps.quit();

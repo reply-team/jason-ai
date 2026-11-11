@@ -13,9 +13,10 @@ import { configuration } from '../electron-builder.config.mjs';
 import { wrapperScript } from '../src/command-line.ts';
 import { autostartEntry, autostartEntryFile, launchAgent, launchAgentFile, LoginItem, type ElectronLogin } from '../src/login-item.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
+import { AttentionWatcher } from '../src/attention.ts';
 import { PathCommand } from '../src/path-command.ts';
 import { desktopPaths } from '../src/paths.ts';
-import { debPackage, placedRemoval, RemovalAct, removalOffered, removalQuestion, removalText, removeApplication, removeLabel, removePlaced, type RemovalScope } from '../src/remove-placed.ts';
+import { debPackage, placedRemoval, quietWatcher, RemovalAct, removalOffered, removalQuestion, removalText, removeApplication, removeLabel, removePlaced, type RemovalScope } from '../src/remove-placed.ts';
 import { processesRunFrom, stopFromAny, uninstall, type RunsFrom, type UninstallDeps } from '../src/uninstall.ts';
 import { memoryLog } from './harness.ts';
 
@@ -710,4 +711,58 @@ test('the deb is removed by the name electron-builder gives it', () => {
     assert.equal(debPackage, name);
     const built = configuration({ version: '0.35.0' }) as { linux?: { packageName?: string }; deb?: { packageName?: string } };
     assert.equal(built.deb?.packageName ?? built.linux?.packageName ?? name, debPackage);
+});
+
+test('the tray’s count starts nothing between the act’s first step and its last, and reads again after only while the copies of its jason are there', async (t) => {
+    for (const form of ['deb', 'appimage'] as const) {
+        const b = bench(t, form, { stop: async () => ({ kind: 'stopped' }) });
+        await placeAll(b);
+        const asked: string[] = [];
+        const cli = { run: async (args: readonly string[]) => (asked.push(args.join(' ')), { exit: 3, stdout: '', stderr: '' }) };
+        const pending: { run: () => void }[] = [];
+        const timers = {
+            setTimeout: (run: () => void) => {
+                const entry = { run };
+                pending.push(entry);
+                return entry;
+            },
+            clearTimeout: (entry: unknown) => {
+                const at = pending.indexOf(entry as { run: () => void });
+                if (at >= 0) pending.splice(at, 1);
+            },
+        };
+        const watcher = new AttentionWatcher({ cli, log: memoryLog(), timers, show: () => undefined, notify: () => undefined });
+        watcher.start();
+        pending.shift()?.run();
+        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(pending.length, 1, 'the count reads on its cadence before the act');
+        const before = asked.length;
+        const during: number[] = [];
+        const act = new RemovalAct({
+            scope: () => scope(b),
+            ask: async () => 0,
+            remove: async () => {
+                during.push(pending.length);
+                const report = await uninstall(b.deps);
+                during.push(pending.length);
+                return report;
+            },
+            tell: async () => 1,
+            quit: () => undefined,
+            log: b.log,
+            changed: () => undefined,
+            ...quietWatcher(() => watcher),
+        });
+        await act.run();
+        assert.deepEqual(during, [0, 0], `${form}: no read is waiting from the first step to the last`);
+        assert.equal(asked.length, before, `${form}: the carried jason was not started meanwhile`);
+        if (form === 'appimage') {
+            assert.equal(watcher.reading, false, 'the copies went: nothing starts the jason they held again');
+            assert.equal(pending.length, 0);
+        } else {
+            assert.equal(watcher.reading, true, 'the jason is still there: the count reads again');
+            assert.equal(pending.length, 1);
+        }
+    }
 });

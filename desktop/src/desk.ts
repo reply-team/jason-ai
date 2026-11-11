@@ -13,7 +13,7 @@ import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './ke
 import type { Logger } from './log.ts';
 import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
-import { RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
+import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import { menuItemOf, type Updater } from './updates.ts';
 
 export interface DeskDeps {
@@ -83,6 +83,7 @@ export class Desk {
                       quit: () => app.quit(),
                       log: deps.log,
                       changed: () => this.renderMenu(),
+                      ...quietWatcher(() => this.watcher),
                   });
         this.watcher = new AttentionWatcher({
             cli: deps.cli,
