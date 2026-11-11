@@ -41,6 +41,10 @@ export type Judgement =
     | { verdict: 'ask'; title: string; detail: string; remember: string; covers: string };
 
 const allow: Judgement = { verdict: 'allow' };
+/**
+ * The most of a card's detail the page is given: a longer detail is cut with an ellipsis (`shorten`), and a longer command
+ * is refused (`judgeCommand`), since its card could not show what Allow would run.
+ */
 const detailLimit = 4000;
 const readers: Readonly<Record<string, string>> = { Read: 'file_path', Glob: 'path', Grep: 'path', LS: 'path' };
 const writers: Readonly<Record<string, string>> = { Write: 'file_path', Edit: 'file_path', MultiEdit: 'file_path', NotebookEdit: 'notebook_path' };
@@ -50,14 +54,40 @@ const shells = new Set(['Bash', 'PowerShell']);
  * card covers its one request.
  */
 const runsNothing: ReadonlySet<string> = new Set<string>();
+interface GuardedName {
+    /** The name as its owner spells it; compared as the platform folds case. */
+    name: string;
+    /** The card's title for a write under it. */
+    title: string;
+    /** True when the file directly in the chat folder is the chat's own instructions: a write of it there is refused. */
+    chatsOwn?: true;
+}
+
+const instructionsTitle = 'Change instructions an agent reads';
+const loadsTitle = 'Change the skills or settings an agent loads';
+
 /**
- * Inside a working folder, these still act on what runs next: `.claude` configures the host for the next turn, and
- * `.git` holds a repository's hooks and configuration, which git runs. Writing under either is never silent.
+ * Inside a working folder, the names whose files act on what runs next, as any component of a path: `.claude` configures
+ * Claude Code for the next turn; `.git` holds a repository's hooks and configuration, which git runs; `.jason` holds the
+ * marker a folder is known by; `.agents` holds the skills Codex and the other hosts load, and `.codex` Codex's settings;
+ * the instruction files are what a host reads as its instructions, the person's memory file among them, which every role
+ * session in a campaign's folder loads. A write under any is a card each time, never covered by "always"; a read is not.
+ * The four instruction files the hosts read directly in the chat folder are the chat's own instructions, which the
+ * desktop writes before each turn or a host reads beside them: a write of one there is refused. One declaration, which
+ * the .NET suite holds to the names the runtime and the hosts' table use.
  */
-const guardedFolders: Readonly<Record<string, string>> = {
-    '.claude': 'Change the agent\'s own settings',
-    '.git': 'Change a repository\'s own files',
-};
+export const guardedNames: readonly GuardedName[] = [
+    { name: '.claude', title: 'Change the agent\'s own settings' },
+    { name: '.git', title: 'Change a repository\'s own files' },
+    { name: '.jason', title: 'Change a folder\'s Jason marker' },
+    { name: '.agents', title: loadsTitle },
+    { name: '.codex', title: loadsTitle },
+    { name: 'CLAUDE.md', title: instructionsTitle, chatsOwn: true },
+    { name: 'CLAUDE.local.md', title: instructionsTitle, chatsOwn: true },
+    { name: 'AGENTS.md', title: instructionsTitle, chatsOwn: true },
+    { name: 'AGENTS.override.md', title: instructionsTitle, chatsOwn: true },
+    { name: 'GEMINI.md', title: instructionsTitle },
+];
 const allowedReply = [['auth', 'status'], ['account', 'list']];
 
 const dataRefusal = 'That path is the installation\'s own data, outside the chat\'s folder: the chat neither reads nor writes it. Nothing was done.';
@@ -73,6 +103,10 @@ const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096
 const replyRefusal = 'The chat runs only reply auth status and reply account list of reply: provider work goes through jason, and the connection is made on the Connect card. Nothing was run.';
 const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
 const confinedRefusal = 'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.';
+const lookupRefusal = 'That command changes where the shell finds a program, so the jason it would start may not be the desktop\'s: the chat never runs it. Nothing was run.';
+const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';
+const longRefusal = 'That command is longer than the card can show whole, so nobody could read what they would allow: the chat never runs it. '
+    + 'Put the content in a file in the chat\'s folder and give it as --file - < <file>, or split the work. Nothing was run.';
 
 const pathsOf = (platform: Platform) => (platform === 'win32' ? win32 : posix);
 const keyOf = (platform: Platform, path: string) => (platform === 'linux' ? path : path.toLowerCase());
@@ -121,6 +155,40 @@ function inside(scope: ChatScope, root: string, path: string): boolean {
     return key === folder || key.startsWith(folder.endsWith(separator) ? folder : `${folder}${separator}`);
 }
 
+/** The working folder a located path lies in, the chat folder first, and whether it is the chat folder; null when none. */
+function workingFolderOf(scope: ChatScope, path: string): { folder: string; chat: boolean } | null {
+    const chat = located(scope.chat, scope);
+    if (inside(scope, chat, path)) return { folder: chat, chat: true };
+    const added = scope.added.map((folder) => located(folder, scope)).find((folder) => inside(scope, folder, path));
+    return added === undefined ? null : { folder: added, chat: false };
+}
+
+/**
+ * The components of a located path below its working folder, the folder's own name never among them, compared as the
+ * platform folds case, so that a path spelled in another case than its folder is still read below it.
+ */
+function partsBelow(scope: ChatScope, folder: string, path: string): string[] {
+    const paths = pathsOf(scope.platform);
+    return paths.relative(keyOf(scope.platform, folder), keyOf(scope.platform, path)).split(paths.sep).filter((part) => part !== '');
+}
+
+/** The guarded name a component is, as the platform folds case. */
+function guardOf(scope: ChatScope, part: string): GuardedName | undefined {
+    const key = keyOf(scope.platform, part);
+    return guardedNames.find((guarded) => keyOf(scope.platform, guarded.name) === key);
+}
+
+/**
+ * What a write of a located path in a working folder is: refused when it is one of the chat's own instruction files
+ * directly in the chat folder, a card titled by the first guarded name among its components, and otherwise allowed.
+ */
+function judgeWrite(scope: ChatScope, working: { folder: string; chat: boolean }, path: string): Judgement {
+    const parts = partsBelow(scope, working.folder, path);
+    if (working.chat && parts.length === 1 && guardOf(scope, parts[0] ?? '')?.chatsOwn === true) return { verdict: 'deny', message: instructionsRefusal };
+    const guarded = parts.map((part) => guardOf(scope, part)).find((found) => found !== undefined);
+    return guarded === undefined ? allow : { verdict: 'ask', title: guarded.title, detail: shorten(path), remember: null };
+}
+
 /**
  * What the spelling alone says, before anything is looked up; null when the path may be looked up. A path too long for
  * the platform is refused. One that begins with `~` is a card, since the shell and the host may expand it where this
@@ -152,12 +220,8 @@ function judgePath(value: string, scope: ChatScope, writes: boolean): Judgement 
     if (scope.protectedFiles.some((file) => keyOf(scope.platform, located(file, scope)) === key)) return { verdict: 'deny', message: dataRefusal };
     const chat = located(scope.chat, scope);
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, chat, path)) return { verdict: 'deny', message: dataRefusal };
-    const root = [chat, ...scope.added.map((folder) => located(folder, scope))].find((folder) => inside(scope, folder, path));
-    if (root !== undefined) {
-        const guarded = paths.relative(root, path).split(paths.sep).map((part) => guardedFolders[keyOf(scope.platform, part)]).find((title) => title !== undefined);
-        if (!(writes && guarded !== undefined)) return allow;
-        return { verdict: 'ask', title: guarded, detail: shorten(path), remember: null };
-    }
+    const working = workingFolderOf(scope, path);
+    if (working !== null) return writes ? judgeWrite(scope, working, path) : allow;
     if (writes) return { verdict: 'ask', title: 'Change a file outside the chat\'s folders', detail: shorten(path), remember: null };
     return {
         verdict: 'ask',
@@ -411,6 +475,52 @@ function namesConfinedVariable(command: string): boolean {
 }
 
 /**
+ * The variables a shell finds a program by: PATH, and PATHEXT, which Windows' own search reads. A command that assigns
+ * either could start a `jason` the agent wrote in place of the desktop's, and the confined CLI never runs to say so; the
+ * host's own deny rules (`searchRules`) refuse the plain assignments first.
+ */
+export const searchVariables = ['PATH', 'PATHEXT'] as const;
+
+const searchName = `(?:${searchVariables.join('|')})`;
+/**
+ * What changes where the shell finds a program, read over the whole text in any letter case: an assignment to a search
+ * variable in any shell's form (`NAME=`, `NAME+=`, `${NAME:=}`; leading, or after `export`, `declare`, `env` or `set`,
+ * quoted or not), PowerShell's environment drive and .NET's setter, cmd's `setx`; and a function, an alias or a hash
+ * entry for jason. A longer name that only ends like one (`MYPATH=`, `PYTHONPATH=`), a read of `$PATH` and an option
+ * named path (`--path=`) are not it. A spelling that builds the name is not refused here and reaches a card.
+ */
+const searchChanges: readonly RegExp[] = [
+    new RegExp(`(?<![A-Za-z0-9_$.-])${searchName}(?:\\+|:)?=`, 'i'),
+    new RegExp(`env:\\\\?${searchName}(?![A-Za-z0-9_])`, 'i'),
+    new RegExp(`setenvironmentvariable\\s*\\(\\s*['"]?${searchName}['"]?\\s*,`, 'i'),
+    new RegExp(`(?<![A-Za-z0-9_.-])setx(?:\\s+/\\S+)*\\s+["']?${searchName}(?![A-Za-z0-9_])`, 'i'),
+    /(?<![A-Za-z0-9_.-])jason(?:\.[a-z]+)?\s*\(\s*\)/i,
+    /(?<![A-Za-z0-9_.-])function\s+jason(?![A-Za-z0-9_-])/i,
+    /(?<![A-Za-z0-9_.-])(?:alias|doskey)\s+(?:-\S+\s+)*['"]?jason(?:\.[a-z]+)?['"]?=/i,
+    /(?<![A-Za-z0-9_.-])(?:set-alias|new-alias|sal|nal)\s+(?:-name\s+)?['"]?jason(?![A-Za-z0-9_-])/i,
+    /(?<![A-Za-z0-9_.-])hash\s+(?:-\S+\s+)*(?:\S+\s+)?['"]?jason(?![A-Za-z0-9_.-])/i,
+];
+
+function changesSearch(command: string): boolean {
+    return searchChanges.some((change) => change.test(command));
+}
+
+/**
+ * The first guarded name a place the command's words name holds below its working folder, so that its card says what it
+ * may change and covers that request alone. A shell word is never refused by it: a quoted text that names one is located
+ * as a path too.
+ */
+function guardedPlace(places: readonly string[], scope: ChatScope): GuardedName | undefined {
+    for (const path of places) {
+        const working = workingFolderOf(scope, path);
+        if (working === null) continue;
+        const guarded = partsBelow(scope, working.folder, path).map((part) => guardOf(scope, part)).find((found) => found !== undefined);
+        if (guarded !== undefined) return guarded;
+    }
+    return undefined;
+}
+
+/**
  * True when the command's text names the data directory, or anything in it outside the chat folder, in any literal
  * spelling a shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows,
  * and `~/.jason`, `$HOME/.jason` or `.jason` under the home folder's variable in any shell's spelling (`$USERPROFILE`
@@ -473,11 +583,18 @@ function wordNamesData(places: readonly string[], scope: ChatScope): boolean {
 
 function judgeCommand(tool: string, command: string, scope: ChatScope): Judgement {
     if (namesConfinedVariable(command)) return { verdict: 'deny', message: confinedRefusal };
+    if (changesSearch(command)) return { verdict: 'deny', message: lookupRefusal };
     const places = placesOf(command, scope);
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
     if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
     if (replyRefused(command, scope)) return { verdict: 'deny', message: replyRefusal };
+    // After every refusal and before any card: a card cuts its detail at the limit, so Allow would run what nobody saw.
+    // A grant is looked at only for a card, so none allows it either.
+    if (command.length > detailLimit) return { verdict: 'deny', message: longRefusal };
+    // A word under a guarded name in a working folder: that guard's card, never covered by a grant.
+    const guarded = guardedPlace(places, scope);
+    if (guarded !== undefined) return { verdict: 'ask', title: guarded.title, detail: shorten(command), remember: null };
     // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
     // person's to answer, each time.
     if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };

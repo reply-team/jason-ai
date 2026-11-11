@@ -6,7 +6,7 @@ import { posix, win32 } from 'node:path';
 import { sessionShape } from './chat-conversations.ts';
 import { allowRules, denyRules } from './chat-deny.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
-import { confinedVariable, type Platform } from './chat-permission-model.ts';
+import { confinedVariable, searchVariables, type Platform } from './chat-permission-model.ts';
 import { withReplyClient } from './reply-client.ts';
 import { isSessionMarker } from './session-markers.ts';
 
@@ -79,6 +79,14 @@ function resumable(session: string): string {
 }
 
 /**
+ * The host's own refusal of any Bash command that assigns a variable the shell finds a program by (`searchVariables`),
+ * anywhere in it, plainly or by `+=`: such a command could start a `jason` the agent wrote. The host's documentation
+ * says such an assignment asks; these rules refuse it whether or not it would. They also refuse a longer name that ends
+ * the same way (`PYTHONPATH=`), with no card; the permission model refuses the other spellings.
+ */
+export const searchRules: readonly string[] = searchVariables.flatMap((name) => [`Bash(*${name}=*)`, `Bash(*${name}+=*)`]);
+
+/**
  * The command line of one Claude Code turn. Never `--bare`, which drops the subscription sign-in and the skills; always
  * `--strict-mcp-config`, so a person's own MCP servers never enter the chat; reads outside the working folders blocked
  * (`claudeTurnSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives,
@@ -87,7 +95,7 @@ function resumable(session: string): string {
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
     args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(turn.allowed));
-    args.push('--disallowedTools', ...claudeRemovedTools, ...denyRules(turn.denied), confinedRule, ...turn.dataRules);
+    args.push('--disallowedTools', ...claudeRemovedTools, ...denyRules(turn.denied), confinedRule, ...searchRules, ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', claudeTurnSettings);
     for (const folder of turn.addDirs) args.push('--add-dir', folder);

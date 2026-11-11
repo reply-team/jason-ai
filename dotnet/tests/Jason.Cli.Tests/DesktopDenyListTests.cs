@@ -4,6 +4,8 @@ using Jason.Cli;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
+using Jason.Contracts.Harness;
+using Jason.Contracts.Hosts;
 
 namespace Jason.Cli.Tests;
 
@@ -183,6 +185,38 @@ public class DesktopDenyListTests
         var declared = Regex.Matches(model, @"^export const confinedVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
 
         Assert.Equal(Confinement.Variable, Assert.Single(declared).Groups["name"].Value);
+    }
+
+    /// <summary>
+    /// The desktop's permission model guards, as one declaration, the names whose files act on what runs next in a working
+    /// folder: a write under one is a card each time. It holds the names the runtime and the hosts use, read here from their
+    /// own tables: the folder a marker lives in, the person's memory file, every instruction file a harness folder holds
+    /// beside it, and the first folder of every place a host reads a work directory's skills from. A host or a file added to
+    /// those tables is red here until the model guards it too.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_guarded_names_hold_the_runtime_s_and_the_hosts_own_names()
+    {
+        var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
+        var declaration = Assert.Single(Regex.Matches(
+            model,
+            @"^export const guardedNames: [^=\r\n]+= \[\r?$(?<body>.*?)^\];\r?$",
+            RegexOptions.Multiline | RegexOptions.Singleline));
+        var guarded = Regex.Matches(declaration.Groups["body"].Value, @"name: '(?<name>[^']*)'")
+            .Select(match => match.Groups["name"].Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        string[] expected =
+        [
+            HarnessMarker.Directory,
+            AgentHosts.MemoryFile,
+            .. AgentHosts.ImportFiles.Select(file => file.FileName),
+            .. AgentHosts.All.Select(facts => facts.WorkSkills.Split('/')[0]),
+        ];
+        var missing = expected.Distinct(StringComparer.Ordinal).Where(name => !guarded.Contains(name)).Order(StringComparer.Ordinal).ToList();
+
+        Assert.True(guarded.Count > 0, "The model's guardedNames declaration names nothing.");
+        Assert.True(missing.Count == 0, $"The desktop's guarded names lack: {string.Join(", ", missing)}");
     }
 
     /// <summary>An entry covers a verb when the entry's words begin the verb's: <c>runtime</c> covers <c>runtime stop</c>.</summary>

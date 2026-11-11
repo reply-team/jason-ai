@@ -455,3 +455,11 @@ test('a Codex turn that failed ends with the host\'s last words', () => {
     const results = fixture('codex-failed.jsonl').flatMap((line) => codexLine(line, seen)).filter((line) => line.kind === 'result');
     assert.deepEqual(results.at(-1), { kind: 'result', error: 'You are not signed in. Run codex login.' });
 });
+
+test('a Claude turn is denied, by the host itself, any command that assigns PATH or PATHEXT, beside the confining variable', () => {
+    const disallowed = valuesOf(claudeArguments(turn), '--disallowedTools');
+    for (const rule of ['Bash(*PATH=*)', 'Bash(*PATH+=*)', 'Bash(*PATHEXT=*)', 'Bash(*PATHEXT+=*)']) assert.equal(disallowed.filter((each) => each === rule).length, 1, rule);
+    const at = disallowed.indexOf('Bash(*JASON_CONFINED*)');
+    assert.deepEqual(disallowed.slice(at, at + 5), ['Bash(*JASON_CONFINED*)', 'Bash(*PATH=*)', 'Bash(*PATH+=*)', 'Bash(*PATHEXT=*)', 'Bash(*PATHEXT+=*)']);
+    assert.ok(!valuesOf(claudeArguments(turn), '--allowedTools').some((rule) => rule.includes('PATH')));
+});

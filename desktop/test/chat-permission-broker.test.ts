@@ -417,3 +417,23 @@ test('an input too large to send back is allowed without being copied', async ()
     const input = { file_path: '/Users/someone/.jason/desktop/chat/big.md', content: 'x'.repeat(40_000) };
     assert.deepEqual(await broker.ask('turn_1', 'Write', input), { behavior: 'allow' });
 });
+
+test('a grant of a command never allows one longer than the card shows, nor one naming a guarded file: neither is covered', async () => {
+    const { broker, sent, decided, turn } = bench();
+    turn('chat_a', 'turn_1');
+    const first = broker.ask('turn_1', 'Bash', { command: 'cp notes.md backup.md' });
+    await settle();
+    assert.equal(sent.at(-1)?.event.remember, 'cp notes.md \u2026');
+    broker.answer('chat_a', 'req_1', { allow: true, always: true });
+    await first;
+    const cards = sent.length;
+    const long = `cp notes.md ${'x'.repeat(4001 - 'cp notes.md '.length)}`;
+    const answer = await within(broker.ask('turn_1', 'Bash', { command: long }));
+    assert.equal(answer.behavior, 'deny');
+    assert.match(answer.behavior === 'deny' ? answer.message : '', /longer than the card can show whole/);
+    assert.equal(sent.length, cards);
+    assert.deepEqual(decided.at(-1), { outcome: 'refused', by: 'model' });
+    void broker.ask('turn_1', 'Bash', { command: 'cp notes.md CLAUDE.md' });
+    await settle();
+    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Change instructions an agent reads', detail: 'cp notes.md CLAUDE.md', remember: null });
+});
