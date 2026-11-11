@@ -245,6 +245,46 @@ describe('Attention', () => {
             expect(screen.queryByRole('group', { name: 'Approvals or questions' })).toBeNull();
         });
 
+        it('keeps the open item’s panel under its own kind and under All, and closes it under the other kind', async () => {
+            const fake = pendingFake();
+            renderApp(fake);
+            await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
+            fireEvent.click(screen.getByText('Enroll Ada Lovelace'));
+            await waitFor(() => screen.getByRole('button', { name: 'Approve' }));
+            const opened = route.value;
+
+            show('Approvals');
+            await waitFor(() => expect(pressed()).toEqual(['✓ Approvals 2']));
+            expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+            expect(route.value).toEqual(opened);
+
+            show('All');
+            await waitFor(() => expect(pressed()).toEqual(['✓ All 4']));
+            expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+            expect(route.value).toEqual(opened);
+
+            show('Questions');
+            await waitFor(() => expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull());
+            expect(route.value).toEqual({ screen: 'attention' });
+            expect(pressed()).toEqual(['✓ Questions 2']);
+        });
+
+        it('counts in the open panel’s “more” only the kind it shows', async () => {
+            renderApp(pendingFake());
+            await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
+            fireEvent.click(screen.getByText('Enroll Ada Lovelace'));
+            await waitFor(() => screen.getByRole('button', { name: 'Approve' }));
+            const more = () => document.querySelector('.panel .next')?.textContent;
+            expect(more()).toBe('1 more approval and 2 questions after this one');
+
+            show('Approvals');
+            await waitFor(() => expect(more()).toBe('1 more approval after this one'));
+
+            // The last approval listed: the questions still waiting are not this kind's, and nothing claims none waits.
+            store.approvals.value = store.approvals.value.filter((each) => each.id === 'apr_1');
+            await waitFor(() => expect(more()).toBe('No more approvals after this one'));
+        });
+
         it('moves, after a decision, to the next item of the kind it shows', async () => {
             const fake = pendingFake()
                 .answer('approval.get', 'approval.get/other-pending', 'approval.get/pending-with-preview')
