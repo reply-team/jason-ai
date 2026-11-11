@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.34.0-rc.1
+# Jason 0.34.0
 
 ## What is new since 0.33.0
 
@@ -76,6 +76,18 @@ for it, and with no desktop installed nothing in the runtime differs.
   plugin's keys in `<data>/config/settings.json`, keeps everything else in the file, and refuses a file it cannot parse.
   Reply is signed in with `reply auth login`, or with a key on standard input, then installed and wired as the default
   route only where you have set none. A card says "configured" when the runtime accepted it, never "connected".
+- **Accounts and Disconnect.** The Reply card groups the accounts the Reply CLI lists by channel, Email first, then
+  LinkedIn, then any other channel under its own name, and shows each account's state as Reply itself reports it:
+  Connected, Disconnected or Unknown for email; Enabled, Disabled, Signed out or Daily limit reached for LinkedIn. A
+  state the card does not know is shown as Reply wrote it, as plain text. The card does not manage accounts: limits,
+  signatures, pauses and an account's connection stay in Reply, and a link, "Manage accounts in Reply", opens Reply's
+  web app in your browser. The Slack, Telegram and ntfy cards gain Disconnect, which asks once and then edits
+  `<data>/config/settings.json` once: it removes that plugin's configuration and its notification entry, keeps the
+  entry's `Enabled: false` where you had set it off, removes the Http grant that was derived from a server of the
+  plugin's own, and keeps every other key, the rest of the plugin's grants and the installed package. It then reloads
+  plugins. A settings file the desktop cannot parse is refused and left as it is. The journal forwarder has no
+  Disconnect, since removing its receiver while its subscriptions stay granted would fail every line it is handed;
+  ungranting it is its own act.
 - **The tray.** It counts what waits on you, approvals and questions, read through the CLI at most every 30 seconds. A
   system notification carries the counts alone, never a name or a question's text. When the runtime comes back on
   another port, the window pairs again by itself. The tray never starts a runtime.
