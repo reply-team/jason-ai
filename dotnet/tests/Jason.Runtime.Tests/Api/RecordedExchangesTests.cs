@@ -721,7 +721,7 @@ public class RecordedExchangesTests
 
     /// <summary>
     /// What a first start shows: a Campaigns list and a People list that hold nothing yet, asked as the screens and the
-    /// desktop's console ask them.
+    /// desktop's console ask them, and the People page's counts of its default view, which count nobody.
     /// </summary>
     [Fact]
     public async Task Empty_lists_of_a_first_start()
@@ -729,6 +729,7 @@ public class RecordedExchangesTests
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
         Assert.Empty((await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "screen-empty", new { limit = 100 }, Ct)).Items);
         Assert.Empty((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-empty", new { order = "activity", limit = 200 }, Ct)).Items);
+        Assert.Empty((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "everyone-without-archived-empty", new { exclude_archived_contacts = true }, Ct)).Campaigns);
     }
 
     /// <summary>

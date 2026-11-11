@@ -130,6 +130,7 @@ public static class ApiFixtures
         "campaign.summary/archived",
         "campaign.summary/everyone",
         "campaign.summary/everyone-without-archived",
+        "campaign.summary/everyone-without-archived-empty",
         "campaign.summary/inbox-all",
         "campaign.summary/inbox-one",
         "campaign.summary/inbox-quiet",
