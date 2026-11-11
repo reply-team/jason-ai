@@ -295,7 +295,7 @@ public class RecordedExchangesTests
         Assert.Equal(3, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "first-page", new { limit = 10 }, Ct)).Items.Count);
         Assert.NotEmpty((await api.RecordAsync<JsonObject>(Operations.RoleList, "all", null, Ct))["items"]!.AsArray());
         Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "query-email", new { query = "aguilar@", limit = 10 }, Ct)).Items);
-        Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "query-phone", new { query = "+48 601 234 567", limit = 10 }, Ct)).Items);
+        Assert.Single((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "query-phone", new { query = "+1 312 555 0118", limit = 10 }, Ct)).Items);
         Assert.Equal("Ada", (await api.RecordAsync<ContactDto>(Operations.ContactGet, "one", new { contact_id = seed.Ada }, Ct)).FirstName);
 
         // What the tabs ask under their filters: one day on Done, a campaign, its role work, one role and its provider
@@ -532,6 +532,14 @@ public class RecordedExchangesTests
         Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some", new { campaign_ids = new[] { seed.Spring } }, Ct)).Campaigns);
         Assert.Equal(4, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "with-archived", new { campaign_ids = everything.Items.Select(c => c.Id) }, Ct)).Campaigns.Count);
 
+        // Asked for nothing, the summary answers every campaign not archived, Winter left out, and a total in which Ada,
+        // a member of three of them, counts once.
+        var unasked = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "everyone", new { }, Ct);
+        Assert.Equal(all.Campaigns, unasked.Campaigns);
+        Assert.DoesNotContain(seed.Winter, unasked.Campaigns.Select(c => c.CampaignId));
+        Assert.Equal(all.Total, unasked.Total);
+        Assert.True(unasked.Total.People < unasked.Campaigns.Sum(c => c.People), "A person in several campaigns would count once per campaign.");
+
         var week = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "last-7-days", new { campaign_ids = listed, since = WeekStart, until = Now }, Ct);
         Assert.Equal(new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1), week.Campaigns[0]);
         var today = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "today", new { campaign_ids = listed, since = "2026-10-16T00:00:00.000Z", until = Now }, Ct);
@@ -573,6 +581,24 @@ public class RecordedExchangesTests
         // The people Add people offers: the first page as it opens, and Zoe, who is in no campaign yet, as it is searched.
         Assert.Contains(seed.Hal, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "campaign-picker", new { limit = 10 }, Ct)).Items.Select(c => c.Id));
         Assert.Equal([seed.Zoe], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "campaign-picker-zoe", new { query = "zoe", limit = 10 }, Ct)).Items.Select(c => c.Id));
+
+        // Everyone as the People page opens, where each person stands in each campaign: Ada in three campaigns, Ben in two
+        // counts of one, Oli removed, Zoe in none; then the page under a count, under a count and a name, and under a count
+        // in one campaign, and a count beside a channel, refused.
+        string[] Names(Page<ContactDto> page) => [.. page.Items.Select(contact => contact.FirstName!)];
+        var everyone = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-several", new { order = "activity", limit = 200 }, Ct);
+        ContactCampaignDto[] Of(string name) => [.. everyone.Items.Single(contact => contact.FirstName == name).Campaigns!];
+        Assert.Equal(3, Of("Ada").Length);
+        Assert.Equal([CampaignSummaryFilter.Waiting, CampaignSummaryFilter.Idle], Assert.Single(Of("Ben")).Standing);
+        Assert.Equal([CampaignSummaryFilter.Removed], Assert.Single(Of("Oli")).Standing);
+        Assert.Empty(Of("Zoe"));
+        Assert.Equal(
+            ["Ada", "Ben", "Pia"],
+            Names(await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-summary-waiting", new { order = "activity", summary = "waiting", limit = 200 }, Ct)).Order(StringComparer.Ordinal));
+        Assert.Equal(["Ben"], Names(await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-summary-query", new { order = "activity", summary = "waiting", query = "ben", limit = 200 }, Ct)));
+        Assert.Equal(["Ada"], Names(await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-summary", new { order = "activity", summary = "new", campaign_id = seed.Autumn, limit = 200 }, Ct)));
+        Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.ContactList, "summary-with-channel", new { order = "activity", summary = "waiting", channel = "email", limit = 200 }, HttpStatusCode.BadRequest, Ct)).Code);
+        Assert.Empty((await api.RecordAsync<ContactDto>(Operations.ContactGet, "no-campaign", new { contact_id = seed.Zoe }, Ct)).Campaigns!);
         var added = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "several", new { campaign_id = seed.Spring, contacts = new[] { new { contact_id = seed.Zoe }, new { contact_id = seed.Hal } }, reason = "From the partner list.", actor = ada }, Ct);
         Assert.Equal(new AddContactsSummary(1, 1, 0), added.Summary);
         Assert.Equal("campaign_archived", (await api.RecordErrorAsync(Operations.CampaignAddContacts, "to-archived", new { campaign_id = seed.Winter, contacts = new[] { new { contact_id = seed.Hal } }, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
@@ -827,7 +853,7 @@ public class RecordedExchangesTests
             }
 
             var mateo = Person(101, "Mateo", "Ruiz", "Soluna", "Head of Sales", "America/Mexico_City",
-                ("email", "mateo@soluna.example"), ("linkedin", "https://www.linkedin.com/in/mateo-ruiz-example"), ("phone", "+525512345678"));
+                ("email", "mateo@soluna.example"), ("linkedin", "https://www.linkedin.com/in/mateo-ruiz-example"), ("phone", "+13125550162"));
             mateo.Custom = new JsonObject { ["segment"] = "fintech-mx", ["source"] = "q2-list", ["series"] = "A, raised 2026-06" };
             var aguilar = Person(102, null, "Aguilar", "Andina Tech", "Director of Sales", "America/Lima", ("email", "aguilar@andina.example"));
             var grace = Person(103, "Grace", "Hopper", "Navy", "Rear Admiral", null, ("email", "grace@navy.example"));
@@ -1071,7 +1097,7 @@ public class RecordedExchangesTests
                     return person;
                 }
 
-                var ada = Person(1, "Ada", "Lovelace", "Kavali", "CTO", ("email", "ada@kavali.example"), ("phone", "+48601234567"));
+                var ada = Person(1, "Ada", "Lovelace", "Kavali", "CTO", ("email", "ada@kavali.example"), ("phone", "+13125550118"));
                 var tomas = Person(3, "Tomás", "Aguilar", "Andina Tech", "Director of Sales", ("email", "t.aguilar@andina.example"));
 
                 WorkItem Role(int n, Campaign campaign, string role, Contact? contact, WorkItemStatus status, Action<WorkItem>? more = null)

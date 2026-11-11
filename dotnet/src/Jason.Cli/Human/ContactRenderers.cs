@@ -42,10 +42,10 @@ public static class ContactRenderers
         lines.Add(Channels(contact.Channels));
         if (contact.Campaigns is { Count: > 0 } campaigns)
         {
-            var table = new HumanTable("CAMPAIGN", "NAME", "STATE", "ADDED");
+            var table = new HumanTable("CAMPAIGN", "NAME", "STATE", "STANDING", "ADDED");
             foreach (var campaign in campaigns)
             {
-                table.Row(campaign.CampaignId, campaign.CampaignName, RenderText.Snake(campaign.State), RenderText.Moment(campaign.AddedAt));
+                table.Row(campaign.CampaignId, campaign.CampaignName, RenderText.Snake(campaign.State), Standing(campaign), RenderText.Moment(campaign.AddedAt));
             }
 
             lines.Add(string.Empty);
@@ -56,7 +56,7 @@ public static class ContactRenderers
         return RenderText.Lines(lines);
     }
 
-    /// <summary>A page of contacts, recognizable by name, company and address.</summary>
+    /// <summary>A page of contacts, recognizable by name, company and address, with where each stands in each campaign.</summary>
     public static string? ContactList(string json)
     {
         var page = RenderText.Read<Page<ContactDto>>(json);
@@ -65,7 +65,7 @@ public static class ContactRenderers
             return null;
         }
 
-        var table = new HumanTable("ID", "NAME", "COMPANY", "EMAIL", "TIME ZONE", "LAST");
+        var table = new HumanTable("ID", "NAME", "COMPANY", "EMAIL", "TIME ZONE", "CAMPAIGNS", "LAST");
         foreach (var contact in page.Items)
         {
             table.Row(
@@ -74,6 +74,9 @@ public static class ContactRenderers
                 contact.Company,
                 RenderText.Email(contact.Channels),
                 contact.TimeZone,
+                contact.Campaigns is { Count: > 0 } campaigns
+                    ? string.Join("; ", campaigns.Select(campaign => campaign.Standing is { Count: > 0 } ? $"{campaign.CampaignName}: {Standing(campaign)}" : campaign.CampaignName))
+                    : null,
                 contact.LastActivity is { } last ? $"{last.Kind} {RenderText.Moment(last.Ts)}" : null);
         }
 
@@ -137,6 +140,10 @@ public static class ContactRenderers
 
         return RenderText.Lines(lines);
     }
+
+    /// <summary>The counts of campaign summary the person stands in there, in the counts' order, or nothing.</summary>
+    private static string? Standing(ContactCampaignDto campaign) =>
+        campaign.Standing is { Count: > 0 } counts ? string.Join(", ", counts.Select(RenderText.Snake)) : null;
 
     private static string Channels(IReadOnlyList<ChannelDto>? channels)
     {

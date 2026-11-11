@@ -468,6 +468,14 @@ Now:
 `sequence_linked` is false while the campaign's provider campaign is not pinned: until it is, nobody can be in the
 provider's sequence.
 
+The same definitions read for one person say where they stand: every answer that carries a person's campaigns
+(`jason contact get`, `jason contact list`, `jason campaign list-contacts`) gives each membership a `standing`, the counts
+above that count the person in that campaign now, in this order; a removed membership stands in `removed` alone, and one
+no count counts stands in none. `jason contact list --summary <count>` (`contact.list` with `summary`) lists the people
+one count counts in at least one campaign not archived, or in the one `--campaign` names, in either of its orders. A
+count's `total` counts an archived person who is still a member, whom `contact.list` shows only with
+`--include-archived`, so the two agree only then.
+
 In a period, removed people included, so a past period does not change when somebody is taken out today:
 
 - `people` — Something happened to them in the period: they are in at least one of the period's counts.

@@ -39,21 +39,30 @@
         "campaign_name": "Spring webinar",
         "state": "excluded",
         "added_at": "2026-09-11T00:00:00.000Z",
-        "updated_at": "2026-09-21T00:00:00.000Z"
+        "updated_at": "2026-09-21T00:00:00.000Z",
+        "standing": [
+          "removed"
+        ]
       },
       {
         "campaign_id": "cmp_2",
         "campaign_name": "Nordic pilot",
         "state": "enrolled",
         "added_at": "2026-10-02T00:00:00.000Z",
-        "updated_at": "2026-10-02T00:00:00.000Z"
+        "updated_at": "2026-10-02T00:00:00.000Z",
+        "standing": [
+          "idle"
+        ]
       },
       {
         "campaign_id": "cmp_3",
         "campaign_name": "Q4 follow-ups",
         "state": "enrolled",
         "added_at": "2026-10-16T09:00:00.000Z",
-        "updated_at": "2026-10-16T09:00:00.000Z"
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "standing": [
+          "new"
+        ]
       }
     ],
     "last_activity": null

@@ -25,7 +25,7 @@ public partial class CampaignPeoplePlanTests
         await db.Database.OpenConnectionAsync(Ct);
         var scans = new StringBuilder();
 
-        string[] counts = [CampaignPeople.SummaryCountsSql, CampaignPeople.ActivityCountsSql, CampaignPeople.SummaryTotalSql, CampaignPeople.ActivityTotalSql];
+        string[] counts = [CampaignPeople.SummaryCountsSql, CampaignPeople.ActivityCountsSql, CampaignPeople.SummaryTotalSql, CampaignPeople.ActivityTotalSql, CampaignPeople.StandingSql];
         string[] why = [CampaignWhy.FirstReplies, CampaignWhy.FinishedWork, CampaignWhy.Additions, CampaignWhy.Removals, CampaignWhy.OptOuts];
         foreach (var sql in CampaignPeople.Summary.Values.Concat(counts).Concat(CampaignPeople.Moments.Values).Concat(CampaignPeople.PeopleByMoment.Values).Concat(why))
         {
@@ -71,7 +71,69 @@ public partial class CampaignPeoplePlanTests
             await PlanAsync(command, scans);
         }
 
+        // The people a Summary count counts, as contact.list reads them in the order of activity: the count's people first,
+        // each then found by their key and their newest line through their own index.
+        var counted = ContactService.Counted(db, db.Contacts.Where(contact => contact.ArchivedAt == null), campaign, CampaignSummaryFilter.Waiting);
+        await using (var command = ContactActivity.Ordered(ContactActivity.Rows(counted, db)).Take(201).CreateDbCommand())
+        {
+            await PlanAsync(command, scans);
+        }
+
         Assert.True(scans.Length == 0, scans.ToString());
+    }
+
+    /// <summary>
+    /// Where a page's people stand is read part by part through these indexes and no others: memberships, work items and
+    /// suppressions by person, approvals and questions by their campaign, and reply and event lines by their campaign and
+    /// kind, each then kept to the page's people. A part that came to read by another index, or a table read whole, changes
+    /// this list, and with it what the read grows with.
+    /// </summary>
+    [Fact]
+    public async Task The_standing_read_finds_each_part_s_rows_by_the_index_it_names()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await db.Database.OpenConnectionAsync(Ct);
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = CampaignPeople.StandingSql
+            .Replace("{0}", "'[1,2]'", StringComparison.Ordinal)
+            .Replace("{1}", "'[1,2]'", StringComparison.Ordinal);
+
+        var read = (await StepsAsync(command))
+            .Select(step => Read().Match(step))
+            .Where(match => match.Success)
+            .Select(match => $"{match.Groups[1].Value} {match.Groups.Values.Skip(2).FirstOrDefault(group => group.Success)?.Value ?? "whole"}")
+            .Distinct()
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(
+            [
+                "a ix_approvals_campaign_id",
+                "cc ix_campaign_contacts_contact_id",
+                "ch ix_contact_channels_contact_id_channel_value",
+                "d ix_decisions_campaign_id",
+                "jl ix_journal_campaign_kind_key",
+                "jl ix_journal_campaign_kind_key_events",
+                "m ix_campaign_contacts_campaign_id_contact_id",
+                "s ix_suppressions_channel_value",
+                "w INTEGER PRIMARY KEY",
+                "w ix_work_items_campaign_id_contact_id",
+                "w ix_work_items_public_id",
+            ],
+            read);
+    }
+
+    private static async Task<List<string>> StepsAsync(DbCommand command)
+    {
+        command.CommandText = "EXPLAIN QUERY PLAN " + command.CommandText;
+        var steps = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        while (await reader.ReadAsync(Ct))
+        {
+            steps.Add(reader.GetString(reader.GetOrdinal("detail")));
+        }
+
+        return steps;
     }
 
     /// <summary>
@@ -81,16 +143,7 @@ public partial class CampaignPeoplePlanTests
     /// </summary>
     private static async Task PlanAsync(DbCommand command, StringBuilder scans)
     {
-        command.CommandText = "EXPLAIN QUERY PLAN " + command.CommandText;
-        var steps = new List<string>();
-        await using (var reader = await command.ExecuteReaderAsync(Ct))
-        {
-            while (await reader.ReadAsync(Ct))
-            {
-                steps.Add(reader.GetString(reader.GetOrdinal("detail")));
-            }
-        }
-
+        var steps = await StepsAsync(command);
         var built = steps.Select(step => Built().Match(step)).Where(match => match.Success).Select(match => match.Groups[1].Value).ToHashSet();
         foreach (var step in steps)
         {
@@ -108,6 +161,13 @@ public partial class CampaignPeoplePlanTests
             }
         }
     }
+
+    /// <summary>
+    /// A table step and what it reads by: one of the table's own indexes or its key, or nothing, the table whole. A
+    /// subquery searched through an automatic index and a list of ids are not tables of the installation.
+    /// </summary>
+    [GeneratedRegex("^(?:SEARCH|SCAN) (\\S+)(?: (?:EXISTS )?USING (?:COVERING INDEX (\\S+)|INDEX (\\S+)|(INTEGER PRIMARY KEY))|$)")]
+    private static partial Regex Read();
 
     [GeneratedRegex("^(?:CO-ROUTINE|MATERIALIZE) (\\S+)")]
     private static partial Regex Built();

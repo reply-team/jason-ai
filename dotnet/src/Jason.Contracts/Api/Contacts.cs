@@ -29,8 +29,19 @@ public sealed record ContactDto(
     IReadOnlyList<ContactCampaignDto>? Campaigns = null,
     JournalEntryDto? LastActivity = null);
 
-/// <summary>A campaign the person is a member of, in whatever state, excluded included.</summary>
-public sealed record ContactCampaignDto(string CampaignId, string CampaignName, MembershipState State, DateTimeOffset AddedAt, DateTimeOffset UpdatedAt);
+/// <summary>
+/// A campaign the person is a member of, in whatever state, excluded included. <c>standing</c> names the counts of
+/// <c>campaign.summary</c> that count the person in that campaign now, in the counts' order, read from the same
+/// definitions, so a membership, a count and the list it opens cannot disagree; an excluded membership stands in
+/// <c>removed</c> alone, and a membership no count counts stands in none.
+/// </summary>
+public sealed record ContactCampaignDto(
+    string CampaignId,
+    string CampaignName,
+    MembershipState State,
+    DateTimeOffset AddedAt,
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<CampaignSummaryFilter> Standing);
 
 /// <summary>A channel as submitted: the runtime normalizes and validates it before storing.</summary>
 public sealed record ChannelInput(string? Channel, string? Value, string? Label, bool? Primary, JsonObject? Data);
@@ -77,7 +88,10 @@ public sealed record ContactThreadResponse(string PluginId, JsonObject Thread, J
 /// <summary>
 /// <c>value</c> without <c>channel</c> is a usage error; <c>channel</c> alone lists contacts reachable on that channel.
 /// <c>query</c> finds people by any part of a name, company, title or channel value, and narrows together with them.
-/// <c>campaign_id</c> keeps the campaign's members who are not excluded.
+/// <c>campaign_id</c> keeps the campaign's members who are not excluded. <c>summary</c> keeps the people one count of
+/// <c>campaign.summary</c> counts in at least one campaign not archived, or in the campaign <c>campaign_id</c> names, by
+/// the count's own definition, removed people too under <c>removed</c>; it lists people by where they stand, so it is
+/// refused beside <c>channel</c> or <c>value</c>.
 /// </summary>
 public sealed record ContactListRequest(
     string? Channel,
@@ -87,7 +101,8 @@ public sealed record ContactListRequest(
     string? Cursor,
     string? Query = null,
     string? CampaignId = null,
-    ContactListOrder? Order = null);
+    ContactListOrder? Order = null,
+    CampaignSummaryFilter? Summary = null);
 
 /// <summary>
 /// A partial patch: absent fields stay as they are, an explicit null clears one. <c>channels</c> and <c>custom</c>
