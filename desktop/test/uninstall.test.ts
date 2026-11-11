@@ -73,7 +73,10 @@ function bench(
         harnessRoot: 'C:\\Users\\someone\\Jason',
         updaterCache: 'C:\\Users\\someone\\AppData\\Local\\jason-desktop-updater',
         bundles: null,
+        jason: executable,
         log: memoryLog(),
+        // The made-up folders are not on this machine: each path resolves to itself.
+        resolve: (path) => path,
     };
     return { folder, deps, acts };
 }
@@ -226,7 +229,8 @@ test('what stays is said by name: the data directory, the harness root, the upda
         'The data directory, C:\\Users\\someone\\.jason',
         'The harness root, C:\\Users\\someone\\Jason',
         'The updater’s cache, C:\\Users\\someone\\AppData\\Local\\jason-desktop-updater',
-        'A runtime is running that this application could not confirm as its own: it was not stopped; jason runtime stop stops it',
+        // The uninstaller removes the carried jason next, so the hand act names the jason the runtime was started from.
+        'A runtime is running that this application could not confirm as its own: it was not stopped; the jason it was started from stops it with runtime stop',
     ]) {
         assert.ok(detail.includes(named), named);
     }
@@ -276,7 +280,7 @@ test('when the runtime this application carries does not stop, or a runtime did 
         assert.equal(message, 'Jason was not removed.');
         assert.match(
             detail,
-            /^Nothing was removed, because (the runtime this application carries is running and did not stop \(jason runtime stop (exited 1|did not finish)\)\. Stop it with jason runtime stop, then uninstall Jason again|a runtime may be running( that did not answer(: its run file names process 4242, which is running|, and its run file names no process)|: its run file, [^,]+, is there and could not be read)\. jason runtime status answers once the runtime does[^]*\. Then uninstall Jason again)\.$/,
+            /^Nothing was removed, because (the runtime this application carries is running and did not stop \(jason runtime stop (exited 1|did not finish)\)\. Stop it with C:\\Users\\someone\\AppData\\Local\\Programs\\Jason\\resources\\bundle\\jason\.exe runtime stop, then uninstall Jason again|a runtime may be running( that did not answer(: its run file names process 4242, which is running|, and its run file names no process)|: its run file, [^,]+, is there and could not be read)\. C:\\Users\\someone\\AppData\\Local\\Programs\\Jason\\resources\\bundle\\jason\.exe runtime status answers once the runtime does[^]*\. Then uninstall Jason again)\.$/,
         );
         assert.doesNotMatch(detail, /planted/);
     }
@@ -302,7 +306,8 @@ test('a removal that fails is named with its act among what could not be taken o
     for (const named of [
         `${join(folder, 'jason.cmd')}, which could not be taken off: deleting the file takes it off`,
         'Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it',
-        'The runtime’s start at logon, which could not be taken off: jason runtime autostart disable takes it off',
+        // The uninstaller removes the carried jason next, so the hand act names the registration itself.
+        'The runtime’s start at logon, which could not be taken off: Task Scheduler holds it as the task named Jason- followed by your account’s SID; deleting that task takes it off',
     ]) {
         assert.ok(report.failed.includes(named), named);
         assert.ok(!report.left.includes(named), named);
@@ -328,7 +333,7 @@ test('a removal that fails is named with its act among what could not be taken o
     unread.deps.autostart = { status: async () => Promise.reject(new Error('planted-status-error')), disable: async () => (unread.acts.push('autostart disable'), false) };
     const read = await uninstall(unread.deps);
     assert.deepEqual(unread.acts, []);
-    assert.ok(read.failed.includes('The runtime’s start at logon, which could not be read: jason runtime autostart status says whether it is there'));
+    assert.ok(read.failed.includes('The runtime’s start at logon, which could not be read: Task Scheduler holds it as the task named Jason- followed by your account’s SID; deleting that task takes it off'));
     assert.equal(uninstallExit(read), 0);
 
     // A status the CLI did not answer is one that could not be read, too, and nothing is disabled.
@@ -336,7 +341,7 @@ test('a removal that fails is named with its act among what could not be taken o
     silent.deps.autostart = { status: async () => null, disable: async () => (silent.acts.push('autostart disable'), false) };
     const quiet = await uninstall(silent.deps);
     assert.deepEqual(silent.acts, []);
-    assert.ok(quiet.failed.includes('The runtime’s start at logon, which could not be read: jason runtime autostart status says whether it is there'));
+    assert.ok(quiet.failed.includes('The runtime’s start at logon, which could not be read: Task Scheduler holds it as the task named Jason- followed by your account’s SID; deleting that task takes it off'));
 });
 
 test('the harness root is read from the settings without regard to the case of its keys, as the runtime reads them', (t) => {

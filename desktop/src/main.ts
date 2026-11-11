@@ -14,7 +14,7 @@ import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedTurns } from './chat-log.ts';
-import { carriedOf, copiesBundle, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
+import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
@@ -36,8 +36,8 @@ import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
 import { Setup } from './setup.ts';
 import { loginPath } from './shell-path.ts';
-import { removalOffered, removeApplication, type RemovalDeps } from './remove-placed.ts';
-import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstall, uninstallStart, updaterCache } from './uninstall.ts';
+import { placedRemoval, removalOffered } from './remove-placed.ts';
+import { processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 
 function readText(file: string): string | null {
@@ -280,39 +280,26 @@ async function run(): Promise<void> {
         }
     }
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
-    // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets. A start
-    // that offers neither the PATH command nor the start at logon (an AppImage whose copy was not made) still takes off
-    // what an earlier start placed: a command of ours is removed whatever it runs, and the start at logon is read and
-    // disabled through this start's jason, which registers nothing.
-    const bundles = copiesBundle(form) ? paths.bundle : null;
-    const placedCommand = command ?? new PathCommand(commandDeps);
-    const placedAutostart = autostart ?? (version === null ? null : new RuntimeAutostart({ cli, log }));
-    const removal: Pick<RemovalDeps, 'scope' | 'remove'> | null = removalOffered(process.platform)
-        ? {
-              scope: () => ({
-                  command: placedCommand.status(),
-                  bundles,
-                  dataDirectory: paths.data,
-                  harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
-                  updaterCache: updaterCache(process.env, home, process.platform),
-                  next: removeApplication(process.platform, form, process.execPath),
-              }),
-              remove: () =>
-                  uninstall({
-                      platform: process.platform,
-                      folder: commandFolder(process.platform, process.env, home),
-                      command: placedCommand,
-                      login,
-                      runtime: version === null ? null : { stop: () => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)) },
-                      autostart: placedAutostart === null ? null : { status: () => placedAutostart.registration(), disable: () => placedAutostart.set(false) },
-                      application: applicationFolder(process.platform, process.execPath),
-                      bundles: bundles === null ? null : { folder: bundles, runsFrom: () => processesRunFrom(bundles) },
-                      dataDirectory: paths.data,
-                      harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
-                      updaterCache: updaterCache(process.env, home, process.platform),
-                      log,
-                  }),
-          }
+    // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets.
+    const removal = removalOffered(process.platform)
+        ? placedRemoval({
+              platform: process.platform,
+              home,
+              env: process.env,
+              form,
+              execPath: process.execPath,
+              executable,
+              version,
+              paths,
+              command,
+              autostart,
+              makeCommand: () => new PathCommand(commandDeps),
+              makeAutostart: () => new RuntimeAutostart({ cli, log }),
+              login,
+              stopAs: (carried) => stopOwnRuntime(ownRuntimeDeps(process.platform, carried, paths.runFile, cli)),
+              runsFrom: (folder) => processesRunFrom(folder),
+              log,
+          })
         : null;
     const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal });
     desk.open();

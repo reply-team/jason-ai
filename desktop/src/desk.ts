@@ -13,7 +13,7 @@ import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './ke
 import type { Logger } from './log.ts';
 import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
-import { removeLabel, removePlaced, type RemovalDeps } from './remove-placed.ts';
+import { RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import { menuItemOf, type Updater } from './updates.ts';
 
 export interface DeskDeps {
@@ -66,11 +66,24 @@ export class Desk {
     private tray: Tray | null = null;
     private attention: Attention = { state: 'reading' };
     private autostartOn: boolean | null = null;
-    private removing = false;
+    private readonly removal: RemovalAct | null;
     private readonly watcher: AttentionWatcher;
 
     constructor(deps: DeskDeps) {
         this.deps = deps;
+        const removal = deps.removal;
+        this.removal =
+            removal === null
+                ? null
+                : new RemovalAct({
+                      scope: () => removal.scope(),
+                      remove: () => removal.remove(),
+                      ask: (question) => this.box({ type: 'question', title: 'Jason', ...question }),
+                      tell: (closing) => this.box({ type: closing.quitId === null ? 'warning' : 'info', title: 'Jason', message: closing.message, detail: closing.detail, buttons: closing.buttons, defaultId: closing.defaultId, cancelId: closing.cancelId }),
+                      quit: () => app.quit(),
+                      log: deps.log,
+                      changed: () => this.renderMenu(),
+                  });
         this.watcher = new AttentionWatcher({
             cli: deps.cli,
             log: deps.log,
@@ -129,14 +142,14 @@ export class Desk {
             {
                 label: 'Open Jason at Login',
                 type: 'checkbox',
-                enabled: opens,
+                enabled: opens && !this.removing(),
                 checked: opens && login.isOn(),
                 click: (item) => void login.set(item.checked).finally(() => this.renderMenu()),
             },
             {
                 label: 'Start the Runtime at Logon',
                 type: 'checkbox',
-                enabled: autostart !== null && this.autostartOn !== null,
+                enabled: autostart !== null && this.autostartOn !== null && !this.removing(),
                 checked: this.autostartOn === true,
                 click: (item) =>
                     void autostart?.set(item.checked).then((now) => {
@@ -160,7 +173,7 @@ export class Desk {
         return [
             {
                 label: item.label,
-                enabled: item.enabled,
+                enabled: item.enabled && !this.removing(),
                 click: () => {
                     if (item.act === 'check') void updates?.check();
                     else if (item.act === 'download') void updates?.download();
@@ -189,7 +202,7 @@ export class Desk {
         items.push({ label: 'Copy the Executable’s Path', click: () => clipboard.writeText(status.executable) });
         if (menu.acts.length > 0) items.push({ type: 'separator' });
         for (const act of menu.acts) {
-            items.push({ label: act.label, enabled: app.isPackaged, click: () => void this.commandAct(act.act, status) });
+            items.push({ label: act.label, enabled: app.isPackaged && !this.removing(), click: () => void this.commandAct(act.act, status) });
         }
         return { label: 'Command Line', submenu: items };
     }
@@ -210,37 +223,33 @@ export class Desk {
         this.renderMenu();
     }
 
-    /** Remove What Jason Placed: in the Jason menu and the tray's, beside the other acts on the installation. */
-    private removalItems(): MenuItemConstructorOptions[] {
-        if (this.deps.removal === null) return [];
-        return [{ label: removeLabel, enabled: app.isPackaged && !this.removing, click: () => void this.removeAct() }];
+    /** Whether Remove What Jason Placed runs: the installation's other acts are off meanwhile. */
+    private removing(): boolean {
+        return this.removal?.busy ?? false;
     }
 
-    /** Asks, takes off what the desktop placed on the person's word, says what came of each step, and quits when asked. */
+    /** A message box, on the window when there is one; the index of the button chosen. */
+    private async box(options: Electron.MessageBoxOptions): Promise<number> {
+        const window = this.deps.window();
+        return (window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options)).response;
+    }
+
+    /** Remove What Jason Placed: in the Jason menu and the tray's, beside the other acts on the installation. */
+    private removalItems(): MenuItemConstructorOptions[] {
+        if (this.removal === null) return [];
+        return [{ label: removeLabel, enabled: app.isPackaged && !this.removing(), click: () => void this.removeAct() }];
+    }
+
+    /** Runs the act, then reads again what the menu shows of the installation, which the act changed. */
     private async removeAct(): Promise<void> {
-        const removal = this.deps.removal;
-        if (removal === null || this.removing) return;
-        this.removing = true;
-        this.renderMenu();
-        const box = async (options: Electron.MessageBoxOptions) => {
-            const window = this.deps.window();
-            return (window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options)).response;
-        };
+        if (this.removal === null) return;
         try {
-            await removePlaced({
-                scope: () => removal.scope(),
-                remove: () => removal.remove(),
-                ask: (question) => box({ type: 'question', title: 'Jason', ...question }),
-                tell: (closing) => box({ type: closing.quitId === null ? 'warning' : 'info', title: 'Jason', message: closing.message, detail: closing.detail, buttons: closing.buttons, defaultId: closing.defaultId, cancelId: closing.cancelId }),
-                quit: () => app.quit(),
-                log: this.deps.log,
-            });
+            await this.removal.run();
         } catch (error) {
             dialog.showErrorBox('Jason', error instanceof Error ? error.message : String(error));
-        } finally {
-            this.removing = false;
-            this.renderMenu();
         }
+        await this.readAutostart().catch(() => undefined);
+        this.renderMenu();
     }
 
     /** Starts reading the count; called at the first pairing that succeeded (`atFirstPairing`). */

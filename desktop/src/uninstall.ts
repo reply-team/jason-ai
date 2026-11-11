@@ -8,28 +8,39 @@
  * In this order, each step logged by its name and outcome and never a path:
  *
  * 1. A runtime started from the jason executable this application carries is stopped through `jason runtime stop`
- *    (`own-runtime.ts`), since the uninstaller then removes that executable. One that does not stop, or a run file whose
- *    runtime did not answer while the process it names still runs, ends it there: nothing is taken off, the start exits
- *    1, and the uninstaller quits before it removes a file, so no folder is left half removed. A runtime started from any
- *    other executable is not stopped, and is named.
- * 2. "Open Jason at login", when it is on.
+ *    (`own-runtime.ts`), since the uninstaller then removes that executable; on an AppImage, one started from any of the
+ *    copies of its jason is this application's too (`stopFromAny`). Nothing is ever killed. One that does not stop, or a
+ *    run file whose runtime did not answer while the process it names still runs, ends it there: nothing is taken off,
+ *    the start exits 1, and the uninstaller quits before it removes a file, so no folder is left half removed. A runtime
+ *    started from any other executable is not stopped, and is named.
+ * 2. "Open Jason at login", when it is on. A file under the desktop's own name that starts another path stays, and is
+ *    named with what it starts.
  * 3. The runtime's logon registration, when it starts an executable of this application's: inside its folder, or, for
- *    an AppImage, one of the copies of its jason under `<data>/desktop/bundle/`; one that starts another executable
- *    stays, and is named.
+ *    an AppImage, one of the copies of its jason under `<data>/desktop/bundle/`, decided on resolved paths
+ *    (`resolved-path.ts`). One that starts another executable stays, and is named; so does one whose executable cannot be
+ *    told to be this application's or not.
  * 4. The PATH command's files that are ours, by the same read-back the menu makes (`PathCommand.remove`), by the name
  *    they were put there with; a file of either name another program wrote stays, and is named.
- * 5. For an AppImage, the copies of its jason under `<data>/desktop/bundle/`, only when no process runs from them.
+ * 5. For an AppImage, the copies of its jason under `<data>/desktop/bundle/`: only the real folders named as a version,
+ *    and this desktop's temporaries, the one selection the removal of other versions' copies makes (`bundleEntries`);
+ *    only when no process runs from them, read from `/proc` on resolved paths; never while a hand act above runs the
+ *    carried jason; and the folder itself only once that leaves it empty. A link or anything else there stays, and is
+ *    named.
  *
  * What stays is said by name: the data directory with everything Jason keeps there, the harness root with the person's
- * folders, and the updater's cache under the profile. A removal that fails is named with what takes it off by hand, and
- * the others are still made, since what is left outside the application is the person's to finish.
+ * folders, and the updater's cache under the profile. A removal that fails is named with what takes it off by hand,
+ * naming the carried jason by its full path, and the others are still made, since what is left outside the application
+ * is the person's to finish. Every value a person or another program wrote is made inert before it is shown (`inert`).
  */
 
-import { existsSync, readdirSync, readFileSync, readlinkSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, readlinkSync, rmdirSync, rmSync } from 'node:fs';
 import { join, posix, win32 } from 'node:path';
+import { bundleEntries } from './bundle-copy.ts';
+import { inert } from './inert.ts';
 import type { Logger } from './log.ts';
 import { unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
 import type { CommandStatus } from './path-command.ts';
+import { containedIn, lexicallyInside, resolveReal, type Resolve } from './resolved-path.ts';
 
 /** On the command line of the start the uninstaller makes. */
 export const uninstallFlag = '--uninstall';
@@ -108,45 +119,74 @@ export function updaterCache(env: Readonly<Record<string, string | undefined>>, 
     return win32.join(env['LOCALAPPDATA'] ?? win32.join(home, 'AppData', 'Local'), 'jason-desktop-updater');
 }
 
-/** Whether `file` is inside `folder`, as the platform compares paths: on Windows without regard to case. */
+/** Whether `file` is inside `folder` as written, as the platform compares paths: on Windows without regard to case. */
 export function inside(platform: NodeJS.Platform, folder: string, file: string): boolean {
-    const paths = platform === 'win32' ? win32 : posix;
-    const relative = paths.relative(folder, file);
-    return relative !== '' && !relative.startsWith('..') && !paths.isAbsolute(relative);
+    return lexicallyInside(platform, folder, file);
 }
+
+/** Whether a process runs from a folder: none, one does, or the process table could not be read. */
+export type RunsFrom = 'none' | 'running' | 'unread';
 
 /**
  * Whether any process runs an executable inside `folder`, read from the process table Linux keeps under `/proc`: each
- * process's `exe` link names the file it runs. A process this account may not read is not ours and is passed over; a
- * table that cannot be listed at all says that one may, so nothing is removed on a guess.
+ * process's `exe` link names the file it runs, resolved and, once that file is deleted, with ` (deleted)` after it. The
+ * folder is resolved too, since the data directory may pass through a link. A process this account may not read is not
+ * ours and is passed over; a table that cannot be listed, or a folder that cannot be resolved, cannot be read, and
+ * nothing is removed on a guess.
  */
-export function processesRunFrom(folder: string, table: { list(): string[]; exe(pid: string): string } = procTable): boolean {
+export function processesRunFrom(folder: string, table: { list(): string[]; exe(pid: string): string } = procTable, resolve: Resolve = resolveReal): RunsFrom {
+    let real: string;
     let pids: string[];
     try {
+        real = resolve(folder);
         pids = table.list().filter((name) => /^\d+$/.test(name));
     } catch {
-        return true;
+        return 'unread';
     }
     for (const pid of pids) {
         let exe: string;
         try {
-            exe = table.exe(pid);
+            exe = table.exe(pid).replace(/ \(deleted\)$/, '');
         } catch {
             continue;
         }
-        if (inside('linux', folder, exe)) return true;
+        if (lexicallyInside('linux', real, exe) || lexicallyInside('linux', folder, exe)) return 'running';
     }
-    return false;
+    return 'none';
 }
 
 const procTable = { list: () => readdirSync('/proc'), exe: (pid: string) => readlinkSync(`/proc/${pid}/exe`) };
+
+/**
+ * Stops the runtime when it runs as any of `executables` (`stopOwnRuntime` asked of each in turn, through jason and never
+ * by a kill): the first answer that is not `another` is the answer. On an AppImage, a runtime started from any of the
+ * copies of its jason is this application's.
+ */
+export async function stopFromAny(executables: readonly string[], stop: (executable: string) => Promise<StopOutcome>): Promise<StopOutcome> {
+    let outcome: StopOutcome = { kind: 'none' };
+    for (const executable of executables) {
+        outcome = await stop(executable);
+        if (outcome.kind !== 'another') return outcome;
+    }
+    return outcome;
+}
+
+/** The desktop's own login file that does not start this application: on macOS the LaunchAgent, on Linux the autostart entry. */
+export interface LoginElsewhere {
+    file: string;
+    /** What it starts, as written there, or null when it names nothing. */
+    starts: string | null;
+    /** A Linux entry that is turned off (`Hidden=true`). */
+    hidden: boolean;
+}
 
 export interface UninstallDeps {
     platform: NodeJS.Platform;
     /** The folder the PATH command goes in (`commandFolder`), or null where none is offered. */
     folder: string | null;
     command: { status(): CommandStatus; remove(): CommandStatus };
-    login: { isOn(): boolean; set(on: boolean): Promise<void> };
+    /** Open Jason at login; `elsewhere` reads the desktop's own file when it starts another path (`LoginItem.elsewhere`). */
+    login: { isOn(): boolean; set(on: boolean): Promise<void>; elsewhere?(): LoginElsewhere | null };
     /** Stopping the runtime this application carries when it is the one running (`stopOwnRuntime`); null when the bundle carries no CLI. */
     runtime: { stop(): Promise<StopOutcome> } | null;
     /** `jason runtime autostart status` and `disable`, through the bundled CLI; null when the bundle carries none. */
@@ -157,11 +197,18 @@ export interface UninstallDeps {
      * An AppImage's copies of its jason, `<data>/desktop/bundle/` (`bundle-copy.ts`), with the look whether a process runs
      * from them (`processesRunFrom`); null for every other form, which carries its jason inside its own folder.
      */
-    bundles: { folder: string; runsFrom(): boolean } | null;
+    bundles: { folder: string; runsFrom(): RunsFrom } | null;
+    /**
+     * The carried jason by its full path, which every hand act names. On Windows the uninstaller removes it next, so
+     * there a hand act after the runtime's own names the registration, or the jason the runtime was started from.
+     */
+    jason: string;
     dataDirectory: string;
     harnessRoot: string;
     updaterCache: string;
     log: Logger;
+    /** Resolves a path (`resolved-path.ts`); the system's own unless a test says otherwise. */
+    resolve?: Resolve;
 }
 
 /** The steps, in the order they are taken, as the log names them. */
@@ -182,19 +229,29 @@ export interface UninstallReport {
     runtime: StopOutcome;
     /** Each step taken, with its outcome, as it was logged. */
     steps: { step: RemovalStep; outcome: string }[];
+    /** The carried jason, by its full path, which a hand act names. */
+    jason: string;
+}
+
+/** How a hand act names the carried jason: its full path, quoted when it holds a space, made inert. */
+export function handJason(jason: string | null): string {
+    if (jason === null) return 'jason';
+    const shown = inert(jason);
+    return /\s/.test(shown) ? `"${shown}"` : shown;
 }
 
 /**
  * What the person is told when the runtime this application carries did not stop, or did not answer, so nothing was
- * removed; `again` is the act to repeat once it has.
+ * removed; `again` is the act to repeat once it has, and `jason` the carried jason the hand acts name.
  */
-export function runtimeRefusal(outcome: { kind: 'failed'; exit: number } | Unanswered, again = 'uninstall Jason again'): string {
+export function runtimeRefusal(outcome: { kind: 'failed'; exit: number } | Unanswered, again = 'uninstall Jason again', jason: string | null = null): string {
+    const hand = handJason(jason);
     if (outcome.kind === 'unanswered') {
-        const { why, next } = unansweredWords(outcome);
+        const { why, next } = unansweredWords({ ...outcome, runFile: inert(outcome.runFile) }, hand);
         return `Nothing was removed, because ${why}. ${next} Then ${again}.`;
     }
     const how = outcome.exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${outcome.exit}`;
-    return `Nothing was removed, because the runtime this application carries is running and did not stop (${how}). Stop it with jason runtime stop, then ${again}.`;
+    return `Nothing was removed, because the runtime this application carries is running and did not stop (${how}). Stop it with ${hand} runtime stop, then ${again}.`;
 }
 
 /** The exit of the uninstaller's start: 1 when the uninstall is to go no further, which the uninstaller acts on. */
@@ -208,6 +265,9 @@ function commandFiles(platform: NodeJS.Platform, folder: string): string[] {
     return names.map((name) => join(folder, name));
 }
 
+/** Where the Windows start at logon is, for a hand act once the uninstaller has removed the jason that would take it off. */
+const windowsTask = 'Task Scheduler holds it as the task named Jason- followed by your account’s SID; deleting that task takes it off';
+
 /** Takes off what the desktop placed outside its folder, in the order above, and says what it took and what it left. */
 export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
     const removed: string[] = [];
@@ -219,33 +279,53 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
         steps.push({ step, outcome });
         deps.log.info('removal_step', { Step: step, Outcome: outcome });
     };
+    const resolve = deps.resolve ?? resolveReal;
+    const hand = handJason(deps.jason);
+    // On Windows the uninstaller removes the carried jason once this start exits: a hand act cannot run it.
+    const goes = deps.platform === 'win32';
+    const data = inert(deps.dataDirectory);
+    // Whether a line above names the carried jason for the person to run by hand: its copies then stay.
+    let handNeedsJason = false;
 
     // 1. The runtime this application's jason runs as; one that does not stop ends it here.
     const running: StopOutcome = deps.runtime === null ? { kind: 'none' } : await deps.runtime.stop().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
-    ended('runtime', running.kind);
+    ended('runtime', deps.runtime === null ? 'no_cli' : running.kind);
     if (running.kind === 'failed' || running.kind === 'unanswered') {
-        return { removed: [], untouched: [], failed: [], left: [], refused: runtimeRefusal(running), runtime: running, steps };
+        return { removed: [], untouched: [], failed: [], left: [], refused: runtimeRefusal(running, undefined, deps.jason), runtime: running, steps, jason: deps.jason };
     }
-    if (running.kind === 'stopped') removed.push('The runtime this application carries, which was running: it was stopped with jason runtime stop');
-    if (running.kind === 'none') untouched.push('No runtime of this application’s was running');
+    if (deps.runtime === null) left.push('The runtime and its start at logon, which were not looked at, since this build carries no jason');
+    else if (running.kind === 'stopped') removed.push('The runtime this application carries, which was running: it was stopped with jason runtime stop');
+    else if (running.kind === 'none') untouched.push(`No runtime was running with the data directory ${data}`);
 
-    // 2. Open Jason at login.
+    // 2. Open Jason at login; the desktop's own file that starts another path stays, and is named.
     try {
         if (deps.login.isOn()) {
             await deps.login.set(false);
             removed.push('Open Jason at login');
             ended('login', 'off');
         } else {
-            untouched.push('Open Jason at login was off');
-            ended('login', 'was_off');
+            const there = deps.login.elsewhere?.() ?? null;
+            if (there === null) {
+                untouched.push('Open Jason at login was off');
+                ended('login', 'was_off');
+            } else {
+                const what = there.hidden ? 'which is turned off (Hidden=true)' : `which starts ${there.starts === null ? 'nothing it names' : inert(there.starts)}, not this application`;
+                left.push(`${inert(there.file)}, under Jason’s name, ${what}: deleting it takes it off`);
+                ended('login', 'another');
+            }
         }
     } catch {
         failed.push('Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it');
         ended('login', 'failed');
     }
 
-    // 3. The runtime's start at logon, only when it starts this application's jason.
-    const ours = (executable: string) => inside(deps.platform, deps.application, executable) || (deps.bundles !== null && inside(deps.platform, deps.bundles.folder, executable));
+    // 3. The runtime's start at logon, only when it starts this application's jason, decided on resolved paths.
+    const ownership = (executable: string): 'inside' | 'outside' | 'unknown' => {
+        const folders = [deps.application, ...(deps.bundles === null ? [] : [deps.bundles.folder])];
+        const answers = folders.map((folder) => containedIn(deps.platform, folder, executable, resolve));
+        if (answers.includes('inside')) return 'inside';
+        return answers.includes('unknown') ? 'unknown' : 'outside';
+    };
     let registration: { registered: boolean; executable: string | null } | null = null;
     let unread = false;
     try {
@@ -255,21 +335,29 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
         unread = true;
     }
     if (unread) {
-        failed.push('The runtime’s start at logon, which could not be read: jason runtime autostart status says whether it is there');
+        failed.push(`The runtime’s start at logon, which could not be read: ${goes ? windowsTask : `${hand} runtime autostart status says whether it is there`}`);
+        handNeedsJason = true;
         ended('autostart', 'unread');
     } else if (registration?.registered === true) {
         const executable = registration.executable;
-        if (executable !== null && ours(executable)) {
+        const owned = executable === null ? 'outside' : ownership(executable);
+        const named = executable === null ? 'an executable it does not name' : inert(executable);
+        if (owned === 'inside') {
             const still = await deps.autostart?.disable().catch(() => null);
             if (still === false) {
                 removed.push('The runtime’s start at logon');
                 ended('autostart', 'off');
             } else {
-                failed.push('The runtime’s start at logon, which could not be taken off: jason runtime autostart disable takes it off');
+                failed.push(`The runtime’s start at logon, which could not be taken off: ${goes ? windowsTask : `${hand} runtime autostart disable takes it off`}`);
+                handNeedsJason = true;
                 ended('autostart', 'failed');
             }
+        } else if (owned === 'unknown') {
+            left.push(`The runtime’s start at logon, which starts ${named}: whether that is this application’s could not be told, so it was left; ${goes ? windowsTask : `${hand} runtime autostart disable takes it off`}`);
+            handNeedsJason = true;
+            ended('autostart', 'unknown');
         } else {
-            left.push(`The runtime’s start at logon, which starts ${executable ?? 'an executable it does not name'}, not this application’s`);
+            left.push(`The runtime’s start at logon, which starts ${named}, not this application’s`);
             ended('autostart', 'another');
         }
     } else if (registration?.registered === false) {
@@ -292,38 +380,82 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
         let took = 0;
         for (const file of before) {
             if (!existsSync(file)) {
-                removed.push(file);
+                removed.push(inert(file));
                 took += 1;
-            } else if (threw) failed.push(`${file}, which could not be taken off: deleting the file takes it off`);
-            else left.push(`${file}, which another program wrote`);
+            } else if (threw) failed.push(`${inert(file)}, which could not be taken off: deleting the file takes it off`);
+            else left.push(`${inert(file)}, which another program wrote`);
         }
         if (before.length === 0) untouched.push('No jason command of this application’s was on the PATH');
         ended('command', threw ? 'failed' : took > 0 ? 'removed' : before.length > 0 ? 'another' : 'was_off');
     }
 
-    // 5. An AppImage's copies of its jason, only when nothing runs from them.
-    if (deps.bundles !== null && existsSync(deps.bundles.folder)) {
-        const folder = deps.bundles.folder;
-        if (deps.bundles.runsFrom()) {
-            failed.push(`The copies of jason in ${folder}, which a process still runs from: once no Jason runtime or jason command runs, deleting the folder takes them off`);
-            ended('bundle', 'running');
-        } else {
-            try {
-                rmSync(folder, { recursive: true, force: true });
-                removed.push(`The copies of jason in ${folder}`);
-                ended('bundle', 'removed');
-            } catch {
-                failed.push(`The copies of jason in ${folder}, which could not all be taken off: deleting the folder takes them off`);
-                ended('bundle', 'failed');
-            }
-        }
+    // The runtime another installation runs is said with the carried jason that stops it.
+    if (running.kind === 'another') {
+        left.push(`A runtime is running that this application could not confirm as its own: it was not stopped; ${goes ? 'the jason it was started from stops it with runtime stop' : `${hand} runtime stop stops it`}`);
+        handNeedsJason = true;
     }
 
-    left.push(`The data directory, ${deps.dataDirectory}, with the campaigns, the journal, the settings and the logs`);
-    left.push(`The harness root, ${deps.harnessRoot}, with your folders and memory files`);
-    left.push(`The updater’s cache, ${deps.updaterCache}`);
-    if (running.kind === 'another') left.push('A runtime is running that this application could not confirm as its own: it was not stopped; jason runtime stop stops it');
-    return { removed, untouched, failed, left, refused: null, runtime: running, steps };
+    // 5. An AppImage's copies of its jason: the real folders named as versions, when nothing runs from them.
+    if (deps.bundles !== null) bundleStep(deps.bundles, { removed, failed, left, ended, handNeedsJason, jasonInCopies: containedIn(deps.platform, deps.bundles.folder, deps.jason, resolve) === 'inside', hand });
+
+    left.push(`The data directory, ${data}, with the campaigns, the journal, the settings and the logs`);
+    left.push(`The harness root, ${inert(deps.harnessRoot)}, with your folders and memory files`);
+    left.push(`The updater’s cache, ${inert(deps.updaterCache)}`);
+    return { removed, untouched, failed, left, refused: null, runtime: running, steps, jason: deps.jason };
+}
+
+/** Step 5: what of the bundles folder is this application's copies, and only then, and only those, removed. */
+function bundleStep(
+    bundles: { folder: string; runsFrom(): RunsFrom },
+    into: { removed: string[]; failed: string[]; left: string[]; ended(step: RemovalStep, outcome: string): void; handNeedsJason: boolean; jasonInCopies: boolean; hand: string },
+): void {
+    const folder = bundles.folder;
+    const shown = inert(folder);
+    const entries = bundleEntries(folder);
+    if (entries.kind === 'absent') return into.ended('bundle', 'absent');
+    if (entries.kind === 'other') {
+        into.left.push(`${shown}, which is not a folder this application made (a link or a file): it was left`);
+        return into.ended('bundle', 'not_folder');
+    }
+    if (entries.kind === 'unread') {
+        into.failed.push(`The copies of jason in ${shown}, which could not be read: once nothing runs from them, deleting the folders named as versions in it takes them off`);
+        return into.ended('bundle', 'unread');
+    }
+    for (const name of entries.others) into.left.push(`${inert(join(folder, name))}, which is not a copy of jason this application made: it was left`);
+    const ours = [...entries.copies, ...entries.temporaries];
+    if (ours.length === 0) return into.ended('bundle', 'none');
+    if (into.handNeedsJason && into.jasonInCopies) {
+        into.left.push(`The copies of jason in ${shown}, kept because a hand act above runs ${into.hand}: once it is done and nothing runs from them, deleting the folders named as versions in it takes them off`);
+        return into.ended('bundle', 'kept');
+    }
+    const runs = bundles.runsFrom();
+    if (runs !== 'none') {
+        const why = runs === 'running' ? 'which a process still runs from' : 'since whether a process runs from them could not be read';
+        into.failed.push(`The copies of jason in ${shown}, ${why}: once nothing runs from them, deleting the folders named as versions in it takes them off`);
+        return into.ended('bundle', runs);
+    }
+    let failed = false;
+    for (const name of ours) {
+        const copy = join(folder, name);
+        try {
+            rmSync(copy, { recursive: true, force: true });
+            into.removed.push(`The copy of jason in ${inert(copy)}`);
+        } catch {
+            failed = true;
+            into.failed.push(`The copy of jason in ${inert(copy)}, which could not be taken off: deleting the folder takes it off`);
+        }
+    }
+    if (!failed && entries.others.length === 0) {
+        try {
+            if (readdirSync(folder).length === 0) {
+                rmdirSync(folder);
+                into.removed.push(`The folder that held them, ${shown}`);
+            }
+        } catch {
+            // Left as it is: it holds nothing of this application's any more.
+        }
+    }
+    into.ended('bundle', failed ? 'failed' : 'removed');
 }
 
 /** What the uninstall shows the person: what could not be taken off is said first among what is left. */

@@ -73,6 +73,7 @@ export async function runUninstall(quiet: boolean): Promise<number> {
         application: applicationFolder(process.platform, process.execPath),
         // Windows carries its jason inside the installed folder: there is no copy of it to take off.
         bundles: null,
+        jason: executable,
         dataDirectory: paths.data,
         harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
         updaterCache: updaterCache(process.env, home, process.platform),
