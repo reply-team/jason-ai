@@ -1,5 +1,5 @@
 import { computed, effect } from '@preact/signals-react';
-import { useCallback, useMemo, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { act, define } from './actions';
 import {
@@ -248,9 +248,12 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
 /** A campaign a pick names: by the name the console read for it, else by its id. */
 const campaignName = (id: string): string => campaigns.value.find((each) => each.id === id)?.name ?? id;
 
-/** The campaigns a set-up turn made: while the chat is about none and no turn runs, each is a choice. */
-function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>): Html {
-    const open = chat.campaignId === null && !chat.running;
+/**
+ * The campaigns a set-up turn made. Only the chat's last pick is a choice, as only it is one the desktop takes, and only
+ * while the chat is about no campaign and no turn runs; an earlier one is drawn as text.
+ */
+function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean): Html {
+    const open = last && chat.campaignId === null && !chat.running;
     return html`<div class="ask chat-pick">
         <div class="ask-h">
             ${svg('camp', 14)}<b>${open ? 'Make this the conversation of' : 'Campaigns this chat made'}</b>
@@ -284,6 +287,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 ${suggestions.map((text) => html`<button class="sug" type="button" ${act('chat.suggest', chat.id, text)}>${text}</button>`)}
             </div>`;
     const sentence = host && signInSentence(host);
+    const lastPick = [...chat.entries].reverse().find((entry) => entry.kind === 'pick');
     const parts = shown(chat).map((entry) => {
         switch (entry.kind) {
             case 'steps':
@@ -313,7 +317,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                     ${sentence && isSignInFailure(entry.text) ? html`<div class="sign-in">${withCode(sentence)}</div>` : null}
                 </div>`;
             case 'pick':
-                return pick(chat, entry);
+                return pick(chat, entry, entry === lastPick);
             case 'attached':
                 return noteLine(`This chat is now the conversation of ${entry.title}.`);
             case 'fresh':
@@ -363,8 +367,25 @@ function threadOf(chatId: string) {
 export function ChatPanel({ chatId }: { chatId: string }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
+    const panel = useRef<HTMLDivElement>(null);
+    const removeButton = useRef<HTMLButtonElement>(null);
+    const keepButton = useRef<HTMLButtonElement>(null);
+    const wasRemoving = useRef(false);
+    const removing = chats.value[chatId]?.removing ?? false;
+    // Remove's question is a dialog: focus goes to keeping the conversation, the rest of the panel takes nothing while it
+    // asks, and once it is answered or dismissed focus goes back to Remove.
+    useEffect(() => {
+        for (const part of panel.current?.querySelectorAll('.thread, .composer') ?? []) {
+            if (removing) part.setAttribute('inert', '');
+            else part.removeAttribute('inert');
+        }
+        if (removing) keepButton.current?.focus();
+        else if (wasRemoving.current) removeButton.current?.focus();
+        wasRemoving.current = removing;
+    }, [removing]);
     const chat = chats.value[chatId];
     if (!chat) return null;
+    const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
     const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
     const host = hostOf(chat);
     const send = (event?: FormEvent) => {
@@ -389,42 +410,47 @@ export function ChatPanel({ chatId }: { chatId: string }) {
             .catch((error: unknown) => changeChat(chatId, (each) => failed(each, messageOf(error))));
     };
     return (
-        <div className="chat-panel">
+        <div className="chat-panel" ref={panel}>
             <div className="chat-bar">
                 <button
                     className="btn sm"
                     type="button"
-                    disabled={chat.running}
+                    disabled={chat.running || chat.removing}
                     title="The agent's next turn begins without its memory of this conversation; what is shown here stays"
                     onClick={() => restartChat(chatId)}
                 >
                     Start afresh
                 </button>
                 <button
+                    ref={removeButton}
                     className="btn sm"
                     type="button"
-                    disabled={chat.running}
+                    disabled={chat.running || chat.removing}
                     onClick={() => changeChat(chatId, (each) => ({ ...each, removing: true }))}
                 >
                     Remove
                 </button>
             </div>
             {chat.removing && (
-                <div className="note am chat-remove" role="alertdialog" aria-label="Remove this conversation?">
-                    <div>
+                <div
+                    className="note am chat-remove"
+                    role="alertdialog"
+                    aria-label="Remove this conversation?"
+                    aria-describedby={`remove-said-${chatId}`}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Escape') keep();
+                    }}
+                >
+                    <div id={`remove-said-${chatId}`}>
                         Remove this conversation? Its record goes from this computer; the agent host keeps its own
                         transcript of it.
                     </div>
                     <div className="crow">
+                        <button ref={keepButton} className="btn sm" type="button" onClick={keep}>
+                            Keep it
+                        </button>
                         <button className="btn sm" type="button" onClick={() => removeChat(chatId)}>
                             Remove it
-                        </button>
-                        <button
-                            className="btn sm"
-                            type="button"
-                            onClick={() => changeChat(chatId, (each) => ({ ...each, removing: false }))}
-                        >
-                            Keep it
                         </button>
                     </div>
                 </div>
@@ -481,6 +507,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 <textarea
                     id="box"
                     rows={2}
+                    disabled={chat.removing}
                     placeholder={chat.running ? 'Sent when this turn ends…' : 'Ask Jason…'}
                     aria-label="Your message"
                     value={chat.draft}
@@ -490,6 +517,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 <div className="crow">
                     <select
                         aria-label="Agent host"
+                        disabled={chat.removing}
                         value={host?.id ?? ''}
                         onChange={(event) => changeChat(chatId, (each) => ({ ...each, host: event.target.value }))}
                     >
@@ -515,16 +543,31 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                             <button
                                 className="btn sm"
                                 type="submit"
-                                disabled={chat.stopping || chat.waiting !== null || chat.draft.trim() === ''}
+                                disabled={
+                                    chat.removing || chat.stopping || chat.waiting !== null || chat.draft.trim() === ''
+                                }
                             >
                                 Send when the turn ends
                             </button>
-                            <button className="send" type="button" title="Stop" aria-label="Stop" onClick={stop}>
+                            <button
+                                className="send"
+                                type="button"
+                                title="Stop"
+                                aria-label="Stop"
+                                disabled={chat.removing}
+                                onClick={stop}
+                            >
                                 ■
                             </button>
                         </>
                     ) : (
-                        <button className="send" type="submit" title="Send" aria-label="Send" disabled={!host}>
+                        <button
+                            className="send"
+                            type="submit"
+                            title="Send"
+                            aria-label="Send"
+                            disabled={!host || chat.removing}
+                        >
                             ↑
                         </button>
                     )}

@@ -72,9 +72,12 @@ export interface Chat {
 /** How much of a set-up chat's first message names it, as the desktop names it. */
 const titleLength = 60;
 
-/** A set-up chat's title from the person's first message: its first sixty characters, on one line. */
+/** What a title never shows, as the desktop drops it: every control and format character, and the two separators. */
+const unseen = /[\p{Cc}\p{Cf}\u2028\u2029]/gu;
+
+/** A set-up chat's title from the person's first message, as the desktop names it: its first sixty characters, on one line. */
 function titleOf(text: string): string {
-    const characters = Array.from(text.replace(/\s+/g, ' ').trim());
+    const characters = Array.from(text.replace(/\s+/g, ' ').replace(unseen, '').trim());
     return characters.length === 0 ? 'New chat' : characters.slice(0, titleLength).join('');
 }
 

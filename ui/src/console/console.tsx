@@ -28,7 +28,19 @@ import * as connect from './connect';
 import * as needs from './needs';
 import { Painted } from './painted';
 import { sideView } from './side';
-import { bind, changeChat, chats, clock, here, keepLine, streamState, type Dock, type PanelName } from './state';
+import {
+    bind,
+    changeChat,
+    chats,
+    clock,
+    conversationsFailure,
+    currentChat,
+    here,
+    keepLine,
+    streamState,
+    type Dock,
+    type PanelName,
+} from './state';
 
 // The desktop's shell: a sidebar and a dock. Home is the Live chat; beside it the panels the console draws itself from
 // the Runtime API, and a page panel that shows the browser shell's screens. The dock's layout is not kept: every
@@ -129,7 +141,10 @@ function makeDock(get: () => DockviewApi | null): Dock {
             void startChat(campaign).then((id) => {
                 if (id !== null) showChat(id);
             }),
-        closeChat: (id) => get()?.getPanel(chatPanel(id))?.api.close(),
+        closeChat: (id) => {
+            get()?.getPanel(chatPanel(id))?.api.close();
+            if (currentChat.value === id) currentChat.value = null;
+        },
         page: (to) => {
             navigate(to);
             show('page');
@@ -225,6 +240,10 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
 
     const ready = (event: DockviewReadyEvent) => {
         dockApi.current = event.api;
+        // The sidebar marks the conversation whose chat came to the front last.
+        event.api.onDidActivePanelChange(({ panel }) => {
+            if (panel?.id.startsWith('chat:')) currentChat.value = panel.id.slice('chat:'.length);
+        });
         event.api.addPanel({ id: 'needs', component: 'needs', title: titles.needs });
         event.api.addPanel({
             id: 'campaigns',
@@ -247,6 +266,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             <div className="shell">
                 <aside className="side">
                     <Painted className="side-body" view={sideView} />
+                    <SideFailure />
                 </aside>
                 <main className="dock">
                     <DockviewReact
@@ -257,6 +277,19 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     />
                 </main>
             </div>
+        </div>
+    );
+}
+
+/**
+ * Why the conversations could not be listed, opened or made, in the desktop's words. Drawn by React beside the painted
+ * sidebar, not in it: the sidebar is painted afresh as the chats change, and an alert inserted afresh is said afresh.
+ */
+function SideFailure() {
+    const failure = conversationsFailure.value;
+    return failure === null ? null : (
+        <div className="note am side-note" role="alert">
+            {failure}
         </div>
     );
 }

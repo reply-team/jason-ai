@@ -24,6 +24,8 @@ export const setupError = signal<string | null>(null);
 export const chats = signal<Readonly<Record<string, Chat>>>({});
 /** Every conversation the desktop keeps, newest first, as it listed them last. */
 export const conversations = signal<readonly DesktopConversation[]>([]);
+/** The conversation whose chat was brought to the front last, which the sidebar marks; null when none is open. */
+export const currentChat = signal<string | null>(null);
 /** Why the conversations could not be listed or one opened, in the desktop's words; null when nothing failed. */
 export const conversationsFailure = signal<string | null>(null);
 

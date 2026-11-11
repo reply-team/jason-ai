@@ -35,6 +35,11 @@ describe('a chat as the page keeps it', () => {
         // As the desktop names a set-up chat: its first sixty characters, on one line.
         expect(said(newChat('c2', 'claude'), 'x'.repeat(80)).title).toBe('x'.repeat(60));
         expect(said(newChat('c4', 'claude'), 'Find\n\nleads   in Berlin').title).toBe('Find leads in Berlin');
+        // The characters the desktop drops from a title are dropped here too: controls, format characters, separators.
+        const hidden = ['\u200b', '\u{E0041}', '\u0085'];
+        expect(said(newChat('c5', 'claude'), `Find${hidden[0]} leads${hidden[1]} in Berlin${hidden[2]}`).title).toBe(
+            'Find leads in Berlin',
+        );
         const about = said(newChat('c3', 'claude', { id: 'cmp_1', name: 'Autumn outreach' }), 'How is it going?');
         expect(about).toMatchObject({ title: 'Autumn outreach', campaignId: 'cmp_1' });
     });

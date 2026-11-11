@@ -6,7 +6,7 @@ import { act, define } from './actions';
 import { html, type Html } from './html';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
-import { chats, conversations, conversationsFailure, here, type PanelName } from './state';
+import { chats, conversations, currentChat, here, type PanelName } from './state';
 
 // The console's sidebar: a new chat, the conversations the desktop keeps, newest first, the console's own panels, and
 // the browser shell's screens that the console has no panel of its own for, shown in the page panel.
@@ -55,14 +55,19 @@ export function sideView(): Html {
             ${conversations.value.map(
                 // A chat the console holds says its title as it is now; the list says it as the desktop kept it.
                 (conversation) =>
-                    html`<button class="item" type="button" ${act('side.chat', conversation.id)}>
+                    html`<button
+                        class="item"
+                        type="button"
+                        ${conversation.id === currentChat.value ? html`aria-current="true"` : null}
+                        ${act('side.chat', conversation.id)}
+                    >
                         ${svg(conversation.campaignId === null ? 'chat' : 'camp', 15)}<span
                             >${chats.value[conversation.id]?.title ?? conversation.title}</span
                         >
                     </button>`,
             )}
         </nav>
-        ${conversationsFailure.value !== null ? html`<div class="note am side-note" role="alert">${conversationsFailure.value}</div>` : null}
+
         <nav class="list" aria-label="Console">
             ${panels.map(
                 (each) =>

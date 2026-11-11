@@ -364,4 +364,149 @@ describe('the desktop’s conversations', () => {
         expect(Object.values(chats.value).filter((chat) => chat.campaignId === 'cmp_1')).toHaveLength(1);
         expect(screen.getAllByText('Spring', { selector: '.dv-default-tab-content' })).toHaveLength(1);
     });
+
+    it('asks Remove as a dialog: focus on keeping it, Escape and Keep it close it back to Remove, nothing else usable meanwhile', async () => {
+        const { desktop } = renderConsole();
+        const id = await send(desktop, 'Go');
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        const remove = await waitFor(() => {
+            const button = screen.getByRole('button', { name: 'Remove' });
+            expect(button).toHaveProperty('disabled', false);
+            return button;
+        });
+        fireEvent.click(remove);
+        const dialog = screen.getByRole('alertdialog', { name: 'Remove this conversation?' });
+        expect(
+            within(dialog)
+                .getAllByRole('button')
+                .map((each) => each.textContent?.trim()),
+        ).toEqual(['Keep it', 'Remove it']);
+        await waitFor(() =>
+            expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Keep it' })),
+        );
+        const described = document.getElementById(dialog.getAttribute('aria-describedby') ?? '');
+        expect(described?.textContent).toContain('the agent host keeps its own transcript of it');
+        // While it asks, the conversation takes nothing else.
+        expect(screen.getByRole('textbox', { name: 'Your message' })).toHaveProperty('disabled', true);
+        expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
+        expect(screen.getByRole('button', { name: 'Start afresh' })).toHaveProperty('disabled', true);
+        expect(screen.getByRole('button', { name: 'Remove' })).toHaveProperty('disabled', true);
+        fireEvent.keyDown(dialog, { key: 'Escape' });
+        expect(screen.queryByRole('alertdialog')).toBeNull();
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove' })));
+        expect(screen.getByRole('textbox', { name: 'Your message' })).toHaveProperty('disabled', false);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Keep it' }));
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove' })));
+        expect(calls(desktop, 'chat.remove')).toHaveLength(0);
+    });
+
+    it('offers only the last pick of a set-up chat, and draws an earlier one as text', async () => {
+        const desktop = stubDesktop();
+        desktop.names.set('cmp_3', 'Summer referrals');
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000P1',
+            title: 'Make campaigns',
+            entries: [
+                { kind: 'user', text: 'Make two campaigns' },
+                { kind: 'pick', campaignIds: ['cmp_2', 'cmp_3'] },
+                { kind: 'user', text: 'Make another' },
+                { kind: 'pick', campaignIds: ['cmp_1'] },
+            ],
+        });
+        renderConsole(desktop);
+        await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Make campaigns' }));
+        await waitFor(() => expect(document.querySelectorAll('.chat-pick')).toHaveLength(2));
+        const [earlier, last] = [...document.querySelectorAll<HTMLElement>('.chat-pick')];
+        expect(within(earlier!).queryByRole('button')).toBeNull();
+        expect(earlier!.textContent).toContain('Autumn, Summer referrals');
+        expect(
+            within(last!)
+                .getAllByRole('button')
+                .map((each) => each.textContent?.trim()),
+        ).toEqual(['Spring']);
+        fireEvent.click(within(last!).getByRole('button', { name: 'Spring' }));
+        await waitFor(() => expect(chats.value['conv_01JDKEPT0000000000000000P1']?.campaignId).toBe('cmp_1'));
+        expect(desktop.calls.filter((each) => each.name === 'chat.attach').map((each) => each.args)).toEqual([
+            ['conv_01JDKEPT0000000000000000P1', 'cmp_1'],
+        ]);
+    });
+
+    it('reads the list again after Start afresh, so the conversation started afresh is listed first', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000S1',
+            campaignId: 'cmp_1',
+            title: 'Spring',
+            updatedAt: '2026-11-01T00:00:00.000Z',
+        });
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000S2',
+            campaignId: 'cmp_2',
+            title: 'Autumn',
+            updatedAt: '2026-11-02T00:00:00.000Z',
+        });
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000S3',
+            campaignId: 'cmp_3',
+            title: 'Summer',
+            updatedAt: '2026-11-03T00:00:00.000Z',
+        });
+        renderConsole(desktop);
+        await waitFor(() => expect(names()).toEqual(['Summer', 'Autumn', 'Spring']));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        fireEvent.click(
+            within(hero.closest<HTMLElement>('.chat-panel')!).getByRole('button', { name: 'Start afresh' }),
+        );
+        await waitFor(() => expect(names()).toEqual(['Spring', 'Summer', 'Autumn']));
+    });
+
+    it('says a failed list once: the note is not drawn again as the chats change', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000N1', campaignId: 'cmp_1', title: 'Spring' });
+        renderConsole(desktop);
+        await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+        // The list read again after a turn starts fails; the list keeps what it had, and says why.
+        desktop.refuse.set('chat.list', 'The desktop could not read its conversations.');
+        await send(desktop, 'Go');
+        const note = await waitFor(() => within(side()).getByRole('alert'));
+        expect(note.textContent).toContain('The desktop could not read its conversations.');
+        expect(within(listed()).getByRole('button', { name: 'Spring' })).toBeTruthy();
+        const box = screen.getByRole('textbox', { name: 'Your message' });
+        for (const text of ['F', 'Fi', 'Fin', 'Find']) fireEvent.change(box, { target: { value: text } });
+        expect(within(side()).getAllByRole('alert')).toEqual([note]);
+        expect(note.isConnected).toBe(true);
+    });
+
+    it('marks the conversation open in front in the sidebar', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000C1', campaignId: 'cmp_1', title: 'Spring' });
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000C2', campaignId: 'cmp_2', title: 'Autumn' });
+        renderConsole(desktop);
+        await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+        const current = () =>
+            within(listed())
+                .getAllByRole('button')
+                .filter((each) => each.getAttribute('aria-current') === 'true')
+                .map((each) => each.textContent?.trim());
+        expect(current()).toEqual([]);
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        await waitFor(() => expect(current()).toEqual(['Spring']));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Autumn' }));
+        await waitFor(() => expect(current()).toEqual(['Autumn']));
+    });
+
+    it('draws a tab title made of a person’s words as text', async () => {
+        const { desktop } = renderConsole();
+        await send(desktop, hostile);
+        await waitFor(() =>
+            expect([...document.querySelectorAll('.dv-default-tab-content')].map((each) => each.textContent)).toContain(
+                hostile,
+            ),
+        );
+        expect(document.querySelector('.dv-tabs-container img, .dv-tab img')).toBeNull();
+        expect((window as { hit?: number }).hit).toBeUndefined();
+    });
 });
