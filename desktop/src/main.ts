@@ -18,7 +18,7 @@ import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart } from './login-item.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
-import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
+import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, settleStart } from './rollback.ts';
 import { Updater } from './updates.ts';
@@ -242,6 +242,7 @@ async function run(): Promise<void> {
     void desk.readAutostart();
     updates?.start();
     let runtimeVersion: string | null = null;
+    let runtimeIsOurs = false;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage);
     registerSetup(
         new Setup({
@@ -252,6 +253,7 @@ async function run(): Promise<void> {
             log,
             bundleVersion: version ?? 'unprepared',
             runtimeVersion: () => runtimeVersion,
+            runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
         }),
         origin,
@@ -295,6 +297,9 @@ async function run(): Promise<void> {
             },
         });
         runtimeVersion = started.runtimeVersion;
+        // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
+        // it carries, which `jason update` refuses to change.
+        if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
         await window.loadURL(started.link);
         log.info('window_loaded', { Origin: started.origin });
         settleStart(rollback, app.getVersion(), true, log);

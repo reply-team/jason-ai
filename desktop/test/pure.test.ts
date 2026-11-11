@@ -109,16 +109,27 @@ test('jason status is read by its checks: the runtime up, whether it is the bund
     assert.equal(pluginValid(JSON.stringify({ plugins: [{ id: 'reply', status: 'unavailable' }] }), 'reply'), false);
 });
 
-test('the system screen’s sentence names jason update when the versions differ, and nothing when they agree', () => {
-    assert.equal(versionsDifferSentence('0.34.0-rc.1', '0.34.0-rc.1'), null);
-    assert.equal(versionsDifferSentence(null, '0.34.0-rc.1'), null);
-    // The runtime reports its build after a plus, as the executable the desktop carries does; that is the one version.
-    assert.equal(versionsDifferSentence('0.34.0-rc.1+14315ba2bcc0ac52ba8eeebbd1b52d9306913d5e', '0.34.0-rc.1'), null);
-    assert.notEqual(versionsDifferSentence('0.34.0-rc.2+14315ba2', '0.34.0-rc.1'), null);
-    const sentence = versionsDifferSentence('0.33.0', '0.34.0-rc.1') ?? '';
+test('the system screen’s sentence names jason update when another installation’s runtime differs, and nothing when they agree', () => {
+    for (const ours of [false, true]) {
+        assert.equal(versionsDifferSentence('0.34.0-rc.1', '0.34.0-rc.1', ours), null);
+        assert.equal(versionsDifferSentence(null, '0.34.0-rc.1', ours), null);
+        // The runtime reports its build after a plus, as the executable the desktop carries does; that is the one version.
+        assert.equal(versionsDifferSentence('0.34.0-rc.1+14315ba2bcc0ac52ba8eeebbd1b52d9306913d5e', '0.34.0-rc.1', ours), null);
+        assert.notEqual(versionsDifferSentence('0.34.0-rc.2+14315ba2', '0.34.0-rc.1', ours), null);
+    }
+    const sentence = versionsDifferSentence('0.33.0', '0.34.0-rc.1', false) ?? '';
     assert.match(sentence, /0\.33\.0/);
     assert.match(sentence, /0\.34\.0-rc\.1/);
     assert.match(sentence, /`jason update`/);
+    assert.doesNotMatch(sentence, /Check for Updates/);
+});
+
+test('the system screen’s sentence names Check for Updates when the runtime is the desktop’s own, which jason update refuses to change', () => {
+    const sentence = versionsDifferSentence('0.35.0', '0.34.0', true) ?? '';
+    assert.match(sentence, /0\.35\.0/);
+    assert.match(sentence, /0\.34\.0/);
+    assert.match(sentence, /Check for Updates…/);
+    assert.doesNotMatch(sentence, /jason update/);
 });
 
 test('a log names a CLI verb by its closed list, never by its arguments', () => {
