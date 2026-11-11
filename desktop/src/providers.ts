@@ -14,15 +14,37 @@ export interface SecretBox {
     isEncryptionAvailable(): boolean;
     encryptString(text: string): Buffer;
     decryptString(encrypted: Buffer): string;
+    /** Linux only: which password manager the encryption's key is kept by. */
+    getSelectedStorageBackend?(): string;
+}
+
+/** What a provider-key card says on Linux when the session offers no keyring. */
+export const noKeyring =
+    'This session offers no keyring (GNOME Keyring or KWallet) to the desktop, so the key was not kept. Start one in your session and enter the key again.';
+
+/**
+ * Whether the box keeps its key with a password manager. On Linux the pinned Electron's `electron.d.ts` says
+ * `getSelectedStorageBackend()` returns `basic_text` "When the desktop environment is not recognised or if the following
+ * command line flag is provided `--password-store="basic"`", where the key is a fixed one rather than a keyring's, and
+ * `unknown` "When the function is called before app has emitted the `ready` event". Neither keeps a key safe, so on Linux
+ * a key is neither kept nor read under them, nor under a box that names no backend at all. Elsewhere the question does not
+ * arise.
+ */
+function keyringHeld(box: SecretBox, platform: NodeJS.Platform): boolean {
+    if (platform !== 'linux') return true;
+    const backend = box.getSelectedStorageBackend?.();
+    return backend !== undefined && backend !== 'basic_text' && backend !== 'unknown';
 }
 
 export class ProviderKeys {
     #file: string;
     #box: SecretBox;
+    #platform: NodeJS.Platform;
 
-    constructor(file: string, box: SecretBox) {
+    constructor(file: string, box: SecretBox, platform: NodeJS.Platform = process.platform) {
         this.#file = file;
         this.#box = box;
+        this.#platform = platform;
     }
 
     #read(): Record<string, string> {
@@ -48,6 +70,7 @@ export class ProviderKeys {
 
     /** Which providers have a key stored. */
     stored(): string[] {
+        if (!keyringHeld(this.#box, this.#platform)) return [];
         return Object.keys(this.#read()).filter((id) => keyProvider(id) !== undefined);
     }
 
@@ -61,6 +84,7 @@ export class ProviderKeys {
             this.#write(entries);
             return 'removed';
         }
+        if (!keyringHeld(this.#box, this.#platform)) throw new Refused(noKeyring);
         if (!this.#box.isEncryptionAvailable()) {
             throw new Refused('This system offers no encrypted storage to the desktop, so the key was not kept.');
         }
@@ -71,6 +95,7 @@ export class ProviderKeys {
 
     /** A provider's key, for the agent host's environment and nothing else. */
     keyFor(providerId: string): string | undefined {
+        if (!keyringHeld(this.#box, this.#platform)) return undefined;
         const entry = this.#read()[providerId];
         if (entry === undefined) return undefined;
         try {

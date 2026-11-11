@@ -258,7 +258,7 @@ async function run(): Promise<void> {
     void desk.readAutostart();
     updates?.start();
     let runtimeVersion: string | null = null;
-    const keys = new ProviderKeys(paths.providerKeys, safeStorage);
+    const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);
     // One runner for the Connect cards and the chat, so a listing and a turn share one read of Claude Code's version.
     const programs = sharingVersionReads(programsOn(env, version));
     registerSetup(
