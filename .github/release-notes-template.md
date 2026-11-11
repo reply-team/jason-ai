@@ -74,7 +74,9 @@ Rosetta where the release's runner has it; the test suite does not run on an Int
 
 On Linux, install the deb with `sudo apt install ./jason-desktop-linux-x64.deb`; it puts Jason in `/opt/Jason` and
 in the applications menu. Or make the AppImage executable, `chmod +x jason-desktop-linux-x64.AppImage`, and run it
-from wherever you keep it; it is built on the AppImage runtime that needs no libfuse2. Neither is signed, and neither is
+from wherever you keep it; it is built on the AppImage runtime that needs no libfuse2. Jason never runs without
+Chromium's sandbox: where the system does not let the AppImage use it, the AppImage says so and does not start, and the
+deb is the package to install. Neither is signed, and neither is
 the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file this release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. The `jason` they carry needs the ICU

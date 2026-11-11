@@ -150,6 +150,9 @@ What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), 
   the one an update kept to go back to, one something set up still names, and one the running runtime was started
   from. No folder of the mount reaches what the desktop starts: the PATH and the libraries it hands on are the
   session's.
+- Jason never runs without Chromium's sandbox. An AppImage's launcher, which electron-builder writes, adds
+  `--no-sandbox` wherever the system refuses unprivileged user namespaces; a start that carries it, on any platform,
+  says so and quits, and an AppImage's names the deb to install instead (`src/sandbox.ts`).
 - Updates come to the AppImage and to the deb. An AppImage update keeps the AppImage file itself under
   `<data>/desktop/rollback/<version>/`; a deb update keeps no copy, and if the new version does not start, the page names
   the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says
