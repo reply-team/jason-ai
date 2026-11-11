@@ -95,9 +95,9 @@ public static class AutostartArtifacts
     /// </param>
     /// <param name="searchPath">
     /// The search path of the process that registers, which a LaunchAgent carries: launchd starts an agent on a search
-    /// path of its own, <c>/usr/bin:/bin:/usr/sbin:/sbin</c>, which holds no program a package manager installed. Null or
-    /// empty, the agent carries none. The other two platforms ignore it: a logon task starts with the account's own
-    /// environment, and a user unit's is the user manager's.
+    /// path of its own, <c>/usr/bin:/bin:/usr/sbin:/sbin</c>, which holds no program a package manager installed; and so
+    /// does a user unit, since the user manager's environment reads no shell profile. Null or empty, neither carries
+    /// one. A logon task ignores it: it starts with the account's own environment.
     /// </param>
     public static AutostartRegistration Compose(
         AutostartPlatform platform,
@@ -120,7 +120,7 @@ public static class AutostartArtifacts
         {
             AutostartPlatform.Windows => Windows(line, dataDirectory, account),
             AutostartPlatform.MacOs => MacOs(line, home, string.IsNullOrEmpty(searchPath) ? null : searchPath),
-            AutostartPlatform.Linux => Linux(line, home),
+            AutostartPlatform.Linux => Linux(line, home, string.IsNullOrEmpty(searchPath) ? null : searchPath),
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "There is nothing to compose for a platform that cannot register anything."),
         };
     }
@@ -185,7 +185,12 @@ public static class AutostartArtifacts
     public static string? SearchPathIn(AutostartPlatform platform, string artifact)
     {
         ArgumentNullException.ThrowIfNull(artifact);
-        return platform == AutostartPlatform.MacOs ? PathFromPlist(artifact) : null;
+        return platform switch
+        {
+            AutostartPlatform.MacOs => PathFromPlist(artifact),
+            AutostartPlatform.Linux => PathFromUnit(artifact),
+            _ => null,
+        };
     }
 
     /// <summary>What gets registered, whatever the platform: this program, told to be the runtime.</summary>
@@ -324,11 +329,13 @@ public static class AutostartArtifacts
 
     /// <summary>
     /// A user unit, enabled into the account's own default target. <c>Restart=no</c> for the same reason the
-    /// plist has no <c>KeepAlive</c>: nothing here supervises anything.
+    /// plist has no <c>KeepAlive</c>: nothing here supervises anything. Given a search path, it carries it as the
+    /// runtime's <c>PATH</c> (<see cref="SystemdPath"/>); given none, it has no environment line.
     /// </summary>
-    private static AutostartRegistration Linux(IReadOnlyList<string> line, string home)
+    private static AutostartRegistration Linux(IReadOnlyList<string> line, string home, string? searchPath)
     {
         var unitPath = ArtifactPath(AutostartPlatform.Linux, home, string.Empty);
+        var environment = searchPath is null ? string.Empty : "\nEnvironment=" + SystemdPath(searchPath);
         var unit = $"""
             [Unit]
             Description=The Jason runtime
@@ -336,7 +343,7 @@ public static class AutostartArtifacts
             After=default.target
 
             [Service]
-            Type=simple
+            Type=simple{environment}
             ExecStart={Systemd(line)}
             Restart=no
 
@@ -359,7 +366,8 @@ public static class AutostartArtifacts
                 ["systemctl", "--user", "daemon-reload"],
             ],
             QueryFor(AutostartPlatform.Linux, string.Empty),
-            line);
+            line,
+            searchPath);
     }
 
     /// <summary>One command line out of its words: a word with a space in it keeps its own quotes.</summary>
@@ -476,6 +484,38 @@ public static class AutostartArtifacts
         var settings = new System.Xml.XmlReaderSettings { DtdProcessing = System.Xml.DtdProcessing.Ignore, XmlResolver = null };
         using var reader = System.Xml.XmlReader.Create(new StringReader(artifact), settings);
         return XDocument.Load(reader);
+    }
+
+    /// <summary>
+    /// The search path as a unit's <c>Environment=</c> spells it: the whole assignment in double quotes, so an entry with
+    /// a space in it stays one word, and a per-cent doubled as in the command line. A double quote, a backslash and a
+    /// control character have no spelling the unit and the reader below would both agree on, so a search path carrying
+    /// one is refused by name, as a double quote in the command line is.
+    /// </summary>
+    private static string SystemdPath(string searchPath)
+    {
+        var entry = searchPath.Split(':').FirstOrDefault(part => part.Any(character => character is '"' or '\\' || char.IsControl(character)));
+        if (entry is not null)
+        {
+            throw new AutostartException(
+                AutostartCodes.Refused,
+                $"A systemd unit cannot carry a double quote, a backslash or a control character in the PATH it gives the runtime, and there is one in '{entry}'. "
+                + "Register from a terminal whose PATH has no such entry, or start the runtime yourself with `jason runtime start`.");
+        }
+
+        return "\"PATH=" + searchPath.Replace("%", "%%", StringComparison.Ordinal) + "\"";
+    }
+
+    /// <summary>The <c>PATH</c> a unit's <c>Environment=</c> line carries, with the doubling undone; null where it carries none.</summary>
+    private static string? PathFromUnit(string artifact)
+    {
+        const string Start = "Environment=\"PATH=";
+        var line = artifact
+            .Split('\n')
+            .Select(text => text.Trim())
+            .FirstOrDefault(text => text.StartsWith(Start, StringComparison.Ordinal) && text.EndsWith('"'));
+        var path = line?[Start.Length..^1].Replace("%%", "%", StringComparison.Ordinal);
+        return string.IsNullOrEmpty(path) ? null : path;
     }
 
     private static IReadOnlyList<string> FromUnit(string artifact)

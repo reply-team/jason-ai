@@ -458,7 +458,11 @@ internal sealed class SystemdRegistrar : IAutostartRegistrar
         var (exit, output, error) = AutostartRegistrars.Run(AutostartArtifacts.QueryFor(AutostartPlatform.Linux, string.Empty));
         var answer = AutostartRegistrars.Interpret(AutostartPlatform.Linux, exit, output, error);
 
-        return new AutostartState(answer.Registered, AutostartArtifacts.Read(AutostartPlatform.Linux, held), path);
+        return new AutostartState(
+            answer.Registered,
+            AutostartArtifacts.Read(AutostartPlatform.Linux, held),
+            path,
+            AutostartArtifacts.SearchPathIn(AutostartPlatform.Linux, held));
     }
 
     public void Apply(AutostartRegistration registration)
