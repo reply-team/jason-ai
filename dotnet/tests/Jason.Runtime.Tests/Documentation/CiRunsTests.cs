@@ -1413,6 +1413,26 @@ public class CiRunsTests
     }
 
     /// <summary>
+    /// The download address's short paths, <c>get/</c>, are tested by Node's own runner in the desktop job, which already
+    /// has a node of 22 or later: a step of its own, in its own folder, after the node is set up, which neither fails
+    /// quietly nor is skipped. <c>get/</c> has no dependencies, so nothing is installed for it. Pinned by its text: node
+    /// may be absent where these tests run.
+    /// </summary>
+    [Fact]
+    public void The_download_address_is_tested_by_node_in_the_desktop_job()
+    {
+        var steps = Steps(Mapping(Jobs(), "desktop"));
+        var testing = Assert.Single(steps, step => Scalar(step, "name") == "The download address's tests");
+        Assert.Equal("node --test", Scalar(testing, "run")?.Trim());
+        Assert.Equal("get", Scalar(testing, "working-directory"));
+        Assert.Null(Node(testing, "if"));
+        Assert.Null(Node(testing, "continue-on-error"));
+
+        var node = steps.FindIndex(step => Scalar(step, "uses")?.StartsWith("actions/setup-node@", StringComparison.Ordinal) == true);
+        Assert.InRange(steps.IndexOf(testing), node + 1, steps.Count - 1);
+    }
+
+    /// <summary>
     /// Every plugin package's JavaScript is parsed by node, on the one runner that has it, before the runtime is built and
     /// anything of the UI is installed, so a syntax error is reported in seconds rather than after a full build: the files
     /// are found under <c>plugins/*/</c>, so a package joins by being there, and the step names none. Pinned by its text:

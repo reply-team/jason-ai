@@ -43,3 +43,7 @@ desktop/lib/
 desktop/bundle/
 desktop/bundles/
 desktop/dist/
+
+# The download address's deployment: wrangler's state, and the configuration copy that carries identifiers
+get/.wrangler/
+get/wrangler.toml

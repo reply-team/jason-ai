@@ -547,7 +547,8 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// CI's desktop job builds the Linux packages as a release does, through the same action, after its node tests and on
     /// the run's own SDK, at a candidate's version: the release this tree is on the way to with a ci word and the run's
-    /// number, since a package is never built at the -dev version the tree carries. It adds steps and no job.
+    /// number, since a package is never built at the -dev version the tree carries. It adds steps and no job. The
+    /// download address's tests run between the desktop's node tests and the SDK, on the node the job set up.
     /// </summary>
     [Fact]
     public void Ci_s_desktop_job_builds_the_linux_packages_as_a_release_does()
@@ -558,11 +559,11 @@ public partial class ReleaseWorkflowTests
         var steps = JobSteps(job).ToList();
         var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses")).ToList();
         Assert.Equal(
-            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Node tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does"],
+            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does"],
             names);
-        Assert.Equal("${{ needs.version.outputs.sdk }}", Scalar(Mapping(steps[5], "with"), "sdk-version"));
-        var with = Mapping(steps[6], "with");
-        Assert.Equal("./.github/actions/package", Scalar(steps[6], "uses"));
+        Assert.Equal("${{ needs.version.outputs.sdk }}", Scalar(Mapping(steps[6], "with"), "sdk-version"));
+        var with = Mapping(steps[7], "with");
+        Assert.Equal("./.github/actions/package", Scalar(steps[7], "uses"));
         Assert.Equal("linux-x64", Scalar(with, "rid"));
         Assert.Equal("${{ needs.version.outputs.release }}-ci.${{ github.run_number }}", Scalar(with, "version"));
         Assert.Equal("true", Scalar(with, "desktop"));
