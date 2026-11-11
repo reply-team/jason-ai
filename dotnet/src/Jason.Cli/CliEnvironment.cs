@@ -143,6 +143,16 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             : Environment.GetEnvironmentVariable(ExecutionEnvironment.AttemptIdVariable);
 
     /// <summary>
+    /// Whether this call is confined (<see cref="Confinement"/>): <c>JASON_CONFINED</c> holds a value that is not empty,
+    /// read from <see cref="Variables"/> when they are handed in, from the process otherwise.
+    /// </summary>
+    public bool Confined() =>
+        Confinement.Confines(
+            Variables is { } variables
+                ? variables.GetValueOrDefault(Confinement.Variable)
+                : Environment.GetEnvironmentVariable(Confinement.Variable));
+
+    /// <summary>
     /// The folder the command was typed in, or null where the platform cannot name it — on Linux and macOS, a folder
     /// deleted under the shell standing in it — which finds nothing, as everywhere a verb is given no folder: a verb that
     /// does not need one, <c>jason status</c> above all, is never ended by it before it starts.

@@ -1,40 +1,48 @@
-import type { Contact } from '../../api/types';
+import { Fragment, type ReactNode } from 'react';
+import type { Channel, Contact } from '../../api/types';
 import { place, shortDate } from '../../time/format';
 import { channelName } from './labels';
 
-type Props = { person: Contact; now: Date; zone: string };
+type Props = {
+    person: Contact;
+    now: Date;
+    zone: string;
+    /** What a screen adds to a channel's row, after its value. */
+    aside?: ((channel: Channel) => ReactNode) | undefined;
+};
 
 function value(v: unknown): string {
     return typeof v === 'string' ? v : JSON.stringify(v);
 }
 
 /** The person's record: how to reach them, the facts, custom fields and what providers call them, in one grid. */
-export function Details({ person, now, zone }: Props) {
+export function Details({ person, now, zone, aside }: Props) {
     const here = person.time_zone ? place(person.time_zone, now) : null;
     const pins = person.external_ids ?? [];
     const custom = Object.entries(person.custom ?? {});
     return (
-        <div class="panel-body">
-            <div class="section">
+        <div className="panel-body">
+            <div className="section">
                 <h3>Channels</h3>
-                <dl class="facts">
+                <dl className="facts">
                     {person.channels.map((c) => (
-                        <>
-                            <dt key={`${c.channel}-${c.value}-k`}>{channelName(c.channel)}</dt>
-                            <dd key={`${c.channel}-${c.value}-v`}>
+                        <Fragment key={`${c.channel}-${c.value}`}>
+                            <dt>{channelName(c.channel)}</dt>
+                            <dd>
                                 {c.value}
                                 {c.primary && (
                                     <>
                                         {' '}
-                                        <span class="muted">primary</span>
+                                        <span className="muted">primary</span>
                                     </>
                                 )}
+                                {aside?.(c)}
                             </dd>
-                        </>
+                        </Fragment>
                     ))}
                 </dl>
             </div>
-            <dl class="facts">
+            <dl className="facts">
                 <dt>Company</dt>
                 <dd>{person.company ?? '—'}</dd>
                 <dt>Title</dt>
@@ -49,9 +57,9 @@ export function Details({ person, now, zone }: Props) {
                 )}
             </dl>
             {custom.length > 0 && (
-                <div class="section">
+                <div className="section">
                     <h3>Custom fields</h3>
-                    <dl class="facts">
+                    <dl className="facts">
                         {custom.map(([k, v]) => (
                             <>
                                 <dt key={`${k}-k`}>{k}</dt>
@@ -62,19 +70,19 @@ export function Details({ person, now, zone }: Props) {
                 </div>
             )}
             {pins.length > 0 && (
-                <div class="section">
+                <div className="section">
                     <h3>Provider ids</h3>
-                    <dl class="facts">
+                    <dl className="facts">
                         {pins.map((pin) => (
                             <>
                                 <dt key={`${pin.plugin_id}-${pin.kind}-k`}>
                                     {pin.plugin_id} {pin.kind}
                                 </dt>
                                 <dd key={`${pin.plugin_id}-${pin.kind}-v`}>
-                                    <span class="mono">{pin.value}</span> · pinned{' '}
+                                    <span className="mono">{pin.value}</span> · pinned{' '}
                                     {shortDate(new Date(pin.recorded_at), zone, now)}
                                     {pin.diverged_value && pin.diverged_at && (
-                                        <span class="muted">
+                                        <span className="muted">
                                             {' '}
                                             · later answered {pin.diverged_value} on{' '}
                                             {shortDate(new Date(pin.diverged_at), zone, now)}
@@ -86,7 +94,7 @@ export function Details({ person, now, zone }: Props) {
                     </dl>
                 </div>
             )}
-            <details class="fold">
+            <details className="fold">
                 <summary>Raw contact record</summary>
                 <pre>{JSON.stringify(person, null, 2)}</pre>
             </details>

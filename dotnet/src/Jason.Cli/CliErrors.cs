@@ -32,6 +32,12 @@ public static class CliErrors
     /// <summary>An uninstall understood the command and declined to perform it.</summary>
     public const string UninstallRefused = "uninstall_refused";
 
+    /// <summary>
+    /// This jason is the one the desktop application carries, so <c>jason uninstall</c> would delete it out of the
+    /// application: nothing was read or removed, and the application is removed the way the system removes one.
+    /// </summary>
+    public const string UninstallCarriedByDesktop = "uninstall_carried_by_desktop";
+
     /// <summary>The log directory exists and <c>jason logs</c> could not read it: nothing was shown rather than less.</summary>
     public const string LogsUnreadable = "logs_unreadable";
 

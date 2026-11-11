@@ -67,31 +67,31 @@ function groups({ tab, items, now, zone }: Props): Group[] {
 export function WorkItemList(props: Props) {
     const { tab, filters, selected, more } = props;
     return (
-        <div class="rows">
+        <div className="rows">
             {groups(props).map((group, index) => (
                 <div key={group.title}>
-                    <div class={`group${index === 0 ? ' first' : ''}`}>{group.title}</div>
+                    <div className={`group${index === 0 ? ' first' : ''}`}>{group.title}</div>
                     {group.items.map((item) => {
                         const m = mark(item.status);
                         return (
                             <a
                                 key={item.id}
-                                class={`row${selected === item.id ? ' selected' : ''}`}
+                                className={`row${selected === item.id ? ' selected' : ''}`}
                                 href="#"
                                 onClick={(event) => {
                                     event.preventDefault();
                                     navigate({ screen: 'workitems', tab, id: item.id, filters });
                                 }}
                             >
-                                <span class={`mark ${m.kind}`}>{m.glyph}</span>
-                                <span class="what">
-                                    <span class="name">
+                                <span className={`mark ${m.kind}`}>{m.glyph}</span>
+                                <span className="what">
+                                    <span className="name">
                                         {what(item)}
                                         {item.contact_name ? ` · ${item.contact_name}` : ''}
                                     </span>
-                                    <span class="in">{item.campaign_name}</span>
+                                    <span className="in">{item.campaign_name}</span>
                                 </span>
-                                <span class="meta">
+                                <span className="meta">
                                     <span>{group.note(item)}</span>
                                     {group.time && <time>{group.time(item)}</time>}
                                 </span>

@@ -4,6 +4,7 @@ using System.Text.Json;
 using Jason.Cli;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
 using Jason.Runtime.Tests;
 
@@ -94,6 +95,36 @@ public class EndToEndTests
         var logs = Logs(paths);
         Assert.Contains(RolesRefusal, logs, StringComparison.Ordinal);
         Assert.DoesNotContain(sentinel, logs, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The runtime is indifferent to <c>JASON_CONFINED</c>: a runtime run in the foreground with the variable in its own
+    /// environment, as a person's shell or a host could hand it, starts, answers status and stops as one without it.
+    /// Every start the CLI makes drops the variable, so this is the row that hands it to the runtime itself.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_run_in_the_foreground_with_the_confining_variable_starts_answers_and_stops()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "jason-e2e", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var paths = new JasonPaths(root);
+
+        using var runtime = new RuntimeProcess(root, environment: new Dictionary<string, string> { [Confinement.Variable] = "1" });
+        try
+        {
+            var descriptor = await WaitForDescriptorAsync(paths, expectedNot: null, runtime);
+
+            var (exit, output) = await StatusAsync(paths);
+
+            Assert.Equal(ExitCodes.Success, exit);
+            Assert.Equal(descriptor.InstanceId, JsonSerializer.Deserialize<SystemInfoResponse>(output, JasonJson.Options)!.InstanceId);
+        }
+        finally
+        {
+            await runtime.StopAsync();
+        }
+
+        Assert.True(runtime.HasExited);
     }
 
     /// <summary>
@@ -266,7 +297,8 @@ public class EndToEndTests
 
         /// <param name="dataDirectory">The runtime's data directory.</param>
         /// <param name="port">The port it is configured with; null for one the OS chooses, as every spawned test runtime has.</param>
-        public RuntimeProcess(string dataDirectory, int? port = null)
+        /// <param name="environment">Variables set in the runtime's own environment beside the offline ones.</param>
+        public RuntimeProcess(string dataDirectory, int? port = null, IReadOnlyDictionary<string, string>? environment = null)
         {
             var start = new ProcessStartInfo("dotnet")
             {
@@ -281,6 +313,11 @@ public class EndToEndTests
             if (port is { } configured)
             {
                 start.Environment[TestRuntimeEnvironment.PortVariable] = configured.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+            {
+                start.Environment[name] = value;
             }
 
             _process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the runtime process.");

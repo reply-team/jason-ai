@@ -171,7 +171,7 @@ plugin author needs is here:
 | `docs/` | What Jason is and who it is for, the install manual, the wiring check, the plugin author's guide, the browser UI, the operation contracts, and the Runtime API's recorded exchanges under `docs/api/` |
 | `examples/` | Cases of Jason applied to outbound work, one folder each, and the template a case is written from |
 | `install/` | The install scripts every release attaches, and the update feed's schema |
-| `ui/` | The browser UI the runtime serves: a Preact client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
+| `ui/` | The browser UI the runtime serves: a React client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
 | `VERSION` | The runtime version this tree describes |
 
 The runtime's source is here too, under `dotnet/`: the runtime, its CLI and its plugin host in C#, with their tests.
@@ -241,7 +241,8 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 | migrations are applied | each plugin package this release publishes is the one installed |
 | the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
 | role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a plugin is granted a journal kind |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a route is configured |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | every plugin is granted something of each capability it asks for |
+| | a route is configured |
 | | a binding names an account |
 | | a provider CLI **you name** answers |
 | | the skill packs are deployed to an agent harness, and the files their record names are there |
@@ -269,6 +270,11 @@ or the executable its package ships, then `--version`. Which provider you use is
 be this product naming a vendor in its own sources, which it does not. In its own output it names the file the
 name resolved to and, for npm's shim, what that runs, and, whenever it read a PATH, whose it was: the CLI's,
 which the runtime's may differ from. It prints no credential — not the key, not a prefix of it, not its length.
+With `JASON_CONFINED` set, only a bare name is run, looked up in the fully qualified entries of PATH alone: relative and
+empty entries are skipped, so a working folder is never searched by name, and a value with a directory or a root in it,
+or on Windows a colon, as `C:acme` names `acme` in the current folder of drive C, is neither looked up nor started. The
+check says what it did not run and why, and names the cure: name a program on the search path, or run the check in a
+terminal. `status` answers as it always does, `ready` in its body and its usual exit code.
 
 ### When something is wrong
 
@@ -407,6 +413,16 @@ Every verb prints the exact API response as compact JSON on stdout (add `--human
 rendering). The runtime keeps its data under `~/.jason` (override with the `JASON_DATA_DIR`
 environment variable).
 
+`JASON_CONFINED`, set to any value but empty, confines the one call of the CLI it is set on, for a host that checks
+what a command reads and runs. An option that reads a file's content into a request (`--file`, `--value-file`,
+`--note-file`, `--result-file`) then takes only `-`, so the content comes by standard input, as
+`--file - < contacts.json` or a here-document, and any other value is refused before the file is opened and before
+any request, exit 1. `jason status --provider-cli <program>` runs a bare name only, found in a fully qualified entry
+of PATH. Options that name a path for another reason are not under the rule: `project link --path`, `doctor --output`,
+`export` and `import`, and `logs`, which takes no path. The variable confines the call and nothing that call starts:
+three starts drop it, a runtime it starts, the role work a runtime launches and the terminal `jason session open` opens;
+every other child inherits it, and none reads it. Unset or empty, nothing changes.
+
 A work item moves through one set of statuses: a dispatcher claims it under a lease, with at most one live
 attempt at a time, and whatever performs it reports what happened through the same API; `jason workitem get
 <id> --human` shows its attempts and how each ended.
@@ -515,7 +531,7 @@ Which plugin performs an operation for a campaign, and which account of that pro
 with that reason's own code; what ran is recorded on the attempt:
 
 ```sh
-jason route set --campaign <id> --plugin acme-provider --binding '{"workspace":"latam"}'
+jason route set --campaign <id> --plugin acme-provider --binding '{"workspace":"latam"}' --actor human:you@example.com
 jason route resolve --campaign <id> --operation list_membership.add --human
 jason route list --human
 ```

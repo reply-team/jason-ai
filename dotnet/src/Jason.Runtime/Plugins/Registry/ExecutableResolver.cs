@@ -33,6 +33,14 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
     public const int MaxVersionOutputChars = 64 * 1024;
 
     /// <summary>
+    /// What a person does about a program that is not there, in the runtime's own words: it knows no vendor's install
+    /// command, and the name it was not given is the manifest's, already in the sentence before it. A runtime started at
+    /// logon was handed the search path of the logon, not of the person's shell.
+    /// </summary>
+    private const string MissingRepair =
+        "Install the program where the runtime can see it and run `jason plugin reload`; a runtime started at logon reads no shell profile.";
+
+    /// <summary>
     /// The declared name as <see cref="ProgramLookup"/> answers for it on the runtime's own search path, worded as a
     /// plugin's problem where it answers nothing that may be started. The walk, the Windows order, the refused
     /// extensions and the reading of npm's shim are that lookup's, and the same for every program Jason starts by
@@ -65,11 +73,11 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
             ProgramLookupOutcome.NotFound when found.File is { } shim => new ManifestProblem(
                 ProblemCodes.ExecutableMissing,
                 path,
-                $"'{request.Name}' resolves to '{Path.GetFileName(shim)}', npm's shim, whose executable is not there."),
+                $"'{request.Name}' resolves to '{Path.GetFileName(shim)}', npm's shim, whose executable is not there. {MissingRepair}"),
             _ => new ManifestProblem(
                 ProblemCodes.ExecutableMissing,
                 path,
-                $"'{request.Name}' was not found on the runtime's search path."),
+                $"'{request.Name}' was not found on the runtime's search path. {MissingRepair}"),
         };
         return new ResolvedExecutable(request.Name, null, [], null, request.MinVersion, problem);
     }

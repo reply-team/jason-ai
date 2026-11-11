@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Jason.Cli.Files;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Execution;
 
 namespace Jason.Cli.Session;
 
@@ -168,7 +169,9 @@ public static class MacOpener
 /// The start a terminal is given, made at Jason's one door. On Windows no stream is redirected: the console host opens a
 /// console of its own, and what it does with redirected handles has not been read. On Linux and macOS the door's kind
 /// with all three streams redirected, so the terminal holds none of the CLI's own: a caller that captures the CLI's
-/// output (an agent's shell tool, a script) reads its end of file when the CLI exits, not when the window closes.
+/// output (an agent's shell tool, a script) reads its end of file when the CLI exits, not when the window closes. On
+/// every system the terminal is a person's own, so it never carries <c>JASON_CONFINED</c>, which confines only the CLI
+/// call it is set on.
 /// </summary>
 public static class TerminalStartInfo
 {
@@ -190,6 +193,7 @@ public static class TerminalStartInfo
         }
 
         start.WorkingDirectory = workingDirectory;
+        start.Environment.Remove(Confinement.Variable);
         return start;
     }
 }

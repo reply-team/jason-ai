@@ -742,7 +742,9 @@ public static class DoctorCommand
                                value only where the list below carries it.
               logs             the log files by name, size and time; the newest error and fatal events, at most {DoctorComposer.RecentErrors},
                                looked for in the last {Size(DoctorComposer.ErrorSearchBytes)} of the log; and the newest events of any
-                               level, at most {DoctorComposer.SliceEvents} events, read from no more than the last {Size(DoctorComposer.SliceBytes)}.
+                               level, at most {DoctorComposer.SliceEvents} events, read from no more than the last {Size(DoctorComposer.SliceBytes)}. Then the
+                               desktop application's own log, apart: desktop_files, and desktop_slice, its newest events
+                               of any level, at most {DoctorComposer.DesktopSliceEvents}, read from no more than the last {Size(DoctorComposer.DesktopSliceBytes)}.
               journal          the last {DoctorComposer.JournalWindowDays} days of the journal counted by kind, and its newest {DoctorComposer.RecentEntries} entries
                                by time, kind, ids and the actor's type — never what an entry says.
               work_items       every work item counted by kind and status, and the newest {DoctorComposer.RecentFailures} failed or expired —
@@ -753,7 +755,7 @@ public static class DoctorCommand
               journal_entries  only with --include-journal: the journal's entries whole, newest first.
             The journal, the work items and the subscribed kinds are read {DoctorComposer.PageSize} to a page and never past {DoctorComposer.MaxPages} pages.
 
-            Bounds, in the bundle's own bytes: recent_errors at most {Size(DoctorComposer.RecentErrorsBytes)} and the slice at most {Size(DoctorComposer.SliceBytes)}, each
+            Bounds, in the bundle's own bytes: recent_errors at most {Size(DoctorComposer.RecentErrorsBytes)}, the slice at most {Size(DoctorComposer.SliceBytes)} and desktop_slice at most {Size(DoctorComposer.DesktopSliceBytes)}, each
             keeping the newest events; journal_entries at most {Size(DoctorComposer.JournalEntriesBytes)}, keeping the newest entries; the rest
             of every section at most {Size(DoctorComposer.SectionBytes)}; and the header at most {Size(DoctorComposer.HeaderBytes)}, its values_carried cut from the end to
             fit, which values_carried_truncated says. A section larger than its budget is written as omitted:
@@ -764,7 +766,7 @@ public static class DoctorCommand
             {DoctorComposer.RuntimeDidNotAnswer}, or {DoctorComposer.NotAttempted} when a read before it timed out — after one timeout nothing more
             is asked. A read that stopped partway leaves incomplete and its code: {CliErrors.RuntimeUnreachable}, {DoctorComposer.TimedOut},
             {CliErrors.Unauthorized}, {DoctorComposer.UnreadableAnswer}, {CliErrors.LogsUnreadable}, or the runtime's own code. A list cut short
-            says so: files_truncated, recent_errors_truncated, slice_truncated, plugins_truncated,
+            says so: files_truncated, recent_errors_truncated, slice_truncated, desktop_files_truncated, desktop_slice_truncated, plugins_truncated,
             problem_codes_truncated, subscriptions_truncated, values_carried_truncated, truncated and recent_failures_truncated — the last
             wherever failures may exist that were not read: past the items read, or where their source was cut or
             stopped partway, whatever the count listed.

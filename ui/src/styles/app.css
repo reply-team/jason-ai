@@ -1,6 +1,7 @@
 @import '@fontsource-variable/inter';
 @import './tokens.css';
 @import './components.css';
+@import './dark.css';
 
 /* The bundled Inter registers as "Inter Variable"; tokens.css stays byte-identical to the design source. */
 :root {
@@ -116,4 +117,48 @@
     .sys {
         grid-template-columns: 1fr;
     }
+}
+
+.muted {
+    color: var(--text-muted);
+}
+
+.settings,
+.chat-elsewhere {
+    padding: var(--space-6);
+    max-width: 680px;
+}
+.settings h1,
+.chat-elsewhere h1 {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    margin: 0 0 var(--space-5);
+}
+.chat-elsewhere p {
+    font-size: var(--text-md);
+    line-height: var(--leading);
+}
+.settings section {
+    padding: var(--space-4) 0;
+    border-top: 1px solid var(--border);
+}
+.settings h2 {
+    font-size: var(--text-md);
+    font-weight: 600;
+    margin: 0 0 var(--space-3);
+}
+.settings .choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+.settings .choices button[aria-pressed='true'] {
+    border-color: var(--accent);
+    color: var(--accent-text);
+}
+/* Settings: the icon beside each section's heading, set on the line of its words; the console shows this screen
+   under the same rule. */
+.settings-icon {
+    vertical-align: -2px;
+    color: var(--accent-text);
 }

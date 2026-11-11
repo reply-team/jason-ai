@@ -1,0 +1,22 @@
+{
+  "operation": "workitem.create",
+  "case": "researcher-archived",
+  "request": {
+    "campaign_id": "cmp_2",
+    "kind": "ai_role",
+    "role": "researcher",
+    "contact_id": "cnt_1",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "campaign_archived",
+      "message": "Campaign 'cmp_2' is archived; only journal entries can still be appended.",
+      "retryable": false
+    }
+  }
+}

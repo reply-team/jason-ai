@@ -1,4 +1,4 @@
-import { cleanup } from '@testing-library/preact';
+import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { takeUnanswered } from './fake-api';
 

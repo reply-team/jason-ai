@@ -24,19 +24,19 @@ export function Chips<T extends string>({
             key={chip.key}
             type="button"
             title={chip.title}
-            class={`chip${chip.key === on ? ' on' : ''}`}
+            className={`chip${chip.key === on ? ' on' : ''}`}
             aria-pressed={chip.key === on}
             onClick={() => onChoose(chip.key)}
         >
             {chip.label}
-            {chip.count != null && <span class="n"> {number.format(chip.count)}</span>}
+            {chip.count != null && <span className="n"> {number.format(chip.count)}</span>}
         </button>
     ));
     return row === 'timeline' ? (
-        <div class="chips" role="group" aria-label={label}>
+        <div className="chips" role="group" aria-label={label}>
             {buttons}
         </div>
     ) : (
-        <div class="pfilters">{buttons}</div>
+        <div className="pfilters">{buttons}</div>
     );
 }

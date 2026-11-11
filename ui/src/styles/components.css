@@ -448,6 +448,25 @@ details.fold pre {
 .pfilters .chip.on .n { color: var(--text-secondary); }
 .pfilters .check { margin-left: auto; font-size: var(--text-sm); }
 
+/* A campaign's tabs: a narrow panel scrolls them rather than wrapping, and inside the desktop Chat comes first, drawn as a tab; Sequence ends with What happened, its journal; Inbox lists each person who replied with their threads; Results draws its four figures as tiles; Settings puts the status moves above the record. */
+.campaign-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.campaign-tabs .tabs { flex: 1; min-width: 0; border-bottom: 0; overflow-x: auto; scrollbar-width: thin; }
+.campaign-tabs-chat { flex: none; height: 36px; margin-left: var(--space-5); padding: 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-secondary); font: inherit; font-weight: 500; cursor: pointer; }
+.campaign-tabs-chat:hover { color: var(--text); }
+.campaign-tabs-chat + .tabs { padding-left: var(--space-4); }
+.campaign-tabs .tabs a { flex: none; white-space: nowrap; }
+.campaign-tabs-happened > .group:first-child { color: var(--text); font-weight: 600; }
+.campaign-tabs-settings { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-5) 0; }
+.campaign-tabs-inbox { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-4) var(--space-5); }
+.campaign-tabs-inbox-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.campaign-tabs-inbox-head .hint, .campaign-tabs-inbox-untied .s { color: var(--text-muted); font-size: var(--text-sm); }
+.campaign-tabs-inbox-untied { display: flex; align-items: baseline; gap: var(--space-3); }
+.campaign-tabs-inbox-untied .s { flex: 1; }
+.campaign-tabs-results { padding: var(--space-4) var(--space-5); }
+.campaign-tabs-results .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.campaign-tabs-results .tile, .campaign-tabs-results .tile:hover { cursor: default; background: var(--bg); }
+@media (max-width: 640px) { .campaign-tabs-results .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 /* The people an Add people dialog will add, each with its way out. */
 .picked { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
 .picked .badge .iconbtn { width: 16px; height: 16px; font-size: 12px; }
@@ -592,3 +611,32 @@ button.row:hover .what .cue { text-decoration: underline; }
   .listing .head { padding: var(--space-3) var(--space-3) 0; }
   .listing .rows .row, .listing .group { padding-left: var(--space-3); padding-right: var(--space-3); }
 }
+
+/* The person panel, beside People's list: its Sequences rows, its forms and its acts. */
+.person-panel .sequences { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.person-panel .sequences li { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.person-panel .sequences li .name { font-weight: 500; }
+.person-panel .sequences .acts { display: inline-flex; gap: var(--space-1); margin-left: auto; }
+.person-panel .person-edit { display: flex; flex-direction: column; gap: var(--space-3); }
+.person-panel .person-edit .channels { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.person-panel .person-edit .channels li { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.person-panel .person-edit .channels .input { flex: 1 1 12rem; min-width: 0; }
+.person-panel .person-edit .provider { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.person-panel .person-edit .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.person-panel .register { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-left: var(--space-2); }
+.person-panel .register .ask,
+.person-panel .sequences .ask { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); width: 100%; margin-top: var(--space-1); }
+.person-panel .register .ask .input,
+.person-panel .sequences .ask .input { flex: 1 1 12rem; min-width: 0; }
+.person-panel .research { display: flex; flex-direction: column; gap: var(--space-3); }
+.person-panel .research .ask { display: flex; flex-direction: column; gap: var(--space-2); }
+.person-panel .research .ask .where { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.person-panel .research .finding { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.person-panel .research .finding dl { margin: 0; }
+.person-panel .research .finding dt { font-weight: 500; }
+.person-panel .research .finding dd { margin: 0 0 var(--space-2); }
+.person-panel .research .said { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.person-panel .panel-actions:has(.whole) { flex-wrap: wrap; }
+.person-panel .whole { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.person-panel .whole .ask { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); width: 100%; }
+.person-panel .whole .ask .input { flex: 1 1 12rem; min-width: 0; }

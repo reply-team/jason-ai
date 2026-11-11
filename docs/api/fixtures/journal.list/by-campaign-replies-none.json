@@ -1,0 +1,16 @@
+{
+  "operation": "journal.list",
+  "case": "by-campaign-replies-none",
+  "request": {
+    "campaign_id": "cmp_2",
+    "kinds": [
+      "inbound_reply_observed"
+    ],
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

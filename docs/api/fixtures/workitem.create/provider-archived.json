@@ -1,0 +1,31 @@
+{
+  "operation": "workitem.create",
+  "case": "provider-archived",
+  "request": {
+    "campaign_id": "cmp_2",
+    "kind": "provider_op",
+    "operation": "contact.update",
+    "contact_id": "cnt_1",
+    "context": {
+      "input": {
+        "channel": "email",
+        "fields": {
+          "title": "VP Revenue"
+        }
+      }
+    },
+    "reason": "Promoted in October.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "campaign_archived",
+      "message": "Campaign 'cmp_2' is archived; only journal entries can still be appended.",
+      "retryable": false
+    }
+  }
+}

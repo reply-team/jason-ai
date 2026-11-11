@@ -1,0 +1,13 @@
+{
+  "operation": "suppression.list",
+  "case": "mateo-email-clear",
+  "request": {
+    "channel": "email",
+    "value": "mateo@soluna.example"
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

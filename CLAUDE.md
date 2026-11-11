@@ -14,8 +14,11 @@ repository is for changing Jason.
   `tests/` (one xUnit project per source project).
 - `plugins/` — plugin marketplace. `skills/runtime/`, `skills/business/` — skill packs. `docs/` —
   maintained documentation only.
-- `ui/` — the browser UI: a Preact client of the Runtime API, built into the release asset `jason-ui.zip`;
+- `ui/` — the browser UI: a React client of the Runtime API, built into the release asset `jason-ui.zip`;
   `ui/README.md` says how it is built and tested.
+- `desktop/` — the desktop application: one more client of the installation, through the CLI and the Runtime API. A
+  release publishes from it the Windows installer, a disk image and an update archive for each Mac architecture, the
+  two update feeds and the block maps, ten files in all; `desktop/README.md` says how it is built and tested.
 - `LICENSE` — MIT, for everything in the repository, the runtime included; every archive carries it as `LICENSE`, beside
   the executable and `THIRD-PARTY-NOTICES`.
 - `global.json` at the root pins the SDK; run every command from the repository root.
@@ -60,9 +63,11 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   absent the runtime is unchanged (`UiGuardTests`). A UI token has the run token's rights: one level of trust, the
   machine's user. The UI is tested in three layers (`ui/README.md`, "Testing"): unit tests of dense logic in Node, screen tests against the exchanges the runtime's own tests recorded under
   `docs/api/fixtures/` (`ApiFixtures`, held one-to-one with the files and rewritten only under
-  `JASON_UPDATE_FIXTURES=1`), and a browser smoke of the seams alone. Six guards hold the layers: the unit project runs
-  without a DOM and may not import Preact; no `.json` under `ui/` but the configuration; a dependency allowlist; the
-  fixture catalog; only the smoke's harness starts processes; one CI job runs all of it.
+  `JASON_UPDATE_FIXTURES=1`), and a browser smoke of the seams alone. Eight guards hold the layers: the unit project
+  runs without a DOM and may not import React; no `.json` under `ui/` but the configuration; a dependency allowlist; the
+  fixture catalog; the console's templates (markup only from its tag, into the page only through its painter, no
+  inline handler or style); the desktop seam, its members named once more; only the smoke's harness starts processes;
+  one CI job runs all of it.
 
 ## Conventions
 
@@ -70,7 +75,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   Skills, memory files, named preferences, campaign context, role notes and learned practice are six distinct
   knowledge concepts; do not blur them. Membership in a Jason campaign is local; `campaign.enroll` — a later,
   provider-side, approval-gated act — is a different thing.
-- Runtime API: RPC style, `POST /v1/{noun}.{verb}` for everything, reads included. Success is 200
+- Runtime API: RPC style, `POST /v1/{noun}.{verb}` for everything, reads included, with one declared exception:
+  `GET /v1/journal.stream`, the journal's lines as they are written over a WebSocket, is a `GET` because a WebSocket
+  upgrade is one by its protocol, and `jason journal watch` maps to it one to one. Success is 200
   with a bare DTO; errors are `{"error":{"code","message","retryable"}}` with snake_case codes.
   JSON is snake_case, enums are snake_case strings, timestamps are ISO-8601 UTC, public ids are
   prefixed ULIDs (`cmp_…`, `wi_…`, `att_…`, `rol_…`). Partial patches distinguish absent from null

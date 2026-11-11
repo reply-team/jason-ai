@@ -591,10 +591,7 @@ public static class WorkItemCommands
             return required ? throw new UsageException("The result is missing; give --result <json> or --result-file <path|->.") : null;
         }
 
-        var isStdin = string.Equals(path, "-", StringComparison.Ordinal);
-        var text = isStdin
-            ? await (env.In ?? TextReader.Null).ReadToEndAsync(cancellationToken).ConfigureAwait(false)
-            : await ReadAsync(path, cancellationToken).ConfigureAwait(false);
+        var (text, source) = await RequestFile.ReadAsync(env, "--result-file", path, namesOption: true, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -602,32 +599,7 @@ public static class WorkItemCommands
         }
         catch (JsonException ex)
         {
-            var source = isStdin ? "Standard input" : $"'{path}'";
             throw new UsageException($"{source} does not contain valid JSON (line {ex.LineNumber ?? 0}, position {ex.BytePositionInLine ?? 0}).");
-        }
-    }
-
-    private static async Task<string> ReadAsync(string path, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        }
-        catch (FileNotFoundException)
-        {
-            throw new UsageException($"--result-file: no such file: '{path}'.");
-        }
-        catch (DirectoryNotFoundException)
-        {
-            throw new UsageException($"--result-file: no such file: '{path}'.");
-        }
-        catch (IOException ex)
-        {
-            throw new UsageException($"--result-file '{path}' could not be read: {ex.Message}");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            throw new UsageException($"--result-file '{path}' could not be read: {ex.Message}");
         }
     }
 
@@ -639,7 +611,7 @@ public static class WorkItemCommands
 
     private static Option<string?> ResultOption() => new("--result") { Description = "The result, as any JSON value." };
 
-    private static Option<string?> ResultFileOption() => new("--result-file")
+    private static RequestFileOption ResultFileOption() => new("--result-file")
     {
         Description = "The result as JSON — a path, or - for standard input. The file holds the result itself, not a request body.",
     };

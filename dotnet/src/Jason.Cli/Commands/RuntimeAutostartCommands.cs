@@ -38,7 +38,8 @@ public static class RuntimeAutostartCommands
         autostart.Subcommands.Add(Verb(
             env,
             "enable",
-            "Register this runtime to start at logon, carrying the data directory it is registered under. Nothing is started now.",
+            "Register this runtime to start at logon, carrying the data directory it is registered under, and on macOS the "
+            + "search path (PATH) this command runs with, since launchd's own is " + LaunchdSearchPath + ". Nothing is started now.",
             actor,
             human => Enable(env, human)));
 
@@ -52,7 +53,8 @@ public static class RuntimeAutostartCommands
         autostart.Subcommands.Add(Verb(
             env,
             "status",
-            "Say what is registered to start at logon: the data directory it names, the executable it runs, and whether that executable is still there.",
+            "Say what is registered to start at logon: the data directory it names, the executable it runs, whether that "
+            + "executable is still there, and on macOS the search path it carries, under path.",
             actor,
             human => Status(env, human)));
 
@@ -142,7 +144,11 @@ public static class RuntimeAutostartCommands
             PackageOwner.Of(env) is { } owner ? [owner.StableEntry] : env.InstallPath is { } installed ? [installed] : SelfExecutable.Command,
             env.Paths.Root,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            AutostartRegistrars.ThisAccount());
+            AutostartRegistrars.ThisAccount(),
+            env.SearchPath ?? Environment.GetEnvironmentVariable("PATH"));
+
+    /// <summary>The search path launchd starts an agent on when the agent carries none of its own.</summary>
+    internal const string LaunchdSearchPath = "/usr/bin:/bin:/usr/sbin:/sbin";
 
     private static int Print(CliEnvironment env, bool human, IAutostartRegistrar registrar)
     {
@@ -153,7 +159,8 @@ public static class RuntimeAutostartCommands
             DataDirectoryIn(state.Run),
             state.Run.Count > 0 ? state.Run[0] : null,
             state.Run.Count > 0 ? File.Exists(state.Run[0]) : null,
-            Document(env, registrar, state));
+            Document(env, registrar, state),
+            registrar.Platform == AutostartPlatform.MacOs ? state.SearchPath : null);
 
         env.Out.WriteLine(human ? Sentence(answer) : JsonSerializer.Serialize(answer, JasonJson.Options));
         return ExitCodes.Success;
@@ -230,9 +237,17 @@ public static class RuntimeAutostartCommands
             ? $" The executable it runs is not there any more: {answer.Executable}."
             : string.Empty;
 
+        // On macOS the search path is the half of the registration a plugin's program depends on: launchd's own holds
+        // none a package manager installed, so a registration that carries none is said to start on it.
+        var searched = answer.Platform != "macos"
+            ? string.Empty
+            : answer.Path is { } path
+                ? $", with the search path {path}"
+                : $", with launchd's default search path, {LaunchdSearchPath}";
+
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"The runtime starts at logon from {answer.Executable}, on the data directory {answer.DataDirectory}.{missing}");
+            $"The runtime starts at logon from {answer.Executable}, on the data directory {answer.DataDirectory}{searched}.{missing}");
     }
 
     private static Command Verb(CliEnvironment env, string name, string description, Option<string?> actor, Func<bool, int> run)

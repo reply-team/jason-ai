@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect } from 'react';
 import { useApi } from '../../api/context';
 import type { Campaign, JournalEntry, WorkItemSummary } from '../../api/types';
 import { More } from '../../lists/more';
@@ -51,7 +51,7 @@ function lineTitle(entry: JournalEntry, me: string): string {
 function WorkRow({ item, now, zone }: { item: WorkItemSummary; now: Date; zone: string }) {
     return (
         <a
-            class="row"
+            className="row"
             href={href({
                 screen: 'workitems',
                 tab: item.status === 'created' ? 'planned' : 'now',
@@ -59,21 +59,21 @@ function WorkRow({ item, now, zone }: { item: WorkItemSummary; now: Date; zone: 
                 filters: {},
             })}
         >
-            <span class={`mark ${item.status === 'created' ? 'plan' : 'run'}`}>
+            <span className={`mark ${item.status === 'created' ? 'plan' : 'run'}`}>
                 {item.status === 'created' ? '○' : '◐'}
             </span>
-            <span class="what">
-                <span class="name">{what(item)}</span>
-                {item.contact_name && <span class="in">{item.contact_name}</span>}
+            <span className="what">
+                <span className="name">{what(item)}</span>
+                {item.contact_name && <span className="in">{item.contact_name}</span>}
             </span>
-            <span class="meta">{plannedNote(item, now, zone, (at) => when(at, now, zone))}</span>
+            <span className="meta">{plannedNote(item, now, zone, (at) => when(at, now, zone))}</span>
         </a>
     );
 }
 
 /**
- * The campaign over time: what is planned, what waits for you and what is running above the now line, and below it
- * what its journal says, by day, narrowed by chips as a person's timeline is.
+ * The campaign's Sequence: what is planned, what waits for you and what is running above the now line, and below it,
+ * as its last section, What happened: what its journal says, by day, narrowed by chips as a person's timeline is.
  */
 export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) {
     const api = useApi();
@@ -98,7 +98,7 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
     const today = dayKey(now, zone);
 
     return (
-        <div class="timeline">
+        <div className="timeline">
             <Chips
                 label="Show"
                 row="timeline"
@@ -107,10 +107,10 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
                 onChoose={(each) => void timeline.loadTimeline(api, subject, each, false)}
             />
             {timeline.timelineFailure.value && <Notice danger>{timeline.timelineFailure.value}</Notice>}
-            <div class="rows">
+            <div className="rows">
                 {planned.length > 0 && (
                     <div>
-                        <div class="group first">Planned</div>
+                        <div className="group first">Planned</div>
                         <More more={more('planned', store.plannedCursor.value)} />
                         {[...planned].reverse().map((item) => (
                             <WorkRow key={item.id} item={item} now={now} zone={zone} />
@@ -119,18 +119,18 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
                 )}
                 {approvals.length + questions.length > 0 && (
                     <div>
-                        <div class="group">Waiting for you</div>
+                        <div className="group">Waiting for you</div>
                         {approvals.map((approval) => (
                             <button
                                 key={approval.id}
                                 type="button"
-                                class="row"
+                                className="row"
                                 onClick={() => onWaiting({ approval_id: approval.id })}
                             >
-                                <span class="mark wait">!</span>
-                                <span class="what">
-                                    <span class="name">{title(approval.operation, approval.contact_name)}</span>
-                                    <span class="in">
+                                <span className="mark wait">!</span>
+                                <span className="what">
+                                    <span className="name">{title(approval.operation, approval.contact_name)}</span>
+                                    <span className="in">
                                         waiting since {relative(new Date(approval.requested_at), now)}
                                     </span>
                                 </span>
@@ -140,13 +140,13 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
                             <button
                                 key={question.id}
                                 type="button"
-                                class="row"
+                                className="row"
                                 onClick={() => onWaiting({ decision_id: question.id })}
                             >
-                                <span class="mark ask">?</span>
-                                <span class="what">
-                                    <span class="name">{question.question}</span>
-                                    <span class="in">
+                                <span className="mark ask">?</span>
+                                <span className="what">
+                                    <span className="name">{question.question}</span>
+                                    <span className="in">
                                         {question.contact_name ?? 'about the campaign'} · asked{' '}
                                         {relative(new Date(question.raised_at), now)}
                                     </span>
@@ -159,49 +159,56 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
                 )}
                 {running.length > 0 && (
                     <div>
-                        <div class="group">Running</div>
+                        <div className="group">Running</div>
                         {running.map((item) => (
                             <WorkRow key={item.id} item={item} now={now} zone={zone} />
                         ))}
                         <More more={more('running', store.runningCursor.value)} />
                     </div>
                 )}
-                <div class="now">
-                    <span class="pill">now {clock(now, zone)}</span>
-                    <span class="line" />
+                <div className="now">
+                    <span className="pill">now {clock(now, zone)}</span>
+                    <span className="line" />
                 </div>
-                {timeline.linesLoaded.value && mine && lines.length === 0 && <div class="empty">Nothing here yet.</div>}
-                {groupByDay(lines, (entry) => new Date(entry.ts), zone).map((group) => (
-                    <div key={group.day}>
-                        <div class="group">{dayLabel(group.day, today)}</div>
-                        {group.items.map((entry) => {
-                            const label = entryLabel(entry, me);
-                            const link = linkOf(entry);
-                            const body = (
-                                <>
-                                    <span class={`mark ${label.mark.kind}`}>{label.mark.glyph}</span>
-                                    <span class="what">
-                                        <span class="name">{lineTitle(entry, me)}</span>
-                                        {label.note && <span class="in">{label.note}</span>}
-                                    </span>
-                                    <span class="meta">
-                                        <time>{clock(new Date(entry.ts), zone)}</time>
-                                    </span>
-                                </>
-                            );
-                            return link ? (
-                                <a key={entry.id} class="row" href={link}>
-                                    {body}
-                                </a>
-                            ) : (
-                                <div key={entry.id} class="row">
-                                    {body}
-                                </div>
-                            );
-                        })}
+                <section className="campaign-tabs-happened" aria-labelledby="campaign-tabs-happened">
+                    <div className="group" id="campaign-tabs-happened">
+                        What happened
                     </div>
-                ))}
-                <More more={timeline.linesCursor.value ? () => timeline.moreLines(api, subject) : null} />
+                    {timeline.linesLoaded.value && mine && lines.length === 0 && (
+                        <div className="empty">Nothing here yet.</div>
+                    )}
+                    {groupByDay(lines, (entry) => new Date(entry.ts), zone).map((group) => (
+                        <div key={group.day}>
+                            <div className="group">{dayLabel(group.day, today)}</div>
+                            {group.items.map((entry) => {
+                                const label = entryLabel(entry, me);
+                                const link = linkOf(entry);
+                                const body = (
+                                    <>
+                                        <span className={`mark ${label.mark.kind}`}>{label.mark.glyph}</span>
+                                        <span className="what">
+                                            <span className="name">{lineTitle(entry, me)}</span>
+                                            {label.note && <span className="in">{label.note}</span>}
+                                        </span>
+                                        <span className="meta">
+                                            <time>{clock(new Date(entry.ts), zone)}</time>
+                                        </span>
+                                    </>
+                                );
+                                return link ? (
+                                    <a key={entry.id} className="row" href={link}>
+                                        {body}
+                                    </a>
+                                ) : (
+                                    <div key={entry.id} className="row">
+                                        {body}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
+                    <More more={timeline.linesCursor.value ? () => timeline.moreLines(api, subject) : null} />
+                </section>
             </div>
         </div>
     );

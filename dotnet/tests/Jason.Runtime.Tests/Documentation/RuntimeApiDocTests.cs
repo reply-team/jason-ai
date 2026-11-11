@@ -82,6 +82,42 @@ public partial class RuntimeApiDocTests
     }
 
     /// <summary>
+    /// The journal's stream as the code has it: its route and its two subprotocols, the parameter it starts from, how
+    /// often it looks and how much it takes, how long a frame may wait on its reader, the codes it is refused and closed with,
+    /// and the verb that is it.
+    /// </summary>
+    [Fact]
+    public void The_page_describes_the_journal_stream_as_the_runtime_serves_it()
+    {
+        var page = Flat(Page());
+        var section = Flat(Section(Page(), "## Following the journal as it is written"));
+
+        Assert.Contains($"`GET {Streams.JournalRoute}`", Flat(Section(Page(), "## The request form")), StringComparison.Ordinal);
+        Assert.Contains($"`GET {Streams.JournalRoute}`", Flat(Section(Page(), "## What `/v1/` holds")), StringComparison.Ordinal);
+        Assert.Contains($"`GET {Streams.JournalRoute}`: the one route under `/{ApiVersion.Current}/` that is not a `POST`", section, StringComparison.Ordinal);
+        Assert.Contains($"`{Streams.JournalSubProtocol}`", section, StringComparison.Ordinal);
+        Assert.Contains($"`{Streams.BearerSubProtocolPrefix}<token>`", section, StringComparison.Ordinal);
+        Assert.Contains($"`{Streams.AfterParameter}=<id>`", section, StringComparison.Ordinal);
+        Assert.Contains("drops a line whose `id` it already has", section, StringComparison.Ordinal);
+        Assert.Contains("never takes `journal.list`'s cursor", section, StringComparison.Ordinal);
+        Assert.Contains("`jason journal watch`", section, StringComparison.Ordinal);
+        Assert.Contains("`websocket_required`", section, StringComparison.Ordinal);
+        Assert.Contains("`validation_failed`", section, StringComparison.Ordinal);
+        Assert.Contains("refused before it becomes a WebSocket: `401` with no token, or an unknown or revoked one", section, StringComparison.Ordinal);
+        Assert.Contains("`403` with the code `operation_not_granted` with a plugin handler's capability in the header", section, StringComparison.Ordinal);
+
+        Assert.Equal(TimeSpan.FromSeconds(1), Jason.Runtime.Journal.JournalStream.PollInterval);
+        Assert.Contains("every second", section, StringComparison.Ordinal);
+        Assert.Contains($"up to {Jason.Runtime.Journal.JournalStream.BatchSize.ToString(CultureInfo.InvariantCulture)} at a time", section, StringComparison.Ordinal);
+
+        Assert.Contains($"answers `{(int)System.Net.WebSockets.WebSocketCloseStatus.NormalClosure}`", section, StringComparison.Ordinal);
+        Assert.Contains($"`{(int)System.Net.WebSockets.WebSocketCloseStatus.PolicyViolation}` and the reason `{Jason.Runtime.Journal.JournalStream.RevokedReason}` when the UI token", section, StringComparison.Ordinal);
+        Assert.Contains($"`{(int)System.Net.WebSockets.WebSocketCloseStatus.EndpointUnavailable}` when the runtime stops", section, StringComparison.Ordinal);
+        Assert.Contains($"a reader that has stopped taking frames is cut without a close, at the stop or once a frame has waited {Jason.Runtime.Journal.JournalStream.SendWait.TotalSeconds.ToString(CultureInfo.InvariantCulture)} seconds for it, so an open stream never holds a stop", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("journal.stream", Named(page));
+    }
+
+    /// <summary>
     /// What a build is: a manifest of exactly the members <see cref="UiManifest"/> reads, and files of exactly the kinds
     /// <see cref="UiFiles"/> serves, no kind left out and none added.
     /// </summary>

@@ -1,0 +1,13 @@
+{
+  "operation": "suppression.list",
+  "case": "mateo-linkedin-clear",
+  "request": {
+    "channel": "linkedin",
+    "value": "https://www.linkedin.com/in/mateo-ruiz-example"
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

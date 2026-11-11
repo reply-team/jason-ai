@@ -1,0 +1,13 @@
+{
+  "operation": "suppression.list",
+  "case": "mateo-phone-clear",
+  "request": {
+    "channel": "phone",
+    "value": "+525512345678"
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

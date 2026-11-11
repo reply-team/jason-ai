@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals';
+import { signal } from '@preact/signals-react';
 import { campaignIdsLimit } from './api/types';
 
 export type Tab = 'now' | 'planned' | 'done';
@@ -12,7 +12,9 @@ export type WorkItemFilters = {
     failed?: boolean;
 };
 
-export type PersonTab = 'timeline' | 'threads' | 'details';
+export type PersonTab = 'timeline' | 'threads' | 'details' | 'sequences' | 'next' | 'research';
+/** The tabs a person's address on People can name; Performance's panel names the first three only. */
+const personTabs: readonly PersonTab[] = ['details', 'threads', 'sequences', 'next', 'research'];
 export type PeopleFilters = {
     /** The search typed into the list: a name, a company, a title or part of a channel value. */
     q?: string;
@@ -20,7 +22,9 @@ export type PeopleFilters = {
     archived?: boolean;
 };
 
-export type CampaignTab = 'timeline' | 'people' | 'details';
+/** A campaign's tabs, in the order they are drawn; the first is where a campaign opens. */
+export const campaignTabs = ['sequence', 'people', 'inbox', 'results', 'settings'] as const;
+export type CampaignTab = (typeof campaignTabs)[number];
 export type CampaignView = 'summary' | 'activity';
 export type Period = 'today' | '7d' | '30d' | '90d';
 export type CampaignFilters = {
@@ -41,6 +45,8 @@ const day = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 export type Route =
     | { screen: 'attention'; kind?: 'approvals' | 'questions'; id?: string; decided?: true }
     | { screen: 'system' }
+    | { screen: 'settings' }
+    | { screen: 'chat' }
     | { screen: 'workitems'; tab: Tab; id?: string; filters: WorkItemFilters }
     | { screen: 'people'; id?: string; tab: PersonTab; filters: PeopleFilters }
     | {
@@ -76,6 +82,8 @@ export function parseRoute(hash: string): Route {
     const [path = '', query = ''] = hash.replace(/^#/, '').split('?');
     const segments = path.split('/').filter((s) => s.length > 0);
     if (segments[0] === 'system') return { screen: 'system' };
+    if (segments[0] === 'settings') return { screen: 'settings' };
+    if (segments[0] === 'chat') return { screen: 'chat' };
     if (segments[0] === 'workitems') return workItems(segments.slice(1), query);
     if (segments[0] === 'people') return people(segments.slice(1), query);
     if (segments[0] === 'campaigns') return campaigns(segments.slice(1), query);
@@ -117,7 +125,7 @@ function people(segments: string[], query: string): Route {
     if (campaign) filters.campaign = campaign;
     if (params.get('archived') === '1') filters.archived = true;
     if (id === null) return { screen: 'people', tab: 'timeline', filters };
-    const tab = segments[1] === 'details' || segments[1] === 'threads' ? segments[1] : 'timeline';
+    const tab = personTabs.find((each) => each === segments[1]) ?? 'timeline';
     return { screen: 'people', id, tab, filters };
 }
 
@@ -131,8 +139,10 @@ function campaigns(segments: string[], query: string): Route {
     const q = params.get('q');
     if (q) filters.q = q;
     if (params.get('archived') === '1') filters.archived = true;
-    if (id === null) return { screen: 'campaigns', tab: 'timeline', view, period, filters };
-    const tab: CampaignTab = segments[1] === 'people' || segments[1] === 'details' ? segments[1] : 'timeline';
+    if (id === null) return { screen: 'campaigns', tab: 'sequence', view, period, filters };
+    // An older address's Details opens Settings; its Timeline, any other tab or none opens the first.
+    const named = segments[1] === 'details' ? 'settings' : segments[1];
+    const tab: CampaignTab = campaignTabs.find((each) => each === named) ?? 'sequence';
     const at = { screen: 'campaigns' as const, id, tab, view, period, filters };
     if (tab !== 'people') return at;
     const filter = params.get('filter');
@@ -228,6 +238,8 @@ function decode(segment: string): string | null {
 
 export function href(route: Route): string {
     if (route.screen === 'system') return '#/system';
+    if (route.screen === 'settings') return '#/settings';
+    if (route.screen === 'chat') return '#/chat';
     if (route.screen === 'workitems') {
         const tab = route.tab !== 'now' || route.id ? `/${route.tab}` : '';
         const id = route.id ? `/${encodeURIComponent(route.id)}` : '';
@@ -240,7 +252,7 @@ export function href(route: Route): string {
     }
     if (route.screen === 'campaigns') {
         const id = route.id ? `/${encodeURIComponent(route.id)}` : '';
-        const tab = route.id && route.tab !== 'timeline' ? `/${route.tab}` : '';
+        const tab = route.id && route.tab !== 'sequence' ? `/${route.tab}` : '';
         return `#/campaigns${id}${tab}${campaignQuery(route)}`;
     }
     if (route.screen === 'performance') {

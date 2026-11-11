@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'react';
 
 /** The search box: what is typed reaches the list once the person pauses, and only from two characters on. */
 export function Search({
@@ -31,12 +31,12 @@ export function Search({
     }, [text]);
     return (
         <input
-            class="search"
+            className="search"
             type="search"
             aria-label={label}
             placeholder={placeholder}
             value={text}
-            onInput={(e) => setText((e.target as HTMLInputElement).value)}
+            onChange={(e) => setText((e.target as HTMLInputElement).value)}
         />
     );
 }

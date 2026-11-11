@@ -491,4 +491,50 @@ public partial class InteractiveSkillTests
         Assert.Contains("when it finds a span of an account's events it will not read, or when a provider block is open, it tells them once", skill, StringComparison.Ordinal);
         Assert.Contains("One that says provider blocks hold work items sends you to `jason block list`", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A provider on a fresh installation is four acts in one order — the package, the grant, the route, the reload — and
+    /// an agent that knew only the first would leave a plugin loaded, valid and refused at every call. The skill says the
+    /// four, points at the golden path's steps for each in full, names the sentence the CLI prints as what to ask the
+    /// person for, and says what to do when npm refuses a global install.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_says_the_four_acts_that_connect_a_provider_and_the_refused_global_install()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains(
+            "A provider on a fresh installation is connected by four acts, in this order, and steps 3 to 5 of `docs/golden-path.md` say each in full:",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("1. Install the package: `jason plugin install reply`", skill, StringComparison.Ordinal);
+        Assert.Contains("2. Grant it what it asks for, under `Plugins:Grants:<id>`", skill, StringComparison.Ordinal);
+        Assert.Contains("3. Route its work, under `Routes`", skill, StringComparison.Ordinal);
+        Assert.Contains("4. Reload: `jason plugin reload`", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "name each capability a plugin asks for and is granted nothing of, with the key that grants it and the settings file: that sentence is what to ask the person to allow.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Where `npm install -g` is refused with `EACCES`, npm's global prefix is a directory this account does not own: install it under a prefix of the account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the search path the runtime sees.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("Those three verbs are the whole plugin vocabulary", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// On macOS a runtime started at logon has launchd's search path unless the registration carries one, so a plugin
+    /// whose program a package manager installed is unavailable there; the skill says what launchd's is, what the
+    /// registration records, and the repair, whose restart is a stop and asked first like every other.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_says_what_search_path_a_macos_logon_start_has_and_the_repair()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains(
+            "On macOS a runtime started at logon is a LaunchAgent, and launchd's default search path is `/usr/bin:/bin:/usr/sbin:/sbin`, which holds no program a package manager installed; the registration records the `PATH` of the terminal it was made from, and `jason runtime autostart status` says which it carries. The repair is to register again from a terminal whose `PATH` has the program, with `jason runtime autostart enable`, then `jason runtime restart`, which is a stop and asked first.",
+            skill,
+            StringComparison.Ordinal);
+    }
 }

@@ -30,7 +30,7 @@ Everything about a release happens in one repository, `reply-team/jason-ai`: the
 A release starts as the release pull request into `main`, whose run builds and tests the tree on Linux, macOS and
 Windows; merging it is the last review a release has. The tag `v<version>` pushed on that merge builds the release
 from it: the critical tests again under the tag's version, the three executables, the macOS and Windows ones signed
-and their archived signatures verified, and the plugins' and the UI's packages. The release job then writes the
+and their archived signatures verified, the plugins' and the UI's packages, and the desktop's. The release job then writes the
 manifest and the checksums and publishes the release at once, with the assets below and its notes, as the latest
 release unless a newer one already is or the version is a release candidate; a last job asks the Homebrew tap to bump
 its formula (§6). The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
@@ -59,6 +59,16 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at the tag, at the archive's root |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
 | `jason-skills.zip` | the skills' package: `skills/` at the tag, under `skills/`, and a `source.json` naming the repository, the tag and its commit; `jason skills install` deploys from it when it is given no `--source` |
+| `jason-desktop-windows-x64-setup.exe` | the desktop's Windows installer, signed, carrying this release's signed `jason.exe` |
+| `jason-desktop-windows-x64-setup.exe.blockmap` | the installer's block map, from which the Windows desktop's updater downloads only what changed |
+| `latest.yml` | the Windows desktop's update feed: the version, the installer's name and its SHA-512 |
+| `jason-desktop-macos-arm64.dmg` | the desktop for Apple silicon, signed, notarized and stapled, carrying the osx-arm64 executable |
+| `jason-desktop-macos-arm64.zip` | the same application, as the Mac desktop's updater downloads it |
+| `jason-desktop-macos-arm64.zip.blockmap` | that zip's block map |
+| `jason-desktop-macos-x64.dmg` | the desktop for Intel Macs, signed, notarized and stapled, carrying an osx-x64 executable built for it alone |
+| `jason-desktop-macos-x64.zip` | the same application, as the Mac desktop's updater downloads it |
+| `jason-desktop-macos-x64.zip.blockmap` | that zip's block map |
+| `latest-mac.yml` | the Mac desktop's update feed: the version, each zip's name and its SHA-512 |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
@@ -98,6 +108,36 @@ it downloads the package from the release this build was published as, holds it 
 this build's version and to the runtime's API, and swaps it in as `ui/default/` whole or not at all. The install
 guide runs it after the role skills, `jason update apply` runs it at its end, and `jason status` names it where the
 default UI is missing or another release's (DEC-UI-003).
+
+**The desktop's files are published beside them, from 0.34.0 on,** and listed in `checksums.txt` but not in the
+manifest: an installed desktop updates itself through electron-updater, which reads `latest.yml` or `latest-mac.yml`
+of the latest release and checks the download against the SHA-512 the feed gives, so the runtime's updater never reads
+them. Each package carries the executable its platform's release job signed, at the release's version, with `LICENSE`
+and `THIRD-PARTY-NOTICES`. The Windows job builds the installer while its sign-in holds: the installer, its
+uninstaller and `Jason.exe` are signed there, and verified with the `jason.exe` they carry. The macOS job builds an
+osx-x64 executable for the Intel package alone, signed, notarized and assessed as the osx-arm64 one is, and never
+published as an archive, so on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason`
+the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.
+A candidate writes the same two feed names a release does, and its release is marked a pre-release, which the latest
+release never is, so no installed desktop reads a candidate's feed: the desktop updates to stable releases only.
+
+Installing a desktop update restarts the runtime. The desktop stops the runtime its own `jason` runs as, with `jason
+runtime stop`, before the installer replaces that file, and the new version starts it again when it opens; it knows the
+runtime is its own when `jason runtime status` answers for the instance the run file names and the descriptor's
+`installed_image` is the application's own `jason` (`docs/runtime-api.md`). A runtime that does not stop leaves the
+update uninstalled, and so does a run file whose runtime did not answer while the process it names still runs, or names
+none, and a run file that is there and cannot be read; one started from another executable is never stopped. Where
+PowerShell is available, the Windows installer and uninstaller look for any process running from the carried `jason.exe`
+by its exact path, whichever data directory started it, and never close one: they stop it through the application's own
+`--stop-runtime` start, which runs `jason runtime stop` for the data directory the installer's environment names, or the
+default one, and look again. A person running them is asked first; an update and a silent run are not. A process still
+running ends the run before a file is replaced, and a person is told to stop a runtime that did not stop with the
+carried `jason.exe` by its full path, with `JASON_DATA_DIR` set when it was started with another data directory. Where
+PowerShell is not available nothing is looked for: a person is asked to stop the runtime, and an update goes on without
+a look. Once the runtime has stopped and before the update installs, the application as it was is copied under
+`<data>/desktop/rollback/<version>/`, kept until the next update replaces it and named in the Jason menu; nothing puts
+it back by itself, so going back is quitting Jason and putting that folder back in the place of the installed
+application by hand, which leaves the data directory as the newer version left it.
 
 ## 3. The manifest
 
@@ -403,6 +443,30 @@ Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-t
 follows the latest release. Publishing a release asks the tap to bump it at once; the bump reads the latest release
 itself, and the tap also looks every six hours, so a request that fails delays the formula and never the release.
 
+### Carried by the desktop
+
+The desktop application carries a `jason` of its own inside its package, and beside it `version.json`, a JSON object
+whose `version` names the version the package was built at. That record, and not the path, is how a `jason` knows it
+is carried: a folder that merely looks like an application's is still Jason's own, and a copy of the carried folder
+made with its record is carried wherever it is.
+
+The file is the application's: on macOS it is part of a signed application, and on Windows the installer owns it. The
+desktop's own update, Check for Updates… in its menu, replaces the application and the `jason` inside it together, and
+the system's way of removing the application removes both. So, run as a carried executable, `jason update apply` and
+`jason update rollback` refuse with `update_carried_by_desktop` (§7), and `jason uninstall` with
+`uninstall_carried_by_desktop` (§9), before anything is fetched, stopped, read or removed. A resumed apply and a
+rollback act on the file the update record names, not on the one they run as, so another `jason` sharing the data
+directory, one the install line put on the PATH say, refuses both the same way where that record names a carried file
+other than itself. `jason update check` and `jason status` answer as they do anywhere. When the runtime the desktop
+finds is another version than the one it carries, its system screen names Check for Updates where that runtime runs
+from the carried `jason`, and `jason update` where it is another installation's.
+
+A desktop whose `jason` was built before this refusal, the candidate 0.34.0-rc.1, carries the record too, but its
+apply takes every step up to `swapped` in its own process before it hands the rest to the new build (§7): the carried
+file is replaced before any code of a later build runs. The new build finishes an update handed to it that way, rather than leave the runtime
+stopped and the update half done, and refuses the next one; the desktop's Check for Updates then brings the
+application to the same version.
+
 ## 7. Updating
 
 ```sh
@@ -436,6 +500,12 @@ deletes the old keg, and a running runtime starts every plugin host from its own
 until the runtime is restarted. A runtime left running across such an upgrade, or across a file copied over by hand, is
 still the old build; `jason status` says so in its required `runtime_version` check, whose repair is
 `jason runtime restart`.
+
+**It refuses a `jason` the desktop application carries** (§6), with `update_carried_by_desktop`, before anything is
+staged, drained or stopped, and so does `jason update rollback`: the desktop's Check for Updates updates the application
+and its `jason` together. The one update it carries on is one handed to it past `swapped` whose install path is the
+carried file itself, which only the apply of a desktop's `jason` from before this refusal leaves. Any other `jason`
+refuses too where the update in flight, or for a rollback the update recorded, names a carried file other than itself.
 
 Where the feed names no release, `jason update apply` answers `update_feed_unreachable` and does nothing;
 there is nothing to apply until one is published. The feed resolves to the latest release, and a repository
@@ -790,6 +860,7 @@ a code on its own tells nobody what to do next.
 | `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed; no archive is downloaded and no update begins. From 0.20.0 the message names both commands, `jason update apply --version <floor>` and then `jason update apply` or `jason update apply --version <to>` when the apply named one; a build before 0.20.0 names the version to install first, which the same two commands reach |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
 | `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade, `jason runtime start` |
+| `update_carried_by_desktop` | this `jason` is the one the desktop application carries, known by the `version.json` beside it (§6), or the update recorded names such a file other than this one, so the file is the application's and not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message names the desktop's Check for Updates, which updates the application and its `jason` together |
 | `update_cross_volume` | the staged file and the install path are on different volumes. An update renames rather than copies, because a half-copied executable is the one state nothing can recover from. Point `JASON_DATA_DIR` at the executable's volume, or install Jason on the data directory's |
 | `update_runtime_unreachable` | the runtime would not drain or would not stop, so nothing was replaced |
 | `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed, or the new executable could not be run to finish the update. The executable can be put back |
@@ -816,7 +887,7 @@ a file in the account's own home:
 | platform | what is registered | where the document lives |
 | --- | --- | --- |
 | Windows | a logon task called `Jason-<SID>`, one per account and named for its SID, with an interactive logon for that account (`InteractiveToken`), registered from a task document with `schtasks /Create /XML` | `<data>/autostart/jason-task.xml`; the task itself is the Task Scheduler's |
-| macOS | a LaunchAgent labelled `ai.jason.runtime`, `RunAtLoad` and no `KeepAlive` | `~/Library/LaunchAgents/ai.jason.runtime.plist` |
+| macOS | a LaunchAgent labelled `ai.jason.runtime`, `RunAtLoad` and no `KeepAlive`, and the `PATH` of the process that registered it under `EnvironmentVariables` | `~/Library/LaunchAgents/ai.jason.runtime.plist` |
 | Linux | a `systemd --user` unit, enabled into your default target | `~/.config/systemd/user/jason.service` |
 
 **It is registration, not supervision.** What starts at logon is `jason runtime run --detached --data-dir
@@ -935,10 +1006,11 @@ in session 0 shows none — `jason status` says so in its `notifications` check 
 ### The environment an autostarted runtime has
 
 It is the account's logon environment, not your shell's. Anything your shell's profile sets — a `PATH` a version
-manager edits, a `JASON_DATA_DIR` you export, a proxy variable — is not there. The data directory is why the
-registration carries it explicitly; a plugin whose executable is only on a `PATH` your profile builds is the
-other half, and it will be reported `unavailable` by a runtime that started at logon while working perfectly
-from a terminal. `jason plugin list` from the same account says which.
+manager edits, a `JASON_DATA_DIR` you export, a proxy variable — is not there, save that from 0.34.0 a macOS
+registration carries the `PATH` of the terminal that registered it, as the macOS paragraph below says. The data
+directory is why the registration carries it explicitly; a plugin whose executable is only on a `PATH` your profile
+builds is the other half, and it will be reported `unavailable` by a runtime that started at logon while working
+perfectly from a terminal. `jason plugin list` from the same account says which.
 
 On Linux the registration is a `systemd --user` unit, and the environment it starts the runtime with is the systemd
 user manager's, which reads no shell profile: not `~/.profile`, and not `~/.bashrc`, where a version manager or a
@@ -948,6 +1020,14 @@ the user manager. It does through a file ending `.conf` in `~/.config/environmen
 `PATH=/opt/tool/bin:$PATH`, say — which the user manager passes to every service it starts, read when it starts
 and again at `systemctl --user daemon-reload`; or through the unit's own environment, an `Environment=` line in a
 drop-in `systemctl --user edit jason.service` opens. Or start the runtime from that terminal instead.
+
+On macOS the registration is a LaunchAgent, and launchd starts an agent on a search path of its own,
+`/usr/bin:/bin:/usr/sbin:/sbin`, which holds no program a package manager installed. So `enable` records the `PATH`
+of the process that registers, under the agent's `EnvironmentVariables`, and the runtime starts at logon with it;
+`jason runtime autostart status` says it under `path`, and an agent an earlier version registered carries none, so
+`--human` names launchd's. A program installed after the registration, in a directory that `PATH` did not hold, is
+missing to a runtime started at logon until you register again from a terminal whose `PATH` has it, with
+`jason runtime autostart enable`, then `jason runtime restart`.
 
 ### What tests prove here, and what they cannot
 
@@ -1024,6 +1104,13 @@ is in and the PATH entry that reaches it are left to the package manager, and so
 unpacked, which stay with it; the plan and the report name them as left to it, with the command that takes them off —
 `brew uninstall jason`, or `winget uninstall Reply.Jason`. Everything above them goes as it always does, the runtime
 stopped first, and the plan an agent reads carries the same as `left_to`.
+
+**Where the desktop application carries this `jason`** (§6), the verb refuses with `uninstall_carried_by_desktop`
+before anything is read or removed, a dry run included: its last step would delete the executable out of the
+application. The application is removed the way the system removes one — on Windows from Installed apps in Settings,
+whose uninstaller stops the runtime it carries and takes off what it placed; elsewhere by taking off what it placed from
+its Jason menu and then removing the application — and the message names that way for the system it runs on. The data
+directory is kept either way.
 
 **Never touched:** a skill there is no receipt for, including one copied into a harness by hand; any other
 skill in that harness; any provider CLI; any model credential; a PATH entry the installer did not write; another

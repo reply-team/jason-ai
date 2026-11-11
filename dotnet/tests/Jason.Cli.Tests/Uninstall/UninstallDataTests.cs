@@ -287,6 +287,32 @@ public class UninstallDataTests
     }
 
     /// <summary>
+    /// The desktop application is one more client of the installation, and what it keeps in the data directory is the
+    /// product's own: its log beside the runtime's and its folder of settings, keys and the chat's working folder. The
+    /// purge takes them with the rest.
+    /// </summary>
+    [Fact]
+    public async Task The_purge_removes_the_desktop_s_log_and_its_own_folder()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        var logs = Directory.CreateDirectory(dir.Paths.LogsDirectory).FullName;
+        File.WriteAllText(Path.Combine(logs, "desktop-20261109.jsonl"), "{}");
+        File.WriteAllText(Path.Combine(logs, "desktop-20261109_001.jsonl"), "{}");
+        var desktop = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "desktop")).FullName;
+        File.WriteAllText(Path.Combine(desktop, "settings.json"), "{}");
+        File.WriteAllText(Path.Combine(desktop, "provider-keys"), "sealed");
+        Directory.CreateDirectory(Path.Combine(desktop, "chat", ".claude", "skills"));
+
+        var (exit, report) = await RunAsync(dir, purgeData: true, yes: true);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.False(Directory.Exists(logs), "the desktop's log is still in the data directory.");
+        Assert.False(Directory.Exists(desktop), "the desktop's own folder is still in the data directory.");
+        Assert.DoesNotContain(report.Kept, line => line.Contains("desktop", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// And where one of Jason's own entries could not be removed, the line about what was kept does not say that
     /// everything Jason keeps there is gone: the entry is a problem, and the verb exits 1 for it.
     /// </summary>

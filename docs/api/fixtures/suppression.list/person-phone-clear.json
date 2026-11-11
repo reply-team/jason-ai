@@ -1,0 +1,13 @@
+{
+  "operation": "suppression.list",
+  "case": "person-phone-clear",
+  "request": {
+    "channel": "phone",
+    "value": "+4791234567"
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

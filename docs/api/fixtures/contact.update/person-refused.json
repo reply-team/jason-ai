@@ -1,0 +1,28 @@
+{
+  "operation": "contact.update",
+  "case": "person-refused",
+  "request": {
+    "contact_id": "cnt_1",
+    "time_zone": "Europe/Atlantis",
+    "reason": "Moved.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: time_zone: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "time_zone",
+          "code": "invalid",
+          "message": "time_zone must be an IANA time zone id such as Europe/Kyiv."
+        }
+      ]
+    }
+  }
+}

@@ -19,24 +19,24 @@ export function AttentionList({ approvals, questions, moreApprovals, moreQuestio
     const keep = selected?.decided ? { decided: true as const } : {};
     const isSelected = (kind: Kind, id: string) => selected?.kind === kind && selected.id === id;
     return (
-        <div class="rows">
-            {approvals.length > 0 && <div class="group first">Approvals</div>}
+        <div className="rows">
+            {approvals.length > 0 && <div className="group first">Approvals</div>}
             {approvals.map((a) => (
                 <a
                     key={a.id}
-                    class={`row${isSelected('approvals', a.id) ? ' selected' : ''}`}
+                    className={`row${isSelected('approvals', a.id) ? ' selected' : ''}`}
                     href="#"
                     onClick={(e) => {
                         e.preventDefault();
                         navigate({ screen: 'attention', kind: 'approvals', id: a.id, ...keep });
                     }}
                 >
-                    <span class={`mark ${approvalMark(a.status).kind}`}>{approvalMark(a.status).glyph}</span>
-                    <span class="what">
-                        <span class="name">{title(a.operation, a.contact_name)}</span>
-                        <span class="in">in {a.campaign_name}</span>
+                    <span className={`mark ${approvalMark(a.status).kind}`}>{approvalMark(a.status).glyph}</span>
+                    <span className="what">
+                        <span className="name">{title(a.operation, a.contact_name)}</span>
+                        <span className="in">in {a.campaign_name}</span>
                     </span>
-                    <span class="meta">
+                    <span className="meta">
                         {approvalNote(a.status, a.decided_by?.id) && (
                             <span>{approvalNote(a.status, a.decided_by?.id)}</span>
                         )}
@@ -45,23 +45,23 @@ export function AttentionList({ approvals, questions, moreApprovals, moreQuestio
                 </a>
             ))}
             <More more={moreApprovals} />
-            {questions.length > 0 && <div class={`group${approvals.length > 0 ? '' : ' first'}`}>Questions</div>}
+            {questions.length > 0 && <div className={`group${approvals.length > 0 ? '' : ' first'}`}>Questions</div>}
             {questions.map((q) => (
                 <a
                     key={q.id}
-                    class={`row${isSelected('questions', q.id) ? ' selected' : ''}`}
+                    className={`row${isSelected('questions', q.id) ? ' selected' : ''}`}
                     href="#"
                     onClick={(e) => {
                         e.preventDefault();
                         navigate({ screen: 'attention', kind: 'questions', id: q.id, ...keep });
                     }}
                 >
-                    <span class={`mark ${q.status === 'pending' ? 'ask' : 'off'}`}>?</span>
-                    <span class="what">
-                        <span class="name">{q.question}</span>
-                        <span class="in">{q.campaign_name}</span>
+                    <span className={`mark ${q.status === 'pending' ? 'ask' : 'off'}`}>?</span>
+                    <span className="what">
+                        <span className="name">{q.question}</span>
+                        <span className="in">{q.campaign_name}</span>
                     </span>
-                    <span class="meta">
+                    <span className="meta">
                         {q.answered_by?.id && <span>answered by {q.answered_by.id}</span>}
                         <time>{relative(new Date(q.answered_at ?? q.raised_at), now)}</time>
                     </span>

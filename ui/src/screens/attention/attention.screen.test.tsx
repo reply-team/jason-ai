@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/preact';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
@@ -12,6 +12,11 @@ function pendingFake() {
         .answer('approval.get', 'approval.get/pending-with-preview')
         .answer('decision.get', 'decision.get/pending-with-options');
 }
+
+/** The fact a panel states under a term, or undefined where it states none. */
+const fact = (term: string) =>
+    Array.from(document.querySelectorAll('.facts dt')).find((dt) => dt.textContent === term)?.nextElementSibling
+        ?.textContent;
 
 describe('Attention', () => {
     it('says nothing needs you when both lists are empty', async () => {
@@ -45,7 +50,10 @@ describe('Attention', () => {
     });
 
     it('approves with the recorded request, reloads, and moves to the next pending item', async () => {
-        const fake = pendingFake().answer('approval.approve', 'approval.approve/approved');
+        // The screen reads the next pending item once it moves there; React runs that read before the test ends.
+        const fake = pendingFake()
+            .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
+            .answer('approval.approve', 'approval.approve/approved');
         renderApp(fake);
         await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
         fireEvent.click(screen.getByText('Enroll Ada Lovelace'));
@@ -57,6 +65,28 @@ describe('Attention', () => {
         expect(fake.sent('approval.approve')).toEqual({ approval_id: expected.approval_id });
         await waitFor(() => expect(fake.calls.filter((c) => c.operation === 'approval.list').length).toBe(2));
         await waitFor(() => expect(route.value).toEqual({ screen: 'attention', kind: 'approvals', id: 'apr_2' }));
+    });
+
+    it("shows a message's sender and its channel in words among the facts", async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/messages-pending')
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/email-message');
+        renderApp(fake);
+        await waitFor(() => screen.getByText('message.send Ines Duarte'));
+        fireEvent.click(screen.getByText('message.send Ines Duarte'));
+        await waitFor(() => screen.getByText('owner@example.test'));
+        expect(fact('From')).toBe('owner@example.test');
+        expect(fact('Channel')).toBe('Email');
+    });
+
+    it('shows no sender and no channel where the preview carries none', async () => {
+        renderApp(pendingFake());
+        await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
+        fireEvent.click(screen.getByText('Enroll Ada Lovelace'));
+        await waitFor(() => screen.getByText('Put Ada Lovelace into the campaign at the provider.'));
+        expect(fact('From')).toBeUndefined();
+        expect(fact('Channel')).toBeUndefined();
     });
 
     it("shows the runtime's refusal and reloads when a decision is no longer pending", async () => {
@@ -93,6 +123,9 @@ describe('Attention', () => {
 
     it('answers a question with an option and a reason, as recorded', async () => {
         const fake = pendingFake().answer('decision.answer', 'decision.answer/answered');
+        // The screen reads the next pending question once it moves there, and React runs that read before the test
+        // ends; nothing recorded it, so it is left waiting, as it was when this test ended before the read was made.
+        fake.hold('decision.get', (body) => (body as { decision_id?: string }).decision_id === 'dec_2');
         renderApp(fake);
         await waitFor(() => screen.getByText('Pause outreach to Vireo Labs until their funding news?'));
         fireEvent.click(screen.getByText('Pause outreach to Vireo Labs until their funding news?'));

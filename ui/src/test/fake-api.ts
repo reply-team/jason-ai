@@ -45,7 +45,7 @@ export class FakeApi implements Api {
     readonly unanswered: Call[] = [];
     private readonly answers = new Map<string, FixtureName[]>();
     private readonly held = new Map<string, { when: (body: object) => boolean; until: Promise<void> }>();
-    private readonly gone = new Set<string>();
+    private readonly gone = new Map<string, (body: object) => boolean>();
 
     /** The paired person the client puts on every write, as the recordings were made with. */
     constructor(private readonly actorId = 'ada') {}
@@ -73,18 +73,19 @@ export class FakeApi implements Api {
     }
 
     /**
-     * Makes an operation unreachable until the returned function is called: the runtime does not answer at all, and the
-     * call fails as the browser's fetch does when nothing is listening. There is no exchange to record for it.
+     * Makes an operation unreachable — for the calls whose request matches, when a test says which — until the returned
+     * function is called: the runtime does not answer at all, and the call fails as the browser's fetch does when
+     * nothing is listening. There is no exchange to record for it.
      */
-    unreachable(operation: string): () => void {
-        this.gone.add(operation);
+    unreachable(operation: string, when: (body: object) => boolean = () => true): () => void {
+        this.gone.set(operation, when);
         return () => this.gone.delete(operation);
     }
 
     async call<T>(operation: string, given: object = {}, kind: 'read' | 'write' = 'read'): Promise<T> {
         const call = { operation, body: given, kind };
         this.calls.push(call);
-        if (this.gone.has(operation)) throw new TypeError('Failed to fetch');
+        if (this.gone.get(operation)?.(given)) throw new TypeError('Failed to fetch');
         const body = kind === 'write' ? { ...given, actor: { type: 'human', id: this.actorId } } : given;
         const held = this.held.get(operation);
         if (held?.when(given)) await held.until;

@@ -1,4 +1,4 @@
-import { h, type ComponentChild } from 'preact';
+import { createElement as h, type ReactNode } from 'react';
 
 // Structure and emphasis are rebuilt; a link keeps its address when it is a web or mail one, and is plain text when it
 // is not. Anything else that is an element is unwrapped to its text, and what runs, loads, styles or asks for input is
@@ -70,7 +70,7 @@ const markup = new RegExp(`</?(?:${[...kept, ...dropped].join('|')})(?=[\\s/>])`
 const inline = /\s(?:style|on[a-z]+)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
 const tags = /<[^>]*>/g;
 
-function rebuild(node: Node, key: number): ComponentChild {
+function rebuild(node: Node, key: number): ReactNode {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent;
     if (node.nodeType !== Node.ELEMENT_NODE) return null;
     const element = node as Element;
@@ -98,7 +98,7 @@ export function MessageBody({ body }: { body: string }) {
     if (!markup.test(body)) {
         const lines = body.split(/\r?\n/);
         return (
-            <div class="preview" data-testid="message-body">
+            <div className="preview" data-testid="message-body">
                 {lines.flatMap((line, at) => (at === 0 ? [line] : [<br key={at} />, line]))}
             </div>
         );
@@ -106,7 +106,7 @@ export function MessageBody({ body }: { body: string }) {
     const quiet = body.replace(tags, (tag) => tag.replace(inline, ''));
     const parsed = new DOMParser().parseFromString(quiet, 'text/html');
     return (
-        <div class="preview" data-testid="message-body">
+        <div className="preview" data-testid="message-body">
             {Array.from(parsed.body.childNodes).map(rebuild)}
         </div>
     );

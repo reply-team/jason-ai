@@ -91,7 +91,7 @@ internal static class Diagnostics
     public static Task WriteStartLineAsync(string behaviour, LaunchEnvelope envelope, string? token) =>
         WriteAsync(string.Create(
             CultureInfo.InvariantCulture,
-            $"behaviour={behaviour} pid={Environment.ProcessId} started={StartedAt()} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)} attempt-in-env={Variable(ExecutionEnvironment.AttemptIdVariable)} work-item-in-env={Variable(ExecutionEnvironment.WorkItemIdVariable)} path-head={PathHead()} update-mark-in-env={Variable(UpdateLaunch.Variable)} host-constant-in-env={Variable("HOST_CONSTANT_FOR_TESTS")}"));
+            $"behaviour={behaviour} pid={Environment.ProcessId} started={StartedAt()} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)} attempt-in-env={Variable(ExecutionEnvironment.AttemptIdVariable)} work-item-in-env={Variable(ExecutionEnvironment.WorkItemIdVariable)} path-head={PathHead()} update-mark-in-env={Variable(UpdateLaunch.Variable)} confined-in-env={Variable(Confinement.Variable)} host-constant-in-env={Variable("HOST_CONSTANT_FOR_TESTS")}"));
 
     /// <summary>
     /// When this process began, as the system reports it, in round-trip UTC. A test that must end this child by the

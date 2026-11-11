@@ -1,0 +1,226 @@
+// The two login items: "Open Jason at login", the desktop's own (a LaunchAgent on macOS, Electron's login item on
+// Windows), and "Start the runtime at logon", which is the CLI's `jason runtime autostart` and nothing of the desktop's.
+
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { test } from 'node:test';
+import type { Cli, CliResult } from '../src/cli.ts';
+import { verbOf } from '../src/installation.ts';
+import { fileLogger } from '../src/log.ts';
+import { bringForward, launchAgent, launchAgentFile, LoginItem, loginFlag, openedAtLogin, RuntimeAutostart, showsOnSecondStart, type ElectronLogin } from '../src/login-item.ts';
+import { memoryLog } from './harness.ts';
+
+function scratch(t: { after(fn: () => void): void }): string {
+    const root = mkdtempSync(join(tmpdir(), 'jason-desktop-login-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    return root;
+}
+
+/** Electron's login-item calls, recorded, holding one setting as the system would. */
+function electronLogin(): ElectronLogin & { asked: unknown[]; set: unknown[] } {
+    let on = false;
+    const asked: unknown[] = [];
+    const set: unknown[] = [];
+    return {
+        asked,
+        set,
+        getLoginItemSettings(options) {
+            asked.push(options);
+            return { openAtLogin: on };
+        },
+        setLoginItemSettings(settings) {
+            set.push(settings);
+            on = settings.openAtLogin;
+        },
+    };
+}
+
+const pathRead = Promise.resolve();
+const executable = '/Applications/Jason.app/Contents/MacOS/Jason';
+
+test('the LaunchAgent is the one the application is started by at sign-in, in the background, as the person who signed in', () => {
+    assert.equal(launchAgentFile('/Users/someone'), join('/Users/someone', 'Library', 'LaunchAgents', 'ai.jasonharness.desktop.plist'));
+    const plist = launchAgent('/Applications/J&son <1>.app/Contents/MacOS/Jason');
+    assert.match(plist, /<key>Label<\/key><string>ai\.jasonharness\.desktop<\/string>/);
+    assert.match(plist, /<key>ProgramArguments<\/key>\s*<array>\s*<string>\/Applications\/J&amp;son &lt;1&gt;\.app\/Contents\/MacOS\/Jason<\/string>\s*<string>--opened-at-login<\/string>\s*<\/array>/);
+    assert.match(plist, /<key>RunAtLoad<\/key><true\/>/);
+    assert.match(plist, /<key>LimitLoadToSessionType<\/key><string>Aqua<\/string>/);
+    assert.equal(loginFlag, '--opened-at-login');
+});
+
+test('a start the computer made is told by its flag, and only by it', () => {
+    assert.equal(openedAtLogin(['Jason.exe', '--opened-at-login']), true);
+    assert.equal(openedAtLogin(['Jason.exe']), false);
+    assert.equal(openedAtLogin(['Jason.exe', '--opened-at-login=no']), false);
+});
+
+test('starting Jason again while it runs brings the window forward, hidden or minimized; a start the computer made at sign-in does not', () => {
+    assert.equal(showsOnSecondStart(['Jason.exe']), true, 'a shortcut, the Start menu or the Dock');
+    assert.equal(showsOnSecondStart(['Jason.exe', '--opened-at-login']), false);
+
+    const window = (minimized: boolean) => {
+        const did: string[] = [];
+        return { did, isMinimized: () => minimized, restore: () => void did.push('restore'), show: () => void did.push('show'), focus: () => void did.push('focus') };
+    };
+    const hidden = window(false);
+    bringForward(hidden);
+    assert.deepEqual(hidden.did, ['show', 'focus'], 'a window hidden in the tray is shown, not only focused');
+    const minimized = window(true);
+    bringForward(minimized);
+    assert.deepEqual(minimized.did, ['restore', 'show', 'focus']);
+    bringForward(null);
+});
+
+test('Open Jason at login is off by default and nothing is registered until the person turns it on', (t) => {
+    const home = scratch(t);
+    const electron = electronLogin();
+    const mac = new LoginItem({ platform: 'darwin', home, executable, electron, pathRead, log: memoryLog() });
+    const windows = new LoginItem({ platform: 'win32', home, executable, electron, pathRead, log: memoryLog() });
+    assert.equal(mac.isOn(), false);
+    assert.equal(windows.isOn(), false);
+    assert.deepEqual(electron.set, [], 'nothing is registered by being read');
+    assert.deepEqual(readdirSync(home), [], 'nothing is written by being read');
+    assert.deepEqual(electron.asked, [{ args: [loginFlag] }], 'Windows is asked about the item that carries the flag');
+});
+
+test('on macOS turning it on writes the LaunchAgent under the person’s home and turning it off removes it', async (t) => {
+    const home = scratch(t);
+    const electron = electronLogin();
+    const log = memoryLog();
+    const item = new LoginItem({ platform: 'darwin', home, executable, electron, pathRead, log });
+    await item.set(true);
+    assert.equal(readFileSync(launchAgentFile(home), 'utf8'), launchAgent(executable));
+    assert.equal(item.isOn(), true);
+    await item.set(false);
+    assert.equal(existsSync(launchAgentFile(home)), false);
+    assert.equal(item.isOn(), false);
+    assert.deepEqual(electron.set, [], 'macOS does not use Electron’s login item');
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [
+        ['login_item_set', { On: true, Platform: 'darwin' }],
+        ['login_item_set', { On: false, Platform: 'darwin' }],
+    ]);
+});
+
+test('on macOS the item is on only when the LaunchAgent starts this application: one that starts another reads as off', (t) => {
+    const home = scratch(t);
+    const file = launchAgentFile(home);
+    mkdirSync(dirname(file), { recursive: true });
+    const item = (exe: string) => new LoginItem({ platform: 'darwin', home, executable: exe, electron: electronLogin(), pathRead, log: memoryLog() });
+    writeFileSync(file, launchAgent('/Applications/Old Jason.app/Contents/MacOS/Jason'));
+    assert.equal(item(executable).isOn(), false, 'a LaunchAgent of another copy of the application');
+    writeFileSync(file, launchAgent(executable));
+    assert.equal(item(executable).isOn(), true);
+    const ampersand = '/Applications/R&D/Jason.app/Contents/MacOS/Jason';
+    writeFileSync(file, launchAgent(ampersand));
+    assert.equal(item(ampersand).isOn(), true, 'the executable is read as the plist escapes it');
+    writeFileSync(file, 'not a plist');
+    assert.equal(item(executable).isOn(), false);
+});
+
+test('on Windows turning it on sets Electron’s login item with the flag, and writes no file', async (t) => {
+    const home = scratch(t);
+    const electron = electronLogin();
+    const item = new LoginItem({ platform: 'win32', home, executable, electron, pathRead, log: memoryLog() });
+    await item.set(true);
+    assert.equal(item.isOn(), true);
+    await item.set(false);
+    assert.deepEqual(electron.set, [{ openAtLogin: true, args: [loginFlag] }, { openAtLogin: false, args: [loginFlag] }]);
+    assert.deepEqual(readdirSync(home), []);
+});
+
+test('nothing is registered before the login shell’s PATH has been read', async (t) => {
+    const home = scratch(t);
+    let read: () => void = () => undefined;
+    const shellPath = new Promise<void>((resolve) => {
+        read = resolve;
+    });
+    const item = new LoginItem({ platform: 'darwin', home, executable, electron: electronLogin(), pathRead: shellPath, log: memoryLog() });
+    const setting = item.set(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(existsSync(launchAgentFile(home)), false, 'the agent waited for the PATH');
+    read();
+    await setting;
+    assert.equal(existsSync(launchAgentFile(home)), true);
+});
+
+test('where there is no login item to set, the item says so and sets nothing', async (t) => {
+    const home = scratch(t);
+    const electron = electronLogin();
+    const log = memoryLog();
+    const item = new LoginItem({ platform: 'linux', home, executable, electron, pathRead, log });
+    assert.equal(item.supported, false);
+    assert.equal(item.isOn(), false);
+    await item.set(true);
+    assert.deepEqual(electron.set, []);
+    assert.deepEqual(readdirSync(home), []);
+    assert.deepEqual(log.lines, []);
+});
+
+function autostartCli(registered: () => boolean, exit = 0): Cli & { asked: string[][] } {
+    const asked: string[][] = [];
+    return {
+        asked,
+        async run(args): Promise<CliResult> {
+            asked.push([...args]);
+            if (exit !== 0) return { exit, stdout: '', stderr: 'refused' };
+            const verb = args[2];
+            const now = verb === 'enable' ? true : verb === 'disable' ? false : registered();
+            const answer = { registered: now, platform: 'windows', data_directory: now ? 'C:/planted-data' : null, executable: now ? 'C:/planted-exe/jason.exe' : null, executable_exists: now ? true : null, artifact_path: null };
+            return { exit: 0, stdout: `${JSON.stringify(answer)}\n`, stderr: '' };
+        },
+    };
+}
+
+test('Start the runtime at logon is read and set through jason runtime autostart, and the desktop writes nothing for it', async () => {
+    const cli = autostartCli(() => false);
+    const log = memoryLog();
+    const autostart = new RuntimeAutostart({ cli, log });
+    assert.equal(await autostart.registered(), false);
+    assert.equal(await autostart.set(true), true);
+    assert.equal(await autostart.set(false), false);
+    assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'disable']]);
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [
+        ['autostart_set', { On: true, Exit: 0 }],
+        ['autostart_set', { On: false, Exit: 0 }],
+    ]);
+    assert.equal(verbOf(['runtime', 'autostart', 'enable']), 'runtime autostart', 'the log names the verb');
+});
+
+test('an autostart the CLI refused or did not answer is unknown, and logged by its exit alone', async () => {
+    const log = memoryLog();
+    const refusing = autostartCli(() => true, 1);
+    const autostart = new RuntimeAutostart({ cli: refusing, log });
+    assert.equal(await autostart.registered(), null);
+    assert.equal(await autostart.set(true), null);
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_set', { On: true, Exit: 1 }]]);
+    assert.deepEqual(refusing.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'status']], 'a set that said nothing is followed by a read');
+    const garbled: Cli = { run: async () => ({ exit: 0, stdout: 'not json', stderr: '' }) };
+    assert.equal(await new RuntimeAutostart({ cli: garbled, log: memoryLog() }).registered(), null);
+});
+
+test('a set the CLI answered without saying what is registered is followed by a read of what is', async () => {
+    const asked: string[][] = [];
+    const cli: Cli = {
+        async run(args) {
+            asked.push([...args]);
+            if (args[2] === 'status') return { exit: 0, stdout: '{"registered":true}\n', stderr: '' };
+            return { exit: 0, stdout: 'done\n', stderr: '' };
+        },
+    };
+    assert.equal(await new RuntimeAutostart({ cli, log: memoryLog() }).set(true), true);
+    assert.deepEqual(asked, [['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'status']]);
+});
+
+test('the login items’ log lines, read back, carry the setting and the platform, never a path the CLI printed', async (t) => {
+    const root = scratch(t);
+    const logs = join(root, 'logs');
+    const log = fileLogger(logs);
+    await new LoginItem({ platform: 'darwin', home: join(root, 'home'), executable: '/planted-exe/Jason', electron: electronLogin(), pathRead, log }).set(true);
+    const autostart = new RuntimeAutostart({ cli: autostartCli(() => false), log });
+    await autostart.set(true);
+    const text = readdirSync(logs).map((name) => readFileSync(join(logs, name), 'utf8')).join('');
+    assert.equal(text.includes('planted'), false, 'a path reached the log');
+    assert.deepEqual(text.split(/\r?\n/).filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName), ['login_item_set', 'autostart_set']);
+});

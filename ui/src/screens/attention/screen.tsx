@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect } from 'react';
 import { useApi } from '../../api/context';
 import { Segmented } from '../../layout/segmented';
 import { Toolbar } from '../../layout/toolbar';
@@ -47,8 +47,8 @@ export function AttentionScreen() {
     };
 
     return (
-        <div class={`main${selected ? '' : ' single'}`}>
-            <div class="list">
+        <div className={`main${selected ? '' : ' single'}`}>
+            <div className="list">
                 <Toolbar
                     title="Attention"
                     refresh={{ busy: store.refreshing.value, onRefresh: () => void store.refresh(api, decided) }}
@@ -67,7 +67,7 @@ export function AttentionScreen() {
                 </Toolbar>
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.loaded.value && count === 0 ? (
-                    <div class="empty">
+                    <div className="empty">
                         <strong>Nothing needs you</strong>
                         {!decided ? 'No approval is waiting and no question is open.' : 'Nothing has been decided yet.'}
                     </div>

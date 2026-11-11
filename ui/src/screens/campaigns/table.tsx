@@ -26,8 +26,8 @@ type Props = {
 export function CampaignTable({ campaigns, view, period, filters, summary, activity, selected, opens, more }: Props) {
     const columns = (view === 'summary' ? summaryColumns : activityColumns).filter((column) => column.column !== false);
     return (
-        <div class="tablewrap">
-            <table class="grid">
+        <div className="tablewrap">
+            <table className="grid">
                 <thead>
                     <tr>
                         <th>Campaign</th>
@@ -35,7 +35,7 @@ export function CampaignTable({ campaigns, view, period, filters, summary, activ
                             <th
                                 key={column.key}
                                 title={column.hint}
-                                class={column.key === atTheProvider[0] ? 'side' : ''}
+                                className={column.key === atTheProvider[0] ? 'side' : ''}
                             >
                                 {column.label}
                             </th>
@@ -48,29 +48,29 @@ export function CampaignTable({ campaigns, view, period, filters, summary, activ
                             view === 'summary' ? summary[campaign.id] : activity[campaign.id];
                         const linked = view === 'activity' || summary[campaign.id]?.sequence_linked !== false;
                         const at = { screen: 'campaigns' as const, id: campaign.id, view, period, filters };
-                        const opened = { ...at, ...(opens ?? { tab: 'timeline' as const }) };
+                        const opened = { ...at, ...(opens ?? { tab: 'sequence' as const }) };
                         return (
                             <tr
                                 key={campaign.id}
-                                class={campaign.id === selected ? 'sel' : ''}
+                                className={campaign.id === selected ? 'sel' : ''}
                                 onClick={(event) => {
                                     if (!(event.target as HTMLElement).closest('a')) navigate(opened);
                                 }}
                             >
                                 <td>
-                                    <a class="name" href={href(opened)}>
+                                    <a className="name" href={href(opened)}>
                                         {campaign.name}
                                     </a>
                                     {campaign.status !== 'active' && (
-                                        <span class="badge outline">{campaign.status}</span>
+                                        <span className="badge outline">{campaign.status}</span>
                                     )}
                                 </td>
                                 {columns.map((column) => {
                                     const side = column.key === atTheProvider[0] ? 'side' : '';
                                     if (!linked && atTheProvider.includes(column.key)) {
                                         return (
-                                            <td key={column.key} class={side}>
-                                                <span class="dash" title={unlinked}>
+                                            <td key={column.key} className={side}>
+                                                <span className="dash" title={unlinked}>
                                                     —
                                                 </span>
                                             </td>
@@ -81,12 +81,12 @@ export function CampaignTable({ campaigns, view, period, filters, summary, activ
                                     // People is every member, not a count of the summary's, so it opens the People tab unfiltered.
                                     const filter = column.key === 'people' ? {} : { filter: column.key };
                                     return (
-                                        <td key={column.key} class={side}>
+                                        <td key={column.key} className={side}>
                                             {value === 0 ? (
-                                                <span class="zero">0</span>
+                                                <span className="zero">0</span>
                                             ) : (
                                                 <a
-                                                    class={`n ${tone[column.key] ?? ''}`}
+                                                    className={`n ${tone[column.key] ?? ''}`}
                                                     href={href({ ...at, tab: 'people', ...filter })}
                                                 >
                                                     {number.format(value)}

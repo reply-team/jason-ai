@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'react';
 import * as threadsStore from './threads-store';
 import type { Failure } from './threads-store';
 import { useApi } from '../../api/context';
@@ -15,7 +15,7 @@ function Failed({ failure, retry }: { failure: Failure; retry: () => void }) {
             {failure.retry && (
                 <>
                     {' '}
-                    <button class="btn ghost" type="button" onClick={retry}>
+                    <button className="btn ghost" type="button" onClick={retry}>
                         Try again
                     </button>
                 </>
@@ -50,17 +50,17 @@ export function ThreadMessages({
     }, [view]);
 
     return (
-        <div class="msgs">
+        <div className="msgs">
             {failure && <Failed failure={failure} retry={() => void read(messages === null ? 0 : (next ?? 0))} />}
-            {messages === null && !failure && <div class="end loading">loading…</div>}
+            {messages === null && !failure && <div className="end loading">loading…</div>}
             {(messages ?? []).map((message, at) => {
                 const to = (message.to ?? []).join(', ');
                 return (
                     <div
                         key={message.external_id ?? at}
-                        class={`msg ${message.direction === 'inbound' ? 'in' : 'out'}`}
+                        className={`msg ${message.direction === 'inbound' ? 'in' : 'out'}`}
                     >
-                        <div class="who">
+                        <div className="who">
                             <span>
                                 {message.from ?? '?'}
                                 {to && ` → ${to}`}
@@ -72,7 +72,7 @@ export function ThreadMessages({
                 );
             })}
             {next !== null && (
-                <button class="btn ghost" type="button" onClick={() => void read(next)}>
+                <button className="btn ghost" type="button" onClick={() => void read(next)}>
                     Load more
                 </button>
             )}
@@ -95,36 +95,36 @@ function Threads({ contactId, pluginId, zone }: { contactId: string; pluginId: s
     }, [view]);
 
     return (
-        <div class="section threads">
-            <div class="threads-head">
+        <div className="section threads">
+            <div className="threads-head">
                 <h3>At {pluginId}</h3>
-                {readAt && <span class="hint">read at {clock(readAt, zone)}</span>}
-                <span class="spacer" />
+                {readAt && <span className="hint">read at {clock(readAt, zone)}</span>}
+                <span className="spacer" />
                 {threads !== null && (
-                    <button class="btn ghost" type="button" onClick={() => void read(0)}>
+                    <button className="btn ghost" type="button" onClick={() => void read(0)}>
                         Refresh
                     </button>
                 )}
             </div>
             {failure && <Failed failure={failure} retry={() => void read(0)} />}
-            {threads === null && !failure && <div class="end loading">loading…</div>}
-            {threads?.length === 0 && <div class="empty">No threads.</div>}
+            {threads === null && !failure && <div className="end loading">loading…</div>}
+            {threads?.length === 0 && <div className="empty">No threads.</div>}
             {(threads ?? []).map((thread) => (
-                <div key={thread.external_id} class="thread">
+                <div key={thread.external_id} className="thread">
                     <button
                         type="button"
-                        class="thread-head"
+                        className="thread-head"
                         aria-expanded={opened === thread.external_id}
                         onClick={() => setOpened(opened === thread.external_id ? null : thread.external_id)}
                     >
-                        <span class="ch">{thread.channel && channelName(thread.channel)}</span>
-                        <span class="s">
+                        <span className="ch">{thread.channel && channelName(thread.channel)}</span>
+                        <span className="s">
                             {thread.subject}
                             {thread.subject && thread.preview && ' · '}
-                            {thread.preview && <span class="pv">{thread.preview}</span>}
+                            {thread.preview && <span className="pv">{thread.preview}</span>}
                         </span>
-                        <span class="at">
-                            {thread.unread && <span class="badge accent">unread</span>}
+                        <span className="at">
+                            {thread.unread && <span className="badge accent">unread</span>}
                             {thread.last_activity_at && (
                                 <time>{when(new Date(thread.last_activity_at), now, zone)}</time>
                             )}
@@ -141,7 +141,7 @@ function Threads({ contactId, pluginId, zone }: { contactId: string; pluginId: s
                 </div>
             ))}
             {next !== null && (
-                <button class="btn ghost" type="button" onClick={() => void read(next)}>
+                <button className="btn ghost" type="button" onClick={() => void read(next)}>
                     Load more
                 </button>
             )}
@@ -157,7 +157,7 @@ export function linked(person: Contact): boolean {
 /** The Threads tab: the person's threads at each provider they are linked at. */
 export function ThreadsTab({ person, zone }: { person: Contact; zone: string }) {
     return (
-        <div class="panel-body">
+        <div className="panel-body">
             {(person.external_ids ?? [])
                 .filter((pin) => pin.kind === 'contact')
                 .map((pin) => (

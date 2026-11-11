@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState } from 'react';
 import { ApiError, Unpaired } from '../../api/client';
 import { useApi } from '../../api/context';
 import { session } from '../../api/session';
@@ -51,33 +51,38 @@ export function AddDialog({ person, onClose }: Props) {
             onClose={onClose}
             buttons={
                 <>
-                    <button class="btn primary" type="button" disabled={!campaign || busy} onClick={() => void add()}>
+                    <button
+                        className="btn primary"
+                        type="button"
+                        disabled={!campaign || busy}
+                        onClick={() => void add()}
+                    >
                         Add
                     </button>
                 </>
             }
         >
-            <div class="field">
+            <div className="field">
                 <CampaignPicker
                     label={campaign?.name ?? 'Choose a campaign'}
                     none="Choose a campaign"
                     onPick={setCampaign}
                 />
-                {excluded && <div class="hint">They were excluded from this campaign; adding re-enrols them.</div>}
+                {excluded && <div className="hint">They were excluded from this campaign; adding re-enrols them.</div>}
             </div>
-            <div class="field">
-                <label for="add-reason">Reason (optional, kept in the journal)</label>
+            <div className="field">
+                <label htmlFor="add-reason">Reason (optional, kept in the journal)</label>
                 <textarea
                     id="add-reason"
-                    class="textarea"
+                    className="textarea"
                     aria-label="Reason"
                     maxLength={2000}
                     value={reason}
-                    onInput={(e) => setReason((e.target as HTMLTextAreaElement).value)}
+                    onChange={(e) => setReason((e.target as HTMLTextAreaElement).value)}
                 />
             </div>
             {said && (
-                <p class="hint" role="status">
+                <p className="hint" role="status">
                     {said}
                 </p>
             )}

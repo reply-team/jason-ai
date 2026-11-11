@@ -1,0 +1,63 @@
+{
+  "operation": "workitem.get",
+  "case": "researcher-finding-second",
+  "request": {
+    "work_item_id": "wi_2"
+  },
+  "status": 200,
+  "response": {
+    "id": "wi_2",
+    "campaign_id": "cmp_2",
+    "contact_id": "cnt_1",
+    "kind": "ai_role",
+    "role": "researcher",
+    "operation": null,
+    "execution_profile": null,
+    "status": "succeeded",
+    "eligible": false,
+    "priority": 0,
+    "not_before": null,
+    "due_at": null,
+    "retry_after": null,
+    "timeout_seconds": null,
+    "heartbeat_seconds": null,
+    "max_attempts": null,
+    "created_by": {
+      "type": "human",
+      "id": null
+    },
+    "context": {},
+    "result_format": null,
+    "result": {
+      "summary": "Fjordline runs ferries between Bergen and Stavanger."
+    },
+    "attempt_count": 0,
+    "current_attempt_id": null,
+    "last_error": null,
+    "attempts": [
+      {
+        "id": "att_1",
+        "number": 1,
+        "status": "succeeded",
+        "command": "ai_role",
+        "execution_profile": null,
+        "error": null,
+        "launch": null,
+        "claimed_at": "2026-10-10T00:00:00.000Z",
+        "started_at": null,
+        "finished_at": null,
+        "last_heartbeat_at": null,
+        "lock_until": "2026-10-10T01:00:00.000Z"
+      }
+    ],
+    "external_reports": [],
+    "created_at": "2026-10-10T00:00:00.000Z",
+    "updated_at": "2026-10-10T00:00:00.000Z",
+    "finished_at": "2026-10-10T01:00:00.000Z",
+    "lineage": {
+      "state": "root"
+    },
+    "campaign_name": "Nordic pilot",
+    "contact_name": "Ingrid Solberg"
+  }
+}
