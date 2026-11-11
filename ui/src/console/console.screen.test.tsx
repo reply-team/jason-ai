@@ -164,7 +164,8 @@ describe('the console', () => {
         const row = within(panel('Campaigns')).getByText(hostile).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
         await waitFor(() => screen.getByRole('heading', { name: `What should Jason do in ${hostile}?` }));
-        expect(document.querySelector('img')).toBeNull();
+        // The only images of the page are the brand's own, at the head of the sidebar.
+        expect(Array.from(document.querySelectorAll('img')).filter((img) => !img.closest('.brand'))).toEqual([]);
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 
@@ -942,6 +943,31 @@ describe('the console', () => {
         expect(focus.map((rule) => /outline:\s*(?!none|0)[^;]+;/.test(rule.body))).toContain(true);
         const send = screen.getByRole('button', { name: 'Send' });
         expect(send.matches('.jc-console *')).toBe(true);
+    });
+
+    it('puts the mark and the wordmark at the head of the sidebar, the dark wordmark shown only on a dark ground', async () => {
+        renderConsole(pending(new FakeApi()));
+        const brand = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.jc-console .side .brand');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        const [mark, light, dark] = Array.from(brand.querySelectorAll('img'));
+        expect(mark!.getAttribute('src')).toMatch(/favicon[.]svg$/);
+        expect(mark!.getAttribute('alt')).toBe('');
+        expect(light!.getAttribute('src')).toMatch(/brand-wordmark[.]svg$/);
+        expect(light!.getAttribute('alt')).toBe('Jason AI, GTM Harness');
+        expect(dark!.getAttribute('src')).toMatch(/brand-wordmark-dark[.]svg$/);
+        expect(dark!.getAttribute('alt')).toBe('Jason AI, GTM Harness');
+        expect(brand.querySelector('.glyph')).toBeNull();
+        const shown = (selector: string) =>
+            rules()
+                .filter((rule) => rule.selector === selector)
+                .map((rule) => rule.body)
+                .join(';');
+        expect(shown('.jc-console .brand .wordmark.dark')).toContain('display: none');
+        expect(shown(":root:not([data-theme='light']) .jc-console .brand .wordmark.dark")).toContain('display: inline');
+        expect(shown(":root[data-theme='dark'] .jc-console .brand .wordmark.light")).toContain('display: none');
     });
 
     it("cuts the sidebar's version line with an ellipsis rather than scrolling, and keeps its whole text in the title", async () => {

@@ -44,12 +44,19 @@ define('side.page', ([hash]) => {
     if (typeof hash === 'string') here().dock.page(parseRoute(hash));
 });
 
+/** Where the build's own files are served from: the runtime serves the build under /ui/. */
+const assets = import.meta.env.BASE_URL;
+
 export function sideView(): Html {
     const marked = pendingMark.value;
     const screens = registry.list('screen').filter((each) => !ownPanels.has(each.id));
     // A long version is cut with an ellipsis at the sidebar's width; the title keeps all of it.
     const version = `Jason ${info.value?.runtime_version ?? '…'}`;
-    return html`<div class="brand"><span class="glyph"></span>Jason</div>
+    return html`<div class="brand">
+            <img class="mark" src="${assets}favicon.svg" alt="" />
+            <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
+            <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
+        </div>
         <button class="newbtn" type="button" ${act('side.new')}>${svg('plus', 15)}New chat</button>
         <nav class="list" aria-label="Conversations">
             ${conversations.value.map(
