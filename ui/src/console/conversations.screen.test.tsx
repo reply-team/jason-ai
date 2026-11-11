@@ -643,6 +643,55 @@ describe('the desktop’s conversations', () => {
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 
+    it('gives focus back to Rename after Save, Cancel or Escape, and Escape closes the box from anywhere in it', async () => {
+        const { desktop } = renderConsole();
+        const id = await send(desktop, 'Go');
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        const rename = () => screen.getByRole('button', { name: 'Rename' });
+        await waitFor(() => expect(rename()).toHaveProperty('disabled', false));
+
+        fireEvent.click(rename());
+        fireEvent.change(screen.getByRole('textbox', { name: 'Conversation name' }), {
+            target: { value: 'Saved name' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+        await waitFor(() => expect(document.activeElement).toBe(rename()));
+
+        fireEvent.click(rename());
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(document.activeElement).toBe(rename());
+
+        fireEvent.click(rename());
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Save name' }), { key: 'Escape' });
+        expect(screen.queryByRole('textbox', { name: 'Conversation name' })).toBeNull();
+        expect(document.activeElement).toBe(rename());
+        expect(calls(desktop, 'chat.rename')).toHaveLength(1);
+    });
+
+    it('cuts a typed name by characters as the desktop does, and a picked campaign keeps a name a person gave', async () => {
+        const desktop = stubDesktop();
+        desktop.names.set('cmp_3', 'Summer referrals');
+        renderConsole(desktop);
+        await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+        const id = await send(desktop, 'Make two campaigns');
+        flush(() => {
+            desktop.emit(id, { kind: 'pick', campaignIds: ['cmp_3', 'cmp_9'] });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Rename' })).toHaveProperty('disabled', false));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+        const box = screen.getByRole('textbox', { name: 'Conversation name' }) as HTMLInputElement;
+        fireEvent.change(box, { target: { value: '\u{1F600}'.repeat(70) } });
+        expect(Array.from(box.value)).toHaveLength(60);
+        fireEvent.change(box, { target: { value: 'Summer\u3164 picks' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+        await waitFor(() => expect(chats.value[id]?.title).toBe('Summer picks'));
+        const card = await waitFor(() => document.querySelector<HTMLElement>('.chat-pick')!);
+        fireEvent.click(within(card).getByRole('button', { name: 'Summer referrals' }));
+        await waitFor(() => expect(chats.value[id]).toMatchObject({ campaignId: 'cmp_3', title: 'Summer picks' }));
+        expect(desktop.kept.get(id)?.title).toBe('Summer picks');
+    });
+
     it('draws a tab title made of a person’s words as text', async () => {
         const { desktop } = renderConsole();
         await send(desktop, hostile);

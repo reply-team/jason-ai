@@ -46,6 +46,20 @@ function standInDesktop(): void {
             restart: (id: unknown) => Promise.resolve(kept(id) ? null : notKept),
             attach: () =>
                 Promise.resolve({ refused: 'That campaign is not one this chat made. Open it from the campaign.' }),
+            // As the desktop renames: refused before the first send, one line, cut at sixty characters.
+            rename: (id: unknown, title: unknown) => {
+                const found = kept(id);
+                if (!found || !sent.has(found.id))
+                    return Promise.resolve(
+                        found ? { refused: 'Send this chat a message first; then it can be renamed.' } : notKept,
+                    );
+                const name = Array.from(typeof title === 'string' ? title.replace(/\s+/g, ' ').trim() : '')
+                    .slice(0, 60)
+                    .join('');
+                if (name === '') return Promise.resolve({ refused: 'A name needs at least one character that shows.' });
+                found.title = name;
+                return Promise.resolve(found);
+            },
         },
         setup: {
             status: () =>

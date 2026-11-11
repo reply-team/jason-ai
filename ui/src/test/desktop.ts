@@ -10,6 +10,7 @@ import type {
     JasonDesktop,
 } from '../platform/desktop';
 import { JournalStream, type StreamSocket } from '../platform/journal-stream';
+import { unseen } from '../console/chat-model';
 import { fixtures } from './fixtures';
 
 // A stand-in for Jason Desktop's seam, and for the journal stream, as the console's screen tests want them: every call
@@ -202,6 +203,8 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
     /** By conversation, the campaigns its last pick named. */
     const picks = new Map<string, string[]>();
     const names = new Map<string, string>([['cmp_1', 'Spring']]);
+    /** The conversations a person renamed, whose name a hand-over keeps. */
+    const namedByPerson = new Set<string>();
     let made = 0;
     let moment = Date.parse('2026-11-11T10:00:00.000Z');
     const now = () => new Date((moment += 1000)).toISOString();
@@ -331,7 +334,9 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
                 if (!(picks.get(record.id) ?? []).includes(campaignId as string))
                     return { refused: 'That campaign is not one this chat made. Open it from the campaign.' };
                 record.campaignId = campaignId as string;
-                record.title = names.get(campaignId as string) ?? (campaignId as string);
+                // A name a person gave stays, as the desktop keeps it.
+                if (!namedByPerson.has(record.id))
+                    record.title = names.get(campaignId as string) ?? (campaignId as string);
                 record.updatedAt = now();
                 // The desktop says the hand-over before it answers.
                 stub.emit(record.id, { kind: 'attached', campaignId: record.campaignId, title: record.title });
@@ -342,9 +347,17 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
                 if (!record) return notKept;
                 if (!listed.has(record.id))
                     return { refused: 'Send this chat a message first; then it can be renamed.' };
-                const name = typeof title === 'string' ? title.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
+                if (typeof title === 'string' && title.length > 10_000)
+                    return { refused: 'That name is too long. Keep it to a short line.' };
+                // As the desktop cleans it: one line, nothing unseen, cut at sixty characters, never in one.
+                const line =
+                    typeof title === 'string'
+                        ? title.replace(/\s+/g, ' ').replace(unseen, '').replace(/\s+/g, ' ').trim()
+                        : '';
+                const name = Array.from(line).slice(0, 60).join('');
                 if (name === '') return { refused: 'A name needs at least one character that shows.' };
                 record.title = name;
+                namedByPerson.add(record.id);
                 record.updatedAt = now();
                 // The desktop says the new title before it answers.
                 stub.emit(record.id, { kind: 'renamed', title: name });
