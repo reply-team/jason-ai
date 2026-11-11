@@ -14,13 +14,23 @@ export function loginShellOptions(env: Readonly<Record<string, string | undefine
     return { timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, env: withoutSessionMarkers(env) } as const;
 }
 
-/** Pure: a PATH with the places an agent's command line lands added at its end, which a profile may not name yet. */
-export function withUsualPlaces(path: string, home: string): string {
+/**
+ * Pure: a PATH with the places an agent's command line lands added at its end, which a profile may not name yet:
+ * Homebrew's on macOS, Homebrew on Linux's own folder on Linux.
+ */
+export function withUsualPlaces(path: string, home: string, platform: NodeJS.Platform = 'darwin'): string {
     const entries = path.split(delimiter).filter(Boolean);
-    for (const place of [join(home, '.local', 'bin'), join(home, '.claude', 'local'), join(home, '.npm-global', 'bin'), '/opt/homebrew/bin', '/usr/local/bin']) {
+    const brew = platform === 'linux' ? ['/usr/local/bin', '/home/linuxbrew/.linuxbrew/bin'] : ['/opt/homebrew/bin', '/usr/local/bin'];
+    for (const place of [join(home, '.local', 'bin'), join(home, '.claude', 'local'), join(home, '.npm-global', 'bin'), ...brew]) {
         if (!entries.includes(place)) entries.push(place);
     }
     return entries.join(delimiter);
+}
+
+/** Pure: the login shell asked for the PATH, or null where none is: `SHELL`, else the one each system starts a terminal with. */
+export function loginShell(platform: NodeJS.Platform, env: Readonly<Record<string, string | undefined>>): string | null {
+    if (platform !== 'darwin' && platform !== 'linux') return null;
+    return env['SHELL'] || (platform === 'darwin' ? '/bin/zsh' : '/bin/sh');
 }
 
 /**
@@ -37,17 +47,19 @@ export function pathFromOutput(stdout: string): string | null {
 }
 
 /**
- * The PATH every program the desktop starts is given. A program started from the Finder gets launchd's bare PATH, on
- * which no agent's command line is found; the person's login shell knows the real one, so on macOS it is asked once,
- * before anything is started, and failing that the usual places are added. Everywhere else the inherited PATH is the
- * person's own and is used as it is.
+ * The PATH every program the desktop starts is given. A program started from the Finder gets launchd's bare PATH, and one
+ * started from a Linux session's menu gets the session's, which reads no `~/.bashrc`, where a version manager or npm's
+ * own folder most often adds itself; on neither is an agent's command line found as a terminal finds it. The person's
+ * login shell knows the real one, so on macOS and Linux it is asked once, before anything is started, and failing that
+ * the usual places are added. On Windows the inherited PATH is the person's own and is used as it is.
  */
 export async function loginPath(inherited: string, home: string): Promise<string> {
-    if (process.platform !== 'darwin') return inherited;
-    const shell = process.env.SHELL || '/bin/zsh';
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return inherited;
+    const shell = loginShell(process.platform, process.env) ?? '/bin/sh';
+    const platform = process.platform;
     return new Promise((resolve) => {
         execFile(shell, ['-ilc', `printf '${marker}%s${closing}' "$PATH"`], loginShellOptions(process.env), (error, stdout) => {
-            resolve(withUsualPlaces((error ? null : pathFromOutput(String(stdout))) ?? inherited, home));
+            resolve(withUsualPlaces((error ? null : pathFromOutput(String(stdout))) ?? inherited, home, platform));
         });
     });
 }
