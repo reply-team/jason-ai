@@ -806,12 +806,14 @@ describe('the console', () => {
     it('draws a hostile question and a hostile contact name in Needs you as text', async () => {
         renderConsole(pending(new FakeApi()));
         await waitFor(() => expect(attention.loaded.value).toBe(true));
+        // The dock draws its panels in a render of its own once it is ready, which the runtime's answer can come before:
+        // the read having ended says nothing of the panel being there yet.
+        const needs = await waitFor(() => panel('Needs you'));
         // A prospect may be called anything, and an agent may ask anything; the next read brings it back.
         flush(() => {
             attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: hostile }));
             attention.questions.value = attention.questions.value.map((each) => ({ ...each, question: hostile }));
         });
-        const needs = panel('Needs you');
         await waitFor(() => expect(within(needs).getAllByText(hostile).length).toBeGreaterThanOrEqual(2));
         expect(needs.querySelector('img')).toBeNull();
         expect((window as { hit?: number }).hit).toBeUndefined();
