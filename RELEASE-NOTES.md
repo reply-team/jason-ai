@@ -46,8 +46,8 @@ for it, and with no desktop installed nothing in the runtime differs.
 - **One installation.** The desktop asks `jason status` whether a runtime is up and whether it is the same build, and
   starts one with `jason runtime start` only when none is, never as its own child. It deploys the role skills from the
   package it carries, and works in a chat folder of its own under `<data>/desktop/chat`. When the runtime is another
-  version, its UI is loaded as it is and the window says the versions differ and names Check for Updates when the runtime runs from the `jason` the desktop
-  carries, and `jason update` otherwise.
+  version, its UI is loaded as it is and the window says the versions differ and names Check for Updates when the
+  runtime runs from the `jason` the desktop carries, and `jason update` otherwise.
 - **A window that stays shut.** The page gets `window.jasonDesktop` and nothing else, answered only from the top frame
   of a page at the runtime's origin. Navigation is locked to that origin; a link that leaves it opens in the system
   browser, and only when it is `https:`. Electron's own profile, storage and logs live under `<data>/desktop/electron`.
