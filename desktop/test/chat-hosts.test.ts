@@ -159,7 +159,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     assert.deepEqual(targetsOf(rules), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -171,7 +171,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
 
@@ -291,8 +291,27 @@ const inheritedClaudeProvider: Readonly<Record<string, string>> = {
     CLAUDE_CODE_USE_VERTEX: '1',
     CLAUDE_CODE_USE_FOUNDRY: '1',
     CLAUDE_CODE_OAUTH_TOKEN: 'inherited-oauth',
+    CLAUDE_CONFIG_DIR: '/inherited/claude-config',
+    CLAUDE_CODE_PROJECT_DIR_NAME: 'inherited-project-dir',
+    ANTHROPIC_PROFILE: 'inherited-profile',
+    ANTHROPIC_FEDERATION_RULE_ID: 'inherited-rule',
+    ANTHROPIC_ORGANIZATION_ID: 'inherited-organization',
+    ANTHROPIC_SERVICE_ACCOUNT_ID: 'inherited-service-account',
+    ANTHROPIC_IDENTITY_TOKEN_FILE: '/inherited/identity-token',
+    ANTHROPIC_IDENTITY_TOKEN: 'inherited-identity-token',
+    ANTHROPIC_WORKSPACE_ID: 'inherited-workspace',
 };
-const inheritedCodexProvider: Readonly<Record<string, string>> = { OPENAI_API_KEY: 'sk-inherited-openai', OPENAI_BASE_URL: 'https://inherited.example/v1' };
+const inheritedCodexProvider: Readonly<Record<string, string>> = {
+    OPENAI_API_KEY: 'sk-inherited-openai',
+    OPENAI_BASE_URL: 'https://inherited.example/v1',
+    CODEX_API_KEY: 'sk-inherited-codex',
+    CODEX_HOME: '/inherited/codex-home',
+    CODEX_SQLITE_HOME: '/inherited/codex-sqlite',
+    CODEX_ACCESS_TOKEN: 'inherited-access-token',
+    OPENAI_FEDERATION_RULE_ID: 'inherited-openai-rule',
+    OPENAI_IDENTITY_TOKEN_FILE: '/inherited/openai-identity-token',
+    OPENAI_WORKLOAD_IDENTITY_CONTEXT: 'inherited-workload-context',
+};
 
 test('a key provider\'s turn is started without the provider and credentials the desktop inherited; a plain turn keeps them', () => {
     const base = { PATH: '/x', HOME: '/h', ...inheritedClaudeProvider, ...inheritedCodexProvider };
@@ -306,9 +325,10 @@ test('a key provider\'s turn is started without the provider and credentials the
     for (const value of [...Object.values(inheritedClaudeProvider).filter((each) => each !== '1'), 'sk-lower']) assert.ok(!Object.values(keyed).includes(value), value);
     assert.equal(keyed.HOME, '/h');
 
-    const openai = hostEnvironment(base, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: true, provider: { OPENAI_API_KEY: 'sk-openai' } });
-    assert.equal(openai.OPENAI_API_KEY, 'sk-openai');
-    assert.equal('OPENAI_BASE_URL' in openai, false);
+    const openai = hostEnvironment(base, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: true, provider: { CODEX_API_KEY: 'sk-openai', CODEX_HOME: '/d/codex-keyed' } });
+    assert.equal(openai.CODEX_API_KEY, 'sk-openai');
+    assert.equal(openai.CODEX_HOME, '/d/codex-keyed');
+    for (const name of Object.keys(inheritedCodexProvider).filter((each) => each !== 'CODEX_API_KEY' && each !== 'CODEX_HOME')) assert.equal(name in openai, false, name + ' is withheld');
 
     for (const program of ['claude', 'codex'] as const) {
         const plain = hostEnvironment(base, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
@@ -345,6 +365,7 @@ test('a recorded Claude Code turn maps to its session, its words and one step pe
     const lines = fixture('claude-turn.jsonl').flatMap((line) => claudeLine(line));
     assert.deepEqual(lines, [
         { kind: 'session', id: '0b6f3c1e-2d4a-4c8e-9f10-5a7b8c9d0e1f' },
+        { kind: 'key_source', source: 'absent' },
         { kind: 'text', text: 'Let me look at what is waiting.' },
         { kind: 'step', text: 'Ran a jason command', detail: 'jason approval list --json' },
         { kind: 'step', text: 'Read a file', detail: '/data/desktop/chat/notes.md' },
@@ -359,6 +380,39 @@ test('a Claude Code turn that ended in an error ends with the host\'s own words'
     assert.deepEqual(lines.at(-1), { kind: 'result', error: 'Not logged in. Please run /login.' });
     assert.deepEqual(claudeLine('{"type":"result","subtype":"error_max_turns","is_error":true}'), [{ kind: 'result', error: 'Claude Code ended the turn: error_max_turns.' }]);
     assert.deepEqual(claudeLine('{"type":"result","subtype":"error_during_execution"}'), [{ kind: 'result', error: 'Claude Code ended the turn: error_during_execution.' }]);
+});
+
+test('the init line says where the turn\'s key came from, by a closed word: the page\'s values sorted, and what it does not list', () => {
+    const source = (value: unknown) => claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'stub-session-1', ...(value === undefined ? {} : { apiKeySource: value }) })).filter((line) => line.kind === 'key_source');
+    assert.deepEqual(source('ANTHROPIC_API_KEY'), [{ kind: 'key_source', source: 'environment' }]);
+    for (const elsewhere of ['apiKeyHelper', '/login managed key', 'none', 'oauth']) assert.deepEqual(source(elsewhere), [{ kind: 'key_source', source: 'elsewhere' }], elsewhere);
+    for (const unexplained of ['user', 'project', 'org', 'temporary']) assert.deepEqual(source(unexplained), [{ kind: 'key_source', source: 'unexplained' }], unexplained);
+    for (const unlisted of ['anthropic_api_key', 'ANTHROPIC_AUTH_TOKEN', '', 'constructor']) assert.deepEqual(source(unlisted), [{ kind: 'key_source', source: 'unlisted' }], unlisted);
+    for (const absent of [undefined, 7, null]) assert.deepEqual(source(absent), [{ kind: 'key_source', source: 'absent' }], String(absent));
+    // A session id of a shape the desktop does not pass on still says where the key came from.
+    assert.deepEqual(claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: '--x', apiKeySource: 'oauth' })), [{ kind: 'key_source', source: 'elsewhere' }]);
+});
+
+test('a retry Claude Code reports on a 401, a 403 or a failed authentication is a refused key; any other retry says nothing', () => {
+    const retry = (fields: Record<string, unknown>) => claudeLine(JSON.stringify({ type: 'system', subtype: 'api_retry', attempt: 1, max_retries: 10, retry_delay_ms: 500, ...fields }));
+    assert.deepEqual(retry({ error_status: 401, error: 'unknown' }), [{ kind: 'refused' }]);
+    assert.deepEqual(retry({ error_status: 403, error: 'unknown' }), [{ kind: 'refused', forbidden: true }]);
+    assert.deepEqual(retry({ error_status: 403, error: 'authentication_failed' }), [{ kind: 'refused' }]);
+    assert.deepEqual(retry({ error_status: null, error: 'authentication_failed' }), [{ kind: 'refused' }]);
+    for (const other of [{ error_status: 429, error: 'rate_limit' }, { error_status: 529, error: 'overloaded' }, { error_status: null, error: 'server_error' }, {}]) assert.deepEqual(retry(other), [], JSON.stringify(other));
+});
+
+test('a turn Claude Code ends on a 401 or 403, or with a failed authentication, says the key was refused beside the host\'s own words', () => {
+    assert.deepEqual(claudeLine('{"type":"result","subtype":"success","is_error":true,"api_error_status":401,"result":"Invalid API key · Fix external API key"}'), [
+        { kind: 'result', error: 'Invalid API key · Fix external API key', refused: true },
+    ]);
+    assert.deepEqual(claudeLine('{"type":"result","subtype":"success","is_error":true,"api_error_status":403,"result":"Forbidden"}'), [{ kind: 'result', error: 'Forbidden', refused: true, forbidden: true }]);
+    assert.deepEqual(claudeLine('{"type":"result","subtype":"success","is_error":true,"api_error_status":429,"result":"Limit"}'), [{ kind: 'result', error: 'Limit' }]);
+    assert.deepEqual(claudeLine('{"type":"assistant","error":"authentication_failed","message":{"content":[{"type":"text","text":"Invalid API key · Fix external API key"}]}}'), [
+        { kind: 'refused' },
+        { kind: 'text', text: 'Invalid API key · Fix external API key' },
+    ]);
+    assert.deepEqual(claudeLine('{"type":"assistant","error":"rate_limit","message":{"content":[{"type":"text","text":"Slow down"}]}}'), [{ kind: 'text', text: 'Slow down' }]);
 });
 
 test('a step says in plain words what the tool did, with the command, path or query beneath it as text', () => {
@@ -423,7 +477,8 @@ test('a session that does not begin with a letter or a digit never reaches a com
         assert.throws(() => codexArguments({ resume }), { message: 'That session is not one the desktop passes to a host.' }, resume);
     }
     for (const id of options) {
-        assert.deepEqual(claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: id })), [], id);
+        // The line still says where the key came from (`keySourceOf`), and nothing of the session.
+        assert.deepEqual(claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: id })), [{ kind: 'key_source', source: 'absent' }], id);
         assert.deepEqual(codexLine(JSON.stringify({ type: 'thread.started', thread_id: id }), new Set()), [], id);
     }
     assert.equal(valueOf(claudeArguments({ ...turn, resume: '0c1d-ses' }), '--resume'), '0c1d-ses');
@@ -434,7 +489,7 @@ test('an unreadable line, a tool\'s output and a malformed session say nothing',
     assert.deepEqual(claudeLine(''), []);
     assert.deepEqual(claudeLine('[1,2]'), []);
     assert.deepEqual(claudeLine('{"type":"user","message":{"content":[{"type":"tool_result","content":"secret"}]}}'), []);
-    assert.deepEqual(claudeLine('{"type":"system","subtype":"init","session_id":"a b"}'), []);
+    assert.deepEqual(claudeLine('{"type":"system","subtype":"init","session_id":"a b"}'), [{ kind: 'key_source', source: 'absent' }]);
     assert.deepEqual(codexLine('{"type":"thread.started","thread_id":"../x y"}', new Set()), []);
 });
 

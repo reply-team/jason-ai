@@ -15,6 +15,13 @@ export interface DesktopPaths {
     conversations: string;
     /** `<data>/desktop/provider-keys`: the AI providers' keys, encrypted by the operating system. */
     providerKeys: string;
+    /**
+     * `<data>/desktop/claude-keyed/`: one Claude Code configuration folder per key provider, `<provider id>/` in it, which
+     * a turn on that provider's key runs with: no claude.ai login is in it, and it keeps those turns' transcripts.
+     */
+    claudeKeyed: string;
+    /** `<data>/desktop/codex-keyed/`: the Codex home a turn on the OpenAI key runs with: no saved login is in it, and it keeps those turns' transcripts. */
+    codexKeyed: string;
     /** `<data>/desktop/turns/`: one MCP configuration per running chat turn, with that turn's secret. */
     turns: string;
     /** `<data>/desktop/rollback/`: the previous application an update kept aside, and the record of that update. */
@@ -52,6 +59,8 @@ export function desktopPaths(data: string): DesktopPaths {
         chat: join(desktop, 'chat'),
         conversations: join(desktop, 'conversations'),
         providerKeys: join(desktop, 'provider-keys'),
+        claudeKeyed: join(desktop, 'claude-keyed'),
+        codexKeyed: join(desktop, 'codex-keyed'),
         turns: join(desktop, 'turns'),
         rollback: join(desktop, 'rollback'),
         bundle: join(desktop, 'bundle'),

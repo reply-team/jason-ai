@@ -36,6 +36,22 @@ cannot be chosen there, and has every chat turn sent to it refused before the ho
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`). On Linux a key
   is kept and read only where the session offers a keyring (GNOME Keyring or KWallet): where Electron falls back to its
   `basic_text` store, a fixed key, the card says so and the key is not kept.
+- `<data>/desktop/claude-keyed/<provider id>/` and `<data>/desktop/codex-keyed/`: the folders a chat turn on a
+  provider's key runs its host with, as `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, made `0700` where the system has modes.
+  No claude.ai login and no saved Codex login are in them, and a keyed turn is started without the variables that name
+  another credential, a profile or a federation; the design is that a key the host does not take fails the turn instead
+  of running it on the person's own plan, as built and not yet seen with a real host. A Claude Console profile kept under
+  the person's own home is not moved by the folder; the key in the environment ranks above it. The key itself is never
+  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex). Each folder keeps the
+  transcripts of its provider's turns, one Claude Code folder per provider since a conversation keeps one session per
+  provider.
+- How a turn on a key ends. On Anthropic's own key, a turn whose host says the key came from elsewhere is stopped. On a
+  key run through Claude Code (Anthropic, DeepSeek, Kimi, GLM, MiniMax), a retry or an end the host reports for a
+  refused key ends the turn at once with one sentence naming the provider's card in Connect: a 401 or a failed
+  authentication says the key was refused, a 403 alone that the key or the request was. On the OpenAI key, run through
+  Codex, Codex's own words end the turn, since OpenAI does not say how its events name a refused key. On every keyed
+  turn of either host, the host's error text passes one function that replaces any part of the key, and any token
+  shaped as a provider's key, by `[key]` before the page shows it or the conversation keeps it.
 - `<data>/desktop/bundle/<version>/`: on Linux, an AppImage's copy of the `jason` it carries (see "On Linux").
 - `<data>/desktop/electron/`: Electron's own files (its profile, the page's storage, and in `logs/` what Electron itself
   logs), set before anything else, so a second data directory is a second desktop and nothing of it lands outside
@@ -121,9 +137,9 @@ desktop does not narrow, so it may read the records.
 - **What never carries one.** `jason doctor` carries none of it, its count and size included. The desktop's log says
   how many were read, how many files were not records, a record's error code when one could not be written, how many
   new campaigns a set-up turn found and why a turn started afresh, and nothing else. `jason export` carries no part of
-  `<data>/desktop/`, so conversations do not travel to another machine. `jason uninstall --purge-data` removes them
-  with the data directory; the transcripts the agent hosts keep of the chat are theirs, in their own folders, and are
-  never touched.
+  `<data>/desktop/`, so conversations do not travel to another machine, nor do the transcripts of turns on a provider's
+  key. `jason uninstall --purge-data` removes both with the data directory; the transcripts the agent hosts keep of the
+  chat's other turns are theirs, in their own folders, and are never touched.
 
 ## The window
 

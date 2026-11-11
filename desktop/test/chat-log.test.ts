@@ -251,3 +251,16 @@ test('no conversation reaches the log: a planted record, a lost session and a se
     assert.deepEqual(fields('chat_setup_ended'), [{ ListRead: true, Found: 2, HandedOver: false }]);
     assert.deepEqual(fields('chat_conversation_unwritten'), []);
 });
+
+test('a key source that stops nothing is logged by its word alone', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    for (const source of ['unexplained', 'unlisted', 'absent'] as const) loggedTurns(log).keySource(source);
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_key_source')
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
+    assert.deepEqual(said, (['unexplained', 'unlisted', 'absent'] as const).map((source) => ({ '@l': 'Warning', Source: source })));
+});

@@ -14,10 +14,10 @@
  * acts for the person across the installation, as the permission model and the allow list let it.
  */
 
-import { mkdirSync, readdirSync, statSync } from 'node:fs';
+import { chmodSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute } from 'node:path';
-import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type Step } from './chat-hosts.ts';
+import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
 import {
     bounded,
     conversationIdShape,
@@ -42,7 +42,7 @@ import type { Cli } from './cli.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs } from './programs.ts';
-import { hosts, keyProvider, providerEnvironment } from './providers-model.ts';
+import { hosts, keyedFolder, keyProvider, providerEnvironment, withoutKey, withoutWholeKey } from './providers-model.ts';
 
 /** Why a turn starts a fresh session of a conversation that had one. */
 export type FreshReason = 'host_changed' | 'not_found';
@@ -130,6 +130,11 @@ export interface ChatOptions {
     setupEnded?(found: number | null, handedOver: boolean): void;
     /** Said when a turn starts a fresh session of a conversation that had one. */
     fresh?(reason: FreshReason): void;
+    /**
+     * Said when a turn on Anthropic's key starts and Claude Code names where its key came from by a value that does not
+     * say it is the environment's, nor that it is not: the word only (`KeySource`), never what the host printed.
+     */
+    keySource?(source: Exclude<KeySource, 'environment' | 'elsewhere'>): void;
     /** How long a card waits for the person; thirty minutes unless a test shortens it. */
     answerWindowMs?: number;
     platform?: Platform;
@@ -155,6 +160,43 @@ interface Resolved {
     keyed: boolean;
     /** The model named on the command line; an Anthropic-compatible endpoint is given its model by the environment instead. */
     model: string | undefined;
+    /** A key provider's host folder of the desktop's own (`keyedFolder`), made before the turn; null on a plain turn. */
+    folder: string | null;
+    /** Whether the host's word on where its key came from is read: on Anthropic's own key alone, whose variable the page names. */
+    checksKeySource: boolean;
+    /** The key a keyed turn runs on, which no error text of the host reaches the page or the record with (`withoutKey`). */
+    key: string | null;
+}
+
+/** The turn's end when a provider refused its key: one sentence naming where the key is changed. */
+function refusedSentence(label: string): string {
+    return `${label} refused the key. Change it on the ${label} card in Connect, then send again.`;
+}
+
+/** The turn's end when the provider answered 403 alone, which a proxy or a denied resource answers as well. */
+function forbiddenSentence(label: string): string {
+    return `${label} refused the key or the request (403). Check the key on the ${label} card in Connect, then send again.`;
+}
+
+/** The turn's end when Claude Code said the key it uses is not the one in its environment. */
+function notTakenSentence(label: string): string {
+    return `Claude Code did not use the ${label} key, so the turn was stopped before it ran on another account. Check the key on the ${label} card in Connect, then send again.`;
+}
+
+/**
+ * Makes a key provider's host folder, and its parent of the desktop's own, closed to every account but this one where
+ * the system has modes: the folder keeps the transcripts of that provider's turns.
+ */
+function makePrivate(label: string, parent: string, folder: string): void {
+    try {
+        mkdirSync(folder, { recursive: true, mode: 0o700 });
+        if (process.platform === 'win32') return;
+        for (const each of new Set([parent, folder])) chmodSync(each, 0o700);
+    } catch (error) {
+        // The system's code, never its text, which names the path; the turn is refused and no host starts.
+        const code = (error as NodeJS.ErrnoException | null)?.code;
+        throw new Error(`the folder for ${label} turns could not be made (${typeof code === 'string' ? code : 'unknown'}).`);
+    }
 }
 
 /** A campaign as a turn reads it: what the header says, and the folders a Claude Code turn adds. */
@@ -184,6 +226,8 @@ interface Attempted {
     result: string | null | undefined;
     host: HostProcess | null;
     again: boolean;
+    /** Whether the result is the desktop's own sentence for a refused key, which no scrub touches. */
+    ours?: boolean;
 }
 
 /** The campaigns the conversation's last pick named. */
@@ -544,15 +588,26 @@ export class Chat {
         if (provider !== undefined) {
             const key = this.#options.keyFor(provider.id);
             if (!key) return `No key is stored for ${provider.label}. Add it on the Connect card, then send again.`;
-            const provided = providerEnvironment(provider, key, model ?? '');
-            return { host: provider.id, label: provider.label, program: provider.program, provider: provided, keyed: true, model: provider.baseUrl ? undefined : model };
+            const folder = keyedFolder(this.#options.paths, provider);
+            const provided = providerEnvironment(provider, key, model ?? '', folder);
+            return {
+                host: provider.id,
+                label: provider.label,
+                program: provider.program,
+                provider: provided,
+                keyed: true,
+                model: provider.baseUrl ? undefined : model,
+                folder,
+                checksKeySource: provider.keyVariable === 'ANTHROPIC_API_KEY',
+                key,
+            };
         }
         const known = hosts.find((each) => each.id === host);
         if (known === undefined) return notAHost;
         if (!known.drivesChat || (known.program !== 'claude' && known.program !== 'codex')) {
             return `${known.label} runs campaign work, not the chat yet. Choose Claude Code or Codex for the chat.`;
         }
-        return { host: known.id, label: known.label, program: known.program, provider: {}, keyed: false, model };
+        return { host: known.id, label: known.label, program: known.program, provider: {}, keyed: false, model, folder: null, checksKeySource: false, key: null };
     }
 
     async #readJson(args: string[]): Promise<Record<string, unknown> | null> {
@@ -701,6 +756,7 @@ export class Chat {
             // First of all a turn does: the chat folder is found to be the desktop's own, and its memory files written,
             // before the turn's file, its endpoint or the host that starts in that folder.
             this.#placeInstructions(fence);
+            if (resolved.folder !== null) makePrivate(resolved.label, resolved.program === 'claude' ? paths.claudeKeyed : paths.codexKeyed, resolved.folder);
             if (resolved.program === 'claude') {
                 const id = newTurnId();
                 turnId = id;
@@ -791,6 +847,10 @@ export class Chat {
             let result: string | null | undefined;
             let shown = 0;
             let other = false;
+            // The sentence the turn ends with when the desktop stopped the host for its key; nothing it says after counts.
+            let stoppedFor: string | null = null;
+            // Whether the turn ended on a key the provider refused, in the desktop's own sentence.
+            let keyRefused = false;
             // The fallback's session, kept aside until the fallback has done something.
             let pending: string | null = null;
             const seen = new Set<string>();
@@ -800,8 +860,24 @@ export class Chat {
                 conversation.sessions[resolved.host] = session;
                 this.#keep(conversation);
             };
+            const stopFor = (sentence: string) => {
+                stoppedFor = sentence;
+                result = sentence;
+                host?.stop();
+            };
             const said = (line: HostLine) => {
-                if (other) return;
+                if (other || stoppedFor !== null) return;
+                if (line.kind === 'key_source') {
+                    if (!resolved.checksKeySource || line.source === 'environment') return;
+                    if (line.source === 'elsewhere') stopFor(notTakenSentence(resolved.label));
+                    else this.#options.keySource?.(line.source);
+                    return;
+                }
+                if (line.kind === 'refused') {
+                    // On a plain turn the host's own sign-in is the person's, and so are its retries and its words.
+                    if (resolved.keyed) stopFor(line.forbidden === true ? forbiddenSentence(resolved.label) : refusedSentence(resolved.label));
+                    return;
+                }
                 if (line.kind === 'session') {
                     if (resumed !== undefined && line.id !== resumed) {
                         other = true;
@@ -811,20 +887,29 @@ export class Chat {
                     if (fallback && shown === 0) pending = line.id;
                     else name(line.id);
                 } else if (line.kind === 'result') {
-                    result = line.error;
+                    keyRefused = resolved.keyed && line.refused === true;
+                    result = !keyRefused ? line.error : line.forbidden === true ? forbiddenSentence(resolved.label) : refusedSentence(resolved.label);
                 } else {
                     if (pending !== null) {
                         name(pending);
                         pending = null;
                     }
                     shown++;
+                    // On a keyed turn the whole key, exactly as it is, never reaches the page or the record in what the
+                    // host says while it runs; only the exact key, since an answer's long ids and hashes are its own.
+                    const key = resolved.key;
+                    const clean = key === null ? (text: string) => text : (text: string) => withoutWholeKey(text, key);
                     if (line.kind === 'step') {
                         steps++;
-                        conversation.entries.push(line.detail === undefined ? { kind: 'step', text: line.text } : { kind: 'step', text: line.text, detail: line.detail });
+                        const step: Extract<ChatEvent, { kind: 'step' }> =
+                            line.detail === undefined ? { kind: 'step', text: clean(line.text) } : { kind: 'step', text: clean(line.text), detail: clean(line.detail) };
+                        conversation.entries.push({ ...step });
+                        this.#options.emit(replyTo, step);
                     } else {
-                        conversation.entries.push({ kind: 'text', text: line.text });
+                        const said: Extract<ChatEvent, { kind: 'text' }> = { kind: 'text', text: clean(line.text) };
+                        conversation.entries.push({ ...said });
+                        this.#options.emit(replyTo, said);
                     }
-                    this.#options.emit(replyTo, line);
                 }
             };
             let started: HostProcess;
@@ -846,12 +931,14 @@ export class Chat {
             host = started;
             running.process = started;
             this.#options.started?.(resolved.host, resumed !== undefined);
-            if (running.stopped) started.stop();
+            if (running.stopped || stoppedFor !== null) started.stop();
             const exit = await started.exited;
             // Every tool use is said as a step before it runs, so a host that said nothing did nothing.
             const failedSilently = shown === 0 && (exit.code !== 0 || typeof result === 'string');
-            const again = resumed !== undefined && !running.stopped && exit.startError === null && (other || failedSilently);
-            return { exit, result, host: started, again };
+            // A key that was refused or not taken is the key's, not the session's: a fresh session would fail the same way.
+            const refusedKey = stoppedFor !== null || keyRefused;
+            const again = resumed !== undefined && !running.stopped && exit.startError === null && !refusedKey && (other || failedSilently);
+            return { exit, result, host: started, again, ours: refusedKey };
         };
 
         void (async () => {
@@ -873,7 +960,10 @@ export class Chat {
                 // The turn ends whatever closing its files or reading the campaigns did.
             } finally {
                 // The turn ends: its record kept, it is no longer running, its end is told, and its done sent.
-                const error = this.#ending(resolved.label, last.exit, last.result, running.stopped, last.host);
+                // On a keyed turn the host's own words pass `withoutKey` before the page or the record has them.
+                const key = resolved.key;
+                const scrub = key === null || last.ours ? (text: string) => text : (text: string) => withoutKey(text, key);
+                const error = this.#ending(resolved.label, last.exit, last.result, running.stopped, last.host, scrub);
                 if (error !== null) conversation.entries.push({ kind: 'error', text: error });
                 if (handed?.kind === 'pick') conversation.entries.push({ kind: 'pick', campaignIds: [...handed.campaignIds] });
                 this.#keep(conversation);
@@ -891,11 +981,12 @@ export class Chat {
         this.#options.emit(replyTo, { kind: 'fresh', reason });
     }
 
-    #ending(label: string, exit: HostExit, result: string | null | undefined, stopped: boolean, host: HostProcess | null): string | null {
+    /** The turn's end in words: the host's own (its result, or the tail of its standard error) through `scrub`, else the desktop's. */
+    #ending(label: string, exit: HostExit, result: string | null | undefined, stopped: boolean, host: HostProcess | null, scrub: (text: string) => string): string | null {
         if (stopped) return null;
         if (exit.startError !== null) return `${label} could not be started: ${exit.startError}`;
-        if (typeof result === 'string') return result;
-        const words = lastWords(host?.stderrTail() ?? '');
+        if (typeof result === 'string') return scrub(result);
+        const words = scrub(lastWords(host?.stderrTail() ?? ''));
         if (result === null && exit.code === 0) return null;
         if (result === null) return words || `${label} stopped with exit code ${exit.code ?? 'none'}.`;
         if (exit.code === 0) return words || `${label} ended without an answer.`;

@@ -10,7 +10,7 @@ import { dataDirectory, desktopPaths } from '../src/paths.ts';
 import { permissionAllowed } from '../src/permissions.ts';
 import { findOnPath, launchOf, npmScript } from '../src/program-path.ts';
 import { pathOf, withPath } from '../src/programs.ts';
-import { hosts, keyProviders, notTheChatYet, providerEnvironment, signInSentence } from '../src/providers-model.ts';
+import { hosts, keyedFolder, keyProviders, keyWord, notTheChatYet, providerEnvironment, signInSentence, withoutKey } from '../src/providers-model.ts';
 import { isFeed, parseSettings } from '../src/settings.ts';
 import { versionsDifferSentence } from '../src/setup.ts';
 import { pluginValid, runtimeVersionIn, statusFacts, versionAtLeast, versionIn } from '../src/setup-model.ts';
@@ -227,12 +227,61 @@ test('a provider’s key reaches the host’s environment under the variable the
     const anthropic = keyProviders.find((provider) => provider.id === 'claude-api-key');
     const deepseek = keyProviders.find((provider) => provider.id === 'deepseek');
     assert.ok(anthropic && deepseek);
-    assert.deepEqual(providerEnvironment(anthropic, 'k', ''), { ANTHROPIC_API_KEY: 'k' });
-    assert.deepEqual(providerEnvironment(deepseek, undefined, ''), {});
-    const env = providerEnvironment(deepseek, 'k', '');
+    assert.deepEqual(providerEnvironment(anthropic, 'k', '', '/f'), { ANTHROPIC_API_KEY: 'k', CLAUDE_CONFIG_DIR: '/f' });
+    assert.deepEqual(providerEnvironment(deepseek, undefined, '', '/f'), {});
+    const env = providerEnvironment(deepseek, 'k', '', '/f');
     assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'k');
     assert.equal(env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
     assert.equal(env.ANTHROPIC_MODEL, 'deepseek-v4-pro');
+    assert.equal(env.CLAUDE_CONFIG_DIR, '/f');
+});
+
+test('the OpenAI key reaches codex exec as CODEX_API_KEY, the variable OpenAI documents for it, with a home of the desktop\'s own', () => {
+    const openai = keyProviders.find((provider) => provider.id === 'codex-api-key');
+    assert.ok(openai);
+    assert.deepEqual(providerEnvironment(openai, 'k', '', '/f'), { CODEX_API_KEY: 'k', CODEX_HOME: '/f' });
+});
+
+test('GLM and MiniMax name the default model their own guides for Claude Code give, with no window suffix', () => {
+    const models = (id: string) => keyProviders.find((provider) => provider.id === id)?.models;
+    assert.deepEqual(models('zai'), ['glm-5.3', 'glm-5.3-flash']);
+    assert.deepEqual(models('minimax'), ['MiniMax-M3.1-Flash']);
+    for (const id of ['zai', 'minimax']) {
+        const provider = keyProviders.find((each) => each.id === id);
+        assert.ok(provider);
+        const env = providerEnvironment(provider, 'k', '', '/f');
+        for (const name of ['ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL']) assert.equal(env[name], models(id)?.[0], `${id} ${name}`);
+    }
+});
+
+test('a keyed turn\'s host folder is the desktop\'s own: one per provider for Claude Code, one for Codex', () => {
+    const paths = desktopPaths(join('/home', 'a', '.jason'));
+    assert.equal(paths.claudeKeyed, join(paths.desktop, 'claude-keyed'));
+    assert.equal(paths.codexKeyed, join(paths.desktop, 'codex-keyed'));
+    for (const provider of keyProviders) {
+        const expected = provider.program === 'claude' ? join(paths.claudeKeyed, provider.id) : paths.codexKeyed;
+        assert.equal(keyedFolder(paths, provider), expected, provider.id);
+        assert.match(provider.id, /^[a-z0-9-]+$/, 'a folder name from the closed table');
+    }
+});
+
+test('on a keyed turn a host error text keeps no part of the key: the whole key, its ends, the masked form OpenAI prints, any key-shaped token', () => {
+    const key = 'sk-proj-PLANTEDkeyMiddle0123456789Wq7Z';
+    const masked = `Incorrect API key provided: sk-proj-${'*'.repeat(40)}Wq7Z. You can find your API key at the dashboard.`;
+    assert.equal(withoutKey(masked, key), `Incorrect API key provided: ${keyWord}. You can find your API key at the dashboard.`);
+    assert.equal(withoutKey(`unexpected status 401 Unauthorized: {"message":"bad key ${key}"}`, key), `unexpected status 401 Unauthorized: {"message":"bad key ${keyWord}"}`);
+    assert.equal(withoutKey('the key ****Wq7Z was refused', key), `the key ${keyWord} was refused`);
+    assert.equal(withoutKey('the key Wq7Z was refused', key), `the key ${keyWord} was refused`);
+    assert.equal(withoutKey('the key sk-pro... was refused', key), `the key ${keyWord} was refused`);
+    // A key of another shape: a compatible endpoint's, by its own first six and last four characters.
+    const zai = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6.Zk9QvPlantedSecret';
+    assert.equal(withoutKey('authentication failed for a1b2c3...cret', zai), `authentication failed for ${keyWord}`);
+    // A token shaped as a provider's key is replaced whoever's it is; a token as long as one, too.
+    assert.equal(withoutKey('header sk-ant-api03-OTHERKEYxx was refused', key), `header ${keyWord} was refused`);
+    assert.equal(withoutKey('bearer eyJhbGciOiJIUzI1NiJ9.e30.abc rejected', key), `bearer ${keyWord} rejected`);
+    assert.equal(withoutKey('token AbCdEfGhIjKlMnOpQrStUvWxYz012345 rejected', key), `token ${keyWord} rejected`);
+    // Words that carry none of it stay as they are.
+    assert.equal(withoutKey('Codex ended the turn: the model is overloaded, status 529.', key), 'Codex ended the turn: the model is overloaded, status 529.');
 });
 
 test('a version is read from what a program printed and compared part by part', () => {
