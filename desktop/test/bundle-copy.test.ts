@@ -2,7 +2,7 @@
 // copies it under <data>/desktop/bundle/<version>/ and that copy is the jason the desktop carries.
 
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -304,4 +304,31 @@ test('a removal that fails is logged and stops nothing', async (t) => {
         { level: 'error', name: 'bundle_copy_removal_failed', fields: {} },
         { level: 'info', name: 'bundle_copies_removed', fields: { Count: 1 } },
     ]);
+});
+
+/** The data directory reached through a folder link, as a home on another disk or a linked ~/.jason is: a junction on Windows. */
+function linkedData(t: { after(fn: () => void): void }): { bundles: string; real: string } {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'jason-desktop-bundle-linked-')));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const disk = join(root, 'disk', 'jason-data');
+    mkdirSync(disk, { recursive: true });
+    mkdirSync(join(root, 'home'));
+    symlinkSync(disk, join(root, 'home', '.jason'), 'junction');
+    return { bundles: join(root, 'home', '.jason', 'desktop', 'bundle'), real: join(disk, 'desktop', 'bundle') };
+}
+
+test('with the data directory reached through a link, a jason named by its resolved path is told as another version’s copy, to re-point', (t) => {
+    const { bundles, real } = linkedData(t);
+    plant(bundles, ['0.35.0', '0.36.0']);
+    const current = join(bundles, '0.36.0', 'jason');
+    assert.equal(isOtherCopy(join(real, '0.35.0', 'jason'), bundles, current), true, 'a start at logon reports the copy resolved');
+    assert.equal(isOtherCopy(join(real, '0.36.0', 'jason'), bundles, current), false, 'this start’s copy, resolved, is not another');
+});
+
+test('with the data directory reached through a link, a copy something set up names by its resolved path stays', async (t) => {
+    const { bundles, real } = linkedData(t);
+    plant(bundles, ['0.34.0', '0.35.0', '0.36.0']);
+    const r = removal(bundles, { named: async () => [join(real, '0.35.0', 'jason')] });
+    assert.deepEqual(await removeOtherCopies(r), ['0.34.0']);
+    assert.deepEqual(readdirSync(bundles).sort(), ['0.35.0', '0.36.0']);
 });
