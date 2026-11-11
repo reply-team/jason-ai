@@ -40,12 +40,12 @@ describe('the shell', () => {
             'brand-wordmark.svg',
             'brand-wordmark-dark.svg',
         ]);
-        expect(screen.getByRole('img', { name: 'Jason AI, GTM Harness' })).toBeTruthy();
+        expect(screen.getAllByRole('img', { name: 'Jason AI, GTM Harness' })).toHaveLength(2);
         expect(head.querySelector('.glyph')).toBeNull();
         unmount();
         renderApp(new FakeApi(), { paired: false });
         await waitFor(() => expect(screen.getByText(/jason ui open/)).toBeTruthy());
-        expect(screen.getByRole('img', { name: 'Jason AI, GTM Harness' })).toBeTruthy();
+        expect(screen.getAllByRole('img', { name: 'Jason AI, GTM Harness' })).toHaveLength(2);
     });
 
     it('shows pair-again when the runtime answers 401, and clears the stored pairing', async () => {

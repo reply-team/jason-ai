@@ -21,10 +21,11 @@ function pngSize(file: string): [number, number] {
 
 test('the application icon is the mark at 1024 px, with an icon set for the Mac, in every platform’s configuration', () => {
     assert.deepEqual(pngSize('resources/icon.png'), [1024, 1024]);
-    assert.equal(readFileSync(join(desktop, 'resources', 'icon.icns')).subarray(0, 4).toString('latin1'), 'icns');
+    assert.equal(readFileSync(join(desktop, 'installer', 'icon.icns')).subarray(0, 4).toString('latin1'), 'icns');
     const built = configuration({ version: '0.35.0' });
     assert.equal(built.win.icon, 'resources/icon.png');
-    assert.equal(built.mac.icon, 'resources/icon.icns');
+    assert.equal(built.mac.icon, 'installer/icon.icns');
+    assert.equal(existsSync(join(desktop, 'resources', 'icon.icns')), false, 'the icon set is read at build time and is no part of app.asar');
 });
 
 test('the tray has a template image for the menu bar and a coloured mark for the other systems', () => {
@@ -44,7 +45,7 @@ test('the wordmark and the mark are images the starting page carries, for a ligh
     assert.match(page, /<title>Jason<\/title>/);
     assert.match(page, /src="brand\/wordmark\.svg"/);
     assert.match(page, /srcset="brand\/wordmark-dark\.svg"[^>]*prefers-color-scheme: dark/);
-    assert.match(page, /class="splash-mark"/);
+    assert.match(page, /class="launch-emblem"/);
     // The mark is drawn inline so that it can turn; its paths are the ones of the icon the console's favicon is.
     for (const [, d] of readFileSync(join(repository, 'ui', 'public', 'favicon.svg'), 'utf8').matchAll(/ d="([^"]+)"/g)) assert.ok(page.includes(d!), 'the page draws the mark');
     assert.doesNotMatch(page, /<h1>/, 'the name is the image, with the product’s name in the title and the label');
@@ -54,7 +55,7 @@ test('the wordmark and the mark are images the starting page carries, for a ligh
 test('the mark turns once and the wordmark and the line fade in, by CSS alone, and neither moves under reduced motion', () => {
     const css = read('shell', 'shell.css');
     assert.match(css, /@keyframes [a-z-]+\s*\{[^}]*rotate/);
-    assert.match(css, /\.splash-orbit\s*\{[^}]*animation:[^;]*splash-turn[^;]* 1 /, 'the mark turns once');
+    assert.match(css, /\.launch-arc\s*\{[^}]*animation:[^;]*arc-once[^;]* 1 /, 'the mark turns once');
     const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{([^]*?)\n\}/.exec(css);
     assert.ok(reduced, 'a reduced-motion block');
     assert.match(reduced[1]!, /animation:\s*none/);

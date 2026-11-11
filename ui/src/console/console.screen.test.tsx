@@ -958,7 +958,7 @@ describe('the console', () => {
         expect(light!.getAttribute('src')).toMatch(/brand-wordmark[.]svg$/);
         expect(light!.getAttribute('alt')).toBe('Jason AI, GTM Harness');
         expect(dark!.getAttribute('src')).toMatch(/brand-wordmark-dark[.]svg$/);
-        expect(dark!.getAttribute('alt')).toBe('');
+        expect(dark!.getAttribute('alt')).toBe('Jason AI, GTM Harness');
         expect(brand.querySelector('.glyph')).toBeNull();
         const shown = (selector: string) =>
             rules()

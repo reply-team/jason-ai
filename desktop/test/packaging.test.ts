@@ -157,7 +157,7 @@ test('the bundled jason keeps its own signature on macOS, and the application as
 test('app.asar carries the main process, the starting page, the tray icons, the chat’s lists and instruction text, and package.json', () => {
     assert.deepEqual(built.files, ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', 'chat-deny-list.txt', 'chat-allow-list.txt', 'chat-instructions.md']);
     assert.deepEqual(chatFiles, ['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-instructions.md']);
-    for (const icon of ['resources/icon.png', 'resources/icon.icns', 'resources/tray/tray.png', 'resources/tray/trayTemplate.png', 'resources/tray/trayTemplate@2x.png']) assert.ok(existsSync(join(root, icon)), icon);
+    for (const icon of ['resources/icon.png', 'resources/tray/tray.png', 'resources/tray/trayTemplate.png', 'resources/tray/trayTemplate@2x.png']) assert.ok(existsSync(join(root, icon)), icon);
     // buildResources is left out of app.asar by electron-builder, so it is never resources/.
     assert.equal(built.directories.buildResources, 'installer');
 });

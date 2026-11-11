@@ -55,7 +55,7 @@ export function sideView(): Html {
     return html`<div class="brand">
             <img class="mark" src="${assets}favicon.svg" alt="" />
             <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
-            <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="" />
+            <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
         </div>
         <button class="newbtn" type="button" ${act('side.new')}>${svg('plus', 15)}New chat</button>
         <nav class="list" aria-label="Conversations">
