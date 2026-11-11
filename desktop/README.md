@@ -5,6 +5,10 @@ the browser UI is: it finds the data directory as the CLI does (`JASON_DATA_DIR`
 runtime serves at its loopback address, and changes the installation only through CLI verbs and the settings file a
 person would edit.
 
+This page is the builder's view. What the desktop is for a person, how it is installed, updated and taken off on each
+system, and what its chat may run are in [docs/desktop.md](../docs/desktop.md), which carries the sentences of this page
+that a person needs.
+
 ## What it does, and through what
 
 | Step | How |
