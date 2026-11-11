@@ -7,7 +7,7 @@ namespace Jason.Runtime.Tests.Execution;
 /// runtime starts does not carry it, even where the runtime's own environment holds it, as a runtime run in the
 /// foreground under the variable does.
 /// </summary>
-[Collection(ProcessEnvironmentCollection.Name)]
+[Collection(ConfinementEnvironmentCollection.Name)]
 public class ExecutorConfinementTests
 {
     private const string WorkItemId = "wi_one";
@@ -35,4 +35,14 @@ public class ExecutorConfinementTests
         var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
         Assert.Contains("confined-in-env=unset", stderr, StringComparison.Ordinal);
     }
+}
+
+/// <summary>
+/// The tests that set this process's own <c>JASON_CONFINED</c>, kept away from everything else while they run: every
+/// child another test starts meanwhile would inherit the variable.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class ConfinementEnvironmentCollection
+{
+    public const string Name = "confinement environment";
 }

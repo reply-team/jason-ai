@@ -400,7 +400,9 @@ function namesDataVariable(command: string, scope: ChatScope): boolean {
  * a request takes standard input only, and the provider check runs a bare name only (`hostEnvironment`). A command that
  * names it could clear it for the jason it runs, so it is refused by its name as a whole word, in any letter case on
  * every platform, whatever wraps it; the host's own deny rule (`confinedRule`) refuses the exact spelling first. A longer
- * name that only begins or ends like it is not it.
+ * name that only begins or ends like it is not it. A spelling that builds the name, as `JASON_CONF''INED`,
+ * `${!JASON_CONF@}` or `env -i`, is not refused by this check and reaches a card; what holds then is the CLI's
+ * own rule.
  */
 export const confinedVariable = 'JASON_CONFINED';
 

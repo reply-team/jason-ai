@@ -419,9 +419,9 @@ what a command reads and runs. An option that reads a file's content into a requ
 `--file - < contacts.json` or a here-document, and any other value is refused before the file is opened and before
 any request, exit 1. `jason status --provider-cli <program>` runs a bare name only, found in a fully qualified entry
 of PATH. Options that name a path for another reason are not under the rule: `project link --path`, `doctor --output`,
-`export` and `import`, and `logs`, which takes no path. The variable confines the call and nothing that call starts: a
-runtime it starts, the role work a runtime launches, and the terminal `jason session open` opens never carry it. Unset
-or empty, nothing changes.
+`export` and `import`, and `logs`, which takes no path. The variable confines the call and nothing that call starts:
+three starts drop it, a runtime it starts, the role work a runtime launches and the terminal `jason session open` opens;
+every other child inherits it, and none reads it. Unset or empty, nothing changes.
 
 A work item moves through one set of statuses: a dispatcher claims it under a lease, with at most one live
 attempt at a time, and whatever performs it reports what happened through the same API; `jason workitem get

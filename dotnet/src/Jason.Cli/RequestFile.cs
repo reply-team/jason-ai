@@ -23,9 +23,9 @@ public sealed class RequestFileOption(string name) : Option<string?>(name);
 /// <para>
 /// The rule covers every option the command tree gives an operation verb to read a file's content into a request
 /// (<c>--file</c>, <c>--value-file</c>, <c>--note-file</c>, <c>--result-file</c>) and no other path: <c>project link
-/// --path</c> reads a folder's markers and sends no file's content; <c>doctor --output</c> writes its bundle and lists
-/// what it writes before it writes; <c>export</c> and <c>import</c> are not left to a confined caller at all; and
-/// <c>logs</c> takes no path.
+/// --path</c> names a folder the runtime adopts and sends no file's content; <c>doctor --output</c> writes its bundle
+/// and lists what it writes before it writes; <c>export</c> and <c>import</c> run under the variable as without it,
+/// and the desktop's chat never runs them; and <c>logs</c> takes no path.
 /// </para>
 /// </remarks>
 public static class RequestFile

@@ -11,8 +11,9 @@ namespace Jason.Cli;
 /// that take no default actor, which name who acts or are refused: somebody's own word (an approval or a rejection, a
 /// standing approval set or unset, an answer, a preference set or unset, a block's clear, a resume, a report and a
 /// subscription's rewind), and the acts the runtime takes from any caller but the CLI will not put this account's name on
-/// by itself (a suppression lifted, a route set or unset, a role's execution profile set). Whatever it claims, a CLI the environment says runs inside an attempt names that attempt on every request
-/// beside it, in the Jason-Attempt header (see <see cref="Http.RuntimeClient"/>).
+/// by itself (a suppression lifted, a route set or unset, a role's execution profile set). Whatever it claims, a CLI
+/// the environment says runs inside an attempt names that attempt on every request beside it, in the Jason-Attempt
+/// header (see <see cref="Http.RuntimeClient"/>).
 /// </summary>
 public static class ActorOption
 {
@@ -50,7 +51,8 @@ public static class ActorOption
             + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
             + "clearing a block, resuming a work item, rewinding a subscription, submitting a report, "
-            + "lifting a suppression, setting or unsetting a route, setting a role's execution profile take no default. "
+            + "lifting a suppression, setting or unsetting a route, "
+            + "and setting a role's execution profile take no default. "
             + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
             + "and approving, rejecting, setting or unsetting a standing approval and answering are refused there.",
         Recursive = true,

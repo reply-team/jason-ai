@@ -194,7 +194,7 @@ public class DefaultActorTests
         Assert.Contains("the paired browser", description, StringComparison.Ordinal);
         Assert.Contains("where that name cannot be read, as a person who gave no name", description, StringComparison.Ordinal);
         Assert.Contains("rewinding a subscription", description, StringComparison.Ordinal);
-        Assert.Contains("lifting a suppression, setting or unsetting a route, setting a role's execution profile", description, StringComparison.Ordinal);
+        Assert.Contains("lifting a suppression, setting or unsetting a route, and setting a role's execution profile take no default.", description, StringComparison.Ordinal);
     }
 
     /// <summary>
