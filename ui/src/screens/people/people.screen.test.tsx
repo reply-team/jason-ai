@@ -85,7 +85,9 @@ const rowTitles = () =>
 
 describe('People', () => {
     it('says a People list with nothing in it and how people come in: the sentence alone in a browser, a New chat inside the desktop', async () => {
-        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-empty');
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity-empty')
+            .answer('campaign.summary', 'campaign.summary/everyone-without-archived-empty');
         open(api);
         await screen.findByText(
             'Nobody yet. People come in when a campaign finds or imports them: start with a campaign, set up in a chat with Jason.',
@@ -93,7 +95,9 @@ describe('People', () => {
         expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull();
         expect(sentLists(api)).toEqual([fixtures['contact.list/by-activity-empty'].request]);
 
-        const inside = new FakeApi().answer('contact.list', 'contact.list/by-activity-empty');
+        const inside = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity-empty')
+            .answer('campaign.summary', 'campaign.summary/everyone-without-archived-empty');
         const chat = vi.fn();
         const { rerender } = renderApp(inside);
         rerender(

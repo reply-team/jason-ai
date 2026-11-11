@@ -146,6 +146,7 @@ import campaignStartAfterPause from '../../../docs/api/fixtures/campaign.start/a
 import campaignSummaryAll from '../../../docs/api/fixtures/campaign.summary/all.json';
 import campaignSummaryEveryone from '../../../docs/api/fixtures/campaign.summary/everyone.json';
 import campaignSummaryEveryoneWithoutArchived from '../../../docs/api/fixtures/campaign.summary/everyone-without-archived.json';
+import campaignSummaryEveryoneWithoutArchivedEmpty from '../../../docs/api/fixtures/campaign.summary/everyone-without-archived-empty.json';
 import campaignSummaryAllAfter from '../../../docs/api/fixtures/campaign.summary/all-after.json';
 import campaignSummaryArchived from '../../../docs/api/fixtures/campaign.summary/archived.json';
 import campaignSummaryInboxAll from '../../../docs/api/fixtures/campaign.summary/inbox-all.json';
@@ -594,6 +595,10 @@ export const fixtures = {
     'campaign.start/after-pause': campaignStartAfterPause satisfies Exchange<CampaignTransitionRequest, Campaign>,
     'campaign.summary/all': campaignSummaryAll satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
     'campaign.summary/everyone': campaignSummaryEveryone satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/everyone-without-archived-empty': campaignSummaryEveryoneWithoutArchivedEmpty satisfies Exchange<
         CampaignSummaryRequest,
         CampaignSummaryResponse
     >,
