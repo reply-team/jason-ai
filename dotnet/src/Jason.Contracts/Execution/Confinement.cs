@@ -5,8 +5,9 @@ namespace Jason.Contracts.Execution;
 /// reads a file's content into a request takes only standard input, and <c>status --provider-cli</c> runs only a
 /// program it finds by a bare name in a fully qualified entry of the search path. It confines the call it is set on and
 /// nothing that call starts: a runtime the CLI starts, the role work a runtime launches, and the terminal
-/// <c>session open</c> opens never carry it. The CLI and the runtime read the name from here, and nothing else spells
-/// it.
+/// <c>session open</c> opens never carry it. The CLI and the runtime read the name from here, and nothing else in .NET
+/// spells it; the desktop spells it once, in its permission model, held to this constant by a row of
+/// <c>DesktopDenyListTests</c>.
 /// </summary>
 public static class Confinement
 {
