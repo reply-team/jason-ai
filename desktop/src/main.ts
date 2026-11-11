@@ -16,7 +16,8 @@ import { registerChat } from './chat-ipc.ts';
 import { loggedTurns } from './chat-log.ts';
 import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
-import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart } from './login-item.ts';
+import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
+import { launcherOf, linuxPackage, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
@@ -57,6 +58,13 @@ function chatFence(): ChatFence {
 /** The folder the application carries `jason` and the skills package in: beside the app when packaged, else `bundle/`. */
 function bundleDirectory(): string {
     return app.isPackaged ? join(process.resourcesPath, 'bundle') : join(app.getAppPath(), 'bundle');
+}
+
+/** The Linux package this application runs as (`linux-package.ts`): a development build is a folder; null off Linux. */
+function linuxForm(): LinuxPackage | null {
+    if (process.platform !== 'linux') return null;
+    if (!app.isPackaged) return { form: 'folder' };
+    return linuxPackage(process.env, readText(join(process.resourcesPath, 'package-type')));
 }
 
 /** The version the bundle was prepared as: a release's or a candidate's, never `dev`. */
@@ -149,19 +157,23 @@ async function run(): Promise<void> {
     const env = withPath(process.env, process.env.PATH);
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
+    const form = linuxForm();
     const log = fileLogger(paths.logs, limitsFrom(readText(paths.installationSettings)));
     const bundle = bundleDirectory();
     const version = bundleVersion(bundle);
     log.info('desktop_started', { Version: version ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
 
+    const conduct = windowConduct(process.platform);
+    const atLogin = openedAtLogin(process.argv);
     const window = new BrowserWindow({
         width: 1280,
         height: 860,
         minWidth: 900,
         minHeight: 600,
         title: 'Jason',
-        // A start the computer made at sign-in stays in the tray until the person opens the window.
-        show: !openedAtLogin(process.argv),
+        // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
+        // tray can be counted on, it opens minimized instead.
+        show: !atLogin || conduct.atLogin === 'minimized',
         backgroundColor: '#f7f7f5',
         webPreferences: {
             preload: join(__dirname, 'preload.js'),
@@ -178,14 +190,16 @@ async function run(): Promise<void> {
     window.on('closed', () => {
         current = null;
     });
-    window.setMenuBarVisibility(false);
-    // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it.
+    if (atLogin && conduct.atLogin === 'minimized') window.minimize();
+    window.setMenuBarVisibility(conduct.menuBar);
+    // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it. On Linux
+    // closing the window quits; the runtime keeps running either way.
     let quitting = false;
     app.on('before-quit', () => {
         quitting = true;
     });
     window.on('close', (event) => {
-        if (quitting) return;
+        if (quitting || conduct.closeQuits) return;
         event.preventDefault();
         window.hide();
     });
@@ -205,7 +219,8 @@ async function run(): Promise<void> {
         repairer.start();
     });
     const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)), paired: begin });
-    const login = new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead, log });
+    // On Linux the session starts the launcher: the AppImage file itself, whose mount lasts only while it runs.
+    const login = new LoginItem({ platform: process.platform, home, executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead, log, env: process.env });
     const autostart = version === null ? null : new RuntimeAutostart({ cli, log });
     // The updater runs only in an installed build: a development build has no installer to hand an update to.
     const rollback = paths.rollback;

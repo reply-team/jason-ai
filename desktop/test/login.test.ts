@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { verbOf } from '../src/installation.ts';
 import { fileLogger } from '../src/log.ts';
-import { bringForward, launchAgent, launchAgentFile, LoginItem, loginFlag, openedAtLogin, RuntimeAutostart, showsOnSecondStart, type ElectronLogin } from '../src/login-item.ts';
+import { autostartEntry, autostartEntryFile, autostartExec, bringForward, launchAgent, launchAgentFile, LoginItem, loginFlag, openedAtLogin, RuntimeAutostart, showsOnSecondStart, type ElectronLogin } from '../src/login-item.ts';
 import { memoryLog } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }): string {
@@ -145,11 +145,66 @@ test('nothing is registered before the login shell’s PATH has been read', asyn
     assert.equal(existsSync(launchAgentFile(home)), true);
 });
 
+test('on Linux turning it on writes an XDG autostart entry that starts this application with the flag, and off removes it', async (t) => {
+    const home = scratch(t);
+    const electron = electronLogin();
+    const log = memoryLog();
+    const appImage = '/home/someone/Apps/Jason.AppImage';
+    const item = new LoginItem({ platform: 'linux', home, executable: appImage, electron, pathRead, log, env: {} });
+    const file = join(home, '.config', 'autostart', 'ai.jasonharness.desktop.desktop');
+    assert.equal(autostartEntryFile(home, {}), file);
+    assert.equal(item.supported, true);
+    assert.equal(item.isOn(), false);
+    await item.set(true);
+    assert.equal(readFileSync(file, 'utf8'), `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nExec="${appImage}" ${loginFlag}\n`);
+    assert.equal(item.isOn(), true);
+    assert.deepEqual(readdirSync(dirname(file)), ['ai.jasonharness.desktop.desktop'], 'written by rename, no temporary left');
+    await item.set(false);
+    assert.equal(existsSync(file), false);
+    assert.equal(item.isOn(), false);
+    assert.deepEqual(electron.set, [], 'Electron’s login item is macOS’s and Windows’ only');
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [
+        ['login_item_set', { On: true, Platform: 'linux' }],
+        ['login_item_set', { On: false, Platform: 'linux' }],
+    ]);
+});
+
+test('on Linux the entry goes under $XDG_CONFIG_HOME when it names an absolute folder, else ~/.config', () => {
+    assert.equal(autostartEntryFile('/home/a', { XDG_CONFIG_HOME: '/srv/config' }), join('/srv/config', 'autostart', 'ai.jasonharness.desktop.desktop'));
+    assert.equal(autostartEntryFile('/home/a', { XDG_CONFIG_HOME: 'relative' }), join('/home/a', '.config', 'autostart', 'ai.jasonharness.desktop.desktop'));
+    assert.equal(autostartEntryFile('/home/a', { XDG_CONFIG_HOME: '' }), join('/home/a', '.config', 'autostart', 'ai.jasonharness.desktop.desktop'));
+});
+
+test('on Linux the Exec line quotes the launcher as the Desktop Entry Specification says, and a launcher it cannot spell is not offered', () => {
+    assert.equal(autostartExec('/opt/Jason/jason-desktop-app'), `Exec="/opt/Jason/jason-desktop-app" ${loginFlag}`);
+    // Inside quotes a double quote, a backtick, a dollar sign and a backslash take a backslash; the string escape then
+    // doubles every backslash.
+    assert.equal(autostartExec('/home/a/R&D "x" `y` $z \\w/Jason.AppImage'), `Exec="/home/a/R&D \\\\"x\\\\" \\\\\`y\\\\\` \\\\$z \\\\\\\\w/Jason.AppImage" ${loginFlag}`);
+    assert.equal(autostartExec('/home/a/100%/Jason.AppImage'), null, 'a per-cent begins a field code');
+    assert.equal(autostartExec('/home/a/new\nline/Jason.AppImage'), null);
+    assert.equal(new LoginItem({ platform: 'linux', home: '/home/a', executable: '/home/a/100%/Jason.AppImage', electron: electronLogin(), pathRead, log: memoryLog(), env: {} }).supported, false);
+});
+
+test('on Linux the item is on only when the entry starts this application and is not hidden', (t) => {
+    const home = scratch(t);
+    const file = autostartEntryFile(home, {});
+    mkdirSync(dirname(file), { recursive: true });
+    const item = (exe: string) => new LoginItem({ platform: 'linux', home, executable: exe, electron: electronLogin(), pathRead, log: memoryLog(), env: {} });
+    writeFileSync(file, autostartEntry('/home/someone/Old/Jason.AppImage'));
+    assert.equal(item('/home/someone/Apps/Jason.AppImage').isOn(), false, 'an entry of another copy of the application');
+    writeFileSync(file, autostartEntry('/home/someone/Apps/Jason.AppImage'));
+    assert.equal(item('/home/someone/Apps/Jason.AppImage').isOn(), true);
+    writeFileSync(file, `${autostartEntry('/home/someone/Apps/Jason.AppImage')}Hidden=true\n`);
+    assert.equal(item('/home/someone/Apps/Jason.AppImage').isOn(), false, 'Hidden=true means the session ignores the entry');
+    writeFileSync(file, 'not an entry');
+    assert.equal(item('/home/someone/Apps/Jason.AppImage').isOn(), false);
+});
+
 test('where there is no login item to set, the item says so and sets nothing', async (t) => {
     const home = scratch(t);
     const electron = electronLogin();
     const log = memoryLog();
-    const item = new LoginItem({ platform: 'linux', home, executable, electron, pathRead, log });
+    const item = new LoginItem({ platform: 'freebsd', home, executable, electron, pathRead, log });
     assert.equal(item.supported, false);
     assert.equal(item.isOn(), false);
     await item.set(true);
