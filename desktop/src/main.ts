@@ -23,6 +23,7 @@ import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from 
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
+import { sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
@@ -427,8 +428,16 @@ app.setPath('userData', early.electron);
 app.setPath('sessionData', early.electron);
 app.setAppLogsPath(early.electronLogs);
 
+// Never without Chromium's sandbox: a start that carries --no-sandbox, which an AppImage's launcher adds where the system
+// refuses it, says why and quits before anything else is decided (`sandbox.ts`).
+const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), linuxForm());
 const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
-if (uninstalling !== null) {
+if (unsandboxed !== null) {
+    void app.whenReady().then(() => {
+        dialog.showErrorBox('Jason', unsandboxed);
+        app.exit(1);
+    });
+} else if (uninstalling !== null) {
     // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
     // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
     void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));
