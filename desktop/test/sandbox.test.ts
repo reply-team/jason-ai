@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { refuseStart, sandboxRefusal } from '../src/sandbox.ts';
 import { debFile } from '../src/updates.ts';
 import type { Logger } from '../src/log.ts';
@@ -67,6 +68,23 @@ test('a refused start waits for Electron, logs one line with no path, shows the 
     await done;
     assert.deepEqual(steps, ['ready', 'logger', 'dialog Jason: m', 'exit 1']);
     assert.deepEqual(lines, [['sandbox_refused', { Form: 'appimage' }]]);
+});
+
+test('before the refusal, main.ts runs nothing: every top-level statement above it is an import, a declaration, or the one let of the window to show', () => {
+    const file = join(root, 'src', 'main.ts');
+    const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+    const decision = source.statements.findIndex(
+        (statement) => ts.isVariableStatement(statement) && statement.declarationList.declarations.some((declaration) => declaration.name.getText(source) === 'unsandboxed'),
+    );
+    assert.ok(decision > 0, 'main.ts declares no unsandboxed');
+    for (const statement of source.statements.slice(0, decision)) {
+        const text = statement.getText(source).split('\n')[0] ?? '';
+        if (ts.isImportDeclaration(statement) || ts.isFunctionDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) continue;
+        assert.ok(
+            ts.isVariableStatement(statement) && text.startsWith('let showWindow: () => void = () => bringForward('),
+            `main.ts runs a statement before the refusal: ${text}`,
+        );
+    }
 });
 
 test('the refusal is the first thing the main process decides, and nothing else of a start runs beside it', () => {
