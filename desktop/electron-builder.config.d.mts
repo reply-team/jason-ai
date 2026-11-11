@@ -19,7 +19,7 @@ export interface Configuration {
     appId: string;
     productName: string;
     copyright: string;
-    extraMetadata: { version: string };
+    extraMetadata: { version: string; homepage: string };
     directories: { output: string; buildResources: string };
     files: string[];
     asar: boolean;
@@ -32,6 +32,8 @@ export interface Configuration {
     generateUpdatesFilesForAllChannels: boolean;
     beforePack: (context: unknown) => Promise<void>;
     afterPack: (context: unknown) => Promise<void>;
+    artifactBuildStarted: (event: unknown) => Promise<void>;
+    artifactBuildCompleted: (event: unknown) => void;
     win: {
         target: Target[];
         icon: string;
@@ -55,7 +57,19 @@ export interface Configuration {
         artifactName: string;
     };
     dmg: { sign: boolean; writeUpdateInfo: boolean; artifactName: string };
+    linux: {
+        target: Target[];
+        executableName: string;
+        executableArgs: string[];
+        icon: string;
+        category: string;
+        synopsis: string;
+        maintainer: string;
+    };
+    appImage: { artifactName: string };
+    deb: { artifactName: string };
+    toolsets: { appimage: string };
 }
 
-export function configuration(options: { version: string; sign?: string | null }): Configuration;
+export function configuration(options: { version: string; sign?: string | null; linuxWaitMs?: number }): Configuration;
 export default function (): Configuration;
