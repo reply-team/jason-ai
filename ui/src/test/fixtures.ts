@@ -120,6 +120,7 @@ import campaignListInbox from '../../../docs/api/fixtures/campaign.list/inbox.js
 import campaignListIncludeArchived from '../../../docs/api/fixtures/campaign.list/include-archived.json';
 import campaignListQuery from '../../../docs/api/fixtures/campaign.list/query.json';
 import campaignListScreen from '../../../docs/api/fixtures/campaign.list/screen.json';
+import campaignListScreenEmpty from '../../../docs/api/fixtures/campaign.list/screen-empty.json';
 import campaignListScreenMany from '../../../docs/api/fixtures/campaign.list/screen-many.json';
 import campaignListScreenManyNext from '../../../docs/api/fixtures/campaign.list/screen-many-next.json';
 import campaignListScreenQuery from '../../../docs/api/fixtures/campaign.list/screen-query.json';
@@ -167,6 +168,7 @@ import contactGetUnrouted from '../../../docs/api/fixtures/contact.get/unrouted.
 import contactGetWithCampaigns from '../../../docs/api/fixtures/contact.get/with-campaigns.json';
 import contactListArchived from '../../../docs/api/fixtures/contact.list/archived.json';
 import contactListByActivity from '../../../docs/api/fixtures/contact.list/by-activity.json';
+import contactListByActivityEmpty from '../../../docs/api/fixtures/contact.list/by-activity-empty.json';
 import contactListByActivityQuery from '../../../docs/api/fixtures/contact.list/by-activity-query.json';
 import contactListByActivityQueryAguilar from '../../../docs/api/fixtures/contact.list/by-activity-query-aguilar.json';
 import contactListByActivitySeveral from '../../../docs/api/fixtures/contact.list/by-activity-several.json';
@@ -507,6 +509,10 @@ export const fixtures = {
     >,
     'campaign.list/query': campaignListQuery satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/screen': campaignListScreen satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
+    'campaign.list/screen-empty': campaignListScreenEmpty satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
     'campaign.list/screen-many': campaignListScreenMany satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/screen-many-next': campaignListScreenManyNext satisfies Exchange<
         CampaignListRequest,
@@ -650,6 +656,7 @@ export const fixtures = {
     'contact.get/with-campaigns': contactGetWithCampaigns satisfies Exchange<{ contact_id: string }, Contact>,
     'contact.list/archived': contactListArchived satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-activity': contactListByActivity satisfies Exchange<ContactListRequest, Page<Contact>>,
+    'contact.list/by-activity-empty': contactListByActivityEmpty satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-activity-query': contactListByActivityQuery satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-activity-query-aguilar': contactListByActivityQueryAguilar satisfies Exchange<
         ContactListRequest,

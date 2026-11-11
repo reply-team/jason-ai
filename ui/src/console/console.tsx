@@ -62,9 +62,9 @@ function ChatTab({ params, api }: IDockviewPanelProps<{ chatId: string }>) {
     return <ChatPanel chatId={params.chatId} />;
 }
 
-/** What a campaign's Chat in the page panel does: shows the campaign's one conversation, made on first use. One
- *  function for every render, so the pages it is handed to keep it. */
-function chatAbout(campaign: { id: string; name: string }): void {
+/** What a campaign's Chat in the page panel does: shows the campaign's one conversation, made on first use; with no
+ *  campaign, a new set-up chat. One function for every render, so the pages it is handed to keep it. */
+function chatAbout(campaign?: { id: string; name: string }): void {
     here().dock.chat(campaign);
 }
 

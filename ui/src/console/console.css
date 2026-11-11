@@ -253,6 +253,9 @@
     text-align: center;
     color: var(--faint);
 }
+.jc-console .empty-start p {
+    margin: 0 0 10px;
+}
 .jc-console .note {
     background: var(--blue-2);
     border: 1px solid #c6d6f0;

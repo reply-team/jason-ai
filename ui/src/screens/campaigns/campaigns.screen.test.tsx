@@ -248,6 +248,31 @@ describe('The campaign panel', () => {
         expect(screen.queryByRole('button', { name: 'Chat' })).toBeNull();
     });
 
+    it('says a Campaigns list with nothing in it and how a campaign starts: the sentence alone in a browser, a New chat inside the desktop', async () => {
+        const api = new FakeApi().answer('campaign.list', 'campaign.list/screen-empty');
+        open(api);
+        await screen.findByText(
+            'No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and the agent sets it up with you.',
+        );
+        expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull();
+        expect(sent(api, 'campaign.list')).toEqual([fixtures['campaign.list/screen-empty'].request]);
+        expect(sent(api, 'campaign.summary')).toEqual([]);
+
+        const inside = new FakeApi().answer('campaign.list', 'campaign.list/screen-empty');
+        const chat = vi.fn();
+        const { rerender } = renderApp(inside);
+        rerender(
+            <CampaignChat.Provider value={chat}>
+                <App api={inside} uiApiVersion="v1" />
+            </CampaignChat.Provider>,
+        );
+        location.hash = href(table);
+        route.value = table;
+        fireEvent.click(await screen.findByRole('button', { name: 'New chat' }));
+        expect(chat).toHaveBeenCalledTimes(1);
+        expect(chat).toHaveBeenCalledWith();
+    });
+
     it('inside the desktop has a Chat tab, which opens a chat about the campaign and moves nowhere', async () => {
         const api = panelApi();
         const chat = vi.fn();
