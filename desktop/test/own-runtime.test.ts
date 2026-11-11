@@ -293,3 +293,13 @@ test('the stop is given longer than the CLI waits for the runtime to exit', asyn
     // jason runtime stop waits thirty seconds for the process to exit before it says it did not.
     assert.ok((limits[1] ?? 0) > 30_000, `the stop was given ${limits[1]} ms`);
 });
+
+test('with the data directory reached through a link, a runtime that reports the carried executable resolved is this application’s', async (t) => {
+    const s = scratch(t);
+    // The desktop holds the executable through a link, as a linked home or ~/.jason gives it; the runtime reports it resolved.
+    const linked = join(s.root, 'linked');
+    symlinkSync(join(s.root, 'Programs'), linked, 'junction');
+    const held = join(linked, 'jason-desktop', 'resources', 'bundle', 'jason.exe');
+    const { cli } = fakeCli({ status: () => ok({ instance_id: 'rt_A', runtime_version: '0.34.0' }) });
+    assert.equal((await whoseRuntime({ ...deps(s, { file: runFile('rt_A', s.executable) }, cli), executable: held })).whose, 'ours');
+});

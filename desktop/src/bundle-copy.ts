@@ -30,6 +30,7 @@ import { dirname, isAbsolute, join, relative } from 'node:path';
 import type { LinuxPackage } from './linux-package.ts';
 import type { Logger } from './log.ts';
 import type { Whose } from './own-runtime.ts';
+import { containedIn, sameResolved, resolveReal, type Resolve } from './resolved-path.ts';
 
 /** Whether this application copies its bundle out of the package: only an AppImage does. */
 export function copiesBundle(form: LinuxPackage | null): boolean {
@@ -135,16 +136,52 @@ function writeSynced(to: string, from: string): void {
     chmodSync(to, statSync(from).mode & 0o755);
 }
 
-/** Whether `named` is a jason under the bundles folder other than `current`: another version's copy, to re-point. */
-export function isOtherCopy(named: string, bundles: string, current: string): boolean {
-    const inside = relative(bundles, named);
-    return named !== current && inside !== '' && !inside.startsWith('..') && !isAbsolute(inside);
+/**
+ * Whether `named` is a jason under the bundles folder other than `current`: another version's copy, to re-point. Decided
+ * on resolved paths (`resolved-path.ts`), since what names it reports a resolved path and the bundles folder is held as
+ * the data directory was given; where that cannot be told, it is not one, and nothing is re-pointed.
+ */
+export function isOtherCopy(named: string, bundles: string, current: string, resolve: Resolve = resolveReal): boolean {
+    if (named === current || sameResolved(process.platform, named, current, resolve)) return false;
+    return containedIn(process.platform, bundles, named, resolve) === 'inside';
 }
 
-/** Whether `named` is `folder` or anything under it. */
-function within(named: string, folder: string): boolean {
-    const inside = relative(folder, named);
-    return inside === '' || (!inside.startsWith('..') && !isAbsolute(inside));
+/** What the bundles folder holds, by lstat: the real folders named as a version and this desktop's temporaries, and everything else by name. */
+export type BundleEntries =
+    | { kind: 'absent' }
+    | { kind: 'other' }
+    | { kind: 'unread' }
+    | { kind: 'folder'; copies: string[]; temporaries: string[]; others: string[] };
+
+/**
+ * The one selection of the copies, which the removal of other versions' copies and the menu's Remove What Jason Placed
+ * both act on: only real folders named as a version or as this desktop's temporary; a link, a file or a folder of any
+ * other name is another's, and is never removed.
+ */
+export function bundleEntries(bundles: string): BundleEntries {
+    let names: string[];
+    try {
+        const kind = kindAt(bundles);
+        if (kind !== 'folder') return { kind };
+        names = readdirSync(bundles);
+    } catch {
+        return { kind: 'unread' };
+    }
+    const copies: string[] = [];
+    const temporaries: string[] = [];
+    const others: string[] = [];
+    for (const name of names) {
+        let folder = false;
+        try {
+            folder = kindAt(join(bundles, name)) === 'folder';
+        } catch {
+            folder = false;
+        }
+        if (folder && versionName.test(name)) copies.push(name);
+        else if (folder && temporaryName.test(name)) temporaries.push(name);
+        else others.push(name);
+    }
+    return { kind: 'folder', copies, temporaries, others };
 }
 
 export interface BundleCopy {
@@ -243,6 +280,8 @@ export interface CopyRemoval {
     log: Logger;
     /** Removes a folder and what it holds; `rmSync` unless a test says otherwise. */
     remove?: (folder: string) => void;
+    /** Resolves a path (`resolved-path.ts`); the system's own unless a test says otherwise. */
+    resolve?: Resolve;
 }
 
 /**
@@ -254,24 +293,12 @@ export interface CopyRemoval {
  */
 export async function removeOtherCopies(removal: CopyRemoval): Promise<string[]> {
     const { bundles, log } = removal;
-    let names: string[];
-    try {
-        if (kindAt(bundles) !== 'folder') return [];
-        names = readdirSync(bundles);
-    } catch {
-        log.error('bundle_copies_kept', { Why: 'unread' });
-        return [];
-    }
+    const entries = bundleEntries(bundles);
+    if (entries.kind === 'unread') log.error('bundle_copies_kept', { Why: 'unread' });
+    if (entries.kind !== 'folder') return [];
     const kept = new Set([removal.version, ...removal.keep]);
-    const folders = names.filter((name) => {
-        try {
-            return kindAt(join(bundles, name)) === 'folder';
-        } catch {
-            return false;
-        }
-    });
-    const temporaries = folders.filter((name) => temporaryName.test(name));
-    let copies = folders.filter((name) => versionName.test(name) && !kept.has(name));
+    const temporaries = entries.temporaries;
+    let copies = entries.copies.filter((name) => !kept.has(name));
     if (copies.length > 0) {
         const named = await removal.named().catch(() => null);
         if (named === null) {
@@ -281,7 +308,8 @@ export async function removeOtherCopies(removal: CopyRemoval): Promise<string[]>
         const free: string[] = [];
         for (const name of copies) {
             const folder = join(bundles, name);
-            if (named.some((jason) => within(jason, folder))) continue;
+            // What names a jason reports it resolved: a copy it may be in, or cannot be told not to be in, stays.
+            if (named.some((jason) => containedIn(process.platform, folder, jason, removal.resolve) !== 'outside')) continue;
             const whose = await removal.whose(join(folder, 'jason')).catch((): Whose => 'unanswered');
             if (whose === 'unanswered') {
                 log.warn('bundle_copies_kept', { Why: 'unanswered' });

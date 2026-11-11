@@ -184,6 +184,36 @@ export class LoginItem {
         return false;
     }
 
+    /**
+     * The desktop's own login file, under its own name, when it is there and does not start this application: on macOS a
+     * LaunchAgent that starts another path (Jason.app moved, or run from where macOS put it aside), on Linux an entry
+     * whose Exec line starts another launcher or that is turned off. Null when there is none, or it is on.
+     */
+    elsewhere(): { file: string; starts: string | null; hidden: boolean } | null {
+        if (this.isOn()) return null;
+        if (this.deps.platform === 'linux') {
+            const file = this.entryFile();
+            let lines: string[];
+            try {
+                lines = readFileSync(file, 'utf8').split('\n').map((line) => line.trim());
+            } catch {
+                return null;
+            }
+            const exec = lines.find((line) => line.startsWith('Exec='));
+            const hidden = lines.includes('Hidden=true') || lines.includes('X-GNOME-Autostart-enabled=false');
+            return { file, starts: exec === undefined ? null : exec.slice('Exec='.length), hidden };
+        }
+        if (this.deps.platform === 'darwin') {
+            const file = launchAgentFile(this.deps.home);
+            try {
+                return { file, starts: launchAgentProgram(readFileSync(file, 'utf8')), hidden: false };
+            } catch {
+                return null;
+            }
+        }
+        return null;
+    }
+
     /** Writes the autostart entry for a launcher by write and rename. */
     private writeEntry(file: string, launcher: string): void {
         mkdirSync(dirname(file), { recursive: true });

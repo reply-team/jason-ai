@@ -162,12 +162,21 @@ start at logon when it starts this application's `jason`, and names what it leav
 and the updater's cache.
 
 On macOS there is no installer, so nothing looks when Jason.app is moved to the Trash, and the desktop's own look before
-an update is the whole guard. Before removing Jason.app, take off by hand what it placed:
+an update is the whole guard. Before removing Jason.app, choose Remove What Jason Placed… in the Jason menu (or the
+tray's), which, once confirmed, takes the Windows uninstall's own steps (`src/uninstall.ts`; its dialogs are
+`src/remove-placed.ts`), stopping the runtime first and going no further when it does not stop, says what came of each
+and what to do by hand for one that failed, and offers to quit Jason, after which Jason.app goes to the Trash.
 
-1. In the Jason menu, turn off Open Jason at Login and Start the Runtime at Logon.
-2. Run `jason runtime stop`.
-3. In the same menu, under Command Line, choose Remove jason from the PATH (or Remove jason-desktop from the PATH, by the
-   name it was put there with), then quit Jason.
+When Jason will not start, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
+Jason.app (`/Applications/Jason.app/Contents/Resources/bundle/jason` where it was put in Applications):
+
+1. Read `installed_image` in the run file, `run/runtime.json` in the data directory. Only when it names that `jason` is
+   the runtime this application's: stop it with that `jason`, `<that jason> runtime stop`. A runtime of any other
+   `jason` is another installation's, and stays.
+2. Run `<that jason> runtime autostart status`. When the `executable` it names is that `jason`, run
+   `<that jason> runtime autostart disable`.
+3. Delete `~/Library/LaunchAgents/ai.jasonharness.desktop.plist`, which is Open Jason at Login.
+4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`.
 
 What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
 `Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`.
@@ -197,6 +206,22 @@ What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), 
   the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says
   updates come through the package. When the installer stops before it finishes (a refused password, say), Jason stays
   open and says so. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
+- Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which takes the same steps
+  as on macOS. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
+  the real folders named as versions under `<data>/desktop/bundle/`, when nothing runs from them, and the folder itself
+  once that leaves it empty; a link or anything else there stays, and is named. It then says what removes the
+  application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. When Jason will not
+  start, take off by hand what it placed. Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each
+  `<data>/desktop/bundle/<version>/jason` for an AppImage:
+
+  1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this
+     application's: stop it with `<that jason> runtime stop`. A runtime of any other `jason` stays.
+  2. Run `<that jason> runtime autostart status`. When the `executable` it names is that `jason`, run
+     `<that jason> runtime autostart disable`, which takes off the runtime's systemd user unit.
+  3. Delete `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that is set), which is
+     Open Jason at Login, when its `Exec` line starts the AppImage file or the deb's executable.
+  4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`.
+  5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
 
 ## Building and testing
 
