@@ -155,9 +155,9 @@ so in one line on stderr, naming the variable and never its value.
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
   `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
   the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
-  `reason` is free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`, `contact.archive`,
-  `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove` set it no limit of
-  their own.
+  `reason` is free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`,
+  `contact.archive`, `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove`
+  set it no limit of their own.
 - **A partial update tells absent from `null`**: a field left out stays as it is, and a field sent as `null` is
   cleared where the field can be empty. A context is the exception: in `campaign.update_context` and
   `workitem.update`, its `set` stores `null` as a value, and its `unset` removes a key.
