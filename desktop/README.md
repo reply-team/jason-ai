@@ -151,29 +151,42 @@ record keeps what its last turn was sent with, and the box shows it again when t
 
 | Host | The models offered | Effort |
 | --- | --- | --- |
-| Claude Code, and Anthropic's key | the vendor's aliases `opus`, `sonnet`, `haiku`, `fable`, which follow the vendor's newest version; beside them a model's full name the person types, passed as it is, with no effort | `--effort`: the five levels on each alias; on `haiku` only from Claude Code 2.1.293, before which the alias names a model that takes none |
+| Claude Code, and Anthropic's key | the vendor's aliases `opus`, `sonnet`, `haiku`, `fable`, which "point to the recommended version for your provider and update over time"; beside them a model's full name the person types, passed as it is, with no effort | `--effort`: the five levels on each alias; on `haiku` only from Claude Code 2.1.293, the version from which, on the Anthropic API, the alias names a model that takes them (the rule is the Anthropic API's: on another provider the box may offer a level Claude Code does not apply) |
 | Codex, on the person's sign-in and on the OpenAI key | what `codex app-server` answers to `model/list`, kept per host id (see below) | `-c model_reasoning_effort=<level>`: the levels each model lists among the five |
 | DeepSeek, MiniMax, Kimi, GLM | the desktop's table of each provider's models | `--effort` where the vendor's guide names levels: DeepSeek `low`, `high`, `max`; MiniMax the five; Kimi and GLM none |
 
 The effort is one of five words, `low`, `medium`, `high`, `xhigh`, `max`, and the desktop passes no other: never
-`ultracode` or `ultra`, which run more agents rather than set a level. A send whose effort is another word, or one the
-model named does not take by the table or the list kept (the host's own default model, a typed name and a model no list
-names take none), is refused before any host starts; on Claude Code that is decided after the version is read, as the
-floor is. A turn that names an effort is started without an inherited `CLAUDE_CODE_EFFORT_LEVEL`, which Claude Code ranks
-above `--effort`. DeepSeek's retired `deepseek-v4-flash` is sent, and read from a record, as `deepseek-flash`, the name
-its page gives now.
+`ultracode` or `ultra`, which run more agents rather than set a level. A send is refused before any host starts when
+its effort is another word; when its model is not one the host offers by the table or the list kept, or, on Claude
+Code and Anthropic's key alone, a typed name of the model shape, so a model chosen on one host never reaches another;
+and when its effort is not one the model named takes (the host's own default model, a typed name and a model no list
+names take none). On Claude Code the effort is decided after the version is read, as the floor is. A turn that names an
+effort is started without an inherited `CLAUDE_CODE_EFFORT_LEVEL`, which Claude Code ranks above `--effort`.
+DeepSeek's retired `deepseek-v4-flash` is sent, and read from a record, as `deepseek-flash`, the name its page gives
+now. A model a conversation kept that its host no longer lists is shown as no longer listed, and its turn goes on the
+host's own model with no effort; while "Another model…" is chosen with no name typed, nothing is sent.
 
-Claude Code documents no command that lists its models, so its list is the desktop's own table of the aliases. Codex's
-list is asked of the host: `codex app-server` is started with no message, as a turn of that host id is started (found
-on the PATH, no shell, the chat folder, the turn's environment, and on the OpenAI key the key and the desktop's own Codex
-folder), and sent `initialize`, `initialized` and `model/list` page by page, each after the answer before it; no thread
-or turn is started, so nothing reaches a model. The lists are kept in `<data>/desktop/models.json`, one per host id
-since OpenAI says an API key's models follow its organization and project, shown at once from what is kept, and asked
-again in the background when the hosts are listed, at most once a day per host id and one ask at a time, only for a
-Codex on the PATH and an OpenAI key stored. An ask that is refused, answers what cannot be read, ends early or passes 30
-seconds keeps the last list and is logged by its kind alone. A list the desktop cannot read whole is not shown, and an
-entry is shown only when its name is one the desktop passes to a host. On a Claude Code turn the desktop's file rules
-deny the agent the file.
+Claude Code documents no command that lists its models, so its list is the desktop's own table of the aliases, and
+nothing is asked of Claude Code in the background. Codex's list is asked of the host: `codex app-server` is started
+with no message, as a turn of that host id is started (found on the PATH, no shell, the chat folder, the turn's
+environment, and on the OpenAI key the key and the desktop's own Codex folder), and sent `initialize`, `initialized`
+and `model/list` page by page, each after the answer before it; no thread or turn is started, so nothing reaches a
+model. The lists are kept in `<data>/desktop/models.json`, one per host id since OpenAI says an API key's models follow
+its organization and project, shown at once from what is kept, and asked again in the background when the hosts are
+listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored.
+
+- **Only a list read counts for the day.** A host whose list was read is asked again once a day. An ask that is
+  refused, answers what cannot be read, ends early or passes its bound keeps the last list read as it was, is logged by
+  its kind alone, and is kept in memory only: its host is asked again at the next start, or an hour later while the
+  desktop runs. Where no list was ever read, the box keeps Codex's model control with its own default alone and one line
+  that says the models could not be read, or are being read.
+- **The bounds.** An ask ends at 30 seconds, after 20 pages, past 200 models, or on a line longer than 1 MB, each read
+  as unreadable but the first. A kept list of more than 200 models, or a file larger than two such lists could take, is
+  not read, nor is a list the desktop cannot read whole; an entry is shown only when its name is one the desktop passes
+  to a host.
+- **Quitting.** When the desktop quits, or its last window closes, an ask that runs is ended as a turn's host is, and
+  the asks that wait are dropped.
+- On a Claude Code turn the desktop's file rules deny the agent the file.
 
 ## The window
 

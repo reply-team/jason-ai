@@ -8,8 +8,10 @@
  *   recommended version for your provider and update over time", and the CLI's `--model` takes a model's full name as
  *   well. The same page on effort: "Fable models | `low`, `medium`, `high`, `xhigh`, `max`", "Opus 5.5, Sonnet 5.5,
  *   Haiku 5.5, Opus 5, Sonnet 5, Opus 4.8, and Opus 4.7 | `low`, `medium`, `high`, `xhigh`, `max`" and "Models not listed
- *   here do not support effort"; its version history: from v2.1.293 "`haiku` resolves to Haiku 5.5", and before that to
- *   Haiku 4.5, which is not listed. The flag, https://code.claude.com/docs/en/cli-reference: `--effort` "Options: `low`,
+ *   here do not support effort"; its version history: "v2.1.293 | `haiku` resolves to Haiku 5.5 on the Anthropic API",
+ *   and before that "`haiku` resolves to Haiku 4.5 on every provider", which is not listed. So the rule that `haiku`
+ *   takes effort from 2.1.293 is the Anthropic API's: on another provider the box may offer a level that Claude Code
+ *   does not apply. The flag, https://code.claude.com/docs/en/cli-reference: `--effort` "Options: `low`,
  *   `medium`, `high`, `xhigh`, `max`, or `ultracode`. Available levels depend on the model."
  * - OpenAI, https://developers.openai.com/codex/app-server (served as https://learn.chatgpt.com/docs/app-server): "Call
  *   model/list to populate a model picker with the available models and reasoning efforts."; "stdio (--listen

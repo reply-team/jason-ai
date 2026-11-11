@@ -280,9 +280,9 @@ const maintainFolder = 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR';
 const noBackground = 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS';
 
 /**
- * Withheld from a turn that names an effort: Anthropic, https://code.claude.com/docs/en/env-vars (read 2026-11-11):
- * "`CLAUDE_CODE_EFFORT_LEVEL` overrides `--effort` and `/effort`", so an inherited one would stand for the person's
- * choice.
+ * Withheld from a turn that names an effort: Anthropic, https://code.claude.com/docs/en/env-vars (read 2026-11-11), of
+ * `CLAUDE_CODE_EFFORT_LEVEL`: "Takes precedence over `--effort`, `/effort`, and the `modelSettings` and `effortLevel`
+ * settings.", so an inherited one would stand for the person's choice.
  */
 const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
 
