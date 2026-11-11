@@ -128,6 +128,35 @@ test('an output past 8 MiB on a stream answers as unreadable, whatever it holds'
     assert.equal(floorSentence(printedVersion(result)), floorSentence(null));
 });
 
+test('a program that never answers is answered at the runner’s own time limit, as stopped there, and ended by its first signal', { timeout: 60_000 }, async (t) => {
+    // Whatever the row's end, the stand-in is ended before the bench removes its folder.
+    let pidFile: string | null = null;
+    endWhenOver(t, () => (pidFile !== null && existsSync(pidFile) ? [Number(readFileSync(pidFile, 'utf8'))] : []));
+    const b = bench(t, { programs: ['claude'] });
+    pidFile = join(b.root, 'hung.pid');
+    const hung = programsOn({ ...b.env, STUB_HANG: 'claude', STUB_HANG_PID: pidFile }, null);
+    const bound = 1500;
+    const started = Date.now();
+    const result = await hung.run('claude', ['--version'], { timeoutMs: bound });
+    const took = Date.now() - started;
+    assert.deepEqual(result, { exit: -1, stdout: '', stderr: `It was stopped at its time limit of ${bound} ms.` });
+    assert.equal(printedVersion(result), null, 'a program stopped at its limit said no version');
+    assert.ok(took >= bound - 50 && took < bound + 15_000, `answered at the bound: ${took} ms`);
+    assert.ok(existsSync(pidFile), 'the stand-in started before the bound');
+    const pid = Number(readFileSync(pidFile, 'utf8'));
+    const gone = () => {
+        try {
+            process.kill(pid, 0);
+            return false;
+        } catch {
+            return true;
+        }
+    };
+    const waited = Date.now();
+    while (!gone() && Date.now() - waited < 20_000) await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.ok(gone(), 'the program is ended, not left running');
+});
+
 test('a version read past its bound answers as unreadable at the bound, and a program that outlives the first signal is still ended', { timeout: 60_000 }, async (t) => {
     // Whatever the row's end, what the stand-in left running is ended before the bench removes its folder.
     let ids: string | null = null;

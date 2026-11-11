@@ -10,7 +10,12 @@ const stdin = record.readStdin();
 record(name, args, stdin);
 const said = args.join(' ');
 
-if (said === '--version' && name === 'claude' && process.env.STUB_CLAUDE_VERSION_STUCK) {
+if (process.env.STUB_HANG === name) {
+    // A program that never answers, whatever it was asked, and ends at the first signal: what a runner's time limit is
+    // for. Its id is written to the file STUB_HANG_PID names, so a test can see it has gone.
+    if (process.env.STUB_HANG_PID) writeFileSync(process.env.STUB_HANG_PID, String(process.pid));
+    setInterval(() => undefined, 60000);
+} else if (said === '--version' && name === 'claude' && process.env.STUB_CLAUDE_VERSION_STUCK) {
     // A Claude Code that never answers and outlives the first signal. Elsewhere it ignores SIGTERM. On Windows, where a
     // signal ends a process outright, it leaves a detached process of its own holding its output open, which outlives it
     // unless the whole tree is ended. The ids of both are written to the file named, as a JSON array.
