@@ -23,7 +23,7 @@ import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from 
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
-import { sandboxRefusal } from './sandbox.ts';
+import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
@@ -422,37 +422,53 @@ async function run(): Promise<void> {
 
 // Electron's own files follow the data directory, before anything opens: its profile, the page's storage and its own
 // logs are under <data>/desktop/electron, never the account's application data, so a second installation (one
-// JASON_DATA_DIR names) is a second desktop with its own lock, and a purge of the data directory takes all of it.
-const early = desktopPaths(dataDirectory(process.env, homedir()));
-app.setPath('userData', early.electron);
-app.setPath('sessionData', early.electron);
-app.setAppLogsPath(early.electronLogs);
+// JASON_DATA_DIR names) is a second desktop with its own lock, and a purge of the data directory takes all of it. Every
+// start sets them before Electron is ready, a refused one too.
+function keepElectronUnderData(): void {
+    const early = desktopPaths(dataDirectory(process.env, homedir()));
+    app.setPath('userData', early.electron);
+    app.setPath('sessionData', early.electron);
+    app.setAppLogsPath(early.electronLogs);
+}
 
-// Never without Chromium's sandbox: a start that carries --no-sandbox, which an AppImage's launcher adds where the system
-// refuses it, says why and quits before anything else is decided (`sandbox.ts`).
-const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), linuxForm());
-const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
+// Never without Chromium's sandbox: the first thing the main process decides, on every platform. A start that carries
+// --no-sandbox, which an AppImage's launcher adds where the system refuses the sandbox, says why once Electron is ready
+// and quits, with no lock taken, no copy made, no jason started and no window made (`sandbox.ts`).
+const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), process.argv, linuxForm());
 if (unsandboxed !== null) {
-    void app.whenReady().then(() => {
-        dialog.showErrorBox('Jason', unsandboxed);
-        app.exit(1);
+    keepElectronUnderData();
+    void refuseStart(unsandboxed, {
+        whenReady: () => app.whenReady(),
+        logger: () => fileLogger(desktopPaths(dataDirectory(process.env, homedir())).logs),
+        showErrorBox: (title, text) => dialog.showErrorBox(title, text),
+        exit: (code) => app.exit(code),
     });
-} else if (uninstalling !== null) {
-    // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
-    // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
-    void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));
-} else if (stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform })) {
-    // The nsis installer's and uninstaller's start when a runtime runs from the carried jason.exe: it stops that runtime
-    // through jason runtime stop and exits, and opens no window; the installer looks again rather than read the code.
-    void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));
-} else if (!app.requestSingleInstanceLock()) {
-    app.quit();
 } else {
-    // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray.
-    app.on('second-instance', (_event, argv) => {
-        if (showsOnSecondStart(argv)) showWindow();
-    });
-    app.on('activate', () => showWindow());
-    app.on('window-all-closed', () => app.quit());
-    void app.whenReady().then(run);
+    startDesktop();
+}
+
+function startDesktop(): void {
+    keepElectronUnderData();
+
+    const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
+    if (uninstalling !== null) {
+        // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
+        // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
+        void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));
+    } else if (stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform })) {
+        // The nsis installer's and uninstaller's start when a runtime runs from the carried jason.exe: it stops that
+        // runtime through jason runtime stop and exits, and opens no window; the installer looks again rather than read
+        // the code.
+        void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));
+    } else if (!app.requestSingleInstanceLock()) {
+        app.quit();
+    } else {
+        // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray.
+        app.on('second-instance', (_event, argv) => {
+            if (showsOnSecondStart(argv)) showWindow();
+        });
+        app.on('activate', () => showWindow());
+        app.on('window-all-closed', () => app.quit());
+        void app.whenReady().then(run);
+    }
 }
