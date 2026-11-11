@@ -213,6 +213,33 @@ public sealed class UpdateCarriedTests
         Assert.True(installation.Running, "the runtime was stopped for a rollback that was refused");
     }
 
+    /// <summary>
+    /// A complete record is history, not an update in flight: an apply plans a new update of its own file past it. So
+    /// an ordinary jason whose data directory holds a complete record of the carried jason's update updates its own
+    /// file, and the application's file stays as it is.
+    /// </summary>
+    [Fact]
+    public async Task An_ordinary_jason_updates_its_own_file_past_a_complete_record_of_a_carried_executable()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        installation.Killed(UpdateStep.Complete);
+        CarriedRecord.Beside(installation.InstallPath);
+        var carried = File.ReadAllText(installation.InstallPath);
+        var ordinary = Ordinary(installation);
+        File.WriteAllText(ordinary, $"jason {installation.From}");
+        var env = installation.Env with { InstallPath = ordinary };
+        installation.Machine = env;
+
+        var exit = await UpdateCommands.ApplyAsync(env, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.DoesNotContain("update_carried_by_desktop", installation.Out.ToString(), StringComparison.Ordinal);
+        Assert.Equal($"jason {installation.To}", File.ReadAllText(ordinary));
+        Assert.Equal(ordinary, installation.Ledger()!.InstallPath);
+        Assert.Equal(UpdateStep.Complete, installation.Ledger()!.Step);
+        Assert.Equal(carried, File.ReadAllText(installation.InstallPath));
+    }
+
     /// <summary>A record in flight that names the ordinary jason's own file is carried on as it always was.</summary>
     [Fact]
     public async Task An_ordinary_jason_resumes_an_update_in_flight_on_its_own_file()
