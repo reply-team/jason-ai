@@ -21,14 +21,16 @@ verbs existed, correctly and incompletely.
 One per moment somebody asks for something, because a host chooses a skill by its description and a
 description that promises everything matches nothing.
 
-- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **verified.**
+- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft.**
   Turning an objective into durable campaign work and following it: the provider check, what the person has
-  already written down, the campaign and its goals, the people it is about, provider operations and AI role work, what the
+  already written down, the campaign and its goals, the people it is about, from a list or from a search the planner
+  forms, provider operations and AI role work, what the
   runtime does with them afterwards, answering a conversation after the responder has been at it, and stopping or holding work.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **draft.**
   What Jason is waiting for a person to decide: the approvals parked at a claim and the questions a running role
   raised — including when a notification brought the person — presented in their own words and recorded as their
-  decision, and the standing approval a person sets in advance for one category of reply in a campaign.
+  decision, and the standing approval a person sets in advance for one category of reply in a campaign, or for the
+  searches under one of its audiences, the allowance, offered once the audience is judged to work.
 - [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft.**
   The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI and
   unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
@@ -39,13 +41,14 @@ description that promises everything matches nothing.
   apart, a subscribing plugin that is behind or failing and the rewind that is a person's, the repairs that are safe, and the diagnostic file `jason doctor` writes.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
-- [`planner-in-session`](planner-in-session/SKILL.md) — **verified.** The planner's judgement in a person's own
+- [`planner-in-session`](planner-in-session/SKILL.md) — **draft.** The planner's judgement in a person's own
   conversation about a campaign: its first words on where the person's files live, an opening in the order a real
   start needs, with who writes and how the company sounds set as the person's word, taking a brief as it comes and
   asking for what is missing one question at a time, what stays a quick look, what is agreed with the person before
   anything is created, among it a campaign named for what it is for, under a project named from what they sell, when it
   becomes campaign work, and the first message seen before anything is sent; a campaign never split only to give
-  some of its people another tone of voice. The session file of the planner, below.
+  some of its people another tone of voice, and an audience from a search formed with the person by free looks before
+  its probe. The session file of the planner, below.
 - [`researcher-in-session`](researcher-in-session/SKILL.md) — **draft.** The researcher's judgement in a person's own
   conversation about an account or a person: taking the question as it comes, what stays a quick look and what
   becomes research work items, what Jason already holds and the launched researcher's notes read as a lead, the
@@ -93,11 +96,14 @@ for a role that sits with a person, the judgement it shares with its session fil
   is launched for: why it was
   woken, what a noticed reply or provider-event line asks of it and whose thread it is, what it reads and in which
   order, what it may decide alone, how it asks a person the one question it cannot answer, and the line it leaves in
-  the chronicle every time; and for replies, the verdicts it reads by category and the responder it defers to.
-- [`roles/planner`](roles/planner/SKILL.md) — **verified.** The next short horizon of work: what a planner reads
+  the chronicle every time; for replies, the verdicts it reads by category and the responder it defers to; and for the
+  audience, how a search ended, the analyst asked once the probe has had its window, the planner launched on a verdict
+  of replace, and the top-ups it runs under the person's allowance.
+- [`roles/planner`](roles/planner/SKILL.md) — **draft.** The next short horizon of work: what a planner reads
   before it plans, the order a first campaign opens in, a campaign never split only to give some of its people
-  another tone of voice, the goals a campaign is made with, what this build stores of a plan and what it does not, and how a horizon becomes work items a
-  dispatcher will claim.
+  another tone of voice, the goals a campaign is made with, an audience formed from a search with its probe sized by the
+  look's count and the threshold and allowance it proposes, what this build stores of a plan and what it does not, and
+  how a horizon becomes work items a dispatcher will claim.
 - [`roles/copywriter`](roles/copywriter/SKILL.md) — **verified.** The campaign-level messaging: what the campaign
   itself says about voice and guardrails, the tone and the sender it writes in, where the copy goes when it is
   written, when one text may be a template for a whole audience, and why writing it is not sending it.
@@ -114,7 +120,8 @@ for a role that sits with a person, the judgement it shares with its session fil
   approves or a standing approval they set for its category releases.
 - [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the four things
   this runtime keeps — the work items, the chronicle, the reports and the campaign's activity, with the replies counted by category over a window — and honest about
-  where the record runs out.
+  where the record runs out; and whether one audience works, judged on its own people over equal time since they landed,
+  answered working, replace or stop.
 - [`roles/deliverability-specialist`](roles/deliverability-specialist/SKILL.md) — **verified.** What the
   do-not-contact register and the failed items say about whether anything is arriving, and what somebody
   would have to do outside Jason about it.
@@ -126,7 +133,7 @@ SHA-256 of the text it read.
 | role | status | host that read it | Jason | the text it read |
 |---|---|---|---|---|
 | `manager` | draft | — | — | — |
-| `planner` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:8e4f5ddb1a2b72a220c9cc83ad45d6ada9a6f308da405ef39f641d1afcbe1610` |
+| `planner` | draft | — | — | — |
 | `researcher` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:767f398c45154333ba92825004f302571fa1b0e31e2c4080a538ab8e067692dd` |
 | `copywriter` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:2e39996997d944484db6a8a08169be0ba543901c2a7094bec23e27bc6a1aa7b4` |
 | `personalizer` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:1b322d94a7d22e9bace3d0a139c87d47bab5e6c1f78d22d38a01b35dee38c3dd` |
@@ -185,5 +192,3 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |
-| `managed-campaign-work` | Claude Code 2.1.318 | 0.27.0 | `sha256:1952b08363d464eb00a00a5f5d6bfaa3bbf908cb17f2083e01458a170061ea30` |
-| `planner-in-session` | Claude Code 2.1.318 | 0.27.0 | `sha256:e17f4601e5a33040e188a639fdcbfe4f9c5dfafa7e4aa936d85150fcf7bcf3d9` |

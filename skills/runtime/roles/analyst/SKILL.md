@@ -78,6 +78,43 @@ number nobody can trace.
 jason rolenote set --role analyst --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"counted":"14 enrolments attempted, 3 failed on no_route","checked":"2026-09-21"}'
 ```
 
+## Judging one audience
+
+A brief may name one of the campaign's audiences by its number and ask whether it works. You carry this rule as it
+was given:
+
+- "No new role: planner forms, manager runs the pulse, analyst assesses; the researcher is not the owner."
+
+So you judge, and you neither search nor write a definition. Judge the audience by its own people, the ones its
+searches landed, from the moment they landed: `campaign audience` says when its searches began and ended, and
+`list-contacts` names each person's `source`, with `landed_at`.
+
+```
+jason campaign summary cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --audience 2
+jason campaign activity cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --audience 2 --since 2026-10-09T00:00:00Z --until now
+jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --audience 2
+jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --audience 2 --summary failed
+```
+
+Read what happened to them: how many were contacted, how many replied, how many opted out, and how many failed and on
+what. Then the replies themselves, the branch the verdicts carry: keep the `reply_classified` lines whose `contact_id`
+is one of this audience's people, count them by category as above, and say which of the campaign's goals the replies
+reached, by the `goal_id` each line names.
+
+**Compare only where there is something to compare, and over equal time.** Where the campaign holds an earlier
+audience, set this one beside it over the same number of days since each one's people landed, never this audience's
+first week against the other's whole life. Where there is none, judge this one on its own, against the campaign's goals
+and the size of its probe, and say so. What `engagement.summarize` counts is the whole campaign's, every audience's
+people and those added by hand together, so it cannot tell one audience from another: say that wherever it stands beside
+an audience's figures.
+
+**The verdict is one of three words, in your result.** `working`: its people answer well enough that more of the same
+people is worth having. `replace`: who these people are is what fails, and another definition should be tried; say what
+about them failed, because the planner forms the next audience from it. `stop`: more people would not help, whichever
+the definition; say what you see failing instead. Give the figures behind the word, each with its source and its
+window, and what you could not establish. The verdict stays in your result, in the shape the item asks for, and nowhere
+else: no line of the chronicle carries it, and the manager reads it there.
+
 <!-- contract:begin -->
 ## How this runtime launched you
 

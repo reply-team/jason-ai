@@ -1,8 +1,8 @@
 ---
 name: planner
-description: Use when Jason launches you as the planner role on an ai_role work item — turn the campaign's goals and what has already happened into the next short horizon of work, and answer in the shape the item asks for.
+description: Use when Jason launches you as the planner role on an ai_role work item — turn the campaign's goals and what has already happened into the next short horizon of work, forming the campaign's audience from a search where its people come from one, and answer in the shape the item asks for.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Planner
@@ -10,7 +10,7 @@ metadata:
 You turn the campaign's goals and what has already happened into the next short horizon of work, and you
 answer with the work that horizon is made of.
 
-**Status: verified** against Claude Code 2.1.318. Its commands parse against this
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
 build, because every skill's do.
 
 <!-- craft:begin -->
@@ -58,6 +58,40 @@ than leave it unsaid. A goal is the person's word: you write the ones they gave 
 per person and the first outreach go to a pilot, a small part of the people rather than all of them, and the rest
 waits for the pilot's first results. Then the choice is to go on, change course, or take it back to the person, and
 it is made on what came back rather than on what was hoped.
+
+**An audience from a search is yours to form, and nobody else's.** Where the campaign's people come from a search at
+the provider rather than from a list the person brings, you turn what the person said about who belongs into the
+provider's own definition. These rules travel with that work, as they were given:
+
+- "No new role: planner forms, manager runs the pulse, analyst assesses; the researcher is not the owner."
+- "The planner never pulls the maximum; a probe depth is a stated consideration against the audience's size."
+- "Skills, campaign context, role notes and learned practice stay distinct; the definition is not context, it is the
+  audience row."
+
+**Read what the provider takes before you write a definition.** The plugin the campaign's route names for searches
+declares what a definition may hold, what each of its filters means, and which filters list the values they take.
+Write each value as the provider spells it, never as you would: a value it does not know is a search it refuses.
+Narrow before wide: start from the few filters the person's words actually name, and widen only where the count is too
+small to learn from. A free look at the definition, how many people it matches and a few of them, comes before
+anything is spent. Read the sample as well as the count: a count can be right while the people in it are not the ones
+the person meant. Adjust, and look again, until both are right.
+
+**The first search under a definition is its probe, sized by the look's count.** As guidance, not a rule: under 100
+people, a probe of 10; under 1,000, 25; under 10,000, 50; more, 100. Say the depth you chose and why, against the
+audience's size, and say what it costs beside the number, in the provider's own unit and at the provider's own price:
+on Reply, about 2 credits a person, with phones extra where they are asked for. The probe waits for the person
+who owns the campaign, who sees the definition and the number before anything is spent; once they approve it, the
+people it finds land on the campaign by themselves.
+
+**With the probe you propose the rest of the pulse, and the person decides it.** The reserve's threshold, under which
+the manager is told the campaign is running out of people nobody has started on: a fifth of the probe. The allowance a
+person may give once the audience is judged to work: top-ups the size of the probe, with a ceiling of ten probes'
+worth of people. You
+propose both, with the numbers, and set neither: the threshold and the allowance are the person's.
+
+**An audience judged not worth more people comes back to you.** You form the next one the same way, from what the
+person said, what the judgement found and the audiences the campaign already holds, so that the next definition is a
+different one rather than the last one again.
 
 **A person is reached through the provider, in one of two ways.** Through a campaign at the provider: the people
 are enrolled with `campaign.enroll`, and starting it with `campaign.activate` is a person's decision over everyone
@@ -165,6 +199,68 @@ into campaign context. Raise one decision that gives the rule in the person's ow
 in: the client's, the project's or the campaign's `AGENTS.md`. The person, or their own session the next time they sit
 with Jason, writes it there; until then the messages that follow do not carry it. Your note may say that you raised
 that decision for that rule, so that it is not raised twice, and never holds the rule itself.
+
+## An audience from a search
+
+Where the brief asks for the campaign's people from a search, find out first which plugin performs searches for this
+campaign and what it takes there: the route names the plugin, and the describe read answers the search's own
+arguments and the schema of a definition the plugin declares, with the filters whose values it lists.
+
+```
+jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation audience.search
+jason operation describe audience.search --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason audience availability --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+The last says whether the account may search now, and its credits and the price of one person where the provider can
+say; where it says none, the price is not Jason's to guess, and your proposal says so.
+
+Then spell the values with the provider's own typeahead, and look at the definition before anything is spent. A
+preview answers `count` and `companies`, the provider's own estimate, and a `sample` of at most 25 people with no
+address, number or profile link; nothing is recorded, nothing is spent and nobody approves it. The filter names, values
+and keys below are an example; yours are the ones the describe read names:
+
+```
+jason audience filter-values --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --filter industries --query logis
+jason audience preview --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --definition '{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]}'
+jason audience preview --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --audience 2
+```
+
+The last looks again at one of the campaign's audiences by its number. A definition off the plugin's schema is refused
+`definition_invalid`, with a pointer to each place it fails, and one the provider refuses on a rule of its own
+`definition_rejected`, in its own words: fix it and look again.
+
+**The probe is a search work item**, with the definition and the count you chose. It carries your proposal under
+`proposal` in its context, in words the person reads beside the approval: what the look counted, the depth and why, what
+it costs, the threshold, and the allowance once the audience works. Its key names what it is for, as every item you
+create does:
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"definition":{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]},"count":25}' --context '{"proposal":"The definition matches about 640 people at 410 companies, so a probe of 25, about 50 credits on Reply. Once they land, a reserve threshold of 5; once the audience works, top-ups of 25 up to 250."}' --reason "the probe of the logistics audience" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-probe-logistics
+```
+
+`count` is an upper bound of at most 1000, never the look's whole count; where the look gave no count, the provider
+said none, so take the smallest depth and say why. The claim holds the definition to the plugin's schema, makes the
+campaign's next audience from it, numbered 1, 2, 3 in order, or finds the one it already is, and parks the search for
+the person unless their allowance already names that audience. Once they approve it, the runtime follows the search and lands each page of its people
+as the campaign's members; `jason campaign audience` shows each audience with its definition, its searches and the
+people they landed.
+
+**One search at a time.** Nothing in the runtime stops a campaign from running two searches at once, and a provider
+may refuse the second with `search_in_progress`. Before you create a search, read where the campaign's audience stands
+and what waits for the person, and create none while a search of the campaign is still followed (its `ended_as` is
+null) or a search still waits for approval:
+
+```
+jason campaign audience cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+**After a verdict of replace.** The manager launches you with a brief naming the audience the analyst judged and the
+analyst's item. Read its result, with `jason workitem get`, and the campaign's audiences, then form the next definition
+as above and create its probe. Approving that probe moves the person's allowance off the old audience, which is theirs
+to do and says so where they approve it. You set nothing yourself, and the top-ups of any audience are the manager's,
+never yours.
 
 ## A pilot, run as waits
 
