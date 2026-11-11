@@ -256,7 +256,12 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
             executableName: 'jason-desktop-app',
             // Nothing after the program in the menu entry's Exec, where the legacy AppImage toolset puts --no-sandbox.
             executableArgs: [],
-            icon: 'resources/icon.png',
+            // A folder of the icon set's own PNGs, each named by its size: app-builder-lib 26.18.0, out/options/linuxOptions.d.ts,
+            // icon: "The path to icon set directory or one png file, relative to the build resources or to the project
+            // directory. The icon filename must contain the size (e.g. 32x32.png) of the icon." The deb installs each as
+            // /usr/share/icons/hicolor/<size>x<size>/apps/<executable>.png (out/targets/FpmTarget.js), the AppImage under
+            // usr/share/icons/hicolor the same way (out/targets/appimage/appLauncher.js).
+            icon: 'installer/linux-icons',
             category: 'Office',
             synopsis: 'A window onto the installation the jason command line uses',
             maintainer: `${signer} <support@reply.io>`,

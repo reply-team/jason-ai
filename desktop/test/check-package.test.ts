@@ -5,14 +5,14 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { fuses, signer } from '../electron-builder.config.mjs';
-import { checkPackage, fuseFile, updateFile, wireOrder, type Form, type Platform } from '../scripts/check-package.mjs';
+import { checkPackage, fuseFile, iconRoot, linuxIconSizes, updateFile, wireOrder, type Form, type Platform } from '../scripts/check-package.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const library = createRequire(join(root, 'package.json'))('@electron/fuses') as {
@@ -75,10 +75,10 @@ const menuEntry = (exec: string) => ['[Desktop Entry]', 'Name=Jason', `Exec=${ex
 async function made(
     t: { after(fn: () => void): void },
     platform: Kind,
-    options: { length?: number; copies?: number; updater?: string | null; packageType?: string | null; appRun?: boolean; exec?: string | null; profile?: string | null } = {},
+    options: { length?: number; copies?: number; updater?: string | null; packageType?: string | null; appRun?: boolean; exec?: string | null; profile?: string | null; icons?: number[] } = {},
 ): Promise<string> {
     const folder = temporary(t);
-    const app = platform === 'win32' ? join(folder, 'win-unpacked') : platform === 'darwin' ? join(folder, 'mac-arm64', 'Jason.app') : join(folder, platform === 'linux-deb' ? 'Jason' : 'squashfs-root');
+    const app = platform === 'win32' ? join(folder, 'win-unpacked') : platform === 'darwin' ? join(folder, 'mac-arm64', 'Jason.app') : join(folder, platform === 'linux-deb' ? join('opt', 'Jason') : 'squashfs-root');
     const on = platformOf(platform);
     mkdirSync(dirname(fuseFile(app, on)), { recursive: true });
     mkdirSync(dirname(updateFile(app, on)), { recursive: true });
@@ -93,6 +93,13 @@ async function made(
     if (options.appRun ?? platform === 'linux-appimage') writeFileSync(join(app, 'AppRun'), '#!/usr/bin/env bash\n');
     if (platform === 'linux-appimage' && options.exec !== null) writeFileSync(join(app, 'jason-desktop-app.desktop'), menuEntry(options.exec ?? 'AppRun %U'));
     if (platform === 'linux-deb' && options.profile !== null) writeFileSync(join(app, 'resources', 'apparmor-profile'), options.profile ?? appArmorProfile);
+    if (platform === 'linux-deb' || platform === 'linux-appimage') {
+        for (const size of options.icons ?? linuxIconSizes) {
+            const target = join(iconRoot(app, formOf(platform) as Form), 'usr', 'share', 'icons', 'hicolor', `${size}x${size}`, 'apps', 'jason-desktop-app.png');
+            mkdirSync(dirname(target), { recursive: true });
+            copyFileSync(join(root, 'installer', 'linux-icons', `${size}x${size}.png`), target);
+        }
+    }
     return app;
 }
 
@@ -282,4 +289,28 @@ test('run as a program: what was read on stdout and exit 0, a refusal on stderr 
     const read = spawnSync(process.execPath, [script, '--app', deb, '--platform', 'linux', '--form', 'deb'], { encoding: 'utf8' });
     assert.equal(read.status, 0, read.stderr);
     assert.match(read.stdout, /package-type: deb/);
+});
+
+for (const kind of ['linux-deb', 'linux-appimage'] as const) {
+    test(`${kind}: the icon is installed at 32, 128, 256 and 512 px, each the file the tree holds, and what was read is said`, async (t) => {
+        const said = check(await made(t, kind), kind);
+        for (const size of linuxIconSizes) assert.ok(said.includes(`icon ${size}x${size}: the file the tree holds`), said.join('\n'));
+    });
+
+    test(`${kind}: a package missing one of the required icon sizes is refused`, async (t) => {
+        for (const size of linuxIconSizes) {
+            const app = await made(t, kind, { icons: linuxIconSizes.filter((other) => other !== size) });
+            assert.throws(() => check(app, kind), new RegExp(`no icon at ${size}x${size}`));
+        }
+    });
+
+    test(`${kind}: an icon that is not the file the tree holds is refused`, async (t) => {
+        const app = await made(t, kind);
+        writeFileSync(join(iconRoot(app, formOf(kind) as Form), 'usr', 'share', 'icons', 'hicolor', '128x128', 'apps', 'jason-desktop-app.png'), 'not the icon');
+        assert.throws(() => check(app, kind), /icon at 128x128 is not the file the tree holds/);
+    });
+}
+
+test('linux: the sizes a package must carry are 32, 128, 256 and 512', () => {
+    assert.deepEqual([...linuxIconSizes], [32, 128, 256, 512]);
 });

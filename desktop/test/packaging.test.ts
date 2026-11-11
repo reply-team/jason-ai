@@ -3,7 +3,7 @@
 // from, and the release's own steps read the built package back.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -173,7 +173,22 @@ test('the deb names its maintainer and its home page, which a deb must, and its 
     assert.equal(built.linux.maintainer, 'ReplyApp Inc. <support@reply.io>');
     assert.equal(built.extraMetadata.homepage, 'https://github.com/reply-team/jason-ai');
     assert.equal(built.linux.category, 'Office');
-    assert.equal(built.linux.icon, 'resources/icon.png');
+    assert.equal(built.linux.icon, 'installer/linux-icons');
+});
+
+test('the Linux icon folder holds the icon set’s own PNGs, each named by its size, which the packer reads the size from', () => {
+    // app-builder-lib 26.18.0, out/options/linuxOptions.d.ts, icon: "The path to icon set directory or one png file,
+    // relative to the build resources or to the project directory. The icon filename must contain the size (e.g.
+    // 32x32.png) of the icon."
+    const folder = join(root, 'installer', 'linux-icons');
+    const names = readdirSync(folder).sort();
+    assert.deepEqual(names, ['1024x1024.png', '128x128.png', '256x256.png', '32x32.png', '512x512.png', '64x64.png']);
+    for (const name of names) {
+        const bytes = readFileSync(join(folder, name));
+        const size = Number(name.split('x')[0]);
+        assert.equal(bytes.readUInt32BE(16), size, name);
+        assert.equal(bytes.readUInt32BE(20), size, name);
+    }
 });
 
 test('when one pack makes both Linux forms, the deb starts once the AppImage is built, so the AppImage never carries package-type', async () => {
