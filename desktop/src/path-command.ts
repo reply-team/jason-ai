@@ -7,7 +7,7 @@
  *   the app-alias machinery there manages its own zero-byte alias files and ignores files it did not make. The two files
  *   are placed only when that folder is on the PATH, so no PATH entry is ever written, and they are removed by deleting
  *   them.
- * - On macOS it is a wrapper script in `~/.local/bin/`.
+ * - On macOS and Linux it is a wrapper script in `~/.local/bin/`.
  *
  * The files of a command are placed and removed together, only on the person's word, and read back together on every
  * look: a command of ours with any file that runs another executable, names another data directory than the desktop
@@ -38,7 +38,7 @@ export type CommandStatus =
 /** The folder the command goes in, or null where none is offered. */
 export function commandFolder(platform: NodeJS.Platform, env: Readonly<Record<string, string | undefined>>, home: string): string | null {
     if (platform === 'win32') return env['LOCALAPPDATA'] ? win32.join(env['LOCALAPPDATA'], 'Microsoft', 'WindowsApps') : null;
-    if (platform === 'darwin') return posix.join(home, '.local', 'bin');
+    if (platform === 'darwin' || platform === 'linux') return posix.join(home, '.local', 'bin');
     return null;
 }
 
@@ -53,7 +53,7 @@ export function sameFile(platform: NodeJS.Platform, a: string, b: string): boole
     return shape(a) === shape(b);
 }
 
-/** Whether a file the PATH names is a program: a file and, on macOS, one that may be executed. */
+/** Whether a file the PATH names is a program: a file and, off Windows, one that may be executed. */
 export function isProgramFile(file: string, platform: NodeJS.Platform): boolean {
     try {
         if (!statSync(file).isFile()) return false;
@@ -101,7 +101,7 @@ export class PathCommand {
         this.deps = deps;
     }
 
-    /** The files a command of this name is: the shim and the Git Bash wrapper on Windows, the wrapper on macOS. */
+    /** The files a command of this name is: the shim and the Git Bash wrapper on Windows, the wrapper on macOS and Linux. */
     private filesOf(name: Name): CommandFile[] {
         const { executable, dataDirectory } = this.deps;
         // The folder is a path of the machine the desktop runs on, so it is joined as that machine joins it.
@@ -149,7 +149,7 @@ export class PathCommand {
 
     status(): CommandStatus {
         const { executable, dataDirectory } = this.deps;
-        if (this.deps.folder === null || (this.deps.platform !== 'win32' && this.deps.platform !== 'darwin')) return { state: 'unsupported', executable };
+        if (this.deps.folder === null || (this.deps.platform !== 'win32' && this.deps.platform !== 'darwin' && this.deps.platform !== 'linux')) return { state: 'unsupported', executable };
         const names: Name[] = ['jason', 'jason-desktop'];
         for (const name of names) {
             const looks = this.looksOf(name);
@@ -181,7 +181,7 @@ export class PathCommand {
     /** Places the command, or places it again over a command of ours that points elsewhere: only on the person's word. */
     place(): CommandStatus {
         const status = this.status();
-        if (status.state === 'unsupported') throw new Error('The PATH command is offered on Windows and macOS only.');
+        if (status.state === 'unsupported') throw new Error('The PATH command is offered on Windows, macOS and Linux only.');
         if (status.state === 'taken') throw new Error(`${status.files.join(' and ')} are there and are not the desktop’s; nothing was placed.`);
         if (status.state === 'placed') return status;
         if (status.state === 'absent' && this.deps.platform === 'win32' && !status.folderOnPath) {
@@ -232,7 +232,7 @@ export function commandMenuOf(status: CommandStatus): CommandMenu {
     const runs = `The jason executable: ${status.executable}`;
     switch (status.state) {
         case 'unsupported':
-            return { lines: [runs, 'A jason command on the PATH is offered on Windows and macOS.'], acts: [] };
+            return { lines: [runs, 'A jason command on the PATH is offered on Windows, macOS and Linux.'], acts: [] };
         case 'taken':
             return { lines: [runs, `${status.files.join(' and ')} are another program’s; nothing is placed.`], acts: [] };
         case 'placed': {

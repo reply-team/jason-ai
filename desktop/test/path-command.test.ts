@@ -40,11 +40,12 @@ function windows(t: { after(fn: () => void): void }, options: Partial<PathComman
     return { root, folder, command, log };
 }
 
-test('the folder is %LOCALAPPDATA%\\Microsoft\\WindowsApps on Windows, ~/.local/bin on macOS, none elsewhere', () => {
+test('the folder is %LOCALAPPDATA%\\Microsoft\\WindowsApps on Windows, ~/.local/bin on macOS and Linux, none elsewhere', () => {
     assert.equal(commandFolder('win32', { LOCALAPPDATA: 'C:\\Users\\someone\\AppData\\Local' }, 'C:\\Users\\someone'), win32.join('C:\\Users\\someone\\AppData\\Local', 'Microsoft', 'WindowsApps'));
     assert.equal(commandFolder('win32', {}, 'C:\\Users\\someone'), null);
     assert.equal(commandFolder('darwin', {}, '/Users/someone'), posix.join('/Users/someone', '.local', 'bin'));
-    assert.equal(commandFolder('linux', {}, '/home/someone'), null);
+    assert.equal(commandFolder('linux', {}, '/home/someone'), posix.join('/home/someone', '.local', 'bin'));
+    assert.equal(commandFolder('freebsd', {}, '/home/someone'), null);
 });
 
 test('on Windows, with the folder on the PATH and no jason anywhere, the shim is offered and nothing is placed until the person says so', (t) => {
@@ -272,11 +273,37 @@ test('on macOS a jason of another installation on the PATH makes the wrapper jas
     assert.deepEqual([(status as { name: string }).name, (status as { shadows: string }).shadows, (status as { folderOnPath: boolean }).folderOnPath], ['jason-desktop', brew, true]);
 });
 
-test('elsewhere than Windows and macOS the PATH command is not offered', () => {
-    const command = new PathCommand({ platform: 'linux', folder: null, executable: '/opt/jason', dataDirectory: null, path: () => '', isProgram: () => false, log: memoryLog() });
+test('elsewhere than Windows, macOS and Linux the PATH command is not offered', () => {
+    const command = new PathCommand({ platform: 'freebsd', folder: null, executable: '/opt/jason', dataDirectory: null, path: () => '', isProgram: () => false, log: memoryLog() });
     assert.deepEqual(command.status(), { state: 'unsupported', executable: '/opt/jason' });
-    assert.throws(() => command.place());
-    assert.deepEqual(commandMenuOf(command.status()).acts, []);
+    assert.throws(() => command.place(), /Windows, macOS and Linux/);
+    assert.deepEqual(commandMenuOf(command.status()), { lines: ['The jason executable: /opt/jason', 'A jason command on the PATH is offered on Windows, macOS and Linux.'], acts: [] });
+});
+
+test('on Linux the wrapper is ~/.local/bin/jason, as on macOS: executable, made with its folder, read back, and removed', (t) => {
+    const root = scratch(t);
+    const folder = join(root, 'home', '.local', 'bin');
+    const exe = '/opt/Jason/resources/bundle/jason';
+    const log = memoryLog();
+    const command = new PathCommand({ platform: 'linux', folder, executable: exe, dataDirectory: null, path: () => '/usr/bin:/bin', isProgram: (file) => existsSync(file), log });
+    assert.deepEqual(command.status(), { state: 'absent', name: 'jason', files: [join(folder, 'jason')], folderOnPath: false, shadows: null, executable: exe });
+    assert.deepEqual(commandMenuOf(command.status()).acts.map((act) => act.act), ['place'], 'a folder not on the PATH yet does not stop the place, as on macOS');
+    command.place();
+    assert.equal(readFileSync(join(folder, 'jason'), 'utf8'), `#!/bin/sh\n# Written by the Jason desktop application.\nexec '${exe}' "$@"\n`);
+    if (process.platform !== 'win32') assert.equal(statSync(join(folder, 'jason')).mode & 0o111, 0o111);
+    assert.equal(command.status().state, 'placed');
+    command.remove();
+    assert.deepEqual(readdirSync(folder), []);
+    assert.deepEqual(log.lines.map((line) => line.fields), [{ On: true, Name: 'jason', Platform: 'linux' }, { On: false, Name: 'jason', Platform: 'linux' }]);
+});
+
+test('on Linux a jason of another installation on the PATH makes the wrapper jason-desktop', () => {
+    const folder = '/home/someone/.local/bin';
+    const other = '/usr/local/bin/jason';
+    const command = new PathCommand({ platform: 'linux', folder, executable: '/opt/Jason/resources/bundle/jason', dataDirectory: null, path: () => `${folder}:/usr/local/bin`, isProgram: (file) => file === other, log: memoryLog() });
+    const status = command.status();
+    assert.equal(status.state, 'absent');
+    assert.deepEqual([(status as { name: string }).name, (status as { shadows: string }).shadows, (status as { folderOnPath: boolean }).folderOnPath], ['jason-desktop', other, true]);
 });
 
 test('the menu always shows the bundled executable’s full path and offers only the act each state allows', () => {
