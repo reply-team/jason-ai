@@ -84,6 +84,9 @@ never a name or the words of a question. Both login items are off until you turn
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system. On Linux a key is kept and read
   only where the session offers a keyring (GNOME Keyring or KWallet); where Electron would fall back to its fixed-key
   store, the card says so and the key is not kept.
+- `<data>/desktop/claude-keyed/<provider id>/` and `<data>/desktop/codex-keyed/`: the folders a turn on a provider's key
+  runs its host with. They keep the host's transcripts of those turns, never the key, and are readable by your account
+  alone where the system has modes.
 - `<data>/desktop/rollback/<version>/`: the application as it was before the last update (below).
 - `<data>/desktop/bundle/<version>/`: on Linux, an AppImage's copy of the `jason` it carries. An AppImage runs from a mount
   that lasts only while it runs, so each start copies its `jason` here; that copy is the `jason` it runs, starts the
@@ -94,8 +97,9 @@ never a name or the words of a question. Both login items are off until you turn
 - `<data>/logs/desktop-YYYYMMDD[_NNN].jsonl`: its log, in the runtime log's shape and under its limits, and never any
   text a person gave Jason. `jason logs --source desktop` reads it, and `jason doctor` carries a bounded slice.
 
-`jason export` carries no part of `<data>/desktop/`, `jason doctor` carries none of a conversation, and
-`jason uninstall --purge-data` removes `<data>/desktop/` with the rest of the data directory.
+`jason export` carries no part of `<data>/desktop/`, the keyed folders included, `jason doctor` carries none of a
+conversation or of a keyed folder, and `jason uninstall --purge-data` removes `<data>/desktop/` with the rest of the data
+directory.
 
 A Connect card writes, into `<data>/config/settings.json`, the keys of the plugin it configures and no other, as a person
 would write them (`Plugins:Config:<id>`, `Plugins:Grants:<id>:Http`, `Notifications:Plugins:<id>:Binding`), and then runs
@@ -109,8 +113,15 @@ lists each key and each card's grant.
   installed. The desktop never signs in to a host: sign in once by running the host in a terminal, and the chat uses that
   sign-in.
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
-  MiniMax, which run through Claude Code with a token and a base address. A key is kept by the operating system's store,
-  reaches the host's process environment and nothing else, and is never written to a file of Jason's.
+  MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
+  `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's
+  process environment and nothing else (`CODEX_API_KEY` for Codex), and is never written to a file of Jason's. A turn on
+  a key runs its host with a configuration folder of the desktop's own, holding no claude.ai login and no saved Codex
+  login, and without the variables that name another credential, a profile or a federation: the design is that a key the
+  host does not take fails the turn instead of running it on your own plan, as built and not yet seen with a real host.
+  A refused key ends the turn at once with a sentence naming the provider's card in Connect (OpenAI's key, run through
+  Codex, ends it with Codex's own words), and a host's error text is shown and kept with any part of the key replaced by
+  `[key]`.
 - **Reply.** Signed in with `reply auth login`, or with a key on standard input that only the Reply CLI keeps, then the
   plugin installed and, only where you have set no default route, wired as the default. A card says "configured" when the
   runtime accepted it, never "connected". What the desktop tells Reply about itself is one label in the User-Agent of
@@ -155,8 +166,9 @@ starts a fresh one with a recap of the last words. The conversation is no bounda
 campaign, and a command that names another campaign is not refused for that. What a turn may do is the permission
 model's to decide.
 
-The agent hosts keep their own transcripts of a turn, in their own folders (Claude Code's are under `~/.claude/projects`),
-and Jason never touches them; the desktop keeps no transcript of a host.
+The agent hosts keep their own transcripts of a turn, in their own folders: Claude Code's are under `~/.claude/projects`,
+and those of a turn on a provider's key are in that provider's keyed folder (see Its own files). Jason never touches the
+first, and the desktop keeps no transcript of a host.
 
 ### What runs without asking, what is refused, what is a card
 
