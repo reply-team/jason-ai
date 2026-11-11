@@ -10,6 +10,7 @@ import {
     modelView,
     onHost,
     turnOptions,
+    withModels,
     failed,
     fromRecord,
     handed,
@@ -387,5 +388,32 @@ describe('the model and the effort a chat is sent with', () => {
             model: null,
             effort: null,
         });
+    });
+});
+
+describe('the hosts as a desktop of another version answers them', () => {
+    it('reads a host listed without models as one that offers none and takes no typed name', () => {
+        const older = {
+            id: 'claude',
+            label: 'Claude Code',
+            kind: 'program',
+            found: true,
+            version: '2.1.300',
+            drivesChat: true,
+            install: null,
+            belowFloor: null,
+        } as unknown as DesktopHost;
+        const [read] = withModels([older]);
+        expect(read).toMatchObject({ id: 'claude', models: [], typedModel: false });
+        expect(turnOptions(modelChosen(newChat('conv_1', 'claude'), read!, 'opus'), read!)).toEqual({
+            host: 'claude',
+            model: 'opus',
+        });
+        const current: DesktopHost = {
+            ...older,
+            models: [{ id: 'opus', label: 'Opus', efforts: ['low'] }],
+            typedModel: true,
+        };
+        expect(withModels([current])[0]).toEqual(current);
     });
 });

@@ -153,6 +153,23 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
     };
 }
 
+/**
+ * The hosts as the page reads them: a desktop of an earlier version, whose runtime serves this page, lists none of the
+ * models a host offers, and such a host offers none here and takes no typed name.
+ */
+export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
+    return hosts.map((host) => {
+        const given = host as Partial<Pick<DesktopHost, 'models' | 'typedModel'>>;
+        return Array.isArray(given.models) && typeof given.typedModel === 'boolean'
+            ? host
+            : {
+                  ...host,
+                  models: Array.isArray(given.models) ? given.models : [],
+                  typedModel: given.typedModel === true,
+              };
+    });
+}
+
 /** What the model menu's last option stands for: the person types a model's full name. No model is named so. */
 export const anotherModel = '-another';
 
