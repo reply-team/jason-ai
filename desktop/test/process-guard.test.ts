@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ipcModule, processModules, processViolations } from './process-rules.ts';
+import { ipcModule, processModules, processViolations, signalLines } from './process-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -99,4 +99,21 @@ test('the chat\'s host module is named, and the shell and whole-module rules hol
     assert.notDeepEqual(processViolations('src/chat-process.ts', "import { exec } from 'node:child_process';"), []);
     assert.notDeepEqual(processViolations('src/chat-process.ts', "execFile('cmd.exe', ['/c', 'taskkill']);"), []);
     assert.notDeepEqual(processViolations('src/chat.ts', "import { spawn } from 'node:child_process';"), []);
+});
+
+test('a process is signalled only on two lines: a look whether a process runs, with signal 0, and the end of a chat turn', () => {
+    for (const [path, line] of Object.entries(signalLines)) {
+        assert.ok(statSync(join(root, path)).isFile(), `${path} is named by the guard and missing`);
+        assert.ok(readFileSync(join(root, path), 'utf8').split(/\r?\n/).some((one) => one.trim() === line), `${path} no longer holds ${line}`);
+        assert.deepEqual(processViolations(path, `    ${line}\n`), []);
+    }
+    for (const planted of ['process.kill(pid, 0);\nprocess.kill(pid);', "process.kill(pid, 'SIGTERM');", 'process.kill(pid, 9);', "process['kill'](pid, 0);", 'const { kill } = process;']) {
+        assert.notDeepEqual(processViolations('src/own-runtime.ts', planted), [], planted);
+    }
+    for (const path of ['src/main.ts', 'src/uninstall-start.ts', 'src/updates.ts']) {
+        const found = processViolations(path, 'if (alive) process.kill(pid, 0);');
+        assert.equal(found.length, 1, path);
+        assert.match(found[0] ?? '', /signals a process/);
+    }
+    assert.notDeepEqual(processViolations('src/chat-process.ts', '(target) => process.kill(target, 0),'), []);
 });

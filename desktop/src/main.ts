@@ -5,7 +5,7 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, ipcMain, safeStorage, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -18,6 +18,7 @@ import { cliAt } from './cli.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart } from './login-item.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
+import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, settleStart } from './rollback.ts';
 import { Updater } from './updates.ts';
@@ -32,6 +33,8 @@ import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
 import { Setup } from './setup.ts';
 import { loginPath } from './shell-path.ts';
+import { stopRuntimeStart, uninstallStart } from './uninstall.ts';
+import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 
 function readText(file: string): string | null {
     try {
@@ -165,6 +168,8 @@ async function run(): Promise<void> {
             sandbox: true,
             webSecurity: true,
             spellcheck: false,
+            // A packaged build opens no DevTools, whatever the page or a key asks.
+            devTools: !app.isPackaged,
         },
     });
     let current: BrowserWindow | null = window;
@@ -209,6 +214,8 @@ async function run(): Promise<void> {
               application: applicationFolder(process.platform, process.execPath),
               rollback,
               log,
+              stopRuntime: () => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)),
+              refused: (why) => dialog.showErrorBox('Jason', why),
               async beforeInstall() {
                   quitting = true;
                   repairer.stop();
@@ -312,7 +319,16 @@ app.setPath('userData', early.electron);
 app.setPath('sessionData', early.electron);
 app.setAppLogsPath(early.electronLogs);
 
-if (!app.requestSingleInstanceLock()) {
+const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
+if (uninstalling !== null) {
+    // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
+    // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
+    void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));
+} else if (stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform })) {
+    // The nsis installer's and uninstaller's start when a runtime runs from the carried jason.exe: it stops that runtime
+    // through jason runtime stop and exits, and opens no window; the installer looks again rather than read the code.
+    void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));
+} else if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {
     // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray.

@@ -140,6 +140,17 @@ export class LoginItem {
     }
 }
 
+/** What the answer of `jason runtime autostart status` says is registered and what it starts, or null when it says nothing. */
+function registrationIn(stdout: string): { registered: boolean; executable: string | null } | null {
+    try {
+        const said = JSON.parse(stdout) as { registered?: unknown; executable?: unknown };
+        if (typeof said.registered !== 'boolean') return null;
+        return { registered: said.registered, executable: typeof said.executable === 'string' ? said.executable : null };
+    } catch {
+        return null;
+    }
+}
+
 /** Whether the answer of `jason runtime autostart` says a registration is there, or null when it says nothing. */
 function registeredIn(stdout: string): boolean | null {
     try {
@@ -161,6 +172,12 @@ export class RuntimeAutostart {
     async registered(): Promise<boolean | null> {
         const status = await this.deps.cli.run(['runtime', 'autostart', 'status']);
         return status.exit === 0 ? registeredIn(status.stdout) : null;
+    }
+
+    /** Whether the runtime is registered to start at logon and which executable it starts, or null when the CLI did not say. */
+    async registration(): Promise<{ registered: boolean; executable: string | null } | null> {
+        const status = await this.deps.cli.run(['runtime', 'autostart', 'status']);
+        return status.exit === 0 ? registrationIn(status.stdout) : null;
     }
 
     /**

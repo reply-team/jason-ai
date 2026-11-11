@@ -1211,7 +1211,9 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>Each signed platform and the secrets its package call alone holds, each under the input of its own name.</summary>
-    private static (string Rid, (string Input, string Secret)[] Secrets)[] SigningSecrets => [("osx-arm64", AppleSecrets), ("win-x64", AzureSecrets)];
+    /// <remarks>osx-x64 is signed in the macOS job as well, for the desktop's Intel package, and holds the same six.</remarks>
+    private static (string Rid, (string Input, string Secret)[] Secrets)[] SigningSecrets =>
+        [("osx-arm64", AppleSecrets), ("osx-x64", AppleSecrets), ("win-x64", AzureSecrets)];
 
     /// <summary>The package calls that name a platform literally, in a job none of whose steps runs a test, with the job's name.</summary>
     private static IEnumerable<(string Job, YamlMappingNode Step)> PackageCallsWithoutTests(YamlMappingNode jobs, string rid) =>
@@ -1250,7 +1252,9 @@ public partial class ReleaseWorkflowTests
     /// call, which builds the other platforms beside the tests, a test run in the macOS job, the tap's token in the
     /// macOS job; and a secret read elsewhere without its name after a dot, the whole context or by index, and one
     /// of the six reached through a YAML alias of the node in the call, which the parser hands back as that node itself.
-    /// Each copy is refused, and release.yml itself is not.
+    /// The macOS job's second call, which builds osx-x64 for the desktop, holds the same six in the same way: a copy
+    /// whose osx-x64 call lacks them, or that calls for osx-x64 twice, is refused as well. Each copy is refused, and
+    /// release.yml itself is not.
     /// </summary>
     [Theory]
     [InlineData("as it is", false)]
@@ -1266,10 +1270,15 @@ public partial class ReleaseWorkflowTests
     [InlineData("the whole context in another job", true)]
     [InlineData("a secret by index in another job", true)]
     [InlineData("an alias of the call's team id", true)]
-    public void Only_the_package_call_that_builds_osx_arm64_holds_the_apple_secrets(string copy, bool refused)
+    [InlineData("the osx-x64 call's six dropped", true)]
+    [InlineData("a second osx-x64 call", true)]
+    public void Only_the_package_calls_that_build_a_macos_executable_hold_the_apple_secrets(string copy, bool refused)
     {
         var text = Read(Release).ReplaceLineEndings("\n");
+        // The osx-arm64 call's team id, told from the osx-x64 call's by the step that follows it.
+        const string ArmTail = "\n      # The archive is what a person downloads";
         const string TeamId = "          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}\n";
+        const string X64Call = "          rid: osx-x64\n";
         const string Archive = "      - name: Read the signature of the archived macOS executable\n        shell: bash\n        env:\n          ARCHIVE: ${{ steps.package.outputs.archive }}\n";
         const string PluginSteps = "  plugin:\n    name: The plugins' packages\n    needs: version\n    runs-on: ubuntu-latest\n";
         var six = string.Concat(AppleSecrets.Select(secret => $"          {secret.Input}: ${{{{ secrets.{secret.Secret} }}}}\n"));
@@ -1287,16 +1296,16 @@ public partial class ReleaseWorkflowTests
         var moved = copy switch
         {
             "as it is" => text,
-            "a seventh name" => Moved(TeamId, TeamId + "          apple-extra-key: ${{ secrets.APPLE_EXTRA_KEY }}\n"),
-            "two swapped" => Moved(TeamId, "          apple-team-id: ${{ secrets.APPLE_NOTARY_KEY_ID }}\n"),
-            "a secret not Apple's in the call" => Moved(TeamId, TeamId + "          extra: ${{ secrets.SOME_OTHER_TOKEN }}\n"),
+            "a seventh name" => Moved(TeamId + ArmTail, TeamId + "          apple-extra-key: ${{ secrets.APPLE_EXTRA_KEY }}\n" + ArmTail),
+            "two swapped" => Moved(TeamId + ArmTail, "          apple-team-id: ${{ secrets.APPLE_NOTARY_KEY_ID }}\n" + ArmTail),
+            "a secret not Apple's in the call" => Moved(TeamId + ArmTail, TeamId + "          extra: ${{ secrets.SOME_OTHER_TOKEN }}\n" + ArmTail),
             "another step of the macOS job" => Moved(Archive, Archive + "          KEY: ${{ secrets.APPLE_NOTARY_KEY_P8 }}\n"),
             "another job's environment" => Moved(PluginSteps, PluginSteps + "    env:\n      KEY: ${{ secrets.APPLE_NOTARY_KEY_P8 }}\n"),
             "another job's package call" => Moved(
                 "    steps:\n      - uses: actions/checkout@v7\n\n      - name: Archive plugins/reply\n",
                 "    steps:\n      - uses: actions/checkout@v7\n\n      - uses: ./.github/actions/package\n        with:\n          rid: linux-x64\n" + six +
                 "\n      - name: Archive plugins/reply\n"),
-            "the matrix's package call" => Moved(MatrixPackage, MatrixPackage + six, Moved(six, string.Empty)),
+            "the matrix's package call" => Moved(MatrixPackage, MatrixPackage + six, Moved(six + ArmTail, ArmTail)),
             "a test in the macOS job" => Moved(MacosPackage, "      - run: dotnet test --solution dotnet/Jason.slnx\n\n" + MacosPackage),
             "the token in the macOS job" => Moved(Archive, Archive + $"          TOKEN: {TapToken}\n"),
             "the whole context in another job" => Moved(PluginSteps, PluginSteps + "    env:\n      ALL: ${{ toJSON(secrets) }}\n"),
@@ -1304,7 +1313,11 @@ public partial class ReleaseWorkflowTests
             "an alias of the call's team id" => Moved(
                 PluginSteps,
                 PluginSteps + "    env:\n      TEAM: *team\n",
-                Moved(TeamId, "          apple-team-id: &team ${{ secrets.APPLE_TEAM_ID }}\n")),
+                Moved(TeamId + ArmTail, "          apple-team-id: &team ${{ secrets.APPLE_TEAM_ID }}\n" + ArmTail)),
+            "the osx-x64 call's six dropped" => Moved(six + "\n      # The osx-x64 executable started once", "\n      # The osx-x64 executable started once"),
+            "a second osx-x64 call" => Moved(
+                "\n  windows:\n",
+                "\n      - uses: ./.github/actions/package\n        with:\n" + X64Call + "          version: ${{ needs.version.outputs.version }}\n" + six + "\n  windows:\n"),
             _ => throw new ArgumentOutOfRangeException(nameof(copy)),
         };
 
@@ -1677,13 +1690,14 @@ public partial class ReleaseWorkflowTests
         Assert.All(ranOnLinuxAlone, step => Assert.True(Scalar(step, "if") == OnLinux, $"'{Scalar(step, "name")}' has the condition '{Scalar(step, "if")}', not '{OnLinux}'"));
 
         // macOS and Windows each package in a job of their own, which builds and tests nothing else; every job packages
-        // and smoke-tests every platform it builds, the three smoke tests one text.
+        // and smoke-tests every platform it publishes, the three smoke tests one text. The macOS job packages osx-x64 as
+        // well, for the desktop's Intel package alone, and starts that executable under Rosetta where it can.
         var macos = JobSteps(MacosJob()).ToList();
         var windows = JobSteps(WindowsJob()).ToList();
         foreach (var platform in new[] { steps, macos, windows })
         {
             var everywhere = platform.Where(step => Scalar(step, "uses") == "./.github/actions/package" || Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true).ToList();
-            Assert.Equal(2, everywhere.Count);
+            Assert.Equal(platform == macos ? 3 : 2, everywhere.Count);
             Assert.All(everywhere, step => Assert.True(Scalar(step, "if") is null, $"'{Scalar(step, "name") ?? Scalar(step, "uses")}' runs only when '{Scalar(step, "if")}'"));
         }
 
@@ -1989,8 +2003,11 @@ public partial class ReleaseWorkflowTests
         ("apple-team-id", "APPLE_TEAM_ID"),
     ];
 
-    /// <summary>What every step that signs, notarizes or assesses runs on: osx-arm64, and only when it is asked to.</summary>
-    private const string Signing = "inputs.rid == 'osx-arm64' && inputs.sign-macos == 'true'";
+    /// <summary>
+    /// What every step that signs, notarizes or assesses an executable runs on: a macOS platform, osx-arm64 or the
+    /// desktop's osx-x64, and only when it is asked to.
+    /// </summary>
+    private const string Signing = "startsWith(inputs.rid, 'osx-') && inputs.sign-macos == 'true'";
 
     private const string Entitlements = "dotnet/src/Jason.App/jason.entitlements";
 
@@ -2013,10 +2030,11 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>
     /// A release's macOS executable carries Reply's Developer ID; a pull request's carries the ad hoc signature the SDK
-    /// writes at publish. The package action signs only when it is told to, and <c>release.yml</c> tells it so in one
-    /// call alone, the one that names osx-arm64 in a job of its own, with the six Apple secrets each under the input of
-    /// its own name; its other call, the matrix's, tells it nothing. That job runs on macOS, builds that platform alone
-    /// and runs no test, so no test code shares a runner with the identity. <c>ci.yml</c> tells the action nothing and
+    /// writes at publish. The package action signs only when it is told to, and <c>release.yml</c> tells it so in the
+    /// two calls of a job of its own, the one that names osx-arm64 and the one that names osx-x64 for the desktop's
+    /// Intel package, each with the six Apple secrets under the input of its own name; its other calls, the matrix's and
+    /// the Windows job's, tell it nothing of macOS. That job runs on macOS and runs no test, so no test code shares a
+    /// runner with the identity. <c>ci.yml</c> tells the action nothing and
     /// names no Apple secret at all: a pull request's build never holds the identity.
     /// </summary>
     [Fact]
@@ -2031,18 +2049,26 @@ public partial class ReleaseWorkflowTests
         }
 
         var release = PackagingCalls(Release);
-        Assert.Equal(3, release.Count);
-        var signing = Assert.Single(release, call => Node(Mapping(call, "with"), "sign-macos") is not null);
-        var with = Mapping(signing, "with");
-        Assert.Equal("osx-arm64", Scalar(with, "rid"));
-        Assert.Equal("true", Scalar(with, "sign-macos"));
-        foreach (var (input, secret) in AppleSecrets)
+        Assert.Equal(4, release.Count);
+        var signing = release.Where(call => Node(Mapping(call, "with"), "sign-macos") is not null).ToList();
+        Assert.Equal(["osx-arm64", "osx-x64"], signing.Select(call => Scalar(Mapping(call, "with"), "rid")));
+        foreach (var call in signing)
         {
-            Assert.Equal($"${{{{ secrets.{secret} }}}}", Scalar(with, input));
+            var with = Mapping(call, "with");
+            Assert.Equal("true", Scalar(with, "sign-macos"));
+            foreach (var (input, secret) in AppleSecrets)
+            {
+                Assert.Equal($"${{{{ secrets.{secret} }}}}", Scalar(with, input));
+            }
+
+            Assert.Null(Node(call, "continue-on-error"));
         }
 
-        Assert.Null(Node(signing, "continue-on-error"));
-        Assert.All(release.Where(call => call != signing), call => Assert.DoesNotContain(
+        Assert.Equal(
+            ["osx-arm64", "osx-x64"],
+            JobSteps(MacosJob()).Where(step => Scalar(step, "uses") == "./.github/actions/package").Select(step => Scalar(Mapping(step, "with"), "rid")));
+
+        Assert.All(release.Where(call => !signing.Contains(call)), call => Assert.DoesNotContain(
             Mapping(call, "with").Children.Keys.Select(key => key.ToString()),
             key => key == "sign-macos" || key.StartsWith("apple-", StringComparison.Ordinal)));
 
@@ -2239,7 +2265,9 @@ public partial class ReleaseWorkflowTests
     /// The six secrets reach the package action by name, as inputs, and inside it only the steps that use them, through
     /// their <c>env</c>: never interpolated into a script, which GitHub prints into the log before it runs it. No step that
     /// holds one prints its environment or traces its commands, and none echoes a secret's variable anywhere but into a
-    /// pipe or a file that is not one of the runner's own. <c>release.yml</c> names them only where it calls the action.
+    /// pipe or a file that is not one of the runner's own. Those steps are the identity's import, the executable's
+    /// notarization and the desktop's Mac check, which is given the team id alone. <c>release.yml</c> names them only
+    /// where it calls the action.
     /// </summary>
     [Fact]
     public void The_apple_secrets_reach_only_the_steps_that_use_them_and_none_of_those_prints_them()
@@ -2248,7 +2276,7 @@ public partial class ReleaseWorkflowTests
         var inputs = Mapping(Parse(action), "inputs").Children.Keys.Select(key => key.ToString()).ToList();
         Assert.All(AppleSecrets, secret => Assert.Contains(secret.Input, inputs));
 
-        var holding = 0;
+        var holding = new List<string>();
         foreach (var step in ActionSteps())
         {
             var run = Scalar(step, "run") ?? string.Empty;
@@ -2267,8 +2295,8 @@ public partial class ReleaseWorkflowTests
                 continue;
             }
 
-            holding++;
             var name = Scalar(step, "name");
+            holding.Add(name!);
             var lines = run.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
             Assert.DoesNotContain(lines, line => PrintsTheEnvironment().IsMatch(line));
             foreach (var line in lines.Where(line => Regex.IsMatch(line, @"^(echo|printf|cat)\b")))
@@ -2285,12 +2313,17 @@ public partial class ReleaseWorkflowTests
             }
         }
 
-        Assert.Equal(2, holding);
+        // The team id alone reaches the desktop's Mac check, which holds each package's signatures to that team.
+        Assert.Equal(
+            ["Import the Developer ID identity into a keychain of this job's own", "Notarize the macOS executable", MacDesktopVerify],
+            holding);
+        Assert.Equal(["TEAM_ID"], Mapping(ActionStep(MacDesktopVerify), "env").Children.Where(pair => pair.Value.ToString().Contains("inputs.apple-", StringComparison.Ordinal)).Select(pair => pair.Key.ToString()));
 
+        // Once in each of the macOS job's two package calls, osx-arm64's and osx-x64's.
         var release = Read(Release);
         foreach (var (_, secret) in AppleSecrets)
         {
-            Assert.Equal(1, Regex.Count(release, $@"\bsecrets\.{secret}\b"));
+            Assert.Equal(2, Regex.Count(release, $@"\bsecrets\.{secret}\b"));
         }
 
         var runs = Mapping(Parse(release), "jobs").Children.Values.Cast<YamlMappingNode>()
@@ -2830,8 +2863,9 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>
     /// The notary is asked with the executable zipped as Apple documents, and waited for, for thirty minutes at most:
-    /// anything but <c>Accepted</c> prints the service's own log of the submission and fails the step. Nothing is stapled:
-    /// a bare executable has no place for the ticket, which Apple documents Gatekeeper finding online instead.
+    /// anything but <c>Accepted</c> prints the service's own log of the submission and fails the step. The executable is
+    /// never stapled: a bare executable has no place for the ticket, which Apple documents Gatekeeper finding online
+    /// instead. Only the desktop's application and dmg are, which have one.
     /// </summary>
     [Fact]
     public void The_notarization_waits_for_the_notary_and_fails_on_anything_but_accepted()
@@ -2849,22 +2883,31 @@ public partial class ReleaseWorkflowTests
 
         Assert.Contains("notarytool log \"$id\"", run, StringComparison.Ordinal);
         Assert.Contains("if [ \"$status\" = \"Accepted\" ]; then", run, StringComparison.Ordinal);
-        Assert.DoesNotContain("stapler", Read(Action) + Read(Release), StringComparison.Ordinal);
+        Assert.DoesNotContain("stapler", Read(Release), StringComparison.Ordinal);
+
+        // The one step that staples is the desktop's, whose application and dmg have a place for the ticket.
+        Assert.Equal(
+            ["Verify the desktop's Mac packages and what they carry"],
+            ActionSteps().Where(step => (Scalar(step, "run") ?? string.Empty).Contains("stapler", StringComparison.Ordinal)).Select(step => Scalar(step, "name")));
     }
 
     /// <summary>
     /// The notarization step itself, run as GitHub runs a bash step, against a notary that answers as told: only an
     /// accepted submission passes; a refused one has its log asked for and fails, as does a wait that ran out and an answer
     /// that is not one. And none of the made-up secret values reaches what the step printed, nor, for an accepted
-    /// submission, its id: a release's log is public, and only a submission that failed needs its id read.
+    /// submission, its id: a release's log is public, and only a submission that failed needs its id read. On the call
+    /// that builds the desktop, the key is kept in the job's keychain for the packages, while its file is still there, and
+    /// the file is gone when the step ends either way.
     /// </summary>
     [Theory]
-    [InlineData("Accepted", 0, 0, false)]
-    [InlineData("Invalid", 1, 1, true)]
-    [InlineData("In Progress", 0, 1, true)]
-    [InlineData(null, 1, 1, false)]
+    [InlineData("Accepted", 0, 0, false, false)]
+    [InlineData("Accepted", 0, 0, false, true)]
+    [InlineData("Invalid", 1, 1, true, false)]
+    [InlineData("Invalid", 1, 1, true, true)]
+    [InlineData("In Progress", 0, 1, true, false)]
+    [InlineData(null, 1, 1, false, false)]
     [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
-    public void The_notarization_step_passes_an_accepted_submission_alone(string? status, int notary, int exit, bool logAsked)
+    public void The_notarization_step_passes_an_accepted_submission_alone(string? status, int notary, int exit, bool logAsked, bool desktop)
     {
         Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "The step is bash; CI's Linux and macOS legs run this row.");
 
@@ -2874,12 +2917,15 @@ public partial class ReleaseWorkflowTests
         var calls = Path.Combine(tree.Root, "calls.txt");
         var answer = status is null ? "notarytool could not reach the service" : $$"""{"id":"0f1e2d3c-made-up","message":"Processing complete","status":"{{status}}"}""";
 
-        // A notary that records what it is asked, never on stdout, and answers as this row says.
+        // A notary that records what it is asked, never on stdout, keeps a copy of the key file it was handed with its
+        // mode, and answers as this row says.
+        var witness = Path.Combine(tree.Root, "key-as-handed");
         File.WriteAllText(Path.Combine(bin, "xcrun"), $$"""
             #!/bin/bash
             echo "$*" >> '{{calls}}'
-            if [ "$2" = submit ]; then printf '%s\n' '{{answer}}'; exit {{notary}}; fi
+            if [ "$2" = submit ]; then cp -p "$5" '{{witness}}'; printf '%s\n' '{{answer}}'; exit {{notary}}; fi
             if [ "$2" = log ]; then echo "the notary's log of $3"; fi
+            if [ "$2" = store-credentials ] && [ -f "$5" ]; then echo "the key's file was there" >> '{{calls}}'; fi
             """.ReplaceLineEndings("\n"));
         File.WriteAllText(Path.Combine(bin, "ditto"), "#!/bin/bash\necho \"$*\" >> '" + calls + "'\n: > \"$5\"\n");
         File.SetUnixFileMode(Path.Combine(bin, "xcrun"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -2895,6 +2941,8 @@ public partial class ReleaseWorkflowTests
             ["NOTARY_KEY"] = "-----BEGIN PRIVATE KEY-----\nmade-up-key-material\n-----END PRIVATE KEY-----",
             ["NOTARY_KEY_ID"] = "MADEUPKEYID",
             ["NOTARY_ISSUER"] = "00000000-made-up-issuer",
+            ["KEYCHAIN"] = Path.Combine(tree.Root, "jason-signing.keychain-db"),
+            ["DESKTOP"] = desktop ? "true" : "false",
         };
 
         var ran = Bash(environment, tree.Root, Scalar(ActionStep("Notarize the macOS executable"), "run")!);
@@ -2903,8 +2951,15 @@ public partial class ReleaseWorkflowTests
         var asked = File.ReadAllLines(calls);
         Assert.Contains(asked, line => line.StartsWith("notarytool submit ", StringComparison.Ordinal) && line.Contains("--wait", StringComparison.Ordinal));
         Assert.Equal(logAsked, asked.Any(line => line.StartsWith("notarytool log 0f1e2d3c-made-up ", StringComparison.Ordinal)));
-        Assert.Equal(environment["NOTARY_KEY"] + "\n", File.ReadAllText(Path.Combine(tree.Root, "jason-notary.p8")));
-        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(Path.Combine(tree.Root, "jason-notary.p8")));
+        var kept = desktop && status == "Accepted";
+        Assert.Equal(kept, asked.Any(line => line.StartsWith("notarytool store-credentials jason-notary --key ", StringComparison.Ordinal)));
+        Assert.Equal(kept, asked.Contains("the key's file was there"));
+        Assert.Equal(environment["NOTARY_KEY"] + "\n", File.ReadAllText(witness));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(witness));
+
+        // The key's file is gone when the step ends, whatever it ended with: what comes after it in the job, the
+        // desktop's build tooling among it, never finds the key on disk.
+        Assert.False(File.Exists(Path.Combine(tree.Root, "jason-notary.p8")), "The notary key's file outlives the notarization step.");
 
         foreach (var secret in (string[])["made-up-key-material", "MADEUPKEYID", "00000000-made-up-issuer"])
         {
@@ -3088,7 +3143,10 @@ public partial class ReleaseWorkflowTests
         }
         Assert.Contains("The Windows executable is signed with Reply's certificate through Azure Artifact Signing, and timestamped under RFC 3161, so the signature stays valid after the certificate expires.", notes, StringComparison.Ordinal);
         Assert.Contains("SmartScreen's reputation for a new publisher builds over downloads, so in the first weeks of signed releases a download may still show its dialog", notes, StringComparison.Ordinal);
-        Assert.Contains("The Linux executable is not signed, and nothing else a release carries is either.", notes, StringComparison.Ordinal);
+        Assert.Contains("The Linux executable is not signed, and nothing else a release carries is either, apart from the desktop's installer and Mac packages, as \"Desktop\" above says.", notes, StringComparison.Ordinal);
+        // The desktop's carried jason is signed and notarized like the archive's, and, a bare executable, never stapled.
+        Assert.Contains("the application, the `jason` it carries and the dmg are signed with Reply's Developer ID and notarized, and the application and the dmg are stapled.", notes, StringComparison.Ordinal);
+        Assert.DoesNotContain("Developer ID, notarized and stapled", notes, StringComparison.Ordinal);
         Assert.Contains("On Linux that check is the only provenance there is; on macOS and Windows the signature says who built the executable as well.", notes, StringComparison.Ordinal);
         foreach (var checkable in (string[])["`codesign -dv --verbose=2`", "`Authority=Developer ID Application:`", "`TeamIdentifier=`", "`Get-AuthenticodeSignature`", "`Valid`", "`CN=ReplyApp Inc.`", "`signtool verify /pa /v`"])
         {
@@ -3928,7 +3986,7 @@ public partial class ReleaseWorkflowTests
             File.WriteAllText(Path.Combine(directory, $"jason-{rid}.fragment.json"), JsonSerializer.Serialize(fragment) + "\n");
         }
 
-        foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills])
+        foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills, .. ReleaseAssets.Desktop])
         {
             File.WriteAllText(Path.Combine(directory, carried), $"not really {carried}");
         }
@@ -4096,7 +4154,7 @@ public partial class ReleaseWorkflowTests
             Assert.Equal(SemanticVersion.Parse("0.19.0"), manifest.MinUpgradeFrom);
 
             var checksums = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Checksums));
-            foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills])
+            foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills, .. ReleaseAssets.Desktop])
             {
                 var package = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, carried))));
                 Assert.True(
@@ -4139,7 +4197,7 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The release names each plugin's package from the tag's own digest list, the file the package's test holds to the
     /// package, and carries every package it names: the job that writes the manifest builds nothing and hashes nothing to
-    /// say which packages it publishes.
+    /// say which packages it publishes. The UI's, the skills' and the desktop's files follow them into checksums.txt.
     /// </summary>
     [Fact]
     public void The_release_names_each_plugin_s_package_from_the_tag_s_digest_list()
@@ -4148,7 +4206,7 @@ public partial class ReleaseWorkflowTests
         var packages = ReleasedPackages();
 
         Assert.Contains($"-PluginDigests {string.Join(',', packages.Select(package => Digests(package.Id)))} ", line + " ", StringComparison.Ordinal);
-        Assert.Contains($"-Plugins {string.Join(',', [.. packages.Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills])} ", line, StringComparison.Ordinal);
+        Assert.Contains($"-Plugins {string.Join(',', [.. packages.Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills, .. ReleaseAssets.Desktop])} ", line, StringComparison.Ordinal);
         Assert.All(packages, package => Assert.True(File.Exists(Path.Combine(RepositoryRoot(), Digests(package.Id))), $"{Digests(package.Id)} is not in the repository."));
     }
 

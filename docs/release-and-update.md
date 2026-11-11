@@ -59,6 +59,16 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at the tag, at the archive's root |
 | `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
 | `jason-skills.zip` | the skills' package: `skills/` at the tag, under `skills/`, and a `source.json` naming the repository, the tag and its commit; `jason skills install` deploys from it when it is given no `--source` |
+| `jason-desktop-windows-x64-setup.exe` | the desktop's Windows installer, signed, carrying this release's signed `jason.exe` |
+| `jason-desktop-windows-x64-setup.exe.blockmap` | the installer's block map, from which the Windows desktop's updater downloads only what changed |
+| `latest.yml` | the Windows desktop's update feed: the version, the installer's name and its SHA-512 |
+| `jason-desktop-macos-arm64.dmg` | the desktop for Apple silicon, signed, notarized and stapled, carrying the osx-arm64 executable |
+| `jason-desktop-macos-arm64.zip` | the same application, as the Mac desktop's updater downloads it |
+| `jason-desktop-macos-arm64.zip.blockmap` | that zip's block map |
+| `jason-desktop-macos-x64.dmg` | the desktop for Intel Macs, signed, notarized and stapled, carrying an osx-x64 executable built for it alone |
+| `jason-desktop-macos-x64.zip` | the same application, as the Mac desktop's updater downloads it |
+| `jason-desktop-macos-x64.zip.blockmap` | that zip's block map |
+| `latest-mac.yml` | the Mac desktop's update feed: the version, each zip's name and its SHA-512 |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
@@ -98,6 +108,36 @@ it downloads the package from the release this build was published as, holds it 
 this build's version and to the runtime's API, and swaps it in as `ui/default/` whole or not at all. The install
 guide runs it after the role skills, `jason update apply` runs it at its end, and `jason status` names it where the
 default UI is missing or another release's (DEC-UI-003).
+
+**The desktop's files are published beside them, from 0.34.0 on,** and listed in `checksums.txt` but not in the
+manifest: an installed desktop updates itself through electron-updater, which reads `latest.yml` or `latest-mac.yml`
+of the latest release and checks the download against the SHA-512 the feed gives, so the runtime's updater never reads
+them. Each package carries the executable its platform's release job signed, at the release's version, with `LICENSE`
+and `THIRD-PARTY-NOTICES`. The Windows job builds the installer while its sign-in holds: the installer, its
+uninstaller and `Jason.exe` are signed there, and verified with the `jason.exe` they carry. The macOS job builds an
+osx-x64 executable for the Intel package alone, signed, notarized and assessed as the osx-arm64 one is, and never
+published as an archive, so on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason`
+the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.
+A candidate writes the same two feed names a release does, and its release is marked a pre-release, which the latest
+release never is, so no installed desktop reads a candidate's feed: the desktop updates to stable releases only.
+
+Installing a desktop update restarts the runtime. The desktop stops the runtime its own `jason` runs as, with `jason
+runtime stop`, before the installer replaces that file, and the new version starts it again when it opens; it knows the
+runtime is its own when `jason runtime status` answers for the instance the run file names and the descriptor's
+`installed_image` is the application's own `jason` (`docs/runtime-api.md`). A runtime that does not stop leaves the
+update uninstalled, and so does a run file whose runtime did not answer while the process it names still runs, or names
+none, and a run file that is there and cannot be read; one started from another executable is never stopped. Where
+PowerShell is available, the Windows installer and uninstaller look for any process running from the carried `jason.exe`
+by its exact path, whichever data directory started it, and never close one: they stop it through the application's own
+`--stop-runtime` start, which runs `jason runtime stop` for the data directory the installer's environment names, or the
+default one, and look again. A person running them is asked first; an update and a silent run are not. A process still
+running ends the run before a file is replaced, and a person is told to stop a runtime that did not stop with the
+carried `jason.exe` by its full path, with `JASON_DATA_DIR` set when it was started with another data directory. Where
+PowerShell is not available nothing is looked for: a person is asked to stop the runtime, and an update goes on without
+a look. Once the runtime has stopped and before the update installs, the application as it was is copied under
+`<data>/desktop/rollback/<version>/`, kept until the next update replaces it and named in the Jason menu; nothing puts
+it back by itself, so going back is quitting Jason and putting that folder back in the place of the installed
+application by hand, which leaves the data directory as the newer version left it.
 
 ## 3. The manifest
 

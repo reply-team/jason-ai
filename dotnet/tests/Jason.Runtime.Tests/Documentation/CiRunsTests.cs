@@ -1426,8 +1426,9 @@ public class CiRunsTests
 
     /// <summary>
     /// What CI uploads is kept three days: it exists for the jobs of the same run and for a person looking at a failure.
-    /// The packaging action is shared with the release, whose call names no retention, and the action's default, 0, is
-    /// upload-artifact's own word for the repository's retention — so a release keeps what it always kept.
+    /// The packaging action is shared with the release, whose calls name no retention, and the action's default, 0, is
+    /// upload-artifact's own word for the repository's retention — so a release keeps what it always kept, the desktop's
+    /// packages included.
     /// </summary>
     [Fact]
     public void Ci_keeps_what_it_uploads_three_days_and_a_release_what_it_always_kept()
@@ -1435,10 +1436,12 @@ public class CiRunsTests
         var action = Parse(Read(Action));
         var retention = Mapping(Mapping(action, "inputs"), "retention-days");
         Assert.Equal("0", Scalar(retention, "default"));
-        var upload = Assert.Single(
-            Assert.IsType<YamlSequenceNode>(Node(Mapping(action, "runs"), "steps")).Children.Cast<YamlMappingNode>(),
-            step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true);
-        Assert.Equal("${{ inputs.retention-days }}", Scalar(Mapping(upload, "with"), "retention-days"));
+        // The platform's upload, and the desktop's two, which only a release's calls make.
+        var uploads = Assert.IsType<YamlSequenceNode>(Node(Mapping(action, "runs"), "steps")).Children.Cast<YamlMappingNode>()
+            .Where(step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true)
+            .ToList();
+        Assert.Equal(3, uploads.Count);
+        Assert.All(uploads, upload => Assert.Equal("${{ inputs.retention-days }}", Scalar(Mapping(upload, "with"), "retention-days")));
 
         var ci = PackagingCalls(Ci);
         Assert.NotEmpty(ci);

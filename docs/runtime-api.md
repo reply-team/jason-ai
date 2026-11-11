@@ -20,7 +20,7 @@ The descriptor is `run/runtime.json` under the data directory: `~/.jason/run/run
 directory `JASON_DATA_DIR` names when that variable is set. It is one JSON object:
 
 ```json
-{"api_version":"v1","runtime_version":"0.23.0","instance_id":"rt_…","pid":4242,"base_url":"http://127.0.0.1:52766","token":"…","started_at":"2026-10-26T09:00:00.000Z"}
+{"api_version":"v1","runtime_version":"0.34.0","instance_id":"rt_…","pid":4242,"base_url":"http://127.0.0.1:52766","token":"…","started_at":"2026-10-26T09:00:00.000Z","installed_image":"/usr/local/bin/jason"}
 ```
 
 | Field | What it is |
@@ -32,11 +32,17 @@ directory `JASON_DATA_DIR` names when that variable is set. It is one JSON objec
 | `base_url` | where the API listens; every request goes here |
 | `token` | the capability token, the next section's subject |
 | `started_at` | when this run started |
+| `installed_image` | the executable file this runtime runs as, when it is an installed single-file executable; `null` when it is not, a build run from source for one, and absent from a descriptor a runtime before 0.34.0 wrote. Absent and `null` both mean unknown |
 
 The runtime writes the descriptor last, so a program that finds one finds an address that is already listening, and it
 removes the descriptor when it stops. A descriptor can outlive its runtime, after a crash for one; a program that wants
 to be sure asks `system.info` and compares the `instance_id` it answers with the descriptor's. No descriptor means no
 runtime is running, and `jason runtime start` starts one.
+
+`installed_image` is for a program that must know whether the runtime it found is the copy it would replace or remove.
+It is believed only from a descriptor whose `instance_id` the runtime answering there confirms, and only when it names
+the same file as that program's copy once both paths are resolved; anything else, unknown included, means another
+copy, which that program leaves running.
 
 Every start writes a new descriptor with a new `instance_id` and a new token. A program reads the descriptor when it
 starts and again whenever the runtime answers `unauthorized`: the runtime it knew has stopped, and another may be

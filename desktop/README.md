@@ -78,6 +78,37 @@ with Node. `test/process-guard.test.ts` holds this, and also refuses a `require`
 registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`
 outside the navigation lock in `src/main.ts`.
 
+## Updating and taking it off
+
+Before an update installs, the desktop stops the runtime its own `jason` runs as, with `jason runtime stop`, and goes no
+further when that runtime does not stop, or when the run file names a runtime that did not answer while the process it
+names still runs, or when the run file is there and cannot be read (`src/own-runtime.ts`); it asks only the data
+directory it was started with.
+
+On Windows, where PowerShell is available, the installer and the uninstaller also look for any process running from the
+carried `jason.exe`, whichever data directory started it, and never close one (`installer/uninstall.nsh`): they stop it
+through the application's own `--stop-runtime` start, which runs `jason runtime stop` for the data directory their
+environment names, or the default one, and exits, and look again. A person running them is asked first; an update and a
+silent run are not. A process still running, a runtime that did not stop or one started with another data directory say,
+ends the install or the uninstall before a file is replaced, and a person is told to stop it with
+`resources\bundle\jason.exe runtime stop` in the application's folder, with `JASON_DATA_DIR` set when it was started
+with another data directory. Where PowerShell is not available nothing is looked for: a person is asked to stop the
+runtime, and an update goes on without a look. A person's uninstall starts the application with `--uninstall`, which
+stops the runtime it carries, takes off the PATH command's files that are its own, Open Jason at Login and the runtime's
+start at logon when it starts this application's `jason`, and names what it leaves: the data directory, the harness root
+and the updater's cache.
+
+On macOS there is no installer, so nothing looks when Jason.app is moved to the Trash, and the desktop's own look before
+an update is the whole guard. Before removing Jason.app, take off by hand what it placed:
+
+1. In the Jason menu, turn off Open Jason at Login and Start the Runtime at Logon.
+2. Run `jason runtime stop`.
+3. In the same menu, under Command Line, choose Remove jason from the PATH (or Remove jason-desktop from the PATH, by the
+   name it was put there with), then quit Jason.
+
+What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
+`Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`.
+
 ## Building and testing
 
 From `desktop/`:
@@ -93,6 +124,33 @@ npm run dev           # builds and starts the window
 A desktop build always carries a candidate's version string (`0.34.0-rc.1`), never `dev`, so `jason ui install` and
 `jason plugin install` resolve that candidate's own release directory. `test/candidate-version.test.ts` proves it against
 a local feed when `JASON_UI_ZIP` names a UI build packaged with `JASON_VERSION` set to the candidate.
+
+A package is built from `electron-builder.config.mjs` at the version `JASON_VERSION` names, a release's or a candidate's,
+around a bundle prepared for each architecture at that same version. On Windows, unsigned:
+
+```sh
+node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version 0.34.0-rc.1
+JASON_VERSION=0.34.0-rc.1 npm run package -- --win --x64   # dist/: the nsis installer, latest.yml, win-unpacked/
+```
+
+The release passes `--executable` with the `jason` it has already built and signed, so the package carries that very
+file, and signs the package itself: a Mac package is never built unsigned. Inside `app.asar` are `lib/`, `shell/`,
+`resources/` and the chat's two lists; beside it, in the package's `resources/`, are `bundle/` (the executable with
+`LICENSE` and `THIRD-PARTY-NOTICES`, the skills and `version.json`) and `notices/` (the repository's `LICENSE`, this
+folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package carries no UI: `jason ui install`
+places the UI of the runtime's own release.
+
+electron-builder fetches Electron's distribution for each platform and architecture it packs. The configuration hands it
+the sha256 of each file from the `checksums.json` the `electron` package carries, which `package-lock.json` pins, so a zip
+that does not match, downloaded or cached, stops the pack; its own tools (nsis, the resource and icon tools, 7-Zip,
+dmgbuild) it checks against the sha256 its own source names.
+
+`scripts/check-package.mjs` reads a built package back against this configuration: the feed and, on Windows, the
+publisher its `app-update.yml` names, and the fuses its binary carries. The release runs it on every package it builds:
+
+```sh
+node scripts/check-package.mjs --app dist/win-unpacked --platform win32
+```
 
 To run it against an installation other than your own, set `JASON_DATA_DIR` and `JASON_Harness__Root` in the environment
 it is started from.

@@ -64,4 +64,46 @@ public class DescriptorPublisherTests
         new DescriptorPublisher(dir.Paths).Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t", TestContext.Current.CancellationToken);
         Assert.True(FilePermissions.IsRestrictedToCurrentUser(dir.Paths.RunDirectory));
     }
+
+    [Fact]
+    public void A_single_file_image_is_written_as_the_installed_image()
+    {
+        using var dir = new TempDataDir();
+        var image = Path.Combine(dir.Paths.Root, "bin", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        var publisher = new DescriptorPublisher(dir.Paths) { InstalledImage = () => image };
+
+        var descriptor = publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t", TestContext.Current.CancellationToken);
+
+        Assert.Equal(image, descriptor.InstalledImage);
+        var json = File.ReadAllText(dir.Paths.DescriptorFile);
+        Assert.Contains($"\"installed_image\":{JsonSerializer.Serialize(image)}", json, StringComparison.Ordinal);
+        Assert.Equal(descriptor, JsonSerializer.Deserialize<RuntimeDescriptor>(json, JasonJson.Options));
+    }
+
+    [Fact]
+    public void A_runtime_that_is_no_single_file_image_writes_no_installed_image()
+    {
+        using var dir = new TempDataDir();
+        var publisher = new DescriptorPublisher(dir.Paths) { InstalledImage = () => null };
+
+        var descriptor = publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t", TestContext.Current.CancellationToken);
+
+        Assert.Null(descriptor.InstalledImage);
+        var json = File.ReadAllText(dir.Paths.DescriptorFile);
+        Assert.Contains("\"installed_image\":null", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void By_default_the_test_host_which_is_no_single_file_image_writes_no_installed_image()
+    {
+        using var dir = new TempDataDir();
+
+        var descriptor = new DescriptorPublisher(dir.Paths).Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t", TestContext.Current.CancellationToken);
+
+        // What this holds is the default's answer in a test only: a test host is no single-file image, so it is none.
+        // That a single-file image writes its own path is the seam's row above, and SelfExecutable.Image's rows in
+        // UninstallExecutableTests.
+        Assert.False(SelfExecutable.IsSingleFile);
+        Assert.Null(descriptor.InstalledImage);
+    }
 }

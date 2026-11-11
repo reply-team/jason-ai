@@ -11,6 +11,17 @@ export const processModules: Readonly<Record<string, string>> = {
     'src/chat-process.ts': "an agent host for one turn of the chat, streamed, and on Windows taskkill from the system folder to end that turn's process tree",
     'src/shell-path.ts': "the login shell, on macOS only, for the PATH a program started from the Finder lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
+    'scripts/sign-windows.mjs': 'signtool, to sign each file of the Windows package through the Trusted Signing client',
+};
+
+/**
+ * The two lines that may signal a process, each in its one module: the look whether the process a run file names is
+ * running, with signal 0, which delivers nothing, and the end of a chat turn's process group. Anything else that
+ * reaches `process.kill` could stop whatever program holds a pid read from a file.
+ */
+export const signalLines: Readonly<Record<string, string>> = {
+    'src/own-runtime.ts': 'process.kill(pid, 0);',
+    'src/chat-process.ts': '(target, signal) => process.kill(target, signal),',
 };
 
 /** The one module allowed to register an IPC handler, because it checks every sender's origin first. */
@@ -31,6 +42,8 @@ const registration = '(?:handle|handleOnce|on|once|addListener|prependListener)'
 const ipcRegistration = new RegExp(`\\bipcMain\\s*\\.\\s*${registration}\\s*\\(`);
 /** `webContents.ipc`, Electron's second registration surface, which answers a frame without the origin check. */
 const contentsIpcRegistration = new RegExp(`\\.\\s*ipc\\s*\\.\\s*${registration}\\s*\\(`);
+const processKill = /\bprocess\s*(?:\.\s*kill\b|\[\s*['"`]kill['"`]\s*\])/g;
+const killTaken = /\{[^}]*\bkill\b[^}]*\}\s*=\s*process\b/;
 const openPath = /\bshell\s*\.\s*openPath\b/;
 const openExternal = /\bshell\s*\.\s*openExternal\b/g;
 
@@ -73,6 +86,12 @@ export function processViolations(path: string, text: string): string[] {
     if ((ipcRegistration.test(text) || contentsIpcRegistration.test(text)) && path !== ipcModule) {
         found.push(`${path} registers an IPC handler; only ${ipcModule} may, since it checks the sender's origin`);
     }
+    for (const match of text.matchAll(processKill)) {
+        const end = text.indexOf('\n', match.index);
+        const line = text.slice(text.lastIndexOf('\n', match.index) + 1, end < 0 ? text.length : end).trim();
+        if (signalLines[path] !== line) found.push(`${path} signals a process with ${line}; only the two lines the guard names may`);
+    }
+    if (killTaken.test(text)) found.push(`${path} takes kill from process, which hides what it signals`);
     if (openPath.test(text)) found.push(`${path} uses shell.openPath, which opens a file with whatever the system runs it with`);
     const lock = path === 'src/main.ts' ? lockNavigationBody(text) : null;
     for (const match of text.matchAll(openExternal)) {

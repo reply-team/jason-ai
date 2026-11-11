@@ -41,3 +41,5 @@ ui/playwright-report/
 # The desktop's build and the bundle it carries
 desktop/lib/
 desktop/bundle/
+desktop/bundles/
+desktop/dist/
