@@ -33,7 +33,9 @@ public sealed partial class ProductAddressTests : IDisposable
     /// <c>https://github.com/reply-team/jason-ai</c>, the root with the repository itself. An asset is one of the
     /// files a release publishes, by its name in <see cref="ReleaseAssets.Published"/>. The releases index is the
     /// path under <c>/releases/</c> that names nothing further, and it is written with its slash: without it the
-    /// address is not under <c>/releases/</c>, the redirect does not take it, and nothing behind it answers.
+    /// address is not under <c>/releases/</c>, the redirect does not take it, and nothing behind it answers. A short path
+    /// is the address's own, answered by <c>get/</c>: the install page, and a desktop download by system, with or without
+    /// the source a link names; the files those redirect to are held by <c>DownloadPathsTests</c>.
     /// </summary>
     internal static readonly IReadOnlyList<(string Shape, Regex Pattern)> Shapes =
     [
@@ -42,6 +44,7 @@ public sealed partial class ProductAddressTests : IDisposable
         ("a release's asset", PinnedAsset()),
         ("a release's page", ReleasePage()),
         ("the releases index", ReleasesIndex()),
+        ("a short path", ShortPath()),
     ];
 
     /// <summary>
@@ -184,6 +187,21 @@ public sealed partial class ProductAddressTests : IDisposable
     [InlineData("https://jasonharness.ai/releases/latest/download/manifest.json", null)]
     [InlineData("https://get.jasonharness.ai.example.com/releases/latest/download/manifest.json", null)]
     [InlineData("https://get.jasonharness.ai/releases", null)]
+    [InlineData("The instructions are <https://get.jasonharness.ai/install>: read the whole file", "a short path")]
+    [InlineData("served as plain text at `https://get.jasonharness.ai/install`, the address", "a short path")]
+    [InlineData("https://get.jasonharness.ai/install?ref=linkedin-ads", "a short path")]
+    [InlineData("https://get.jasonharness.ai/desktop/windows", "a short path")]
+    [InlineData("https://get.jasonharness.ai/desktop/mac", "a short path")]
+    [InlineData("https://get.jasonharness.ai/desktop/mac-intel?ref=news", "a short path")]
+    [InlineData("https://get.jasonharness.ai/desktop/linux-deb", "a short path")]
+    [InlineData("https://get.jasonharness.ai/desktop/linux-appimage", "a short path")]
+    [InlineData("https://get.jasonharness.ai/desktop/mac-arm", null)]
+    [InlineData("https://get.jasonharness.ai/desktop/", null)]
+    [InlineData("https://get.jasonharness.ai/install/", null)]
+    [InlineData("https://get.jasonharness.ai/installer", null)]
+    [InlineData("https://get.jasonharness.ai/install?ref=Bad_Ref", null)]
+    [InlineData("https://get.jasonharness.ai/install?from=readme", null)]
+    [InlineData("https://get.jasonharness.ai/stats", null)]
     public void The_address_detector_reads_the_shape_a_line_names(string line, string? shape)
     {
         var address = Assert.Single(Address().Matches(line)).Value.TrimEnd('.', ',', ';', ':', '!', '?');
@@ -438,6 +456,9 @@ public sealed partial class ProductAddressTests : IDisposable
 
     [GeneratedRegex(@"^https://get\.jasonharness\.ai/releases/$")]
     private static partial Regex ReleasesIndex();
+
+    [GeneratedRegex(@"^https://get\.jasonharness\.ai/(?:install|desktop/(?:windows|mac|mac-intel|linux-deb|linux-appimage))(?:\?ref=[a-z0-9-]{1,40})?$")]
+    private static partial Regex ShortPath();
 
     private sealed record Finding(string File, int Line, string What)
     {
