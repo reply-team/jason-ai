@@ -173,7 +173,7 @@ before a runtime has ever run. `jason route set` writes a *campaign's* route and
 usage error that says so. A campaign override, when you want one, is written with the CLI:
 
 ```
-jason route set --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin reply
+jason route set --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin reply --actor human:ada
 ```
 
 ## 5. Activate both with one explicit act

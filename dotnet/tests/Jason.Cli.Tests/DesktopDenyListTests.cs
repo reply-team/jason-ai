@@ -111,22 +111,22 @@ public class DesktopDenyListTests
     }
 
     [Fact]
-    public void The_allow_list_names_no_verb_that_is_a_person_s_own_word_and_not_doctor()
+    public void The_allow_list_names_no_verb_that_takes_no_default_actor_and_not_doctor()
     {
         var file = Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt");
         var allowed = File.ReadAllLines(file).Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
 
         Assert.NotEmpty(allowed);
         Assert.DoesNotContain("doctor", allowed);
-        Assert.Empty(allowed.Where(verb => DefaultActorTests.TheEleven.Select(DefaultActorTests.VerbOf).Contains(verb)).ToList());
+        Assert.Empty(allowed.Where(verb => DefaultActorTests.NoDefaultActor.Select(DefaultActorTests.VerbOf).Contains(verb)).ToList());
     }
 
     [Fact]
-    public void The_deny_list_holds_every_verb_that_is_a_person_s_own_word()
+    public void The_deny_list_holds_every_verb_that_takes_no_default_actor()
     {
         var listed = DenyList();
 
-        var missing = DefaultActorTests.TheEleven.Select(DefaultActorTests.VerbOf).Where(verb => !listed.Contains(verb)).ToList();
+        var missing = DefaultActorTests.NoDefaultActor.Select(DefaultActorTests.VerbOf).Where(verb => !listed.Contains(verb)).ToList();
 
         Assert.Empty(missing);
     }
@@ -236,7 +236,7 @@ public class DesktopDenyListTests
             (denied.Any(entry => Covers(entry, verb)) ? fromDenied : fromAllowed).UnionWith(run.Requests.Select(request => request.Operation));
         }
 
-        foreach (var args in DefaultActorTests.TheEleven)
+        foreach (var args in DefaultActorTests.NoDefaultActor)
         {
             var run = await DefaultActorTests.RunEachAsync(["--actor", "human:ada", .. args]);
             Assert.True(run.Requests.Count > 0, $"'jason {DefaultActorTests.VerbOf(args)}' sent nothing: exit {run.Exit}, saying:{Environment.NewLine}{run.Error}");

@@ -152,8 +152,10 @@ so in one line on stderr, naming the variable and never its value.
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume` and `report.submit` take no
   such default: given no actor, the CLI refuses all ten itself, before any request, in one sentence that names the
-  form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. `reason` is
-  free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`, `contact.archive`,
+  form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
+  `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
+  the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
+  `reason` is free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`, `contact.archive`,
   `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove` set it no limit of
   their own.
 - **A partial update tells absent from `null`**: a field left out stays as it is, and a field sent as `null` is

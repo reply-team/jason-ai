@@ -104,7 +104,7 @@ public class BootstrapTests
 
         // 7. The one step an operator will reach for and not find. The refusal is documentation: it says where a
         //    global route lives and what makes it active, before anything is sent to the runtime.
-        var refused = await GoldenPath.JasonAsync(it, "route", "set", "--plugin", GoldenPath.PluginId);
+        var refused = await GoldenPath.JasonAsync(it, "route", "set", "--plugin", GoldenPath.PluginId, "--actor", "human:ada");
         Assert.Equal(ExitCodes.Usage, refused.ExitCode);
         Assert.Contains("settings.json", refused.Error, StringComparison.Ordinal);
         Assert.Contains("jason plugin reload", refused.Error, StringComparison.Ordinal);

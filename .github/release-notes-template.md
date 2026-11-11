@@ -126,6 +126,12 @@ ordinary prompt â€” if that answers Access is denied, follow its message first â
 sign-out and holds the data directory; until it stops, the runtime this version starts at sign-in finds the directory
 taken and exits.
 
+## For scripts that call the CLI
+
+Since 0.34.0, `jason suppression remove`, `jason route set`, `jason route unset` and `jason role set-profile` take no
+default actor: outside a run, a command that does not name who acts with `--actor human:<Name>` exits 2 before any
+request.
+
 ## Checking a download by hand
 
 ```sh
