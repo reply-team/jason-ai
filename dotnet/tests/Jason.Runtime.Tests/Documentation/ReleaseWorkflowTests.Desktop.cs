@@ -494,10 +494,11 @@ public partial class ReleaseWorkflowTests
             "if kill -0 \"$main\" 2> /dev/null; then echo \"::error title=Desktop::The $form did not quit.\"; return 1; fi",
             "if pgrep -f -- \"$program\" > /dev/null; then pgrep -a -f -- \"$program\"; echo \"::error title=Desktop::The $form left a process of the application running.\"; return 1; fi",
             "JASON_DATA_DIR=\"$data\" \"$jason\" runtime stop || { echo \"::error title=Desktop::The runtime the $form started did not stop with the jason it carries.\"; return 1; }",
-            "sudo apt-get install -y --no-install-recommends \"$dist/jason-desktop-linux-x64.deb\"",
+            "sudo apt-get -o Acquire::Retries=5 update -qq",
+            "sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \"$dist/jason-desktop-linux-x64.deb\"",
             "if [ -e /etc/apparmor.d/jason-desktop-app ]; then echo \"The deb installed its AppArmor profile.\"; else echo \"The deb installed no AppArmor profile: this runner's AppArmor reads none.\"; fi",
             "started deb \"$RUNNER_TEMP/jason-desktop-deb-data\" /opt/Jason/resources/bundle/jason /usr/bin/jason-desktop-app",
-            "sudo apt-get remove -y jason-desktop",
+            "sudo apt-get -o Acquire::Retries=5 remove -y jason-desktop",
             "if ! unshare -Ur true 2> /dev/null; then",
             "sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0",
             "unshare -Ur true || { echo \"::error title=Desktop::This runner refuses unprivileged user namespaces with AppArmor's restriction off.\"; exit 1; }",
@@ -508,6 +509,12 @@ public partial class ReleaseWorkflowTests
         Assert.All(lines.Where(line => line.Contains("JASON_DATA_DIR=", StringComparison.Ordinal)), line => Assert.Contains("\"$data\"", line, StringComparison.Ordinal));
         Assert.Contains("data=\"$RUNNER_TEMP/jason-desktop-appimage-data\"", lines);
         Assert.DoesNotContain(lines, line => Regex.IsMatch(line, @"\$HOME|~/"));
+
+        // Every apt-get call asks again when the archive does not answer at once: a hosted runner's name lookups fail
+        // now and then, before anything of the step has changed the system.
+        var apt = lines.Where(line => line.Contains("apt-get", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, apt.Count);
+        Assert.All(apt, line => Assert.StartsWith("sudo apt-get -o Acquire::Retries=5 ", line, StringComparison.Ordinal));
 
         // The switch is named on one line alone, the one that refuses a start carrying it.
         const string refusal = "case \" $said \" in *' --no-sandbox '*) echo \"::error title=Desktop::The $form runs with --no-sandbox.\"; return 1 ;; esac";
