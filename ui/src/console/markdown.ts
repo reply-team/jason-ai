@@ -3,7 +3,7 @@
 // its address, both text. Raw HTML is not in the subset: it stays the text it is, like everything else the subset does
 // not hold, and a table that is not whole (ragged rows, no header separator) is text too, never guessed. Nesting is
 // read to a fixed depth and the rest is text, so no input makes the reading deep or slow: every expression below
-// matches a line's start alone or takes its rest whole, so none of them scans a line more than once.
+// matches a line's start alone or takes its rest whole, so each reads its line in time linear in its length.
 
 export type Inline =
     | { kind: 'text'; text: string }
@@ -28,7 +28,8 @@ const maxLength = 200_000;
 const fenceLine = /^ {0,3}(`{3,}|~{3,})/;
 /** A heading's marker and the spaces after it; the rest of the line is taken by index (`headingOf`). */
 const headingStart = /^ {0,3}(#{1,6})(?:[ \t]+|$)/;
-const quoteLine = /^ {0,3}> ?(.*)$/;
+/** A quote's marker; its rest is taken by the class that matches every character, as an item's is. */
+const quoteLine = /^ {0,3}> ?([^]*)$/;
 /** An item's marker; its rest is taken by a class that matches every character, a line separator included. */
 const itemLine = /^( {0,3})([-*+]|\d{1,9}[.)])(?:[ \t]+([^]*))?$/;
 const separatorCell = /^:?-+:?$/;
@@ -247,9 +248,36 @@ function runAt(source: string, at: number, char: string): number {
     return end - at;
 }
 
+/** By length, where each run of backticks in the source starts, in order: the source is read for them once. */
+function tickRuns(source: string): Map<number, number[]> {
+    const runs = new Map<number, number[]>();
+    let at = source.indexOf('`');
+    while (at !== -1) {
+        const run = runAt(source, at, '`');
+        const starts = runs.get(run);
+        if (starts === undefined) runs.set(run, [at]);
+        else starts.push(at);
+        at = source.indexOf('`', at + run);
+    }
+    return runs;
+}
+
+/** The first of the ordered starts at or after `from`, or -1. */
+function firstFrom(starts: readonly number[], from: number): number {
+    let low = 0;
+    let high = starts.length;
+    while (low < high) {
+        const middle = (low + high) >> 1;
+        if (starts[middle]! < from) low = middle + 1;
+        else high = middle;
+    }
+    return low < starts.length ? starts[low]! : -1;
+}
+
 /**
  * Inline text of the subset. A delimiter pairs only with a run of the same character and the same length, so a run it
- * cannot pair stays text; and the search for a closing run that is not there is made once per kind of run, since a
+ * cannot pair stays text. A closing run of backticks is looked up among the runs of its length, found in one reading
+ * of the source; the search for a closing run of emphasis that is not there is made once per kind of run, since a
  * later opener would search a part of the same text.
  */
 export function inline(source: string, depth = 0): Inline[] {
@@ -273,6 +301,7 @@ export function inline(source: string, depth = 0): Inline[] {
         none.set(key, from);
         return -1;
     };
+    let ticks: Map<number, number[]> | null = null;
     let at = 0;
     while (at < source.length) {
         const char = source[at]!;
@@ -283,7 +312,8 @@ export function inline(source: string, depth = 0): Inline[] {
         }
         if (char === '`') {
             const run = runAt(source, at, '`');
-            const close = closer('`', run, at + run, () => true);
+            ticks ??= tickRuns(source);
+            const close = firstFrom(ticks.get(run) ?? [], at + run);
             if (close === -1) {
                 text += source.slice(at, at + run);
                 at += run;

@@ -203,6 +203,20 @@ describe('what the subset does not hold', () => {
         expect(read[0]!.kind).toBe('paragraph');
     });
 
+    it('reads a text at its limit of backtick runs of distinct lengths, inside nested emphasis, in a moment', () => {
+        // Runs of one, two, three backticks and on: none pairs, so no run of a length has a closing run of that length.
+        let runs = '';
+        for (let size = 1; runs.length + size + 1 <= 200_000 - 12; size++) runs += `${'`'.repeat(size)}a`;
+        runs = runs.padEnd(200_000 - 12, 'a');
+        const source = `*_**__${runs}__**_*`;
+        expect(source.length).toBe(200_000);
+        const started = performance.now();
+        const read = markdown(source);
+        expect(performance.now() - started).toBeLessThan(150);
+        const strong: Inline = { kind: 'strong', children: [{ kind: 'strong', children: [text(runs)] }] };
+        expect(read).toEqual([paragraph({ kind: 'em', children: [{ kind: 'em', children: [strong] }] })]);
+    });
+
     it('reads a heading with a long run of spaces inside it in one pass', () => {
         const spaces = ' '.repeat(100_000);
         const started = performance.now();
@@ -211,7 +225,7 @@ describe('what the subset does not hold', () => {
         expect(read).toEqual([{ kind: 'heading', level: 1, children: [text(`a${spaces}x`)] }]);
     });
 
-    it('reads a heading that ends in a long run of spaces, or of spaces before a closing run of #, in one pass', () => {
+    it('drops the long run of spaces a heading ends in, and the runs of spaces around a closing run of #', () => {
         const spaces = ' '.repeat(90_000);
         const started = performance.now();
         expect(markdown(`## b${spaces}`)).toEqual([{ kind: 'heading', level: 2, children: [text('b')] }]);
@@ -234,6 +248,10 @@ describe('what the subset does not hold', () => {
         const read = markdown(`- ${spaces}x\u2028y`);
         expect(performance.now() - started).toBeLessThan(1_000);
         expect(read).toEqual([{ kind: 'list', ordered: false, start: 1, items: [[plain('x\u2028y')]] }]);
+    });
+
+    it('reads a quote whose line holds a line separator as a quote, as it reads such an item', () => {
+        expect(markdown('> a\u2028b')).toEqual([{ kind: 'quote', children: [plain('a\u2028b')] }]);
     });
 
     it('reads an item with a very long run of blank lines inside it', () => {
