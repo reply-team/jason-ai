@@ -3,7 +3,7 @@
   "case": "mateo-phone-clear",
   "request": {
     "channel": "phone",
-    "value": "+525512345678"
+    "value": "+13125550162"
   },
   "status": 200,
   "response": {

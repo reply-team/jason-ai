@@ -33,7 +33,7 @@
           },
           {
             "channel": "phone",
-            "value": "+525512345678",
+            "value": "+13125550162",
             "label": null,
             "primary": false,
             "data": null
@@ -62,14 +62,21 @@
             "campaign_name": "Re-engage Q2 no-replies",
             "state": "excluded",
             "added_at": "2026-09-20T00:00:00.000Z",
-            "updated_at": "2026-10-01T09:30:00.000Z"
+            "updated_at": "2026-10-01T09:30:00.000Z",
+            "standing": [
+              "removed"
+            ]
           },
           {
             "campaign_id": "cmp_2",
             "campaign_name": "LatAm pilot",
             "state": "enrolled",
             "added_at": "2026-10-03T00:00:00.000Z",
-            "updated_at": "2026-10-03T00:00:00.000Z"
+            "updated_at": "2026-10-03T00:00:00.000Z",
+            "standing": [
+              "working",
+              "out"
+            ]
           }
         ],
         "last_activity": {

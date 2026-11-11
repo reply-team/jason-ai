@@ -31,7 +31,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -81,7 +84,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -131,7 +137,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -181,7 +190,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -231,7 +243,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -281,7 +296,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -331,7 +349,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -381,7 +402,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -431,7 +455,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -481,7 +508,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -531,7 +561,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -581,7 +614,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -631,7 +667,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -681,7 +720,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -731,7 +773,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -781,7 +826,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -831,7 +879,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -881,7 +932,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -931,7 +985,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -981,7 +1038,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1031,7 +1091,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1081,7 +1144,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1131,7 +1197,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1181,7 +1250,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1231,7 +1303,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1281,7 +1356,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1331,7 +1409,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1381,7 +1462,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1431,7 +1515,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1481,7 +1568,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1531,7 +1621,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1581,7 +1674,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1631,7 +1727,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1681,7 +1780,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1731,7 +1833,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1781,7 +1886,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1831,7 +1939,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1881,7 +1992,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1931,7 +2045,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -1981,7 +2098,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2031,7 +2151,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2081,7 +2204,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2131,7 +2257,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2181,7 +2310,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2231,7 +2363,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2281,7 +2416,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2331,7 +2469,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2381,7 +2522,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2431,7 +2575,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null
@@ -2481,7 +2628,10 @@
               "campaign_name": "Campaign 001",
               "state": "enrolled",
               "added_at": "2026-10-12T10:00:00.000Z",
-              "updated_at": "2026-10-12T10:00:00.000Z"
+              "updated_at": "2026-10-12T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": null

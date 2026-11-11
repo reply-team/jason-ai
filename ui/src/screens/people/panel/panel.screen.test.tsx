@@ -325,13 +325,13 @@ describe('Saving the person', () => {
         const kinds = within(panel()).getAllByRole<HTMLSelectElement>('combobox', { name: 'Kind' });
         fireEvent.change(kinds.at(-1)!, { target: { value: 'phone' } });
         const values = within(panel()).getAllByRole<HTMLInputElement>('textbox', { name: 'Address' });
-        fireEvent.input(values.at(-1)!, { target: { value: '+4791234567' } });
+        fireEvent.input(values.at(-1)!, { target: { value: '+12125550147' } });
         reason('Gave a phone number.');
         fireEvent.click(within(panel()).getByRole('button', { name: 'Save' }));
 
         await waitFor(() => expect(asked(api, 'contact.update')).toHaveLength(1));
         expect(asked(api, 'contact.update')).toEqual([recorded('contact.update/person-channels')]);
-        expect(await within(panel()).findByText('+4791234567')).toBeTruthy();
+        expect(await within(panel()).findByText('+12125550147')).toBeTruthy();
     });
 
     it('picks a primary per kind: a pick changes its own kind only, and a row moved onto a kind with one is not primary', async () => {

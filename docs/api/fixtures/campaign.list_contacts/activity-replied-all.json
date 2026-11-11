@@ -38,7 +38,10 @@
               "campaign_name": "Spring",
               "state": "excluded",
               "added_at": "2026-10-01T10:00:00.000Z",
-              "updated_at": "2026-10-15T10:00:00.000Z"
+              "updated_at": "2026-10-15T10:00:00.000Z",
+              "standing": [
+                "removed"
+              ]
             }
           ],
           "last_activity": {
@@ -127,7 +130,10 @@
               "campaign_name": "Spring",
               "state": "enrolled",
               "added_at": "2026-10-01T10:00:00.000Z",
-              "updated_at": "2026-10-01T10:00:00.000Z"
+              "updated_at": "2026-10-01T10:00:00.000Z",
+              "standing": [
+                "out"
+              ]
             }
           ],
           "last_activity": {

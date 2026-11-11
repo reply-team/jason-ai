@@ -63,10 +63,10 @@ public class PersonPanelExchangesTests
         [
             ("mateo-email-clear", "email", "mateo@soluna.example"),
             ("mateo-linkedin-clear", "linkedin", "https://www.linkedin.com/in/mateo-ruiz-example"),
-            ("mateo-phone-clear", "phone", "+525512345678"),
+            ("mateo-phone-clear", "phone", "+13125550162"),
             ("aguilar-email-clear", "email", "aguilar@andina.example"),
             ("grace-email-clear", "email", "grace@navy.example"),
-            ("person-phone-clear", "phone", "+4791234567"),
+            ("person-phone-clear", "phone", "+12125550147"),
         ];
         foreach (var (@case, channel, value) in reads)
         {
@@ -93,7 +93,7 @@ public class PersonPanelExchangesTests
                 {
                     new { channel = "email", value = Email, label = (string?)null, primary = true, data = (object?)null },
                     new { channel = "linkedin", value = LinkedIn, label = (string?)null, primary = false, data = (object?)null },
-                    new { channel = "phone", value = "+4791234567", label = (string?)null, primary = false, data = (object?)null },
+                    new { channel = "phone", value = "+12125550147", label = (string?)null, primary = false, data = (object?)null },
                 },
                 reason = "Gave a phone number.",
                 actor = Ada,
