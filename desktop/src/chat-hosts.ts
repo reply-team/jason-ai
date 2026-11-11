@@ -65,8 +65,18 @@ export interface ClaudeTurn {
  * blocked, such a command on a path outside the chat folder and the added folders asks, and so reaches the permission
  * tool, as does a command whose folder the host cannot trace. It holds no secret, so it travels as inline JSON. The key
  * is read from Claude Code 2.1.257, the floor no turn starts below (`claudeFloor`); an older version would skip it.
+ *
+ * Every fetch asks too, so that each page reaches the permission model, which opens the documentation hosts' pages with
+ * no card (`documentationHosts`) and puts a card in front of any other. Without the rule Claude Code would open a page of
+ * its own preapproved set with no question at all. Anthropic,
+ * https://code.claude.com/docs/en/tools-reference#webfetch-tool-behavior (read 2026-11-11): "WebFetch prompts before
+ * fetching, except for domains your permission rules already allow or deny and a built-in set of preapproved
+ * documentation domains that fetch without a prompt." and "An explicit `WebFetch(domain:...)` rule in `deny`, `ask`, or
+ * `allow` takes precedence over the preapproved set, so you can block a preapproved domain or require a prompt for it.";
+ * https://code.claude.com/docs/en/permissions#webfetch: "`WebFetch(domain:*)` matches every domain", and "Wildcards in
+ * `WebFetch` rules require Claude Code v2.1.172 or later to match fetches.", below the floor.
  */
-export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}';
+export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]}}';
 
 /**
  * The host's own refusal of any Bash command that names `JASON_CONFINED`, anywhere in it: the variable confines the jason
@@ -130,9 +140,25 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
  * An effort is the configuration key `model_reasoning_effort`, set for the run by `-c`. OpenAI,
  * https://developers.openai.com/codex/cli/reference, `exec`: "-c, --config key=value Inline configuration override for
  * the non-interactive run (repeatable)." and "Values parse as TOML if possible; otherwise the literal string is used."
+ *
+ * Every turn searches the web, from OpenAI's cached index and never live: a Codex turn asks no permission, so a page it
+ * opened live would be one no card was shown for, and the cached index opens none. Set for the run, so the person's own
+ * configuration neither turns the search off nor makes it live. OpenAI
+ * (read 2026-11-11), https://developers.openai.com/codex/config-reference: `web_search` "disabled | cached | indexed |
+ * live" "Web search mode (default: `"cached"`; cached uses an OpenAI-maintained index without external web access;
+ * indexed permits external access only when gated by the search index; if you use `--yolo` or another full access
+ * sandbox setting, it defaults to `"live"`). Use `"live"` for unrestricted live retrieval, or `"disabled"` to remove the
+ * tool.";
+ * https://developers.openai.com/codex/web-search: "Cached mode uses an OpenAI-maintained index instead of fetching
+ * arbitrary pages live, which lowers—but doesn’t remove—prompt injection risk. Web search is a hosted tool, separate
+ * from sandboxed local command networking. It does not use the permission profile’s network proxy or domain allowlist,
+ * and it can remain available when command network access is disabled." A search is a step (`codexLine`); the item
+ * types https://developers.openai.com/codex/noninteractive names, "agent messages, reasoning, command executions, file
+ * changes, MCP tool calls, web searches, and plan updates", hold no fetch of a page. The naming run keeps its search off
+ * (`codexToolsOff`).
  */
 export function codexArguments(turn: { model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
-    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check'];
+    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached'];
     if (turn.model) args.push('--model', turn.model);
     if (turn.effort !== undefined) args.push('-c', `model_reasoning_effort=${effortWord(turn.effort)}`);
     if (turn.resume) args.push('resume', resumable(turn.resume));

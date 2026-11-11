@@ -731,6 +731,38 @@ function hostOf(url: string): string | null {
     }
 }
 
+/**
+ * The hosts a page of which the chat's agent opens with no card: the documentation of the two agent hosts and of the
+ * provider, each published by its own vendor and holding no one else's pages, so a page there is the vendor's word and a
+ * fetch there reaches only the vendor. Claude Code's documentation (`code.claude.com`), Codex's (`developers.openai.com`
+ * and `learn.chatgpt.com`, where OpenAI publishes it too), and Reply's API reference (`docs.reply.io`). Each is one exact
+ * host; none is a wildcard, since a vendor's other subdomains may serve what others wrote. Claude Code does not follow a
+ * redirect to another host: Anthropic, https://code.claude.com/docs/en/tools-reference#webfetch-tool-behavior (read
+ * 2026-11-11), "When a URL redirects to a different host, WebFetch returns a text result that names the original URL
+ * and the redirect target instead of following it. Claude then fetches the new URL with a second WebFetch call.", so a
+ * listed page that leads elsewhere is a card at the next fetch.
+ */
+export const documentationHosts: readonly string[] = ['code.claude.com', 'developers.openai.com', 'learn.chatgpt.com', 'docs.reply.io'];
+
+/**
+ * True when a URL is a page of a documentation host as written: `https://`, then the host exactly as listed (in any
+ * letter case), then the end or `/`, `?` or `#`. Anything else in its place, a user, a port (the default one spelled
+ * included), a trailing dot, an escape or a character a parser would turn into a dot, is not; nor is a URL with a space
+ * or a control character anywhere, which a parser drops or trims. A URL parser must read the same host from it, so no
+ * reading of it can reach another.
+ */
+function isDocumentationPage(url: string): boolean {
+    if (/[\s\x00-\x1f\x7f]/.test(url)) return false;
+    const spelled = /^https:\/\/([A-Za-z0-9.-]+)(?:[/?#]|$)/.exec(url)?.[1]?.toLowerCase();
+    if (spelled === undefined || !documentationHosts.includes(spelled)) return false;
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'https:' && parsed.username === '' && parsed.password === '' && parsed.port === '' && parsed.hostname === spelled;
+    } catch {
+        return false;
+    }
+}
+
 function named(value: unknown): value is string {
     return typeof value === 'string' && value !== '';
 }
@@ -773,6 +805,8 @@ function judgeAsked(tool: string, input: Record<string, unknown>, scope: ChatSco
     if (shells.has(tool)) return judgeCommand(tool, '', scope);
     if (tool === 'WebFetch') {
         const url = typeof input['url'] === 'string' ? input['url'] : '';
+        // A documentation host's page opens with no card; any other page, a lookalike of one included, keeps its card.
+        if (isDocumentationPage(url)) return allow;
         const host = hostOf(url);
         if (host === null) return { verdict: 'ask', title: 'Open a web page', detail: shorten(url), remember: null };
         return { verdict: 'ask', title: 'Open a web page', detail: shorten(url), remember: `web:${host.toLowerCase()}`, covers: `pages on ${host.toLowerCase()}` };
