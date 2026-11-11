@@ -57,7 +57,13 @@ public class ConfinedProviderCliTests
         using var programs = new TestPrograms();
         programs.AddProgram("acme-sdr");
         var entry = driveRelative ? programs.Root[2..] : Path.GetRelativePath(Environment.CurrentDirectory, programs.Root);
-        Assert.SkipWhen(Path.IsPathFullyQualified(entry), "The temporary folder is on another drive than the working folder.");
+        Assert.SkipWhen(
+            Path.IsPathFullyQualified(entry)
+                || (driveRelative && !string.Equals(
+                    Path.GetPathRoot(Environment.CurrentDirectory),
+                    Path.GetPathRoot(programs.Root),
+                    StringComparison.OrdinalIgnoreCase)),
+            "The temporary folder is on another drive than the working folder.");
 
         var confined = await StatusAsync(dir, "acme-sdr", entry, Set("1"));
         var plain = await StatusAsync(dir, "acme-sdr", entry, Unset);
