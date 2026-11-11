@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useApi } from '../../api/context';
+import { FiltersBar } from '../../layout/filters-bar';
 import { Segmented } from '../../layout/segmented';
+import { t } from '../../platform/i18n';
 import { Toolbar } from '../../layout/toolbar';
 import { navigate, route } from '../../router';
 import { ApprovalPanel } from './approval-panel';
@@ -10,6 +12,9 @@ import * as store from './store';
 import { Notice } from '../../layout/notice';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** Which of the listed items the screen shows: all of them, or the one kind. */
+type Shows = 'all' | store.Kind;
 
 export function AttentionScreen() {
     const api = useApi();
@@ -29,9 +34,20 @@ export function AttentionScreen() {
         else store.detail.value = null;
     }, [api, selected?.kind, selected?.id]);
 
+    // The filter is the screen's own: kept while it is open, never stored, in the address or anywhere else, and never
+    // sent to the runtime. When nothing is listed at all it goes back to everything, so what arrives next is shown.
+    const [shows, setShows] = useState<Shows>('all');
+    const count = store.approvals.value.length + store.questions.value.length;
+    const nothing = store.loaded.value && count === 0;
+    useEffect(() => {
+        if (nothing) setShows('all');
+    }, [nothing]);
+    const only = shows === 'all' ? undefined : shows;
+    const approvals = shows === 'questions' ? [] : store.approvals.value;
+    const questions = shows === 'approvals' ? [] : store.questions.value;
+
     const now = new Date();
     const detail = store.detail.value;
-    const count = store.approvals.value.length + store.questions.value.length;
     const remaining = selected ? remainingText(selected) : '';
 
     const go = (to: { kind: store.Kind; id: string } | null) =>
@@ -40,9 +56,9 @@ export function AttentionScreen() {
 
     // The next item is chosen before the action, from the list as it is; after the reload it is the one the person lands on.
     const decide = (acted: { kind: store.Kind; id: string }, call: () => Promise<boolean>) => {
-        const planned = store.nextPending(acted);
+        const planned = store.nextPending(acted, only);
         void call().then((ok) => {
-            if (ok) go(store.stillPending(planned));
+            if (ok) go(store.stillPending(planned, only));
         });
     };
 
@@ -66,19 +82,58 @@ export function AttentionScreen() {
                     />
                 </Toolbar>
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
-                {store.loaded.value && count === 0 ? (
+                {store.loaded.value && count > 0 && (
+                    <FiltersBar>
+                        <Segmented
+                            label={t('attention.filter.label')}
+                            options={[
+                                { value: 'all', label: t('attention.filter.all'), count },
+                                {
+                                    value: 'approvals',
+                                    label: t('attention.filter.approvals'),
+                                    count: store.approvals.value.length,
+                                },
+                                {
+                                    value: 'questions',
+                                    label: t('attention.filter.questions'),
+                                    count: store.questions.value.length,
+                                },
+                            ]}
+                            value={shows}
+                            onChange={setShows}
+                            tick
+                        />
+                        <span className="shown" role="status">
+                            {t('attention.filter.shown', { count: String(approvals.length + questions.length) })}
+                        </span>
+                    </FiltersBar>
+                )}
+                {nothing ? (
                     <div className="empty">
                         <strong>Nothing needs you</strong>
                         {!decided ? 'No approval is waiting and no question is open.' : 'Nothing has been decided yet.'}
                     </div>
                 ) : (
-                    <AttentionList
-                        approvals={store.approvals.value}
-                        questions={store.questions.value}
-                        moreApprovals={store.approvalsCursor.value ? () => store.more(api, 'approvals', decided) : null}
-                        moreQuestions={store.questionsCursor.value ? () => store.more(api, 'questions', decided) : null}
-                        now={now}
-                    />
+                    <>
+                        {shows !== 'all' && approvals.length + questions.length === 0 && (
+                            <div className="empty">{noneOfKind(shows, decided)}</div>
+                        )}
+                        <AttentionList
+                            approvals={approvals}
+                            questions={questions}
+                            moreApprovals={
+                                shows !== 'questions' && store.approvalsCursor.value
+                                    ? () => store.more(api, 'approvals', decided)
+                                    : null
+                            }
+                            moreQuestions={
+                                shows !== 'approvals' && store.questionsCursor.value
+                                    ? () => store.more(api, 'questions', decided)
+                                    : null
+                            }
+                            now={now}
+                        />
+                    </>
                 )}
             </div>
             {selected && detail?.kind === 'approvals' && (
@@ -96,7 +151,7 @@ export function AttentionScreen() {
                             store.reject(api, detail.item.id, reason),
                         )
                     }
-                    onSkip={() => go(store.nextPending(selected))}
+                    onSkip={() => go(store.nextPending(selected, only))}
                     onClose={close}
                 />
             )}
@@ -111,12 +166,18 @@ export function AttentionScreen() {
                             store.answer(api, detail.item.id, choice, reason),
                         )
                     }
-                    onSkip={() => go(store.nextPending(selected))}
+                    onSkip={() => go(store.nextPending(selected, only))}
                     onClose={close}
                 />
             )}
         </div>
     );
+}
+
+/** The line in the place of a kind the filter shows when none of that kind is listed. */
+function noneOfKind(kind: store.Kind, decided: boolean): string {
+    if (kind === 'approvals') return t(decided ? 'attention.filter.noneDecided' : 'attention.filter.noneWaiting');
+    return t(decided ? 'attention.filter.noneAnswered' : 'attention.filter.noneOpen');
 }
 
 function remainingText(selected: { kind: store.Kind; id: string }): string {

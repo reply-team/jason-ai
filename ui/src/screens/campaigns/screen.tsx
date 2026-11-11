@@ -380,7 +380,7 @@ export function CampaignsScreen() {
                                 />
                             )}
                             {at.tab === 'settings' && (
-                                <CampaignSettings campaign={campaign} now={new Date()} zone={zone} onAct={setActing} />
+                                <CampaignSettings campaign={campaign} now={new Date()} zone={zone} />
                             )}
                         </>
                     )}

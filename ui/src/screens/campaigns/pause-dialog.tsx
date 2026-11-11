@@ -12,7 +12,19 @@ export type Transition = 'pause' | 'resume' | 'start';
 
 type Props = { campaign: Campaign; kind: Transition; onDone: () => void; onClose: () => void };
 
-const verbs: Record<Transition, string> = { pause: 'Pause', resume: 'Resume', start: 'Start' };
+/** Each move by the word its button and its dialog say. */
+export const verbs: Record<Transition, string> = { pause: 'Pause', resume: 'Resume', start: 'Start' };
+
+/**
+ * What the runtime lets this campaign's status move to: an active one pauses, a paused one resumes and a draft starts,
+ * each through `campaign.pause` or `campaign.start`; an archived campaign is over and moves nowhere.
+ */
+export function transitions(campaign: Campaign): Transition[] {
+    if (campaign.status === 'active') return ['pause'];
+    if (campaign.status === 'paused') return ['resume'];
+    if (campaign.status === 'draft') return ['start'];
+    return [];
+}
 
 /** The provider campaign's own name for itself: the plugin that holds its pin, as a person would write it. */
 function provider(campaign: Campaign): string | null {

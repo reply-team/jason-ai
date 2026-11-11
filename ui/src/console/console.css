@@ -429,6 +429,9 @@
 .jc-console .sfoot {
     border-top: 1px solid var(--line);
     padding: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .jc-console .pillc {
     display: inline-flex;
@@ -1019,4 +1022,8 @@ body,
 .jc-console .needs-empty {
     color: var(--faint);
     text-align: center;
+}
+.jc-console .needs-empty > .ask-a {
+    justify-content: center;
+    margin: 0 0 16px;
 }

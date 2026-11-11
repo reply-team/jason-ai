@@ -58,6 +58,8 @@ define('needs.filter', ([value]) => {
     if (chosen) filter.value = chosen[0];
 });
 
+define('needs.campaigns', () => here().dock.show('campaigns'));
+
 define('needs.open', ([kind, id]) => {
     if ((kind === 'approvals' || kind === 'questions') && typeof id === 'string')
         void attention.open(here().api, kind, id);
@@ -239,7 +241,12 @@ export function needsView(): Html {
             !attention.loaded.value
                 ? html`<div class="empty">Reading what waits…</div>`
                 : none
-                  ? html`<div class="card needs-empty"><div class="bd">You're all caught up</div></div>`
+                  ? html`<div class="card needs-empty">
+                        <div class="bd">You're all caught up</div>
+                        <div class="ask-a">
+                            <button class="btn sm" type="button" ${act('needs.campaigns')}>Open your campaigns</button>
+                        </div>
+                    </div>`
                   : html`${filterRow()} ${waiting(now, busy)}`
         }
     </div>`;
