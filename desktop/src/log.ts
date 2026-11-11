@@ -67,6 +67,8 @@ export const templates = {
     bundle_copies_removed: 'The copies of other versions an AppImage carried were removed: {Count}',
     bundle_copies_kept: 'The copies of other versions an AppImage carried were kept at this start: {Why}',
     bundle_copy_removal_failed: 'A copy of another version an AppImage carried could not be removed',
+    // The sandbox.
+    sandbox_refused: 'The start carried --no-sandbox and was refused, running as {Form}; the desktop does not run without its sandbox',
     // The chat.
     chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}',
     chat_turn_ended: 'A chat turn on {Host} ended with exit {Exit} after {DurationMs} ms: {Steps} steps, {Requests} permission requests',

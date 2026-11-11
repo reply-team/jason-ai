@@ -500,9 +500,19 @@ public partial class ReleaseWorkflowTests
             "The stamp is checked after the tests have already run under it.");
 
         // Every other job keeps the -dev version, and nothing stamps VersionPrefix itself: that would leave the suffix behind.
+        // The one exception is the desktop job's Linux packages, which are never built at a -dev version: they carry the
+        // release with a ci word and the run's number, a candidate's shape no release ever has, on that one line.
         foreach (var name in jobs.Children.Keys.Select(key => key.ToString()).Where(name => name is not "version" and not "release-stamp"))
         {
-            Assert.DoesNotContain("outputs.release", Job(ci, name), StringComparison.Ordinal);
+            var text = Job(ci, name);
+            if (name == "desktop")
+            {
+                const string candidate = "version: ${{ needs.version.outputs.release }}-ci.${{ github.run_number }}";
+                Assert.Equal(1, Regex.Count(text, Regex.Escape(candidate)));
+                text = text.Replace(candidate, string.Empty, StringComparison.Ordinal);
+            }
+
+            Assert.DoesNotContain("outputs.release", text, StringComparison.Ordinal);
         }
 
         Assert.DoesNotContain("-p:VersionPrefix", ci, StringComparison.Ordinal);

@@ -225,17 +225,26 @@ What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), 
   the one an update kept to go back to, one something set up still names, and one the running runtime was started
   from. No folder of the mount reaches what the desktop starts: the PATH and the libraries it hands on are the
   session's.
+- Jason never runs without Chromium's sandbox. An AppImage's launcher, which electron-builder writes, adds
+  `--no-sandbox` wherever the system refuses unprivileged user namespaces; a start that carries it, on any platform,
+  is refused before anything else is decided: a dialog says so, one log line says it was refused, and the application
+  quits (`src/sandbox.ts`). So the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu
+  24.04 and later, as shipped, it says so and names the deb, whose install brings an AppArmor profile that lets the
+  program make the user namespaces its sandbox uses; neither package has yet been seen on such a machine.
 - Updates come to the AppImage and to the deb. An AppImage update keeps the AppImage file itself under
   `<data>/desktop/rollback/<version>/`; a deb update keeps no copy, and if the new version does not start, the page names
   the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says
   updates come through the package. When the installer stops before it finishes (a refused password, say), Jason stays
-  open and says so. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
+  open and says so; that, the password dialog and an AppImage replacing itself are built so and not yet seen on a real
+  machine. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
 - Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which takes the same steps
   as on macOS. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
   the real folders named as versions under `<data>/desktop/bundle/`, when nothing runs from them, and the folder itself
   once that leaves it empty; a link or anything else there stays, and is named. It then says what removes the
-  application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. When Jason will not
-  start, take off by hand what it placed. Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each
+  application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. What stays after
+  that is the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
+  `Harness:Root` names) and the updater's cache, `~/.cache/jason-desktop-updater`. When Jason will not start, take
+  off by hand what it placed. Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each
   `<data>/desktop/bundle/<version>/jason` for an AppImage:
 
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this
@@ -271,6 +280,18 @@ node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version 0.34.0-rc.
 JASON_VERSION=0.34.0-rc.1 npm run package -- --win --x64   # dist/: the nsis installer, latest.yml, win-unpacked/
 ```
 
+On Linux, where nothing is signed, the same two lines make the deb and the AppImage, and the feed that names both:
+
+```sh
+node scripts/prepare.mjs --rid linux-x64 --output bundles/x64 --version 0.35.0-rc.1
+JASON_VERSION=0.35.0-rc.1 npm run package -- --linux --x64   # dist/: the deb, the AppImage, latest-linux.yml
+```
+
+The program is `jason-desktop-app`, so the deb's `/usr/bin` link never takes `jason-desktop`, the name the PATH command
+falls back to. The AppImage is packed on electron-builder's static AppImage runtime, which needs no libfuse2. The two
+forms are packed at once from one folder, and the deb writes `resources/package-type` into it, which makes
+electron-updater update a package as a deb, so the configuration starts the deb only once the AppImage is built.
+
 The release passes `--executable` with the `jason` it has already built and signed, so the package carries that very
 file, and signs the package itself: a Mac package is never built unsigned. Inside `app.asar` are `lib/`, `shell/`,
 `resources/` (the application icon as a PNG, and the tray's images; the Mac's icon set is read at build time from `installer/`), the chat's two lists and its instruction text; beside it, in the package's `resources/`, are `bundle/`
@@ -284,10 +305,15 @@ that does not match, downloaded or cached, stops the pack; its own tools (nsis, 
 dmgbuild) it checks against the sha256 its own source names.
 
 `scripts/check-package.mjs` reads a built package back against this configuration: the feed and, on Windows, the
-publisher its `app-update.yml` names, and the fuses its binary carries. The release runs it on every package it builds:
+publisher its `app-update.yml` names, the fuses its binary carries, and on Linux what each form is: a deb must carry
+`resources/package-type` saying `deb` and an AppArmor profile that lets `/opt/Jason/jason-desktop-app` make user
+namespaces; an AppImage must carry no `package-type`, hold `AppRun`, and have a menu entry at its root whose `Exec`
+line is there and carries no `--no-sandbox`. The release runs it on every package it builds:
 
 ```sh
 node scripts/check-package.mjs --app dist/win-unpacked --platform win32
+node scripts/check-package.mjs --app <unpacked deb>/opt/Jason --platform linux --form deb
+node scripts/check-package.mjs --app squashfs-root --platform linux --form appimage   # after the AppImage's --appimage-extract
 ```
 
 To run it against an installation other than your own, set `JASON_DATA_DIR` and `JASON_Harness__Root` in the environment

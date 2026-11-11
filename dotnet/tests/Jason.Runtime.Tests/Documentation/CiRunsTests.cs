@@ -1477,11 +1477,12 @@ public class CiRunsTests
         var action = Parse(Read(Action));
         var retention = Mapping(Mapping(action, "inputs"), "retention-days");
         Assert.Equal("0", Scalar(retention, "default"));
-        // The platform's upload, and the desktop's two, which only a release's calls make.
+        // The platform's upload, and the desktop's three: Windows' and the Macs', which only a release's calls make, and
+        // Linux's, which CI's desktop job makes too, kept three days as everything CI uploads.
         var uploads = Assert.IsType<YamlSequenceNode>(Node(Mapping(action, "runs"), "steps")).Children.Cast<YamlMappingNode>()
             .Where(step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true)
             .ToList();
-        Assert.Equal(3, uploads.Count);
+        Assert.Equal(4, uploads.Count);
         Assert.All(uploads, upload => Assert.Equal("${{ inputs.retention-days }}", Scalar(Mapping(upload, "with"), "retention-days")));
 
         var ci = PackagingCalls(Ci);

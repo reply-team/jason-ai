@@ -69,6 +69,9 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-desktop-macos-x64.zip` | the same application, as the Mac desktop's updater downloads it |
 | `jason-desktop-macos-x64.zip.blockmap` | that zip's block map |
 | `latest-mac.yml` | the Mac desktop's update feed: the version, each zip's name and its SHA-512 |
+| `jason-desktop-linux-x64.deb` | the desktop for Linux on x64 as a deb, not signed, carrying the linux-x64 executable; it installs to `/opt/Jason` |
+| `jason-desktop-linux-x64.AppImage` | the same application as one AppImage file, not signed, on the AppImage runtime that needs no libfuse2, its block map inside it; it needs a system that lets it run its sandbox, and on Ubuntu 24.04 and later is built to name the deb instead |
+| `latest-linux.yml` | the Linux desktop's update feed: the version, the deb's and the AppImage's names and their SHA-512 |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
@@ -109,17 +112,31 @@ this build's version and to the runtime's API, and swaps it in as `ui/default/` 
 guide runs it after the role skills, `jason update apply` runs it at its end, and `jason status` names it where the
 default UI is missing or another release's (DEC-UI-003).
 
-**The desktop's files are published beside them, from 0.34.0 on,** and listed in `checksums.txt` but not in the
-manifest: an installed desktop updates itself through electron-updater, which reads `latest.yml` or `latest-mac.yml`
-of the latest release and checks the download against the SHA-512 the feed gives, so the runtime's updater never reads
-them. Each package carries the executable its platform's release job signed, at the release's version, with `LICENSE`
-and `THIRD-PARTY-NOTICES`. The Windows job builds the installer while its sign-in holds: the installer, its
+**The desktop's files are published beside them, from 0.34.0 on, and its Linux packages from 0.35.0,** and listed in
+`checksums.txt` but not in the manifest: an installed desktop updates itself through electron-updater, which reads
+`latest.yml`, `latest-mac.yml` or `latest-linux.yml` of the latest release and checks the download against the SHA-512
+the feed gives, so the runtime's updater never reads them. Each package carries the executable its platform's release
+job built, and signed where that job signs, at the release's version, with `LICENSE` and `THIRD-PARTY-NOTICES`. The
+Windows job builds the installer while its sign-in holds: the installer, its
 uninstaller and `Jason.exe` are signed there, and verified with the `jason.exe` they carry. The macOS job builds an
 osx-x64 executable for the Intel package alone, signed, notarized and assessed as the osx-arm64 one is, and never
 published as an archive, so on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason`
 the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.
-A candidate writes the same two feed names a release does, and its release is marked a pre-release, which the latest
-release never is, so no installed desktop reads a candidate's feed: the desktop updates to stable releases only.
+The Linux job, which signs nothing, builds the deb and the AppImage around the linux-x64 executable it archives, reads
+each back, and starts each once under a virtual display, sandboxed. The desktop never runs without Chromium's sandbox,
+so the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04 and later, as shipped,
+the AppImage says so and names the deb, whose AppArmor profile lets the program make the user namespaces its sandbox
+uses; neither package has yet been seen on such a machine. Neither is signed.
+Checked beside the deb,
+`sha256sum --check --ignore-missing checksums.txt` proves it is the file the release published, not who built it;
+checked beside the AppImage, it proves the same of the AppImage and no more. As built, and not yet seen on a real
+machine: a deb update installs with `dpkg` and asks for an administrator's password every time; an AppImage update
+replaces the file where it is. Removing the desktop on Linux starts with Remove What Jason Placed… in the Jason menu,
+which takes off what the desktop placed; then `sudo apt remove jason-desktop` removes the deb, or deleting the file
+removes the AppImage, and the data directory, the harness root and the updater's cache,
+`~/.cache/jason-desktop-updater`, stay. A candidate writes the
+same three feed names a release does, and its release is marked a pre-release, which the latest release never is, so no
+installed desktop reads a candidate's feed: the desktop updates to stable releases only.
 
 Installing a desktop update restarts the runtime. The desktop stops the runtime its own `jason` runs as, with `jason
 runtime stop`, before the installer replaces that file, and the new version starts it again when it opens; it knows the
@@ -137,7 +154,9 @@ PowerShell is not available nothing is looked for: a person is asked to stop the
 a look. Once the runtime has stopped and before the update installs, the application as it was is copied under
 `<data>/desktop/rollback/<version>/`, kept until the next update replaces it and named in the Jason menu; nothing puts
 it back by itself, so going back is quitting Jason and putting that folder back in the place of the installed
-application by hand, which leaves the data directory as the newer version left it.
+application by hand, which leaves the data directory as the newer version left it. On Linux what an AppImage update
+keeps there is the AppImage file itself, and a deb update keeps nothing: going back from a deb is installing the
+previous release's `jason-desktop-linux-x64.deb` with `sudo apt install`.
 
 ## 3. The manifest
 
