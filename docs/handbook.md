@@ -271,9 +271,10 @@ be this product naming a vendor in its own sources, which it does not. In its ow
 name resolved to and, for npm's shim, what that runs, and, whenever it read a PATH, whose it was: the CLI's,
 which the runtime's may differ from. It prints no credential — not the key, not a prefix of it, not its length.
 With `JASON_CONFINED` set, only a bare name is run, looked up in the fully qualified entries of PATH alone: relative and
-empty entries are skipped, so a working folder is never searched by name, and a value with a directory in it is neither
-looked up nor started. The check says what it did not run and why, and names the cure: name a program on the search
-path, or run the check in a terminal. `status` answers as it always does, `ready` in its body and its usual exit code.
+empty entries are skipped, so a working folder is never searched by name, and a value with a directory or a root in it,
+or on Windows a colon, as `C:acme` names the current folder of drive C, is neither looked up nor started. The check
+says what it did not run and why, and names the cure: name a program on the search path, or run the check in a
+terminal. `status` answers as it always does, `ready` in its body and its usual exit code.
 
 ### When something is wrong
 
