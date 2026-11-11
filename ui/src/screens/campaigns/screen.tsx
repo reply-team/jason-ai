@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApi } from '../../api/context';
 import { FiltersBar } from '../../layout/filters-bar';
 import { PeriodSwitch } from '../../layout/period-switch';
@@ -60,6 +60,13 @@ export function CampaignsScreen() {
         void store.load(api, table, new Date(), zone);
     }, [api, key]);
 
+    // A campaign opened starts its timeline on All; Back from what opened in place, or another tab, keeps the chip. It is
+    // set before any effect runs, because a campaign still held from before this screen was shown paints its timeline
+    // on the first frame, and that timeline's own read runs before this screen's effects.
+    useLayoutEffect(() => {
+        if (selected) timeline.chip.value = 'all';
+    }, [selected]);
+
     // A campaign the address names is read with its numbers; one the runtime no longer knows is closed, and said so.
     useEffect(() => {
         if (!selected) {
@@ -67,8 +74,6 @@ export function CampaignsScreen() {
             return;
         }
         store.notice.value = null;
-        // A campaign opened starts its timeline on All; Back from what opened in place, or another tab, keeps the chip.
-        timeline.chip.value = 'all';
         void store.open(api, selected, table, new Date(), zone, at.tab !== 'people').then((known) => {
             if (known) return;
             store.notice.value = 'The campaign in this address no longer exists; it was closed.';
