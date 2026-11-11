@@ -102,9 +102,11 @@ public sealed record CampaignUpdateContextRequest(
 
 /// <summary>
 /// <c>campaign_ids</c> names one to a hundred campaigns, archived ones included, answered in the order asked; absent, it
-/// means every campaign <c>campaign.list</c> shows by default, in its order.
+/// means every campaign <c>campaign.list</c> shows by default, in its order. <c>exclude_archived_contacts</c> true leaves
+/// out every membership of a contact whose own record is archived, so each count agrees with <c>contact.list</c> without
+/// <c>include_archived</c>; absent, null or false, they are counted. A campaign's status plays no part in it.
 /// </summary>
-public sealed record CampaignSummaryRequest(IReadOnlyList<string>? CampaignIds);
+public sealed record CampaignSummaryRequest(IReadOnlyList<string>? CampaignIds, bool? ExcludeArchivedContacts = null);
 
 /// <summary>
 /// Where one campaign's people stand now, each count a number of people: one person may be in several, so they need not

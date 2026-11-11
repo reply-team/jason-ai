@@ -162,6 +162,11 @@ internal static partial class CampaignPeople
     // Every membership, the removed ones too: Removed counts them, and every other count only the members (Current).
     private const string SummaryMembers = $"cc.campaign_id IN {Asked}";
 
+    // The same memberships, of contacts whose own record is not archived: the people contact.list shows without
+    // include_archived.
+    private const string SummaryMembersNotArchived =
+        $"cc.campaign_id IN {Asked} AND NOT EXISTS (SELECT 1 FROM contacts AS p WHERE p.id = cc.contact_id AND p.archived_at IS NOT NULL)";
+
     private const string Current = "f.state <> 'excluded'";
 
     // Everyone it happened to, removed since or not: last week does not change because somebody was taken out today.
@@ -237,9 +242,10 @@ internal static partial class CampaignPeople
     private const string PageMembers = "cc.contact_id IN (SELECT value FROM json_each({1}))";
 
     /// <summary>Every Summary count per campaign, from the same conditions the lists filter by.</summary>
-    internal static readonly string SummaryCountsSql =
-        $"SELECT f.campaign_id AS CampaignId, sum(CASE WHEN {Current} THEN 1 ELSE 0 END) AS People, {Sums(SummaryDefinitions)} "
-        + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), SummaryMembers)}) AS f GROUP BY f.campaign_id";
+    internal static readonly string SummaryCountsSql = CountsOf(SummaryMembers);
+
+    /// <summary>The same counts, the memberships of archived contacts left out.</summary>
+    internal static readonly string SummaryCountsWithoutArchivedSql = CountsOf(SummaryMembersNotArchived);
 
     internal static readonly string ActivityCountsSql =
         $"SELECT f.campaign_id AS CampaignId, {Sums(ActivityDefinitions)} "
@@ -329,9 +335,10 @@ internal static partial class CampaignPeople
             + $"FROM ({pair.Value}) AS bym JOIN contacts AS p ON p.id = bym.ContactId GROUP BY bym.ContactId, p.public_id");
 
     /// <summary>Every Summary count across the campaigns asked, a person once, from the same conditions.</summary>
-    internal static readonly string SummaryTotalSql =
-        $"SELECT 0 AS CampaignId, count(DISTINCT CASE WHEN {Current} THEN f.contact_id END) AS People, {Distincts(SummaryDefinitions)} "
-        + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), SummaryMembers)}) AS f";
+    internal static readonly string SummaryTotalSql = TotalOf(SummaryMembers);
+
+    /// <summary>The same total, the memberships of archived contacts left out.</summary>
+    internal static readonly string SummaryTotalWithoutArchivedSql = TotalOf(SummaryMembersNotArchived);
 
     /// <summary>
     /// Every Summary count each membership of a page's people stands in now, from the same conditions, as one bit per
@@ -357,11 +364,13 @@ internal static partial class CampaignPeople
         return db.CampaignContacts.FromSqlRaw(Summary[filter], Keys(campaignIds));
     }
 
-    /// <summary>Every Summary count of each campaign asked that has people, in one read.</summary>
-    public static Task<Dictionary<int, SummaryCounts>> SummaryCountsAsync(JasonDbContext db, IReadOnlyCollection<int> campaignIds, CancellationToken ct)
+    /// <summary>Every Summary count of each campaign asked that has people, in one read; archived contacts left out when asked.</summary>
+    public static Task<Dictionary<int, SummaryCounts>> SummaryCountsAsync(
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, bool withoutArchived, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Database.SqlQueryRaw<SummaryCounts>(SummaryCountsSql, Keys(campaignIds)).ToDictionaryAsync(counts => counts.CampaignId, ct);
+        return db.Database.SqlQueryRaw<SummaryCounts>(withoutArchived ? SummaryCountsWithoutArchivedSql : SummaryCountsSql, Keys(campaignIds))
+            .ToDictionaryAsync(counts => counts.CampaignId, ct);
     }
 
     /// <summary>
@@ -388,11 +397,11 @@ internal static partial class CampaignPeople
             .ToDictionaryAsync(counts => counts.CampaignId, ct);
     }
 
-    /// <summary>Every Summary count across the campaigns asked, each person once.</summary>
-    public static Task<SummaryCounts> SummaryTotalAsync(JasonDbContext db, IReadOnlyCollection<int> campaignIds, CancellationToken ct)
+    /// <summary>Every Summary count across the campaigns asked, each person once; archived contacts left out when asked.</summary>
+    public static Task<SummaryCounts> SummaryTotalAsync(JasonDbContext db, IReadOnlyCollection<int> campaignIds, bool withoutArchived, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Database.SqlQueryRaw<SummaryCounts>(SummaryTotalSql, Keys(campaignIds)).SingleAsync(ct);
+        return db.Database.SqlQueryRaw<SummaryCounts>(withoutArchived ? SummaryTotalWithoutArchivedSql : SummaryTotalSql, Keys(campaignIds)).SingleAsync(ct);
     }
 
     /// <summary>Every Activity count across the campaigns asked, each person once.</summary>
@@ -432,6 +441,14 @@ internal static partial class CampaignPeople
             .ConfigureAwait(false);
         return pinned.ToHashSet();
     }
+
+    private static string CountsOf(string members) =>
+        $"SELECT f.campaign_id AS CampaignId, sum(CASE WHEN {Current} THEN 1 ELSE 0 END) AS People, {Sums(SummaryDefinitions)} "
+        + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), members)}) AS f GROUP BY f.campaign_id";
+
+    private static string TotalOf(string members) =>
+        $"SELECT 0 AS CampaignId, count(DISTINCT CASE WHEN {Current} THEN f.contact_id END) AS People, {Distincts(SummaryDefinitions)} "
+        + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), members)}) AS f";
 
     private static string Distincts<TFilter>(Definition<TFilter>[] definitions)
         where TFilter : struct, Enum =>
