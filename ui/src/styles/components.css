@@ -347,6 +347,8 @@ details.fold pre {
 /* Work items: the counts in the tabs, the filter bar, a list to pick from, the person's chip. */
 .segmented .count { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .segmented button.on .count { color: var(--text-secondary); }
+.segmented .tick { font-weight: 600; }
+.filters .shown { color: var(--text-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .filters {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border);
