@@ -711,7 +711,7 @@ test('the instruction text holds the eight rules in plain words, and says nothin
     assert.match(text, /Keep to these eight rules/);
     assert.match(rules[5]!, /first paragraph of a message, written by Jason, says which campaign this conversation is about\. Work on that campaign only\./);
     assert.match(rules[5]!, /asks about another, say so and tell them to open that campaign's conversation/);
-    assert.match(rules[6]!, /about no campaign yet, create at most one campaign in it; once you have, this conversation becomes that campaign's/);
+    assert.match(rules[6]!, /about no campaign yet, create at most one campaign in it; Jason then makes this conversation that campaign's, or asks the person which\./);
     // Both forms of handing content, exactly: a quoted here-document closed by EOF alone, and a file in the chat folder.
     assert.ok(rules[7]!.includes("For short content write `--file - <<'EOF'` with the quotes, then the body, then `EOF` alone on the last line and nothing after it."), rules[7]);
     assert.ok(rules[7]!.includes('For long content, write it to a file in this chat folder and hand it with `--file - < file`.'), rules[7]);
