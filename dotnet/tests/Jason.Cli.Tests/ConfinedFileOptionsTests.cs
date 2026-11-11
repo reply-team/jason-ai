@@ -50,9 +50,10 @@ public class ConfinedFileOptionsTests
     };
 
     /// <summary>
-    /// Options that name a path and are not under the rule, each for its own reason: <c>project link --path</c> reads a
-    /// folder's markers and sends no file's content; <c>doctor --output</c> writes, and is asked each time; export and
-    /// import are not left to an agent at all; <c>logs</c> takes no path.
+    /// Options that name a path and are not under the rule, each for its own reason: <c>project link --path</c> names a
+    /// folder the runtime adopts and sends no file's content; <c>doctor --output</c> writes, and is asked each time;
+    /// export and import run under the variable as without it, and the desktop's chat never runs them; <c>logs</c>
+    /// takes no path.
     /// </summary>
     private static readonly string[] NotUnderTheRule = ["project link --path", "doctor --output"];
 
