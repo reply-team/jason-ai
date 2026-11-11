@@ -243,11 +243,12 @@ async function run(): Promise<void> {
     updates?.start();
     let runtimeVersion: string | null = null;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage);
+    const programs = programsOn(env, version);
     registerSetup(
         new Setup({
             paths,
             cli,
-            programs: programsOn(env, version),
+            programs,
             keys,
             log,
             bundleVersion: version ?? 'unprepared',
@@ -265,6 +266,7 @@ async function run(): Promise<void> {
         dataNamed: Boolean(process.env.JASON_DATA_DIR?.trim()),
         bundleVersion: version,
         cli,
+        programs,
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),

@@ -10,7 +10,14 @@ const stdin = record.readStdin();
 record(name, args, stdin);
 const said = args.join(' ');
 
-if (said === '--version') {
+if (said === '--version' && name === 'claude' && process.env.STUB_CLAUDE_VERSION_FILE) {
+    // What Claude Code says of its version, read from the file at each start so a test can change it between two
+    // listings: { "stdout": "...", "stderr": "...", "exit": 0 }.
+    const answer = JSON.parse(require('node:fs').readFileSync(process.env.STUB_CLAUDE_VERSION_FILE, 'utf8'));
+    process.stdout.write(answer.stdout ?? '');
+    process.stderr.write(answer.stderr ?? '');
+    process.exitCode = answer.exit ?? 0;
+} else if (said === '--version') {
     process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.19.0'}\n` :'10.9.2\n');
 } else if (name === 'reply' && said === 'auth status --json') {
     // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there.

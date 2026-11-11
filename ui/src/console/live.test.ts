@@ -20,9 +20,10 @@ const host = (fields: Partial<DesktopHost>): DesktopHost => ({
     label: 'Claude Code',
     kind: 'program',
     found: true,
-    version: '2.1.0',
+    version: '2.1.300',
     drivesChat: true,
     install: null,
+    belowFloor: null,
     ...fields,
 });
 

@@ -71,6 +71,12 @@ export interface DesktopHost {
     drivesChat: boolean;
     /** The `programId` for `setup.installProgram` when the program is not found and npm is there to install it. */
     install: string | null;
+    /**
+     * When the Claude Code the host runs on is older than the oldest version the chat runs on, or its version could not
+     * be read, the desktop's sentence that says so and how to update it; null otherwise. The chat lists such a host and
+     * runs no turn on it, and the desktop refuses a turn sent to it whatever the page asked.
+     */
+    belowFloor: string | null;
 }
 
 /** An account Reply holds, as the Reply CLI lists it. */

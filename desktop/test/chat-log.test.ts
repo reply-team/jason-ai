@@ -46,6 +46,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         dataNamed: true,
         bundleVersion: null,
         cli: loggedCli(b.cli, log),
+        programs: b.programs,
         keyFor: (id) => (id === 'deepseek' ? planted.key : undefined),
         fence: () => fence,
         emit(_chatId, event) {
@@ -104,6 +105,7 @@ test('a missing instruction text is logged once, by a closed line that names the
         dataNamed: true,
         bundleVersion: null,
         cli: b.cli,
+        programs: b.programs,
         keyFor: () => undefined,
         fence: () => ({ ...fence, instructions: null }),
         emit(_chatId, event) {
@@ -145,6 +147,7 @@ test('an instruction file that cannot be written is logged by a closed line that
         dataNamed: true,
         bundleVersion: null,
         cli: b.cli,
+        programs: b.programs,
         keyFor: () => undefined,
         fence: () => fence,
         emit(_chatId, event) {

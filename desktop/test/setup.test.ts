@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { loggedTurns } from '../src/chat-log.ts';
+import { floorSentence, versionLimitMs } from '../src/host-version.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
@@ -346,6 +347,7 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
             dataNamed: true,
             bundleVersion: null,
             cli: loggedCli(b.cli, log),
+            programs: b.programs,
             keyFor: () => undefined,
             fence: () => readFence(join(import.meta.dirname, '..')),
             emit(_chatId, event: ChatEvent) {
@@ -659,13 +661,88 @@ test('every host is listed, found or not; the missing ones name an install only 
     const b = bench(t, { programs: ['claude', 'gemini', 'npm'] });
     const { hosts } = await setupOn(b).status();
     const byId = new Map(hosts.map((host) => [host.id, host]));
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null });
     assert.equal(byId.get('codex')?.found, false);
     assert.equal(byId.get('codex')?.install, 'codex');
     assert.equal(byId.get('gemini')?.found, true);
     assert.equal(byId.get('gemini')?.drivesChat, false);
     assert.equal(byId.get('copilot')?.install, null, 'the desktop installs only the hosts it names an npm package for');
     assert.equal(byId.get('deepseek')?.kind, 'provider');
+});
+
+// ---- Claude Code's version and its floor ---------------------------------------------------------------------------
+
+/** A bench whose Claude Code says of its version what `say` writes, read again at each start. */
+function claudeSaying(t: { after(fn: () => void): void }, programs: string[] = ['claude', 'codex']) {
+    // The file is named before the bench exists, since the programs' environment is fixed when the bench is made.
+    const file = join(tmpdir(), `jason-claude-version-${process.pid}-${Math.random().toString(36).slice(2)}.json`);
+    t.after(() => rmSync(file, { force: true }));
+    const b = bench(t, { programs, env: { STUB_CLAUDE_VERSION_FILE: file } });
+    const say = (answer: { stdout?: string; stderr?: string; exit?: number }) => writeFileSync(file, JSON.stringify(answer));
+    return { b, say };
+}
+
+test('a Claude Code below the floor is listed and marked with the version found, the floor and the cure; a key provider on it too, Codex never', async (t) => {
+    const { b, say } = claudeSaying(t);
+    say({ stdout: '2.1.200 (Claude Code)\n' });
+    const setup = setupOn(b);
+    await setup.setProviderKey('claude-api-key', 'sk-a');
+    await setup.setProviderKey('codex-api-key', 'sk-o');
+    const byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
+    const sentence = floorSentence('2.1.200');
+    assert.ok(sentence);
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence });
+    assert.equal(byId.get('claude-api-key')?.belowFloor, sentence, 'a key provider runs on that same claude');
+    assert.equal(byId.get('deepseek')?.belowFloor, sentence);
+    assert.equal(byId.get('codex')?.belowFloor, null, 'only Claude Code has a floor');
+    assert.equal(byId.get('codex-api-key')?.belowFloor, null);
+});
+
+test('Claude Code’s version is read again at each listing, never remembered, so an update shows without a restart', async (t) => {
+    const { b, say } = claudeSaying(t);
+    const setup = setupOn(b);
+    say({ stdout: 'Claude Code 2.1.200\n' });
+    assert.equal((await setup.status()).hosts.find((host) => host.id === 'claude')?.belowFloor, floorSentence('2.1.200'));
+    say({ stdout: 'Claude Code 2.1.257\n' });
+    const claude = (await setup.status()).hosts.find((host) => host.id === 'claude');
+    assert.equal(claude?.version, '2.1.257');
+    assert.equal(claude?.belowFloor, null, 'exactly at the floor');
+    assert.equal(b.record().filter((entry) => entry.name === 'claude' && entry.args.join(' ') === '--version').length, 2);
+});
+
+test('a Claude Code whose version cannot be read is held as below the floor: a non-zero exit, a timeout, or no number', async (t) => {
+    const { b, say } = claudeSaying(t);
+    const setup = setupOn(b);
+    const unreadable = floorSentence(null);
+    say({ stdout: '2.1.300 (Claude Code)\n', stderr: 'it failed\n', exit: 1 });
+    const failed = (await setup.status()).hosts.find((host) => host.id === 'claude');
+    assert.equal(failed?.version, null);
+    assert.equal(failed?.belowFloor, unreadable);
+    say({ stdout: 'Claude Code, a new build\n' });
+    assert.equal((await setup.status()).hosts.find((host) => host.id === 'claude')?.belowFloor, unreadable);
+    say({ stderr: 'warning: slow start\nversion 2.1.300 ready\n' });
+    assert.equal((await setup.status()).hosts.find((host) => host.id === 'claude')?.belowFloor, null, 'standard error is read too');
+
+    // The runner reports a program stopped at its time limit as -1, and the limit it is given is the generous one.
+    const asked: { name: string; args: readonly string[]; timeoutMs: number | undefined }[] = [];
+    const timedOut = new Setup({
+        paths: b.paths,
+        cli: b.cli,
+        programs: {
+            find: (name) => b.programs.find(name),
+            run: async (name, args, options) => {
+                asked.push({ name, args, timeoutMs: options?.timeoutMs });
+                return name === 'claude' ? { exit: -1, stdout: '', stderr: 'timed out' } : b.programs.run(name, args, options);
+            },
+        },
+        keys: new ProviderKeys(b.paths.providerKeys, fakeBox),
+        log: memoryLog(),
+        bundleVersion: '0.34.0-rc.1',
+        runtimeVersion: () => null,
+        settings: () => ({ feed: null, skillsDeployedFor: null }),
+    });
+    assert.equal((await timedOut.status()).hosts.find((host) => host.id === 'claude')?.belowFloor, unreadable);
+    assert.deepEqual(asked.filter((each) => each.name === 'claude'), [{ name: 'claude', args: ['--version'], timeoutMs: versionLimitMs }]);
 });
 
 test('a missing program is installed with npm on a click, and only where npm is there; Node never', async (t) => {

@@ -9,6 +9,8 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/chat.ts';
 import { instructionsFile, readFence } from '../src/chat-deny.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
+import { floorSentence, versionLimitMs } from '../src/host-version.ts';
+import type { RunResult } from '../src/programs.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -52,6 +54,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
         dataNamed: true,
         bundleVersion: null,
         cli: b.cli,
+        programs: b.programs,
         keyFor: (id) => keys[id],
         fence: () => fence,
         emit(chatId, event) {
@@ -373,6 +376,69 @@ test('a host that cannot drive the chat, one it does not know, one not on the PA
     assert.deepEqual(r.started, []);
 });
 
+/** A stand-in for the program runner: Claude Code says `answer` of its version, and each question is kept. */
+function versionSaying(answer: RunResult | (() => Promise<RunResult>)) {
+    const asked: { name: string; args: readonly string[]; timeoutMs: number | undefined }[] = [];
+    const programs: ChatOptions['programs'] = {
+        run: async (name, args, options) => {
+            asked.push({ name, args, timeoutMs: options?.timeoutMs });
+            return typeof answer === 'function' ? answer() : answer;
+        },
+    };
+    return { asked, programs };
+}
+
+test('a turn on a Claude Code below the floor is refused before any child starts, whatever the page asked, a key provider’s too', async (t) => {
+    const { asked, programs } = versionSaying({ exit: 0, stdout: '2.1.200 (Claude Code)\n', stderr: '' });
+    const r = rig(t, { chat: { programs } });
+    r.keys['claude-api-key'] = 'sk-planted-anthropic';
+    const sentence = floorSentence('2.1.200');
+    assert.ok(sentence);
+    for (const host of ['claude', 'claude-api-key']) {
+        assert.deepEqual(await r.turn('c1', words, { host }), [{ kind: 'done', error: sentence }], host);
+    }
+    assert.deepEqual(r.b.record(), [], 'no host, no jason verb and no version read of the stub ran: the stand-in answered');
+    assert.deepEqual(r.started, []);
+    assert.deepEqual(existsSync(r.b.paths.turns) ? readdirSync(r.b.paths.turns) : [], [], 'no turn file was written');
+    assert.equal(r.chat.isRunning('c1'), false);
+    assert.deepEqual(asked, [
+        { name: 'claude', args: ['--version'], timeoutMs: versionLimitMs },
+        { name: 'claude', args: ['--version'], timeoutMs: versionLimitMs },
+    ]);
+
+    // Codex has no floor: its turn runs, and its version is not asked.
+    const codex = await r.turn('c2', words, { host: 'codex' });
+    assert.deepEqual(doneOf(codex), { kind: 'done', error: null });
+    assert.equal(asked.length, 2);
+});
+
+test('a turn on a Claude Code whose version cannot be read is refused as below the floor; one exactly at the floor runs', async (t) => {
+    const unreadable = rig(t, { chat: { programs: versionSaying({ exit: -1, stdout: '', stderr: 'timed out' }).programs } });
+    assert.deepEqual(await unreadable.turn('c1', words, { host: 'claude' }), [{ kind: 'done', error: floorSentence(null) }]);
+    const failed = rig(t, { chat: { programs: versionSaying({ exit: 1, stdout: '2.1.300\n', stderr: '' }).programs } });
+    assert.deepEqual(await failed.turn('c1', words, { host: 'claude' }), [{ kind: 'done', error: floorSentence(null) }]);
+    assert.deepEqual([...unreadable.hosts(), ...failed.hosts()], []);
+
+    const at = rig(t, { chat: { programs: versionSaying({ exit: 0, stdout: 'Claude Code 2.1.257 (build 1)\n', stderr: '' }).programs } });
+    const said = await at.turn('c1', words, { host: 'claude' });
+    assert.deepEqual(doneOf(said), { kind: 'done', error: null });
+    assert.equal(at.hosts().length, 1);
+});
+
+test('a second send while Claude Code’s version is read is refused as busy, and the first turn goes on', async (t) => {
+    let release: (result: RunResult) => void = () => undefined;
+    const { programs } = versionSaying(() => new Promise<RunResult>((resolve) => (release = resolve)));
+    const r = rig(t, { chat: { programs } });
+    const first = r.until('c1', (event) => event.kind === 'done' && event.error === null);
+    const sending = r.chat.send('c1', words, { host: 'claude' });
+    await r.chat.send('c1', words, { host: 'claude' });
+    assert.deepEqual(r.events.get('c1'), [{ kind: 'done', error: 'This chat is still answering. Wait for it to finish, or stop it, then send again.' }]);
+    release({ exit: 0, stdout: '2.1.300\n', stderr: '' });
+    await sending;
+    await first;
+    assert.equal(r.hosts().length, 1);
+});
+
 test('what a send gives is checked before a host starts', async (t) => {
     const r = rig(t);
     const cases: [unknown, unknown][] = [
@@ -535,7 +601,7 @@ test('a start removes the turn files a desktop that ended mid-turn left in turns
     // Under <data>/desktop itself nothing is touched, a name of the turn file's own shape included.
     const beside = ['turn-00112233445566778899aabb.mcp.json', 'settings.json'];
     for (const name of beside) writeFileSync(join(r.b.paths.desktop, name), '{}');
-    new Chat({ paths: r.b.paths, env: r.b.env, bundle: r.bundle, dataNamed: true, bundleVersion: null, cli: r.b.cli, keyFor: () => undefined, fence: () => fence, emit: () => undefined });
+    new Chat({ paths: r.b.paths, env: r.b.env, bundle: r.bundle, dataNamed: true, bundleVersion: null, cli: r.b.cli, programs: r.b.programs, keyFor: () => undefined, fence: () => fence, emit: () => undefined });
     assert.deepEqual(readdirSync(r.b.paths.turns).sort(), [...kept].sort());
     assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'chat' && name !== 'turns').sort(), [...beside].sort());
 });

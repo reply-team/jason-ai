@@ -13,9 +13,10 @@ export const setupFound: DesktopSetup = {
             label: 'Claude Code',
             kind: 'program',
             found: true,
-            version: '2.1.0',
+            version: '2.1.300',
             drivesChat: true,
             install: null,
+            belowFloor: null,
         },
         {
             id: 'codex',
@@ -25,6 +26,7 @@ export const setupFound: DesktopSetup = {
             version: null,
             drivesChat: true,
             install: 'codex',
+            belowFloor: null,
         },
         {
             id: 'gemini',
@@ -34,6 +36,7 @@ export const setupFound: DesktopSetup = {
             version: '0.9.0',
             drivesChat: false,
             install: null,
+            belowFloor: null,
         },
         {
             id: 'deepseek',
@@ -43,6 +46,7 @@ export const setupFound: DesktopSetup = {
             version: null,
             drivesChat: true,
             install: null,
+            belowFloor: null,
         },
     ],
     reply: {

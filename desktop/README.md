@@ -21,6 +21,11 @@ person would edit.
 When the runtime is another version, the UI it serves is loaded as it is and `setup.status()` says the versions differ
 and names `jason update`. A `feed` in the desktop's settings is passed to every verb that takes `--feed`.
 
+Claude Code's version is read with `claude --version` at each listing of the hosts and before each chat turn on it, never
+remembered: a Claude Code older than 2.1.257 (`src/host-version.ts`), or one whose version cannot be read, is listed on
+the Connect card and in the chat's host list with a sentence naming the version found, that floor and how to update it,
+cannot be chosen there, and has every chat turn sent to it refused before the host starts, a key provider's included.
+
 ## Its own files
 
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, and the version whose skills were last deployed).

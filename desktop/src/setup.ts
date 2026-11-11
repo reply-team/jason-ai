@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
+import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
@@ -48,6 +49,12 @@ export interface HostState {
     drivesChat: boolean;
     /** The `installProgram` id when the program is missing and npm is there to install it. */
     install: string | null;
+    /**
+     * When the Claude Code the host runs on is older than the oldest version the chat runs on, or its version could not
+     * be read, the sentence that says so, names the floor and the cure: the chat starts no turn on the host. Null
+     * otherwise, and for a host that is not Claude Code or a key provider on it.
+     */
+    belowFloor: string | null;
 }
 
 export interface ReplyState {
@@ -204,20 +211,29 @@ export class Setup {
         return programInstalls[program]?.npmPackage && this.#deps.programs.find('npm') !== null ? program : null;
     }
 
+    /** Claude Code's version, read at each listing and never remembered, and the sentence when it is below the floor. */
+    async #claude(): Promise<{ version: string | null; belowFloor: string | null }> {
+        const version = printedVersion(await this.#run('claude', '--version', ['--version'], { timeoutMs: versionLimitMs }));
+        return { version, belowFloor: floorSentence(version) };
+    }
+
     async status(): Promise<SetupState> {
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
+        const claude = programs.find('claude') !== null ? await this.#claude() : null;
         const programHosts: HostState[] = [];
         for (const host of hosts) {
             const found = programs.find(host.program) !== null;
+            const own = host.program === 'claude' ? claude : null;
             programHosts.push({
                 id: host.id,
                 label: host.label,
                 kind: 'program',
                 found,
-                version: found ? await this.#version(host.program) : null,
+                version: !found ? null : own !== null ? own.version : await this.#version(host.program),
                 drivesChat: host.drivesChat,
                 install: found ? null : this.#installable(host.program),
+                belowFloor: own?.belowFloor ?? null,
             });
         }
         const providerHosts: HostState[] = keyProviders.map((provider) => ({
@@ -228,6 +244,7 @@ export class Setup {
             version: null,
             drivesChat: hosts.find((host) => host.program === provider.program)?.drivesChat ?? false,
             install: null,
+            belowFloor: provider.program === 'claude' ? (claude?.belowFloor ?? null) : null,
         }));
 
         let settings: unknown = {};
