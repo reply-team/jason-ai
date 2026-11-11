@@ -2,15 +2,22 @@
 // reload it asks for afterwards.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { cliAt } from '../src/cli.ts';
 import { loggedCli } from '../src/installation.ts';
 import type { Logger } from '../src/log.ts';
+import { desktopPaths } from '../src/paths.ts';
+import { programsOn } from '../src/programs.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import { Setup } from '../src/setup.ts';
 import { bundledPlugin, isConfigured, Refused, withPluginConfigured, withPluginDisconnected, type BundledPlugin } from '../src/setup-model.ts';
 import { bench, fakeBox, memoryLog, snapshot, type Bench } from './harness.ts';
+
+const desktopFolder = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 function setupOn(b: Bench, log: Logger = memoryLog()) {
     return new Setup({
@@ -191,4 +198,68 @@ test('Disconnect with no settings file writes none', async (t) => {
     await setupOn(b).disconnectPlugin('ntfy');
     assert.equal(existsSync(b.paths.installationSettings), false);
     assert.deepEqual(b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [['plugin', 'reload'], ['plugin', 'list']]);
+});
+
+// ---- Against the real executable --------------------------------------------------------------------------------------
+//
+// Opt-in, since it starts a runtime of its own (its own data directory and harness root, stopped at the end):
+//
+//   JASON_EXE=<a jason executable> npm test
+
+const executable = process.env.JASON_EXE;
+
+test('against the real executable, the reload after Disconnect activates a snapshot read from a file with no value for the plugin, its package unchanged', { skip: !executable || !existsSync(executable) ? 'set JASON_EXE to run it' : false }, async (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'jason-desktop-disconnect-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const data = join(root, 'data');
+    const env: Record<string, string> = { ...(process.env as Record<string, string>), JASON_DATA_DIR: data, JASON_Harness__Root: join(root, 'harness') };
+    const package_ = join(data, 'plugins', 'slack');
+    cpSync(join(desktopFolder, '..', 'plugins', 'slack'), package_, { recursive: true });
+    const paths = desktopPaths(data);
+    mkdirSync(dirname(paths.installationSettings), { recursive: true });
+    writeFileSync(
+        paths.installationSettings,
+        JSON.stringify({
+            Plugins: { Config: { slack: { token: 'xoxb-planted-token' } }, Grants: { slack: { Http: ['slack.com'] } } },
+            Notifications: { Plugins: { slack: { Enabled: true, Binding: { channel: 'C0123456' } } } },
+        }),
+    );
+    const cli = cliAt(executable!, env);
+    const started = await cli.run(['runtime', 'start']);
+    assert.equal(started.exit, 0, started.stderr);
+    try {
+        const info = async () => JSON.parse((await cli.run(['runtime', 'status'])).stdout) as { runtime_version: string; plugins: { snapshot_id: string; last_reload_activated: boolean }; notifications: { channels: { channel: string }[] } };
+        const listed = async () => (JSON.parse((await cli.run(['plugin', 'list'])).stdout) as { plugins: { id: string; digest: string; status: string; capabilities: { http: { granted: string[] } } }[] }).plugins.find((each) => each.id === 'slack');
+        const before = await info();
+        const slackBefore = await listed();
+        assert.equal(slackBefore?.status, 'valid');
+        const packageBefore = snapshot(package_);
+
+        const log = memoryLog();
+        await new Setup({
+            paths,
+            cli: loggedCli(cli, log),
+            programs: programsOn(env),
+            keys: new ProviderKeys(join(root, 'provider-keys'), fakeBox),
+            log,
+            bundleVersion: before.runtime_version,
+            runtimeVersion: () => before.runtime_version,
+            settings: () => ({ feed: null, skillsDeployedFor: null }),
+        }).disconnectPlugin('slack');
+
+        const kept = JSON.parse(readFileSync(paths.installationSettings, 'utf8')) as Record<string, unknown>;
+        assert.deepEqual(kept, { Plugins: { Grants: { slack: { Http: ['slack.com'] } } }, Notifications: { Plugins: { slack: { Enabled: true } } } });
+        assert.deepEqual(log.lines.find((each) => each.name === 'plugin_disconnected')?.fields, { PluginId: 'slack', Exit: 0, Valid: true });
+        const after = await info();
+        assert.notEqual(after.plugins.snapshot_id, before.plugins.snapshot_id, 'the runtime read its plugins again');
+        assert.equal(after.plugins.last_reload_activated, true, 'and activated what it read');
+        const slackAfter = await listed();
+        assert.equal(slackAfter?.status, 'valid');
+        assert.equal(slackAfter?.digest, slackBefore?.digest, 'the package the runtime reads is the one it read before');
+        assert.deepEqual(slackAfter?.capabilities.http.granted, ['slack.com'], 'and its grant stays');
+        assert.deepEqual(snapshot(package_), packageBefore, 'the package folder is where it was, byte for byte');
+        console.log(`snapshot ${before.plugins.snapshot_id} -> ${after.plugins.snapshot_id}; slack ${slackAfter?.status} ${slackAfter?.digest}; channels ${JSON.stringify(after.notifications.channels)}`);
+    } finally {
+        await cli.run(['runtime', 'stop']);
+    }
 });
