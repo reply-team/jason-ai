@@ -889,9 +889,11 @@ public partial class ReleaseWorkflowTests
     /// copy of it with one byte changed and over a file nobody signed. It passes a file its named publisher signed and
     /// timestamped that signtool accepts, and refuses, saying so, a file signtool refuses, an unsigned file, a changed
     /// file, a file Windows reads as validly signed but without a timestamp, a valid timestamped signature by any
-    /// publisher but the one named — a name that only contains it, or differs from it in case, included — a call that
-    /// names no publisher, a signtool that is not there and a runner without the Windows SDK's signtool; signtool is
-    /// asked with the Authenticode policy and verbosely, and only by the script.
+    /// publisher but the one named — a name that only contains it, or differs from it in case, included — a file that
+    /// carries no signature of its own, which Windows vouches for from a catalog of its own and reads as validly signed
+    /// and timestamped by the catalog's signer, even when that signer is the publisher named, a call that names no
+    /// publisher, a signtool that is not there and a runner without the Windows SDK's signtool; signtool is asked with
+    /// the Authenticode policy and verbosely, and only by the script.
     /// </summary>
     [Theory]
     [InlineData("signed, signtool clean", 0)]
@@ -902,6 +904,7 @@ public partial class ReleaseWorkflowTests
     [InlineData("signed by another publisher, signtool clean", 1)]
     [InlineData("signed by a publisher whose name only contains the one named, signtool clean", 1)]
     [InlineData("signed by the publisher named in another case, signtool clean", 1)]
+    [InlineData("vouched for by a catalog of Windows alone, signtool clean", 1)]
     [InlineData("no publisher named", 1)]
     [InlineData("no signtool", 1)]
     [InlineData("no Windows SDK", 1)]
@@ -923,8 +926,13 @@ public partial class ReleaseWorkflowTests
         var signtool = Path.Combine(tree.Root, "signtool.cmd");
         File.WriteAllText(signtool, $"@echo %*> \"{calls}\"\r\n@exit /b {(row == "signed, signtool refuses" ? 1 : 0)}\r\n");
 
+        // Windows' own cmd.exe carries no signature in the file: Windows vouches for it from a catalog of its own, and
+        // reads that catalog's signer, Microsoft Windows, valid and timestamped. Like its neighbours this row runs on
+        // Windows alone, on CI's Windows leg, whose runner image is where a catalog first answered for a library.
+        var catalogued = Path.Combine(Environment.SystemDirectory, "cmd.exe");
         var executable = row.StartsWith("unsigned", StringComparison.Ordinal) ? unsigned
             : row.StartsWith("tampered", StringComparison.Ordinal) ? tampered
+            : row.StartsWith("vouched for by a catalog", StringComparison.Ordinal) ? catalogued
             : signed;
         // The publisher Microsoft signs this file as is the simple name of its signer's certificate, CN=.NET.
         var publisher = row switch
@@ -932,6 +940,7 @@ public partial class ReleaseWorkflowTests
             "signed by another publisher, signtool clean" => "ReplyApp Inc.",
             "signed by a publisher whose name only contains the one named, signtool clean" => "NET",
             "signed by the publisher named in another case, signtool clean" => ".net",
+            "vouched for by a catalog of Windows alone, signtool clean" => "Microsoft Windows",
             _ => ".NET",
         };
         string[] arguments = row switch
@@ -959,6 +968,20 @@ public partial class ReleaseWorkflowTests
                 exit $LASTEXITCODE
                 """);
             script = shadowed;
+        }
+
+        // The row's premise, read as the cmdlet reads it: the catalog's signer, valid and timestamped, the very reading
+        // that once named a library's publisher in place of the signature the library carries.
+        if (row.StartsWith("vouched for by a catalog", StringComparison.Ordinal))
+        {
+            var reading = Path.Combine(tree.Root, "reading.ps1");
+            File.WriteAllText(reading, """
+                $s = Get-AuthenticodeSignature -LiteralPath $args[0]
+                $name = $s.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+                Write-Host "$($s.Status) $($s.SignatureType) $name, timestamped $([bool] $s.TimeStamperCertificate)"
+                """);
+            var read = Script(environment, reading, catalogued);
+            Assert.Equal("Valid Catalog Microsoft Windows, timestamped True", read.Stdout.Trim());
         }
 
         var ran = Script(environment, script, arguments);
@@ -993,6 +1016,11 @@ public partial class ReleaseWorkflowTests
         if (row.StartsWith("signed by", StringComparison.Ordinal))
         {
             Assert.Contains($"is signed by '.NET', not by '{publisher}'", ran.Stderr, StringComparison.Ordinal);
+        }
+
+        if (row.StartsWith("vouched for by a catalog", StringComparison.Ordinal))
+        {
+            Assert.Contains($"{executable} carries no signature of its own", ran.Stderr, StringComparison.Ordinal);
         }
 
         if (row == "no publisher named")
