@@ -49,11 +49,9 @@ in focused, with its selection. The
 classic screens in the page panel take the browser's stylesheet, scoped under `.harness` when the build runs
 (`src/console/scope.ts`), so the two stylesheets do not meet.
 
-**Language and theme.** The browser shell's words are in `src/locale/` in English and Ukrainian, each file naming its
-language in its own words, and a language file must hold every key the English one has. The language and the theme
-(light, dark, or the system's) are chosen under Settings and kept in this browser, never sent to the runtime; the
-document's `lang` follows the language. The console's own words are English in this release: the locale files serve
-the browser shell's.
+**Words and theme.** The browser shell's words are in `src/locale/en.ts`, one table read through `t()`. The theme
+(light, dark, or the system's) is chosen under Settings and kept in this browser, never sent to the runtime; the
+document's `lang` is `en`. The console's own words are English in this release: the table serves the browser shell's.
 
 ## Dev loop
 

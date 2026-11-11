@@ -2,7 +2,7 @@ import { signal } from '@preact/signals-react';
 import type { ComponentType } from 'react';
 import type { Route } from '../router';
 
-/** Words an entry shows: fixed, or read at each render so they follow the language. */
+/** Words an entry shows: fixed, or read at each render. */
 export type Text = string | (() => string);
 
 export const textOf = (text: Text): string => (typeof text === 'function' ? text() : text);

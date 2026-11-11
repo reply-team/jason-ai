@@ -265,8 +265,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   guard over every message template the runtime writes and by a run of the real executable that reads
   its own log back; the paths the installation runs from do, and a bundle rewrites them. `jason logs`
   reads them without the runtime; `jason doctor` carries a bounded slice of them.
-- Everything in the repository is written in English, with one exception: the translations of the browser UI's words
-  under `ui/src/locale/`, each language beside the English file it translates.
+- Everything in the repository is written in English.
 
 ## Working style
 

@@ -1,46 +1,41 @@
 import { readFileSync } from 'node:fs';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLocale } from '../../platform/i18n';
+import { startLocale } from '../../platform/i18n';
 import { setTheme } from '../../platform/theme';
 import { route } from '../../router';
 import { FakeApi } from '../../test/fake-api';
 import { renderApp } from '../../test/render-app';
 
 afterEach(() => {
-    setLocale('en');
     setTheme('system');
 });
 
 describe('Settings', () => {
-    it('changes the language of the shell and of the document, and keeps it in this browser, asking the runtime nothing', async () => {
-        const fake = new FakeApi();
-        renderApp(fake);
-        route.value = { screen: 'settings' };
-        await waitFor(() => screen.getByRole('heading', { name: 'Settings' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Українська' }));
-        await waitFor(() => screen.getByRole('heading', { name: 'Налаштування' }));
-        expect(screen.getByRole('link', { name: 'Кампанії' })).toBeTruthy();
-        expect(localStorage.getItem('jason.ui.locale')).toBe('uk');
-        expect(document.documentElement.lang).toBe('uk');
-        fireEvent.click(screen.getByRole('button', { name: 'English' }));
-        expect(document.documentElement.lang).toBe('en');
-        expect(fake.calls.map((c) => c.operation)).toEqual(['system.info']);
+    it('draws no language choice, and reads none that this browser stored before', async () => {
+        localStorage.setItem('jason.ui.locale', 'uk');
+        try {
+            const fake = new FakeApi();
+            renderApp(fake);
+            route.value = { screen: 'settings' };
+            await waitFor(() => screen.getByRole('heading', { name: 'Settings' }));
+            expect(screen.queryByRole('heading', { name: 'Language', level: 2 })).toBeNull();
+            expect(screen.queryByRole('button', { name: 'English' })).toBeNull();
+            expect(screen.getByRole('link', { name: 'Campaigns' })).toBeTruthy();
+            startLocale();
+            expect(document.documentElement.lang).toBe('en');
+            expect(fake.calls.map((c) => c.operation)).toEqual(['system.info']);
+        } finally {
+            localStorage.removeItem('jason.ui.locale');
+        }
     });
 
-    it('marks each section with an icon of its own, hidden from a screen reader, in either language', async () => {
+    it('marks the Appearance section with an icon, hidden from a screen reader', async () => {
         renderApp(new FakeApi());
         route.value = { screen: 'settings' };
         await waitFor(() => screen.getByRole('heading', { name: 'Appearance' }));
-        const icon = (name: string) =>
-            screen.getByRole('heading', { name, level: 2 }).querySelector('svg.settings-icon[aria-hidden="true"]');
-        expect(icon('Appearance')).toBeTruthy();
-        expect(icon('Language')).toBeTruthy();
-        expect(icon('Appearance')!.innerHTML).not.toBe(icon('Language')!.innerHTML);
-        fireEvent.click(screen.getByRole('button', { name: 'Українська' }));
-        await waitFor(() => screen.getByRole('heading', { name: 'Мова', level: 2 }));
-        expect(icon('Вигляд')).toBeTruthy();
-        expect(icon('Мова')).toBeTruthy();
+        const heading = screen.getByRole('heading', { name: 'Appearance', level: 2 });
+        expect(heading.querySelector('svg.settings-icon[aria-hidden="true"]')).toBeTruthy();
     });
 
     it("sets each icon on the line of its heading's words, in the browser's own stylesheet", () => {
