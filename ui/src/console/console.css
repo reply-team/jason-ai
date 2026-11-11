@@ -971,6 +971,28 @@ body,
     margin-top: 6px;
     color: var(--ink);
 }
+.jc-console .chat-bar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 8px 16px 0;
+}
+.jc-console .chat-remove {
+    margin: 8px 16px 0;
+}
+.jc-console .chat-note {
+    color: var(--mute);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+.jc-console .chat-pick .ask-a {
+    flex-wrap: wrap;
+}
+.jc-console .side-note {
+    margin: 0 8px 10px;
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+}
 .jc-console .pillc.green {
     color: var(--green);
     background: var(--green-2);

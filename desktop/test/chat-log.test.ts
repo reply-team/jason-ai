@@ -11,6 +11,7 @@ import { loggedTurns } from '../src/chat-log.ts';
 import { newConversationId, writeConversation, type Conversation } from '../src/chat-conversations.ts';
 import { loggedCli } from '../src/installation.ts';
 import { fileLogger } from '../src/log.ts';
+import { NamedChat } from './named-chat.ts';
 import { bench } from './harness.ts';
 
 const lines0 = (text: string) => text.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
@@ -40,6 +41,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     const events: ChatEvent[] = [];
     let ended: () => void = () => undefined;
     const done = new Promise<void>((resolve) => (ended = resolve));
+    const named = new NamedChat(() => chat);
     const chat: Chat = new Chat({
         paths: b.paths,
         env: b.env,
@@ -53,14 +55,14 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         emit(_chatId, event) {
             events.push(event);
             // Every card is answered yes, so each request is settled by the person or the model and logged.
-            if (event.kind === 'permission') chat.answer('c1', event.request, { allow: true, always: false });
+            if (event.kind === 'permission') named.answer('c1', event.request, { allow: true, always: false });
             if (event.kind === 'done') ended();
         },
         ...loggedTurns(log),
     });
     t.after(() => chat.closeAll());
 
-    await chat.send('c1', planted.prompt, { host: 'deepseek', campaignId: planted.campaign });
+    await named.send('c1', planted.prompt, { host: 'deepseek', campaignId: planted.campaign });
     await done;
     assert.deepEqual(events.at(-1), { kind: 'done', error: null });
     assert.ok(events.some((event) => event.kind === 'permission'), 'a card was made and answered');
@@ -71,7 +73,8 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     assert.equal(text.includes(folder), false, 'the campaign folder is not logged');
     const names = text.split('\n').filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName);
     assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_conversations_read', 'chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
-    assert.deepEqual(lines0(text).filter((line) => line.EventName === 'cli_exited').map((line) => line.Verb), ['campaign get', 'project get']);
+    // The campaign's conversation is made by reading the campaign; its turn reads it again, with its project.
+    assert.deepEqual(lines0(text).filter((line) => line.EventName === 'cli_exited').map((line) => line.Verb), ['campaign get', 'campaign get', 'project get']);
     const lines = text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
     const { '@t': _at, ...startLine } = lines.find((line) => line.EventName === 'chat_turn_started') ?? {};
     assert.deepEqual(startLine, {
@@ -99,6 +102,7 @@ test('a missing instruction text is logged once, by a closed line that names the
     let ends = 0;
     let ended: () => void = () => undefined;
     const done = new Promise<void>((resolve) => (ended = resolve));
+    const named = new NamedChat(() => chat);
     const chat: Chat = new Chat({
         paths: b.paths,
         env: b.env,
@@ -111,12 +115,12 @@ test('a missing instruction text is logged once, by a closed line that names the
         fence: () => ({ ...fence, instructions: null }),
         emit(_chatId, event) {
             if (event.kind === 'done' && ++ends === 2) ended();
-            if (event.kind === 'done' && ends === 1) void chat.send('c1', 'planted second words', { host: 'claude' });
+            if (event.kind === 'done' && ends === 1) void named.send('c1', 'planted second words', { host: 'claude' });
         },
         ...loggedTurns(log),
     });
     t.after(() => chat.closeAll());
-    await chat.send('c1', 'planted words', { host: 'claude' });
+    await named.send('c1', 'planted words', { host: 'claude' });
     await done;
     const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
     const missing = lines0(text).filter((line) => line.EventName === 'chat_instructions_missing');
@@ -141,7 +145,8 @@ test('an instruction file that cannot be written is logged by a closed line that
     let ended: () => void = () => undefined;
     const done = new Promise<void>((resolve) => (ended = resolve));
     const said: ChatEvent[] = [];
-    const chat = new Chat({
+    const named = new NamedChat(() => chat);
+    const chat: Chat = new Chat({
         paths: b.paths,
         env: b.env,
         bundle: join(b.root, 'bundle'),
@@ -158,7 +163,7 @@ test('an instruction file that cannot be written is logged by a closed line that
         ...loggedTurns(log),
     });
     t.after(() => chat.closeAll());
-    await chat.send('c1', 'planted words', { host: 'claude' });
+    await named.send('c1', 'planted words', { host: 'claude' });
     await done;
     assert.equal(said.length, 1);
     const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');

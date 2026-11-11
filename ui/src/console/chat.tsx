@@ -1,34 +1,42 @@
 import { computed, effect } from '@preact/signals-react';
-import { useCallback, useMemo, type FormEvent, type KeyboardEvent } from 'react';
-import type { DesktopHost } from '../platform/desktop';
+import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent } from 'react';
+import type { DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { act, define } from './actions';
 import {
+    afresh,
     answered,
     failed,
+    fromRecord,
     handed,
     kept,
     lost,
     newChat,
+    pickedFor,
     replaced,
     said,
     shown,
     stopAsked,
     takenBack,
+    told,
     typed,
     type Answer,
     type Chat,
+    type Entry,
 } from './chat-model';
+import { campaigns } from './campaigns';
 import { html, type Html } from './html';
 import { markdownView } from './markdown-view';
 import { svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
 import { reload as listHosts } from './connect';
-import { changeChat, chats, here, messageOf, setup } from './state';
+import { changeChat, chats, conversations, conversationsFailure, here, messageOf, setup } from './state';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
 // back as events. The agent's words are drawn as a fixed subset of Markdown, every word of them as text. A message sent
 // while a turn runs waits in the page, and the page hands it to the desktop as the next turn when the turn ends well.
+// Every chat is a conversation the desktop keeps: a campaign's one, or a set-up chat about no campaign yet. The desktop
+// decides which campaign a turn is about, from its record; the page names the conversation and the host, nothing more.
 
 const suggestions = ['What is waiting for me?', 'How are my campaigns doing?', 'Help me start a new campaign.'];
 
@@ -39,13 +47,95 @@ const answerWords: Readonly<Record<Answer, string>> = {
     gone: 'This request has ended',
 };
 
-let made = 0;
+/** Whether the desktop answered a call with a refusal: its sentence, as a value, never a thrown error. */
+export const isRefusal = (answer: unknown): answer is DesktopRefusal =>
+    typeof answer === 'object' && answer !== null && typeof (answer as { refused?: unknown }).refused === 'string';
 
-/** Opens a chat and returns its id: an id the page makes up and keeps for every turn of the chat. */
-export function openChat(campaign?: { id: string; name: string }): string {
-    const id = `chat-${Date.now().toString(36)}-${++made}`;
-    chats.value = { ...chats.value, [id]: newChat(id, null, campaign) };
-    return id;
+/** A refusal the desktop answered, thrown on as an Error whose message is the sentence alone. */
+function unless<T>(answer: T | DesktopRefusal): T {
+    if (isRefusal(answer)) throw new Error(answer.refused);
+    return answer;
+}
+
+/** Lists the conversations the desktop keeps again; one it could not list is said in the sidebar. */
+export async function reloadConversations(): Promise<void> {
+    try {
+        const listed = await here().desktop.chat.list();
+        conversations.value = listed;
+        conversationsFailure.value = null;
+    } catch (error) {
+        conversationsFailure.value = messageOf(error);
+    }
+}
+
+/** Holds a conversation in the console, read from the desktop once: what the page drew before comes with it. */
+async function hold(id: string): Promise<string> {
+    if (chats.value[id]) return id;
+    const record = unless(await here().desktop.chat.open(id));
+    if (!chats.value[record.id]) chats.value = { ...chats.value, [record.id]: fromRecord(record, null) };
+    return record.id;
+}
+
+/**
+ * The conversation to show: the campaign's one, made on first use and opened with what it kept, or with no campaign
+ * a new set-up chat. Resolves with its id, or with null when the desktop refused, which the sidebar says.
+ */
+export async function startChat(campaign?: { id: string; name: string }): Promise<string | null> {
+    try {
+        let id: string;
+        if (campaign) {
+            id = await hold(unless(await here().desktop.chat.create(campaign.id)).id);
+        } else {
+            const made = unless(await here().desktop.chat.create());
+            chats.value = { ...chats.value, [made.id]: { ...newChat(made.id, null), title: made.title } };
+            id = made.id;
+        }
+        conversationsFailure.value = null;
+        void reloadConversations();
+        return id;
+    } catch (error) {
+        conversationsFailure.value = messageOf(error);
+        return null;
+    }
+}
+
+/** A conversation from the sidebar's list: the one held, else the one the desktop kept. Null when it refused. */
+export async function openConversation(id: string): Promise<string | null> {
+    try {
+        const held = await hold(id);
+        conversationsFailure.value = null;
+        return held;
+    } catch (error) {
+        conversationsFailure.value = messageOf(error);
+        return null;
+    }
+}
+
+/** "Start afresh": the desktop drops the hosts' sessions and keeps the conversation; a refusal is said in the chat. */
+export function restartChat(id: string): void {
+    here()
+        .desktop.chat.restart(id)
+        .then((answer) => {
+            if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
+            changeChat(id, afresh);
+            // The desktop keeps the conversation changed now: the list says it first.
+            void reloadConversations();
+        })
+        .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
+}
+
+/** Removes the conversation, asked twice: its tab closes and the list follows; a refusal is said in the chat. */
+export function removeChat(id: string): void {
+    changeChat(id, (chat) => ({ ...chat, removing: false }));
+    here()
+        .desktop.chat.remove(id)
+        .then((answer) => {
+            if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
+            here().dock.closeChat(id);
+            chats.value = Object.fromEntries(Object.entries(chats.value).filter(([each]) => each !== id));
+            void reloadConversations();
+        })
+        .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 }
 
 /** The host a chat's next turn runs on: the one chosen, else the first found that drives the chat. */
@@ -55,7 +145,7 @@ export function hostOf(chat: Chat): DesktopHost | null {
 }
 
 /**
- * Starts a turn on the host chosen now, with the chat's campaign. `resent` says the words were the waiting message: a
+ * Starts a turn on the host chosen now; the desktop takes the campaign from the conversation. `resent` says the words were the waiting message: a
  * turn of those the page cannot start ends with its error, and the words are given back as a failed turn gives them.
  */
 export function sendTurn(id: string, text: string, resent = false): void {
@@ -76,9 +166,13 @@ export function sendTurn(id: string, text: string, resent = false): void {
         return;
     }
     changeChat(id, (each) => said(each, words, resent));
-    const options = { host: host.id, ...(chat.campaignId ? { campaignId: chat.campaignId } : {}) };
     here()
-        .desktop.chat.send(id, words, options)
+        .desktop.chat.send(id, words, { host: host.id })
+        .then((answer) => {
+            if (isRefusal(answer)) return changeChat(id, (each) => failed(each, answer.refused));
+            // From its first turn the desktop keeps the conversation, and lists it.
+            void reloadConversations();
+        })
         .catch((error: unknown) => changeChat(id, (each) => failed(each, messageOf(error))));
 }
 
@@ -103,6 +197,18 @@ define('chat.answer', ([id, request, answer]) => {
     here()
         .desktop.chat.answer(id, request, { allow: answer !== 'deny', always: answer === 'always' })
         .catch(() => changeChat(id, (chat) => lost(chat, request)));
+});
+
+define('chat.attach', ([id, campaignId]) => {
+    if (typeof id !== 'string' || typeof campaignId !== 'string') return;
+    here()
+        .desktop.chat.attach(id, campaignId)
+        .then((conversation) => {
+            if (isRefusal(conversation)) return changeChat(id, (chat) => told(chat, conversation.refused));
+            changeChat(id, (chat) => pickedFor(chat, conversation));
+            void reloadConversations();
+        })
+        .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 });
 
 /** "Sign in once by running `claude` …", with the command as code. */
@@ -139,6 +245,37 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
     </div>`;
 }
 
+/** A campaign a pick names: by the name the console read for it, else by its id. */
+const campaignName = (id: string): string => campaigns.value.find((each) => each.id === id)?.name ?? id;
+
+/**
+ * The campaigns a set-up turn made. Only the chat's last pick is a choice, as only it is one the desktop takes, and only
+ * while the chat is about no campaign and no turn runs; an earlier one is drawn as text.
+ */
+function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean): Html {
+    const open = last && chat.campaignId === null && !chat.running;
+    return html`<div class="ask chat-pick">
+        <div class="ask-h">
+            ${svg('camp', 14)}<b>${open ? 'Make this the conversation of' : 'Campaigns this chat made'}</b>
+        </div>
+        ${
+            open
+                ? html`<div class="ask-a">
+                      ${entry.campaignIds.map(
+                          (id) =>
+                              html`<button class="btn sm" type="button" ${act('chat.attach', chat.id, id)}>
+                                  ${campaignName(id)}
+                              </button>`,
+                      )}
+                  </div>`
+                : html`<div class="perm-done">${entry.campaignIds.map(campaignName).join(', ')}</div>`
+        }
+    </div>`;
+}
+
+/** One line in the desktop's words for something the page alone says of the conversation. */
+const noteLine = (text: string): Html => html`<div class="note chat-note">${text}</div>`;
+
 export function threadView(chat: Chat, host: DesktopHost | null): Html {
     if (chat.entries.length === 0)
         return html`<div class="hero">
@@ -150,6 +287,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 ${suggestions.map((text) => html`<button class="sug" type="button" ${act('chat.suggest', chat.id, text)}>${text}</button>`)}
             </div>`;
     const sentence = host && signInSentence(host);
+    const lastPick = [...chat.entries].reverse().find((entry) => entry.kind === 'pick');
     const parts = shown(chat).map((entry) => {
         switch (entry.kind) {
             case 'steps':
@@ -178,9 +316,27 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                     <div class="said">${entry.text}</div>
                     ${sentence && isSignInFailure(entry.text) ? html`<div class="sign-in">${withCode(sentence)}</div>` : null}
                 </div>`;
+            case 'pick':
+                return pick(chat, entry, entry === lastPick);
+            case 'attached':
+                return noteLine(`This chat is now the conversation of ${entry.title}.`);
+            case 'fresh':
+                return noteLine(
+                    entry.reason === 'host_changed'
+                        ? `${host?.label ?? 'This agent host'} has not seen this conversation; it was given the last messages.`
+                        : "The agent's memory of this conversation was gone; it starts from the last messages.",
+                );
+            case 'afresh':
+                return noteLine(
+                    "Started afresh: the agent's next turn begins without its memory of this conversation.",
+                );
         }
     });
-    return html`${parts}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
+    const dropped =
+        chat.dropped > 0
+            ? noteLine('Earlier messages of this conversation were let go to keep it within its size.')
+            : null;
+    return html`${dropped}${parts}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
 }
 
 /**
@@ -188,19 +344,22 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
  * draw the thread afresh, closing what the person opened in it, nor read its Markdown again.
  */
 function threadOf(chatId: string) {
-    let last: { chat: Chat; host: DesktopHost | null; view: Html } | null = null;
+    let last: { chat: Chat; host: DesktopHost | null; named: unknown; view: Html } | null = null;
     return computed(() => {
         const chat = chats.value[chatId];
         if (!chat) return html``;
         const host = hostOf(chat);
+        // A pick names its campaigns by the names the console read, which may come after the pick.
+        const named = campaigns.value;
         const same =
             last !== null &&
             last.host === host &&
+            last.named === named &&
             last.chat.entries === chat.entries &&
             last.chat.running === chat.running &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
-        if (!same) last = { chat, host, view: threadView(chat, host) };
+        if (!same) last = { chat, host, named, view: threadView(chat, host) };
         return last!.view;
     });
 }
@@ -208,8 +367,25 @@ function threadOf(chatId: string) {
 export function ChatPanel({ chatId }: { chatId: string }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
+    const panel = useRef<HTMLDivElement>(null);
+    const removeButton = useRef<HTMLButtonElement>(null);
+    const keepButton = useRef<HTMLButtonElement>(null);
+    const wasRemoving = useRef(false);
+    const removing = chats.value[chatId]?.removing ?? false;
+    // Remove's question is a dialog: focus goes to keeping the conversation, the rest of the panel takes nothing while it
+    // asks, and once it is answered or dismissed focus goes back to Remove.
+    useEffect(() => {
+        for (const part of panel.current?.querySelectorAll('.thread, .composer') ?? []) {
+            if (removing) part.setAttribute('inert', '');
+            else part.removeAttribute('inert');
+        }
+        if (removing) keepButton.current?.focus();
+        else if (wasRemoving.current) removeButton.current?.focus();
+        wasRemoving.current = removing;
+    }, [removing]);
     const chat = chats.value[chatId];
     if (!chat) return null;
+    const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
     const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
     const host = hostOf(chat);
     const send = (event?: FormEvent) => {
@@ -234,7 +410,51 @@ export function ChatPanel({ chatId }: { chatId: string }) {
             .catch((error: unknown) => changeChat(chatId, (each) => failed(each, messageOf(error))));
     };
     return (
-        <div className="chat-panel">
+        <div className="chat-panel" ref={panel}>
+            <div className="chat-bar">
+                <button
+                    className="btn sm"
+                    type="button"
+                    disabled={chat.running || chat.removing}
+                    title="The agent's next turn begins without its memory of this conversation; what is shown here stays"
+                    onClick={() => restartChat(chatId)}
+                >
+                    Start afresh
+                </button>
+                <button
+                    ref={removeButton}
+                    className="btn sm"
+                    type="button"
+                    disabled={chat.running || chat.removing}
+                    onClick={() => changeChat(chatId, (each) => ({ ...each, removing: true }))}
+                >
+                    Remove
+                </button>
+            </div>
+            {chat.removing && (
+                <div
+                    className="note am chat-remove"
+                    role="alertdialog"
+                    aria-label="Remove this conversation?"
+                    aria-describedby={`remove-said-${chatId}`}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Escape') keep();
+                    }}
+                >
+                    <div id={`remove-said-${chatId}`}>
+                        Remove this conversation? Its record goes from this computer; the agent host keeps its own
+                        transcript of it.
+                    </div>
+                    <div className="crow">
+                        <button ref={keepButton} className="btn sm" type="button" onClick={keep}>
+                            Keep it
+                        </button>
+                        <button className="btn sm" type="button" onClick={() => removeChat(chatId)}>
+                            Remove it
+                        </button>
+                    </div>
+                </div>
+            )}
             <Painted className="thread" view={view} />
             <form className="composer" onSubmit={send} aria-label="Message">
                 {setup.value && !host && held.length > 0 && (
@@ -287,6 +507,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 <textarea
                     id="box"
                     rows={2}
+                    disabled={chat.removing}
                     placeholder={chat.running ? 'Sent when this turn ends…' : 'Ask Jason…'}
                     aria-label="Your message"
                     value={chat.draft}
@@ -296,6 +517,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 <div className="crow">
                     <select
                         aria-label="Agent host"
+                        disabled={chat.removing}
                         value={host?.id ?? ''}
                         onChange={(event) => changeChat(chatId, (each) => ({ ...each, host: event.target.value }))}
                     >
@@ -321,16 +543,31 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                             <button
                                 className="btn sm"
                                 type="submit"
-                                disabled={chat.stopping || chat.waiting !== null || chat.draft.trim() === ''}
+                                disabled={
+                                    chat.removing || chat.stopping || chat.waiting !== null || chat.draft.trim() === ''
+                                }
                             >
                                 Send when the turn ends
                             </button>
-                            <button className="send" type="button" title="Stop" aria-label="Stop" onClick={stop}>
+                            <button
+                                className="send"
+                                type="button"
+                                title="Stop"
+                                aria-label="Stop"
+                                disabled={chat.removing}
+                                onClick={stop}
+                            >
                                 ■
                             </button>
                         </>
                     ) : (
-                        <button className="send" type="submit" title="Send" aria-label="Send" disabled={!host}>
+                        <button
+                            className="send"
+                            type="submit"
+                            title="Send"
+                            aria-label="Send"
+                            disabled={!host || chat.removing}
+                        >
                             ↑
                         </button>
                     )}

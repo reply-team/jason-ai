@@ -2,7 +2,7 @@ import { signal } from '@preact/signals-react';
 import type { Api } from '../api/client';
 import { ApiError } from '../api/client';
 import type { JournalEntry } from '../api/types';
-import type { DesktopSetup, JasonDesktop } from '../platform/desktop';
+import type { DesktopConversation, DesktopSetup, JasonDesktop } from '../platform/desktop';
 import type { StreamState } from '../platform/journal-stream';
 import type { Route } from '../router';
 import type { Chat } from './chat-model';
@@ -20,7 +20,14 @@ export const setup = signal<DesktopSetup | null>(null);
 export const setupBusy = signal<string | null>(null);
 export const setupError = signal<string | null>(null);
 
+/** The chats the console has open, by the id of the conversation the desktop keeps for each. */
 export const chats = signal<Readonly<Record<string, Chat>>>({});
+/** Every conversation the desktop keeps, newest first, as it listed them last. */
+export const conversations = signal<readonly DesktopConversation[]>([]);
+/** The conversation whose chat was brought to the front last, which the sidebar marks; null when none is open. */
+export const currentChat = signal<string | null>(null);
+/** Why the conversations could not be listed or one opened, in the desktop's words; null when nothing failed. */
+export const conversationsFailure = signal<string | null>(null);
 
 /** The moment ages are counted from, moved on by the console every half minute. */
 export const clock = signal(Date.now());
@@ -43,10 +50,14 @@ export type PanelName = 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
 
 export interface Dock {
     show(panel: PanelName): void;
-    /** Opens a new chat, about a campaign when it is given one, and shows it. */
+    /**
+     * Shows a conversation: the campaign's one, made on first use, when a campaign is given, else a new set-up chat.
+     */
     chat(campaign?: { id: string; name: string }): void;
     /** Shows a chat that is open. */
     showChat(id: string): void;
+    /** Takes a chat's tab out of the dock. */
+    closeChat(id: string): void;
     /** Shows one of the browser shell's screens in the page panel. */
     page(to: Route): void;
 }

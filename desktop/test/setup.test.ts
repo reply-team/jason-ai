@@ -360,13 +360,14 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
             emit(_chatId, event: ChatEvent) {
                 if (event.kind === 'permission') {
                     during = written(before, snapshot(b.paths.data)).filter((path) => !isLog(path));
-                    chat.answer('c1', event.request, { allow: true, always: false });
+                    chat.answer(conversation, event.request, { allow: true, always: false });
                 }
                 if (event.kind === 'done') finished();
             },
             ...loggedTurns(log),
         });
-        await chat.send('c1', 'hello', { host: 'claude' });
+        const conversation = (await chat.create()).id;
+        await chat.send(conversation, 'hello', { host: 'claude' });
         await done;
     }, [...instructionFiles, conversationFile], []);
     const turnFiles = during.filter((path) => !instructionFiles.includes(path) && !conversationFile.test(path));
@@ -778,7 +779,7 @@ test('two listings and a chat turn that arrive while Claude Code’s version is 
     });
     t.after(() => chat.closeAll());
     const listings = [setup.status(), setup.status()];
-    const sending = chat.send('c1', 'Which campaigns wait?', { host: 'claude' });
+    const sending = chat.send((await chat.create()).id, 'Which campaigns wait?', { host: 'claude' });
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal(releases.length, 1, 'one read for the two listings and the turn');
     releases[0]!({ exit: 0, stdout: '2.1.200 (Claude Code)\n', stderr: '' });

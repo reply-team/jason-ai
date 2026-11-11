@@ -5,17 +5,16 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { stubDesktop, stubStream } from '../test/desktop';
+import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
-import { said } from './chat-model';
-import { changeChat, chats } from './state';
+import { chats, conversations } from './state';
 
-// A campaign's Chat tab, in the page panel of the desktop: it brings forward the newest chat about the campaign the
-// console holds, and opens one only when there is none.
+// A campaign's Chat tab, in the page panel of the desktop: it opens the campaign's one conversation the desktop keeps,
+// made on first use, as the Campaigns list's Chat does.
 
-function renderConsole(fake: FakeApi) {
+function renderConsole(fake: FakeApi, desktop: StubDesktop = stubDesktop()): StubDesktop {
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -27,8 +26,12 @@ function renderConsole(fake: FakeApi) {
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     fake.answer('system.info', 'system.info/with-ui');
-    render(<Console api={fake} desktop={stubDesktop()} stream={stubStream().stream} />);
+    render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
+    return desktop;
 }
+
+const creates = (desktop: StubDesktop, campaignId: string) =>
+    desktop.calls.filter((each) => each.name === 'chat.create' && each.args[0] === campaignId).length;
 
 /** The console, and Spring opened in the page panel on its Sequence, as the Campaigns panel's Open does. */
 function springApi(): FakeApi {
@@ -44,16 +47,15 @@ function springApi(): FakeApi {
 
 const painted = (name: string) => screen.getByRole('heading', { name, level: 1 }).closest<HTMLElement>('.painted')!;
 
-async function openSpring(chatsFirst = 0): Promise<HTMLElement> {
+async function openSpring(): Promise<HTMLElement> {
     await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
-    // The sidebar brings the Campaigns panel forward each time, since a chat opened from it takes the front.
+    // The sidebar brings the Campaigns panel forward, since a chat opened from it takes the front.
     const spring = async () => {
         fireEvent.click(
             within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Campaigns' }),
         );
         return (await waitFor(() => within(painted('Campaigns')).getByText('Spring'))).closest('tr')!;
     };
-    for (let n = 0; n < chatsFirst; n++) fireEvent.click(within(await spring()).getByRole('button', { name: 'Chat' }));
     fireEvent.click(within(await spring()).getByRole('button', { name: 'Open' }));
     return waitFor(() => {
         const tabs = document.querySelector<HTMLElement>('.harness .campaign-tabs');
@@ -68,6 +70,7 @@ beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-16T09:00:00Z'));
     chats.value = {};
+    conversations.value = [];
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
@@ -77,8 +80,8 @@ afterEach(() => {
 });
 
 describe('a campaign’s Chat tab in the desktop', () => {
-    it('opens a chat about a campaign that has none, and a second click brings that one forward', async () => {
-        renderConsole(springApi());
+    it('opens the campaign’s one conversation, made on first use, and a second click brings that one forward', async () => {
+        const desktop = renderConsole(springApi());
         const tabs = await openSpring();
         expect(about('cmp_1')).toEqual([]);
 
@@ -87,23 +90,34 @@ describe('a campaign’s Chat tab in the desktop', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
 
         fireEvent.click(within(tabs).getByRole('button', { name: 'Chat' }));
+        await waitFor(() => expect(creates(desktop, 'cmp_1')).toBe(2));
         expect(about('cmp_1')).toHaveLength(1);
+        expect(Object.keys(chats.value)).toHaveLength(2); // the set-up chat the window opened on, and Spring's
     });
 
-    it('brings forward a chat about the campaign the console already holds, and opens none', async () => {
-        renderConsole(springApi());
-        // Two chats about Spring from the Campaigns list's own Chat, which opens a new one each time.
-        const tabs = await openSpring(2);
-        expect(about('cmp_1')).toHaveLength(2);
-        const held = Object.keys(chats.value);
-        const [older, newest] = about('cmp_1');
-        changeChat(older!.id, (chat) => said(chat, 'The older chat about Spring'));
-        changeChat(newest!.id, (chat) => said(chat, 'The newest chat about Spring'));
+    it('opens the conversation the desktop keeps for the campaign with what the page drew, from the tab and the list alike', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000S1',
+            campaignId: 'cmp_1',
+            title: 'Spring',
+            entries: [{ kind: 'user', text: 'The kept words about Spring' }],
+        });
+        renderConsole(springApi(), desktop);
+        // The list's Chat first: the campaign's one conversation, opened with its kept words.
+        await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+        fireEvent.click(
+            within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Campaigns' }),
+        );
+        const row = (await waitFor(() => within(painted('Campaigns')).getByText('Spring'))).closest('tr')!;
+        fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
+        expect(await screen.findByText('The kept words about Spring')).toBeTruthy();
+        expect(about('cmp_1').map((chat) => chat.id)).toEqual(['conv_01JDKEPT0000000000000000S1']);
+        const tabs = await openSpring();
 
         fireEvent.click(within(tabs).getByRole('button', { name: 'Chat' }));
-
-        expect(Object.keys(chats.value)).toEqual(held);
-        expect(await screen.findByText('The newest chat about Spring')).toBeTruthy();
-        expect(screen.queryByText('The older chat about Spring')).toBeNull();
+        await waitFor(() => expect(creates(desktop, 'cmp_1')).toBe(2));
+        expect(about('cmp_1')).toHaveLength(1);
+        expect(desktop.calls.filter((each) => each.name === 'chat.open')).toHaveLength(1);
     });
 });

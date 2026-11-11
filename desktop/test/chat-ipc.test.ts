@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { ChatRefused } from '../src/chat.ts';
 import { registerChat } from '../src/chat-ipc.ts';
 import { RefusedSender, type IpcRegistrar, type SenderFrame } from '../src/ipc.ts';
 
@@ -18,11 +19,11 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             stop: (...args) => void calls.push(['stop', ...args]),
             answer: (...args) => void calls.push(['answer', ...args]),
             list: (...args) => (calls.push(['list', ...args]), []),
-            open: (...args) => (calls.push(['open', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', entries: [], dropped: 0 }),
-            create: async (...args) => (calls.push(['create', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '' }),
+            open: (...args) => (calls.push(['open', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false, entries: [], dropped: 0 }),
+            create: async (...args) => (calls.push(['create', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false }),
             remove: (...args) => void calls.push(['remove', ...args]),
             restart: (...args) => void calls.push(['restart', ...args]),
-            attach: async (...args) => (calls.push(['attach', ...args]), { id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '' }),
+            attach: async (...args) => (calls.push(['attach', ...args]), { id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '', running: false }),
         },
         () => origin,
         (channel, why) => refusals.push(`${channel} ${why}`),
@@ -75,4 +76,29 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
     assert.deepEqual(calls, []);
     assert.equal(refusals.length, 18);
     assert.ok(refusals.every((line) => !line.includes('planted')));
+});
+
+test('a refusal reaches the page as the desktop\'s sentence alone, answered as a value; anything else stays a throw', async () => {
+    const sentence = 'That conversation is not one this desktop keeps.';
+    const refusing = async () => {
+        throw new ChatRefused(sentence);
+    };
+    const failing = async () => {
+        throw new TypeError('not a refusal');
+    };
+    const page = { senderFrame: { url: `${origin}/ui/`, parent: null } };
+    const members = ['send', 'open', 'create', 'remove', 'restart', 'attach'] as const;
+    for (const member of members) {
+        for (const [act, answers] of [[refusing, true], [failing, false]] as const) {
+            const listeners = new Map<string, Listener>();
+            const chat = { send: act, stop: () => undefined, answer: () => undefined, list: () => [], open: act, create: act, remove: act, restart: act, attach: act };
+            registerChat({ handle: (channel, listener) => void listeners.set(channel, listener) }, chat as never, () => origin, () => undefined);
+            const asked = Promise.resolve(listeners.get(`jason:chat.${member}`)?.(page, 'conv_1', 'cmp_1'));
+            if (answers) assert.deepEqual(await asked, { refused: sentence }, member);
+            else await assert.rejects(asked, { message: 'not a refusal' }, member);
+        }
+    }
+    // A call that did what was asked and has nothing to answer answers null, never a refusal.
+    const { listeners } = registered();
+    for (const member of ['send', 'remove', 'restart']) assert.equal(await listeners.get(`jason:chat.${member}`)?.(page, 'conv_1', 'hello', { host: 'claude' }), null, member);
 });

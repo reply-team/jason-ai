@@ -93,6 +93,8 @@ desktop does not narrow, so it may read the records.
 - **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: which campaign the
   conversation is about, its name quoted on one line, with every control, format and separator character dropped and
   cut at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it as they are.
+  A turn names its conversation and its host, never a campaign, and a turn sent to a conversation the desktop did not
+  make or keep is refused.
 - **A session per host.** A turn resumes the session its host named for the conversation; a session id begins with a
   letter or a digit, and a record's that does not is read as none. When that host has none, or its session is not
   found, another answers, or the resume fails before saying anything, the turn starts a fresh session given a recap, the
@@ -109,7 +111,13 @@ desktop does not narrow, so it may read the records.
   one campaign in a set-up chat; a command that names another campaign is not refused for being in this conversation.
   What a turn may do is the permission model's to decide, as before.
 - A conversation whose turn runs is not removed, started afresh or attached; each is refused with a sentence.
-  "Start afresh" drops the hosts' sessions and keeps the record.
+  "Start afresh" drops the hosts' sessions and keeps the record. `chat.list` and `chat.open` say whether a
+  conversation's turn runs. When the page is loaded again while a turn runs, the turn shows running with Stop, and a
+  card that waited is drawn as ended, since the record keeps no request to answer it by. A conversation is kept from its first turn: one made and never sent to is not listed and
+  leaves no record, and starting it afresh writes nothing.
+- **A refusal is a value.** Each chat call the desktop refuses answers `{ refused }` with its sentence alone, and a
+  call with nothing to answer answers null; only what is no refusal rejects. Electron would put "Error invoking remote
+  method" and the channel before a sentence thrown across the seam.
 - **What never carries one.** `jason doctor` carries none of it, its count and size included. The desktop's log says
   how many were read, how many files were not records, a record's error code when one could not be written, how many
   new campaigns a set-up turn found and why a turn started afresh, and nothing else. `jason export` carries no part of

@@ -15,7 +15,7 @@ import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention } from './needs';
-import { chats, clock, lines, setup, setupBusy, streamState } from './state';
+import { chats, clock, conversations, lines, setup, setupBusy, streamState } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -52,6 +52,7 @@ const panel = (name: string) => screen.getByRole('heading', { name, level: 1 }).
 
 beforeEach(() => {
     chats.value = {};
+    conversations.value = [];
     lines.value = [];
     attention.loaded.value = false;
     attention.detail.value = null;
@@ -149,11 +150,12 @@ describe('the console', () => {
 
     it('draws a hostile campaign name as text, in the list and in a chat about it', async () => {
         const fake = pending(new FakeApi());
-        renderConsole(fake);
+        const { desktop } = renderConsole(fake);
         await waitFor(() => screen.getByRole('button', { name: 'Campaigns' }));
         show('Campaigns');
         await waitFor(() => within(panel('Campaigns')).getByText('Spring'));
-        // A person may name a campaign anything; the next read brings that name back.
+        // A person may name a campaign anything; the next read brings that name back, to the desktop as well.
+        desktop.names.set('cmp_1', hostile);
         flush(() => {
             consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.map((each) =>
                 each.id === 'cmp_1' ? { ...each, name: hostile } : each,
@@ -804,12 +806,14 @@ describe('the console', () => {
     it('draws a hostile question and a hostile contact name in Needs you as text', async () => {
         renderConsole(pending(new FakeApi()));
         await waitFor(() => expect(attention.loaded.value).toBe(true));
+        // The dock draws its panels in a render of its own once it is ready, which the runtime's answer can come before:
+        // the read having ended says nothing of the panel being there yet.
+        const needs = await waitFor(() => panel('Needs you'));
         // A prospect may be called anything, and an agent may ask anything; the next read brings it back.
         flush(() => {
             attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: hostile }));
             attention.questions.value = attention.questions.value.map((each) => ({ ...each, question: hostile }));
         });
-        const needs = panel('Needs you');
         await waitFor(() => expect(within(needs).getAllByText(hostile).length).toBeGreaterThanOrEqual(2));
         expect(needs.querySelector('img')).toBeNull();
         expect((window as { hit?: number }).hit).toBeUndefined();
@@ -949,8 +953,10 @@ describe('the console', () => {
             return found;
         });
         expect(foot.title).toBe(version);
+        // The sidebar is drawn again as what it lists arrives, so the foot is read where it stands now.
+        const now = document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
         const body = rules()
-            .filter((rule) => rule.selector.includes('sfoot') && foot.matches(rule.selector))
+            .filter((rule) => rule.selector.includes('sfoot') && now.matches(rule.selector))
             .map((rule) => rule.body)
             .join(';');
         expect(body).toMatch(/white-space:\s*nowrap/);
