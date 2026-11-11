@@ -71,6 +71,8 @@ public static class UninstallCommand
                                    any provider CLI, any model credential, a PATH entry the installer did
                                    not write, another account's logon registration, the notifications
                                    already in the notification center, which are the person's to dismiss,
+                                   the transcripts the agent hosts keep of the desktop's chat, which are
+                                   the hosts' own and stay where each host keeps them,
                                    a jason: link registration another program owns, and one whose command is
                                    other than this installation's: it may be another installation's or a
                                    spelling of this one.
