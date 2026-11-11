@@ -231,6 +231,12 @@ test('linux: an AppImage whose menu entry starts the program with --no-sandbox i
     assert.throws(() => check(app, 'linux-appimage'), /jason-desktop-app\.desktop starts the program with --no-sandbox/);
 });
 
+test('linux: an AppImage whose menu entry has no Exec line is refused, rather than read as an empty one', async (t) => {
+    const app = await made(t, 'linux-appimage');
+    writeFileSync(join(app, 'jason-desktop-app.desktop'), ['[Desktop Entry]', 'Name=Jason', 'Type=Application', ''].join('\n'));
+    assert.throws(() => check(app, 'linux-appimage'), /jason-desktop-app\.desktop has no Exec line/);
+});
+
 test('linux: an AppImage with no menu entry at its root is refused, since there would be no Exec to read', async (t) => {
     const app = await made(t, 'linux-appimage', { exec: null });
     assert.throws(() => check(app, 'linux-appimage'), /holds no \.desktop menu entry at its root/);
