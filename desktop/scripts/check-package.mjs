@@ -23,9 +23,33 @@
 // as Electron left it.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { configuration, fuses, signer } from '../electron-builder.config.mjs';
+
+const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** The icon sizes, in pixels, a Linux package must install, each as the file desktop/installer/linux-icons holds. */
+export const linuxIconSizes = Object.freeze([32, 128, 256, 512]);
+
+/** Where a Linux package's file system begins: a deb's folder is /opt/Jason inside it, an AppImage's is its root. */
+export function iconRoot(app, form) {
+    return form === 'deb' ? dirname(dirname(app)) : app;
+}
+
+/** The icon sizes a menu and a dock look for: each installed under hicolor, and byte-equal to the tree's file. */
+function checkIcons(app, form) {
+    const said = [];
+    for (const size of linuxIconSizes) {
+        const name = `${size}x${size}`;
+        const installed = join(iconRoot(app, form), 'usr', 'share', 'icons', 'hicolor', name, 'apps', `${built.linux.executableName}.png`);
+        if (!existsSync(installed)) throw new Error(`The package has no icon at ${name}: ${installed} is not there.`);
+        const held = readFileSync(join(desktop, 'installer', 'linux-icons', `${name}.png`));
+        if (!held.equals(readFileSync(installed))) throw new Error(`The icon at ${name} is not the file the tree holds: ${installed} differs from installer/linux-icons/${name}.png.`);
+        said.push(`icon ${name}: the file the tree holds`);
+    }
+    return said;
+}
 
 const sentinel = Buffer.from('dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX', 'ascii');
 
@@ -166,7 +190,7 @@ function checkForm(app, form) {
             throw new Error(`resources/apparmor-profile does not let ${program} make user namespaces, which its sandbox uses.`);
         }
         said.push(`apparmor-profile: userns for ${program}`);
-        return said;
+        return [...said, ...checkIcons(app, form)];
     }
     if (!appRun) throw new Error(`${app} holds no AppRun; it is not an AppImage's contents.`);
     if (type !== null) throw new Error(`The AppImage carries resources/package-type saying ${type}, so electron-updater would update it as a ${type}.`);
@@ -179,7 +203,7 @@ function checkForm(app, form) {
         if (/(^|\s)--no-sandbox(\s|$)/.test(exec.slice('Exec='.length))) throw new Error(`${entry} starts the program with --no-sandbox: ${exec}`);
         said.push(`${entry}: ${exec}`);
     }
-    return said;
+    return [...said, ...checkIcons(app, form)];
 }
 
 /**
