@@ -346,6 +346,7 @@ public static partial class DoctorComposer
         JasonPaths.DataDirectoryVariable,
         ExecutionEnvironment.AttemptIdVariable,
         ExecutionEnvironment.WorkItemIdVariable,
+        Confinement.Variable,
     };
 
     /// <summary>

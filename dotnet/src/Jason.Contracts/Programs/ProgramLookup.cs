@@ -91,6 +91,23 @@ public static partial class ProgramLookup
     }
 
     /// <summary>
+    /// Whether a program as written is a path rather than a plain file name: it holds a directory separator, it is
+    /// rooted, or on Windows it holds a colon. The colon is the form the separators miss: <c>C:acme</c> names
+    /// <c>acme</c> in the current folder of drive C, and joined to any directory it stays itself. A path is looked for
+    /// in the directory it names, never on a search path. The provider check asks this, and <see cref="Find"/> refuses
+    /// such a name itself, so every caller of the lookup gets the same floor.
+    /// </summary>
+    public static bool IsPath(string program)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+
+        return program.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            || program.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+            || Path.IsPathRooted(program)
+            || (OperatingSystem.IsWindows() && program.Contains(':', StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Walks the search path in order. On Windows a name resolves to an <c>.exe</c> or a <c>.com</c>, or — only
     /// when the whole path yielded neither — to the cmd shim npm writes, which is read rather than started:
     /// starting a <c>.cmd</c> or a <c>.bat</c> means <c>cmd.exe</c> interprets the arguments, which is the shell
@@ -108,6 +125,13 @@ public static partial class ProgramLookup
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(searchPath);
         ArgumentNullException.ThrowIfNull(interpreterSearchPath);
+
+        // The walk never leaves the entry it walks: a name that is a path would be joined to no entry at all, so it is
+        // not found, before any directory is read.
+        if (IsPath(name))
+        {
+            return new FoundProgram(name, ProgramLookupOutcome.NotFound, null, [], null, null);
+        }
 
         // The first file that only a shell could start, which is what a refusal names when no .cmd turns up at all.
         string? script = null;

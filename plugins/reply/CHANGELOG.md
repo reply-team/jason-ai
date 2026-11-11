@@ -3,6 +3,13 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.14.8
+
+- The README's example of routing a campaign names who sets the route, `--actor human:you@example.com`: from Jason
+  0.34.0 the CLI will not put the account's name on a change of route by itself, and `jason route set` typed without
+  an actor outside a run exits 2. Nothing the package does has changed; update the package (`jason update apply`) to
+  have the page.
+
 ## 0.14.7
 
 - The README says what to do when `npm install -g reply-cli` is refused with `EACCES`, npm's global prefix being a

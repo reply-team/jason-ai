@@ -11,6 +11,7 @@ using Jason.Cli.Uninstall;
 using Jason.Contracts;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Execution;
 using Jason.Contracts.Hosts;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
@@ -1290,7 +1291,22 @@ internal static class StatusChecks
             return new StatusCheck("provider_cli", false, CheckState.Unknown, $"This environment cannot run programs, so '{command}' was not run.", null);
         }
 
-        var (found, directory) = FindProvider(providerCli, env.SearchPath);
+        // A confined call runs a bare name only: a path, which on Windows takes in a value naming a drive, names a file
+        // anyone who can write there chose, so it is neither looked up nor started.
+        var confined = env.Confined();
+        if (confined && IsPath(providerCli))
+        {
+            return new StatusCheck(
+                "provider_cli",
+                false,
+                CheckState.Unknown,
+                $"This environment cannot run a program named by a path, so '{command}' was not run: {Confinement.Variable} is set. "
+                    + "Name a program on the search path, or run it in a terminal.",
+                null);
+        }
+
+        var searchPath = confined ? FullyQualified(env.SearchPath ?? Environment.GetEnvironmentVariable("PATH")) : env.SearchPath;
+        var (found, directory) = FindProvider(providerCli, searchPath);
 
         // A name is looked up on this process's search path; a path names its directory and reads none, except that a shim
         // given by path takes its interpreter from the search path when none stands beside it. A runtime that started at
@@ -1300,7 +1316,7 @@ internal static class StatusChecks
 
         if (found is not { Outcome: ProgramLookupOutcome.Program or ProgramLookupOutcome.NpmShim, Path: { } program })
         {
-            var script = found.Outcome == ProgramLookupOutcome.NotFound ? ScriptNamed(providerCli, env.SearchPath) : null;
+            var script = found.Outcome == ProgramLookupOutcome.NotFound ? ScriptNamed(providerCli, searchPath) : null;
             return new StatusCheck("provider_cli", false, CheckState.Absent, Said(NotRun(found, providerCli, directory, script, command)), null);
         }
 
@@ -1336,8 +1352,8 @@ internal static class StatusChecks
     /// The provider CLI as Jason finds every program it starts by name (<see cref="ProgramLookup"/>): on Windows an
     /// <c>.exe</c> or a <c>.com</c>, or npm's shim read for what it starts (the interpreter and entry script it names, or
     /// the executable its package ships), and never a script
-    /// a shell would have to interpret. A value with a directory in it is a path, looked up in that directory alone by
-    /// the same rule; the directory comes back with the answer, so a name not found there says where it was looked for.
+    /// a shell would have to interpret. A value that is a path (<see cref="ProgramLookup.IsPath"/>) is looked up in the
+    /// directory it names alone by the same rule; the directory comes back with the answer, so a name not found there says where it was looked for.
     /// A shim found there takes its interpreter from the search path, as the shim itself would when it runs.
     /// </summary>
     private static (FoundProgram Found, string? Directory) FindProvider(string providerCli, string? searchPath)
@@ -1358,9 +1374,23 @@ internal static class StatusChecks
             : (ProgramLookup.Find(name, new ProgramSearchPath(directory, pathExt), onPath), directory);
     }
 
-    private static bool IsPath(string providerCli) =>
-        providerCli.Contains(System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal)
-        || providerCli.Contains(System.IO.Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+    /// <summary>
+    /// The entries of a search path a confined call looks a bare name up in: the fully qualified ones. A relative or empty
+    /// entry, or on Windows one rooted on no drive, names a folder relative to wherever the call runs, which is a working
+    /// folder anyone the call serves may write in.
+    /// </summary>
+    private static string FullyQualified(string? searchPath) =>
+        string.Join(
+            System.IO.Path.PathSeparator,
+            (searchPath ?? string.Empty)
+                .Split(System.IO.Path.PathSeparator)
+                .Where(entry => entry.Trim().Trim('"') is { Length: > 0 } directory && System.IO.Path.IsPathFullyQualified(directory)));
+
+    /// <summary>
+    /// What a path is, for the confined refusal and the path branch alike, as the lookup itself reads it: a separator, a
+    /// root, or on Windows a colon, so a value naming a drive is a path.
+    /// </summary>
+    private static bool IsPath(string providerCli) => ProgramLookup.IsPath(providerCli);
 
     /// <summary>The extensions a value may carry that name a script only a shell could run.</summary>
     private static readonly string[] ScriptExtensions = [".cmd", ".bat", ".ps1"];

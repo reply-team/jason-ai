@@ -1,7 +1,9 @@
 using System.CommandLine;
 using System.Reflection;
 using Jason.Cli;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 
 namespace Jason.Cli.Tests;
 
@@ -24,11 +26,11 @@ public class DesktopDenyListTests
     private static readonly string[] ReadsTheAgentKeeps = ["status", "logs", "doctor"];
 
     /// <summary>
-    /// The verbs the chat refuses beyond the CLI's own table: taking someone off the do-not-contact register, changing which
-    /// plugin performs an operation, changing which profile a role runs on, and adding a role, whose entry command the
-    /// dispatcher starts when work names the role.
+    /// The verbs the chat refuses beyond the CLI's table of verbs that take no default actor: adding a role, whose entry
+    /// command the dispatcher starts when work names the role, and linking a project's folder, which then becomes a
+    /// working folder of every chat on the project's campaigns.
     /// </summary>
-    private static readonly string[] TheChatsOwnWord = ["suppression remove", "route set", "route unset", "role set-profile", "role add"];
+    private static readonly string[] TheChatsOwnWord = ["role add", "project link"];
 
     /// <summary>
     /// The verbs the deny list leaves to the agent that still go to a person's card at every use: <c>doctor</c> writes its
@@ -111,22 +113,22 @@ public class DesktopDenyListTests
     }
 
     [Fact]
-    public void The_allow_list_names_no_verb_that_is_a_person_s_own_word_and_not_doctor()
+    public void The_allow_list_names_no_verb_that_takes_no_default_actor_and_not_doctor()
     {
         var file = Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt");
         var allowed = File.ReadAllLines(file).Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
 
         Assert.NotEmpty(allowed);
         Assert.DoesNotContain("doctor", allowed);
-        Assert.Empty(allowed.Where(verb => DefaultActorTests.TheEleven.Select(DefaultActorTests.VerbOf).Contains(verb)).ToList());
+        Assert.Empty(allowed.Where(verb => DefaultActorTests.NoDefaultActor.Select(DefaultActorTests.VerbOf).Contains(verb)).ToList());
     }
 
     [Fact]
-    public void The_deny_list_holds_every_verb_that_is_a_person_s_own_word()
+    public void The_deny_list_holds_every_verb_that_takes_no_default_actor()
     {
         var listed = DenyList();
 
-        var missing = DefaultActorTests.TheEleven.Select(DefaultActorTests.VerbOf).Where(verb => !listed.Contains(verb)).ToList();
+        var missing = DefaultActorTests.NoDefaultActor.Select(DefaultActorTests.VerbOf).Where(verb => !listed.Contains(verb)).ToList();
 
         Assert.Empty(missing);
     }
@@ -167,6 +169,20 @@ public class DesktopDenyListTests
         var missing = TheChatsOwnWord.Where(verb => !listed.Contains(verb)).ToList();
 
         Assert.Empty(missing);
+    }
+
+    /// <summary>
+    /// The desktop spells the confining variable once, in its permission model, and sets it in every host's environment
+    /// by that declaration; it is the CLI's own name, so the jason the chat runs is the jason that reads it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_confining_variable_is_the_cli_s()
+    {
+        var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
+
+        var declared = Regex.Matches(model, @"^export const confinedVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
+
+        Assert.Equal(Confinement.Variable, Assert.Single(declared).Groups["name"].Value);
     }
 
     /// <summary>An entry covers a verb when the entry's words begin the verb's: <c>runtime</c> covers <c>runtime stop</c>.</summary>
@@ -236,7 +252,7 @@ public class DesktopDenyListTests
             (denied.Any(entry => Covers(entry, verb)) ? fromDenied : fromAllowed).UnionWith(run.Requests.Select(request => request.Operation));
         }
 
-        foreach (var args in DefaultActorTests.TheEleven)
+        foreach (var args in DefaultActorTests.NoDefaultActor)
         {
             var run = await DefaultActorTests.RunEachAsync(["--actor", "human:ada", .. args]);
             Assert.True(run.Requests.Count > 0, $"'jason {DefaultActorTests.VerbOf(args)}' sent nothing: exit {run.Exit}, saying:{Environment.NewLine}{run.Error}");

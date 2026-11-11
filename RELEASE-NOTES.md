@@ -51,15 +51,18 @@ for it, and with no desktop installed nothing in the runtime differs.
   of a page at the runtime's origin. Navigation is locked to that origin; a link that leaves it opens in the system
   browser, and only when it is `https:`. Electron's own profile, storage and logs live under `<data>/desktop/electron`.
 - **Live chat.** A person talks to Claude Code or Codex, which run on their own machine, and the host works the
-  installation through the same `jason` command a person types. The words go to the host on standard input, never on
-  its command line. For Claude Code the desktop decides what runs without asking, from an allow list of one rule for
-  each of 67 verbs and a deny list of the verbs a chat never runs (everything the CLI reserves for a person,
-  `export` and `import`, `suppression remove`, `route set`, `route unset`, `role set-profile` and `role add`), and
-  asks the person on a card for everything else. Of the Reply CLI the chat may run `reply auth status` and
-  `reply account list` and nothing else. A card's "Allow for this chat" shows exactly the command it covers and is
-  never offered for a program that runs another, for a command with a word the shell would rewrite, or for one that
-  names `reply`. The data directory is refused in every spelling the desktop can read. Codex, in this release, reads
-  and advises with a read-only sandbox and no network, and acts through nothing.
+  installation through the same `jason` command a person types. The words go to the host on standard input, never on its
+  command line. For Claude Code the desktop decides what runs without asking, from an allow list of one rule for each of
+  66 verbs and a deny list of the verbs a chat never runs (everything the CLI reserves for a person, `export` and
+  `import`, `suppression remove`, `route set`, `route unset`, `role set-profile`, `role add` and `project link`, since a
+  folder a project links becomes a working folder of every chat on its campaigns), and asks the person on a card for
+  everything else. Every host's turn runs `jason` with `JASON_CONFINED=1`: a file a request carries comes on standard
+  input, `jason status --provider-cli` runs a bare name found on the `PATH` only, and a command that names the variable
+  is refused. Of the Reply CLI the chat may run `reply auth status` and `reply account list` and nothing else. A card's
+  "Allow for this chat" shows exactly the command it covers and is never offered for a program that runs another, for a
+  command with a word the shell would rewrite, or for one that names `reply`. The data directory is refused in every
+  spelling the desktop can read. Codex, in this release, reads and advises with a read-only sandbox and no network, and
+  acts through nothing.
 - **A chat that reads like one.** The agent's answers are drawn as a fixed subset of Markdown (paragraphs, emphasis,
   code, lists, headings, quotes and simple tables; a link is shown as its text and address, never as a link). A message
   sent while a turn runs waits under the box and goes when the turn ends well; it can be taken back or replaced. The
@@ -130,6 +133,17 @@ for it, and with no desktop installed nothing in the runtime differs.
   alone accepts.
 - **An argument that names a response file is a usage error (exit 2).** The CLI no longer expands a response file, and a
   word that starts with an at sign is a word like any other. A script that relied on it passes the arguments itself.
+- **Four verbs take no default actor.** `jason suppression remove`, `jason route set`, `jason route unset` and
+  `jason role set-profile`, typed outside a run without `--actor human:<Name>`, exit 2 before any request, in one
+  sentence that names that form. Inside a run the attempt is the actor, as before, and the runtime takes these
+  operations from any caller, as before.
+- **`JASON_CONFINED`, set to any value that is not empty, confines one call of the CLI.** A file option of an operation
+  verb (`--file`, `--value-file`, `--note-file`, `--result-file`) takes only `-`, so the content comes on standard
+  input, and any other value is refused with exit 1 before the file is opened and before any request.
+  `jason status --provider-cli` runs a bare name found in the fully qualified entries of the `PATH` only; a value with a
+  directory, a root or, on Windows, a drive in it is neither looked up nor started, and the `provider_cli` check says
+  what it did not run. A runtime the CLI starts, the role work a runtime launches and the terminal `jason session open`
+  opens do not carry the variable. Unset or empty, nothing changes.
 - **`jason logs` gains `--source runtime|desktop`.** The default is `runtime`, so a script that reads the runtime's log
   is unchanged.
 - **The runtime's descriptor gains `installed_image`,** the executable the runtime runs as, `null` or absent when that
@@ -155,7 +169,7 @@ for it, and with no desktop installed nothing in the runtime differs.
   that every call it made was refused, is now named by `jason plugin install`, `jason plugin list`, `jason plugin
   reload` and `jason status`, with the setting that grants it.
 - **Where a global npm install is refused with `EACCES`,** the golden path, the Reply package's prerequisites and the
-  operating skill say to install under a prefix of the account's own. The Reply package is 0.14.7.
+  operating skill say to install under a prefix of the account's own. The Reply package is 0.14.8.
 
 ## Upgrading from 0.33.0
 
@@ -168,7 +182,7 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.33.0 took
 - **The desktop is a separate install.** `jason update` does not install it. Download the installer or the disk image
   for your machine from this release, or, where an earlier desktop is installed, let it offer the update. An Intel Mac
   gets its `jason` only with the desktop's own update.
-- **The packages:** reply 0.14.7; journal-forwarder 1.2.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0 are as in 0.33.0.
+- **The packages:** reply 0.14.8; journal-forwarder 1.2.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0 are as in 0.33.0.
   A release is twenty-four files: the desktop's ten are new.
 - **Skills:** the update redeploys them wherever a deployment was recorded. `operating-the-installation` changed its
   text (how a fresh installation connects a provider) and keeps `draft`, and no agent host has read it against 0.34.0.
@@ -207,7 +221,7 @@ Codex in the desktop's chat reads and advises and acts through nothing: its sand
 Claude Code's chat asks for a card before it reads a path outside its working folders only from 2.1.257 on; an older
 version skips that setting without a word.
 
-What an allowed verb's options open or start, such as a file read into a request, is not yet confined under the chat.
+Work the desktop's chat queues for a role runs under that role's own execution profile, not behind the chat's cards.
 
 The desktop's tray has not been seen on a screen, and the View menu's keys have not been typed at the operating system's
 level; the page receives them, but no run has shown the menu's accelerators fire. A person's run of the installed

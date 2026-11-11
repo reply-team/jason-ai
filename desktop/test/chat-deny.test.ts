@@ -31,9 +31,11 @@ test('the host is denied every entry of the file in its own rule syntax, and eve
     assert.equal(rules.length, entries.length + 1);
 });
 
-test('the file refuses the installation verbs export and import, and the five the chat refuses beyond the CLI\'s table', () => {
-    for (const verb of ['export', 'import', 'suppression remove', 'route set', 'route unset', 'role set-profile', 'role add']) assert.ok(entries.includes(verb), verb);
-    assert.ok(parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8')).operations.includes('role.add'));
+test('the file refuses the installation verbs export and import, the four that take no default actor, and the two the chat refuses beyond the CLI\'s table', () => {
+    for (const verb of ['export', 'import', 'suppression remove', 'route set', 'route unset', 'role set-profile', 'role add', 'project link']) assert.ok(entries.includes(verb), verb);
+    const operations = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8')).operations;
+    assert.ok(operations.includes('role.add'));
+    assert.ok(operations.includes('project.link'));
 });
 
 test('the file\'s second section names the operations the denied verbs call, each once, system.shutdown among them', () => {

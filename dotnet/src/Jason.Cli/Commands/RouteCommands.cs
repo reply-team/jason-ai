@@ -81,7 +81,7 @@ public static class RouteCommands
 
     private static Command Set(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("set", "Send one campaign's work — or one of its operations — to a plugin.");
+        var command = new Command("set", "Send one campaign's work — or one of its operations — to a plugin. " + ActorOption.NoDefaultForAnAct);
         var campaign = Campaign("The campaign whose work is being routed.", required: false);
         var operation = Operation("The operation to override; leave it out for the campaign's default route.", required: false);
         var plugin = new Option<string?>("--plugin")
@@ -111,7 +111,8 @@ public static class RouteCommands
                 .Set("plugin", parseResult.GetValue(plugin))
                 .Set("binding", VerbOptions.Object(parseResult.GetValue(binding), "--binding"))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(body, "route set", "the CLI will not put this account's name on a change of route by itself", $"name who does it, e.g. {ActorOption.Name} human:<Name>");
 
             return OperationRunner.RunAsync(env, Operations.RouteSet, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Routes), cancellationToken);
         });
@@ -121,7 +122,7 @@ public static class RouteCommands
 
     private static Command Unset(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("unset", "Take one campaign route away, and with it whatever it was hiding.");
+        var command = new Command("unset", "Take one campaign route away, and with it whatever it was hiding. " + ActorOption.NoDefaultForAnAct);
         var campaign = Campaign("The campaign whose route is being removed.", required: false);
         var operation = Operation("The operation override to remove; leave it out for the campaign's default route.", required: false);
         var reason = VerbOptions.Reason();
@@ -136,7 +137,8 @@ public static class RouteCommands
             var body = RequireCampaign(parseResult.GetValue(campaign))
                 .Set("operation", parseResult.GetValue(operation))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(body, "route unset", "the CLI will not put this account's name on taking a route away by itself", $"name who does it, e.g. {ActorOption.Name} human:<Name>");
 
             return OperationRunner.RunAsync(env, Operations.RouteUnset, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Routes), cancellationToken);
         });

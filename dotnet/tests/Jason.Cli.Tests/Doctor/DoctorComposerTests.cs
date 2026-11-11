@@ -764,6 +764,7 @@ public sealed class DoctorComposerTests
             ["JASON_Update__FeedUrl"] = "https://SENTINEL_ENV_FEED.example",
             ["JASON_SENTINEL_ENV_NAME"] = "a value",
             ["JASON_DATA_DIR"] = dir.Paths.Root,
+            ["JASON_CONFINED"] = "1",
             ["jason_dispatcher__enabled"] = "false",
             ["PATH"] = "SENTINEL_PATH_VALUE",
         };
@@ -777,7 +778,7 @@ public sealed class DoctorComposerTests
 
         var environment = config["environment"]!.AsArray().ToDictionary(variable => Text(variable!["name"]), variable => variable!.AsObject());
         Assert.Equal(
-            ["JASON_<key>", "JASON_DATA_DIR", "JASON_Dispatcher__MaxParallel", "JASON_Logging__MinimumLevel", "JASON_Update__FeedUrl", "jason_dispatcher__enabled"],
+            ["JASON_<key>", "JASON_CONFINED", "JASON_DATA_DIR", "JASON_Dispatcher__MaxParallel", "JASON_Logging__MinimumLevel", "JASON_Update__FeedUrl", "jason_dispatcher__enabled"],
             environment.Keys);
         Assert.Equal(4, environment["JASON_Dispatcher__MaxParallel"]["value"]!.GetValue<int>());
         Assert.Equal("Debug", Text(environment["JASON_Logging__MinimumLevel"]["value"]));
@@ -785,6 +786,7 @@ public sealed class DoctorComposerTests
         Assert.Equal("string", Text(environment["JASON_Update__FeedUrl"]["shape"]!["type"]));
         Assert.False(environment["JASON_Update__FeedUrl"].ContainsKey("value"));
         Assert.False(environment["JASON_DATA_DIR"].ContainsKey("value"));
+        Assert.False(environment["JASON_CONFINED"].ContainsKey("value"));
         Assert.False(environment["JASON_<key>"].ContainsKey("value"));
 
         Assert.Equal(["Dispatcher:MaxParallel", "Dispatcher:Enabled", "Logging:MinimumLevel"], bundle.ValuesCarried);

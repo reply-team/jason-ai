@@ -110,10 +110,10 @@ public class CliAgainstRuntimeTests
         var listed = await OkAsync(fixture, "suppression", "list", "--channel", "email");
         Assert.Equal("a@b.co", (string?)Assert.Single(listed["items"]!.AsArray())!["value"]);
 
-        var removed = await OkAsync(fixture, "suppression", "remove", "--channel", "email", "--value", "a@b.co", "--reason", "typo");
+        var removed = await OkAsync(fixture, "suppression", "remove", "--channel", "email", "--value", "a@b.co", "--reason", "typo", "--actor", "human:ada");
         Assert.True((bool)removed["removed"]!);
 
-        var again = await OkAsync(fixture, "suppression", "remove", "--channel", "email", "--value", "a@b.co", "--reason", "typo");
+        var again = await OkAsync(fixture, "suppression", "remove", "--channel", "email", "--value", "a@b.co", "--reason", "typo", "--actor", "human:ada");
         Assert.False((bool)again["removed"]!);
         Assert.Empty((await OkAsync(fixture, "suppression", "list"))["items"]!.AsArray());
     }

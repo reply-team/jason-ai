@@ -175,7 +175,7 @@ jason plugin list --human          # status, granted over requested, the version
 has to be in the active snapshot already, which is why this comes after the reload:
 
 ```sh
-jason route set --campaign cmp_… --plugin reply --binding '{"profile":"outbound"}'
+jason route set --campaign cmp_… --plugin reply --binding '{"profile":"outbound"}' --actor human:you@example.com
 jason route resolve --campaign cmp_… --operation list_membership.add --human
 ```
 

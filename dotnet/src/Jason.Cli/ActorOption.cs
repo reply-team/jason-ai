@@ -7,11 +7,13 @@ namespace Jason.Cli;
 /// The global <c>--actor &lt;type&gt;[:&lt;id&gt;]</c> claim, so a skill running as a role journals under that role and
 /// a running executor journals under its attempt. The CLI only parses the text: claims are verified by the
 /// runtime, and the one rule enforced here is that <c>system</c> belongs to the runtime's own writes and
-/// cannot be claimed from outside. A write that claims nobody is made as the person this account is — except the
-/// eleven that are somebody's own word, an approval or a rejection, a standing approval set or unset, an answer, a
-/// preference set or unset, a block's clear, a resume, a report and a subscription's rewind, which name who acts or are
-/// refused. Whatever it claims, a CLI the environment says runs inside an attempt names that attempt on every request
-/// beside it, in the Jason-Attempt header (see <see cref="Http.RuntimeClient"/>).
+/// cannot be claimed from outside. A write that claims nobody is made as the person this account is — except the verbs
+/// that take no default actor, which name who acts or are refused: somebody's own word (an approval or a rejection, a
+/// standing approval set or unset, an answer, a preference set or unset, a block's clear, a resume, a report and a
+/// subscription's rewind), and the acts the runtime takes from any caller but the CLI will not put this account's name on
+/// by itself (a suppression lifted, a route set or unset, a role's execution profile set). Whatever it claims, a CLI
+/// the environment says runs inside an attempt names that attempt on every request beside it, in the Jason-Attempt
+/// header (see <see cref="Http.RuntimeClient"/>).
 /// </summary>
 public static class ActorOption
 {
@@ -26,6 +28,12 @@ public static class ActorOption
 
     /// <summary>A resume's help: whoever is named ends the wait, a person or not.</summary>
     public const string NoDefaultForResume = "The CLI's default actor does not apply here: name who ends it, e.g. --actor human:<Name>.";
+
+    /// <summary>
+    /// The help of an act the runtime takes from any caller but the CLI will not put this account's name on by itself:
+    /// lifting a suppression, setting or unsetting a route, and setting a role's execution profile.
+    /// </summary>
+    public const string NoDefaultForAnAct = "The CLI's default actor does not apply here: it will not put this account's name on this act by itself; name who does it, e.g. --actor human:<Name>.";
 
     /// <summary>A report's help: the reporter is named, a person or a role, and never taken from the machine.</summary>
     public const string NoDefaultForReport = "The CLI's default actor does not apply here: name who reports it with --actor human:<Name> or --actor role:<id>.";
@@ -42,8 +50,9 @@ public static class ActorOption
             + "Without it, a running executor is its attempt, and anything else is written as human:<this account's name>, "
             + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
-            + "clearing a block, resuming a work item, rewinding a subscription "
-            + "and submitting a report take no default. "
+            + "clearing a block, resuming a work item, rewinding a subscription, submitting a report, "
+            + "lifting a suppression, setting or unsetting a route, "
+            + "and setting a role's execution profile take no default. "
             + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
             + "and approving, rejecting, setting or unsetting a standing approval and answering are refused there.",
         Recursive = true,
@@ -59,10 +68,11 @@ public static class ActorOption
         actor ?? (string.IsNullOrWhiteSpace(accountName) ? null : new JsonObject { ["type"] = "human", ["id"] = accountName });
 
     /// <summary>
-    /// Refuses a person's own word that names nobody, before anything is sent, in one sentence that names the form. The
-    /// runtime refuses it too, but only after the request, and in words that cannot say what the CLI's default was.
+    /// Refuses a verb that takes no default actor and names nobody, before anything is sent, in one sentence that names the
+    /// form. For a person's own word the runtime refuses it too, but only after the request, and in words that cannot say
+    /// what the CLI's default was; for an act the runtime takes from any caller, the CLI alone asks who does it.
     /// <paramref name="how"/> is the form the sentence ends with: a person by default, whoever ends a wait for a resume,
-    /// a person or a role for a report.
+    /// a person or a role for a report, whoever does it for an act.
     /// </summary>
     public static JsonObject Named(JsonObject body, string verb, string why, string how = $"write {Name} human:<Name>")
     {
