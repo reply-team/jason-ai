@@ -126,3 +126,49 @@ test('a missing instruction text is logged once, by a closed line that names the
     });
     assert.equal(text.includes('planted'), false);
 });
+
+test('an instruction file that cannot be written is logged by a closed line that names the file and its error code, at the start and at the turn it refuses', async (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
+    mkdirSync(join(b.paths.chat, 'CLAUDE.md'), { recursive: true });
+    const log = fileLogger(b.paths.logs);
+    let ended: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => (ended = resolve));
+    const said: ChatEvent[] = [];
+    const chat = new Chat({
+        paths: b.paths,
+        env: b.env,
+        bundle: join(b.root, 'bundle'),
+        dataNamed: true,
+        cli: b.cli,
+        keyFor: () => undefined,
+        fence: () => fence,
+        emit(_chatId, event) {
+            said.push(event);
+            if (event.kind === 'done') ended();
+        },
+        ...loggedTurns(log),
+    });
+    t.after(() => chat.closeAll());
+    await chat.send('c1', 'planted words', { host: 'claude' });
+    await done;
+    assert.equal(said.length, 1);
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const unwritten = lines0(text).filter((line) => line.EventName === 'chat_instructions_unwritten');
+    assert.equal(unwritten.length, 2, 'once at the start, once at the turn');
+    for (const each of unwritten) {
+        const { '@t': _at, Code: code, ...line } = each;
+        assert.match(String(code), /^E[A-Z]+$/);
+        assert.deepEqual(line, {
+            '@mt': 'The chat instruction file {File} could not be written ({Code}); turns are refused until it is',
+            '@l': 'Warning',
+            File: 'CLAUDE.md',
+            SourceContext: 'Jason.Desktop',
+            EventName: 'chat_instructions_unwritten',
+        });
+    }
+    assert.equal(text.includes('planted'), false);
+    assert.equal(text.includes(b.paths.chat), false, 'no path');
+    assert.equal(text.includes(JSON.stringify(b.paths.chat).slice(1, -1)), false, 'no path, escaped either');
+});

@@ -70,14 +70,40 @@ export interface ChatFence extends DenyList {
     instructions: string | null;
 }
 
+/** A file of the fence that could not be read or parsed, by its name; the error it met is its cause. */
+export class FenceUnreadable extends Error {
+    readonly file: string;
+
+    constructor(file: string, cause: unknown) {
+        super(`The chat file ${file} could not be read.`, { cause });
+        this.name = 'FenceUnreadable';
+        this.file = file;
+    }
+}
+
 /**
  * Reads the fence from the folder that carries its files. A list that cannot be read or parsed throws; an instruction
- * text that is not there is null, since a turn runs without it, and one that is there and cannot be read throws.
+ * text that is not there is null, since a turn runs without it, and one that is there and cannot be read throws. What
+ * throws is a `FenceUnreadable` that names the file.
  */
 export function readFence(directory: string): ChatFence {
-    const denied = parseDenyList(readFileSync(join(directory, denyListFile), 'utf8'));
-    const allowed = parseAllowList(readFileSync(join(directory, allowListFile), 'utf8'));
-    return { ...denied, allowed, instructions: readIfThere(join(directory, instructionsFile)) };
+    const read = <T>(file: string, take: (path: string) => T): T => {
+        try {
+            return take(join(directory, file));
+        } catch (error) {
+            throw new FenceUnreadable(file, error);
+        }
+    };
+    const denied = read(denyListFile, (path) => parseDenyList(readFileSync(path, 'utf8')));
+    const allowed = read(allowListFile, (path) => parseAllowList(readFileSync(path, 'utf8')));
+    return { ...denied, allowed, instructions: read(instructionsFile, readIfThere) };
+}
+
+/** The sentence a turn is refused with when the fence cannot be read: which of its files failed, in the desktop's words. */
+export function fenceRefusal(error: unknown): string {
+    return error instanceof FenceUnreadable && error.file === instructionsFile
+        ? 'The chat’s instruction text could not be read.'
+        : 'The chat’s allow and deny lists could not be read.';
 }
 
 function readIfThere(file: string): string | null {
