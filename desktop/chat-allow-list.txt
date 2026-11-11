@@ -43,7 +43,6 @@ plugin list
 preference list
 project create
 project get
-project link
 project list
 project update
 reply record

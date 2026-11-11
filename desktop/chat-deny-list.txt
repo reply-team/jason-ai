@@ -3,7 +3,9 @@
 # The listed commands are refused by the host's tool fence, and a command that names a listed operation is refused by
 # the desktop. A person runs them, in the page or in a terminal. An operation is told from a command by its dot.
 #
-# The verbs that are a person's own word (no default actor applies to them):
+# The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a
+# preference, a block cleared, work resumed, a report and a subscription rewound. The CLI gives them no default actor,
+# and gives none to four verbs further down either.
 approval approve
 approval reject
 approval set-standing
@@ -30,14 +32,18 @@ journal watch
 export
 import
 #
-# The verbs the chat refuses beyond the CLI's own table: taking someone off the do-not-contact register, changing which
-# plugin performs an operation, changing which profile a role runs on, and adding a role, whose entry command the
-# dispatcher starts when work names the role.
+# The verbs the CLI gives no default actor that change who is reached or what runs: taking someone off the
+# do-not-contact register, changing which plugin performs an operation, and changing which profile a role runs on.
 suppression remove
 route set
 route unset
 role set-profile
+#
+# The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when
+# work names the role, and linking a project's folder, which then becomes a working folder of every chat on the
+# project's campaigns.
 role add
+project link
 #
 # The Runtime API operations the verbs above call, so that a command naming one is refused by the desktop:
 approval.approve
@@ -61,6 +67,7 @@ route.set
 route.unset
 role.set_profile
 role.add
+project.link
 profile.create
 profile.update
 profile.get
