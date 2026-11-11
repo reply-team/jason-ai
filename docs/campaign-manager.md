@@ -507,6 +507,24 @@ names the provider's last word, so a stall for credits reads as one. A search a 
 stalled is not followed again by the poll: a read anybody makes still lands its page, and a stop still stops it. A search
 that ended stays as it ended: a later read still lands what it carries, and nothing is said twice.
 
+### Reading the audiences
+
+`jason campaign audience <campaign-id>` (`campaign.audience`) says where the campaign's audience stands, from the records
+above and nothing kept for the read: the untouched count and the threshold (§9); the allowance, with the searches it let
+go and the people they asked for, as `jason approval list-standing` shows it; and the campaign's audiences, the newest
+first, a page at a time. Each carries its number and id, when the claim that made it ran, its definition as that claim
+held it, how many people its searches landed, removed since or not, how many searches the provider took under it, and the
+latest of them, the newest first, ten unless `--search-limit` asks for up to a hundred: what each asked for, what the
+provider said it found and last said of it, how many it landed, when it began, and how and when it ended. A search's
+whole story stays in the chronicle (`audience_people_landed`, `audience_search_ended`). A search the provider has not
+taken yet, a probe waiting for a person among them, has no row: `jason approval list` and `jason workitem list` show it. With `--human`, each definition is laid out by the schema the
+plugin the campaign's route for searches declares, and shown as stored where that cannot be read.
+
+The people reads take `--audience <number>`: `jason campaign summary`, `activity`, `activity-by-period` and
+`list-contacts` then count and list only the people a search landed under that audience, each count by its own
+definition ([work execution](work-execution.md), "A campaign's people, counted"), so one audience's people are judged on
+their own: who was worked on, contacted, replied or opted out since they landed.
+
 ## 11. Not here yet
 
 - **Notifications.** Nothing tells anybody a review happened. A person finds out by reading the
@@ -517,8 +535,6 @@ that ended stays as it ended: a later read still lands what it carries, and noth
   [inbound sync](inbound-sync.md)), queues the read of the thread and the responder for a thread that is the
   campaign's own, and wakes the manager; it never reads or classifies the reply itself, and nothing tells a person
   one came. Reading it, and answering it, is the responder's; what it means for the campaign is the manager's.
-- **Reading the audiences.** No read lists a campaign's audiences or their searches yet, and the people reads take no
-  audience: `jason campaign list-contacts` names where each member came from, and nothing filters by it.
 - **One search at a time.** Nothing stops a campaign from running two searches at once; a provider may refuse the
   second itself (`search_in_progress`).
 - **Allowing in the browser.** The UI's approval panel approves or rejects a search; allowing more people under its

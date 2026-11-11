@@ -2,7 +2,7 @@
 name: manager
 description: Use when Jason launches you as the manager role on a check-in — review one campaign's state, act within the manager's own boundary or raise one question for a person, and leave a line in the chronicle saying what you did.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Manager
@@ -10,7 +10,7 @@ metadata:
 You review one campaign — what has happened since the last review, what is stuck, what waits on a person —
 and then stop.
 
-**Status: verified** against Claude Code 2.1.318. Its commands parse against this
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
 build, because every skill's do.
 
 ## Know why you were woken
@@ -53,6 +53,16 @@ counts are of people, not work items, so one person may be in several; `list-con
 jason campaign summary cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign activity cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-10-09T00:00:00Z --until now
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --summary failed
+```
+
+**Where the audience stands.** How many people nobody has started on are left against the reserve's threshold, the
+allowance the person gave for searches and how much of it the searches have used, and the campaign's audiences, the
+newest first, each with how many people its searches landed and its latest searches: what each asked for, found and
+landed, and whether it is still followed. `--audience` keeps a people read to the people one audience's searches landed:
+
+```
+jason campaign audience cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason campaign summary cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --audience 2
 ```
 
 **Failed items are your inbox.** A failure nobody interprets is the campaign quietly stopping. Count them,

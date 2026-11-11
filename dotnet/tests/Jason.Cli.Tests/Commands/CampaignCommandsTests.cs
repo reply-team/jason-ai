@@ -266,6 +266,23 @@ public class CampaignCommandsTests
         cli.AssertPosted(Operations.CampaignListContacts, posted);
     }
 
+    /// <summary>Each people read keeps to one audience's people by <c>--audience</c>, the audience's number, sent as <c>audience</c>.</summary>
+    [Theory]
+    [InlineData("summary", new string[0])]
+    [InlineData("activity", new[] { "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z" })]
+    [InlineData("activity-by-period", new[] { "--count", "replied", "--period", "day", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z" })]
+    [InlineData("list-contacts", new[] { "--summary", "waiting" })]
+    public async Task A_people_read_names_one_audience_by_its_number(string verb, string[] rest)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(["campaign", verb, "cmp_A", "--audience", "2", .. rest]);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var sent = JsonNode.Parse(cli.Sent!)!;
+        Assert.Equal(("[\"cmp_A\"]", 2), (sent["campaign_ids"]!.ToJsonString(), sent["audience"]!.GetValue<int>()));
+    }
+
     [Fact]
     public async Task Summary_asks_for_the_campaigns_named_or_for_every_one()
     {
@@ -454,6 +471,164 @@ public class CampaignCommandsTests
         Assert.Equal([Operation(verb)], cli.Operations);
         Assert.Equal(counts, cli.Text.TrimEnd());
     }
+
+    [Fact]
+    public async Task Audience_asks_for_one_campaign_s_audience_a_page_at_a_time()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("campaign", "audience", "cmp_A", "--limit", "2", "--cursor", "Mg", "--search-limit", "5");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.CampaignAudience, "{\"campaign_id\":\"cmp_A\",\"limit\":2,\"cursor\":\"Mg\",\"search_limit\":5}");
+    }
+
+    /// <summary>
+    /// For people, the reserve and the allowance as lines, then each audience: its definition laid out by the schema the
+    /// plugin the campaign's route for searches declares — its properties in the schema's order, each with the side of a
+    /// person it filters on — and its searches as a table. The schema is asked once, of <c>operation.describe</c>.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_renders_the_audience_with_each_definition_laid_out_by_the_plugin_s_schema()
+    {
+        var described = JsonSerializer.Serialize(new OperationDescriptionDto("audience.search", 1, "reply", "0.15.2", [], Definition()), JasonJson.Options);
+        using var cli = new FolderRun(null, (operation, _) => (HttpStatusCode.OK, operation == Operations.OperationDescribe ? described : AudienceView()));
+
+        var exit = await cli.RunAsync("campaign", "audience", "cmp_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal([Operations.CampaignAudience, Operations.OperationDescribe], cli.Operations);
+        cli.AssertSent(1, "{\"campaign_id\":\"cmp_A\",\"operation\":\"audience.search\"}");
+        var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd()).ToList();
+        Assert.Equal(
+            [
+                "Campaign:   cmp_A",
+                "Untouched:  2, threshold 3",
+                "Allowance:  audience 2, 50 of 100 people, 50 per search, in force",
+                "Let go:     1",
+                "Set by:     human:Ada Example, 2026-10-16 09:00:00 UTC",
+                "Audience 2  aud_B  made 2026-10-01 10:00:00 UTC  9 landed, 3 searches",
+                "  industries (company): Software, Logistics",
+                "  jobTitles (person): Head of Sales",
+            ],
+            lines[..8]);
+        Assert.Equal(["SEARCH", "STATE", "ASKED", "FOUND", "LANDED", "BEGAN", "ENDED"], Cells(lines[8]));
+        Assert.Equal(["wi_S3", "in_progress", "50", "-", "2", "2026-10-01 11:00:00 UTC", "-"], Cells(lines[10]));
+        Assert.Equal(
+            [
+                "  2 earlier searches not shown.",
+                "Audience 1  aud_A  made 2026-10-01 10:00:00 UTC  0 landed, 0 searches",
+                "  industries (company): {value: Retail, type: exclude}, {value: Zürich Banking, type: include}",
+                "  No search taken.",
+            ],
+            lines[11..]);
+    }
+
+    /// <summary>
+    /// The rest a view may say: a campaign that keeps no threshold and holds no allowance, a page that goes on, a definition
+    /// member the plugin's schema does not declare, which comes after the declared ones, and one it declares no side for.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_says_no_threshold_no_allowance_the_next_page_and_what_the_schema_does_not_place()
+    {
+        var made = new DateTimeOffset(2026, 10, 1, 10, 0, 0, TimeSpan.Zero);
+        var view = JsonSerializer.Serialize(
+            new CampaignAudienceResponse(
+                "cmp_A",
+                new AudienceReserve(5, null),
+                null,
+                [new CampaignAudienceDto("aud_A", 1, made, new JsonObject { ["keywords"] = new JsonArray("fintech"), ["industries"] = new JsonArray("Software") }, 1, 1,
+                    [new AudienceSearchDto("wi_S1", "finished", 1, 1, 1, made.AddHours(1), "finished", made.AddHours(2))])],
+                "Mg"),
+            JasonJson.Options);
+        var described = JsonSerializer.Serialize(
+            new OperationDescriptionDto(
+                "audience.search", 1, "reply", "0.15.2", [],
+                new JsonObject { ["schema"] = new JsonObject { ["properties"] = new JsonObject { ["industries"] = new JsonObject() } }, ["keys"] = new JsonObject() }),
+            JasonJson.Options);
+        using var cli = new FolderRun(null, (operation, _) => (HttpStatusCode.OK, operation == Operations.OperationDescribe ? described : view));
+
+        var exit = await cli.RunAsync("campaign", "audience", "cmp_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd()).ToList();
+        Assert.Equal(["Campaign:   cmp_A", "Untouched:  5, no threshold", "Allowance:  none", "Audience 1  aud_A  made 2026-10-01 10:00:00 UTC  1 landed, 1 search"], lines[..4]);
+        Assert.Equal(["  industries: Software", "  keywords: fintech"], lines[4..6]);
+        Assert.Equal(["wi_S1", "finished", "1", "1", "1", "2026-10-01 11:00:00 UTC", "finished, 2026-10-01 12:00:00 UTC"], Cells(lines[8]));
+        Assert.Equal("next cursor: Mg", lines[^1]);
+    }
+
+    /// <summary>Where the plugin's schema cannot be read, each definition is shown as the runtime stored it, and the rest the same.</summary>
+    [Fact]
+    public async Task Human_mode_shows_a_definition_as_stored_where_the_schema_cannot_be_read()
+    {
+        using var cli = new FolderRun(null, (operation, _) => operation == Operations.OperationDescribe
+            ? (HttpStatusCode.Conflict, "{\"error\":{\"code\":\"no_route\",\"message\":\"No route.\",\"retryable\":false}}")
+            : (HttpStatusCode.OK, AudienceView()));
+
+        var exit = await cli.RunAsync("campaign", "audience", "cmp_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("  definition: {\"jobTitles\":[\"Head of Sales\"],\"industries\":[\"Software\",\"Logistics\"]}", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Audience 1  aud_A", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Spring's view: two untouched against a threshold of three, the allowance on audience 2, audience 2 with three
+    /// searches of which the one still followed is listed, audience 1 with none the provider took. Audience 2's definition
+    /// names its keys in another order than the plugin's schema declares them.
+    /// </summary>
+    private static string AudienceView()
+    {
+        var made = new DateTimeOffset(2026, 10, 1, 10, 0, 0, TimeSpan.Zero);
+        var allowance = new StandingApprovalDto(
+            "cmp_A", null, ["audience.search"], new AudienceRef("aud_B", 2), null, null, 100, 50, 1, 50, true,
+            new ActorRef(ActorType.Human, "Ada Example"), new DateTimeOffset(2026, 10, 16, 9, 0, 0, TimeSpan.Zero), "jrn_A");
+        return JsonSerializer.Serialize(
+            new CampaignAudienceResponse(
+                "cmp_A",
+                new AudienceReserve(2, 3),
+                allowance,
+                [
+                    new CampaignAudienceDto(
+                        "aud_B", 2, made, new JsonObject { ["jobTitles"] = new JsonArray("Head of Sales"), ["industries"] = new JsonArray("Software", "Logistics") }, 9, 3,
+                        [new AudienceSearchDto("wi_S3", "in_progress", 50, null, 2, made.AddHours(1), null, null)]),
+                    new CampaignAudienceDto(
+                        "aud_A",
+                        1,
+                        made,
+                        new JsonObject
+                        {
+                            ["industries"] = new JsonArray(
+                                new JsonObject { ["value"] = "Retail", ["type"] = "exclude" },
+                                new JsonObject { ["value"] = "Zürich Banking", ["type"] = "include" }),
+                        },
+                        0,
+                        0,
+                        []),
+                ],
+                null),
+            JasonJson.Options);
+    }
+
+    /// <summary>A plugin's declared definition: industries on the company's side, then job titles on the person's.</summary>
+    private static JsonObject Definition() => new()
+    {
+        ["schema"] = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["industries"] = new JsonObject { ["type"] = "array" },
+                ["jobTitles"] = new JsonObject { ["type"] = "array" },
+            },
+        },
+        ["keys"] = new JsonObject
+        {
+            ["industries"] = new JsonObject { ["side"] = "company" },
+            ["jobTitles"] = new JsonObject { ["side"] = "person" },
+        },
+    };
 
     private static Func<string, JsonObject, (HttpStatusCode Status, string Body)> Answer(string counts, string campaigns) =>
         (operation, _) => (HttpStatusCode.OK, operation == Operations.CampaignList ? campaigns : counts);

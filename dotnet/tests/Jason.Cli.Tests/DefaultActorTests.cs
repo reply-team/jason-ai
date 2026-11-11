@@ -286,6 +286,7 @@ public class DefaultActorTests
         ["campaign", "summary", "cmp_A"],
         ["campaign", "activity", "cmp_A", "--since", "2026-10-12T00:00:00Z", "--until", "2026-10-13T00:00:00Z"],
         ["campaign", "activity-by-period", "cmp_A", "--count", "replied", "--period", "day", "--since", "2026-10-12T00:00:00Z", "--until", "2026-10-13T00:00:00Z"],
+        ["campaign", "audience", "cmp_A"],
         ["project", "create", "--name", "Northwind"],
         ["project", "get", "prj_A"],
         ["project", "list"],

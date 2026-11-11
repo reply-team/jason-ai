@@ -35,7 +35,7 @@ public static class OperationFamilies
     public static IReadOnlySet<string> ReadVerbs { get; } = new[]
     {
         "get", "list", "count", "summary", "activity", "activity_by_period", "list_contacts", "list_standing", "resolve",
-        "sources", "kinds", "describe",
+        "sources", "kinds", "describe", "audience",
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>The nouns no read of a handler's reaches: the installation's own and the UI's own.</summary>

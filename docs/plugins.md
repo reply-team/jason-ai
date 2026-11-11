@@ -1449,7 +1449,7 @@ family, or in none:
 
 | Family | Opens |
 |---|---|
-| `read` | every operation that only reads: its verb is `get`, `list`, `count`, `summary`, `activity`, `activity_by_period`, `list_contacts`, `list_standing`, `resolve`, `sources`, `kinds` or `describe`, and its noun is not `system` or `ui` |
+| `read` | every operation that only reads: its verb is `get`, `list`, `count`, `summary`, `activity`, `activity_by_period`, `list_contacts`, `list_standing`, `resolve`, `sources`, `kinds`, `describe` or `audience`, and its noun is not `system` or `ui` |
 | `campaign` | `campaign.create`, `campaign.update`, `campaign.start`, `campaign.pause`, `campaign.archive`, `campaign.update_context`, `campaign.add_contacts`, `campaign.remove_contacts` |
 | `contact` | `contact.create`, `contact.update`, `contact.archive` |
 | `workitem` | `workitem.create`, `workitem.update`, `workitem.cancel` |

@@ -491,6 +491,12 @@ whose person they are, and a line about them a journal line of that campaign tha
 line of each campaign it reaches ([docs/events.md](events.md) §3): one that no campaign's provider campaign places, such
 as the reply to a direct email or a message outside a sequence, reaches every campaign not archived that the person is a
 member of, so one reply counts in each of them and once in `total`.
+`--audience <number>` (`audience`) keeps `campaign summary`, `campaign activity`, `campaign activity-by-period` (below)
+and `campaign list-contacts` to one of the campaign's audiences
+([docs/campaign-manager.md](campaign-manager.md) §10): the memberships a search landed under it, removed since or not,
+and no other, each count by its own definition. An audience is one campaign's, so the read names that campaign alone;
+one nobody landed under answers zeros, and a number the campaign holds none under is refused, `audience_unknown`. A
+member added any other way is in no audience.
 
 Now:
 

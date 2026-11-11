@@ -88,5 +88,39 @@ public class AudienceSearchesSchemaTests
             await PlanAsync(db, MembershipService.Listed(db.CampaignContacts.Where(membership => membership.CampaignId == 1), [1, 2]).ToQueryString()));
     }
 
+    /// <summary>
+    /// The audience view reads a page of a campaign's audiences off the end of its index on their numbers, the next page from
+    /// where the last stopped; each audience's latest searches off the end of the searches' index on the audience, with no
+    /// sort, stopping at the limit; and each audience's counts by the same index: never a sort of the campaign's audiences or
+    /// of an audience's searches, and never a scan.
+    /// </summary>
+    [Fact]
+    public async Task The_audience_view_reads_a_campaign_s_audiences_their_searches_and_their_people_by_an_index()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+
+        Assert.Equal(
+            ["SEARCH a USING INDEX ix_audiences_campaign_id_number (campaign_id=?)"],
+            await PlanAsync(db, CampaignAudienceView.Page(db, 1, null, 101).ToQueryString()));
+        Assert.Equal(
+            ["SEARCH a USING INDEX ix_audiences_campaign_id_number (campaign_id=? AND number<?)"],
+            await PlanAsync(db, CampaignAudienceView.Page(db, 1, 4, 101).ToQueryString()));
+        Assert.Equal(
+            [
+                "SEARCH a USING INTEGER PRIMARY KEY (rowid=?)",
+                "LIST SUBQUERY 2",
+                "SCAN json_each VIRTUAL TABLE INDEX 1:",
+                "SEARCH s USING INTEGER PRIMARY KEY (rowid=?)",
+                "CORRELATED LIST SUBQUERY 1",
+                "SEARCH t USING COVERING INDEX ix_audience_searches_audience_id (audience_id=?)",
+                "SEARCH w USING INTEGER PRIMARY KEY (rowid=?)",
+            ],
+            await PlanAsync(db, CampaignAudienceView.Searches(db, [1, 2], 10).ToQueryString()));
+        Assert.Equal(
+            ["SEARCH a USING INDEX ix_audience_searches_audience_id (audience_id=?)"],
+            await PlanAsync(db, CampaignAudienceView.Tallies(db, [1, 2]).ToQueryString()));
+    }
+
     private static Task<List<string>> PlanAsync(Jason.Runtime.Persistence.JasonDbContext db, string sql) => QueryPlans.PlanAsync(db, sql, Ct);
 }

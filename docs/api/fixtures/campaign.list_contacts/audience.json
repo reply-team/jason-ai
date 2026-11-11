@@ -1,0 +1,291 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "audience",
+  "request": {
+    "campaign_id": "cmp_1",
+    "audience": 1
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "contact": {
+          "id": "cnt_1",
+          "first_name": "Ada",
+          "last_name": "Example",
+          "company": "Ada Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "ada@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_2",
+              "campaign_name": "Autumn",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            },
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-12T09:00:00.000Z",
+              "updated_at": "2026-10-12T09:00:00.000Z"
+            }
+          ],
+          "last_activity": null
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-12T09:00:00.000Z",
+        "updated_at": "2026-10-12T09:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_1"
+          }
+        ],
+        "source": {
+          "audience": "aud_1",
+          "number": 1,
+          "search": "wi_1",
+          "landed_at": "2026-10-01T11:00:00.000Z"
+        }
+      },
+      {
+        "contact": {
+          "id": "cnt_2",
+          "first_name": "Ben",
+          "last_name": "Example",
+          "company": "Ben Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "ben@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            }
+          ],
+          "last_activity": null
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_1"
+          }
+        ],
+        "source": {
+          "audience": "aud_1",
+          "number": 1,
+          "search": "wi_1",
+          "landed_at": "2026-10-01T11:00:00.000Z"
+        }
+      },
+      {
+        "contact": {
+          "id": "cnt_3",
+          "first_name": "Cleo",
+          "last_name": "Example",
+          "company": "Cleo Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "cleo@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            }
+          ],
+          "last_activity": null
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_1"
+          }
+        ],
+        "source": {
+          "audience": "aud_1",
+          "number": 1,
+          "search": "wi_1",
+          "landed_at": "2026-10-01T11:00:00.000Z"
+        }
+      },
+      {
+        "contact": {
+          "id": "cnt_4",
+          "first_name": "Jon",
+          "last_name": "Example",
+          "company": "Jon Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "jon@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_1",
+            "ts": "2026-10-14T10:00:00.000Z",
+            "actor": {
+              "type": "system",
+              "id": null
+            },
+            "kind": "inbound_reply_observed",
+            "campaign_id": "cmp_1",
+            "work_item_id": null,
+            "attempt_id": null,
+            "key": "sha256:recorded-1",
+            "old": null,
+            "new": {
+              "plugin": "reply",
+              "thread": "t-Jon",
+              "channel": "email",
+              "last_activity_at": "2026-10-14T08:00:00.000Z",
+              "unread": true,
+              "has_meeting_intent": null,
+              "contact_id": "cnt_4"
+            },
+            "reason": null,
+            "contact_id": "cnt_4",
+            "campaign_name": "Spring",
+            "contact_name": "Jon Example",
+            "work_item_kind": null,
+            "work_item_role": null,
+            "work_item_operation": null,
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_1"
+          }
+        ],
+        "source": {
+          "audience": "aud_1",
+          "number": 1,
+          "search": "wi_1",
+          "landed_at": "2026-10-01T11:00:00.000Z"
+        }
+      },
+      {
+        "contact": {
+          "id": "cnt_5",
+          "first_name": "Quinn",
+          "last_name": "Example",
+          "company": "Quinn Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "quinn@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z"
+            }
+          ],
+          "last_activity": null
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_1"
+          }
+        ],
+        "source": {
+          "audience": "aud_1",
+          "number": 1,
+          "search": "wi_1",
+          "landed_at": "2026-10-01T11:00:00.000Z"
+        }
+      }
+    ],
+    "next_cursor": null
+  }
+}

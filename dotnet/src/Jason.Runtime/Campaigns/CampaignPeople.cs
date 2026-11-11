@@ -24,7 +24,8 @@ namespace Jason.Runtime.Campaigns;
 /// only SQLite's own functions reach. Work "about" a person is work whose campaign is the membership's and whose person
 /// is the member; a line about a person is a line of the campaign whose person column is the member. <c>{0}</c> is the
 /// campaigns asked as a JSON array of keys; an activity's period is <c>{1}</c> to <c>{2}</c>, since included and until
-/// not.
+/// not; and one audience's reads (<see cref="OneAudience"/>) take the audience's key last, as <c>{1}</c> after the
+/// campaigns or <c>{3}</c> after a period.
 /// </para>
 /// </remarks>
 internal static class CampaignPeople
@@ -162,6 +163,13 @@ internal static class CampaignPeople
     // Everyone it happened to, removed since or not: last week does not change because somebody was taken out today.
     private const string ActivityMembers = $"cc.campaign_id IN {Asked}";
 
+    // One audience's people: the memberships a search landed under it, read off the landing rows' index on the audience as
+    // one more condition on the base set, so every count keeps its definition. The audience is a read's last parameter:
+    // {1} after the campaigns, {3} after a period.
+    private const string LandedAfterCampaigns = "cc.id IN (SELECT campaign_contact_id FROM audience_landings WHERE audience_id = {1})";
+
+    private const string LandedAfterPeriod = "cc.id IN (SELECT campaign_contact_id FROM audience_landings WHERE audience_id = {3})";
+
     private static readonly Part WorkPart = new(
         "wk",
         Work,
@@ -223,26 +231,6 @@ internal static class CampaignPeople
             [.. Happenings.SelectMany(happening => happening.Parts).Distinct()]),
         .. Happenings,
     ];
-
-    /// <summary>Each Summary count's people, as rows of <c>campaign_contacts</c>.</summary>
-    internal static readonly FrozenDictionary<CampaignSummaryFilter, string> Summary = SummaryDefinitions.ToFrozenDictionary(
-        definition => definition.Filter,
-        definition => $"SELECT * FROM ({Facts(definition.Parts, SummaryMembers)}) AS f WHERE {definition.Condition}");
-
-    /// <summary>
-    /// The untouched members of one campaign: the summary's <c>new</c>, by the same SQL, which is what the reserve step
-    /// counts, so the number it says and the number the summary shows cannot drift apart.
-    /// </summary>
-    internal static readonly string UntouchedCountSql = $"SELECT count(*) AS Value FROM ({Summary[CampaignSummaryFilter.New]}) AS n";
-
-    /// <summary>Every Summary count per campaign, from the same conditions the lists filter by.</summary>
-    internal static readonly string SummaryCountsSql =
-        $"SELECT f.campaign_id AS CampaignId, sum(CASE WHEN {Current} THEN 1 ELSE 0 END) AS People, {Sums(SummaryDefinitions)} "
-        + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), SummaryMembers)}) AS f GROUP BY f.campaign_id";
-
-    internal static readonly string ActivityCountsSql =
-        $"SELECT f.campaign_id AS CampaignId, {Sums(ActivityDefinitions)} "
-        + $"FROM ({Facts(ActivityDefinitions.SelectMany(definition => definition.Parts), ActivityMembers)}) AS f GROUP BY f.campaign_id";
 
     // When each Activity count's happenings happened, one row each, dated where the list's why dates it: an addition by
     // the membership or the line that added the person back, work by its finish, a reply by the provider's moment of the
@@ -308,46 +296,47 @@ internal static class CampaignPeople
     private static readonly string People = string.Join(
         " UNION ALL ", HappeningMoments.Where(pair => pair.Key != CampaignActivityFilter.Contacted).Select(pair => pair.Value));
 
-    /// <summary>
-    /// Each Activity count's happenings in the period, a member's id and the moment as Unix milliseconds, which SQLite's
-    /// julian day rounds to exactly; People is every count's.
-    /// </summary>
-    internal static readonly FrozenDictionary<CampaignActivityFilter, string> Moments = Enum.GetValues<CampaignActivityFilter>().ToFrozenDictionary(
-        count => count,
-        count => "SELECT h.contact_id AS ContactId, CAST(round((h.day - 2440587.5) * 86400000.0) AS INTEGER) AS Ms "
-            + $"FROM ({(count == CampaignActivityFilter.People ? People : HappeningMoments[count])}) AS h "
-            + "JOIN campaign_contacts AS cc ON cc.campaign_id = h.campaign_id AND cc.contact_id = h.contact_id");
+    /// <summary>The reads over every membership of the campaigns asked.</summary>
+    internal static readonly Reads Everyone = new(SummaryMembers, ActivityMembers, string.Empty);
+
+    /// <summary>The same reads over one audience's memberships among them, the audience their last parameter.</summary>
+    internal static readonly Reads OneAudience = new(
+        $"{SummaryMembers} AND {LandedAfterCampaigns}", $"{ActivityMembers} AND {LandedAfterPeriod}", $" AND {LandedAfterPeriod}");
 
     /// <summary>
-    /// The people one Activity count counts across the campaigns asked, once each, with the latest moment it happened to
-    /// them: what an activity listing orders by, newest first.
+    /// The untouched members of one campaign: the summary's <c>new</c>, by the same SQL, which is what the reserve step
+    /// counts, so the number it says and the number the summary shows cannot drift apart.
     /// </summary>
-    internal static readonly FrozenDictionary<CampaignActivityFilter, string> PeopleByMoment = Moments.ToFrozenDictionary(
-        pair => pair.Key,
-        pair => "SELECT bym.ContactId AS ContactId, p.public_id AS PublicId, max(bym.Ms) AS Ms "
-            + $"FROM ({pair.Value}) AS bym JOIN contacts AS p ON p.id = bym.ContactId GROUP BY bym.ContactId, p.public_id");
+    internal static readonly string UntouchedCountSql = $"SELECT count(*) AS Value FROM ({Everyone.Summary[CampaignSummaryFilter.New]}) AS n";
 
-    /// <summary>Every Summary count across the campaigns asked, a person once, from the same conditions.</summary>
-    internal static readonly string SummaryTotalSql =
-        $"SELECT 0 AS CampaignId, count(DISTINCT CASE WHEN {Current} THEN f.contact_id END) AS People, {Distincts(SummaryDefinitions)} "
-        + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), SummaryMembers)}) AS f";
-
-    internal static readonly string ActivityTotalSql =
-        $"SELECT 0 AS CampaignId, {Distincts(ActivityDefinitions)} "
-        + $"FROM ({Facts(ActivityDefinitions.SelectMany(definition => definition.Parts), ActivityMembers)}) AS f";
-
-    /// <summary>The people of these campaigns one Summary count counts, now.</summary>
-    public static IQueryable<CampaignContact> Matching(JasonDbContext db, IReadOnlyCollection<int> campaignIds, CampaignSummaryFilter filter)
+    /// <summary>
+    /// The people of these campaigns one Summary count counts, now; of one audience's people among them where
+    /// <paramref name="audience"/> names its row.
+    /// </summary>
+    public static IQueryable<CampaignContact> Matching(JasonDbContext db, IReadOnlyCollection<int> campaignIds, CampaignSummaryFilter filter, int? audience = null)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.CampaignContacts.FromSqlRaw(Summary[filter], Keys(campaignIds));
+        return db.CampaignContacts.FromSqlRaw(Of(audience).Summary[filter], Args(audience, Keys(campaignIds)));
+    }
+
+    /// <summary>
+    /// The memberships among these that a search landed under one audience, its row <paramref name="audience"/>: what the
+    /// reads of one audience's people are kept to, through the landing rows' index on the audience.
+    /// </summary>
+    public static IQueryable<CampaignContact> LandedUnder(JasonDbContext db, IQueryable<CampaignContact> memberships, int audience)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return memberships.Where(membership => db.AudienceLandings
+            .Where(landing => landing.AudienceId == audience)
+            .Select(landing => landing.CampaignContactId)
+            .Contains(membership.Id));
     }
 
     /// <summary>Every Summary count of each campaign asked that has people, in one read.</summary>
-    public static Task<Dictionary<int, SummaryCounts>> SummaryCountsAsync(JasonDbContext db, IReadOnlyCollection<int> campaignIds, CancellationToken ct)
+    public static Task<Dictionary<int, SummaryCounts>> SummaryCountsAsync(JasonDbContext db, IReadOnlyCollection<int> campaignIds, int? audience, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Database.SqlQueryRaw<SummaryCounts>(SummaryCountsSql, Keys(campaignIds)).ToDictionaryAsync(counts => counts.CampaignId, ct);
+        return db.Database.SqlQueryRaw<SummaryCounts>(Of(audience).SummaryCounts, Args(audience, Keys(campaignIds))).ToDictionaryAsync(counts => counts.CampaignId, ct);
     }
 
     /// <summary>How many untouched members one campaign has now: its <c>new</c>, read on its own.</summary>
@@ -359,42 +348,42 @@ internal static class CampaignPeople
 
     /// <summary>Every Activity count of each campaign asked that has had people, in one read.</summary>
     public static Task<Dictionary<int, ActivityCounts>> ActivityCountsAsync(
-        JasonDbContext db, IReadOnlyCollection<int> campaignIds, DateTime since, DateTime until, CancellationToken ct)
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, DateTime since, DateTime until, int? audience, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Database.SqlQueryRaw<ActivityCounts>(ActivityCountsSql, Keys(campaignIds), Utc(since), Utc(until))
+        return db.Database.SqlQueryRaw<ActivityCounts>(Of(audience).ActivityCounts, Args(audience, Keys(campaignIds), Utc(since), Utc(until)))
             .ToDictionaryAsync(counts => counts.CampaignId, ct);
     }
 
     /// <summary>Every Summary count across the campaigns asked, each person once.</summary>
-    public static Task<SummaryCounts> SummaryTotalAsync(JasonDbContext db, IReadOnlyCollection<int> campaignIds, CancellationToken ct)
+    public static Task<SummaryCounts> SummaryTotalAsync(JasonDbContext db, IReadOnlyCollection<int> campaignIds, int? audience, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Database.SqlQueryRaw<SummaryCounts>(SummaryTotalSql, Keys(campaignIds)).SingleAsync(ct);
+        return db.Database.SqlQueryRaw<SummaryCounts>(Of(audience).SummaryTotal, Args(audience, Keys(campaignIds))).SingleAsync(ct);
     }
 
     /// <summary>Every Activity count across the campaigns asked, each person once.</summary>
     public static Task<ActivityCounts> ActivityTotalAsync(
-        JasonDbContext db, IReadOnlyCollection<int> campaignIds, DateTime since, DateTime until, CancellationToken ct)
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, DateTime since, DateTime until, int? audience, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Database.SqlQueryRaw<ActivityCounts>(ActivityTotalSql, Keys(campaignIds), Utc(since), Utc(until)).SingleAsync(ct);
+        return db.Database.SqlQueryRaw<ActivityCounts>(Of(audience).ActivityTotal, Args(audience, Keys(campaignIds), Utc(since), Utc(until))).SingleAsync(ct);
     }
 
     /// <summary>The people of one Activity count across the campaigns asked, each with the latest moment it happened, to compose on.</summary>
     public static IQueryable<PersonMoment> ByMoment(
-        JasonDbContext db, IReadOnlyCollection<int> campaignIds, CampaignActivityFilter count, DateTime since, DateTime until)
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, CampaignActivityFilter count, DateTime since, DateTime until, int? audience = null)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Database.SqlQueryRaw<PersonMoment>(PeopleByMoment[count], Keys(campaignIds), Utc(since), Utc(until));
+        return db.Database.SqlQueryRaw<PersonMoment>(Of(audience).PeopleByMoment[count], Args(audience, Keys(campaignIds), Utc(since), Utc(until)));
     }
 
     /// <summary>Every happening of one Activity count in the period, across the campaigns asked, in no order.</summary>
     public static Task<List<Moment>> MomentsAsync(
-        JasonDbContext db, IReadOnlyCollection<int> campaignIds, CampaignActivityFilter count, DateTime since, DateTime until, CancellationToken ct)
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, CampaignActivityFilter count, DateTime since, DateTime until, int? audience, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Database.SqlQueryRaw<Moment>(Moments[count], Keys(campaignIds), Utc(since), Utc(until)).ToListAsync(ct);
+        return db.Database.SqlQueryRaw<Moment>(Of(audience).Moments[count], Args(audience, Keys(campaignIds), Utc(since), Utc(until))).ToListAsync(ct);
     }
 
     /// <summary>The campaigns among these whose provider campaign is pinned: only they can say who is in the sequence.</summary>
@@ -431,8 +420,80 @@ internal static class CampaignPeople
         return $"SELECT cc.*{columns} FROM campaign_contacts AS cc{joins} WHERE {members}";
     }
 
+    private static Reads Of(int? audience) => audience is null ? Everyone : OneAudience;
+
+    /// <summary>A read's parameters, and the audience after them where one is asked.</summary>
+    private static object[] Args(int? audience, params object[] rest) => audience is { } one ? [.. rest, one] : rest;
+
     /// <summary>One table of facts about people, joined by campaign and person, or by person alone for what holds across campaigns.</summary>
     private sealed record Part(string Alias, string Sql, bool ByPerson, string Columns);
+
+    /// <summary>
+    /// Every people read over one base set of memberships: each Summary count's people as rows of
+    /// <c>campaign_contacts</c>, the counts per campaign and across the campaigns asked, and each Activity count's
+    /// happenings. The set's conditions are on <c>campaign_contacts</c> itself: before any fact is joined to it for a count,
+    /// and on the membership a happening is joined to for the happenings.
+    /// </summary>
+    internal sealed class Reads
+    {
+        /// <param name="summaryMembers">The base set of the Summary counts: every membership, the removed ones included.</param>
+        /// <param name="activityMembers">The base set of the Activity counts.</param>
+        /// <param name="momentMembers">What else the membership a happening is joined to must be.</param>
+        public Reads(string summaryMembers, string activityMembers, string momentMembers)
+        {
+            var summaryParts = SummaryDefinitions.SelectMany(definition => definition.Parts).ToList();
+            var activityParts = ActivityDefinitions.SelectMany(definition => definition.Parts).ToList();
+            Summary = SummaryDefinitions.ToFrozenDictionary(
+                definition => definition.Filter,
+                definition => $"SELECT * FROM ({Facts(definition.Parts, summaryMembers)}) AS f WHERE {definition.Condition}");
+            SummaryCounts = $"SELECT f.campaign_id AS CampaignId, sum(CASE WHEN {Current} THEN 1 ELSE 0 END) AS People, {Sums(SummaryDefinitions)} "
+                + $"FROM ({Facts(summaryParts, summaryMembers)}) AS f GROUP BY f.campaign_id";
+            SummaryTotal = $"SELECT 0 AS CampaignId, count(DISTINCT CASE WHEN {Current} THEN f.contact_id END) AS People, {Distincts(SummaryDefinitions)} "
+                + $"FROM ({Facts(summaryParts, summaryMembers)}) AS f";
+            ActivityCounts = $"SELECT f.campaign_id AS CampaignId, {Sums(ActivityDefinitions)} "
+                + $"FROM ({Facts(activityParts, activityMembers)}) AS f GROUP BY f.campaign_id";
+            ActivityTotal = $"SELECT 0 AS CampaignId, {Distincts(ActivityDefinitions)} "
+                + $"FROM ({Facts(activityParts, activityMembers)}) AS f";
+            Moments = Enum.GetValues<CampaignActivityFilter>().ToFrozenDictionary(
+                count => count,
+                count => "SELECT h.contact_id AS ContactId, CAST(round((h.day - 2440587.5) * 86400000.0) AS INTEGER) AS Ms "
+                    + $"FROM ({(count == CampaignActivityFilter.People ? People : HappeningMoments[count])}) AS h "
+                    + $"JOIN campaign_contacts AS cc ON cc.campaign_id = h.campaign_id AND cc.contact_id = h.contact_id{momentMembers}");
+            PeopleByMoment = Moments.ToFrozenDictionary(
+                pair => pair.Key,
+                pair => "SELECT bym.ContactId AS ContactId, p.public_id AS PublicId, max(bym.Ms) AS Ms "
+                    + $"FROM ({pair.Value}) AS bym JOIN contacts AS p ON p.id = bym.ContactId GROUP BY bym.ContactId, p.public_id");
+        }
+
+        /// <summary>Each Summary count's people, as rows of <c>campaign_contacts</c>.</summary>
+        public FrozenDictionary<CampaignSummaryFilter, string> Summary { get; }
+
+        /// <summary>Every Summary count per campaign, from the same conditions the lists filter by.</summary>
+        public string SummaryCounts { get; }
+
+        /// <summary>Every Summary count across the campaigns asked, a person once, from the same conditions.</summary>
+        public string SummaryTotal { get; }
+
+        public string ActivityCounts { get; }
+
+        public string ActivityTotal { get; }
+
+        /// <summary>
+        /// Each Activity count's happenings in the period, a member's id and the moment as Unix milliseconds, which SQLite's
+        /// julian day rounds to exactly; People is every count's.
+        /// </summary>
+        public FrozenDictionary<CampaignActivityFilter, string> Moments { get; }
+
+        /// <summary>
+        /// The people one Activity count counts across the campaigns asked, once each, with the latest moment it happened to
+        /// them: what an activity listing orders by, newest first.
+        /// </summary>
+        public FrozenDictionary<CampaignActivityFilter, string> PeopleByMoment { get; }
+
+        /// <summary>Every read, for a test that reads each one's plan.</summary>
+        public IEnumerable<string> All =>
+            [.. Summary.Values, SummaryCounts, SummaryTotal, ActivityCounts, ActivityTotal, .. Moments.Values, .. PeopleByMoment.Values];
+    }
 
     private sealed record Definition<TFilter>(TFilter Filter, string Condition, Part[] Parts)
         where TFilter : struct, Enum;

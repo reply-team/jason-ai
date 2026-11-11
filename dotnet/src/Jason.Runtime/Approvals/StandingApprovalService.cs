@@ -241,7 +241,8 @@ public sealed class StandingApprovalService(JasonDbContext db, JournalWriter jou
         return Dto(campaign, StandingApprovals.Read(set), released, people: null, now);
     }
 
-    private static StandingApprovalDto Dto(Campaign campaign, StandingApprovals.Record record, int released, int? people, DateTime now) =>
+    /// <summary>A standing approval as every read answers it: <c>approval.list_standing</c>, and the allowance <c>campaign.audience</c> shows.</summary>
+    internal static StandingApprovalDto Dto(Campaign campaign, StandingApprovals.Record record, int released, int? people, DateTime now) =>
         new(
 
             campaign.PublicId,
