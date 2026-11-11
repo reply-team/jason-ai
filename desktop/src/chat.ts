@@ -19,8 +19,9 @@ import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig 
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import type { Cli } from './cli.ts';
+import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
-import { programLaunch } from './programs.ts';
+import { programLaunch, type Programs } from './programs.ts';
 import { hosts, keyProvider, providerEnvironment } from './providers-model.ts';
 
 /** What the page is told, by the chat it belongs to: U2's `DesktopChatEvent`. */
@@ -56,6 +57,8 @@ export interface ChatOptions {
     /** The bundle's version, from which a host's label for reply-cli is built (`hostEnvironment`); null when there is none. */
     bundleVersion: string | null;
     cli: Cli;
+    /** The program runner, which reads Claude Code's version before each turn on it. */
+    programs: Pick<Programs, 'run'>;
     keyFor(providerId: string): string | undefined;
     /** The deny list's commands and operations, the allow list's verbs and the instruction text, read at each turn. */
     fence(): ChatFence;
@@ -177,7 +180,8 @@ export class Chat {
 
     /**
      * Starts a turn. It resolves once the host has started, or once the send was refused; a refusal, like every end, is
-     * a `done` with an error in plain words, and nothing was started. A chat id the desktop does not take has no chat to
+     * a `done` with an error in plain words, and no host was started: on Claude Code, one below the floor
+     * (`claudeFloor`) or whose version cannot be read is refused after `claude --version` and before anything else. A chat id the desktop does not take has no chat to
      * say `done` to, so that send rejects with an Error the page shows.
      */
     async send(chatId: unknown, text: unknown, options: unknown): Promise<void> {
@@ -197,6 +201,18 @@ export class Chat {
         const running: Running = { stopped: false, process: null, turnId: null };
         this.#running.set(chatId, running);
         try {
+            // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
+            // answering while the version is read, so a second send is refused as busy.
+            const held = resolved.program === 'claude' ? await this.#belowFloor() : null;
+            // A stop or a window close while the version was read: its answer is dropped and nothing of the turn is built.
+            if (running.stopped) {
+                this.#running.delete(chatId);
+                return this.#options.emit(chatId, { kind: 'done', error: null });
+            }
+            if (held !== null) {
+                this.#running.delete(chatId);
+                return refuse(held);
+            }
             await this.#turn(chatId, text, resolved, launch, given.campaignId as string | undefined, running);
         } catch (error) {
             this.#running.delete(chatId);
@@ -231,6 +247,11 @@ export class Chat {
             if (running.turnId !== null) removeQuietly(this.#options.paths.turns, running.turnId);
         }
         this.#broker.endAll();
+    }
+
+    /** Claude Code's version, read before each turn on it and never remembered, and the sentence when it is below the floor. */
+    async #belowFloor(): Promise<string | null> {
+        return floorSentence(printedVersion(await this.#options.programs.run('claude', ['--version'], { timeoutMs: versionLimitMs })));
     }
 
     #resolve(host: unknown, model: string | undefined): Resolved | string {

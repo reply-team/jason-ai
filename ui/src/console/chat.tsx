@@ -23,6 +23,7 @@ import { markdownView } from './markdown-view';
 import { svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
+import { reload as listHosts } from './connect';
 import { changeChat, chats, here, messageOf, setup } from './state';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
@@ -63,9 +64,14 @@ export function sendTurn(id: string, text: string, resent = false): void {
     if (!chat || chat.running || !words) return;
     const host = hostOf(chat);
     if (!host) {
+        // A host that was found and is held says what holds it, below the floor or a version not read, in its own mark.
+        const held = chatHosts(setup.value?.hosts ?? []).held[0]?.belowFloor;
         if (resent)
             changeChat(id, (each) =>
-                failed(said(each, words, true), 'No agent host that drives the chat was found on this machine.'),
+                failed(
+                    said(each, words, true),
+                    held ?? 'No agent host that drives the chat was found on this machine.',
+                ),
             );
         return;
     }
@@ -204,7 +210,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const view = useCallback(() => thread.value, [thread]);
     const chat = chats.value[chatId];
     if (!chat) return null;
-    const { drive, other } = chatHosts(setup.value?.hosts ?? []);
+    const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
     const host = hostOf(chat);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
@@ -231,7 +237,19 @@ export function ChatPanel({ chatId }: { chatId: string }) {
         <div className="chat-panel">
             <Painted className="thread" view={view} />
             <form className="composer" onSubmit={send} aria-label="Message">
-                {setup.value && !host && (
+                {setup.value && !host && held.length > 0 && (
+                    <div className="note am host-held">
+                        {[...new Set(held.map((each) => each.belowFloor!))].map((sentence) => (
+                            <div key={sentence}>
+                                {sentence.split('`').map((part, at) => (at % 2 ? <code key={at}>{part}</code> : part))}
+                            </div>
+                        ))}{' '}
+                        <button className="btn sm" type="button" onClick={() => void listHosts()}>
+                            Check again
+                        </button>
+                    </div>
+                )}
+                {setup.value && !host && held.length === 0 && (
                     <div className="note am">
                         No agent host that drives the chat was found on this machine. Connect lists the hosts and
                         installs one.{' '}
@@ -284,6 +302,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         {drive.map((each) => (
                             <option key={each.id} value={each.id}>
                                 {each.label}
+                            </option>
+                        ))}
+                        {held.map((each) => (
+                            <option key={each.id} value={each.id} disabled>
+                                {each.label}: {each.belowFloor!.replaceAll('`', '')}
                             </option>
                         ))}
                         {other.map((each) => (

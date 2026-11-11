@@ -43,18 +43,48 @@ export function signalGroup(
     kill: (pid: number, signal: NodeJS.Signals) => void,
     later: (run: () => void, ms: number) => void,
 ): void {
+    signalThenKill(-pid, kill, later);
+}
+
+function signalThenKill(
+    target: number,
+    kill: (pid: number, signal: NodeJS.Signals) => void,
+    later: (run: () => void, ms: number) => void,
+): void {
     try {
-        kill(-pid, 'SIGTERM');
+        kill(target, 'SIGTERM');
     } catch {
         return;
     }
     later(() => {
         try {
-            kill(-pid, 'SIGKILL');
+            kill(target, 'SIGKILL');
         } catch {
-            // The group is empty.
+            // The group, or the process, is gone.
         }
     }, graceMs);
+}
+
+/**
+ * Ends a process and what it started the way a stop ends a turn's host: on Windows `taskkill /T` from the system folder,
+ * elsewhere SIGTERM and then, after the grace period, SIGKILL, to the group the host leads or to a lone process.
+ */
+function endTree(pid: number, group: boolean): void {
+    if (process.platform === 'win32') {
+        const taskkill = join(process.env.SystemRoot ?? process.env.windir ?? 'C:\\Windows', 'System32', 'taskkill.exe');
+        execFile(taskkill, ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => undefined);
+        return;
+    }
+    signalThenKill(
+        group ? -pid : pid,
+        (target, signal) => process.kill(target, signal),
+        (run, ms) => setTimeout(run, ms).unref(),
+    );
+}
+
+/** Ends a program the programs module started that ran past its time limit, as a stop ends a turn's host. */
+export function endProgram(pid: number): void {
+    endTree(pid, false);
 }
 
 export function startHost(
@@ -98,16 +128,7 @@ export function startHost(
     function stopTree(): void {
         const pid = child.pid;
         if (pid === undefined) return;
-        if (windows) {
-            const taskkill = join(process.env.SystemRoot ?? process.env.windir ?? 'C:\\Windows', 'System32', 'taskkill.exe');
-            execFile(taskkill, ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => undefined);
-            return;
-        }
-        signalGroup(
-            pid,
-            (target, signal) => process.kill(target, signal),
-            (run, ms) => setTimeout(run, ms).unref(),
-        );
+        endTree(pid, true);
     }
 
     return {

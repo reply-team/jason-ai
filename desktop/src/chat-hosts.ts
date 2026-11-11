@@ -60,7 +60,7 @@ export interface ClaudeTurn {
  * (`cat`, `ls`, `grep` and the like) without asking, wherever the path they name; with reads outside the working folders
  * blocked, such a command on a path outside the chat folder and the added folders asks, and so reaches the permission
  * tool, as does a command whose folder the host cannot trace. It holds no secret, so it travels as inline JSON. The key
- * is read from Claude Code 2.1.257; an older version skips it without a word.
+ * is read from Claude Code 2.1.257, the floor no turn starts below (`claudeFloor`); an older version would skip it.
  */
 export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}';
 

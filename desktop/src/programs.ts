@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
+import { endProgram } from './chat-process.ts';
 import { findOnPath, launchOf, type Launch } from './program-path.ts';
 import { withReplyClient } from './reply-client.ts';
 import { withoutSessionMarkers } from './session-markers.ts';
@@ -77,18 +78,32 @@ function readText(file: string): string | null {
 
 const defaultLimit = 30_000;
 
-/** Runs a file with arguments and no shell, and reads what it said. Never rejects: a failure to start is an answer too. */
+/**
+ * Runs a file with arguments and no shell, and reads what it said. Never rejects: a failure to start is an answer too.
+ * At its time limit the answer is given at once, as stopped there, whether or not the program has gone, and the program
+ * is ended as a stop ends a chat turn's host (`endProgram`), so one that ignores the first signal cannot hold a caller.
+ */
 export function runFile(file: string, args: readonly string[], env: Record<string, string>, options: RunOptions = {}): Promise<RunResult> {
     return new Promise((resolve) => {
+        const limit = options.timeoutMs ?? defaultLimit;
+        let bound: ReturnType<typeof setTimeout> | undefined;
+        const answer = (result: RunResult) => {
+            clearTimeout(bound);
+            resolve(result);
+        };
         const child = execFile(
             file,
             [...args],
-            { env, cwd: options.cwd, timeout: options.timeoutMs ?? defaultLimit, windowsHide: true, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8' },
+            { env, cwd: options.cwd, windowsHide: true, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8' },
             (error, stdout, stderr) => {
                 const code = error && typeof (error as { code?: unknown }).code === 'number' ? ((error as { code: number }).code) : error ? -1 : 0;
-                resolve({ exit: code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') || (error && code === -1 ? error.message : '') });
+                answer({ exit: code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') || (error && code === -1 ? error.message : '') });
             },
         );
+        bound = setTimeout(() => {
+            answer({ exit: -1, stdout: '', stderr: `It was stopped at its time limit of ${limit} ms.` });
+            if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) endProgram(child.pid);
+        }, limit);
         child.stdin?.on('error', () => undefined);
         child.stdin?.end(options.stdin ?? '');
     });
