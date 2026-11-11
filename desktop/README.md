@@ -86,10 +86,13 @@ names still runs, or when the run file is there and cannot be read (`src/own-run
 directory it was started with.
 
 On Windows the installer and the uninstaller also look for any process running from the carried `jason.exe`, whichever
-data directory started it, and never close one (`installer/uninstall.nsh`). A person's uninstall starts the application
-with `--uninstall`, which stops the runtime it carries, takes off the PATH command's files that are its own, Open Jason
-at Login and the runtime's start at logon when it starts this application's `jason`, and names what it leaves: the data
-directory, the harness root and the updater's cache.
+data directory started it, and never close one (`installer/uninstall.nsh`): they stop it through the application's own
+`--stop-runtime` start, which runs `jason runtime stop` and exits, after asking a person first, and look again. One
+still running, started with another data directory say, ends the install or the uninstall before a file is replaced, and
+a person is told to stop it with `jason runtime stop` with `JASON_DATA_DIR` set to that directory. A person's uninstall
+starts the application with `--uninstall`, which stops the runtime it carries, takes off the PATH command's files that
+are its own, Open Jason at Login and the runtime's start at logon when it starts this application's `jason`, and names
+what it leaves: the data directory, the harness root and the updater's cache.
 
 On macOS there is no installer, so nothing looks when Jason.app is moved to the Trash, and the desktop's own look before
 an update is the whole guard. Before removing Jason.app, take off by hand what it placed:
