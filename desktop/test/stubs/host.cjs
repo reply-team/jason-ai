@@ -15,6 +15,8 @@
 // With no plan the turn says one line and ends well. STUB_RESUME says what a resume does: "missing" fails as a session
 // that is not there (Claude Code on stderr, Codex with an error event) before anything is said, "other" answers with a
 // session other than the one asked for and goes on as a turn would.
+// STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
+// as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');
 const { mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -54,6 +56,10 @@ function addCampaign(given) {
     writeFileSync(file, JSON.stringify(items));
 }
 
+function silent(asked) {
+    return process.env.STUB_SILENT === 'always' || (process.env.STUB_SILENT === 'resumed' && asked !== null);
+}
+
 function resumed(args) {
     const at = args.indexOf(args[0] === 'exec' ? 'resume' : '--resume');
     return at < 0 ? null : args[at + 1];
@@ -68,7 +74,7 @@ async function claude(args, stdin) {
     const session = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || 'stub-session-1');
     const config = args[args.indexOf('--mcp-config') + 1];
     print({ type: 'system', subtype: 'init', session_id: session });
-    print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
+    if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;
     for (const step of plan()) {
         if (step.say !== undefined) print({ type: 'assistant', message: { content: [{ type: 'text', text: step.say }] } });
@@ -113,9 +119,11 @@ function codex(args, stdin) {
     const thread = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || '0199a213-81c0-7800-8aa1-bbab2a035a53');
     print({ type: 'thread.started', thread_id: thread });
     print({ type: 'turn.started' });
-    print({ type: 'item.started', item: { id: 'item_1', type: 'command_execution', command: 'jason campaign list --json', status: 'in_progress' } });
-    print({ type: 'item.completed', item: { id: 'item_1', type: 'command_execution', command: 'jason campaign list --json', status: 'completed' } });
-    print({ type: 'item.completed', item: { id: 'item_2', type: 'agent_message', text: `heard ${stdin.length} characters` } });
+    if (!silent(asked)) {
+        print({ type: 'item.started', item: { id: 'item_1', type: 'command_execution', command: 'jason campaign list --json', status: 'in_progress' } });
+        print({ type: 'item.completed', item: { id: 'item_1', type: 'command_execution', command: 'jason campaign list --json', status: 'completed' } });
+        print({ type: 'item.completed', item: { id: 'item_2', type: 'agent_message', text: `heard ${stdin.length} characters` } });
+    }
     for (const step of plan()) {
         if (step.say !== undefined) print({ type: 'item.completed', item: { id: `item_say_${step.say.length}`, type: 'agent_message', text: step.say } });
         else if (step.campaign !== undefined) addCampaign(step.campaign);
