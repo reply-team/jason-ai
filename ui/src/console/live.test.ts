@@ -191,6 +191,23 @@ describe('what the console draws from the runtime', () => {
         expect(other.map((each) => each.id)).toEqual(['gemini']);
     });
 
+    it('holds aside, listed but not offered, a host the desktop marks below the floor, with its sentence', () => {
+        const old = 'Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on.';
+        const { drive, held, other } = chatHosts([
+            host({ version: '2.1.200', belowFloor: old }),
+            host({ id: 'claude-api-key', label: 'Anthropic', kind: 'provider', version: null, belowFloor: old }),
+            host({ id: 'codex', label: 'Codex' }),
+            host({ id: 'gemini', label: 'Gemini CLI', drivesChat: false }),
+            host({ id: 'deepseek', label: 'DeepSeek', kind: 'provider', found: false, version: null, belowFloor: old }),
+        ]);
+        expect(drive.map((each) => each.id)).toEqual(['codex']);
+        expect(held.map((each) => [each.id, each.belowFloor])).toEqual([
+            ['claude', old],
+            ['claude-api-key', old],
+        ]);
+        expect(other.map((each) => each.id)).toEqual(['gemini']);
+    });
+
     it('says how a program is signed in to, and knows a turn that failed on it', () => {
         expect(signInSentence(host({}))).toBe(
             'Sign in once by running `claude` in a terminal; the chat uses that sign-in.',

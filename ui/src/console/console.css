@@ -710,6 +710,12 @@
     gap: 6px;
     margin-left: -6px;
 }
+/* A host held below the floor is listed with a whole sentence; the closed list keeps to the row all the same. */
+.jc-console .composer select {
+    min-width: 0;
+    max-width: 60%;
+    text-overflow: ellipsis;
+}
 .jc-console .send {
     margin-left: auto;
     width: 34px;

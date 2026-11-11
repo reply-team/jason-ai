@@ -195,6 +195,10 @@ const field = (key: string, label: string, kind: 'text' | 'password'): Html =>
 
 const secret = (key: string, label: string): Html => field(key, label, 'password');
 
+/** A desktop sentence with each command it names, between backticks, drawn as code. */
+const withCode = (sentence: string): Html[] =>
+    sentence.split('`').map((part, at) => (at % 2 ? html`<code>${part}</code>` : html`${part}`));
+
 function program(host: DesktopHost, busy: Html | null): Html {
     const sentence = signInSentence(host);
     return html`<div class="setrow">
@@ -208,7 +212,8 @@ function program(host: DesktopHost, busy: Html | null): Html {
                       </div>`
                     : null
             }
-            ${sentence ? html`<div class="meta sign-in">${sentence.split('`').map((part, at) => (at % 2 ? html`<code>${part}</code>` : html`${part}`))}</div>` : null}
+            ${host.belowFloor !== null ? html`<div class="meta">${withCode(host.belowFloor)}</div>` : null}
+            ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
         </div>
         ${
             !host.found && host.install

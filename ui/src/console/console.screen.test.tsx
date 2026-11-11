@@ -487,6 +487,87 @@ describe('the console', () => {
         );
     });
 
+    describe('a Claude Code below the floor', () => {
+        const old = (extra = '') =>
+            `Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running \`claude update\` in a terminal, then check again.${extra}`;
+        const withClaude = (belowFloor: string | null, codexFound: boolean) => ({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, version: belowFloor === null ? '2.1.300' : '2.1.200', belowFloor }
+                    : each.id === 'codex'
+                      ? { ...each, found: codexFound, version: codexFound ? '0.80.0' : null, install: null }
+                      : each,
+            ),
+        });
+
+        it('is listed with the desktop sentence and cannot be chosen, and the turn goes to a host that drives the chat', async () => {
+            const fake = pending(new FakeApi());
+            const desktop = stubDesktop(withClaude(old(), true));
+            renderConsole(fake, desktop);
+            await waitFor(() =>
+                expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'codex'),
+            );
+            const host = screen.getByRole('combobox', { name: 'Agent host' });
+            const option = within(host).getByRole('option', {
+                name: 'Claude Code: Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
+            });
+            expect(option).toHaveProperty('disabled', true);
+            // The sentence is long; the closed list keeps to the composer's row.
+            expect(rules().find((rule) => rule.selector === '.jc-console .composer select')?.body).toMatch(
+                /max-width:\s*60%/,
+            );
+            fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+            expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+                'Go',
+                { host: 'codex' },
+            ]);
+        });
+
+        it('as the only host that drives the chat, says why no turn starts, as text, and checks again on a click', async () => {
+            const fake = pending(new FakeApi());
+            const desktop = stubDesktop(withClaude(old(` ${hostile}`), false));
+            renderConsole(fake, desktop);
+            await waitFor(() => expect(document.querySelector('.composer .host-held')).toBeTruthy());
+            const note = document.querySelector<HTMLElement>('.composer .host-held')!;
+            expect(words(note)).toContain(
+                'Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
+            );
+            expect(note.querySelector('code')?.textContent).toBe('claude update');
+            expect(note.textContent).toContain(hostile);
+            expect(note.querySelector('img')).toBeNull();
+            expect(document.querySelector('.composer')?.textContent).not.toContain(
+                'No agent host that drives the chat was found',
+            );
+            expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
+
+            const read = desktop.calls.filter((each) => each.name === 'setup.status').length;
+            desktop.status = withClaude(null, false);
+            fireEvent.click(within(note).getByRole('button', { name: 'Check again' }));
+            await waitFor(() =>
+                expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1),
+            );
+            await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false));
+            expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'claude');
+            expect(document.querySelector('.composer .host-held')).toBeNull();
+        });
+
+        it('is marked on the Connect card with the same sentence, its command as code', async () => {
+            const fake = pending(new FakeApi());
+            renderConsole(fake, stubDesktop(withClaude(old(), false)));
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            show('Connect');
+            const connect = await waitFor(() => panel('Connect'));
+            const row = within(connect).getByText('Claude Code', { selector: 'b' }).closest<HTMLElement>('.setrow')!;
+            expect(words(row)).toContain(
+                'Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
+            );
+            expect(Array.from(row.querySelectorAll('code'), (each) => each.textContent)).toContain('claude update');
+        });
+    });
+
     it('connects: lists the hosts found or not, installs one, and configures a plugin through the desktop', async () => {
         const fake = pending(new FakeApi());
         const desktop = stubDesktop();
