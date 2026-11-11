@@ -179,6 +179,7 @@ import contactListByCampaignQuery from '../../../docs/api/fixtures/contact.list/
 import contactListByCampaignQueryArchived from '../../../docs/api/fixtures/contact.list/by-campaign-query-archived.json';
 import contactListByCampaignQueryNone from '../../../docs/api/fixtures/contact.list/by-campaign-query-none.json';
 import contactListByCampaignSummary from '../../../docs/api/fixtures/contact.list/by-campaign-summary.json';
+import contactListByCampaignWithoutArchived from '../../../docs/api/fixtures/contact.list/by-campaign-without-archived.json';
 import contactListCampaignPicker from '../../../docs/api/fixtures/contact.list/campaign-picker.json';
 import contactListCampaignPickerZoe from '../../../docs/api/fixtures/contact.list/campaign-picker-zoe.json';
 import contactListFirstPage from '../../../docs/api/fixtures/contact.list/first-page.json';
@@ -683,6 +684,10 @@ export const fixtures = {
         Page<Contact>
     >,
     'contact.list/by-campaign-summary': contactListByCampaignSummary satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
+    'contact.list/by-campaign-without-archived': contactListByCampaignWithoutArchived satisfies Exchange<
         ContactListRequest,
         Page<Contact>
     >,

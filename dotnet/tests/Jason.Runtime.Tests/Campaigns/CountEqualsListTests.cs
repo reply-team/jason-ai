@@ -37,11 +37,11 @@ public class CountEqualsListTests
     }
 
     /// <summary>
-    /// Leaving archived contacts out, every Summary count, and <c>people</c> (null here), equals the people
-    /// <c>contact.list</c> returns for it without <c>include_archived</c>: in one campaign, and across every campaign the
-    /// summary counts when none is named. Archived people stand in several counts: idle (Ada, whose waiting enrolment
-    /// archiving cancelled, and Wes), new and idle in two campaigns (Hal), failed (Cleo), sequence (Ivy), out (Jon) and
-    /// removed (Oli).
+    /// Leaving archived contacts out, every Summary count, and <c>people</c>, equals the people <c>contact.list</c> returns
+    /// for it without <c>include_archived</c>: in one campaign, and across every campaign the summary counts when none is
+    /// named. Archived people stand in several counts: waiting and idle (Ben, whose question archiving leaves pending),
+    /// idle (Ada, whose waiting enrolment archiving cancelled, and Wes), new and idle in two campaigns (Hal), failed
+    /// (Cleo), sequence (Ivy), out (Jon) and removed (Oli).
     /// </summary>
     [Theory]
     [MemberData(nameof(CountsWithPeople))]
@@ -72,16 +72,16 @@ public class CountEqualsListTests
 
         Assert.Equal(Of(filter, every.Total), across.Count);
 
-        // The seed reaches: the archived people stood in this count before they were left out, except in the counts open
-        // work decides, which archiving cancelled.
+        // The seed reaches: the archived people stood in this count before they were left out, except in Working, which
+        // only open work decides, and archiving cancels a person's open work. A question waiting on them stays pending.
         var everyone = await api.PostOkAsync<CampaignSummaryResponse>(Operations.CampaignSummary, new { }, Ct);
-        if (filter is not (CampaignSummaryFilter.Waiting or CampaignSummaryFilter.Working))
+        if (filter is not CampaignSummaryFilter.Working)
         {
             Assert.True(Of(filter, everyone.Total) > Of(filter, every.Total), $"No archived person stands in {filter?.ToString() ?? "people"}.");
         }
     }
 
-    private static readonly string[] Archived = ["Ada", "Cleo", "Hal", "Ivy", "Jon", "Oli", "Wes"];
+    private static readonly string[] Archived = ["Ada", "Ben", "Cleo", "Hal", "Ivy", "Jon", "Oli", "Wes"];
 
     public static TheoryData<string> CountsWithPeople => ["people", .. Enum.GetNames<CampaignSummaryFilter>()];
 

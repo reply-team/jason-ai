@@ -832,6 +832,31 @@ describe('People: the stage chips', () => {
         expect(chip(/^New/).textContent?.replace(/\s+/g, ' ').trim()).toBe(`New ${rows}`);
     });
 
+    it("narrowed to a campaign in the default view, the chips show that campaign's own numbers, archived people left out", async () => {
+        const spring = fixtures['campaign.summary/some-without-archived'].request.campaign_ids[0]!;
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-campaign-without-archived')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.summary', 'campaign.summary/some-without-archived');
+        open(api, { campaign: spring });
+        await waitFor(() =>
+            expect(chipLabels()).toEqual([
+                'All',
+                'Waiting 3',
+                'Failed 3',
+                'Working 2',
+                'New 1',
+                'Idle 6',
+                'Sequence 2',
+                'Out 6',
+            ]),
+        );
+        expect(api.sent('campaign.summary')).toEqual(fixtures['campaign.summary/some-without-archived'].request);
+        // Everyone the list shows is one of the campaign's people, and every one of them is shown.
+        const people = fixtures['campaign.summary/some-without-archived'].response.campaigns[0]!.people;
+        await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(people));
+    });
+
     it('beside a search no chip shows a number, and none is asked for, because a count knows no search', async () => {
         const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-query');
         open(api, { q: 'mat' });
