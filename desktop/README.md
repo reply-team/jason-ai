@@ -36,6 +36,14 @@ cannot be chosen there, and has every chat turn sent to it refused before the ho
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`). On Linux a key
   is kept and read only where the session offers a keyring (GNOME Keyring or KWallet): where Electron falls back to its
   `basic_text` store, a fixed key, the card says so and the key is not kept.
+- `<data>/desktop/claude-keyed/<provider id>/` and `<data>/desktop/codex-keyed/`: the folders a chat turn on a
+  provider's key runs its host with, as `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, made `0700` where the system has modes.
+  No sign-in is in them, so a key the host does not take fails the turn instead of running it on the person's own plan;
+  the key itself is never written there, it reaches the host in its environment alone (`CODEX_API_KEY` for Codex). Each
+  keeps the transcripts of its provider's turns, one Claude Code folder per provider since a conversation keeps one
+  session per provider. On Anthropic's own key, a turn whose host says the key came from elsewhere is stopped; on any
+  key, a retry or an end the host reports for a refused key (401, 403, a failed authentication) ends the turn at once
+  with one sentence naming the provider's card in Connect.
 - `<data>/desktop/bundle/<version>/`: on Linux, an AppImage's copy of the `jason` it carries (see "On Linux").
 - `<data>/desktop/electron/`: Electron's own files (its profile, the page's storage, and in `logs/` what Electron itself
   logs), set before anything else, so a second data directory is a second desktop and nothing of it lands outside
@@ -121,9 +129,9 @@ desktop does not narrow, so it may read the records.
 - **What never carries one.** `jason doctor` carries none of it, its count and size included. The desktop's log says
   how many were read, how many files were not records, a record's error code when one could not be written, how many
   new campaigns a set-up turn found and why a turn started afresh, and nothing else. `jason export` carries no part of
-  `<data>/desktop/`, so conversations do not travel to another machine. `jason uninstall --purge-data` removes them
-  with the data directory; the transcripts the agent hosts keep of the chat are theirs, in their own folders, and are
-  never touched.
+  `<data>/desktop/`, so conversations do not travel to another machine, nor do the transcripts of turns on a provider's
+  key. `jason uninstall --purge-data` removes both with the data directory; the transcripts the agent hosts keep of the
+  chat's other turns are theirs, in their own folders, and are never touched.
 
 ## The window
 

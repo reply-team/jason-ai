@@ -77,6 +77,7 @@ export const templates = {
     chat_conversation_unwritten: 'A chat conversation could not be written or removed ({Code})',
     chat_setup_ended: 'A set-up chat turn ended: the campaign list read {ListRead}, {Found} new campaigns, handed over {HandedOver}',
     chat_turn_fresh: 'A chat turn started a fresh session of its host ({Cause})',
+    chat_key_source: 'A chat turn on a provider key started, and its host named the key source by a value read as {Source}; the turn went on',
 } as const;
 
 export type TemplateName = keyof typeof templates;

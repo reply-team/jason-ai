@@ -12,6 +12,9 @@
 //   { "campaign": "name" }                            add a campaign of that name, created now, to STUB_CAMPAIGNS_FILE;
 //   { "campaign": { "name", "id", "created_at" } }    or one with the id and the moment given
 //   { "sleep": 300 }                                  wait that many milliseconds
+//   { "retry": { "status": 401, "error": "..." } }    Claude Code only: report a retry of a failed API request, as system/api_retry
+//   { "end": "refused", "status": 401, "text": "w" }  Claude Code only: end with a failed result naming that HTTP status
+// STUB_KEY_SOURCE puts that apiKeySource on Claude Code's init line; without it the line carries none.
 // With no plan the turn says one line and ends well. STUB_RESUME says what a resume does: "missing" fails as a session
 // that is not there (Claude Code on stderr, Codex with an error event) before anything is said, "other" answers with a
 // session other than the one asked for and goes on as a turn would.
@@ -73,14 +76,19 @@ async function claude(args, stdin) {
     }
     const session = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || 'stub-session-1');
     const config = args[args.indexOf('--mcp-config') + 1];
-    print({ type: 'system', subtype: 'init', session_id: session });
+    print({ type: 'system', subtype: 'init', session_id: session, ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
     if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;
     for (const step of plan()) {
         if (step.say !== undefined) print({ type: 'assistant', message: { content: [{ type: 'text', text: step.say }] } });
         else if (step.campaign !== undefined) addCampaign(step.campaign);
         else if (step.sleep !== undefined) await new Promise((resolve) => setTimeout(resolve, step.sleep));
-        else if (step.use !== undefined) print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_use_${++n}`, name: step.use.tool, input: step.use.input }] } });
+        else if (step.retry !== undefined) {
+            print({ type: 'system', subtype: 'api_retry', attempt: 1, max_retries: 10, retry_delay_ms: 600, error_status: step.retry.status ?? null, error: step.retry.error ?? 'unknown', session_id: session });
+        } else if (step.end === 'refused') {
+            print({ type: 'result', subtype: 'success', is_error: true, api_error_status: step.status, result: step.text, session_id: session });
+            process.exit(1);
+        } else if (step.use !== undefined) print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_use_${++n}`, name: step.use.tool, input: step.use.input }] } });
         else if (step.ask !== undefined) {
             n++;
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_${n}`, name: step.ask.tool, input: step.ask.input }] } });

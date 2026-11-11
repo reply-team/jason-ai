@@ -3,7 +3,7 @@
 // their answers, a stop, a card nobody answers, Codex, and the hosts that are refused before anything starts.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/chat.ts';
@@ -602,10 +602,133 @@ test('a key provider\'s turn is started without the provider the desktop inherit
     assert.equal(claude?.env.ANTHROPIC_API_KEY, 'sk-inherited');
     assert.equal(claude?.env.CLAUDE_CODE_USE_BEDROCK, '1');
     assert.equal(openai?.env.OPENAI_BASE_URL, undefined);
-    assert.equal(openai?.env.OPENAI_API_KEY, 'sk-planted-openai');
+    assert.equal(openai?.env.CODEX_API_KEY, 'sk-planted-openai');
+    assert.equal(openai?.env.OPENAI_API_KEY, undefined);
     assert.equal(codex?.env.OPENAI_BASE_URL, 'https://inherited.example/v1');
     for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, '1');
     for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
+});
+
+test('a keyed turn runs in a host folder of the desktop\'s own with no sign-in in it: per provider for Claude Code, one for Codex', async (t) => {
+    const r = rig(t, { env: { CLAUDE_CONFIG_DIR: join('/inherited', 'claude'), CODEX_HOME: join('/inherited', 'codex'), CODEX_API_KEY: 'sk-inherited-codex' } });
+    r.keys['claude-api-key'] = 'sk-planted-anthropic';
+    r.keys.deepseek = 'sk-planted-deepseek';
+    r.keys['codex-api-key'] = 'sk-planted-openai';
+    await r.turn('c1', words, { host: 'claude-api-key' });
+    await r.turn('c2', words, { host: 'deepseek' });
+    await r.turn('c3', words, { host: 'codex-api-key' });
+    await r.turn('c4', words, { host: 'claude' });
+    await r.turn('c5', words, { host: 'codex' });
+    const [anthropic, deepseek, openai, claude, codex] = r.hosts();
+    const anthropicFolder = join(r.b.paths.desktop, 'claude-keyed', 'claude-api-key');
+    const deepseekFolder = join(r.b.paths.desktop, 'claude-keyed', 'deepseek');
+    const codexFolder = join(r.b.paths.desktop, 'codex-keyed');
+    assert.equal(anthropic?.env.CLAUDE_CONFIG_DIR, anthropicFolder);
+    assert.equal(deepseek?.env.CLAUDE_CONFIG_DIR, deepseekFolder);
+    assert.equal(openai?.env.CODEX_HOME, codexFolder);
+    assert.equal(openai?.env.CODEX_API_KEY, 'sk-planted-openai');
+    assert.equal(openai?.env.OPENAI_API_KEY, undefined);
+    for (const folder of [anthropicFolder, deepseekFolder, codexFolder]) {
+        assert.ok(statSync(folder).isDirectory(), folder);
+        assert.deepEqual(readdirSync(folder), [], 'nothing of the key is written into the folder');
+        if (process.platform !== 'win32') assert.equal(statSync(folder).mode & 0o777, 0o700, folder);
+    }
+    if (process.platform !== 'win32') assert.equal(statSync(join(r.b.paths.desktop, 'claude-keyed')).mode & 0o777, 0o700);
+    // A plain turn keeps the person's own folders.
+    assert.equal(claude?.env.CLAUDE_CONFIG_DIR, join('/inherited', 'claude'));
+    assert.equal(codex?.env.CODEX_HOME, join('/inherited', 'codex'));
+    assert.equal(codex?.env.CODEX_API_KEY, 'sk-inherited-codex');
+});
+
+test('a keyed folder left open is closed to 0700 again before the turn', { skip: process.platform === 'win32' }, async (t) => {
+    const r = rig(t);
+    r.keys['claude-api-key'] = 'sk-planted-anthropic';
+    const folder = join(r.b.paths.desktop, 'claude-keyed', 'claude-api-key');
+    mkdirSync(folder, { recursive: true, mode: 0o755 });
+    await r.turn('c1', words, { host: 'claude-api-key' });
+    assert.equal(statSync(folder).mode & 0o777, 0o700);
+    assert.equal(statSync(join(r.b.paths.desktop, 'claude-keyed')).mode & 0o777, 0o700);
+});
+
+const refusedSentence = (label: string) => `${label} refused the key. Change it on the ${label} card in Connect, then send again.`;
+
+test('on Anthropic\'s key, a turn whose host says its key came from somewhere else is stopped; one it does not explain goes on and is logged by a word', async (t) => {
+    const sources: string[] = [];
+    const r = rig(t, { chat: { keySource: (source) => void sources.push(source) } });
+    r.keys['claude-api-key'] = 'sk-planted-anthropic';
+    plan(r, [{ sleep: 20_000 }]);
+    r.b.env.STUB_KEY_SOURCE = 'oauth';
+    const begun = Date.now();
+    const stopped = await r.turn('c1', words, { host: 'claude-api-key' });
+    assert.ok(Date.now() - begun < 15_000, 'the host was stopped, not waited out');
+    assert.deepEqual(doneOf(stopped), {
+        kind: 'done',
+        error: 'Claude Code did not use the Anthropic key, so the turn was stopped before it ran on another account. Check the key on the Anthropic card in Connect, then send again.',
+    });
+    assert.deepEqual(texts(stopped), [], 'nothing the host said after it is shown');
+    assert.equal(r.hosts().length, 1, 'a stopped turn is not started again');
+    assert.deepEqual(sources, []);
+
+    plan(r, []);
+    for (const [value, word] of [['user', 'unexplained'], ['not-a-listed-value', 'unlisted'], [undefined, 'absent'], ['ANTHROPIC_API_KEY', null]] as const) {
+        if (value === undefined) delete r.b.env.STUB_KEY_SOURCE;
+        else r.b.env.STUB_KEY_SOURCE = value;
+        const before: number = sources.length;
+        const said = await r.turn(`c-${String(word)}`, words, { host: 'claude-api-key' });
+        assert.deepEqual(doneOf(said), { kind: 'done', error: null }, String(value));
+        assert.deepEqual(sources.slice(before), word === null ? [] : [word]);
+    }
+
+    // A compatible endpoint's key is read from ANTHROPIC_AUTH_TOKEN, whose source the page does not name: no check.
+    r.keys.deepseek = 'sk-planted-deepseek';
+    r.b.env.STUB_KEY_SOURCE = 'none';
+    const before: number = sources.length;
+    assert.deepEqual(doneOf(await r.turn('c-deepseek', words, { host: 'deepseek' })), { kind: 'done', error: null });
+    // Nor a plain turn, which runs on the person's own sign-in.
+    assert.deepEqual(doneOf(await r.turn('c-plain', words, { host: 'claude' })), { kind: 'done', error: null });
+    assert.deepEqual(sources.slice(before), []);
+});
+
+test('on a keyed turn the first retry of a refused key stops the host and ends the turn with one sentence naming the card', async (t) => {
+    const r = rig(t);
+    r.keys.deepseek = 'sk-planted-deepseek';
+    for (const retry of [{ status: 401, error: 'unknown' }, { status: 403, error: 'unknown' }, { status: null, error: 'authentication_failed' }]) {
+        plan(r, [{ retry }, { say: 'never shown' }, { sleep: 20_000 }]);
+        const begun = Date.now();
+        const said = await r.turn(`c-${String(retry.status)}`, words, { host: 'deepseek' });
+        assert.ok(Date.now() - begun < 15_000, 'the host was stopped, not waited out');
+        assert.deepEqual(doneOf(said), { kind: 'done', error: refusedSentence('DeepSeek') }, JSON.stringify(retry));
+        assert.ok(!texts(said).includes('never shown'));
+    }
+    // A retry of another cause is the host's to make.
+    plan(r, [{ retry: { status: 529, error: 'overloaded' } }, { say: 'after the retry' }]);
+    const overloaded = await r.turn('c-529', words, { host: 'deepseek' });
+    assert.deepEqual(doneOf(overloaded), { kind: 'done', error: null });
+    assert.ok(texts(overloaded).includes('after the retry'));
+});
+
+test('a keyed turn that ends on a refused key gets the same sentence; a plain turn keeps the host\'s own words and its retries', async (t) => {
+    const r = rig(t);
+    r.keys['claude-api-key'] = 'sk-planted-anthropic';
+    plan(r, [{ end: 'refused', status: 401, text: 'Invalid API key · Fix external API key' }]);
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude-api-key' })), { kind: 'done', error: refusedSentence('Anthropic') });
+    assert.deepEqual(doneOf(await r.turn('c2', words, { host: 'claude' })), { kind: 'done', error: 'Invalid API key · Fix external API key' });
+    plan(r, [{ retry: { status: 401, error: 'authentication_failed' } }, { say: 'after the retry' }]);
+    const plain = await r.turn('c3', words, { host: 'claude' });
+    assert.deepEqual(doneOf(plain), { kind: 'done', error: null }, 'a plain subscription turn keeps its own sign-in');
+    assert.ok(texts(plain).includes('after the retry'));
+});
+
+test('a refused key on a resumed keyed turn is not tried again as a fresh session', async (t) => {
+    const r = rig(t);
+    r.keys.deepseek = 'sk-planted-deepseek';
+    await r.turn('c1', words, { host: 'deepseek' });
+    r.b.env.STUB_SILENT = 'resumed';
+    plan(r, [{ end: 'refused', status: 401, text: 'Invalid API key' }]);
+    const said = await r.turn('c1', words, { host: 'deepseek' });
+    assert.deepEqual(doneOf(said), { kind: 'done', error: refusedSentence('DeepSeek') });
+    assert.ok(!said.some((event) => event.kind === 'fresh'));
+    assert.equal(r.hosts().length, 2);
 });
 
 test('closing the window stops every turn', async (t) => {

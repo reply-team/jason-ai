@@ -147,11 +147,12 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
 /**
  * The desktop folder's own entries but the chat folder, named the same way; `turns` holds every turn's configuration,
  * `rollback` the application an update kept aside and the record the next start acts on, `bundle` an AppImage's copy of
- * the jason it carries, `conversations` the record of every conversation, which these rules keep a Claude Code turn from
+ * the jason it carries, `conversations` the record of every conversation, `claude-keyed` and `codex-keyed` the hosts'
+ * folders for the turns on a provider's key with those turns' transcripts, which these rules keep a Claude Code turn from
  * reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox, which the desktop does
  * not narrow, holds it (`codexArguments`).
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {
@@ -188,10 +189,11 @@ function withheld(name: string): boolean {
 }
 
 /**
- * What a person's environment says about which provider and credentials each host uses. A turn on a key provider is
- * started without them, so the provider the person picked is the one the turn reaches: an inherited
- * `CLAUDE_CODE_USE_BEDROCK` or `OPENAI_BASE_URL` would otherwise send it elsewhere. A plain Claude Code or Codex turn
- * keeps them, as the person's own configuration.
+ * What a person's environment says about which provider and credentials each host uses, and where the host keeps its
+ * sign-in. A turn on a key provider is started without them, so the provider the person picked is the one the turn
+ * reaches: an inherited `CLAUDE_CODE_USE_BEDROCK` or `OPENAI_BASE_URL` would otherwise send it elsewhere, and an
+ * inherited `CLAUDE_CONFIG_DIR` or `CODEX_HOME` would stand where the desktop's own folder goes (`keyedFolder`). A plain
+ * Claude Code or Codex turn keeps them, as the person's own configuration.
  */
 const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>>> = {
     claude: new Set([
@@ -207,8 +209,10 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
         'CLAUDE_CODE_USE_VERTEX',
         'CLAUDE_CODE_USE_FOUNDRY',
         'CLAUDE_CODE_OAUTH_TOKEN',
+        'CLAUDE_CONFIG_DIR',
+        'CLAUDE_CODE_PROJECT_DIR_NAME',
     ]),
-    codex: new Set(['OPENAI_API_KEY', 'OPENAI_BASE_URL']),
+    codex: new Set(['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_API_KEY', 'CODEX_HOME', 'CODEX_SQLITE_HOME']),
 };
 
 /**
@@ -289,10 +293,53 @@ export function hostEnvironment(
 /** What one line a host prints means. */
 export type HostLine =
     | { kind: 'session'; id: string }
+    /** Where Claude Code says the turn's key came from (`keySourceOf`). */
+    | { kind: 'key_source'; source: KeySource }
+    /** Claude Code said a request was refused for its credential: a retry of a 401 or 403, or a failed authentication. */
+    | { kind: 'refused' }
     | ({ kind: 'step' } & Step)
     | { kind: 'text'; text: string }
-    /** The host said the turn is over: `error` null when it succeeded, else the host's own words. */
-    | { kind: 'result'; error: string | null };
+    /**
+     * The host said the turn is over: `error` null when it succeeded, else the host's own words; `refused` when it ended
+     * on a 401 or 403.
+     */
+    | { kind: 'result'; error: string | null; refused?: true };
+
+/**
+ * Where Claude Code says a turn's key came from, the `apiKeySource` of its `system/init` line, as a closed word. The
+ * values are the page's own list, https://code.claude.com/docs/en/agent-sdk/typescript#apikeysource (read 2026-11-11):
+ * "Where the API key for the session's requests came from, reported as `apiKeySource` on the `SDKSystemMessage` init
+ * message." `type ApiKeySource = "ANTHROPIC_API_KEY" | "apiKeyHelper" | "/login managed key" | "none" | "user" |
+ * "project" | "org" | "temporary" | "oauth";`
+ * - `environment`: `ANTHROPIC_API_KEY`, the variable the desktop puts the key in.
+ * - `elsewhere`: a value that says the requests do not go on that key: a helper script, a saved sign-in's key, a
+ *   subscription's sign-in, or no key at all.
+ * - `unexplained`: `user`, `project`, `org`, `temporary`, which the page lists without saying what they mean.
+ * - `unlisted`: a string the page does not list; `absent`: no string at all.
+ * Only `elsewhere` stops a turn; the rest are logged by their word and the turn goes on, since the turn's folder holds no
+ * sign-in to fall back to (`keyedFolder`).
+ */
+export type KeySource = 'environment' | 'elsewhere' | 'unexplained' | 'unlisted' | 'absent';
+
+const keySources: ReadonlyMap<string, KeySource> = new Map([
+    ['ANTHROPIC_API_KEY', 'environment'],
+    ['apiKeyHelper', 'elsewhere'],
+    ['/login managed key', 'elsewhere'],
+    ['none', 'elsewhere'],
+    ['oauth', 'elsewhere'],
+    ['user', 'unexplained'],
+    ['project', 'unexplained'],
+    ['org', 'unexplained'],
+    ['temporary', 'unexplained'],
+]);
+
+export function keySourceOf(value: unknown): KeySource {
+    if (typeof value !== 'string') return 'absent';
+    return keySources.get(value) ?? 'unlisted';
+}
+
+/** An HTTP status that refuses a credential. */
+const refusedStatus = (status: unknown) => status === 401 || status === 403;
 
 /**
  * One tool use as the page shows it: `text`, fixed words of the desktop's own for what the host did, and `detail`, the
@@ -380,19 +427,32 @@ function parsed(line: string): Record<string, unknown> | null {
 }
 
 /**
- * One line of Claude Code's `stream-json` output: the session it runs as (`system`/`init`), the agent's words and tool
- * uses (`assistant`), and the end (`result`). A tool's own output (`user`) and anything unreadable say nothing.
+ * One line of Claude Code's `stream-json` output: the session it runs as and where its key came from (`system`/`init`),
+ * a retry of a refused credential (`system`/`api_retry`), the agent's words and tool uses (`assistant`), and the end
+ * (`result`). A tool's own output (`user`) and anything unreadable say nothing.
+ *
+ * What a refused credential looks like, as Anthropic states it (read 2026-11-11):
+ * - https://code.claude.com/docs/en/headless#handle-api-retries: "When an API request fails with a retryable error,
+ *   Claude Code emits a `system/api_retry` event before retrying", with `error_status`, "HTTP status code of the failed
+ *   attempt", and `error`, a category among which is `authentication_failed`.
+ * - https://code.claude.com/docs/en/agent-sdk/typescript#sdkresultmessage: `api_error_status`, "the HTTP status code of
+ *   the API error that terminated the conversation"; and an assistant message's `error`, one of which is
+ *   `'authentication_failed'`.
  */
 export function claudeLine(line: string): HostLine[] {
     const event = parsed(line);
     if (event === null) return [];
     if (event.type === 'system' && event.subtype === 'init') {
-        return typeof event.session_id === 'string' && sessionShape.test(event.session_id) ? [{ kind: 'session', id: event.session_id }] : [];
+        const session: HostLine[] = typeof event.session_id === 'string' && sessionShape.test(event.session_id) ? [{ kind: 'session', id: event.session_id }] : [];
+        return [...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }];
+    }
+    if (event.type === 'system' && event.subtype === 'api_retry') {
+        return refusedStatus(event.error_status) || event.error === 'authentication_failed' ? [{ kind: 'refused' }] : [];
     }
     if (event.type === 'assistant') {
         const content = (event.message as { content?: unknown } | null)?.content;
-        if (!Array.isArray(content)) return [];
-        const out: HostLine[] = [];
+        const out: HostLine[] = event.error === 'authentication_failed' ? [{ kind: 'refused' }] : [];
+        if (!Array.isArray(content)) return out;
         for (const block of content as { type?: unknown; text?: unknown; name?: unknown; input?: unknown }[]) {
             if (block?.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') out.push({ kind: 'text', text: block.text });
             else if (block?.type === 'tool_use') out.push({ kind: 'step', ...claudeStep(block.name, block.input) });
@@ -403,7 +463,7 @@ export function claudeLine(line: string): HostLine[] {
         const failed = event.is_error === true || (typeof event.subtype === 'string' && event.subtype !== 'success');
         if (!failed) return [{ kind: 'result', error: null }];
         const words = typeof event.result === 'string' && event.result.trim() !== '' ? event.result.trim() : `Claude Code ended the turn: ${String(event.subtype ?? 'error')}.`;
-        return [{ kind: 'result', error: words }];
+        return [refusedStatus(event.api_error_status) ? { kind: 'result', error: words, refused: true } : { kind: 'result', error: words }];
     }
     return [];
 }
