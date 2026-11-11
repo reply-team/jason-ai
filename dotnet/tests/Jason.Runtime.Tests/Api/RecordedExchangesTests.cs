@@ -708,6 +708,10 @@ public class RecordedExchangesTests
         Assert.Equal(everyone.Campaigns[0], spring);
         var listed = await api.RecordAsync<Page<ContactDto>>(
             Operations.ContactList, "by-activity-summary-new-without-archived", new { order = "activity", summary = "new", limit = 200 }, Ct);
+        // The list narrowed to Spring, as the page asks for it with no chip: its people are Spring's own number.
+        var springListed = await api.RecordAsync<Page<ContactDto>>(
+            Operations.ContactList, "by-campaign-without-archived", new { order = "activity", campaign_id = seed.Spring, limit = 200 }, Ct);
+        Assert.Equal(spring.People, springListed.Items.Count);
 
         Assert.Equal(everyone.Total.New, listed.Items.Count);
         Assert.DoesNotContain(quinn.Id, listed.Items.Select(c => c.Id));

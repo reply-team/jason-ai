@@ -167,6 +167,7 @@ public static class ApiFixtures
         "contact.list/by-campaign-query-archived",
         "contact.list/by-campaign-query-none",
         "contact.list/by-campaign-summary",
+        "contact.list/by-campaign-without-archived",
         "contact.list/campaign-picker",
         "contact.list/campaign-picker-zoe",
         "contact.list/first-page",
