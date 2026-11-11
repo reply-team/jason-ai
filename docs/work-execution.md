@@ -473,8 +473,9 @@ The same definitions read for one person say where they stand: every answer that
 above that count the person in that campaign now, in this order; a removed membership stands in `removed` alone, and one
 no count counts stands in none. `jason contact list --summary <count>` (`contact.list` with `summary`) lists the people
 one count counts in at least one campaign not archived, or in the one `--campaign` names, in either of its orders. A
-count's `total` counts an archived person who is still a member, whom `contact.list` shows only with
-`--include-archived`, so the two agree only then.
+count, in each campaign's row and in `total`, counts an archived person who is still a member unless
+`--exclude-archived-contacts` (`exclude_archived_contacts`) leaves them out; with it, a count agrees with `contact.list`
+without `--include-archived`.
 
 In a period, removed people included, so a past period does not change when somebody is taken out today:
 

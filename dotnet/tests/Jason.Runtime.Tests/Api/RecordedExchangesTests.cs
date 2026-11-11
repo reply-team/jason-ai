@@ -689,6 +689,37 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
+    /// The People page's default view, Archived not ticked: the chips' numbers leave archived people out, as the list does.
+    /// Quinn, new in Spring and with no work anywhere, is archived; the counts that leave him out agree with the list under
+    /// New, and the counts that keep him say one more.
+    /// </summary>
+    [Fact]
+    public async Task Campaign_counts_without_archived_contacts_for_the_people_page()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var seed = await Seed.CampaignsAsync(api);
+        var quinn = Assert.Single((await api.PostOkAsync<Page<ContactDto>>(Operations.ContactList, new { query = "quinn", limit = 10 }, Ct)).Items);
+        await api.PostOkAsync<ContactDto>(Operations.ContactArchive, new { contact_id = quinn.Id }, Ct);
+
+        var everyone = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "everyone-without-archived", new { exclude_archived_contacts = true }, Ct);
+        Assert.Equal([seed.Spring, seed.Autumn, seed.Summer], everyone.Campaigns.Select(c => c.CampaignId));
+        var spring = Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(
+            Operations.CampaignSummary, "some-without-archived", new { campaign_ids = new[] { seed.Spring }, exclude_archived_contacts = true }, Ct)).Campaigns);
+        Assert.Equal(everyone.Campaigns[0], spring);
+        var listed = await api.RecordAsync<Page<ContactDto>>(
+            Operations.ContactList, "by-activity-summary-new-without-archived", new { order = "activity", summary = "new", limit = 200 }, Ct);
+        // The list narrowed to Spring, as the page asks for it with no chip: its people are Spring's own number.
+        var springListed = await api.RecordAsync<Page<ContactDto>>(
+            Operations.ContactList, "by-campaign-without-archived", new { order = "activity", campaign_id = seed.Spring, limit = 200 }, Ct);
+        Assert.Equal(spring.People, springListed.Items.Count);
+
+        Assert.Equal(everyone.Total.New, listed.Items.Count);
+        Assert.DoesNotContain(quinn.Id, listed.Items.Select(c => c.Id));
+        var counted = await api.PostOkAsync<CampaignSummaryResponse>(Operations.CampaignSummary, new { }, Ct);
+        Assert.Equal(counted.Total.New - 1, everyone.Total.New);
+    }
+
+    /// <summary>
     /// An installation past a page: a hundred and one campaigns, which the screen lists a hundred at a time — the most one
     /// read of their counts takes — asking for each page's counts with that page; and fifty-one people added to the first
     /// in the week, whose People tab lists fifty at a time under the period it was opened with.

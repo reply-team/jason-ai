@@ -36,6 +36,76 @@ public class CountEqualsListTests
         Assert.Equal(across.Count, across.Distinct().Count());
     }
 
+    /// <summary>
+    /// Leaving archived contacts out, every Summary count, and <c>people</c>, equals the people <c>contact.list</c> returns
+    /// for it without <c>include_archived</c>: in one campaign, and across every campaign the summary counts when none is
+    /// named. Archived people stand in several counts: waiting and idle (Ben, whose question archiving leaves pending),
+    /// idle (Ada, whose waiting enrolment archiving cancelled, and Wes), new and idle in two campaigns (Hal), failed
+    /// (Cleo), sequence (Ivy), out (Jon) and removed (Oli).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CountsWithPeople))]
+    public async Task Without_archived_contacts_every_summary_count_equals_the_contact_list(string count)
+    {
+        CampaignSummaryFilter? filter = count == "people" ? null : Enum.Parse<CampaignSummaryFilter>(count);
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await CampaignWorld.WriteAsync(api, Ct);
+        foreach (var name in Archived)
+        {
+            await api.PostOkAsync<ContactDto>(Operations.ContactArchive, new { contact_id = world.People[name].PublicId }, Ct);
+        }
+
+        var spring = world.Spring.PublicId;
+        var one = await api.PostOkAsync<CampaignSummaryResponse>(Operations.CampaignSummary, new { CampaignIds = new[] { spring }, ExcludeArchivedContacts = true }, Ct);
+        var row = Assert.Single(one.Campaigns);
+        var listed = await ContactsAsync(api, filter is { } f ? new { CampaignId = spring, Summary = f } : (object)new { CampaignId = spring });
+        Assert.Equal(Of(filter, new CampaignSummaryTotal(row.People, row.Waiting, row.Failed, row.Working, row.New, row.Idle, row.Sequence, row.Out, row.Removed)), listed.Count);
+
+        // Across every campaign the summary counts, a person once; people is everyone listed in one of those campaigns.
+        var every = await api.PostOkAsync<CampaignSummaryResponse>(Operations.CampaignSummary, new { ExcludeArchivedContacts = true }, Ct);
+        var across = new HashSet<string>(StringComparer.Ordinal);
+        IEnumerable<string?> campaigns = filter is null ? [.. every.Campaigns.Select(each => each.CampaignId)] : [null];
+        foreach (var campaign in campaigns)
+        {
+            across.UnionWith(await ContactsAsync(api, filter is { } g ? new { Summary = g } : (object)new { CampaignId = campaign }));
+        }
+
+        Assert.Equal(Of(filter, every.Total), across.Count);
+
+        // The seed reaches: the archived people stood in this count before they were left out, except in Working, which
+        // only open work decides, and archiving cancels a person's open work. A question waiting on them stays pending.
+        var everyone = await api.PostOkAsync<CampaignSummaryResponse>(Operations.CampaignSummary, new { }, Ct);
+        if (filter is not CampaignSummaryFilter.Working)
+        {
+            Assert.True(Of(filter, everyone.Total) > Of(filter, every.Total), $"No archived person stands in {filter?.ToString() ?? "people"}.");
+        }
+    }
+
+    private static readonly string[] Archived = ["Ada", "Ben", "Cleo", "Hal", "Ivy", "Jon", "Oli", "Wes"];
+
+    public static TheoryData<string> CountsWithPeople => ["people", .. Enum.GetNames<CampaignSummaryFilter>()];
+
+    private static int Of(CampaignSummaryFilter? filter, CampaignSummaryTotal counts) => filter is { } count ? Of(count, counts) : counts.People;
+
+    private static async Task<List<string>> ContactsAsync(RuntimeApiFixture api, object filter)
+    {
+        var ids = new List<string>();
+        string? cursor = null;
+        do
+        {
+            var body = System.Text.Json.JsonSerializer.SerializeToNode(filter, Jason.Contracts.Json.JasonJson.Options)!.AsObject();
+            body["limit"] = 2;
+            body["cursor"] = cursor;
+            var page = await api.PostOkAsync<Page<ContactDto>>(Operations.ContactList, body, Ct);
+            ids.AddRange(page.Items.Select(contact => contact.Id));
+            cursor = page.NextCursor;
+        }
+        while (cursor is not null);
+
+        Assert.Equal(ids.Count, ids.Distinct().Count());
+        return ids;
+    }
+
     private static int Of(CampaignSummaryFilter filter, CampaignSummaryTotal counts) => filter switch
     {
         CampaignSummaryFilter.Waiting => counts.Waiting,

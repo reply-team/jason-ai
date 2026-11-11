@@ -248,7 +248,7 @@ export type Project = { id: string; name: string; slug: string; default: boolean
 export type CampaignTransitionRequest = { campaign_id: string; reason?: string; actor?: ActorRef };
 /** The most campaigns one read names in `campaign_ids`: the runtime refuses more. */
 export const campaignIdsLimit = 100;
-export type CampaignSummaryRequest = { campaign_ids?: string[] };
+export type CampaignSummaryRequest = { campaign_ids?: string[]; exclude_archived_contacts?: boolean };
 export type CampaignSummaryRow = {
     campaign_id: string;
     people: number;

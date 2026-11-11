@@ -280,7 +280,8 @@ describe('The campaign panel', () => {
     it('drops a campaign the runtime no longer knows, and says so', async () => {
         const api = new FakeApi()
             .answer('campaign.list', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all')
+            // The People page asks for its chips' numbers too, archived people left out.
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/everyone-without-archived')
             .answer('campaign.get', 'campaign.get/unknown')
             .answer('contact.list', 'contact.list/by-activity');
         open(api, { ...table, id: fixtures['campaign.get/unknown'].request.campaign_id, tab: 'sequence' });
