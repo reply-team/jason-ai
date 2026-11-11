@@ -2,7 +2,8 @@
 // headings, block quotes and simple pipe tables - into a plain tree that a view draws. A link is kept as its text and
 // its address, both text. Raw HTML is not in the subset: it stays the text it is, like everything else the subset does
 // not hold, and a table that is not whole (ragged rows, no header separator) is text too, never guessed. Nesting is
-// read to a fixed depth and the rest is text, so no input makes the reading deep or slow.
+// read to a fixed depth and the rest is text, so no input makes the reading deep or slow: every expression below
+// matches a line's start alone or takes its rest whole, so none of them scans a line more than once.
 
 export type Inline =
     | { kind: 'text'; text: string }
@@ -25,9 +26,11 @@ const maxDepth = 8;
 const maxLength = 200_000;
 
 const fenceLine = /^ {0,3}(`{3,}|~{3,})/;
-const headingLine = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
+/** A heading's marker and the spaces after it; the rest of the line is taken by index (`headingOf`). */
+const headingStart = /^ {0,3}(#{1,6})(?:[ \t]+|$)/;
 const quoteLine = /^ {0,3}> ?(.*)$/;
-const itemLine = /^( {0,3})([-*+]|\d{1,9}[.)])(?:[ \t]+(.*))?$/;
+/** An item's marker; its rest is taken by a class that matches every character, a line separator included. */
+const itemLine = /^( {0,3})([-*+]|\d{1,9}[.)])(?:[ \t]+([^]*))?$/;
 const separatorCell = /^:?-+:?$/;
 
 /** The agent's text as blocks of the subset. */
@@ -44,9 +47,27 @@ const asText = (lines: readonly string[]): Block => ({
 
 const blank = (line: string) => line.trim() === '';
 const indentOf = (line: string) => line.length - line.trimStart().length;
+const spaceOrTab = (char: string | undefined) => char === ' ' || char === '\t';
+
+/** A heading's level and its text, without the spaces and the closing run of # that end it; null when not one. */
+function headingOf(line: string): { level: 1 | 2 | 3 | 4 | 5 | 6; text: string } | null {
+    const start = headingStart.exec(line);
+    if (!start) return null;
+    const rest = line.slice(start[0].length);
+    let end = rest.length;
+    while (end > 0 && spaceOrTab(rest[end - 1])) end--;
+    let hashes = end;
+    while (hashes > 0 && rest[hashes - 1] === '#') hashes--;
+    // A closing run is the whole rest, or follows a space or a tab; one glued to a word is the word's.
+    if (hashes < end && (hashes === 0 || spaceOrTab(rest[hashes - 1]))) {
+        end = hashes;
+        while (end > 0 && spaceOrTab(rest[end - 1])) end--;
+    }
+    return { level: start[1]!.length as 1 | 2 | 3 | 4 | 5 | 6, text: rest.slice(0, end) };
+}
 
 function startsBlock(line: string): boolean {
-    return fenceLine.test(line) || headingLine.test(line) || quoteLine.test(line) || itemLine.test(line);
+    return fenceLine.test(line) || headingStart.test(line) || quoteLine.test(line) || itemLine.test(line);
 }
 
 function blocks(lines: readonly string[], depth: number): Block[] {
@@ -73,10 +94,9 @@ function blocks(lines: readonly string[], depth: number): Block[] {
             out.push({ kind: 'code', text: body.join('\n') });
             continue;
         }
-        const heading = headingLine.exec(line);
+        const heading = headingOf(line);
         if (heading) {
-            const level = heading[1]!.length as 1 | 2 | 3 | 4 | 5 | 6;
-            out.push({ kind: 'heading', level, children: inline(heading[2]!, depth) });
+            out.push({ kind: 'heading', level: heading.level, children: inline(heading.text, depth) });
             at++;
             continue;
         }
@@ -103,12 +123,13 @@ function blocks(lines: readonly string[], depth: number): Block[] {
     return out;
 }
 
-/** The lines with what lies before the subset's reach kept as written, trailing blank lines dropped. */
+/** The lines from the first that is not blank to the last, cut once. */
 function trimmed(lines: readonly string[]): string[] {
-    const kept = [...lines];
-    while (kept.length && blank(kept.at(-1)!)) kept.pop();
-    while (kept.length && blank(kept[0]!)) kept.shift();
-    return kept;
+    let first = 0;
+    while (first < lines.length && blank(lines[first]!)) first++;
+    let last = lines.length;
+    while (last > first && blank(lines[last - 1]!)) last--;
+    return lines.slice(first, last);
 }
 
 function closesFence(line: string, mark: string): boolean {
@@ -138,7 +159,8 @@ function list(lines: readonly string[], start: number, depth: number, out: Block
                 let after = at;
                 while (after < lines.length && blank(lines[after]!)) after++;
                 if (after < lines.length && indentOf(lines[after]!) > markerIndent) {
-                    body.push(...lines.slice(at, after).map(() => ''));
+                    // One at a time: a spread of a long run passes more arguments than a call takes.
+                    for (let gap = at; gap < after; gap++) body.push('');
                     at = after;
                     continue;
                 }
