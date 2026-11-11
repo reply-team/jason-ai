@@ -20,13 +20,15 @@
 ; the application's own start, --stop-runtime, which runs jason runtime stop for the data directory this run was given
 ; and exits; the look after it decides, never the start's exit code. At worst that start waits out jason runtime status
 ; twice, 30 seconds each, and jason runtime stop once, 60 seconds. A person is asked first, before the application is
-; closed, so a Cancel leaves Jason as it was; an update and a silent run are not asked. A runtime still found then - one
-; started with another data directory, say - ends the run before a file is replaced, with error level 1, and a person is
-; told how to stop it. Without PowerShell nothing can be looked for, and a person is asked to stop it.
+; closed, so a Cancel leaves Jason as it was; an update and a silent run are not asked. A process still found then - a
+; runtime that did not stop, one started with another data directory say, or other Jason work from this folder - ends
+; the run before a file is replaced, with error level 1, and a person is told to stop a runtime with the carried
+; executable by its full path, since the PATH command may set a data directory of its own. Without PowerShell nothing
+; can be looked for: a person is asked to stop it, and an update goes on without a look.
 !define JASON_OWN_RUNTIME `Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and [string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) }`
 
 !define JASON_RUNTIME_ASK "A Jason runtime is running from this application's folder. Choose OK to stop it and go on."
-!define JASON_RUNTIME_STILL "A Jason runtime is still running from this application's folder, so nothing was changed. It may have been started with another data directory: stop it with jason runtime stop with JASON_DATA_DIR set to that directory, then run this again."
+!define JASON_RUNTIME_STILL "A Jason process from this application's folder is still running, so nothing was changed. If it is a runtime that did not stop, stop it with $INSTDIR\resources\bundle\jason.exe runtime stop, with JASON_DATA_DIR set if it was started with another data directory; other Jason work from this folder ends by itself. Then run this again."
 
 !macro customCheckAppRunning
   System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_APP", t "$INSTDIR\${APP_EXECUTABLE_FILENAME}")'

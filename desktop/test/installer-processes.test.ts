@@ -173,11 +173,16 @@ test('the whole include runs only the commands these rows name, stops only the a
     assert.ok(unInstall.start > macroIn(script, 'customCheckAppRunning', 'installer/uninstall.nsh').end);
 });
 
-test('the carried jason executable is looked for by its exact path, in a filter that no stop reads', () => {
+test('the carried jason executable is looked for by its exact path, in a filter that no stop reads, and otherwise only named to a person', () => {
     const check = macro('customCheckAppRunning');
-    // The folder's resources appear in one place: the path handed to the runtime's filter through the environment.
+    // The folder's resources appear in two places: the words a person is shown when a process is still found, which only
+    // a message box reads, and the path handed to the runtime's filter through the environment.
     assert.deepEqual([...script.matchAll(/\$INSTDIR\\resources/gi)].map((found) => script.slice(script.lastIndexOf('\n', found.index) + 1, script.indexOf('\n', found.index)).trim()), [
+        `!define JASON_RUNTIME_STILL "${define('JASON_RUNTIME_STILL')}"`,
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_RUNTIME", t "$INSTDIR\\resources\\bundle\\jason.exe")'`,
+    ]);
+    assert.deepEqual(script.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.includes('JASON_RUNTIME_STILL') && !line.startsWith('!define')), [
+        'MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"',
     ]);
     assert.equal(filter('JASON_OWN_RUNTIME'), 'Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) }');
     const looks = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!).filter((command) => command.includes('${JASON_OWN_RUNTIME}'));
@@ -209,7 +214,7 @@ test('a person is asked about a runtime before the application is closed, so a C
     assert.equal(define('JASON_RUNTIME_ASK'), "A Jason runtime is running from this application's folder. Choose OK to stop it and go on.");
 });
 
-test('a runtime running from the carried executable is stopped through the application’s own start on every path, and one still found ends the run', () => {
+test('a runtime running from the carried executable is stopped through the application’s own start on every path, and a Jason process still found there ends the run', () => {
     const check = macro('customCheckAppRunning');
     const after = check.slice(check.indexOf('Stop-Process'));
     const runtime = after.slice(after.indexOf(runtimeLook) + runtimeLook.length + 1);
@@ -248,7 +253,7 @@ test('a runtime running from the carried executable is stopped through the appli
     ]);
     assert.equal(
         define('JASON_RUNTIME_STILL'),
-        "A Jason runtime is still running from this application's folder, so nothing was changed. It may have been started with another data directory: stop it with jason runtime stop with JASON_DATA_DIR set to that directory, then run this again.",
+        "A Jason process from this application's folder is still running, so nothing was changed. If it is a runtime that did not stop, stop it with $INSTDIR\\resources\\bundle\\jason.exe runtime stop, with JASON_DATA_DIR set if it was started with another data directory; other Jason work from this folder ends by itself. Then run this again.",
     );
     // The start is the one the application reads, and the update's application has quit before it is made.
     assert.ok(stopRuntimeLine.endsWith(` ${stopRuntimeFlag}'`));

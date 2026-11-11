@@ -6,7 +6,8 @@
  *   placed, shows what it took and left unless the uninstall is silent, and exits; the uninstaller then removes the
  *   application's folder, unless the exit says to go no further.
  * - `--stop-runtime` stops the runtime this application carries when that is the one running, and exits; it shows
- *   nothing, removes nothing and writes nothing but the log lines of the CLI it runs.
+ *   nothing and removes nothing; it writes its log lines and Electron's own profile under the data directory its
+ *   environment names, as `--uninstall` does.
  */
 
 import { app, dialog } from 'electron';
