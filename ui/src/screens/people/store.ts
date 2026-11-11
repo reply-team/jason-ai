@@ -20,9 +20,9 @@ export const loaded = signal(false);
 export const failure = signal<string | null>(null);
 /** True while a refresh the person asked for is under way: long enough to be seen, even when the answer is instant. */
 export const refreshing = signal(false);
-/** How many people each stage counts, as campaign.summary says it; null while unread, or when the list would not match them. */
 /** The filters the rows on show were fetched with: the table is drawn with these, never with the ones just chosen. */
 export const drawn = signal<PeopleFilters>({});
+/** How many people each stage counts, as campaign.summary says it; null while unread, or when the list would not match them. */
 export const counts = signal<Record<Stage, number> | null>(null);
 /** The campaign the filter names, with the name to show for it. */
 export const campaign = signal<{ id: string; name: string } | null>(null);

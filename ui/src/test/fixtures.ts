@@ -171,6 +171,7 @@ import contactListByActivitySeveral from '../../../docs/api/fixtures/contact.lis
 import contactListByActivitySummaryQuery from '../../../docs/api/fixtures/contact.list/by-activity-summary-query.json';
 import contactListByActivitySummaryWaiting from '../../../docs/api/fixtures/contact.list/by-activity-summary-waiting.json';
 import contactListByCampaign from '../../../docs/api/fixtures/contact.list/by-campaign.json';
+import contactListByCampaignArchived from '../../../docs/api/fixtures/contact.list/by-campaign-archived.json';
 import contactListByCampaignQuery from '../../../docs/api/fixtures/contact.list/by-campaign-query.json';
 import contactListByCampaignQueryArchived from '../../../docs/api/fixtures/contact.list/by-campaign-query-archived.json';
 import contactListByCampaignQueryNone from '../../../docs/api/fixtures/contact.list/by-campaign-query-none.json';
@@ -655,6 +656,10 @@ export const fixtures = {
         Page<Contact>
     >,
     'contact.list/by-campaign': contactListByCampaign satisfies Exchange<ContactListRequest, Page<Contact>>,
+    'contact.list/by-campaign-archived': contactListByCampaignArchived satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
     'contact.list/by-campaign-query': contactListByCampaignQuery satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-campaign-query-archived': contactListByCampaignQueryArchived satisfies Exchange<
         ContactListRequest,

@@ -26,7 +26,6 @@ export function Chips<T extends string>({
             title={chip.title}
             className={`chip${chip.key === on ? ' on' : ''}`}
             aria-pressed={chip.key === on}
-            aria-current={chip.key === on ? 'true' : undefined}
             onClick={() => onChoose(chip.key)}
         >
             {chip.label}

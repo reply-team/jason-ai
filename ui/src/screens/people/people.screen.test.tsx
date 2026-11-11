@@ -190,6 +190,7 @@ describe('People', () => {
 
         expect(route.value).toEqual({ screen: 'people', id: mateo.id, tab: 'timeline', filters: { q: 'mat' } });
         await waitFor(() => expect(rowOf('Mateo Ruiz').className).toContain('sel'));
+        expect(rowOf('Mateo Ruiz').getAttribute('aria-current')).toBe('true');
 
         const details = { screen: 'people' as const, id: mateo.id, tab: 'details' as const, filters: { q: 'mat' } };
         location.hash = href(details);
@@ -776,8 +777,8 @@ describe('People: the stage chips', () => {
         expect(route.value).toMatchObject({ screen: 'people', filters: { stage: 'waiting' } });
         await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(3));
         expect(chip(/^Waiting/).getAttribute('aria-pressed')).toBe('true');
-        expect(chip(/^Waiting/).getAttribute('aria-current')).toBe('true');
         expect(cells(rowOf('Pia Example'))[3]).toBe('WaitingFailed');
+        expect(rowOf('Pia Example').getAttribute('aria-current')).toBeNull();
 
         fireEvent.click(chip(/^All/));
         await waitFor(() => expect(sentLists(api)).toHaveLength(3));
@@ -840,6 +841,25 @@ describe('People: the stage chips', () => {
         await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
         // Mateo is in two campaigns; the list is of the one, so the row says where they stand there.
         expect(cells(rowOf('Mateo Ruiz')).slice(3, 5)).toEqual(['WorkingOut', 'LatAm pilot+1']);
+    });
+
+    it("show a campaign's own numbers when Archived is ticked and the list is narrowed to it, and ask again on a refresh", async () => {
+        const unlinked = fixtures['campaign.get/unlinked'].request.campaign_id;
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-campaign-archived')
+            .answer('campaign.get', 'campaign.get/unlinked')
+            .answer('campaign.summary', 'campaign.summary/unlinked');
+        open(api, { campaign: unlinked, archived: true });
+        await waitFor(() => expect(chipLabels()).toContain('New 1'));
+        expect(api.sent('campaign.summary')).toEqual({ campaign_ids: [unlinked] });
+        expect(chipLabels()).toContain('Idle 1');
+        expect(chipLabels()).toContain('Waiting 0');
+
+        // A refresh an earlier test started may still be turning the button.
+        await waitFor(() => expect((screen.getByTitle('Refresh') as HTMLButtonElement).disabled).toBe(false));
+        fireEvent.click(screen.getByTitle('Refresh'));
+        await waitFor(() => expect(api.calls.filter((c) => c.operation === 'campaign.summary')).toHaveLength(2));
+        await waitFor(() => expect(chipLabels()).toContain('New 1'));
     });
 
     it('keep drawing the rows with the filters they were fetched with while the next list is on its way', async () => {

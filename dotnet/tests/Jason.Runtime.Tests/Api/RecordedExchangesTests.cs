@@ -401,6 +401,7 @@ public class RecordedExchangesTests
         Assert.Equal([seed.Mateo, seed.Aguilar, seed.Paula, seed.Grace], first.Items.Select(c => c.Id));
         Assert.Null(first.NextCursor);
         Assert.Equal([seed.Mateo, seed.Aguilar], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign", new { order = "activity", campaign_id = seed.LatAm, limit = 200 }, Ct)).Items.Select(c => c.Id));
+        Assert.NotEmpty((await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-campaign-archived", new { order = "activity", campaign_id = seed.LatAm, include_archived = true, limit = 200 }, Ct)).Items);
         Assert.Equal([seed.Mateo], (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-query", new { order = "activity", query = "mat", limit = 200 }, Ct)).Items.Select(c => c.Id));
         Assert.Contains(seed.Marcos, (await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "archived", new { order = "activity", include_archived = true, limit = 200 }, Ct)).Items.Select(c => c.Id));
 

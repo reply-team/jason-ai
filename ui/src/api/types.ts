@@ -340,8 +340,10 @@ export type ContactCampaign = {
     state: string;
     added_at: string;
     updated_at: string;
-    /** The counts of campaign.summary that count the person in this campaign now; an excluded membership is in removed alone. */
-    /** Absent from a runtime that does not say where a person stands. */
+    /**
+     * The counts of campaign.summary that count the person in this campaign now; an excluded membership is in removed
+     * alone. Absent from a runtime that does not say where a person stands.
+     */
     standing?: string[];
 };
 export type Contact = {
