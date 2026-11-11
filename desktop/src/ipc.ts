@@ -16,6 +16,12 @@ export const invokeChannels = {
     'chat.send': 'jason:chat.send',
     'chat.stop': 'jason:chat.stop',
     'chat.answer': 'jason:chat.answer',
+    'chat.list': 'jason:chat.list',
+    'chat.open': 'jason:chat.open',
+    'chat.create': 'jason:chat.create',
+    'chat.remove': 'jason:chat.remove',
+    'chat.restart': 'jason:chat.restart',
+    'chat.attach': 'jason:chat.attach',
 } as const;
 
 /** What the desktop sends the page. */

@@ -9,9 +9,16 @@
 //   { "end": "error", "text": "words" }               end with a failed result
 //   { "jam": true }                                   Claude Code only: put a folder where the turn's MCP file is, so its removal fails
 //   { "recover": "words" }                            Codex only: report an error that its turn then completes past
-// With no plan the turn says one line and ends well.
+//   { "campaign": "name" }                            add a campaign of that name, created now, to STUB_CAMPAIGNS_FILE;
+//   { "campaign": { "name", "id", "created_at" } }    or one with the id and the moment given
+//   { "sleep": 300 }                                  wait that many milliseconds
+// With no plan the turn says one line and ends well. STUB_RESUME says what a resume does: "missing" fails as a session
+// that is not there (Claude Code on stderr, Codex with an error event) before anything is said, "other" answers with a
+// session other than the one asked for and goes on as a turn would.
+// STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
+// as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');
-const { mkdirSync, rmSync, writeFileSync } = require('node:fs');
+const { mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { decide } = require('./mcp-http.cjs');
 
@@ -36,14 +43,43 @@ function wait(file) {
     return true;
 }
 
+let made = 0;
+function addCampaign(given) {
+    const { name, id: named, created_at: at } = typeof given === 'string' ? { name: given } : given;
+    const file = process.env.STUB_CAMPAIGNS_FILE;
+    let items = [];
+    try {
+        items = JSON.parse(readFileSync(file, 'utf8'));
+    } catch {}
+    const id = `cmp_${Date.now().toString(36)}${process.pid}x${++made}`.replace(/[^0-9A-Za-z_]/g, '');
+    items.push({ id: named || id, name, status: 'draft', created_at: at || new Date().toISOString() });
+    writeFileSync(file, JSON.stringify(items));
+}
+
+function silent(asked) {
+    return process.env.STUB_SILENT === 'always' || (process.env.STUB_SILENT === 'resumed' && asked !== null);
+}
+
+function resumed(args) {
+    const at = args.indexOf(args[0] === 'exec' ? 'resume' : '--resume');
+    return at < 0 ? null : args[at + 1];
+}
+
 async function claude(args, stdin) {
-    const session = process.env.STUB_HOST_SESSION || 'stub-session-1';
+    const asked = resumed(args);
+    if (asked !== null && process.env.STUB_RESUME === 'missing') {
+        process.stderr.write(`No conversation found with session ID: ${asked}\n`);
+        process.exit(1);
+    }
+    const session = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || 'stub-session-1');
     const config = args[args.indexOf('--mcp-config') + 1];
     print({ type: 'system', subtype: 'init', session_id: session });
-    print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
+    if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;
     for (const step of plan()) {
         if (step.say !== undefined) print({ type: 'assistant', message: { content: [{ type: 'text', text: step.say }] } });
+        else if (step.campaign !== undefined) addCampaign(step.campaign);
+        else if (step.sleep !== undefined) await new Promise((resolve) => setTimeout(resolve, step.sleep));
         else if (step.use !== undefined) print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_use_${++n}`, name: step.use.tool, input: step.use.input }] } });
         else if (step.ask !== undefined) {
             n++;
@@ -75,13 +111,22 @@ async function claude(args, stdin) {
 }
 
 function codex(args, stdin) {
-    print({ type: 'thread.started', thread_id: process.env.STUB_HOST_SESSION || '0199a213-81c0-7800-8aa1-bbab2a035a53' });
+    const asked = resumed(args);
+    if (asked !== null && process.env.STUB_RESUME === 'missing') {
+        print({ type: 'error', message: `no rollout found for thread id ${asked}` });
+        process.exit(1);
+    }
+    const thread = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || '0199a213-81c0-7800-8aa1-bbab2a035a53');
+    print({ type: 'thread.started', thread_id: thread });
     print({ type: 'turn.started' });
-    print({ type: 'item.started', item: { id: 'item_1', type: 'command_execution', command: 'jason campaign list --json', status: 'in_progress' } });
-    print({ type: 'item.completed', item: { id: 'item_1', type: 'command_execution', command: 'jason campaign list --json', status: 'completed' } });
-    print({ type: 'item.completed', item: { id: 'item_2', type: 'agent_message', text: `heard ${stdin.length} characters` } });
+    if (!silent(asked)) {
+        print({ type: 'item.started', item: { id: 'item_1', type: 'command_execution', command: 'jason campaign list --json', status: 'in_progress' } });
+        print({ type: 'item.completed', item: { id: 'item_1', type: 'command_execution', command: 'jason campaign list --json', status: 'completed' } });
+        print({ type: 'item.completed', item: { id: 'item_2', type: 'agent_message', text: `heard ${stdin.length} characters` } });
+    }
     for (const step of plan()) {
         if (step.say !== undefined) print({ type: 'item.completed', item: { id: `item_say_${step.say.length}`, type: 'agent_message', text: step.say } });
+        else if (step.campaign !== undefined) addCampaign(step.campaign);
         else if (step.wait !== undefined) return wait(step.wait);
         else if (step.recover !== undefined) print({ type: 'error', message: step.recover });
         else if (step.end === 'error') {

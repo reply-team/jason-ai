@@ -11,10 +11,18 @@ const top = { platform: true, onCommand: true, chat: true, setup: true } as cons
     keyof JasonDesktop,
     true
 >;
-const chat = { send: true, stop: true, answer: true, onEvent: true } as const satisfies Record<
-    keyof JasonDesktop['chat'],
-    true
->;
+const chat = {
+    send: true,
+    stop: true,
+    answer: true,
+    onEvent: true,
+    list: true,
+    open: true,
+    create: true,
+    remove: true,
+    restart: true,
+    attach: true,
+} as const satisfies Record<keyof JasonDesktop['chat'], true>;
 const setup = {
     status: true,
     connectReply: true,
@@ -57,6 +65,12 @@ describe('the desktop seam', () => {
             'chat.stop',
             'chat.answer',
             'chat.onEvent',
+            'chat.list',
+            'chat.open',
+            'chat.create',
+            'chat.remove',
+            'chat.restart',
+            'chat.attach',
             'setup.status',
             'setup.connectReply',
             'setup.connectReplyWithKey',

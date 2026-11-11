@@ -120,6 +120,7 @@ public sealed class ExportCommandTests
         Assert.Contains("data/logs/", help, StringComparison.Ordinal);
         Assert.Contains("Never carried: data/state/backups/", help, StringComparison.Ordinal);
         Assert.Contains("a replaced-<stamp>/ directory at the data directory's top, which an import moved aside", help, StringComparison.Ordinal);
+        Assert.Contains("data/desktop/, the desktop application's own files, the conversations of its chat among them", help, StringComparison.Ordinal);
         Assert.Contains("every folder in it whole, a .git included", help, StringComparison.Ordinal);
         Assert.Contains("The harness root: JASON_Harness__Root, else the Harness:Root the settings file names, else Jason in the home directory", help, StringComparison.Ordinal);
         Assert.Contains("a link at the top of a carried place, or a harness root that is one, is followed and judged where it leads", help, StringComparison.Ordinal);
@@ -148,6 +149,7 @@ public sealed class ExportCommandTests
             "state/backups/jason-20261101T000000Z.db", "run/runtime.lock", "work/wi_01/att_01/input.json",
             "skills/.staging/pack/SKILL.md", "skills/staged/pack/SKILL.md", "ui/default/index.html",
             "replaced-20261101T000000Z/state/jason.db", "autostart/jason-logon.xml", "update/ledger.json",
+            "desktop/settings.json", "desktop/conversations/conv_01JD7Q6V2N0000000000000000.json",
         ];
         foreach (var file in carried.Concat(left))
         {

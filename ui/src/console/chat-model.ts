@@ -113,6 +113,11 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             };
         case 'permission_gone':
             return answered(chat, event.request, 'gone');
+        // The conversations the desktop keeps: this page does not draw them yet.
+        case 'attached':
+        case 'fresh':
+        case 'pick':
+            return chat;
         case 'done': {
             const over = ended(chat);
             if (event.error === null)

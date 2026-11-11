@@ -1125,6 +1125,39 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
+    /// The desktop keeps each conversation of its chat as a record under <c>desktop/conversations/</c> in the data
+    /// directory: what the person and the agent said, the hosts' session ids, a campaign's name as the title. No bundle
+    /// carries any of it, its count or its size included, the journal asked for or not, and the list of what a bundle
+    /// never holds names it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task No_bundle_carries_a_conversation_of_the_desktop_s_chat(bool includeJournal)
+    {
+        using var dir = new TempPaths();
+        const string id = "conv_01JD7Q6V2N0000000000000000";
+        var folder = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "desktop", "conversations")).FullName;
+        File.WriteAllText(
+            Path.Combine(folder, id + ".json"),
+            """{"id":"conv_01JD7Q6V2N0000000000000000","campaign_id":"cmp_01SENTINELCONVERSATION","title":"SENTINEL_TITLE","created_at":"2026-11-11T10:00:00.000Z","updated_at":"2026-11-11T10:00:00.000Z","sessions":{"claude":"SENTINEL_SESSION"},"entries":[{"kind":"user","text":"SENTINEL_WORDS"}],"dropped":0}""");
+        var logs = Directory.CreateDirectory(dir.Paths.LogsDirectory).FullName;
+        Write(logs, "desktop-20261004.jsonl", Event(At(0), "desktop line"));
+
+        var file = (await ComposeAsync(dir, Running(dir), includeJournal)).Serialize();
+
+        foreach (var withheld in (string[])[id, "conversations", "cmp_01SENTINELCONVERSATION", "SENTINEL_TITLE", "SENTINEL_SESSION", "SENTINEL_WORDS"])
+        {
+            Assert.DoesNotContain(withheld, file.Replace(ConversationsNeverCarried, string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+        }
+
+        Assert.Contains(ConversationsNeverCarried, DoctorComposer.NeverCarried);
+    }
+
+    private const string ConversationsNeverCarried =
+        "the desktop's conversations under desktop/conversations/ in the data directory, and the transcripts the agent hosts keep of the desktop's chat";
+
+    /// <summary>
     /// An id is written only when it is well formed. A campaign id or a snapshot id the runtime sent in any other shape is
     /// a value nobody vouched for, and it is written as the settings write a key nobody chose.
     /// </summary>
