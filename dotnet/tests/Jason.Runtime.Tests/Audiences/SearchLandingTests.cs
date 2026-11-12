@@ -545,6 +545,37 @@ public sealed class SearchLandingTests
         db.Contacts.AsNoTracking().Include(c => c.Channels).Include(c => c.ExternalIds)
             .SingleAsync(c => c.Channels.Any(channel => channel.Channel == "email" && channel.Value == email), Ct);
 
+    /// <summary>
+    /// A read or a stop that finds no search under the reference ends it <c>cancelled</c>, with the line any ending writes,
+    /// by that item, in a campaign that runs as in an archived one: the search is gone at the provider, so nothing would
+    /// ever read or stop it again. No other failure ends a search: one the provider may answer later leaves it to be read
+    /// again, and one a person has to fix leaves it followed.
+    /// </summary>
+    [Theory]
+    [InlineData("audience.search_status", "search_not_found", FailureClass.Permanent, false, "cancelled")]
+    [InlineData("audience.search_cancel", "search_not_found", FailureClass.Permanent, false, "cancelled")]
+    [InlineData("audience.search_cancel", "search_not_found", FailureClass.Permanent, true, "cancelled")]
+    [InlineData("audience.search_status", "provider_unavailable", FailureClass.Transient, false, null)]
+    [InlineData("audience.search_status", "unauthorized", FailureClass.Permanent, false, null)]
+    [InlineData("audience.search_cancel", "unauthorized", FailureClass.Permanent, true, null)]
+    public async Task A_read_or_a_stop_that_finds_the_search_gone_ends_it_cancelled(string operation, string code, FailureClass failure, bool archived, string? ends)
+    {
+        using var scene = await Scene.AcceptedAsync();
+        if (archived)
+        {
+            await using var db = scene.Open();
+            await db.Campaigns.ExecuteUpdateAsync(set => set.SetProperty(campaign => campaign.Status, CampaignStatus.Archived), Ct);
+        }
+
+        var failed = await scene.FailAsync(operation, new OutcomeError(failure, code, "the provider said no"));
+
+        await using var after = scene.Open();
+        Assert.Equal(ends, (await after.AudienceSearches.AsNoTracking().SingleAsync(Ct)).EndedAs);
+        var lines = await LinesAsync(after, JournalKinds.AudienceSearchEnded);
+        Assert.Equal(ends is null ? [] : [failed.Item.PublicId], lines.Select(line => (string?)line.New!["ended_by"]));
+        Assert.Equal(ends is null ? [] : ["cancelled"], lines.Select(line => (string?)line.New!["ended_as"]));
+    }
+
     private static Task<List<JournalEntry>> LinesAsync(JasonDbContext db, string kind) =>
         db.Journal.AsNoTracking().Where(line => line.Kind == kind).OrderBy(line => line.Id).ToListAsync(Ct);
 
@@ -623,17 +654,29 @@ public sealed class SearchLandingTests
             new JsonObject { ["search"] = Search.PublicId },
             new JsonObject { ["items"] = new JsonArray(new JsonObject { ["status"] = status, ["ended_as"] = endedAs }) });
 
-        private async Task<(WorkItem Item, string Attempt)> RunAsync(string operation, JsonObject args, JsonObject answer, bool takenBack = false, Func<Task>? meanwhile = null)
+        /// <summary>A read or a stop of the search, made, and failed by the plugin with <paramref name="error"/>.</summary>
+        public Task<(WorkItem Item, string Attempt)> FailAsync(string operation, OutcomeError error) => RunAsync(
+            operation,
+            operation == "audience.search_status" ? new JsonObject { ["search"] = Search.PublicId, ["limit"] = 100 } : new JsonObject { ["search"] = Search.PublicId },
+            new InvocationOutcome.Failed(error, new OutcomeDiagnostics(12, 2, 0, 1)));
+
+        private Task<(WorkItem Item, string Attempt)> RunAsync(string operation, JsonObject args, JsonObject answer, bool takenBack = false, Func<Task>? meanwhile = null) =>
+            RunAsync(operation, args, new InvocationOutcome.Succeeded(answer, null, new OutcomeDiagnostics(12, 2, 0, 1)), takenBack, meanwhile);
+
+        private async Task<(WorkItem Item, string Attempt)> RunAsync(string operation, JsonObject args, InvocationOutcome outcome, bool takenBack = false, Func<Task>? meanwhile = null)
         {
             await using var db = Open();
             var campaign = await db.Campaigns.SingleAsync(c => c.Id == Campaign.Id, Ct);
             var item = WorkItemFactory.NewProviderOp(campaign, operation, Clock.GetUtcNow().UtcDateTime);
             item.Context = new JsonObject { ["input"] = args };
-            var attempt = await AnswerAsync(db, item, answer, null, takenBack, meanwhile);
+            var attempt = await AnswerAsync(db, item, outcome, takenBack, meanwhile);
             return (item, attempt);
         }
 
-        private async Task<string> AnswerAsync(JasonDbContext db, WorkItem item, JsonObject answer, JsonObject? externalIds, bool takenBack = false, Func<Task>? meanwhile = null)
+        private Task<string> AnswerAsync(JasonDbContext db, WorkItem item, JsonObject answer, JsonObject? externalIds) =>
+            AnswerAsync(db, item, new InvocationOutcome.Succeeded(answer, externalIds, new OutcomeDiagnostics(12, 2, 0, 1)));
+
+        private async Task<string> AnswerAsync(JasonDbContext db, WorkItem item, InvocationOutcome outcome, bool takenBack = false, Func<Task>? meanwhile = null)
         {
             var now = Clock.GetUtcNow().UtcDateTime;
             item.Status = WorkItemStatus.Processing;
@@ -658,7 +701,7 @@ public sealed class SearchLandingTests
                     ["search"] = new JsonObject { ["work_item"] = Search.PublicId, ["reference"] = "srch-1", ["cursor"] = null },
                 };
             var result = new PluginInvocationResult(
-                new InvocationOutcome.Succeeded(answer, externalIds, new OutcomeDiagnostics(12, 2, 0, 1)),
+                outcome,
                 new InvocationProvenance(
                     TestPlugins.FakeProviderId,
                     "1.0.0",
@@ -700,7 +743,7 @@ public sealed class SearchLandingTests
                 await writer;
             }
 
-            Assert.Equal(WorkItemStatus.Succeeded, item.Status);
+            Assert.Equal(outcome is InvocationOutcome.Succeeded, item.Status == WorkItemStatus.Succeeded);
             return attempt.PublicId;
         }
     }

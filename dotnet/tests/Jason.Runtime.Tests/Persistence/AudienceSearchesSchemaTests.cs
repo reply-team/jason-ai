@@ -57,13 +57,20 @@ public class AudienceSearchesSchemaTests
             await PlanAsync(db, AudienceSearches.Followed(db).ToQueryString()));
 
         // The claim asks, for every search it claims, whether another search of the campaign is in the way: its unended rows
-        // off the index of the searches still followed, and its searches starting now off the index of its work by status.
+        // off the index of the searches still followed, its searches starting now off the index of its work by status, and
+        // the attempts that ran of its open searches off that index and the index of an item's attempts.
         Assert.Equal(
             ["SEARCH a USING INDEX ix_audience_searches_in_flight (campaign_id=?)", "SEARCH w USING INTEGER PRIMARY KEY (rowid=?)"],
             await PlanAsync(db, AudienceSearches.Unended(db, 1, 2).ToQueryString()));
         Assert.Equal(
             ["SEARCH w USING INDEX ix_work_items_campaign_id_status (campaign_id=? AND status=?)"],
             await PlanAsync(db, AudienceSearches.Starting(db, 1, 2).ToQueryString()));
+        Assert.Equal(
+            [
+                "SEARCH w USING INDEX ix_work_items_campaign_id_status (campaign_id=? AND status=?)",
+                "SEARCH a USING INDEX ix_attempts_work_item_id_number (work_item_id=?)",
+            ],
+            await PlanAsync(db, AudienceSearches.Ran(db, 1, 2).ToQueryString()));
 
         // Every scan looks for the searches of archived campaigns still in flight, off the index that holds nothing else,
         // and for the stops already made of one, off the indexes of its work by status and by when it finished.

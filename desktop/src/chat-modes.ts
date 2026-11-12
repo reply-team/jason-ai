@@ -14,7 +14,7 @@ export type ChatMode = 'ask_first' | 'plan_only' | 'full_access';
  * Whether the desktop offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
  * refuses it before any confirmation. Everything else of Full access stays, behind this one switch.
  */
-export const fullAccessOffered = false;
+export const fullAccessOffered = true;
 
 /**
  * Whether Full access runs the PowerShell tool's literal commands unasked. Off: in Full access every command of the
@@ -24,7 +24,7 @@ export const fullAccessOffered = false;
  */
 export const powerShellRunsInFullAccess = false;
 
-/** What the menu and the desktop say of Full access while this version does not offer it. */
+/** What the menu and the desktop say of Full access while the switch is off. */
 export const fullAccessNotYet = 'Full access is not in this version yet.';
 
 export const chatModes: readonly ChatMode[] = ['ask_first', 'plan_only', 'full_access'];

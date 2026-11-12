@@ -81,7 +81,8 @@ public static class OutcomeContract
 
     /// <summary>
     /// Whether a repeat of <paramref name="contract"/> after an attempt that may have acted is held to that attempt — its
-    /// package, its account and the request it was composed with: an operation the work item's key settles, and one whose
+    /// plugin (and, for an operation the work item's key settles, the package's digest), its account and the request it
+    /// was composed with: an operation the work item's key settles, and one whose
     /// cost is metered and whose contract asks for a recovery read before a repeat, since its blind repeat would spend
     /// again.
     /// </summary>

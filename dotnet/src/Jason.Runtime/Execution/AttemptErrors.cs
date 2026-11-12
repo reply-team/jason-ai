@@ -113,9 +113,10 @@ public static class AttemptErrors
     public const string ResponderLaunchesSpent = "responder_launches_spent";
 
     /// <summary>
-    /// Another search of the item's campaign has not ended — the provider still runs or holds it, or another search of the
-    /// campaign is running — and a campaign runs one search at a time. Not a refusal of the work: the claim keeps the item
-    /// waiting, with no attempt and nobody asked to approve it, and asks again a search cadence later.
+    /// Another search of the item's campaign has not ended — the provider still runs or holds it, another search of the
+    /// campaign is running, or one is open again after a start whose answer was lost — and a campaign runs one search at a
+    /// time. Not a refusal of the work: the claim keeps the item waiting, with no attempt and nobody asked to approve it,
+    /// and asks again a search cadence later.
     /// </summary>
     public const string SearchUnfinished = "search_unfinished";
 

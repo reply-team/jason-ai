@@ -245,8 +245,8 @@ public static partial class JournalKinds
     public const string AudiencePeopleLanded = "audience_people_landed";
 
     /// <summary>
-    /// A search ended — finished, exhausted, stalled or stopped — keyed by and about its work item, with what it was asked
-    /// for, found and landed. Said by the dispatcher once per search, which the database holds. A default manager trigger:
+    /// A search ended — finished, exhausted, stalled, stopped, or found gone by a read or a stop — keyed by and about its
+    /// work item, with what it was asked for, found and landed. Said by the dispatcher once per search, which the database holds. A default manager trigger:
     /// whether the audience needs more, or another search, is the manager's.
     /// </summary>
     public const string AudienceSearchEnded = "audience_search_ended";

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -21,6 +22,12 @@ namespace Jason.Runtime.Tests.Dispatch;
 public partial class ClaimerTests
 {
     private const string Searcher = "stand-in-search";
+
+    /// <summary>A first search whose start was made and whose answer never came: open again, with no row.</summary>
+    private const string StartAnswerLost = "start answer lost";
+
+    /// <summary>A first search the provider refused outright, for good: failed, with no row.</summary>
+    private const string FailedForGood = "failed for good";
 
     private static JsonObject InSoftware => new() { ["industries"] = new JsonArray("Software"), ["titles"] = new JsonArray("Head of Sales") };
 
@@ -141,13 +148,17 @@ public partial class ClaimerTests
     /// held by the provider paused for credits — waits, with no attempt and nobody asked to approve a spend that cannot
     /// start now: its last error names the search in the way, the line says what it waits behind, and the wait lets it go
     /// for the claim to ask again a cadence later, the long cadence of a hold where the search in the way is held, so a
-    /// hold of days does not say the wait again every few minutes. Another campaign's search goes on to its person, and
-    /// once the search in the way has ended, the waiting one does too.
+    /// hold of days does not say the wait again every few minutes. A search whose start may have acted although its answer
+    /// was lost — open again, with no row, its attempt ended ambiguous — is in the way the same: it may be running at the
+    /// provider. One that failed for good, with an answer that says nothing was started, is in nobody's way. Another
+    /// campaign's search goes on to its person, and once the search in the way has ended, the waiting one does too.
     /// </summary>
     [Theory]
     [InlineData("in_progress", 300)]
     [InlineData("paused_for_credits", 3600)]
-    public async Task Audience_ASecondSearchOfACampaign_WaitsBehindTheOneUnfinished_NamingIt(string state, int seconds)
+    [InlineData(StartAnswerLost, 300)]
+    [InlineData(FailedForGood, null)]
+    public async Task Audience_ASecondSearchOfACampaign_WaitsBehindTheOneUnfinished_NamingIt(string state, int? seconds)
     {
         using var harness = SearchHarness();
         using var database = new TestDatabase();
@@ -157,37 +168,76 @@ public partial class ClaimerTests
         db.Campaigns.AddRange(spring, autumn);
         await HeldAsync(harness, db, spring, InSoftware);
         var first = await db.WorkItems.SingleAsync(w => w.CampaignId == spring.Id, Ct);
-        first.Status = WorkItemStatus.Succeeded;
-        db.AudienceSearches.Add(new AudienceSearch
+        if (state is StartAnswerLost or FailedForGood)
         {
-            CampaignId = spring.Id,
-            AudienceId = (await db.Audiences.SingleAsync(a => a.CampaignId == spring.Id, Ct)).Id,
-            SearchWorkItem = first,
-            PluginId = Searcher,
-            Reference = "srch-1",
-            State = state,
-            Asked = 50,
-            QuietSince = Noon,
-            CreatedAt = Noon,
-        });
+            // Its one attempt ran and ended as the provider's answer, or its loss, says: back in the queue, a retry delay
+            // off, where the start may have acted; failed, where it cannot have.
+            Ran(db, first, state == StartAnswerLost
+                ? new AttemptErrorDto("provider_answer_lost", "No answer arrived.", Retriable: true, Class: FailureClass.Ambiguous)
+                : new AttemptErrorDto("provider_call_failed", "The call was refused.", Retriable: false, Class: FailureClass.Permanent));
+            first.Status = state == StartAnswerLost ? WorkItemStatus.Created : WorkItemStatus.Failed;
+            first.RetryAfter = Noon.AddMinutes(5);
+        }
+        else
+        {
+            first.Status = WorkItemStatus.Succeeded;
+            db.AudienceSearches.Add(new AudienceSearch
+            {
+                CampaignId = spring.Id,
+                AudienceId = (await db.Audiences.SingleAsync(a => a.CampaignId == spring.Id, Ct)).Id,
+                SearchWorkItem = first,
+                PluginId = Searcher,
+                Reference = "srch-1",
+                State = state,
+                Asked = 50,
+                QuietSince = Noon,
+                CreatedAt = Noon,
+            });
+        }
+
         var second = Search(db, spring, new JsonObject { ["definition"] = InLogistics, ["count"] = 50 });
         var elsewhere = Search(db, autumn, new JsonObject { ["definition"] = InLogistics, ["count"] = 50 });
         await db.SaveChangesAsync(Ct);
 
         Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
 
+        if (seconds is null)
+        {
+            await using var free = database.Open();
+            Assert.Equal(WorkItemStatus.AwaitingApproval, (await free.WorkItems.AsNoTracking().SingleAsync(w => w.Id == second.Id, Ct)).Status);
+            return;
+        }
+
         await using (var fresh = database.Open())
         {
             var waiting = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == second.Id, Ct);
-            Assert.Equal((WorkItemStatus.Waiting, AttemptErrors.SearchUnfinished), (waiting.Status, waiting.LastError!.Code));
-            Assert.Contains(first.PublicId, waiting.LastError.Message, StringComparison.Ordinal);
+            Assert.Equal((WorkItemStatus.Waiting, AttemptErrors.SearchUnfinished), (waiting.Status, waiting.LastError?.Code));
+            Assert.Contains(first.PublicId, waiting.LastError!.Message, StringComparison.Ordinal);
             Assert.Empty(await fresh.Attempts.AsNoTracking().Where(a => a.WorkItemId == second.Id).ToListAsync(Ct));
             Assert.Empty(await fresh.Approvals.AsNoTracking().Where(a => a.WorkItemId == second.Id).ToListAsync(Ct));
             var wait = await fresh.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == second.Id, Ct);
-            Assert.Equal((Noon.AddSeconds(seconds), (DateTime?)Noon.AddSeconds(seconds)), (wait.Until!.Value, wait.Deadline));
+            Assert.Equal((Noon.AddSeconds(seconds.Value), (DateTime?)Noon.AddSeconds(seconds.Value)), (wait.Until!.Value, wait.Deadline));
             var line = await fresh.Journal.AsNoTracking().SingleAsync(e => e.WorkItemId == second.PublicId && e.Kind == JournalKinds.WorkItemWaiting, Ct);
             Assert.Equal(first.PublicId, (string?)line.New!["behind_search"]);
             Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == elsewhere.Id, Ct)).Status);
+        }
+
+        if (state == StartAnswerLost)
+        {
+            // Its retry delay over, the search whose answer was lost is claimed again, and nothing it did itself is in its
+            // own way: its repeat goes on to the person, and the second search still waits.
+            await db.WorkItems.Where(w => w.Id == first.Id).ExecuteUpdateAsync(set => set.SetProperty(w => w.RetryAfter, (DateTime?)null), Ct);
+            db.ChangeTracker.Clear();
+            Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+            await using (var repeated = database.Open())
+            {
+                var repeat = await repeated.WorkItems.AsNoTracking().SingleAsync(w => w.Id == first.Id, Ct);
+                Assert.Equal((WorkItemStatus.AwaitingApproval, null), (repeat.Status, repeat.LastError?.Code));
+                Assert.Equal(WorkItemStatus.Waiting, (await repeated.WorkItems.AsNoTracking().SingleAsync(w => w.Id == second.Id, Ct)).Status);
+            }
+
+            await db.WorkItems.Where(w => w.Id == first.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(w => w.Status, WorkItemStatus.Failed).SetProperty(w => w.FinishedAt, Noon), Ct);
         }
 
         await db.AudienceSearches.ExecuteUpdateAsync(set => set.SetProperty(row => row.EndedAs, "finished").SetProperty(row => row.EndedAt, Noon), Ct);
@@ -199,6 +249,53 @@ public partial class ClaimerTests
 
         await using var after = database.Open();
         Assert.Equal(WorkItemStatus.AwaitingApproval, (await after.WorkItems.AsNoTracking().SingleAsync(w => w.Id == second.Id, Ct)).Status);
+    }
+
+    /// <summary>
+    /// Two searches of a campaign whose starts both lost their answers — one reopened after it expired while the other ran,
+    /// say — never wait behind each other: the older goes on to its repeat, and the newer waits behind it.
+    /// </summary>
+    [Fact]
+    public async Task Audience_OfTwoSearchesWhoseStartsLostTheirAnswers_TheOlderGoesOnAndTheNewerWaits()
+    {
+        using var harness = SearchHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var spring = WorkItemFactory.NewCampaign("Spring", now: Noon);
+        db.Campaigns.Add(spring);
+        var older = Search(db, spring, new JsonObject { ["definition"] = InSoftware, ["count"] = 50 });
+        var newer = Search(db, spring, new JsonObject { ["definition"] = InLogistics, ["count"] = 50 });
+        foreach (var lost in new[] { older, newer })
+        {
+            Ran(db, lost, new AttemptErrorDto("provider_answer_lost", "No answer arrived.", Retriable: true, Class: FailureClass.Ambiguous));
+        }
+
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var first = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == older.Id, Ct);
+        var second = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == newer.Id, Ct);
+        Assert.Equal((WorkItemStatus.AwaitingApproval, WorkItemStatus.Waiting), (first.Status, second.Status));
+        var line = await fresh.Journal.AsNoTracking().SingleAsync(e => e.WorkItemId == newer.PublicId && e.Kind == JournalKinds.WorkItemWaiting, Ct);
+        Assert.Equal(older.PublicId, (string?)line.New!["behind_search"]);
+    }
+
+    /// <summary>
+    /// An attempt of <paramref name="search"/> that ran under the harness's route and ended with <paramref name="error"/>, as
+    /// its claim's provenance kept it.
+    /// </summary>
+    private static void Ran(JasonDbContext db, WorkItem search, AttemptErrorDto error)
+    {
+        var ran = WorkItemFactory.NewAttempt(search, search.Attempts.Count + 1, AttemptStatus.Failed, Noon);
+        ran.StartedAt = Noon;
+        ran.FinishedAt = Noon;
+        ran.Error = error;
+        ran.Provenance = new AttemptProvenanceDto(
+            Searcher, "1.0.0", "sha256:0", null, null, "audience.search", 1, null, null, RouteScope.GlobalDefault, BindingIdentity: null);
+        db.Attempts.Add(ran);
     }
 
     /// <summary>

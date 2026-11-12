@@ -53,7 +53,7 @@ line. These kinds summon a review:
 | `provider_event_observed` | A provider said something happened that concerns the campaign — a reply it detected, an invitation accepted, a message that bounced — and the runtime found it by an identifier the campaign's own operations pinned, or by the person a member is. What it calls for is the manager's ([events](events.md)). |
 | `provider_blocked` | A provider block holds the campaign's work: the account, or one sending account under it, is refused for its money, plan, allowance, credential or channel, and what reaches people has stopped until it clears. Said once per campaign and block. Whether to tell somebody, or change course, is the manager's; the block's clearing is not a trigger, because the work runs again by itself ([work execution](work-execution.md) §Provider blocks). |
 | `audience_reserve_low` | The campaign's untouched people — the summary's `new` — fell under the threshold the campaign set with `--audience-threshold`. The runtime counts them and says so once per crossing; whether to top the audience up, and how, is the manager's (§9). |
-| `audience_search_ended` | A search for the campaign's audience ended: it reached its count, its source ran out, its reads landed nobody for the stall bound, or a stop ended it. Said once per search. Whether the audience needs more, another search, or a person's word is the manager's (§10). |
+| `audience_search_ended` | A search for the campaign's audience ended: it reached its count, its source ran out, its reads landed nobody for the stall bound, or a stop ended it, or a read or a stop found it gone (`search_not_found`). Said once per search. Whether the audience needs more, another search, or a person's word is the manager's (§10). |
 | `audience_search_held` | The provider holds one of the campaign's searches — paused there, out of credits or at the plan's contact limit — so it spends nothing and finds nobody until a person acts at the provider. The runtime tells nobody directly; telling the person, by one question, is the manager's (§10). Said once per hold. |
 
 **And what is deliberately not in the list.** `workitem_succeeded` is out: a review after every
@@ -513,7 +513,9 @@ audience's id and number, the search and when the person landed.
 **How a search ends.** A read that answers `finished` or `exhausted` with nothing more readable ends it as that; one that
 answers either with more readable leaves it to the next read. A stop (`audience.search_cancel`) that stopped it, or found
 it stopped by an earlier stop, or gone from the provider, ends it `cancelled`; one that found it ended by itself leaves it
-to the reads, since what it found is still to be read. And a search whose reads have landed nobody for
+to the reads, since what it found is still to be read. A read or a stop that fails `search_not_found` ends it `cancelled`
+too, by that item: the provider holds no search under the reference for the account the binding signs in as — deleted
+there, or that account changed — so nothing would read or stop it again. And a search whose reads have landed nobody for
 `Dispatcher:SearchStallSeconds` — measured from the start of the quiet, the search's start, the last landing that made
 somebody a member or the moment it moved again after a hold, to the moment the dispatcher made its latest read, once that
 read is over — ends `stalled`, said by the dispatcher, and is read no more; never while a stop of it is under way. That
@@ -528,7 +530,8 @@ poll: a read anybody makes still lands its page, and a stop still stops it. A se
 later read still lands what it carries, and nothing is said twice.
 
 **One search at a time.** A campaign runs one search at a time: a search claimed while another of its campaign has not
-ended — its row still followed, running or held, or another search running now — waits behind it, with no attempt and
+ended — its row still followed, running or held, another search running now, or one open again after a start whose
+answer was lost — waits behind it, with no attempt and
 nobody asked to approve it, its last error naming the search in the way, and is claimed again a search cadence later,
 the long cadence of a hold where the provider holds that search ([routing](routing.md) §7, `search_unfinished`). Two campaigns searching one definition are the provider's own refusal,
 `search_in_progress`.
@@ -540,7 +543,8 @@ the campaign's searches still in flight; each ends `cancelled`, and the provider
 provider had already ended by itself ends as it ended, since nobody reads an archived campaign's searches again; through
 Reply its list stays at the provider, with any people not yet read. A search whose start was still under way when the
 campaign was archived has no row yet, so no stop is made for it: the archive cancels that attempt, and whether the
-provider took the start is read there. A stop that fails is protective work, notified, and not made again.
+provider took the start is read there. A stop that fails is protective work, notified, and not made again; one that fails
+`search_not_found` ends the search `cancelled` all the same, since there is nothing left to stop.
 
 ### Reading the audiences
 
