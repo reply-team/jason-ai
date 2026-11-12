@@ -575,6 +575,8 @@ describe("a chat's access mode", () => {
     });
 
     it('says Full access is on in the line under the composer, from the mode the desktop holds alone', () => {
-        expect(fullAccessLine).toBe('Full access: the agent runs commands without asking, except those Jason cannot read.');
+        expect(fullAccessLine).toBe(
+            'Full access: the agent runs commands without asking, except those Jason cannot read.',
+        );
     });
 });
