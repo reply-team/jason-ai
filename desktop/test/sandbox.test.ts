@@ -93,7 +93,7 @@ test('the refusal is the first thing the main process decides, and nothing else 
     assert.ok(decided > 0, 'main.ts never asks whether the start carries --no-sandbox');
     // Everything of a start comes after it: the uninstall and stop-runtime starts, the single-instance lock, and run(),
     // which copies the bundle, calls jason and makes the window. Electron's own paths are set by both branches.
-    for (const later of ['uninstallStart(process.argv', 'app.requestSingleInstanceLock()', 'app.whenReady().then(run)', 'new BrowserWindow(']) {
+    for (const later of ['uninstallStart(process.argv', 'app.requestSingleInstanceLock()', 'app.whenReady().then(() => run(installationWasNew))', 'new BrowserWindow(']) {
         const at = main.indexOf(later);
         assert.ok(at > 0, later);
         if (later !== 'new BrowserWindow(') assert.ok(at > decided, `${later} comes before the refusal`);

@@ -66,3 +66,11 @@ test('the two backgrounds are the starting page’s own', () => {
     assert.ok(css.includes(`--bg: ${lightBackground}`));
     assert.ok(css.includes(`--bg: ${darkBackground}`));
 });
+
+test('whether the installation is new is decided in the main module before Electron makes its profile, on either start', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const decided = main.indexOf('const installationWasNew = isNewInstallation(');
+    const firstKeep = main.indexOf('    keepElectronUnderData();');
+    assert.ok(decided > 0 && firstKeep > 0 && decided < firstKeep);
+    assert.ok(main.includes('run(installationWasNew)'));
+});

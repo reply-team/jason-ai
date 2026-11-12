@@ -153,7 +153,7 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
 /** Brings the window forward; the desk's own once it is open. */
 let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
 
-async function run(): Promise<void> {
+async function run(newInstallation: boolean): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
@@ -164,8 +164,6 @@ async function run(): Promise<void> {
     const env = withoutMount(withPath(process.env, process.env.PATH), mountOf(form, process.env));
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
-    // Whether this installation is new is read before anything is written under the data directory.
-    const newInstallation = isNewInstallation(paths.data);
     const log = fileLogger(paths.logs, limitsFrom(readText(paths.installationSettings)));
     const packaged = bundleDirectory();
     const version = bundleVersion(packaged);
@@ -478,6 +476,9 @@ function keepElectronUnderData(): void {
 // --no-sandbox, which an AppImage's launcher adds where the system refuses the sandbox, says why once Electron is ready
 // and quits, with no lock taken, no copy made, no jason started and no window made (`sandbox.ts`).
 const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), process.argv, linuxForm());
+// Whether this installation is new is read next: before Electron makes its profile under the data directory, before the
+// single-instance lock, before anything is written there, on either start below.
+const installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {
@@ -512,6 +513,6 @@ function startDesktop(): void {
         });
         app.on('activate', () => showWindow());
         app.on('window-all-closed', () => app.quit());
-        void app.whenReady().then(run);
+        void app.whenReady().then(() => run(installationWasNew));
     }
 }

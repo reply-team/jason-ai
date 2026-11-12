@@ -3,6 +3,8 @@ import { signal } from '@preact/signals-react';
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
 const key = 'jason.ui.theme';
+/** Whether this load stored Light itself, for a viewer with no key: a default the page wrote, not a choice. */
+let adoptedLight = false;
 const isChoice = (value: unknown): value is ThemeChoice => value === 'light' || value === 'dark' || value === 'system';
 
 /**
@@ -17,6 +19,7 @@ function read(): ThemeChoice {
         const existing = Object.keys(localStorage).some((each) => each.startsWith('jason.ui.'));
         if (existing) return 'system';
         localStorage.setItem(key, 'light');
+        adoptedLight = true;
         return 'light';
     } catch {
         return 'light';
@@ -54,8 +57,9 @@ function tell(choice: ThemeChoice): void {
 
 /**
  * In the desktop, the desktop's kept choice is the truth: it is read before the page's first paint and taken over the
- * page's own storage. When the desktop holds none, the page's own stored choice, if it has one, is told to it once, so the
- * next start opens in it; a default the page did not read is never told. Never throws.
+ * page's own storage. When the desktop holds none, the page's own choice, if it was stored before this load, is told to it once,
+ * so the next start opens in it; a Light the page adopted on this load is no choice: it takes the system's, stores
+ * nothing and tells nothing. Never throws.
  */
 export async function bindDesktopTheme(desktopSeam: DesktopThemeSeam | undefined): Promise<void> {
     seam = desktopSeam;
@@ -72,6 +76,17 @@ export async function bindDesktopTheme(desktopSeam: DesktopThemeSeam | undefined
             localStorage.setItem(key, kept);
         } catch {
             // The choice lasts for this page load.
+        }
+        return;
+    }
+    // The desktop holds nothing: it follows the system for an installation that existed. The page tells it a choice that
+    // was stored before this load; a Light the page just adopted is no choice, so the system's it is, stored nowhere.
+    if (adoptedLight) {
+        themeChoice.value = 'system';
+        try {
+            localStorage.removeItem(key);
+        } catch {
+            // Nothing stored to remove.
         }
         return;
     }

@@ -124,6 +124,40 @@ describe('the theme in the desktop', () => {
         expect(told).toEqual([]);
     });
 
+    it('takes the system, stores nothing and tells nothing when the desktop holds none and the page storage is empty', async () => {
+        const told: string[] = [];
+        systemDark = true;
+        const theme = await load();
+        await theme.bindDesktopTheme({
+            get: () => Promise.resolve(null),
+            set: (choice) => {
+                told.push(choice);
+                return Promise.resolve();
+            },
+        });
+        theme.startTheme();
+        expect(theme.themeChoice.value).toBe('system');
+        expect(shown()).toBe('dark');
+        expect(told).toEqual([]);
+        expect(localStorage.getItem('jason.ui.theme')).toBeNull();
+    });
+
+    it('is Light and tells nothing when the desktop answers Light, a new installation that it wrote Light for', async () => {
+        const told: string[] = [];
+        systemDark = true;
+        const theme = await load();
+        await theme.bindDesktopTheme({
+            get: () => Promise.resolve('light'),
+            set: (choice) => {
+                told.push(choice);
+                return Promise.resolve();
+            },
+        });
+        theme.startTheme();
+        expect(shown()).toBe('light');
+        expect(told).toEqual([]);
+    });
+
     it('tells the desktop each later choice', async () => {
         const told: string[] = [];
         const theme = await load();
