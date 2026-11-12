@@ -25,6 +25,15 @@
 .brand .mark { width: 24px; height: 24px; flex: none; }
 .brand .wordmark { height: 14px; width: auto; max-width: 100%; min-width: 0; }
 .brand .wordmark.dark { display: none; }
+.brand .alpha {
+  flex: none;
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.5;
+}
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .brand .wordmark.light { display: none; }
   :root:not([data-theme="light"]) .brand .wordmark.dark { display: inline; }

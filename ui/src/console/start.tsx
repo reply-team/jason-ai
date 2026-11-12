@@ -112,6 +112,10 @@ export function StartPanel() {
                     <div>
                         <h1>Who do you want to reach?</h1>
                         <p>Say who it is, and Jason sets the campaign up with you in a chat.</p>
+                        <p className="start-optional">
+                            This interface is optional: Jason is driven from a terminal and an agent, and this page, the
+                            CLI and the API do the same things.
+                        </p>
                     </div>
                 </div>
                 {card && <Painted className="start-ai" view={connect.aiCardView} />}
