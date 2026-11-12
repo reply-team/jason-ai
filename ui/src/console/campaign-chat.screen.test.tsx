@@ -5,7 +5,7 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -14,7 +14,7 @@ import { chats, conversations } from './state';
 // A campaign's Chat tab, in the page panel of the desktop: it opens the campaign's one conversation the desktop keeps,
 // made on first use, as the Campaigns list's Chat does.
 
-function renderConsole(fake: FakeApi, desktop: StubDesktop = stubDesktop()): StubDesktop {
+function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop()): StubDesktop {
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -96,7 +96,7 @@ describe('a campaign’s Chat tab in the desktop', () => {
     });
 
     it('opens the conversation the desktop keeps for the campaign with what the page drew, from the tab and the list alike', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({
             id: 'conv_01JDKEPT0000000000000000S1',
             campaignId: 'cmp_1',

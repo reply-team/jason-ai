@@ -6,7 +6,7 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { setupFound, chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { replyAccountsAddress } from './connect';
@@ -36,7 +36,7 @@ function renderConnect(status: DesktopSetup): StubDesktop {
         'jason.ui.session',
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
-    const desktop = stubDesktop(status);
+    const desktop = chatDesktop(status);
     render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
     return desktop;
 }
