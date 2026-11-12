@@ -388,3 +388,22 @@ test('a tool of an MCP server is held in Full access whatever its input', () => 
         assert.equal(fullAccessJudgement('mcp__frobnicate__run', input, scope).outcome, 'held', JSON.stringify(input));
     }
 });
+
+// The fix round, POSIX first: what the module called the program was not always the program that runs.
+
+test('POSIX: a reserved word in first position is held, bash\'s and zsh\'s, since the program that runs is a later word', () => {
+    const reserved = ['if', 'then', 'elif', 'else', 'fi', 'do', 'done', 'case', 'esac', 'while', 'until', 'for', 'select', 'function', 'coproc', 'time', 'in'];
+    const zsh = ['-', 'noglob', 'nocorrect', 'repeat', 'foreach'];
+    for (const word of [...reserved, ...zsh]) {
+        assert.equal(reasonOf('Bash', `${word} frobnicate a`), 'syntax', word);
+        assert.equal(fullAccessJudgement('Bash', { command: `echo a; ${word} frobnicate a` }, scope).outcome, 'held', `a later command: ${word}`);
+    }
+    assert.equal(fullAccessJudgement('Bash', { command: 'if frobnicate a; then python3 -c x; fi' }, scope).outcome, 'held');
+    for (const command of ['builtin echo a', 'command echo a']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+    assert.deepEqual(wordsOf('Bash', 'echo if then fi'), [['echo', 'if', 'then', 'fi']], 'a reserved word as an argument is a word');
+});
+
+test('POSIX: a word that starts with = is held, since zsh rewrites it to a program\'s path', () => {
+    for (const command of ['echo =frobnicate', '=frobnicate a', "echo '=x' =y"]) assert.equal(reasonOf('Bash', command), 'expansion', command);
+    assert.deepEqual(wordsOf('Bash', 'echo a=b --x=1'), [['echo', 'a=b', '--x=1']]);
+});

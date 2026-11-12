@@ -173,6 +173,14 @@ const posixBare = /[A-Za-z0-9_./:@+,%=-]/;
 const posixDelimiter = /[\s;|&<>]/;
 const assignment = /^[A-Za-z_][A-Za-z0-9_]*\+?=/;
 
+/**
+ * The words that are not a program in first position: bash's reserved words, and zsh's reserved words and precommand
+ * modifiers, since the Bash tool's shell may be zsh. `builtin` and `command` are runners (`runners`).
+ */
+const reservedWords: ReadonlySet<string> = new Set(
+    'if then elif else fi do done case esac while until for select function coproc time in - noglob nocorrect repeat foreach'.split(' '),
+);
+
 function asciiOnly(text: string): void {
     for (const character of text) {
         const code = character.codePointAt(0) ?? 0;
@@ -183,9 +191,14 @@ function asciiOnly(text: string): void {
 
 /** The POSIX grammar: the Bash tool's shell. */
 function readPosix(text: string, home: string): Parsed[] {
-    const builder = new Builder((b) => {
+    const builder = new Builder((b, word) => {
+        // zsh rewrites an unquoted word that starts with `=` to the path of the program it names.
+        if (b.raw.startsWith('=')) throw new Held('expansion');
+        if (b.redirect || b.words.length > 0) return;
         // An unquoted name and `=` as the first word is an assignment, not a program.
-        if (!b.redirect && b.words.length === 0 && assignment.test(b.raw)) throw new Held('assignment');
+        if (assignment.test(b.raw)) throw new Held('assignment');
+        // A reserved word, bash's or zsh's, is not the program: the program that runs is a later word.
+        if (reservedWords.has(word)) throw new Held('syntax');
     });
     const documents: string[] = [];
     let at = 0;
