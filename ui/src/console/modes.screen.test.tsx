@@ -394,12 +394,12 @@ describe('Full access answered once for good', () => {
     it('reads the choice again as the menu opens: one the desktop never said is offered its take-back', async () => {
         const desktop = chatDesktop();
         renderConsole(desktop);
-        await waitFor(() => expect(menu().options).toHaveLength(3));
+        await waitFor(() => expect(menu().options).toHaveLength(4));
         // The file changed behind the desktop's back: no change is said to the page.
         desktop.standing = always;
         fireEvent.focus(menu());
-        await waitFor(() => expect(menu().options).toHaveLength(4));
-        expect(menu().options[3]!.value).toBe('take_back');
+        await waitFor(() => expect(menu().options).toHaveLength(5));
+        expect(menu().options[4]!.value).toBe('take_back');
     });
 
     it('follows a take-back made elsewhere: the option goes', async () => {
