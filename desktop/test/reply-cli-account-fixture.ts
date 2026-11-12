@@ -1,5 +1,5 @@
-// What the Reply CLI prints for its account verbs under --json, as its own tests pin it at commit 4cb969e0 of the public
-// reply-cli repository: src/__tests__/operations/account-links.test.ts and account-manage.test.ts (the results, each by
+// What the Reply CLI prints for its account verbs under --json, as its own tests pin it at the release tag v0.21.0
+// (commit f8a6a28c) of the public reply-cli repository: src/__tests__/operations/account-links.test.ts and account-manage.test.ts (the results, each by
 // `toStrictEqual`), src/utils/errors.ts (an error's line on stderr) and src/operations/shared-page.ts (the warning). The
 // desktop reads these through src/reply-cli-account.ts alone, so the published CLI is checked against this one file.
 // Every link, token, id and name here is made up.
@@ -90,7 +90,7 @@ export function refusalLine(code: string, extra: Record<string, unknown> = {}): 
     return JSON.stringify({ error: { status: 409, code, title: 'Words of the CLI that the desktop never shows.', ...extra } });
 }
 
-/** The codes the CLI's account verbs can end with at that commit, by where they come from. */
+/** The codes the CLI's account verbs can end with at that tag, by where they come from. */
 export const cliCodes = {
     account: [
         'email_link.not_available',
@@ -106,6 +106,7 @@ export const cliCodes = {
         'linkedin.account_in_use',
         'account.status_unknown',
         'account.status_changed',
+        'account.pause_unavailable',
     ],
     common: ['access.denied', 'access.feature_unavailable', 'rate_limited', 'reply.unavailable', 'reply.refused', 'reply.invalid_request', 'outcome.unknown'],
     usage: ['usage.channel', 'usage.name', 'usage.provider', 'usage.choice', 'usage.id', 'usage.limits', 'usage.range', 'usage.unsupported', 'usage.force', 'usage.confirm'],
