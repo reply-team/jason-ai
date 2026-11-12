@@ -341,11 +341,13 @@ export interface JasonDesktop {
          */
         rename(chatId: string, title: string): Promise<DesktopConversation | DesktopRefusal>;
         /**
-         * Chooses a conversation's mode. For `full_access` the desktop asks the person to confirm, every time; their no
-         * answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes
-         * before this answers whenever the mode changed. Refused for a conversation the desktop does not keep.
+         * Chooses a conversation's mode, on `host`, the `DesktopHost.id` the next turn runs on. `full_access` is refused
+         * before anything is asked where it cannot apply (Codex, a host that does not drive the chat, a Claude Code too old
+         * for it), in the desktop's words; otherwise the desktop asks the person to confirm, every time, and their no
+         * answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes before
+         * this answers whenever the mode changed. Refused for a conversation the desktop does not keep.
          */
-        setMode(chatId: string, mode: DesktopChatMode): Promise<DesktopConversation | DesktopRefusal>;
+        setMode(chatId: string, mode: DesktopChatMode, host: string): Promise<DesktopConversation | DesktopRefusal>;
     };
     setup: {
         status(): Promise<DesktopSetup>;

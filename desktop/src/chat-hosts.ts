@@ -8,7 +8,7 @@ import { isEffort, type Effort } from './chat-models.ts';
 import { allowRules, denyRules } from './chat-deny.ts';
 import type { ChatMode } from './chat-modes.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
-import { confinedVariable, searchVariables, type Platform } from './chat-permission-model.ts';
+import { confinedVariable, guardedNames, searchVariables, type Platform } from './chat-permission-model.ts';
 import { withReplyClient } from './reply-client.ts';
 import { isSessionMarker } from './session-markers.ts';
 
@@ -105,6 +105,11 @@ export const planTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirect
 export function fullAccessSettings(hookUrl: string, secret: string) {
     return {
         permissions: { blockReadsOutsideWorkingDirectories: true },
+        // No project file can switch the hook off or filter it out. Anthropic, https://code.claude.com/docs/en/settings
+        // (read 2026-11-12), of command-line settings: "A key you set there overrides the same key in your project and
+        // user settings files", and "Lists merge instead of overriding", so the hook's address is always on the list.
+        disableAllHooks: false,
+        allowedHttpHookUrls: [hookUrl],
         hooks: {
             PreToolUse: [
                 {
@@ -290,6 +295,21 @@ export function dataRules(platform: Platform, data: string, dataEntries: readonl
         const rule = rulePath(platform, target);
         return [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`];
     });
+}
+
+/**
+ * The host's own refusal of an edit of the chat's own names directly in the chat folder: its instructions, and its agent
+ * settings and skills folders and what lies under them, which the desktop writes and keeps. They hold under bypass and in
+ * every mode, beside the permission model's refusal of the same places by every route.
+ */
+export function chatRules(platform: Platform, chat: string): string[] {
+    const paths = platform === 'win32' ? win32 : posix;
+    return guardedNames
+        .filter((guarded) => guarded.chatsOwn !== undefined)
+        .flatMap((guarded) => {
+            const rule = rulePath(platform, paths.join(chat, guarded.name));
+            return guarded.chatsOwn === 'configuration' ? [`Edit(${rule})`, `Edit(${rule}/**)`] : [`Edit(${rule})`];
+        });
 }
 
 /**

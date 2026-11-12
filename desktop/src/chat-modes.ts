@@ -41,8 +41,8 @@ export const planRefusal = 'Plan only is on: nothing is changed. Say what you wo
 export const planExitRefusal = 'Plan only is on, and only the person leaves it, from the menu beside the message box. Give your plan as your answer.';
 
 /**
- * The turn's end when a tool ran that the turn's hook never saw, a managed policy having filtered the hook out, say: the
- * turn is stopped and the chat goes back to Ask first.
+ * The turn's end when a tool ran that the turn's hook never saw, a policy having filtered the hook out, say: that first
+ * unchecked tool ends the turn, and the chat goes back to Ask first.
  */
 export const unguardedSentence =
     'Full access was turned off and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.';

@@ -378,12 +378,16 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 stub.emit(record.id, { kind: 'renamed', title: name });
                 return summaryOf(record);
             }),
-            setMode: answering('chat.setMode', (id, mode) => {
+            setMode: answering('chat.setMode', (id, mode, host) => {
                 const record = own(id);
                 if (!record) return notKept;
                 if (mode !== 'ask_first' && mode !== 'plan_only' && mode !== 'full_access')
                     return { refused: 'That is not a mode of the chat.' };
                 if (mode === record.mode) return summaryOf(record);
+                // Full access is refused before anything is asked on a host where it cannot apply, as the desktop does.
+                const listed = stub.status.hosts.find((each) => each.id === host);
+                if (mode === 'full_access' && (listed === undefined || listed.fullAccess !== null))
+                    return { refused: listed?.fullAccess ?? 'That is not an agent host this desktop knows.' };
                 // Full access waits for the person's yes to the desktop's own box; a no answers the conversation as it was.
                 if (mode === 'full_access' && !stub.confirmFullAccess) return summaryOf(record);
                 record.mode = mode;

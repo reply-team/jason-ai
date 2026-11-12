@@ -15,15 +15,17 @@
  *
  * Each conversation has an access mode (`chat-modes.ts`), read when a person's send starts a turn: Ask first, the
  * default; Plan only, kept on the record; and Full access, chosen through a confirmation each time, held in memory only,
- * so a restart opens every chat in Ask first. Leaving Full access stops the turn that runs in it. A turn in Full access
- * that shows a tool its hook never saw is stopped, and its chat goes back to Ask first. No turn starts without a person's
+ * so a restart opens every chat in Ask first, and so does Start afresh. Leaving Full access stops the turn that runs in
+ * it. The first tool of a Full access turn that runs without its hook having seen it ends the turn, and the chat goes
+ * back to Ask first. Before every turn the chat folder's agent settings are put right (`chat-agent-folder.ts`). No turn starts without a person's
  * send; the naming run of a set-up chat (`chat-naming.ts`) is no turn: it runs with no tool at all, in any mode.
  */
 
 import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute } from 'node:path';
-import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
+import { AgentFolderUnowned, ownAgentFolder } from './chat-agent-folder.ts';
+import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
 import {
     bounded,
     conversationIdShape,
@@ -56,7 +58,7 @@ import { realPathOf } from './chat-real-path.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
-import { fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
+import { codexFullAccess, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
 import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
@@ -152,6 +154,8 @@ export interface ChatOptions {
     confirmFullAccess?(): Promise<boolean>;
     /** Said each time a conversation's mode changes, by the two modes alone. */
     modeChanged?(from: ChatMode, to: ChatMode): void;
+    /** Said when a Full access turn is stopped because a tool ran that its hook never saw. */
+    unchecked?(): void;
     started?(host: string, resumed: boolean, mode: ChatMode): void;
     ended?(turn: TurnEnded): void;
     decided?(decided: Decided): void;
@@ -431,15 +435,24 @@ export class Chat {
     }
 
     /**
-     * A person's choice of a conversation's mode, from the menu beside the composer. Full access is given only once the
-     * person said yes to the confirmation, asked again each time it is chosen; a no leaves the mode as it was. Leaving
-     * Full access stops a turn that runs in it. Plan only is kept on the record; Full access never is.
+     * A person's choice of a conversation's mode, from the menu beside the composer, on the host the page will send to.
+     * Full access is refused before any confirmation where it cannot apply: on Codex, on a host that does not drive the
+     * chat, and on a Claude Code older than its floor or whose version cannot be read, read now as a turn reads it.
+     * Otherwise it is given only once the person said yes to the confirmation, asked again each time it is chosen; a no
+     * leaves the mode as it was. Leaving Full access stops a turn that runs in it. Plan only is kept on the record; Full
+     * access never is.
      */
-    async setMode(id: unknown, mode: unknown): Promise<ConversationSummary> {
+    async setMode(id: unknown, mode: unknown, host?: unknown): Promise<ConversationSummary> {
         const conversation = this.#own(id);
         if (!isChatMode(mode)) throw new ChatRefused('That is not a mode of the chat.');
         if (mode === this.#modeOf(conversation)) return this.#summaryOf(conversation);
         if (mode === 'full_access') {
+            const program = keyProvider(host)?.program ?? hosts.find((each) => each.id === host && each.drivesChat)?.program;
+            if (program === 'codex') throw new ChatRefused(codexFullAccess);
+            if (program !== 'claude') throw new ChatRefused(notAHost);
+            const below = fullAccessSentence(await this.#claudeVersion());
+            if (below !== null) throw new ChatRefused(below);
+            if (this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
             const yes = (await this.#options.confirmFullAccess?.()) === true;
             if (!yes || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
         }
@@ -511,6 +524,8 @@ export class Chat {
         const conversation = this.#own(id);
         if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('start it afresh'));
         conversation.sessions = {};
+        // A chat started afresh is a new chat: it goes back to Ask first.
+        if (this.#fullAccess.has(conversation.id)) this.#changeMode(conversation, 'ask_first', true);
         // One never sent to has no session to drop, and no record to write.
         if (this.#kept.has(conversation.id)) this.#keep(conversation);
     }
@@ -629,7 +644,7 @@ export class Chat {
         } catch (error) {
             this.#running.delete(conversation.id);
             this.#setupTurns.delete(conversation.id);
-            if (error instanceof InstructionsUnwritten) refuse(error.message);
+            if (error instanceof InstructionsUnwritten || error instanceof AgentFolderUnowned) refuse(error.message);
             else refuse(`The turn could not be started: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
@@ -919,6 +934,8 @@ export class Chat {
             // First of all a turn does: the chat folder is found to be the desktop's own, and its memory files written,
             // before the turn's file, its endpoint or the host that starts in that folder.
             this.#placeInstructions(fence);
+            // The chat folder's agent settings hold only what the desktop placed (`chat-agent-folder.ts`).
+            ownAgentFolder(paths.chat);
             if (resolved.folder !== null) makePrivate(resolved.label, resolved.program === 'claude' ? paths.claudeKeyed : paths.codexKeyed, resolved.folder);
             if (resolved.program === 'claude') {
                 const id = newTurnId();
@@ -949,7 +966,7 @@ export class Chat {
                 });
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
                 const settingsFile = full ? writeTurnSettings(paths.turns, id, endpoint.hookUrl, secret) : undefined;
-                const rules = dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop));
+                const rules = [...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop)), ...chatRules(this.#platform, paths.chat)];
                 argsFor = (resumed) =>
                     claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed });
             } else {
@@ -1057,10 +1074,11 @@ export class Chat {
                 }
                 if (line.kind === 'tool_result') {
                     // In Full access every tool use passes the turn's hook first. One whose result comes back unseen by
-                    // it ran, or was refused, with the hook filtered out: the turn stops and the chat goes back to Ask
-                    // first. EndConversation is the one tool Claude Code fires no hook for.
+                    // it ran, or was refused, without the hook: the first tool that runs unchecked ends the turn, and the
+                    // chat goes back to Ask first. EndConversation is the one tool Claude Code fires no hook for.
                     if (running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
+                    this.#options.unchecked?.();
                     this.#changeMode(conversation, 'ask_first', false);
                     stopFor(unguardedSentence);
                     return;

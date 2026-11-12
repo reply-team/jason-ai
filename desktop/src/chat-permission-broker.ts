@@ -4,12 +4,13 @@
 //
 // A turn runs in its chat's mode. Ask first is the above. Plan only refuses every request but a read, which the model
 // settles, and the two cards left to it: reading a file outside the chat's folders and opening a web page. Full access
-// shows no card: the model's refusals stay refusals and the rest is allowed; and the turn's hook (`hook`) is answered with
-// the model's refusals and those of what a file would hold (`writtenRefusal`), the tool uses it saw kept by id.
+// shows no card: the turn's hook (`hook`) and the broker answer by one judgement (`fullAccessJudgement`): refused,
+// runs, or held (refused, saying to switch the chat to Ask first for it); and a deletion the host still asks about is
+// held. The tool uses the hook saw are kept by id, and each refusal is said to the log.
 
 import { randomUUID } from 'node:crypto';
 import { planExitRefusal, planRefusal, type ChatMode } from './chat-modes.ts';
-import { judge, writtenRefusal, type ChatScope } from './chat-permission-model.ts';
+import { deletes, fullAccessJudgement, heldSentence, judge, type ChatScope } from './chat-permission-model.ts';
 
 /** What the permission prompt tool answers, in the shape Claude Code reads. */
 export type ToolAnswer = { behavior: 'allow'; updatedInput?: Record<string, unknown> } | { behavior: 'deny'; message: string };
@@ -97,9 +98,10 @@ export class PermissionBroker {
         const turn = this.#turns.get(turnId);
         if (turn === undefined) return notRunning;
         if (toolUseId !== null) turn.hooked.add(toolUseId);
-        const judged = judge(tool, input, turn.scope);
-        if (judged.verdict === 'deny') return judged.message;
-        return writtenRefusal(tool, input, turn.scope);
+        const judged = fullAccessJudgement(tool, input, turn.scope);
+        if (judged.outcome === 'runs') return null;
+        this.#options.decided?.({ outcome: 'refused', by: 'model', mode: turn.mode });
+        return judged.message;
     }
 
     /** Whether the turn's hook was asked about this tool use. */
@@ -122,8 +124,13 @@ export class PermissionBroker {
         if (judged.verdict === 'allow') return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
         if (judged.verdict === 'deny') return refused(judged.message);
         if (mode === 'full_access') {
-            const written = writtenRefusal(tool, input, turn.scope);
-            return written !== null ? refused(written) : Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
+            // What the host still asks under bypass: the same judgement as the hook's, and a deletion it could not rule
+            // safe is held.
+            const full = fullAccessJudgement(tool, input, turn.scope);
+            if (full.outcome !== 'runs') return refused(full.message);
+            const command = input['command'];
+            if (typeof command === 'string' && deletes(command, turn.scope.platform)) return refused(heldSentence);
+            return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
         }
         if (mode === 'plan_only' && !planCards.has(tool)) return refused(planRefusal);
         if (judged.remember !== null && this.#always.get(turn.chat)?.has(judged.remember) === true) {

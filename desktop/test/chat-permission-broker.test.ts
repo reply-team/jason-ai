@@ -176,7 +176,7 @@ test('a documentation page opens with no card, decided by the model; the same pa
     const input = { url: 'https://code.claude.com/docs/en/cli-reference', prompt: 'p' };
     assert.deepEqual(await within(broker.ask('turn_1', 'WebFetch', input)), { behavior: 'allow', updatedInput: input });
     assert.equal(sent.length, 0);
-    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'model' });
+    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'model', mode: 'ask_first' });
     void broker.ask('turn_1', 'WebFetch', { url: 'http://code.claude.com/docs/en/cli-reference', prompt: 'p' });
     await settle();
     assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_1', title: 'Open a web page', detail: 'http://code.claude.com/docs/en/cli-reference', remember: 'pages on code.claude.com' });
@@ -445,9 +445,9 @@ test('a grant of a command never allows one longer than the card shows, nor one 
     assert.match(answer.behavior === 'deny' ? answer.message : '', /longer than the card can show whole/);
     assert.equal(sent.length, cards);
     assert.deepEqual(decided.at(-1), { outcome: 'refused', by: 'model', mode: 'ask_first' });
-    void broker.ask('turn_1', 'Bash', { command: 'cp notes.md CLAUDE.md' });
+    void broker.ask('turn_1', 'Bash', { command: 'cp notes.md GEMINI.md' });
     await settle();
-    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Change instructions an agent reads', detail: 'cp notes.md CLAUDE.md', remember: null });
+    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Change instructions an agent reads', detail: 'cp notes.md GEMINI.md', remember: null });
 });
 
 test('a grant of a command never covers one whose word names a guarded file outside the working folders', async () => {

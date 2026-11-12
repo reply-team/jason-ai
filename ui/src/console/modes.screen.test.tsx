@@ -5,7 +5,7 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -14,7 +14,7 @@ import { chats, conversations } from './state';
 // A chat's access mode: the menu beside the composer, Full access disabled where the desktop says it cannot be chosen,
 // and the line under the composer, drawn from the mode the desktop holds and from nothing the page asked for.
 
-function renderConsole(desktop: StubDesktop = stubDesktop()): StubDesktop {
+function renderConsole(desktop: StubDesktop = chatDesktop()): StubDesktop {
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
@@ -63,7 +63,7 @@ describe('a chat’s access mode', () => {
     });
 
     it('draws the line under the composer once the desktop holds the chat in Full access, and never before', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.confirmFullAccess = false;
         renderConsole(desktop);
         await waitFor(() => menu());
@@ -106,7 +106,7 @@ describe('a chat’s access mode', () => {
     it('shows Full access disabled with the desktop’s reason on a host that has none, and choosing that host leaves Full access', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
-        const desktop = renderConsole(stubDesktop(status));
+        const desktop = renderConsole(chatDesktop(status));
         await waitFor(() => menu());
         choose('full_access');
         await waitFor(() => expect(line()).not.toBeNull());
@@ -119,7 +119,7 @@ describe('a chat’s access mode', () => {
     });
 
     it('says a mode the desktop refused in its own words, and keeps the mode it holds', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.refuse.set('chat.setMode', 'That conversation is not one this desktop keeps.');
         renderConsole(desktop);
         await waitFor(() => menu());
@@ -129,11 +129,61 @@ describe('a chat’s access mode', () => {
     });
 
     it('reopens a kept conversation in the mode the desktop holds', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000P1', title: 'Planning', mode: 'plan_only' });
         renderConsole(desktop);
         await waitFor(() => screen.getByRole('button', { name: 'Planning' }));
         fireEvent.click(screen.getByRole('button', { name: 'Planning' }));
         await waitFor(() => expect(chats.value['conv_01JDKEPT0000000000000000P1']?.mode).toBe('plan_only'));
+    });
+});
+
+describe('a chat’s access mode, on the host and around a running turn', () => {
+    it('asks the desktop for the mode on the host the next turn runs on', async () => {
+        const desktop = renderConsole();
+        await waitFor(() => menu());
+        choose('full_access');
+        await waitFor(() => expect(calls(desktop, 'chat.setMode')).toHaveLength(1));
+        expect(calls(desktop, 'chat.setMode')[0]!.args.slice(1)).toEqual(['full_access', 'claude']);
+    });
+
+    it('says in the desktop’s words a Full access it refused on the host chosen, and shows no line', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        renderConsole(chatDesktop(status));
+        await waitFor(() => menu());
+        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        choose('full_access');
+        await waitFor(() => expect(screen.getByText('Full access runs on Claude Code only.')).toBeTruthy());
+        expect(line()).toBeNull();
+        expect(menu().value).toBe('ask_first');
+    });
+
+    it('leaving Full access while a turn runs gives the waiting message back, as Stop does: no turn follows by itself', async () => {
+        const desktop = renderConsole();
+        await waitFor(() => menu());
+        choose('full_access');
+        await waitFor(() => expect(line()).not.toBeNull());
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {
+            target: { value: 'Approve them all' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {
+            target: { value: 'And then the next' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
+        await waitFor(() => expect(screen.getByRole('status', { name: 'Waiting message' })).toBeTruthy());
+        choose('ask_first');
+        await waitFor(() => expect(line()).toBeNull());
+        // The desktop stops the turn it ran in Full access; its end says no error.
+        flush(() => desktop.emit(chatId(), { kind: 'done', error: null }));
+        await waitFor(() =>
+            expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' }).value).toBe(
+                'And then the next',
+            ),
+        );
+        expect(calls(desktop, 'chat.send')).toHaveLength(1);
+        expect(screen.queryByRole('status', { name: 'Waiting message' })).toBeNull();
     });
 });

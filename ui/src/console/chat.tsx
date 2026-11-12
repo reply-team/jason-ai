@@ -168,8 +168,13 @@ export function renameChat(id: string, title: string): void {
  * chat in the desktop's words.
  */
 export function chooseMode(id: string, mode: DesktopChatMode): void {
+    const chat = chats.value[id];
+    if (!chat) return;
+    // Leaving Full access while its turn runs stops that turn, as Stop does: the waiting message is given back, and no
+    // turn follows by itself.
+    if (chat.running && chat.mode === 'full_access' && mode !== 'full_access') changeChat(id, stopAsked);
     here()
-        .desktop.chat.setMode(id, mode)
+        .desktop.chat.setMode(id, mode, hostOf(chat)?.id ?? '')
         .then((answer) => {
             if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
             changeChat(id, (chat) => ({ ...chat, mode: answer.mode }));

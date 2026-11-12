@@ -84,6 +84,7 @@ export const templates = {
     chat_models_unlisted: 'The models {Host} offers were asked for and the last list was kept ({Kind})',
     chat_named: 'A set-up chat was asked a name by its host; the run ended {Outcome}',
     chat_mode_changed: 'A chat went from mode {From} to mode {To}',
+    chat_turn_stopped: 'A chat turn was stopped by the desktop: {Cause}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

@@ -45,5 +45,5 @@ export function registerChat(ipc: IpcRegistrar, chat: ChatCalls, origin: () => s
     handle(ipc, 'chat.restart', origin, (chatId) => answered(() => chat.restart(chatId)), refused);
     handle(ipc, 'chat.attach', origin, (chatId, campaignId) => answered(() => chat.attach(chatId, campaignId)), refused);
     handle(ipc, 'chat.rename', origin, (chatId, title) => answered(() => chat.rename(chatId, title)), refused);
-    handle(ipc, 'chat.setMode', origin, (chatId, mode) => answered(() => chat.setMode(chatId, mode)), refused);
+    handle(ipc, 'chat.setMode', origin, (chatId, mode, host) => answered(() => chat.setMode(chatId, mode, host)), refused);
 }

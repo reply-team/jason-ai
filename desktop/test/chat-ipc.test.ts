@@ -59,7 +59,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
     listeners.get('jason:chat.restart')?.(page, 'conv_1');
     await listeners.get('jason:chat.attach')?.(page, 'conv_1', 'cmp_1');
     await listeners.get('jason:chat.rename')?.(page, 'conv_1', 'Mine');
-    await listeners.get('jason:chat.setMode')?.(page, 'conv_1', 'plan_only');
+    await listeners.get('jason:chat.setMode')?.(page, 'conv_1', 'plan_only', 'claude');
     assert.deepEqual(calls, [
         ['send', 'c1', 'hello', { host: 'claude' }],
         ['stop', 'c1'],
@@ -71,7 +71,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
         ['restart', 'conv_1'],
         ['attach', 'conv_1', 'cmp_1'],
         ['rename', 'conv_1', 'Mine'],
-        ['setMode', 'conv_1', 'plan_only'],
+        ['setMode', 'conv_1', 'plan_only', 'claude'],
     ]);
 });
 
