@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
-import { codexFullAccess, feedFullAccess, fullAccessConsent, fullAccessSentence, unguardedSentence, unguardedStandingSentence, type FullAccessAnswer } from '../src/chat-modes.ts';
+import { codexFullAccess, feedFullAccess, fullAccessConsent, fullAccessSentence, standingUnkeptSentence, unguardedSentence, unguardedStandingSentence, type FullAccessAnswer } from '../src/chat-modes.ts';
 import { readStanding, writeStanding } from '../src/full-access-standing.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench } from './harness.ts';
 
@@ -281,7 +281,7 @@ test('with Always and "start new chats" standing, a held card in Full access sti
     assert.ok((r.events.get(id) ?? []).slice(from).some((event) => event.kind === 'text' && event.text.startsWith('tool refused')));
 });
 
-test('a choice that cannot be written still gives Full access this time, and the box comes back next time', async (t) => {
+test('a choice that cannot be written still gives Full access this time, says so in one line, and the box comes back next time', async (t) => {
     const unwritten: string[] = [];
     const s = rig(t, { chat: { standingUnwritten: (code) => void unwritten.push(code) } });
     // A folder where the file would be: the write fails.
@@ -290,6 +290,11 @@ test('a choice that cannot be written still gives Full access this time, and the
     assert.equal((await s.chat.setMode(id, 'full_access', 'claude')).mode, 'full_access');
     assert.equal(unwritten.length, 1);
     assert.equal(s.chat.fullAccessStanding(), null);
+    const said = s.events.get(id) ?? [];
+    assert.deepEqual(said.filter((event) => event.kind === 'notice'), [{ kind: 'notice', text: standingUnkeptSentence }]);
+    assert.deepEqual(modes(said), ['full_access'], 'the line follows the mode it was given');
+    assert.ok(said.findIndex((event) => event.kind === 'mode') < said.findIndex((event) => event.kind === 'notice'));
+    assert.deepEqual(readdirSync(dirname(s.b.paths.fullAccess)).filter((name) => name.endsWith('.tmp')), [], 'no file is left half-written beside it');
     const other = await s.chat.create();
     await s.chat.setMode(other.id, 'full_access', 'claude');
     assert.equal(s.confirms, 2);

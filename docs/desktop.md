@@ -110,9 +110,9 @@ them on.
   are removed at the next start.
 - `<data>/desktop/models.json`: the models Codex offered when it was last asked.
 - `<data>/desktop/full-access.json`: the standing choice of Full access (below), kept for each host program that can take
-  it and removed when you take it back. No Claude Code chat can read or change it, in any mode; a Codex command can read
-  it, as it can Jason's other files, and cannot change it; a program the agent writes and runs in Full access could
-  change it, as it could any file of yours, and the confirmation says so.
+  it and removed when you take it back. No chat can change it, and a chat on Claude Code cannot read it, in any mode;
+  where Codex's sandbox reads Jason's data folder a Codex command can read it, and it holds no secret. A program the
+  agent writes and runs in Full access could change it, as it could any file of yours, and the confirmation says so.
 - `<data>/desktop/skills-records/`: the record of what the desktop placed in the chat folder's skills folders, kept outside
   the chat folder, which the chat can neither read nor write.
 - `<data>/desktop/rollback/<version>/`: the application as it was before the last update (below).

@@ -80,6 +80,9 @@ export const unguardedSentence =
 export const unguardedStandingSentence =
     'Full access was turned off, and Always taken back, and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.';
 
+/** Said in the chat when Always was answered and its file could not be written: Full access is given this time only. */
+export const standingUnkeptSentence = 'Always could not be kept: its file could not be written; Full access holds this time only.';
+
 /**
  * The number the standing choice of Full access is given under (`full-access-standing.ts`): a choice kept under any
  * other number, lower or higher, is no choice, and the confirmation is shown again. It is raised only by a release that

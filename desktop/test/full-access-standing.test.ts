@@ -2,7 +2,7 @@
 // but this build's consent, and the confirmation's three answers that alone may give it.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -61,6 +61,18 @@ test('writing keeps the other host\'s entry, taking back removes only its own, a
     assert.ok(!existsSync(file), 'a file with no choice in it is removed');
     writeStanding(file, 'claude', null);
     assert.ok(!existsSync(file));
+});
+
+test('a write that fails leaves no file half-written and nothing a later read could take, and throws what failed', (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'jason-standing-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const folder = join(root, 'desktop');
+    const file = join(folder, 'full-access.json');
+    // A folder where the file would be: the file beside it is written, and the rename over it fails.
+    mkdirSync(file, { recursive: true });
+    assert.throws(() => writeStanding(file, 'claude', { consent: fullAccessConsent, givenAt: given, newChats: true }));
+    assert.deepEqual(readdirSync(folder), ['full-access.json'], 'the file beside it is removed again');
+    assert.equal(readStanding(file, 'claude'), null);
 });
 
 test('the confirmation offers This time, Always and Cancel, Cancel focused and Escape\'s answer, and a checkbox that counts only with Always', () => {

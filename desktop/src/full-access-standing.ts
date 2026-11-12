@@ -1,10 +1,13 @@
 /**
  * The standing choice of Full access, `<data>/desktop/full-access.json`: one entry per host program, written by the main
- * process alone when the person answers the confirmation with Always, and removed when they take it back. A Claude Code
- * turn can neither read nor write it, in any mode: it is in the data directory, outside the chat folder, which the
- * permission model refuses in every mode and the host's own rules name (`knownDesktopEntries`). A Codex command can read
- * it, as it can Jason's other files, and cannot change it. A program the agent writes and runs in Full access could
- * change it, as it could any file of yours; the confirmation says so.
+ * process alone when the person answers the confirmation with Always, and removed when they take it back. No chat can
+ * change it, and a chat on Claude Code cannot read it, in any mode: it is in the data directory, outside the chat folder,
+ * which the permission model refuses in every mode and the host's own rules name (`knownDesktopEntries`). Where Codex's
+ * sandbox reads Jason's data folder a Codex command can read it, and it holds no secret. A program the agent writes and
+ * runs in Full access could change it, as it could any file of yours; the confirmation says so.
+ *
+ * A write goes to a file beside it renamed over it, so the file is never half-written; a write that fails removes that
+ * file again, and a read never takes it.
  *
  * A choice is read only when it was given under this build's consent number (`fullAccessConsent`): a lower or a higher
  * one, a file that does not parse, or an entry that says anything wrongly is no choice, and the confirmation is shown
@@ -92,6 +95,15 @@ export function writeStanding(file: string, host: StandingHost, standing: Standi
     }
     mkdirSync(dirname(file), { recursive: true });
     const temporary = `${file}.${process.pid}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
-    renameSync(temporary, file);
+    try {
+        writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
+        renameSync(temporary, file);
+    } catch (error) {
+        try {
+            rmSync(temporary, { force: true });
+        } catch {
+            // What could not be removed is never read: a read takes the file alone.
+        }
+        throw error;
+    }
 }

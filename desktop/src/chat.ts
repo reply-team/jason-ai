@@ -77,6 +77,7 @@ import {
     fullAccessOffered,
     fullAccessSentence,
     isChatMode,
+    standingUnkeptSentence,
     unguardedSentence,
     unguardedStandingSentence,
     type ChatMode,
@@ -803,6 +804,8 @@ export class Chat {
         const conversation = this.#own(id);
         if (!isChatMode(mode)) throw new ChatRefused('That is not a mode of the chat.');
         if (mode === this.#modeOf(conversation)) return this.#summaryOf(conversation);
+        // Always answered and its file not written: Full access is given this time, and the chat says so once it is.
+        let unkept = false;
         if (mode === 'full_access') {
             if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
             const program = programOf(host);
@@ -821,7 +824,7 @@ export class Chat {
                     const answer = answerOf(await this.#options.confirmFullAccess?.());
                     // A yes for a conversation removed meanwhile, or after the window closed, gives nothing.
                     if (answer === null || this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
-                    if (answer.always) this.#writeStanding({ consent: fullAccessConsent, givenAt: new Date(this.#now()).toISOString(), newChats: answer.newChats }, 'given');
+                    if (answer.always) unkept = !this.#writeStanding({ consent: fullAccessConsent, givenAt: new Date(this.#now()).toISOString(), newChats: answer.newChats }, 'given');
                 }
                 this.#openGrant(conversation);
             } finally {
@@ -829,6 +832,7 @@ export class Chat {
             }
         }
         this.#changeMode(conversation, mode, true);
+        if (unkept) this.#options.emit(conversation.id, { kind: 'notice', text: standingUnkeptSentence });
         return this.#summaryOf(conversation);
     }
 
