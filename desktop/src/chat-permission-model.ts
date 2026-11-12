@@ -1192,7 +1192,11 @@ function refusalOver(text: string, places: readonly string[], scope: ChatScope):
     if (changesSearch(text)) return lookupRefusal;
     if (namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(places, scope)) return dataRefusal;
     if (jasonIn(text, scope) === 'deny') return commandRefusal;
-    return chatsOwnPlace(places, scope);
+    const own = chatsOwnPlace(places, scope);
+    if (own !== null) return own;
+    // reply with words other than `auth status` or `account list` is refused here as in Ask first: Full access is never
+    // weaker than Ask first.
+    return replyRefused(text, scope) ? replyRefusal : null;
 }
 
 /**

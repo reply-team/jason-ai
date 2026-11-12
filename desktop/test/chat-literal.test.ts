@@ -366,13 +366,19 @@ test('the data directory is reached through a link by its resolved path, never b
 
 // Ruling 4: reply in Full access.
 
-test('reply is held in Full access but for its exact no-card forms', () => {
-    for (const command of ['reply sequence start seq_1', 'reply api DELETE /v3/sequences/1', 'reply account delete acc_1 --yes', 'npx reply-cli sequence start seq_1', 'reply auth status --json > out.json']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('reply'), command);
+test('reply is refused in Full access where Ask first refuses it, held but for its exact no-card forms, and never weaker', () => {
+    const asAskFirst = (tool: string, command: string) => {
+        const judged = judge(tool, { command }, scope);
+        assert.equal(judged.verdict, 'deny', `Ask first: ${command}`);
+        return { outcome: 'refused', message: judged.verdict === 'deny' ? judged.message : '' };
+    };
+    for (const command of ['reply sequence start seq_1', 'reply api DELETE /v3/sequences/1', 'reply account delete acc_1 --yes', 'npx reply-cli sequence start seq_1']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), asAskFirst('Bash', command), command);
     }
+    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'reply sequence start seq_1' }, scope), asAskFirst('PowerShell', 'reply sequence start seq_1'));
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply auth status --json > out.json' }, scope), heldAs('reply'), 'a form Ask first cards, not one of the exact no-card forms');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply auth status --json' }, scope), runs);
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply account list --channel email' }, scope), runs);
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'reply sequence start seq_1' }, scope), heldAs('reply'));
 });
 
 // What runs.
