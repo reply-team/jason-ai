@@ -46,6 +46,7 @@ import { Painted } from './painted';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
 import { changeChat, chats, clock, conversations, conversationsFailure, feedId, here, messageOf, setup } from './state';
+import { fullAccessStanding, standingKnown, takeBackStanding, takeBackWords } from '../platform/full-access';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
 // back as events. The agent's words are drawn as a fixed subset of Markdown, every word of them as text. A message sent
@@ -141,12 +142,19 @@ async function hold(id: string): Promise<string> {
  */
 export async function startChat(campaign?: { id: string; name: string }): Promise<string | null> {
     try {
+        const host = await newChatHost();
+        const { chat } = here().desktop;
         let id: string;
         if (campaign) {
-            id = await hold(unless(await here().desktop.chat.create(campaign.id)).id);
+            const made = unless(await (host === undefined ? chat.create(campaign.id) : chat.create(campaign.id, host)));
+            id = await hold(made.id);
         } else {
-            const made = unless(await here().desktop.chat.create());
-            chats.value = { ...chats.value, [made.id]: { ...newChat(made.id, null), title: made.title } };
+            const made = unless(await (host === undefined ? chat.create() : chat.create(undefined, host)));
+            // The mode the desktop made it in, Full access by the standing choice among them: its line shows at once.
+            chats.value = {
+                ...chats.value,
+                [made.id]: { ...newChat(made.id, null), title: made.title, mode: made.mode },
+            };
             id = made.id;
         }
         conversationsFailure.value = null;
@@ -156,6 +164,26 @@ export async function startChat(campaign?: { id: string; name: string }): Promis
         conversationsFailure.value = messageOf(error);
         return null;
     }
+}
+
+/**
+ * The host a new chat's first turn runs on, named to the desktop only while the standing choice says new chats start in
+ * Full access, so it can tell whether that host takes Full access; otherwise nothing is named, as before.
+ */
+async function newChatHost(): Promise<string | undefined> {
+    await standingKnown();
+    if (fullAccessStanding.value?.newChats !== true) return undefined;
+    if (setup.value === null) await listHosts();
+    return hostOf(newChat('', null))?.id;
+}
+
+/** The take-back in the mode menu: the desktop forgets the standing choice; the chat stays in the mode it is in. */
+export function takeBackChoice(id: string): void {
+    takeBackStanding(here().desktop)
+        .then((refused) => {
+            if (refused !== null) changeChat(id, (chat) => told(chat, refused));
+        })
+        .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 }
 
 /** A conversation from the sidebar's list: the one held, else the one the desktop kept. Null when it refused. */
@@ -220,6 +248,9 @@ export function chooseMode(id: string, mode: DesktopChatMode): void {
         })
         .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 }
+
+/** The menu's value for the take-back of the standing choice: no mode, never sent to the desktop as one. */
+const takeBack = 'take_back';
 
 /** The most characters a conversation's name keeps, as the desktop cuts it. */
 const nameLength = 60;
@@ -892,7 +923,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         aria-label="Access mode"
                         disabled={chat.removing}
                         value={chat.mode}
-                        onChange={(event) => chooseMode(chatId, event.target.value as DesktopChatMode)}
+                        onChange={(event) =>
+                            event.target.value === takeBack
+                                ? takeBackChoice(chatId)
+                                : chooseMode(chatId, event.target.value as DesktopChatMode)
+                        }
                     >
                         {modeChoices(host, chat.main === true).map((each) => (
                             <option key={each.mode} value={each.mode} disabled={each.disabled !== null}>
@@ -901,6 +936,8 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                                     : `${each.label}: ${each.disabled.replaceAll('`', '')}`}
                             </option>
                         ))}
+                        {/* While Always stands, its take-back follows the modes; choosing it leaves the mode as it is. */}
+                        {fullAccessStanding.value !== null && <option value={takeBack}>{takeBackWords}</option>}
                     </select>
                     <span className="grow" />
                     {chat.running ? (

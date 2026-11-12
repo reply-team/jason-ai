@@ -4,6 +4,8 @@ import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import { route } from '../../router';
+import { stubDesktop } from '../../test/desktop';
+import { fullAccessStanding } from '../../platform/full-access';
 
 function systemFake(ui: 'with-ui' | 'without-ui' = 'with-ui', tokens: 'two' | 'aged' = 'two') {
     const fake = new FakeApi()
@@ -126,5 +128,48 @@ describe('System, the update sentence', () => {
         expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
         expect(screen.getByText(/updates itself and the jason it carries/)).toBeTruthy();
         expect(screen.queryByText(/jason update apply/)).toBeNull();
+    });
+});
+
+describe('System, the standing choice of Full access', () => {
+    afterEach(() => {
+        delete window.jasonDesktop;
+        fullAccessStanding.value = null;
+    });
+
+    it('in a browser shows no Full access card', async () => {
+        systemFake();
+        await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
+        expect(screen.queryByRole('heading', { name: 'Full access' })).toBeNull();
+    });
+
+    it('in the desktop says that Full access asks each time while no choice stands', async () => {
+        window.jasonDesktop = stubDesktop();
+        systemFake();
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Full access' })).toBeTruthy());
+        expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Ask each time again' })).toBeNull();
+    });
+
+    it('in the desktop shows Always and new chats, and takes them back with one button', async () => {
+        const desktop = stubDesktop();
+        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
+        window.jasonDesktop = desktop;
+        systemFake();
+        await waitFor(() =>
+            expect(screen.getByText(/Chats on this computer enter Full access without asking, since /)).toBeTruthy(),
+        );
+        expect(screen.getByText('New chats start in Full access.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Ask each time again' }));
+        await waitFor(() => expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy());
+        expect(desktop.calls.filter((each) => each.name === 'fullAccess.takeBack')).toHaveLength(1);
+        expect(screen.queryByText('New chats start in Full access.')).toBeNull();
+    });
+
+    it('in a desktop of an earlier version, with no standing choice to read, shows no card', async () => {
+        window.jasonDesktop = {} as NonNullable<typeof window.jasonDesktop>;
+        systemFake();
+        await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
+        expect(screen.queryByRole('heading', { name: 'Full access' })).toBeNull();
     });
 });

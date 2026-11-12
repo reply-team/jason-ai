@@ -231,3 +231,86 @@ describe('a change to Plan only around a running turn', () => {
         expect(calls(desktop, 'chat.send')).toHaveLength(1);
     });
 });
+
+describe('Full access answered once for good', () => {
+    const always = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
+
+    it('while Always stands the menu enters Full access without the box and offers the take-back after the modes', async () => {
+        const desktop = chatDesktop();
+        desktop.standing = always;
+        // A box would say no: the menu enters all the same, since the desktop asks nothing while the choice stands.
+        desktop.confirmFullAccess = false;
+        renderConsole(desktop);
+        await waitFor(() => expect(menu().options).toHaveLength(4));
+        expect([...menu().options].map((each) => [each.value, each.text, each.disabled])).toEqual([
+            ['ask_first', 'Ask first', false],
+            ['plan_only', 'Plan only', false],
+            ['full_access', 'Full access', false],
+            ['take_back', 'Full access: ask each time again', false],
+        ]);
+        choose('full_access');
+        await waitFor(() => expect(line()).not.toBeNull());
+        expect(menu().value).toBe('full_access');
+    });
+
+    it('the take-back in the menu takes the choice back and leaves the chat in the mode it is in, its line still shown', async () => {
+        const desktop = chatDesktop();
+        desktop.standing = always;
+        renderConsole(desktop);
+        await waitFor(() => expect(menu().options).toHaveLength(4));
+        choose('full_access');
+        await waitFor(() => expect(line()).not.toBeNull());
+        choose('take_back');
+        await waitFor(() => expect(calls(desktop, 'fullAccess.takeBack')).toHaveLength(1));
+        expect(calls(desktop, 'fullAccess.takeBack')[0]!.args).toEqual([]);
+        await waitFor(() => expect(menu().options).toHaveLength(3));
+        expect(menu().value).toBe('full_access');
+        expect(line()).not.toBeNull();
+        expect(calls(desktop, 'chat.setMode')).toHaveLength(1);
+    });
+
+    it('follows a take-back made elsewhere: the option goes', async () => {
+        const desktop = chatDesktop();
+        desktop.standing = always;
+        renderConsole(desktop);
+        await waitFor(() => expect(menu().options).toHaveLength(4));
+        flush(() => desktop.stand(null));
+        expect(menu().options).toHaveLength(3);
+    });
+
+    it('a new chat that starts in Full access by the standing choice shows the line from its first moment, before anything is sent', async () => {
+        const desktop = chatDesktop();
+        desktop.standing = { ...always, newChats: true };
+        renderConsole(desktop);
+        await waitFor(() => expect(line()).not.toBeNull());
+        expect(menu().value).toBe('full_access');
+        expect(calls(desktop, 'chat.create')[0]!.args).toEqual([undefined, 'claude']);
+        expect(calls(desktop, 'chat.send')).toHaveLength(0);
+        expect(calls(desktop, 'chat.setMode')).toHaveLength(0);
+    });
+
+    it('a new chat on a host that cannot take Full access starts in Ask first with no notice; the menu shows the mode it has', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'claude')!.found = false;
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const desktop = chatDesktop(status);
+        desktop.standing = { ...always, newChats: true };
+        renderConsole(desktop);
+        await waitFor(() => menu());
+        await waitFor(() => expect(calls(desktop, 'chat.create')).toHaveLength(1));
+        expect(calls(desktop, 'chat.create')[0]!.args).toEqual([undefined, 'codex']);
+        expect(menu().value).toBe('ask_first');
+        expect(line()).toBeNull();
+        expect(screen.queryByText(/Full access/, { selector: '.note:not(option)' })).toBeNull();
+    });
+
+    it('without "start new chats" a new chat is made as before, naming no host, and starts in Ask first', async () => {
+        const desktop = chatDesktop();
+        desktop.standing = always;
+        renderConsole(desktop);
+        await waitFor(() => menu());
+        await waitFor(() => expect(calls(desktop, 'chat.create')).toHaveLength(1));
+        expect(calls(desktop, 'chat.create')[0]!.args).toEqual([]);
+        expect(menu().value).toBe('ask_first');
+    });
+});
