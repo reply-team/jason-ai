@@ -397,18 +397,16 @@ describe('Reply in a chat, by the route of enrolment', () => {
         expect(card()).toBeNull();
     });
 
-    it('is not asked for where no route sends enrolment anywhere', async () => {
+    it('is asked for where no route sends enrolment anywhere yet: the sign-in is what writes the first one', async () => {
         const fake: { value: FakeApi | null } = { value: null };
         const desktop = renderConsole(stubDesktop(noReply), 'route.resolve/no-route', (each) => (fake.value = each));
         await waitFor(() => startForm());
         await ready();
         await openCampaignChat(desktop, 'Autumn');
-        await waitFor(() => expect(fake.value!.sent('route.resolve')).toBeDefined());
-        await flush(() => Promise.resolve());
-        expect(card()).toBeNull();
+        await waitFor(() => expect(card()).not.toBeNull());
     });
 
-    it('is not asked for while the route is being read, and the chat works on when the read fails', async () => {
+    it('is asked for when the route cannot be read, and the chat works on', async () => {
         const fake: { value: FakeApi | null } = { value: null };
         const desktop = renderConsole(stubDesktop(noReply), toReply, (each) => {
             fake.value = each;
@@ -418,8 +416,7 @@ describe('Reply in a chat, by the route of enrolment', () => {
         await ready();
         await openCampaignChat(desktop, 'Autumn');
         await waitFor(() => expect(fake.value!.sent('route.resolve')).toBeDefined());
-        await flush(() => Promise.resolve());
-        expect(card()).toBeNull();
+        await waitFor(() => expect(card()).not.toBeNull());
         expect(screen.getByRole('form', { name: 'Message' })).toBeTruthy();
     });
 
