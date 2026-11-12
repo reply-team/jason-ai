@@ -261,10 +261,10 @@ test('a tool the hook never saw that reaches the prompt tool in Full access is a
 
 test('a deletion the host still asks about though the hook allowed it is a card, never run on its own and never refused unasked', async (t) => {
     const w = await wired(t);
-    for (const command of ['rm -rf /tmp/build', 'rm notes.md', 'rmdir old']) {
+    for (const command of ['rm -rf build', 'rm notes.md', 'rmdir old']) {
         assert.deepEqual(await hooked(w, 'Bash', { command }), { decision: 'allow' }, command);
     }
-    const answers = ['rm -rf /tmp/build', 'rm notes.md', 'rmdir old'].map((command) => w.broker.ask(w.id, 'Bash', { command }));
+    const answers = ['rm -rf build', 'rm notes.md', 'rmdir old'].map((command) => w.broker.ask(w.id, 'Bash', { command }));
     await settle();
     assert.deepEqual(titles(w.cards), [fullTitle, fullTitle, fullTitle]);
     w.broker.endTurn(w.id);
@@ -358,4 +358,10 @@ test('reply in Full access: what Ask first refuses is refused with its sentence,
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply auth status --json > out.json' }, scope), { outcome: 'held', message: heldSentence, reason: 'reply' });
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply auth status --json' }, scope), { outcome: 'runs' });
+});
+
+test('a judgement that fails before Full access reads anything holds the request, for a command and for any other tool', () => {
+    const failing: ChatScope = { ...(scopes[0] as ChatScope), real: () => { throw new Error('no reading'); } };
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat notes.md' }, failing), { outcome: 'held', message: heldSentence, reason: 'syntax' });
+    assert.deepEqual(fullAccessJudgement('Read', { file_path: '/home/someone/notes.md' }, failing), { outcome: 'held', message: heldSentence });
 });

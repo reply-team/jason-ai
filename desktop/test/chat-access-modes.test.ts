@@ -278,9 +278,9 @@ test('in a Full access turn a deletion the host asks about though the hook allow
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'full_access', 'claude');
-    plan(r, [{ use: { tool: 'Bash', input: { command: 'rm -rf /tmp/build' }, prompt: true } }]);
+    plan(r, [{ use: { tool: 'Bash', input: { command: 'rm -rf build' }, prompt: true } }]);
     const said = await answered(r, id, [false]);
-    assert.deepEqual(cards(said).map((card) => `${card.title}: ${card.detail}`), [`${fullTitle}: rm -rf /tmp/build`]);
+    assert.deepEqual(cards(said).map((card) => `${card.title}: ${card.detail}`), [`${fullTitle}: rm -rf build`]);
     assert.ok(texts(said).includes('tool refused: The person said no. Do not try another way to do the same thing; ask them what they would like instead.'), JSON.stringify(texts(said)));
     assert.ok(!texts(said).includes('tool ran'));
 });

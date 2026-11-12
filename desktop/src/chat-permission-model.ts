@@ -1142,8 +1142,13 @@ export function fullAccessJudgement(tool: string, input: Record<string, unknown>
     // A shell command is read literally (`literalJudgement`), never through the second look's spellings. No MCP tool is:
     // the chat's own keeps its refusal and a person's own is held, whatever its input names.
     const literal = (shells.has(tool) || typeof command === 'string') && !tool.startsWith('mcp__');
-    // What Ask first refuses is refused here, before anything else, by the same sentence.
-    const judged = judge(tool, input, scope);
+    // What Ask first refuses is refused here, before anything else, by the same sentence; a judgement that failed holds.
+    let judged: Judgement;
+    try {
+        judged = judge(tool, input, scope);
+    } catch {
+        return literal ? heldFor('syntax') : { outcome: 'held', message: heldSentence };
+    }
     if (judged.verdict === 'deny') return { outcome: 'refused', message: judged.message };
     const written = writtenRefusal(tool, input, scope);
     if (written !== null) return { outcome: 'refused', message: written };
