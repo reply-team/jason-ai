@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox } from '../src/chat-hosts.ts';
-import { feedFullAccess, fullAccessOffered, fullAccessSentence, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { codexAutoEdit, feedAutoEdit, feedFullAccess, fullAccessOffered, fullAccessSentence, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
@@ -168,7 +168,7 @@ test('Full access is given only on the person\'s yes, asked every time it is cho
     const nobody = rig(t, { confirm: null });
     const alone = await nobody.chat.create();
     assert.equal((await nobody.chat.setMode(alone.id, 'full_access', 'claude')).mode, 'ask_first');
-    await assert.rejects(nobody.chat.setMode(alone.id, 'auto_edit'), /not a mode/);
+    await assert.rejects(nobody.chat.setMode(alone.id, 'accept_edits'), /not a mode/);
     await assert.rejects(nobody.chat.setMode('conv_01JD0000000000000000000000', 'plan_only'), /not one this desktop keeps/);
 });
 
@@ -618,4 +618,124 @@ test('with the switch off Full access is refused before any confirmation, and a 
     assert.equal((await r.chat.setMode(id, 'plan_only', 'claude')).mode, 'plan_only', 'Plan only is offered');
     await r.turn(id, 'hello', claude);
     assert.deepEqual(r.started, ['plan_only']);
+});
+
+// Auto-edit: Ask first with the six file commands in the chat folder run with no card; no box, no record, no hook.
+
+test('Auto-edit is given with no box and no standing choice, and its turn starts Claude Code exactly as Ask first\'s', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    assert.equal((await r.chat.setMode(id, 'auto_edit', 'claude')).mode, 'auto_edit');
+    assert.equal(r.confirms, 0, 'no confirmation is shown');
+    assert.equal(existsSync(r.b.paths.fullAccess), false, 'nothing of the standing choice is written');
+    assert.deepEqual(modes(r.events.get(id) ?? []), ['auto_edit']);
+    assert.deepEqual(r.changes, [['ask_first', 'auto_edit']]);
+    await r.turn(id, 'hello', claude);
+    const edited = r.hosts()[0]?.args ?? [];
+    assert.equal(flag(edited, '--permission-mode'), undefined);
+    assert.ok(flag(edited, '--settings')?.startsWith('{'), 'the settings travel inline, with no hook and no secret');
+    assert.ok(edited.every((arg) => !/acceptEdits|defaultMode/.test(arg)));
+    assert.deepEqual(r.started, ['auto_edit']);
+    await r.chat.setMode(id, 'ask_first');
+    await r.turn(id, 'hello again', claude);
+    const asked = r.hosts()[1]?.args ?? [];
+    // The two turns differ only by the turn's own file and the session resumed.
+    const without = (args: string[]) => args.filter((arg, at) => !arg.endsWith('.mcp.json') && arg !== '--resume' && args[at - 1] !== '--resume');
+    assert.deepEqual(without(edited), without(asked));
+});
+
+test('an existing standing choice of Full access is neither read as Auto-edit nor touched by it', async (t) => {
+    const r = rig(t);
+    mkdirSync(dirname(r.b.paths.fullAccess), { recursive: true });
+    const kept = JSON.stringify({ claude: { consent: 1, given_at: '2026-11-13T08:00:00Z', new_chats: true } });
+    writeFileSync(r.b.paths.fullAccess, kept);
+    const { id } = await r.chat.create();
+    assert.equal((await r.chat.setMode(id, 'auto_edit', 'claude')).mode, 'auto_edit');
+    await r.chat.setMode(id, 'ask_first');
+    assert.equal((await r.chat.setMode(id, 'auto_edit', 'claude')).mode, 'auto_edit');
+    assert.equal(readFileSync(r.b.paths.fullAccess, 'utf8'), kept);
+    assert.equal(r.confirms, 0);
+});
+
+test('in an Auto-edit turn a file command in the chat folder runs with no card, and anything else is Ask first\'s', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'auto_edit', 'claude');
+    plan(r, [{ ask: { tool: 'Bash', input: { command: 'mkdir -p notes && touch notes/plan.md' } } }, { ask: { tool: 'Bash', input: { command: 'jason approval approve apr_1' } } }]);
+    const said = await r.turn(id, 'make a notes folder', claude);
+    const decisions = texts(said).filter((text) => text.startsWith('decision '));
+    assert.equal(decisions[0], 'decision allow');
+    assert.match(decisions[1] ?? '', /^decision deny: /);
+    assert.equal(said.some((event) => event.kind === 'permission'), false, 'no card for either');
+
+    plan(r, [{ ask: { tool: 'Bash', input: { command: 'rm -r notes' } } }]);
+    const card = r.until(id, (event) => event.kind === 'permission');
+    const ended = r.until(id, (event) => event.kind === 'done');
+    await r.chat.send(id, 'remove it all', claude);
+    const shown = await card;
+    assert.equal(shown.kind === 'permission' ? shown.title : '', 'Run a command');
+    r.chat.stop(id);
+    await ended;
+});
+
+test('Auto-edit is refused on Codex and for the Feed before anything changes, and a Codex send takes it back to Ask first', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await assert.rejects(r.chat.setMode(id, 'auto_edit', 'codex'), { message: codexAutoEdit });
+    await assert.rejects(r.chat.setMode(id, 'auto_edit', 'gemini'));
+    assert.equal(r.chat.open(id).mode, 'ask_first');
+    const feed = r.chat.feed([]);
+    await assert.rejects(r.chat.setMode(feed.id, 'auto_edit', 'claude'), { message: feedAutoEdit });
+    assert.equal(r.chat.open(feed.id).mode, 'ask_first');
+
+    await r.chat.setMode(id, 'auto_edit', 'claude');
+    const said = await r.turn(id, 'hello', { host: 'codex' });
+    assert.deepEqual(modes(said), ['ask_first']);
+    assert.equal(flag(r.hosts()[0]?.args ?? [], '--sandbox'), 'read-only');
+    assert.equal(r.chat.open(id).mode, 'ask_first');
+});
+
+test('Auto-edit is never on a record: a restart opens the chat in Ask first, and closing the window forgets it', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'auto_edit', 'claude');
+    await r.turn(id, 'hello', claude);
+    const record = JSON.parse(readFileSync(join(r.b.paths.conversations, `${id}.json`), 'utf8'));
+    assert.equal(record.mode, undefined);
+    assert.equal(r.again().open(id).mode, 'ask_first');
+    writeFileSync(join(r.b.paths.conversations, `${id}.json`), JSON.stringify({ ...record, mode: 'auto_edit' }));
+    assert.equal(r.again().open(id).mode, 'ask_first', 'a record written by hand to say Auto-edit is read as Ask first');
+    r.chat.restart(id);
+    assert.equal(r.chat.open(id).mode, 'auto_edit', 'Start afresh leaves it');
+    r.chat.closeAll();
+    assert.equal(r.chat.open(id).mode, 'ask_first');
+});
+
+test('leaving Auto-edit for Ask first while its turn runs stops that turn; a change from Auto-edit to Full access does not', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'auto_edit', 'claude');
+    const first = await heldTurn(r, id, join(r.b.root, 'held.pid'));
+    await r.chat.setMode(id, 'ask_first');
+    assert.equal(await endsSoon(first.ended), 'ended');
+    assert.equal(r.chat.isRunning(id), false);
+
+    await r.chat.setMode(id, 'auto_edit', 'claude');
+    const second = await heldTurn(r, id, join(r.b.root, 'held-2.pid'));
+    await r.chat.setMode(id, 'full_access', 'claude');
+    assert.equal(await endsSoon(second.ended), 'running', 'a wider mode lets the turn go on, in the mode it started in');
+    // Narrower than the running turn's mode, wherever the chat came from: Full access back to Ask first stops it.
+    await r.chat.setMode(id, 'ask_first');
+    assert.equal(await endsSoon(second.ended), 'ended');
+    assert.deepEqual(r.started, ['auto_edit', 'auto_edit']);
+});
+
+test('the standing choice of Full access with new chats never starts a chat in Auto-edit', async (t) => {
+    const r = rig(t, { chat: { fullAccessOffered: true } });
+    mkdirSync(dirname(r.b.paths.fullAccess), { recursive: true });
+    writeFileSync(r.b.paths.fullAccess, JSON.stringify({ claude: { consent: 1, given_at: '2026-11-13T08:00:00Z', new_chats: true } }));
+    for (const host of ['claude', 'codex', undefined]) {
+        const made = await r.chat.create(undefined, host);
+        assert.notEqual(made.mode, 'auto_edit', String(host));
+    }
 });
