@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import type { DesktopReplyAccount, DesktopSetup } from '../platform/desktop';
+import type { DesktopReplyAccount, DesktopReplyChannel, DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
@@ -218,20 +218,41 @@ describe('the Reply card', () => {
     });
 });
 
-describe('the Reply card, a channel the account does not have', () => {
-    it('says so in one line, beside the accounts of the other channel, and shows no error', async () => {
-        renderConnect({
-            ...withAccounts([account('em1', 'email', 'connected')]),
-            reply: { ...setupFound.reply, accounts: [account('em1', 'email', 'connected')], unavailable: ['linkedin'] },
-        });
-        const card = replyCard(await openConnect());
+describe('the Reply card, a channel it did not list', () => {
+    const with_ = (absent: DesktopReplyChannel[], unread: DesktopReplyChannel[]): DesktopSetup => ({
+        ...setupFound,
+        reply: { ...setupFound.reply, accounts: [account('em1', 'email', 'connected')], absent, unread },
+    });
+    const noted = (card: HTMLElement) => Array.from(card.querySelectorAll('.acct-none'), words);
+
+    it('says a channel the CLI named as not in the plan or role in one fixed line, beside the other rows, as no error', async () => {
+        const card = replyCard((renderConnect(with_(['linkedin'], [])), await openConnect()));
         expect(rows(card)).toEqual([['Email', 'Account em1', 'Connected']]);
-        const lines = Array.from(card.querySelectorAll('.acct-none'), words);
-        expect(lines).toEqual(['This Reply account has no LinkedIn.']);
+        expect(noted(card)).toEqual(['This Reply account has no LinkedIn.']);
         expect(within(card).queryByRole('alert')).toBeNull();
     });
 
-    it('says nothing when both channels were read', async () => {
+    it('says the same of email', async () => {
+        const card = replyCard((renderConnect(with_(['email'], [])), await openConnect()));
+        expect(noted(card)).toEqual(['This Reply account has no email.']);
+    });
+
+    it('says a channel that could not be read in its own fixed sentence, never as an absent one', async () => {
+        const card = replyCard((renderConnect(with_([], ['linkedin'])), await openConnect()));
+        expect(rows(card)).toEqual([['Email', 'Account em1', 'Connected']]);
+        expect(noted(card)).toEqual(['LinkedIn accounts could not be read. Check again.']);
+        expect(card.textContent).not.toContain('has no LinkedIn');
+    });
+
+    it('says the unread sentence for email too, and one line for each channel when both ended so', async () => {
+        const card = replyCard((renderConnect(with_(['linkedin'], ['email'])), await openConnect()));
+        expect(noted(card)).toEqual([
+            'This Reply account has no LinkedIn.',
+            'Email accounts could not be read. Check again.',
+        ]);
+    });
+
+    it('says nothing when both channels were listed', async () => {
         renderConnect(withAccounts([account('em1', 'email', 'connected')]));
         expect((await openConnect()).querySelector('.acct-none')).toBeNull();
     });

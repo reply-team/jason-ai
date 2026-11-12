@@ -198,6 +198,9 @@ export interface DesktopReplyAccount {
     status: string;
 }
 
+/** A channel Reply lists accounts for. */
+export type DesktopReplyChannel = 'email' | 'linkedin';
+
 /** The Reply connection: the Reply CLI, its sign-in, and whether Jason's Reply plugin is set up to use it. */
 export interface DesktopReply {
     /** Whether the Reply CLI was found, its version, and the `programId` that installs it when it was not. */
@@ -208,8 +211,10 @@ export interface DesktopReply {
     /** Whether the runtime has the Reply plugin set up with this sign-in. */
     wired: boolean;
     accounts: DesktopReplyAccount[];
-    /** The channels (`email`, `linkedin`) Reply refused to list, an account with none of it; the other channel's rows stay. */
-    unavailable: string[];
+    /** The channels the Reply CLI says are not in this account's plan or role. */
+    absent: DesktopReplyChannel[];
+    /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
+    unread: DesktopReplyChannel[];
 }
 
 /**

@@ -26,7 +26,9 @@ import {
     isConfigured,
     parseInstallationSettings,
     parseReplyAccounts,
+    readReplyChannel,
     replyChannels,
+    type ReplyChannel,
     parseReplyAuth,
     pluginRuntimes,
     programInstalls,
@@ -77,8 +79,10 @@ export interface ReplyState {
     user: string | null;
     wired: boolean;
     accounts: ReplyAccount[];
-    /** The channels whose list Reply refused, an account with no plan or role for it; the other channel's rows stay. */
-    unavailable: string[];
+    /** The channels the CLI says are not in this account's plan or role (`email`, `linkedin`). */
+    absent: ReplyChannel[];
+    /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
+    unread: ReplyChannel[];
 }
 
 export interface PluginState {
@@ -336,7 +340,7 @@ export class Setup {
     async #reply(valid: boolean): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], unavailable: [] };
+            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [] };
         }
         const routes = valid ? await this.#deps.cli.run(['route', 'list']) : null;
         const wired = routes !== null && routes.exit === 0 && defaultRoutePlugin(routes.stdout) === 'reply';
@@ -346,16 +350,17 @@ export class Setup {
         const current = version !== null && versionAtLeast(version, replyMinimumVersion);
         const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
         const accounts: ReplyAccount[] = [];
-        const unavailable: string[] = [];
+        const absent: ReplyChannel[] = [];
+        const unread: ReplyChannel[] = [];
         if (auth.signedIn && current) {
-            // One read per channel: a plan or role without one of them makes `account list` refuse as a whole.
+            // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
             for (const channel of replyChannels) {
-                const read = await this.#run('reply', 'account list', ['account', 'list', '--channel', channel, '--json']);
-                if (read.exit === 0) accounts.push(...parseReplyAccounts(read.stdout));
-                else unavailable.push(channel);
+                const read = readReplyChannel(await this.#run('reply', 'account list', ['account', 'list', '--channel', channel, '--json']));
+                if (read.kind === 'listed') accounts.push(...read.accounts);
+                else (read.kind === 'absent' ? absent : unread).push(channel);
             }
         }
-        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts, unavailable };
+        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts, absent, unread };
     }
 
     connectReply(): Promise<void> {

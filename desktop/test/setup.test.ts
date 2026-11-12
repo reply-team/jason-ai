@@ -21,6 +21,7 @@ import {
     parseInstallationSettings,
     parseReplyAccounts,
     parseReplyAuth,
+    readReplyChannel,
     Refused,
     serverPattern,
     withPluginConfigured,
@@ -649,7 +650,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
-    assert.deepEqual(reply, { cli: { found: true, version: '0.19.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], unavailable: [] });
+    assert.deepEqual(reply, { cli: { found: true, version: '0.19.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [] });
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
     assert.ok(asked.includes('account list --channel email --json') && asked.includes('account list --channel linkedin --json'));
     assert.equal(asked.includes('account list --json'), false, 'one read per channel, never the unsplit list');
@@ -659,23 +660,47 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.deepEqual(absent.reply.cli, { found: false, version: null, install: null }, 'without npm there is nothing to install it with');
 });
 
-test('the Reply card reads each channel on its own, so a channel the account lacks does not blank the other', async (t) => {
+test('the Reply card keeps three outcomes per channel: listed, not in the plan or role, and could not be read', async (t) => {
     const email = JSON.stringify([{ id: 'e1', channel: 'email', name: 'Sales', address: 'sales@example.test', reply_status: 'connected' }]);
     const linkedin = JSON.stringify([{ id: 'l1', channel: 'linkedin', name: 'Ada', address: '', reply_status: 'enabled' }]);
-    const both = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_ACCOUNTS_EMAIL: email, STUB_REPLY_ACCOUNTS_LINKEDIN: linkedin } });
-    const all = (await setupOn(both).status()).reply;
-    assert.deepEqual(all.accounts.map((each) => each.id), ['e1', 'l1']);
-    assert.deepEqual(all.unavailable, []);
+    const read = async (emailEnd: string, linkedinEnd: string) => {
+        const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_ACCOUNTS_EMAIL: emailEnd, STUB_REPLY_ACCOUNTS_LINKEDIN: linkedinEnd } });
+        const log = memoryLog();
+        const { reply } = await setupOn(b, log).status();
+        const logged = JSON.stringify(log.lines);
+        assert.equal(logged.includes('never shown'), false, 'nothing of the CLI error text is logged');
+        return { ids: reply.accounts.map((each) => each.id), absent: reply.absent, unread: reply.unread };
+    };
 
-    const noLinkedin = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_ACCOUNTS_EMAIL: email, STUB_REPLY_ACCOUNTS_LINKEDIN: 'refused' } });
-    const kept = (await setupOn(noLinkedin).status()).reply;
-    assert.deepEqual(kept.accounts.map((each) => each.id), ['e1'], 'the email account stays');
-    assert.deepEqual(kept.unavailable, ['linkedin']);
+    assert.deepEqual(await read(email, linkedin), { ids: ['e1', 'l1'], absent: [], unread: [] });
+    for (const [channel, other, otherId] of [['linkedin', email, 'e1'], ['email', linkedin, 'l1']] as const) {
+        const ended = (end: string) => (channel === 'linkedin' ? [other, end] as const : [end, other] as const);
+        // reply-cli 0.20.0 answers access.feature_unavailable, exit 1, for the plan or role lacking the channel.
+        assert.deepEqual(await read(...ended('refused')), { ids: [otherId], absent: [channel], unread: [] });
+        // Every other ending is only that it could not be read: a network failure, an expired sign-in, an exit
+        // nobody explained, an answer that is no list.
+        for (const end of ['network', 'expired', 'unexplained', 'garbage']) {
+            assert.deepEqual(await read(...ended(end)), { ids: [otherId], absent: [], unread: [channel] }, end);
+        }
+    }
+});
 
-    const noEmail = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_ACCOUNTS_EMAIL: 'refused', STUB_REPLY_ACCOUNTS_LINKEDIN: linkedin } });
-    const other = (await setupOn(noEmail).status()).reply;
-    assert.deepEqual(other.accounts.map((each) => each.id), ['l1']);
-    assert.deepEqual(other.unavailable, ['email']);
+test('a channel read is the plan-or-role refusal only by the code reply-cli gives for it, and a timeout is not one', () => {
+    const json = (code: string) => JSON.stringify({ error: { code } }) + String.fromCharCode(10);
+    assert.deepEqual(readReplyChannel({ exit: 1, stdout: '', stderr: json('access.feature_unavailable') }), { kind: 'absent' });
+    // Progress lines may come first; the last line is the verdict.
+    assert.deepEqual(readReplyChannel({ exit: 1, stdout: '', stderr: 'checking' + String.fromCharCode(10) + json('access.feature_unavailable') }), { kind: 'absent' });
+    for (const result of [
+        { exit: 1, stdout: '', stderr: json('access.denied') },
+        { exit: 1, stdout: '', stderr: json('reply.unavailable') },
+        { exit: 2, stdout: '', stderr: json('access.feature_unavailable') },
+        { exit: -1, stdout: '', stderr: json('access.feature_unavailable') },
+        { exit: -1, stdout: '', stderr: '' },
+        { exit: 1, stdout: '', stderr: 'access.feature_unavailable' },
+        { exit: 0, stdout: '{"items":"no"}', stderr: '' },
+        { exit: 0, stdout: '', stderr: '' },
+    ]) assert.deepEqual(readReplyChannel(result), { kind: 'unread' }, JSON.stringify(result));
+    assert.deepEqual(readReplyChannel({ exit: 0, stdout: '{"items":[]}', stderr: '' }), { kind: 'listed', accounts: [] });
 });
 
 test('a Reply CLI older than the one Jason’s Reply plugin requires is offered the update, and is not asked what it cannot answer', async (t) => {

@@ -59,12 +59,18 @@ const cap = (text: string): string => {
     return characters.length > 40 ? `${characters.slice(0, 40).join('')}…` : text;
 };
 
-/** The heading a channel goes by on the card; a channel it does not know goes by its own name, cut. */
-const channelName = (channel: string): string => channels.find(([known]) => known === channel)?.[1] ?? cap(channel);
-
-/** The channels Reply refused to list, as text only; an older desktop that does not say reads as none. */
-const unavailableOf = (state: DesktopSetup['reply']): string[] =>
-    Array.isArray(state.unavailable) ? state.unavailable : [];
+/**
+ * The one line for each channel the desktop did not list, from its two lists of closed words: the channels the CLI says
+ * are not in the plan or role, then the channels that could not be read. Only the card's own sentences, never the CLI's.
+ */
+const unlisted = (state: DesktopSetup['reply']): string[] => [
+    ...(Array.isArray(state.absent) ? state.absent : []).map(
+        (channel) => `This Reply account has no ${channel === 'linkedin' ? 'LinkedIn' : 'email'}.`,
+    ),
+    ...(Array.isArray(state.unread) ? state.unread : []).map(
+        (channel) => `${channel === 'linkedin' ? 'LinkedIn' : 'Email'} accounts could not be read. Check again.`,
+    ),
+];
 
 function stateOf(account: DesktopReplyAccount): readonly [string, Tone] {
     if (!account.status) return ['State unknown', 'gray'];
@@ -312,12 +318,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string):
                         })}
                     </div>`,
             )}
-            ${unavailableOf(state).map(
-                (channel) =>
-                    html`<div class="setrow meta acct-none">
-                        This Reply account has no ${channel === 'email' ? 'email' : channelName(channel)}.
-                    </div>`,
-            )}
+            ${unlisted(state).map((line) => html`<div class="setrow meta acct-none">${line}</div>`)}
             ${
                 state.signedIn && state.cli.found
                     ? html`<div class="setrow">

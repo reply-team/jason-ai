@@ -401,6 +401,7 @@ export const replyMinimumVersion = '0.18.0';
 
 /** The channels `reply account list --channel` takes, read one at a time, in the order the card shows them. */
 export const replyChannels = ['email', 'linkedin'] as const;
+export type ReplyChannel = (typeof replyChannels)[number];
 
 export interface ReplyAccount {
     id: string;
@@ -464,6 +465,41 @@ export function parseReplyAccounts(stdout: string): ReplyAccount[] {
         }));
     } catch {
         return [];
+    }
+}
+
+/** What one channel's `reply account list --channel <channel> --json` came to. */
+export type ReplyChannelRead = { kind: 'listed'; accounts: ReplyAccount[] } | { kind: 'absent' } | { kind: 'unread' };
+
+/**
+ * reply-cli 0.20.0 (src/operations/call.ts `refusal`, built to dist/operations/call.js:107-111) answers a 403 that has
+ * no code, or a code ending `.forbidden`, as `Operation_error('access.feature_unavailable', 'The account's plan or
+ * role does not include this.')`, exit code 1, printed under --json as one JSON line on stderr (src/index.ts,
+ * dist/index.js:164-174). That code, with that exit, is the CLI saying the channel is not in this account's plan or role.
+ */
+const channelAbsentCode = 'access.feature_unavailable';
+
+/**
+ * One channel's read, in three outcomes: listed, absent (the CLI's own code above, read from the last line of stderr
+ * and nothing else), and unread for every other ending, a network failure, an expired sign-in, an exit nobody explained,
+ * a timeout (exit -1) or an answer that is no list. The CLI's own words are read for the code only, never kept.
+ */
+export function readReplyChannel(result: { exit: number; stdout: string; stderr: string }): ReplyChannelRead {
+    if (result.exit === 0) {
+        try {
+            const raw = JSON.parse(result.stdout) as { items?: unknown };
+            return Array.isArray(raw.items) ? { kind: 'listed', accounts: parseReplyAccounts(result.stdout) } : { kind: 'unread' };
+        } catch {
+            return { kind: 'unread' };
+        }
+    }
+    if (result.exit !== 1) return { kind: 'unread' };
+    const last = result.stderr.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '').pop();
+    try {
+        const code = (JSON.parse(last ?? '') as { error?: { code?: unknown } }).error?.code;
+        return code === channelAbsentCode ? { kind: 'absent' } : { kind: 'unread' };
+    } catch {
+        return { kind: 'unread' };
     }
 }
 
