@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApi } from '../../api/context';
+import type { Approval } from '../../api/types';
 import { FiltersBar } from '../../layout/filters-bar';
 import { PeriodSwitch } from '../../layout/period-switch';
 import { Segmented } from '../../layout/segmented';
@@ -296,6 +297,11 @@ export function CampaignsScreen() {
                     }
                     onSkip={() => (store.waiting.value = null)}
                     onClose={() => (store.waiting.value = null)}
+                    onReasked={(id) =>
+                        void api
+                            .call<Approval>('approval.get', { approval_id: id })
+                            .then((approval) => (store.waiting.value = { campaignId: waiting.campaignId, approval }))
+                    }
                 />
             )}
             {selected && waiting && 'decision' in waiting && (

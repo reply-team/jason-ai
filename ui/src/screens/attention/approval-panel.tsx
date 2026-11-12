@@ -12,7 +12,7 @@ import { PanelHeader } from '../../layout/panel-header';
 import { toApprovalDetail } from '../../console/live';
 import { MessageCard } from './message-card';
 import { MessageEditor } from './message-editor';
-import { SENDS, editable, isStale, readItem, sentence } from './message-edit';
+import { REPLIES, awaitNewApproval, editable, isMessage, isStale, readItem, sentence } from './message-edit';
 
 type Props = {
     approval: Approval;
@@ -26,6 +26,8 @@ type Props = {
     onReject: (reason?: string) => void;
     onSkip: () => void;
     onClose: () => void;
+    /** Called with the new approval once the runtime has asked again under an edited text. */
+    onReasked?: (approvalId: string) => void;
 };
 
 export function ApprovalPanel({
@@ -39,11 +41,12 @@ export function ApprovalPanel({
     onReject,
     onSkip,
     onClose,
+    onReasked,
 }: Props) {
     const api = useApi();
     const [rejecting, setRejecting] = useState(false);
     // A message approval is checked against its work item before Approve is offered, and again at the press.
-    const watched = approval.status === 'pending' && approval.operation === SENDS;
+    const watched = approval.status === 'pending' && isMessage(approval.operation);
     const [item, setItem] = useState<WorkItem | null>(null);
     const [unread, setUnread] = useState<string | null>(null);
     const [savedHere, setSavedHere] = useState(false);
@@ -62,6 +65,18 @@ export function ApprovalPanel({
         };
     }, [api, watched, approval.id, approval.work_item_id]);
     const stale = watched && item !== null && isStale(approval, item);
+    // After a save the runtime asks again; the card waits for the new approval and hands it on when it arrives.
+    useEffect(() => {
+        if (!savedHere) return;
+        let current = true;
+        awaitNewApproval(api, approval.work_item_id, approval.id, { stopped: () => !current }).then(
+            (id) => current && id && onReasked?.(id),
+            () => {},
+        );
+        return () => {
+            current = false;
+        };
+    }, [api, savedHere, approval.id, approval.work_item_id]);
 
     async function approveChecked() {
         if (!watched) return onApprove();
@@ -175,7 +190,7 @@ export function ApprovalPanel({
                         </>
                     )}
                 </dl>
-                <MessageCard detail={detail} />
+                <MessageCard detail={detail} reply={approval.operation === REPLIES} />
                 {watched && item && editable(approval) && (
                     <MessageEditor
                         approval={approval}

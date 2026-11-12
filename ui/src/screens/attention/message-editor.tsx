@@ -9,13 +9,13 @@ type Props = { approval: Approval; item: WorkItem; busy: boolean; onSaved: (item
 /** Edits the subject and the body of the parked message, and nothing else; Save approves nothing. */
 export function MessageEditor({ approval, item, busy, onSaved }: Props) {
     const api = useApi();
-    const words = wordsOf(heldArgs(item));
+    const words = wordsOf(heldArgs(item), approval.operation);
     const [open, setOpen] = useState(false);
     const [subject, setSubject] = useState(words.subject ?? '');
     const [body, setBody] = useState(words.body ?? '');
     const [saving, setSaving] = useState(false);
     const [problem, setProblem] = useState<string | null>(null);
-    const withSubject = hasSubject(heldArgs(item));
+    const withSubject = hasSubject(heldArgs(item), approval.operation);
 
     if (!open) {
         return (
@@ -39,7 +39,7 @@ export function MessageEditor({ approval, item, busy, onSaved }: Props) {
         setSaving(true);
         setProblem(null);
         try {
-            onSaved(await saveEdit(api, approval.work_item_id, subject, body));
+            onSaved(await saveEdit(api, approval.operation, approval.work_item_id, subject, body));
             setOpen(false);
         } catch (error) {
             if (error instanceof Unpaired) throw error;

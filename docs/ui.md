@@ -73,10 +73,10 @@ which account and on which channel, and through which provider. An approval to s
 written", before the raw request, which stays folded: an email's sender, recipient, subject and body in that order, with the
 body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
 labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it
-is made of. One sentence under it says what is not shown: the provider adds its signature and its tracking when it sends.
-A message written as text (not a template) can be edited there, its subject and its body and nothing else: **Edit message**,
+is made of. One sentence under it says what is not shown: the sender's signature kept at the provider, and the provider's tracking, which are added when it sends.
+A reply in a thread shows who it goes to, the channel and the text. A message written as text (not a template) and a reply can be edited there, a message's subject and body or a reply's body and nothing else: **Edit message**,
 then **Save**, which is `jason workitem update` of the message's input with you as the actor and a reason the page words.
-Saving approves nothing, and the card says "Jason asks again with the new text". A card is checked against its work item
+Saving approves nothing: the card says "Jason asks again with the new text", waits for the approval the runtime then asks under the new text, and opens it when it arrives; Approve belongs to that one. A card is checked against its work item
 before it offers **Approve**, and again at the press: the approval's subject, the arguments the runtime parked, is compared
 with the arguments the work item holds now, on the message's subject, body and compose, as exact strings. Where they
 differ, whether you just saved or an agent in a chat changed the text, Approve is not offered and one sentence says the text

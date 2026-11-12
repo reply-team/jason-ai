@@ -10,10 +10,13 @@ import { ApprovalPanel } from './approval-panel';
 class Held implements Api {
     readonly calls: { operation: string; body: Record<string, unknown> }[] = [];
     updateFails: ApiError | null = null;
+    /** The pending approvals of the item as the runtime lists them; a test adds the new one when it arrives. */
+    pending: string[] = ['apr_1'];
     constructor(public input: Record<string, unknown>) {}
     async call<T>(operation: string, body: object = {}): Promise<T> {
         this.calls.push({ operation, body: body as Record<string, unknown> });
         if (operation === 'workitem.get') return this.item() as T;
+        if (operation === 'approval.list') return { items: this.pending.map((id) => ({ id })), next_cursor: null } as T;
         if (operation === 'workitem.update') {
             if (this.updateFails) throw this.updateFails;
             this.input = (body as { set: { input: Record<string, unknown> } }).set.input;
@@ -29,7 +32,7 @@ class Held implements Api {
 const email = () => structuredClone(fixtures['approval.get/email-message'].response) as unknown as Approval;
 const argsOf = (a: Approval) => (a.subject['input'] as { args: Record<string, unknown> }).args;
 
-function mount(held: Held, approval: Approval, onApprove = vi.fn()) {
+function mount(held: Held, approval: Approval, onApprove = vi.fn(), onReasked = vi.fn()) {
     render(
         <ApiProvider api={held}>
             <ApprovalPanel
@@ -42,11 +45,25 @@ function mount(held: Held, approval: Approval, onApprove = vi.fn()) {
                 onReject={() => {}}
                 onSkip={() => {}}
                 onClose={() => {}}
+                onReasked={onReasked}
             />
         </ApiProvider>,
     );
     return onApprove;
 }
+
+const reply = (): Approval => {
+    const a = email();
+    a.operation = 'conversation.reply';
+    a.subject = {
+        input: { args: { channel: 'email', thread: { external_id: 't_1' }, body: 'Thanks, Tuesday works.' } },
+    };
+    a.preview = {
+        highlights: { '/args/channel': 'email', '/args/body': 'Thanks, Tuesday works.' },
+        contact: { name: 'Ines Duarte', value: 'ines@example.test' },
+    };
+    return a;
+};
 
 const approveButton = () => screen.queryByRole('button', { name: 'Approve' });
 const stale = /changed after this approval was asked/;
@@ -136,6 +153,40 @@ describe('editing a message before it is approved', () => {
         await waitFor(() => expect(screen.getByText('The subject must be one line.')).toBeTruthy());
         expect((screen.getByLabelText('Body') as HTMLTextAreaElement).value).toBe('Typed but refused');
         expect(screen.queryByText('Jason asks again with the new text.')).toBeNull();
+    });
+
+    it('hands on the new approval once the runtime has asked again, and not before', async () => {
+        const approval = email();
+        const held = new Held(structuredClone(argsOf(approval)));
+        const onReasked = vi.fn();
+        mount(held, approval, vi.fn(), onReasked);
+        await waitFor(() => screen.getByRole('button', { name: 'Edit message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
+        fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'New body' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => screen.getByText('Jason asks again with the new text.'));
+        expect(onReasked).not.toHaveBeenCalled();
+        held.pending = ['apr_9'];
+        await waitFor(() => expect(onReasked).toHaveBeenCalledWith('apr_9'), { timeout: 3000 });
+    });
+
+    it('edits a reply by its body alone, with the thread and every other argument put back', async () => {
+        const approval = reply();
+        const input = structuredClone(argsOf(approval));
+        input['reply_to_message'] = { external_id: 'm_1' };
+        const held = new Held(input);
+        mount(held, approval);
+        await waitFor(() => screen.getByRole('button', { name: 'Edit message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
+        expect(screen.queryByLabelText('Subject')).toBeNull();
+        fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'Thursday is better.' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByText('Jason asks again with the new text.')).toBeTruthy());
+        expect(held.calls.find((c) => c.operation === 'workitem.update')!.body).toEqual({
+            work_item_id: 'wi_1',
+            set: { input: { ...input, body: 'Thursday is better.' } },
+            reason: 'Message text edited on the approval card.',
+        });
     });
 
     it('is not offered for a template', async () => {

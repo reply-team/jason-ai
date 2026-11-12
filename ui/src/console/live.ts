@@ -154,7 +154,7 @@ export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDeta
         from: text(sender?.['address']) ?? text(sender?.['external_id']),
         channel: channel ? channelWords(channel) : null,
         subject: text(message?.['subject']),
-        body: text(message?.['body']),
+        body: text(message?.['body']) ?? text(highlights?.['/args/body']),
         compose: text(message?.['compose']) ?? text(highlights?.['/args/message/compose']),
         example: exampleOf(record(preview['example'])),
         facts,
