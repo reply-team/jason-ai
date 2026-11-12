@@ -53,7 +53,7 @@ export function AccountsScreen() {
                                     : 'Reading the notification channels…'}
                             </p>
                         ) : notifications.channels.length === 0 ? (
-                            <p className="empty">No channel is set up, so Jason tells you nothing outside this page.</p>
+                            <p className="empty">No channel is set up, so Jason sends you no notifications.</p>
                         ) : (
                             <table className="tbl">
                                 <thead>
@@ -86,9 +86,9 @@ export function AccountsScreen() {
                             </p>
                         )}
                         <p className="hint">
-                            These are changed under <code>Notifications:*</code> in the installation’s settings file, or
-                            by asking your AI, whose operating-the-installation skill covers them; this page only shows
-                            them.
+                            These are changed under <code>Notifications:*</code> in the installation’s settings file,{' '}
+                            {provider && 'on the Connect panel, '}or by asking your AI, whose operating-the-installation
+                            skill covers them; this page only shows them.
                         </p>
                     </section>
                 </div>

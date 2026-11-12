@@ -34,7 +34,7 @@ export function outcomeWords(channel: NotificationChannel, now: Date): string {
             return `Failed${when}${why ? ` (${why})` : ''}.`;
         }
         case 'silenced':
-            return (channel.reason && silenced[channel.reason]) || `Not shown${when}.`;
+            return `Not shown${when}.${channel.reason && silenced[channel.reason] ? ` ${silenced[channel.reason]}` : ''}`;
         case 'not_attempted':
             return (channel.reason && notAttempted[channel.reason]) || `Not attempted${when}.`;
         default:
@@ -42,7 +42,7 @@ export function outcomeWords(channel: NotificationChannel, now: Date): string {
     }
 }
 
-/** The pill's tone for an outcome: red for a failure, amber for a channel that could not reach anybody. */
+/** The pill's tone for an outcome: green for a delivery, red for a failure, none for the rest. */
 export function outcomeTone(channel: NotificationChannel): 'success' | 'danger' | '' {
     if (!channel.on) return '';
     if (channel.outcome === 'delivered') return 'success';

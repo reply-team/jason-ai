@@ -220,7 +220,7 @@ describe('Accounts inside the desktop', () => {
         await waitFor(() => expect(words(notifications())).toContain('Delivered just now.'));
     });
 
-    it('acts through the desktop by the cards own acts, each behind the desktops confirmation', async () => {
+    it('asks the desktop for a Pause by the account id, and the desktop answers it', async () => {
         const desktop = inDesktop(report([]), {
             ...setupFound,
             reply: {
@@ -248,6 +248,45 @@ describe('Accounts inside the desktop', () => {
                 .filter((call) => call.name.startsWith('setup.reply'))
                 .map((call) => [call.name, ...call.args]),
         ).toEqual([['setup.replyPause', 'li_1']]);
+    });
+
+    it('keeps an act asked on Accounts off the Connect panel, and one asked there off Accounts', async () => {
+        const desktop = inDesktop(report([]), {
+            ...setupFound,
+            reply: {
+                ...setupFound.reply,
+                accounts: [
+                    {
+                        id: 'li_1',
+                        channel: 'linkedin',
+                        name: 'Outreach profile',
+                        address: 'p@example.test',
+                        status: 'enabled',
+                    },
+                ],
+            },
+        });
+        const page = await openAccounts();
+        const cardIn = (where: HTMLElement) =>
+            within(where).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
+        const row = (where: HTMLElement) =>
+            Array.from(cardIn(where).querySelectorAll<HTMLElement>('.acct')).find((each) =>
+                words(each).includes('Outreach profile'),
+            )!;
+        fireEvent.click(within(row(page)).getByRole('button', { name: 'Pause' }));
+        await waitFor(() => expect(words(within(cardIn(page)).getByRole('dialog'))).toMatch(/Done\./));
+        fireEvent.click(side().getByRole('button', { name: 'Connect' }));
+        const connect = await waitFor(() => {
+            const panel = screen.getByRole('heading', { name: 'Connect', level: 1 }).closest<HTMLElement>('.painted')!;
+            expect(panel.querySelector('.acct')).not.toBeNull();
+            return panel;
+        });
+        expect(within(cardIn(connect)).queryByRole('dialog')).toBeNull();
+        // The other way round: an act asked on Connect shows its dialog there and not on Accounts.
+        fireEvent.click(within(row(connect)).getByRole('button', { name: 'Delete' }));
+        await waitFor(() => expect(within(cardIn(connect)).queryByRole('dialog')).not.toBeNull());
+        expect(within(cardIn(page)).queryByRole('dialog')).toBeNull();
+        expect(desktop.calls.filter((call) => call.name.startsWith('setup.reply')).length).toBeGreaterThan(0);
     });
 
     it('drops a choice the card held open when the page stops drawing it', async () => {
