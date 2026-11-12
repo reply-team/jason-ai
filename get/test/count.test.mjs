@@ -6,6 +6,7 @@ import { clientOf, sourceOf } from '../src/classify.mjs';
 import { BASE, GUIDE, fakeDb, fakeFetch, send, sqliteDb } from '../fakes.mjs';
 import { INSTALL_PAGE } from '../src/paths.mjs';
 import { MAX_SOURCES_PER_DAY } from '../src/index.mjs';
+import { NO_SOURCE, NOT_A_SOURCE } from '../src/classify.mjs';
 import { FOLDED_SOURCE, readCounts, tabulate } from '../src/stats.mjs';
 
 const page = () => new Response(GUIDE, { status: 200 });
@@ -89,8 +90,9 @@ test('a GET of the install page is counted once, by day, path, source and client
     [
       'INSERT INTO counts (day, path, ref, client, n)',
       'SELECT ?1, ?2,',
-      '  CASE WHEN EXISTS (SELECT 1 FROM counts WHERE day = ?1 AND ref = ?3)',
-      "         OR (SELECT COUNT(DISTINCT ref) FROM counts WHERE day = ?1 AND ref <> '(rest)') < ?5",
+      "  CASE WHEN ?3 IN ('(none)', '(other)')",
+      '         OR EXISTS (SELECT 1 FROM counts WHERE day = ?1 AND ref = ?3)',
+      "         OR (SELECT COUNT(DISTINCT ref) FROM counts WHERE day = ?1 AND ref NOT IN ('(none)', '(other)', '(rest)')) < ?5",
       "       THEN ?3 ELSE '(rest)' END,",
       '  ?4, 1',
       'WHERE true',
@@ -234,4 +236,34 @@ test('after a flood /stats still shows the real sources by name, and the flood c
   assert.ok(sources.includes('newsletter') && sources.includes('blog'));
   assert.equal(read.rows.filter((row) => row.source === FOLDED_SOURCE).length, 1);
   assert.equal(db.database.prepare('SELECT COUNT(*) AS c FROM counts').get().c, MAX_SOURCES_PER_DAY + 1);
+});
+
+test('no ref and a ref that is not a source are never folded and never count toward the cap', async () => {
+  const db = sqliteDb();
+  await flood(db, MAX_SOURCES_PER_DAY);
+  await send('/desktop/windows', { env: { COUNTS: db } });
+  await send('/desktop/windows?ref=bad_one', { env: { COUNTS: db } });
+  const rows = rowsOf(db);
+  assert.deepEqual(rows.find((row) => row.ref === NO_SOURCE), { ref: NO_SOURCE, n: 1 });
+  assert.deepEqual(rows.find((row) => row.ref === NOT_A_SOURCE), { ref: NOT_A_SOURCE, n: 1 });
+  assert.equal(rows.some((row) => row.ref === FOLDED_SOURCE), false);
+});
+
+test('the two reserved rows do not use up the cap: a hundred named sources still fit after them', async () => {
+  const db = sqliteDb();
+  await send('/desktop/windows', { env: { COUNTS: db } });
+  await send('/desktop/windows?ref=bad_one', { env: { COUNTS: db } });
+  await flood(db, MAX_SOURCES_PER_DAY);
+  assert.equal(rowsOf(db).some((row) => row.ref === FOLDED_SOURCE), false);
+  assert.equal(rowsOf(db).length, MAX_SOURCES_PER_DAY + 2);
+});
+
+test('a named source that comes after a flood is folded that day, and has its own row again the next day', async () => {
+  const db = sqliteDb();
+  await flood(db, MAX_SOURCES_PER_DAY);
+  await send('/desktop/windows?ref=newsletter', { env: { COUNTS: db } });
+  assert.equal(rowsOf(db).some((row) => row.ref === 'newsletter'), false);
+  assert.equal(rowsOf(db).find((row) => row.ref === FOLDED_SOURCE).n, 1);
+  await send('/desktop/windows?ref=newsletter', { env: { COUNTS: db }, now: new Date('2026-11-13T09:00:00Z') });
+  assert.deepEqual(rowsOf(db, '2026-11-13'), [{ ref: 'newsletter', n: 1 }]);
 });

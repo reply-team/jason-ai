@@ -41,11 +41,12 @@ program's HTTP client by its own word (`curl`, `powershell` and the others in [`
 `browser` for anything else that says `Mozilla/`; and `fetcher` for the rest, a request with no User-Agent included.
 HEAD is answered and never counted, and neither are `/stats` nor a refused request.
 
-A day names at most 100 distinct sources (`MAX_SOURCES_PER_DAY` in [`src/index.mjs`](src/index.mjs)). Once it has, a
+A day names at most 100 distinct sources, not counting `(none)` and `(other)`, which are never folded (`MAX_SOURCES_PER_DAY` in [`src/index.mjs`](src/index.mjs)). Once it has, a
 request naming a source that day has not seen is counted under `(rest)`, the row /stats folds its rest into, and makes
 no row of its own; a source already seen that day keeps counting under its own name, and the next UTC day starts again
-from none. So a flood of made-up links costs the table a bounded number of rows, and the real sources stay in /stats by
-name. The decision is made in the same statement as the write, so concurrent requests cannot both pass the cap.
+from none. So a flood of made-up links costs the table a bounded number of rows. A real source stays in /stats by name
+only if the day saw it before the cap: one that first appears after a flood that day is counted in `(rest)`, and has its
+own row again from the next day. The decision is made in the same statement as the write, so concurrent requests cannot both pass the cap.
 
 That is all that is stored. The Worker keeps no record of a request at all, only the counts: no address, cookie,
 identifier, header or whole User-Agent, and Workers Logs are off. The product itself never adds a `ref` to a request,
@@ -126,6 +127,9 @@ the address in the Worker's place. The install scripts' own addresses, `/release
 5. The application's audience tag and the team's name as secrets: `npx wrangler@4.152.0 secret put ACCESS_AUD`,
    `npx wrangler@4.152.0 secret put ACCESS_TEAM`. The team's name is used lowercased, as Access writes it.
 6. `npx wrangler@4.152.0 deploy`, then set each of the three routes' failure mode to fail closed.
+   Then make one GET of a counted path with a `ref` nobody uses, and look for that row in `/stats`. A statement the
+   database refuses fails silently, because the count is left to run after the answer, so the row is the only sign the
+   counting works; if it is not there, `npx wrangler@4.152.0 rollback`.
 7. Check, before a release that names the address is published: `curl -sI https://get.jasonharness.ai/install`
    answers 200 with `content-type: text/plain; charset=utf-8`, and
    `curl -sI https://get.jasonharness.ai/releases/latest/download/manifest.json` still answers the redirect to this
