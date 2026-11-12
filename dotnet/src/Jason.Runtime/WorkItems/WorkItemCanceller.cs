@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -22,6 +23,8 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
 {
     /// <summary>Everything that is not finished for good, derived from the transition table so the two can never drift.</summary>
     private static readonly WorkItemStatus[] Finished = [.. WorkItemTransitions.Final];
+
+    private static readonly string[] RunsInArchivedCampaign = [.. OperationCatalog.RunsInArchivedCampaign];
 
     /// <summary>The attempts this scope has cancelled whose children are still to be stopped.</summary>
     private readonly List<string> _toStop = [];
@@ -100,7 +103,10 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
         _toStop.Clear();
     }
 
-    /// <summary>Everything a campaign still has open, or — with a contact — everything it still has open about that person.</summary>
+    /// <summary>
+    /// Everything a campaign still has open, or — with a contact — everything it still has open about that person. A
+    /// campaign archived keeps the work its contracts say runs in an archived campaign: a search's stop.
+    /// </summary>
     public async Task<int> CancelOpenAsync(JasonDbContext db, int campaignId, int? contactId, ActorRef actor, string reason, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
@@ -108,6 +114,10 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
         if (contactId is { } contact)
         {
             query = query.Where(w => w.ContactId == contact);
+        }
+        else
+        {
+            query = query.Where(w => w.Operation == null || !RunsInArchivedCampaign.Contains(w.Operation));
         }
 
         return await CancelAllAsync(db, await query.ToListAsync(cancellationToken).ConfigureAwait(false), actor, reason, cancellationToken).ConfigureAwait(false);

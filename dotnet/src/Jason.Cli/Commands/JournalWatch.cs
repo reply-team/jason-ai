@@ -57,7 +57,7 @@ public static class JournalWatch
             ? Streams.JournalRoute
             : $"{Streams.JournalRoute}?{Streams.AfterParameter}={Uri.EscapeDataString(after)}";
 
-        using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler);
+        using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler, env.Clock);
         RuntimeStream stream;
         try
         {

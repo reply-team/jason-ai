@@ -65,7 +65,10 @@ public static class PluginMapper
             // JsonNode belongs to exactly one parent.
             manifest.Binding?.DeepClone().AsObject(),
             plugin.Status,
-            [.. plugin.Problems.Select(ToDto)]);
+            [.. plugin.Problems.Select(ToDto)])
+        {
+            AudienceDefinition = manifest.AudienceDefinition?.ToJson(),
+        };
     }
 
     public static ReloadReportDto ToDto(ReloadReport report)

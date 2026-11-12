@@ -73,6 +73,44 @@ public sealed record ManifestTemplates(IReadOnlyDictionary<string, IReadOnlyList
         ByOperation.TryGetValue(operation, out var channels) && channels.Contains(channel, StringComparer.Ordinal);
 }
 
+/// <summary>
+/// One annotation of a property of an audience's definition, beside the schema because the dialect refuses a keyword it
+/// does not publish inside one: which side of a person the property filters on, and the filter whose values the
+/// provider lists for it. The runtime reads neither; it answers them as declared.
+/// </summary>
+public sealed record DefinitionKey(string? Side, string? Typeahead);
+
+/// <summary>
+/// The schema a provider's audience definition satisfies, as <c>audience_definition</c> declares it, and the annotations
+/// of its properties. The envelope of an audience operation is the contract's; the definition inside it is the
+/// provider's, checked against this at the claim and at the preview.
+/// </summary>
+public sealed record AudienceDefinition(JsonObject Schema, IReadOnlyDictionary<string, DefinitionKey> Keys)
+{
+    /// <summary>The declaration as the manifest wrote it, a fresh copy each time: <c>{schema, keys}</c>.</summary>
+    public JsonObject ToJson()
+    {
+        var keys = new JsonObject();
+        foreach (var (name, key) in Keys)
+        {
+            var annotation = new JsonObject();
+            if (key.Side is not null)
+            {
+                annotation["side"] = key.Side;
+            }
+
+            if (key.Typeahead is not null)
+            {
+                annotation["typeahead"] = key.Typeahead;
+            }
+
+            keys[name] = annotation;
+        }
+
+        return new JsonObject { ["schema"] = Schema.DeepClone(), ["keys"] = keys };
+    }
+}
+
 /// <summary>What the plugin asks its invocations to run under; null means "whatever the installation decides".</summary>
 public sealed record ManifestLimits(int? TimeoutMs, int? MemoryMb);
 
@@ -118,6 +156,12 @@ public sealed record PluginManifest(
     /// unless the manifest lists them. Declaring a kind is not being given it: the grants decide that, at every load.
     /// </summary>
     public IReadOnlyList<string> Subscriptions { get; init; } = [];
+
+    /// <summary>
+    /// The schema an audience's definition satisfies for this plugin, as <c>audience_definition</c> declares it; null
+    /// unless the manifest declares one, which it does exactly when it performs an operation that carries a definition.
+    /// </summary>
+    public AudienceDefinition? AudienceDefinition { get; init; }
 
     /// <summary>Whether this is a provider that reads its accounts' events, in a version of the events contract this build speaks.</summary>
     public bool ReadsEvents => Kind == PluginKind.Provider && Contracts.Events.Contains(EventsContract.CurrentVersion);

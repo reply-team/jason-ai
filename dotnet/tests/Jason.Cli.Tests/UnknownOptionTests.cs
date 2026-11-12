@@ -31,6 +31,7 @@ public class UnknownOptionTests
     [InlineData("activity")]
     [InlineData("activity-by-period")]
     [InlineData("list-contacts")]
+    [InlineData("audience")]
     public async Task An_unknown_option_where_a_campaign_id_goes_is_not_read_as_the_id(string verb)
     {
         using var cli = new CliRun();

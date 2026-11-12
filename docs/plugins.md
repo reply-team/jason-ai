@@ -134,6 +134,7 @@ subscriptions: [workitem_failed] # optional; required for a subscriber: the jour
 | `contracts.events` | optional, and only on a provider; when present, must include `1` | `field_invalid`, `contract_unsupported`, `events_not_allowed` |
 | `operations` | required non-empty for a provider; each `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$` — at least one dot — and unique | `field_required`, `field_invalid`, `operation_invalid`, `operation_duplicate` |
 | `operations` on a `notification` or a `subscriber` | must be absent or empty | `operations_not_allowed` |
+| `operations` listing `audience.search` | lists `audience.search_status` and `audience.search_cancel` too: a search the provider keeps running is read by its status, and spends until its stop ends it | `audience_family_incomplete` |
 | `entry.module` | `.js` or `.mjs`, relative, no `..` segments, inside the package, must exist | `field_invalid`, `entry_module_outside_package`, `entry_module_missing` |
 | `entry.function` | `^[A-Za-z_$][A-Za-z0-9_$]*$` | `entry_function_invalid` |
 | `capabilities.exec.executables` | required inside `exec`; 1..16 entries | `field_required`, `field_invalid` |
@@ -154,6 +155,7 @@ subscriptions: [workitem_failed] # optional; required for a subscriber: the jour
 | `arguments` | optional, and only on a provider; a mapping of operations to the arguments the plugin takes on some of that operation's channels, each a non-empty list of channels without duplicates. An operation the plugin does not implement or this build publishes no document for, an argument the operation's document does not name under `channel_arguments`, and a channel the operation's arguments do not take are refused | `field_invalid`, `argument_invalid` |
 | `settles_by_key` | optional, and only on a provider; a non-empty list of the operations whose lost answer the plugin settles by the work item's key, without duplicates. An operation the plugin does not implement, one this build publishes no document for, and one whose document's recovery read does not rest on the key (`recovery_read.by_key`) are refused | `field_invalid`, `settles_by_key_invalid` |
 | `templates` | optional, and only on a provider; a mapping of operations to the channels the plugin writes that operation's message on as a template, each a non-empty list without duplicates. An operation the plugin does not implement or this build publishes no document for, one whose document names no channel under `channel_templates`, and a channel the document does not name there are refused | `field_invalid`, `template_invalid` |
+| `audience_definition` | optional, and only on a provider; required where `operations` lists `audience.search` or `audience.preview`, and refused where it lists neither. A mapping of `schema` and an optional `keys`. `schema` is a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB, and every property under its `properties` carries a `description` of 1 to 500 characters; a problem inside it is located as `audience_definition#/schema<json pointer>`, a pattern that cannot finish its probe included, as for `binding`. `keys` maps a property `schema.properties` declares to its annotations, `side` (`person` or `company`) and `typeahead` (`^[a-z][a-z0-9_-]{0,63}$`), both optional; any other member is an unknown key | `field_required`, `field_invalid` |
 | `subscriptions` | optional on a provider and a notification plugin, required on a subscriber; a non-empty list of the journal kinds the plugin handles, each named once. A kind the runtime does not write to its journal, and one it writes that no plugin may subscribe to, are refused. Declaring a kind is not being given it: the grant decides (§9) | `field_required`, `field_invalid`, `subscription_kind_unknown`, `subscription_kind_not_subscribable` |
 
 `binding` says what an installation has to tell this plugin before it can act — which account, which
@@ -235,6 +237,58 @@ existed writes a template nowhere as far as the claim knows, so the Reply packag
 templates refused `template_not_offered` under this runtime until it is updated. A name the list cannot mean is a
 package problem, `template_invalid`, which rejects the reload; like `arguments` the key asks for nothing a person
 grants, is optional and additive, and leaves `manifest_version` at `1`.
+
+`audience_definition` says what an audience's definition carries for this provider. The documents of the audience
+operations publish the envelope a search is asked in — how many people, how many of one company — and
+two of them carry a definition inside it, `audience.search` and `audience.preview`. The definition is the provider's own
+shape — which industries, which titles, which company sizes, as the provider names them — so the provider declares it
+here, as a schema in the dialect of `docs/contracts/`:
+
+```yaml
+audience_definition:
+  schema:
+    type: object
+    additionalProperties: false
+    anyOf: [{ required: [industries] }, { required: [titles] }]
+    properties:
+      industries:
+        description: Industries the company is in, as the provider names them, each to include or leave out.
+        type: array
+        maxItems: 25
+        items: { $ref: "#/$defs/term" }
+      titles:
+        description: Job titles, each to include or leave out.
+        type: array
+        maxItems: 25
+        items: { $ref: "#/$defs/term" }
+    $defs:
+      term:
+        type: object
+        additionalProperties: false
+        required: [value, type]
+        properties:
+          value: { type: string, minLength: 1, maxLength: 200 }
+          type: { enum: [include, exclude] }
+  keys:
+    industries: { side: company, typeahead: industries }
+    titles: { side: person }
+```
+
+The claim holds a search's definition to that schema, `definition_invalid`, class `validation`, once the envelope around
+it satisfies the operation's own schema, and `audience.preview` holds it there before anything runs; never
+`workitem.create`, which validates the envelope only, because the route, and so the schema, is resolved at the claim. Every
+property carries a description of its own, which is what whoever writes a definition reads: `jason operation describe
+audience.search --campaign <id>` prints the schema and the keys. A description is manifest text, so it is bounded, holds
+no control character, since a terminal prints it as written, and is never logged and never in a bundle. `keys` sits beside the schema rather than inside it because the dialect refuses a keyword
+it does not publish: `side` says which side of a person a property filters on, and `typeahead` names the filter
+`audience.filter_values` lists values for. The runtime reads neither and answers both as declared. The key is required
+where the plugin performs either operation — no schema, no search — and refused where it performs neither, since nothing
+would read it; a plugin that performs `audience.search` performs `audience.search_status` and `audience.search_cancel`
+too (`audience_family_incomplete`), and one whose provider searches inside one call answers `finished`, so its status read is
+never created. Like `arguments` the key asks for nothing a person grants, is optional and additive, and leaves
+`manifest_version` at `1`: a runtime too old to read it rejects the reload with `unknown_field`, and publishes no audience
+operation either. `plugin.list` shows it as `audience_definition`, beside `binding_schema`, and null where the plugin
+declares none.
 
 An invocation's effective timeout and memory are `min(what the manifest asks for, the installation's
 ceiling)`, and a caller's own budget may lower the timeout further, never raise it. A manifest with
@@ -325,7 +379,8 @@ it in full:
         "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] },
         "api": null,
         "subscriptions": null },
-      "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "binding_schema": null, "status": "valid", "problems": [] } ],
+      "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "binding_schema": null, "status": "valid", "problems": [],
+      "audience_definition": null } ],
   "last_reload": { "at": "2026-09-14T12:00:00.000Z", "source": "reload", "activated": true,
                    "candidates": [ { "directory": "fake-provider", "id": "fake-provider", "status": "valid", "problems": [] } ],
                    "routes": [], "subscriptions": [] },
@@ -335,7 +390,8 @@ it in full:
 
 `last_reload.routes` lists the routes that load refused, each named the way it is written — `Routes:Default`,
 `Routes:Operations:<operation>`, `campaign:<cmp_…>/routes/<operation>` or `…/routes/default` — with its code and
-message, so it is empty when the load activated. The routes a load froze are not listed there: `routing_snapshot_id`
+message, so it is empty when the load activated; a search the load's routes would have left without its account is
+named `campaign:<cmp_…>/searches/<wi_…>`, under `route_orphans_search` ([routing](routing.md) §6). The routes a load froze are not listed there: `routing_snapshot_id`
 names the snapshot they are in, and the activation journals them in `plugins_reloaded` (below).
 `last_reload.subscriptions` is the same for the order of each journal kind's subscribers (§16): each refusal is named by
 its setting, `Subscriptions:Order:<kind>[<index>]`, with its code and message. `capabilities.subscriptions` is the kinds
@@ -837,7 +893,7 @@ The plugin-host process — and therefore every program `host.exec` starts — i
   `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `ProgramData`, `ProgramFiles`,
   `ProgramFiles(x86)`, `ProgramW6432`, `NUMBER_OF_PROCESSORS`, `PROCESSOR_ARCHITECTURE`, `OS`,
   `USERNAME`;
-- on everything else: `HOME`, `XDG_CONFIG_HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `LC_CTYPE`, `USER`,
+- on everything else: `HOME`, `XDG_CONFIG_HOME`, `TMPDIR`, `TZ`, `LANG`, `LC_ALL`, `LC_CTYPE`, `USER`,
   `LOGNAME`, `SHELL`, `TERM`;
 - plus the granted `env` variables, by name.
 
@@ -940,7 +996,8 @@ The runtime composes it from the work item; a plugin never sees a work item's co
   `contacts` before reading it.
 - **`campaign`** is Jason's own record of the campaign the work item belongs to. A read a person asks
   for — a person's threads, one thread's messages — runs outside any work item and carries no
-  `campaign`, so an operation whose document lets the campaign go unnamed must not expect one.
+  `campaign`, so an operation whose document lets the campaign go unnamed must not expect one. A campaign's read — an
+  audience's preview, a filter's values, whether the account may search — carries the campaign it was asked for.
 - **`idempotency_key`** is the *work item's* own identifier, present when the operation requires one.
   It is stable across every attempt, which is what makes "what did the prior run under this key do"
   a question a provider's ledger can answer.
@@ -948,6 +1005,15 @@ The runtime composes it from the work item; a plugin never sees a work item's co
   `message.cancel`. The runtime composes it from the succeeded attempt of the send `args.send` names:
   that work item, its operation and your reference for the send. A caller never writes it, so read the
   send by `send.reference` and by nothing in `args`.
+- **`search`** appears the same way — today `audience.search_status` and `audience.search_cancel` — composed from the
+  succeeded attempt of the search `args.search` names: that work item and your reference for the search, returned under
+  `external_ids.search`, and for the status read the `cursor` the next read starts at, yours, stored and never parsed,
+  and null to read from the start. A search that answered `finished` inside its call kept no reference, so nothing reads
+  or stops it.
+- **`definition`** appears at the root of `audience.search` and `audience.preview`: the audience's definition, in your
+  provider's own shape and already held to the schema your manifest declares under `audience_definition` (§3). The
+  runtime composes it from `args.definition`, or, for an audience named by its number, from the audience the campaign
+  holds; read it there and nowhere else.
 - Every `external_ids` object is filtered to **your own** pins — identifiers your plugin returned
   before. Another plugin's identifier for the same person is never visible to you.
 
@@ -960,6 +1026,12 @@ operation, and the route's binding passes its checks. It skips the claim's other
 provenance, the journal, pins, approval and retry, so nothing is recorded about the read, no identifier you return is
 pinned, and the invocation's `context` carries no attempt, work item or campaign. Such a read has no bound of its own:
 it runs outside the handler pool `Dispatcher:MaxParallel` sizes, one child each.
+
+Three more are invoked for a campaign when a person or an agent asks: `audience.preview`, `audience.filter_values` and
+`audience.availability`. Each is routed by the campaign's route for `audience.search`, the search it serves, not by a
+person's pin, and held to the same half of the claim for its own operation; the input carries the campaign with your own pins of it, and the preview's carries the
+definition, held to your declared schema first. Nothing else differs: nothing is recorded, and nothing you return is
+pinned.
 
 ### The contact proxy rule
 
@@ -1187,7 +1259,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all twenty-four published
+`plugins/reply/` is the one to read: a marketplace package that implements every one of the thirty published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
@@ -1395,7 +1467,7 @@ family, or in none:
 
 | Family | Opens |
 |---|---|
-| `read` | every operation that only reads: its verb is `get`, `list`, `count`, `summary`, `activity`, `activity_by_period`, `list_contacts`, `list_standing`, `resolve`, `sources` or `kinds`, and its noun is not `system` or `ui` |
+| `read` | every operation that only reads: its verb is `get`, `list`, `count`, `summary`, `activity`, `activity_by_period`, `list_contacts`, `list_standing`, `resolve`, `sources`, `kinds`, `describe` or `audience`, and its noun is not `system` or `ui` |
 | `campaign` | `campaign.create`, `campaign.update`, `campaign.start`, `campaign.pause`, `campaign.archive`, `campaign.update_context`, `campaign.add_contacts`, `campaign.remove_contacts` |
 | `contact` | `contact.create`, `contact.update`, `contact.archive` |
 | `workitem` | `workitem.create`, `workitem.update`, `workitem.cancel` |
@@ -1410,8 +1482,9 @@ No grant opens the rest: the installation's and the UI's own doors (every `syste
 `approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`,
 `suppression.remove`), an
 executor's fenced verbs (`workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait`), and the
-conversation reads `contact.threads` and `contact.thread`, which are no read here because answering one spends a
-provider call, and `subscription.runs`, whose records carry the envelopes other plugins' handlers made: a handler in a
+conversation reads `contact.threads` and `contact.thread` and a campaign's audience reads `audience.preview`,
+`audience.filter_values` and `audience.availability`, which are no read here because answering one spends a provider
+call, and `subscription.runs`, whose records carry the envelopes other plugins' handlers made: a handler in a
 chain already holds the envelope handed to it, and a person reads the final one through the run token, so no plugin
 reads another chain's envelopes. `subscription.list` is a read by the rule above. An operation the API adds later is in none until it is classified, which a test holds. A family the
 manifest names that is not one of the seven is `api_family_unknown`.

@@ -1,4 +1,6 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Contacts;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Campaigns;
@@ -76,8 +78,15 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
         ArgumentNullException.ThrowIfNull(request);
         var actor = Person(request.Actor);
         var reason = Reason(request.Reason);
+        ValidateAllow(request.Allow, decision);
         var approval = await LoadAsync(request.ApprovalId, tracking: true, cancellationToken).ConfigureAwait(false);
         var item = approval.WorkItem!;
+        var searched = Searched(approval, request.Allow);
+        if (request.Allow is not null && item.Campaign!.Status == CampaignStatus.Archived)
+        {
+            // Its standing approvals no longer change, so an approval that asks for one is refused whole, before anything moves.
+            throw DomainErrors.CampaignArchived(item.Campaign.PublicId);
+        }
 
         if (approval.Status != ApprovalStatus.Pending)
         {
@@ -98,6 +107,10 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
         if (decision == ApprovalStatus.Approved)
         {
             Release(item, actor, reason, now);
+            if (searched is not null)
+            {
+                await MoveAllowanceAsync(item.Campaign!, searched, request.Allow, actor, reason, cancellationToken).ConfigureAwait(false);
+            }
         }
         else
         {
@@ -123,6 +136,77 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
         }
 
         return Detail(approval);
+    }
+
+    /// <summary>
+    /// The allowance a person gives with a decision: only with an approval, and held to the limits
+    /// <c>approval.set_standing</c> holds one to, each refusal under <c>allow</c>.
+    /// </summary>
+    private void ValidateAllow(AllowanceRequest? allow, ApprovalStatus decision)
+    {
+        if (allow is null)
+        {
+            return;
+        }
+
+        var errors = new ValidationErrors();
+        if (decision != ApprovalStatus.Approved)
+        {
+            errors.Add("allow", "not_allowed", "An allowance is given with an approval of a search, never with a rejection.");
+        }
+        else
+        {
+            StandingApprovals.ValidateLimits(allow.MaxPeople, allow.MaxPerSearch, allow.ExpiresAt, clock.GetUtcNow(), errors, "allow.");
+        }
+
+        errors.ThrowIfAny();
+    }
+
+    /// <summary>
+    /// The audience a search being decided runs under, as the claim that parked it recorded it, or null for other work. An
+    /// allowance belongs to a search's audience, so one given with other work is refused.
+    /// </summary>
+    private static AudienceRef? Searched(Approval approval, AllowanceRequest? allow)
+    {
+        var searched = string.Equals(approval.Operation, StandingApprovals.Searches, StringComparison.Ordinal)
+            && approval.WorkItem!.Context[CampaignAudiences.ContextKey] is JsonObject carried
+            && carried["id"] is JsonValue id && id.TryGetValue<string>(out var audience)
+            && carried["number"] is JsonValue number && number.TryGetValue<int>(out var held)
+            ? new AudienceRef(audience, held)
+            : null;
+        if (allow is not null && searched is null)
+        {
+            throw new ValidationException([new ErrorDetail("allow", "not_allowed", "An allowance is given with an approval of a search, for the audience the search runs under.")]);
+        }
+
+        return searched;
+    }
+
+    /// <summary>
+    /// What a person's approval of a search does to the campaign's allowance, in the same act: given an allowance, it sets
+    /// one for the search's audience, retiring the one before it; given none, it retires an allowance that names another
+    /// audience, since the person has moved the campaign's searches there. An approval of the audience the allowance
+    /// already names leaves it as it is, and so does any approval in an archived campaign, whose standing approvals no
+    /// longer change. Every line is the person's, with the reason they gave.
+    /// </summary>
+    private async Task MoveAllowanceAsync(Campaign campaign, AudienceRef searched, AllowanceRequest? allow, ActorRef actor, string? reason, CancellationToken cancellationToken)
+    {
+        if (campaign.Status == CampaignStatus.Archived)
+        {
+            return;
+        }
+
+        var newest = await StandingApprovals.Newest(db, campaign.Id, StandingApprovals.Searches).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        var standing = newest is { Kind: JournalKinds.StandingApprovalSet } ? newest : null;
+        if (allow is not null)
+        {
+            var record = StandingApprovals.AllowanceLine(searched, allow.MaxPeople!.Value, allow.MaxPerSearch, allow.ExpiresAt);
+            StandingApprovals.Allow(db, journal, actor, campaign, standing, record, reason);
+        }
+        else if (standing is not null && !string.Equals(StandingApprovals.Read(standing).Audience?.Id, searched.Id, StringComparison.Ordinal))
+        {
+            StandingApprovals.Retire(db, journal, actor, campaign, standing, reason);
+        }
     }
 
     /// <summary>

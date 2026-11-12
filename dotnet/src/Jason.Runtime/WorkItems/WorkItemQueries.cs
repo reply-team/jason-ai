@@ -19,12 +19,18 @@ public static class WorkItemQueries
     /// </summary>
     private static readonly string[] RunsInPausedCampaign = [.. OperationCatalog.RunsInPausedCampaign];
 
+    /// <summary>The operations whose work runs in an archived campaign, as their contracts declare it.</summary>
+    private static readonly string[] RunsInArchivedCampaign = [.. OperationCatalog.RunsInArchivedCampaign];
+
     private static readonly Expression<Func<WorkItem, DateTime, bool>> EligibleAt =
         (w, now) => w.Status == WorkItemStatus.Created
             && (w.Campaign!.Status == CampaignStatus.Active
                 || (w.Campaign!.Status == CampaignStatus.Paused
                     && w.Operation != null
-                    && Enumerable.Contains(RunsInPausedCampaign, w.Operation)))
+                    && Enumerable.Contains(RunsInPausedCampaign, w.Operation))
+                || (w.Campaign!.Status == CampaignStatus.Archived
+                    && w.Operation != null
+                    && Enumerable.Contains(RunsInArchivedCampaign, w.Operation)))
             && (w.NotBefore == null || w.NotBefore <= now)
             && (w.DueAt == null || w.DueAt > now)
             && (w.RetryAfter == null || w.RetryAfter <= now);

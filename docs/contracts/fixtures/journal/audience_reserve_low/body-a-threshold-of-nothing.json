@@ -1,0 +1,11 @@
+{
+  "kind": "audience_reserve_low",
+  "version": 1,
+  "case": "a threshold is at least one",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": { "untouched": 0, "threshold": 0 }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/threshold", "reason": "minimum" }] }
+}

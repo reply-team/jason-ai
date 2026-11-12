@@ -3,5 +3,5 @@
   "version": 1,
   "case": "only a standing approval in force is taken back, so the line always carries it",
   "body": { "key": "interested", "old": null, "new": null },
-  "expect": { "invalid": [{ "pointer": "/old", "reason": "type" }] }
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }, { "pointer": "/old", "reason": "any_of" }] }
 }

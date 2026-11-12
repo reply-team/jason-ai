@@ -1,0 +1,18 @@
+{
+  "operation": "campaign.audience",
+  "case": "none",
+  "request": {
+    "campaign_id": "cmp_1"
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "reserve": {
+      "untouched": 1,
+      "threshold": null
+    },
+    "allowance": null,
+    "audiences": [],
+    "next_cursor": null
+  }
+}

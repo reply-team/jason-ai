@@ -1,0 +1,55 @@
+{
+  "operation": "audience.preview",
+  "version": 1,
+  "case": "a sample that carries a person's address, which a look never reveals",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "count": 12400,
+      "companies": 3100,
+      "sample": [
+        {
+          "external_id": "p-90211",
+          "first_name": "Lena",
+          "last_name": "Novak",
+          "title": "Head of Operations",
+          "company": {
+            "name": "Northwind Freight",
+            "domain": "northwind-freight.example",
+            "size": "51-200",
+            "industry": "Logistics"
+          },
+          "location": "Porto, Portugal",
+          "raw": "{\"id\":\"p-90211\",\"seniority\":\"head\"}",
+          "channels": [
+            {
+              "channel": "email",
+              "value": "lena.novak@northwind-freight.example"
+            }
+          ]
+        }
+      ]
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [
+      {
+        "pointer": "/sample/0/channels",
+        "reason": "additional_properties"
+      }
+    ]
+  }
+}

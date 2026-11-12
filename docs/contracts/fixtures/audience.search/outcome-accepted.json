@@ -1,0 +1,35 @@
+{
+  "operation": "audience.search",
+  "version": 1,
+  "case": "the provider took the search and is running it: the reference beside the result and in it, one value, pinned to nothing",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "status": "accepted",
+          "reference": "search-5521",
+          "found": null,
+          "people": []
+        }
+      ]
+    },
+    "external_ids": {
+      "search": "search-5521"
+    },
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false,
+    "pinned": {}
+  }
+}

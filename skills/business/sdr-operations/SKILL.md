@@ -251,6 +251,31 @@ selection criterion available under pressure is what some adapter can already ex
 precisely how a contract ends up shaped like one product. Coverage and attention are different
 problems and they get different fixes.
 
+### Where the runtime's names are not this catalogue's
+
+An operation the runtime executes is named by its contract document under `docs/contracts/operations/`, never by
+this catalogue, and most of those names are the catalogue's own. The audience family is the case to know, because it
+reuses this catalogue's word for something else. In the catalogue an audience is a set of people assessed for fitness
+and screened against those who must not be contacted (`audience.assess`, `audience.screen`); in the runtime an audience is one definition a campaign searched under at a
+provider, with the people its searches brought in. The two families share the word and nothing else, and neither
+replaces the other. How the runtime's six map onto the jobs named here:
+
+- `audience.preview` is `segment.preview` asked of the provider's database rather than of the people already held:
+  free, and approved by nobody.
+- `audience.search` is `candidate.search` and `candidate.promote` as one act, because the provider makes every person it
+  finds ours, with no step between finding and taking; it is metered, at the provider's own price, and the first search
+  under a definition waits for a person.
+- `audience.search_status` and `audience.search_cancel` are `job.get` and `job.cancel` for one search running at the
+  provider.
+- `audience.filter_values` lists the values one of the provider's filters takes. No operation here does that:
+  `vocabulary.list` lists an account's own values, never a provider's filter's.
+- `audience.availability` answers, for one account, the part of `budget.get` and `capability.list` that says whether
+  it may search now.
+
+Three of those names, `search_status`, `search_cancel` and `filter_values`, break this catalogue's rule of a single-word
+verb. They are the contract's names, and the contract is what decides; a plan that runs on the runtime writes them as
+the contract does.
+
 ### The four references, and the question each one answers
 
 - `references/invariants.md` — the 140 business rules the operations may never disagree with, in
@@ -347,6 +372,12 @@ fixed by regenerating rather than by editing the table. The same applies to a ru
 
 ## Changelog
 
+- 2.1.0 (2026-11-11): *Where the runtime's names are not this catalogue's*. The runtime's `audience` family is mapped
+  onto the jobs this catalogue names: `audience.preview` onto `segment.preview` of the provider's database,
+  `audience.search` onto `candidate.search` with `candidate.promote`, the status read and the stop onto `job.get` and
+  `job.cancel`, the filter's values onto no operation here, and the availability read onto part of `budget.get` and
+  `capability.list`. The catalogue's `audience.assess` and `audience.screen` keep their meaning, a set of people assessed
+  and screened, beside the runtime's audience, a definition a campaign searched under. No operation of the catalogue changed.
 - 2.0.0 (2026-08-10): breaking rewrite of the contract, not of the prose around it. **The property
   model changed**: `effect` (`read`/`write`/`act`) became `reach` (`read`/`control`/`act`) because
   `write` conflated a bookkeeping edit with a decision that leaves the building; `partial`

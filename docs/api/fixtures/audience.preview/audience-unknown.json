@@ -1,0 +1,16 @@
+{
+  "operation": "audience.preview",
+  "case": "audience-unknown",
+  "request": {
+    "campaign_id": "cmp_1",
+    "audience": 3
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "audience_unknown",
+      "message": "Campaign 'cmp_1' holds no audience under 3: a campaign numbers its audiences from 1, in the order their first searches were claimed, so name one it holds, or the audience by its definition.",
+      "retryable": false
+    }
+  }
+}

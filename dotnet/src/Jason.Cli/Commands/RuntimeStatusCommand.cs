@@ -27,7 +27,7 @@ public static class RuntimeStatusCommand
             return Fail(env, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied);
         }
 
-        using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler);
+        using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler, env.Clock);
         RuntimeResponse response;
         try
         {

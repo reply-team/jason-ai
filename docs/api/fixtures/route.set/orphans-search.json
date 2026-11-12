@@ -1,0 +1,27 @@
+{
+  "operation": "route.set",
+  "case": "orphans-search",
+  "request": {
+    "campaign_id": "cmp_1",
+    "operation": null,
+    "plugin": "fake-provider",
+    "binding": {
+      "workspace": "east"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "route_orphans_search",
+      "message": "The route change was refused: 1 search(es) still followed would have no route to the account each ran under; the routes in force stay active.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "campaign:cmp_1/searches/wi_1",
+          "code": "route_orphans_search",
+          "message": "campaign 'cmp_1' still follows search wi_1, which ran at 'fake-provider' under an account neither the campaign's other routes nor the global ones would name, so its reads and its stop would have nowhere to go while it goes on at the provider. Stop it with audience.search_cancel, or let it end, then change the route."
+        }
+      ]
+    }
+  }
+}

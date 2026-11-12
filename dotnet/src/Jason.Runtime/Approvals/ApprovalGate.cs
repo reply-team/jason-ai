@@ -129,8 +129,9 @@ public static class ApprovalGate
     /// <summary>
     /// Writes the decision a standing approval made for this work: a row born approved, decided by the person who set the
     /// standing approval, about the subject the claim would otherwise have parked, with the preview a person reading it
-    /// later sees. One line says the release and names the standing approval and the verdict; no question is asked, so no
-    /// line says one was and the item never waits.
+    /// later sees. One line says the release and names the standing approval and what the cover names besides: the verdict
+    /// a reply answers, or the audience a search runs under and the people it asks for. No question is asked, so no line
+    /// says one was and the item never waits.
     /// </summary>
     internal static Approval ReleaseUnderStanding(
         JasonDbContext db,
@@ -176,8 +177,11 @@ public static class ApprovalGate
         db.Approvals.Add(approval);
         var names = Names(approval);
         names["standing"] = cover.Standing.PublicId;
-        names["verdict"] = cover.Verdict.PublicId;
-        names["category"] = cover.Category;
+        foreach (var (name, value) in cover.Names)
+        {
+            names[name] = value?.DeepClone();
+        }
+
         journal.Append(
             db,
             Actors.Dispatcher,

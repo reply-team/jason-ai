@@ -44,9 +44,10 @@ plugin may subscribe to.
 
 - **A place for the lines**: a receiver, which is anything that takes a `POST` of JSON at a URL, a file in a directory you
   grant ([below](#a-file-instead-of-a-receiver-or-beside-one)), or both.
-- **Jason 0.32.0 or newer** for this version of the package, whose manifest says a word an earlier runtime refuses.
-  A release publishes the package its own runtime reads; 0.31.0 published 1.1.0 and 0.30.0 published 1.0.1. Subscriptions
-  arrived in 0.29.0, which published none.
+- **Jason 0.36.0 or newer** for this version of the package, whose manifest declares kinds an earlier runtime does not
+  write and refuses. A release publishes the package its own runtime reads; 0.36.0 publishes 1.3.0, 0.32.0 to 0.35.0
+  published 1.2.0, 0.31.0 published 1.1.0 and 0.30.0 published 1.0.1. Subscriptions arrived in 0.29.0, which published
+  none.
 
 ## Installing it
 

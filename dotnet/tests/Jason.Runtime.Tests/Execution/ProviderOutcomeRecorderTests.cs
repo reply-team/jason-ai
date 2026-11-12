@@ -3,6 +3,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -1229,6 +1230,7 @@ public class ProviderOutcomeRecorderTests
             new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(o => o.RetryDelaySeconds = 0)),
             new ExternalIdStore(new JournalWriter(clock), clock),
             new SentFacts(new JournalWriter(clock)),
+            new SearchLanding(new JournalWriter(clock), new ExternalIdStore(new JournalWriter(clock), clock), clock),
             options,
             timing);
         return new Scene(recorder, campaign, contact, item, attempt);

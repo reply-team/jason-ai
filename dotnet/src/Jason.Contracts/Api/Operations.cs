@@ -37,6 +37,7 @@ public static class Operations
     public const string CampaignSummary = "campaign.summary";
     public const string CampaignActivity = "campaign.activity";
     public const string CampaignActivityByPeriod = "campaign.activity_by_period";
+    public const string CampaignAudience = "campaign.audience";
 
     public const string ProjectCreate = "project.create";
     public const string ProjectGet = "project.get";
@@ -116,6 +117,12 @@ public static class Operations
     public const string UiOpen = "ui.open";
     public const string UiTokens = "ui.tokens";
     public const string UiRevoke = "ui.revoke";
+
+    public const string AudiencePreview = "audience.preview";
+    public const string AudienceFilterValues = "audience.filter_values";
+    public const string AudienceAvailability = "audience.availability";
+
+    public const string OperationDescribe = "operation.describe";
 
     public const string RouteResolve = "route.resolve";
     public const string RouteList = "route.list";

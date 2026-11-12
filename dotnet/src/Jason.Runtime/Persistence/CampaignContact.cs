@@ -23,4 +23,7 @@ public sealed class CampaignContact
     public DateTime AddedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>The search that made this membership, where one did: a row of its own, so nothing here says where a person came from.</summary>
+    public AudienceLanding? Landing { get; set; }
 }

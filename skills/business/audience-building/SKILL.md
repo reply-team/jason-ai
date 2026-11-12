@@ -106,6 +106,46 @@ fulfilled, partially fulfilled or absent is a fact about the product, and the ad
 that provider is what states it. Consult it rather than assuming, and treat a partial as a
 partial when planning around it.
 
+### Outward search with Jason
+
+**With Jason, route 2 is the `audience` family, and it buys as it finds.** This runtime performs an outward search as
+operations of its own, and their names are not the catalogue's:
+
+- `audience.preview` counts a definition and samples a few of its people, with no contact detail. It is free and
+  nobody approves it: the catalogue's `segment.preview`, asked of the provider's database rather than of the people we
+  already hold.
+- `audience.search` finds up to a count of people and makes them the campaign's: `candidate.search` and
+  `candidate.promote` in one act, because the provider makes every person it finds ours, with no step between finding
+  and taking. It is metered, at the provider's own price, which is why the first search under a definition waits for a
+  person.
+- `audience.search_status` and `audience.search_cancel` read and stop one search that runs at the provider, as
+  `job.get` and `job.cancel` do queued work; the runtime reads it by itself.
+- `audience.filter_values` lists the values one of the provider's filters takes, as the provider spells them, and
+  `audience.availability` says whether the account may search now.
+
+The catalogue's `audience.assess` and `audience.screen` are not among them, and the word means something else there:
+in the catalogue an audience is a set of people assessed and screened, and in Jason it is one definition a campaign searched
+under, with the people its searches brought in.
+
+**The definition is the provider's, so read what it declares before you write one.** Which filters a definition may
+hold, what each means and which of them list their values is declared by the plugin the campaign's route names for
+searches, and it differs from provider to provider. Write every value as the provider spells it, from the list it
+gives: a value it does not know is a search it refuses.
+
+**Narrow before wide.** Start from the filters the one-sentence segment actually names, and widen one filter at a time,
+only where the count is too small to learn from. A wide definition buys people nobody meant.
+
+**Preview, and look at the sample, before anything is spent.** The count says how many; the sample says whether they
+are the people the user meant. Read each person in it against the segment's sentence: a definition whose sample holds
+people the user would not sell to is wrong however good its count. Change it and look again.
+
+**A probe, never the maximum.** The first search under a definition takes a few people, and more come only once those
+were worked and judged. As guidance, by the preview's count: under 100, a probe of 10; under 1,000, 25; under 10,000,
+50; more, 100. State the depth and why, and its cost beside it: the price per person is the provider's own, and comes
+from the provider, never from this skill; with Jason, `audience.availability` answers it where the provider can say,
+and where it says none, say that rather than guess. A search may also find, and charge for, a person the user already holds; Jason
+keeps that person one member of the campaign, and the charge stays the provider's to count.
+
 Whichever route, the ICP decision stays the user's and has to be explicit before sourcing
 starts: who counts as a fit, which signals matter, what disqualifies. An audience assembled
 without a stated ICP cannot be judged afterwards — when the campaign underperforms there is
@@ -303,6 +343,8 @@ import — that is the part a future run actually benefits from.
   sentence, the campaign built on it cannot be learned from.
 - **Approving a count instead of a population.** "212 contacts" is a number the user can neither
   check nor refuse on any ground. Name who is in the audience, or fix the audience.
+- **Pulling the maximum.** A search for every person a preview counted spends the whole audience before anybody knows
+  whether it answers. Probe, judge, then top up.
 - **Answering "I have no list" with a refusal.** There are five routes and every one of them is a
   named operation. A user left at "that is a gap" has been given nothing they can act on — and
   the gap they were being told about no longer exists.
@@ -328,6 +370,12 @@ reports or logs beyond what the outcome requires.
 
 ## Changelog
 
+- 3.1.0 (2026-11-11): *Outward search with Jason*. Route 2 is this runtime's `audience` family, whose names are not
+  the catalogue's: `audience.preview` is a free `segment.preview` of the provider's database, `audience.search` is
+  `candidate.search` and `candidate.promote` in one act, and the catalogue's `audience.assess` and `audience.screen`
+  are a different thing under the same word. The definition is the provider's, read from what the route's plugin
+  declares; narrow before wide; preview and read the sample before anything is spent; a probe by the preview's count,
+  never the maximum, its price the provider's. Adds *Pulling the maximum* to the failure modes. No provider is named.
 - 3.0.0 (2026-08-10): breaking, against the 325-operation contract, and the reasoning changed
   further than the names did. *Where an audience comes from* rested on "the contract has no
   discovery operation, so here are four routes outside it"; that premise is false, so the routes

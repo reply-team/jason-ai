@@ -400,6 +400,144 @@ public class ManifestReaderTests : IDisposable
         Assert.Equal(("settles_by_key_invalid", "settles_by_key"), (problem.Code, problem.Path));
     }
 
+    /// <summary>The search and its status read, which a provider that searches performs together.</summary>
+    private const string Searches = "operations: [audience.search, audience.search_status, audience.search_cancel]\n";
+
+    /// <summary>A definition schema of one filter, enough for a rule that is not about the schema's own shape.</summary>
+    private const string Definition =
+        "audience_definition:\n  schema:\n    type: object\n    additionalProperties: false\n    properties:\n      industries:\n"
+        + "        description: Industries the company is in, as the provider names them.\n        type: array\n        maxItems: 25\n"
+        + "        items:\n          type: string\n          maxLength: 200\n";
+
+    /// <summary>
+    /// An audience's definition is the provider's own shape, so a provider that performs an operation carrying one
+    /// declares its schema, and the loader holds that declaration where its author can fix it: no schema, no search; a
+    /// schema nothing reads is misplaced; a search is read by its status and stopped by its stop, so a plugin that searches
+    /// performs both;
+    /// the schema is in the published dialect and of a mapping, every filter in it says what it is in plain text, which a
+    /// terminal shows as written and so holds no control character, and an annotation names a filter the schema declares
+    /// and nothing but its side and its typeahead.
+    /// </summary>
+    [Theory]
+    [InlineData(Searches + Definition, null, null)]
+    [InlineData("operations: [audience.preview]\n" + Definition, null, null)]
+    [InlineData("operations: [audience.search_status]\n", null, null)]
+    [InlineData(Searches, "field_required", "audience_definition")]
+    [InlineData("operations: [audience.preview]\n", "field_required", "audience_definition")]
+    [InlineData("operations: [audience.search_status]\n" + Definition, "field_invalid", "audience_definition")]
+    [InlineData("operations: [audience.search, audience.preview]\n" + Definition, "audience_family_incomplete", "operations")]
+    [InlineData("operations: [audience.search, audience.search_status]\n" + Definition, "audience_family_incomplete", "operations")]
+    [InlineData(Searches + "audience_definition: industries\n", "field_invalid", "audience_definition")]
+    [InlineData(Searches + "audience_definition:\n  keys: {}\n", "field_required", "audience_definition.schema")]
+    [InlineData(Searches + Definition + "  examples: []\n", "unknown_field", "audience_definition.examples")]
+    [InlineData(Searches + "audience_definition:\n  schema:\n    type: array\n    items:\n      type: string\n      maxLength: 200\n    maxItems: 5\n", "field_invalid", "audience_definition.schema")]
+    [InlineData(Searches + Definition + "    unevaluatedProperties: false\n", "field_invalid", "audience_definition#/schema/unevaluatedProperties")]
+    [InlineData(Searches + "audience_definition:\n  schema:\n    type: object\n    properties:\n      industries:\n        type: string\n        maxLength: 200\n", "field_invalid", "audience_definition#/schema/properties/industries")]
+    [InlineData(Searches + "audience_definition:\n  schema:\n    type: object\n    properties:\n      industries:\n        description: \"Industries\\e[2J\"\n        type: string\n        maxLength: 200\n", "field_invalid", "audience_definition#/schema/properties/industries")]
+    [InlineData(Searches + Definition + "  keys:\n    headcount:\n      side: company\n", "field_invalid", "audience_definition.keys.headcount")]
+    [InlineData(Searches + Definition + "  keys:\n    industries:\n      label: Industry\n", "unknown_field", "audience_definition.keys.industries.label")]
+    [InlineData(Searches + Definition + "  keys:\n    industries:\n      side: account\n", "field_invalid", "audience_definition.keys.industries.side")]
+    [InlineData(Searches + Definition + "  keys:\n    industries:\n      typeahead: Industries\n", "field_invalid", "audience_definition.keys.industries.typeahead")]
+    public void An_audience_definition_answers_with_its_own_code_at_its_own_path(string manifest, string? code, string? path)
+    {
+        var result = Read(Merge(manifest));
+
+        if (code is null)
+        {
+            Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}: {p.Message}")));
+            return;
+        }
+
+        Assert.Null(result.Manifest);
+        var problem = Assert.Single(result.Problems, p => p.Code == code && p.Path == path);
+        Assert.NotEmpty(problem.Message);
+    }
+
+    /// <summary>
+    /// The dialect expresses a provider's audience as such providers shape one: lists of values each included or
+    /// excluded, a closed set of words, a range with both ends, a switch between every filter and any one, and at least
+    /// one filter given. The declaration is kept as written, with its annotations beside it, because the claim checks
+    /// a definition against the schema and a renderer reads the annotations.
+    /// </summary>
+    [Fact]
+    public void A_provider_s_audience_definition_is_kept_as_declared_with_its_annotations()
+    {
+        var result = Read(Merge(Searches + """
+            audience_definition:
+              schema:
+                type: object
+                additionalProperties: false
+                anyOf:
+                  - required: [industries]
+                  - required: [headcount]
+                properties:
+                  industries:
+                    description: Industries the company is in, as the provider names them.
+                    type: array
+                    maxItems: 25
+                    items:
+                      $ref: "#/$defs/term"
+                  seniority:
+                    description: How senior the person is.
+                    type: array
+                    maxItems: 6
+                    items:
+                      enum: [entry, senior, manager, director, vp, owner]
+                  headcount:
+                    description: How many people the company employs, from the first number to the second.
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      min:
+                        type: integer
+                        minimum: 1
+                      max:
+                        type: integer
+                        minimum: 1
+                  match:
+                    description: Whether a person matches every filter given or any one of them.
+                    enum: [and, or]
+                $defs:
+                  term:
+                    type: object
+                    additionalProperties: false
+                    required: [value, type]
+                    properties:
+                      value:
+                        type: string
+                        minLength: 1
+                        maxLength: 200
+                      type:
+                        enum: [include, exclude]
+              keys:
+                industries:
+                  side: company
+                  typeahead: industries
+                seniority:
+                  side: person
+
+            """));
+
+        Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}: {p.Message}")));
+        var declared = result.Manifest!.AudienceDefinition!;
+        Assert.Equal(
+            ["industries", "seniority", "headcount", "match"],
+            declared.Schema["properties"]!.AsObject().Select(property => property.Key));
+        Assert.Equal(
+            """{"industries":{"side":"company","typeahead":"industries"},"seniority":{"side":"person"}}""",
+            declared.ToJson()["keys"]!.ToJsonString());
+
+        // A definition of that shape is held to it: a term with a word outside the pair, or no filter at all, is not one.
+        var schema = declared.Schema;
+        var valid = JsonNode.Parse("""{"industries":[{"value":"Software","type":"include"}],"headcount":{"min":11,"max":50},"match":"and"}""");
+        Assert.Empty(SchemaValidator.Validate(valid, schema));
+        Assert.Equal(
+            "/industries/0/type",
+            Assert.Single(SchemaValidator.Validate(JsonNode.Parse("""{"industries":[{"value":"Software","type":"maybe"}]}"""), schema)).Pointer);
+        Assert.NotEmpty(SchemaValidator.Validate(JsonNode.Parse("""{"seniority":["senior"]}"""), schema));
+        Assert.Null(Read(Merge("operations: [audience.search_status]\n")).Manifest!.AudienceDefinition);
+    }
+
     /// <summary>
     /// A binding schema is a stranger's, so the dialect's time is a property of its patterns, decided where its author
     /// can fix it: each is probed on a warm engine, and one that cannot finish within the timeout, twice, refuses the

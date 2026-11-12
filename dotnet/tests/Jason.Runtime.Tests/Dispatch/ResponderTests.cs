@@ -840,7 +840,7 @@ public class ResponderTests
     }
 
     /// <summary>What SQLite plans for a command the step sent, its parameters bound to whole numbers; one step a line.</summary>
-    private static List<string> PlanOf(DispatchHarness harness, string text)
+    internal static List<string> PlanOf(DispatchHarness harness, string text)
     {
         using var db = harness.Open();
         var connection = (SqliteConnection)db.Database.GetDbConnection();

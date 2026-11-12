@@ -5,7 +5,7 @@ Reply CLI.
 
 ## What it does
 
-Twenty-four operations — the whole set this build publishes: sixteen that write and eight that only read.
+Thirty operations — the whole set this build publishes: eighteen that write and twelve that only read.
 
 | Operation | What it is at Reply |
 |---|---|
@@ -33,6 +33,12 @@ Twenty-four operations — the whole set this build publishes: sixteen that writ
 | `message.send` | Sends one person one message outside any sequence, once a person approves it: an email, or on LinkedIn a message to a connection, an InMail or a voice message Reply speaks from the text. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the address or the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
 | `message.status` | Reads one direct send by the reference Reply gave it when it took it, which the runtime keeps for the send: whether Reply still holds it, it went or it failed, and whether a cancel can still stop it. Reply lists no pending sends, so one send is all it reads. |
 | `message.cancel` | Takes back one direct send Reply still holds for its moment, by that same reference. One cancelled before answers the same; one that went, that Reply is sending or that failed is refused, and nothing changes. |
+| `audience.preview` | Asks Reply's Live Data how many people and companies a definition matches, and shows up to ten of them with no way to reach them. Reply saves and charges nothing. |
+| `audience.search` | Starts a Live Data search for up to the count asked, on a contact list of its own that Reply puts the people it finds on, once a person approves it. Reply charges per person found. **A person Reply already holds is never found:** Reply skips everyone the account holds — every person an earlier search found among them — and never puts them on the list. See [What it cannot do](#what-it-cannot-do). |
+| `audience.search_status` | Reads a search's status and a page of the people on its list from where the last read stopped, each with Reply's contact id. The last people of a search that ended come with more to read, and the read after them, which finds nobody, deletes the list. |
+| `audience.search_cancel` | Stops a search running or paused by deleting it at Reply, and deletes its list; the people it already added stay Reply's contacts. A search that ended answers how it ended. |
+| `audience.filter_values` | Reads the values Reply suggests for one of its five typeaheads — industries, departments, seniorities, locations, job titles — containing some text. |
+| `audience.availability` | Answers that the account may search, and nothing more: Reply has no read of an account's credits or of its plan's room for contacts. Reply is not asked. |
 
 A campaign is a **sequence** at Reply and a person is a **contact**. Each operation runs the Reply CLI command made
 for it — `reply contact find`, `reply sequence add-contact`, `reply inbox list` and the rest, listed under
@@ -54,10 +60,12 @@ other operation ignores it: it reads none of it, passes none of it to the CLI, a
 shell, and what it leaves behind stays in the CLI's own profile store: this package declares no
 environment variable, is granted no key, passes none on a command line and reads none. Nothing about a
 person reaches an argument either — a person's details travel on stdin, and so do the name a sequence is given,
-the text of a reply, the note of an invitation and the subject and text of a message —
+the text of a reply, the note of an invitation, the subject and text of a message, the name a search's list is given
+and the definition of an audience —
 so what Jason keeps of a call, one line in the invocation's `stderr.log` under `~/.jason/work/plugins/` and nothing
 under `~/.jason/logs/`, is the command line, the exit code and how long it took. The command line carries Reply's
-identifiers and flags, and on a send the work item's own identifier as the key and the moment the send is to go at.
+identifiers and flags, on a send the work item's own identifier as the key and the moment the send is to go at, and on
+a filter's values the text they are to contain, which is a filter's words and never a person's.
 An invocation that ends without an outcome, a protocol failure, has the tail of that file copied onto the attempt's
 trace, the key and the moment included.
 
@@ -69,8 +77,10 @@ trace, the key and the moment included.
   Where `npm install -g` is refused with `EACCES`, npm's global prefix is a directory this account does not own:
   install it under a prefix of the account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin`
   on the search path the runtime sees, as "A runtime that can find it" below says.
-- **Version 0.18.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
-  the answer. 0.18.0 is the release that names a cancel of a send Reply is sending, a cancel Reply could not confirm
+- **Version 0.20.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+  the answer. 0.20.0 is the release with Live Data and the contact lists a search fills — `reply live-data preview`,
+  `start`, `get`, `list`, `delete` and `filter-values`, and `reply contact-list create`, `delete` and `contacts` — which
+  the audience family runs; 0.18.0 the one that names a cancel of a send Reply is sending, a cancel Reply could not confirm
   and a sending schedule that cannot time a send each by a code of its own, and passes on the moment Reply expects to
   send one waiting for its schedule, `estimated_send_at`, and reads and cancels a LinkedIn send Reply holds for later by
   the reference Reply calls it by, `linkedin-scheduled-<n>`, which 0.17.2 refuses before it calls Reply; 0.17.2 the one
@@ -82,9 +92,12 @@ trace, the key and the moment included.
   take the person by their fields and import one Reply holds nobody for. An older CLI makes this plugin `unavailable`
   with `executable_incompatible`, and work routed to it fails at the claim with `plugin_unavailable` rather than
   running commands an older CLI does not have, or answers differently.
-- **Jason 0.22.0 or newer.** The manifest lists the arguments a send takes on each channel (`arguments`) and the
-  channels a message goes on as a template (`templates`), which a runtime older than 0.22.0 does not read: it refuses
-  the package at the reload, `unknown_field`. 0.22.0 is also the release that admits what the sends answer — their
+- **A Jason runtime that publishes the audience family.** The manifest declares the definition an audience is written
+  in for Reply (`audience_definition`), which a runtime without the family does not read: it refuses the package at the
+  reload, `unknown_field`. `jason operation describe audience.search --campaign <id>` answers on a runtime that has it,
+  and prints that definition for a campaign routed here. The manifest also lists the arguments a send takes on each
+  channel (`arguments`) and the channels a message goes on as a template (`templates`), which a runtime older than
+  0.22.0 does not read either; 0.22.0 is also the release that admits what the sends answer — their
   reference, their state and the codes they end with — and reads the list at the claim, so a template goes only on a
   channel the package lists. The package keys a LinkedIn profile with the plugin SDK's `host.channelKey`, and the
   runtime hands `message.send`, `social_invitation.send` and `contact.update` the person's own fields — their names,
@@ -432,6 +445,15 @@ route's binding names them.
 | `direct-send get <reference>` | read | A direct send Reply keeps, by its reference, asked for two things. First on a repeat, inside the window and past it, of the send an earlier attempt that may have sent returned (`context.unsettled_reference`): Reply's record of that send, whose state answers the work item with nothing sent. A record of another send, none, or no answer leaves the repeat to the window; a read the CLI refuses for want of a working credential fails `unauthorized`. And of the send the runtime names under `send.reference`: what `message.status` answers from. |
 | `direct-send cancel <reference>` | write | Takes back a direct send Reply still holds for its moment, by its reference, and answers with Reply's record of it: what `message.cancel` answers from. One cancelled before answers as it stands, so a repeat after a lost answer changes nothing; one that went, that Reply is sending or that failed is refused (`direct_send.already_sent`, `direct_send.already_failed`, and for a send Reply is sending now, `direct_send.already_sending`), and nothing is changed; a cancel Reply could not confirm, of a send still queued or waiting for its schedule, is `direct_send.cancel_not_confirmed`, and Reply asks for it again. |
 | `contact delete <contact>` | write | Deletes the contact by its id, with its history at Reply: it leaves every sequence and list. Run again after a lost answer, it answers that Reply holds the contact no longer. |
+| `live-data preview --filters - [--max-per-company] --wait-seconds` | read | How many people and companies the definition on stdin matches and up to ten of them, waited for inside what is left of the invocation's budget: what `audience.preview` answers from. Reply saves and charges nothing, so a lost answer is asked again. |
+| `contact-list create --name -` | write | Makes the empty, private list one search fills, named on stdin `Jason search`, the work item and ` #` and the attempt's number: what `audience.search` makes before it starts the search. |
+| `live-data start --filters - --count --list-id [--max-per-company] [--with-phones]` | write | Starts the search on that list, the definition on stdin: the spending act of `audience.search`. A lost answer may have started one, so a repeat reads the team's searches first. |
+| `live-data list --limit --offset` | read | One page of the team's searches, newest first, each with its lists: the read a repeat of `audience.search` makes for the search an earlier attempt may have started, by the list named after its work item. |
+| `live-data get <search>` | read | One search's status and Reply's count of the people it found, never the people: what `audience.search_status` reads first, and the read `audience.search_cancel` makes before it stops anything. |
+| `contact-list contacts <list> --live-data-only --limit --offset` | read | One page of the people Live Data put on the search's list, oldest first, from the number already read: what `audience.search_status` answers its people from. |
+| `live-data delete <search>` | write | Deletes the search, whatever its status, which stops it: what `audience.search_cancel` does to a search running or paused. Run again after a lost answer, it answers that Reply holds the search no longer. |
+| `contact-list delete <list>` | write | Deletes a search's list once the search has ended and a read past its last person finds nobody, or once it is cancelled; the contacts on it stay in the account. How it ends changes nothing the operation answers. |
+| `live-data filter-values <kind> [--search] --limit` | read | The values Reply suggests for one of its five typeaheads, containing the text given: what `audience.filter_values` answers from. The text is on the command line, the only place reply-cli takes it. |
 
 ### Endings every operation can meet
 
@@ -444,7 +466,7 @@ route's binding names them.
 | A **write**'s outcome is unknown: the CLI answered `outcome.unknown`, or the write timed out, exited without an error the CLI explained, printed something that is not a result, or had its answer cut off at `Plugins:Exec:OutputBytes`. | `provider_answer_lost` | ambiguous | Where the operation's contract says a repeat is safe, the runtime repeats it; otherwise the item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned, the CLI's own identifiers included, travels with the failure, so there are identifiers to look by. |
 | The profile is not signed in, Reply refused the credential (`access.denied`), or Reply says the account lacks a feature where the operation has no code of its own for that (`access.feature_unavailable`). | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
 | Reply asked to wait longer than the CLI waits on its own (`rate_limited`). | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt; the wait Reply asked for is in the trace. |
-| A 404 without Reply's code: `reply.refused` at status 404 and no code of Reply's own, which reply-cli passes through as it is on every command but `contact get`, `contact delete`, `inbox get`, `inbox reply`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`. Reply's API changed under this package version, and nothing was done. | `provider_call_failed` | permanent | `reply.refused` and the 404 are in the trace, with no code of Reply's. Update the package (`jason update apply`) and, if the ending stays, report it. A repeat whose send itself answers the 404 ends `send_not_settled` instead, and the change feed `events_unsupported`, as their tables say. |
+| A 404 without Reply's code: `reply.refused` at status 404 and no code of Reply's own, which reply-cli passes through as it is on every command but `contact get`, `contact delete`, `contact-list delete`, `inbox get`, `inbox reply`, `live-data delete`, `live-data get`, `live-data start`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`. Reply's API changed under this package version, and nothing was done. | `provider_call_failed` | permanent | `reply.refused` and the 404 are in the trace, with no code of Reply's. Update the package (`jason update apply`) and, if the ending stays, report it. A repeat whose send itself answers the 404 ends `send_not_settled` instead, and the change feed `events_unsupported`, as their tables say. |
 | Reply refused the call otherwise (`reply.refused`), refused a field no row below names (`reply.invalid_request`), or the CLI answered a code this version does not know. | `provider_call_failed` | permanent | The CLI's code, Reply's own code and its sentence are in the trace. A refusal that recurs belongs in the table. |
 | Not reported yet for the account: Reply refused the call for the account's money or plan or a revoked key, and did nothing for it. | `provider_blocked` | blocked | Clear it at Reply where the block says. Pending: the CLI publishes no code for this today, so nothing reaches the row `account_or_sender_blocked` in the table; when the CLI publishes one, its mapping in `rowOf` is where the switch lands, and the failure then carries the block. Until then such a refusal arrives as one of the rows above or below, under the class that row gives it. A sending account Reply refused for its own state is the sender's block, in the two sends' tables. |
 
@@ -1003,8 +1025,138 @@ nothing at Reply. The answer is the send cancelled, with Reply's moment for it, 
 gives none or one that cannot be read. A send that went or failed is never
 reported as cancelled, whatever the exit.
 
+### `audience.preview`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| Reply refused the definition at 400 for a rule of its own the declared schema cannot say (`live_data.invalid_filters`), most often account lists included beside a company filter, or a minimum revenue above the maximum. Reply's words are in the message. | `definition_rejected` | validation | Change the definition as Reply's words say. |
+| Reply's 403 (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan, a role or a key that includes Live Data. |
+| Reply's preview job had not answered when the wait ran out (the CLI's `pending`), or ended without a result (`live_data.preview_failed`, `live_data.preview_not_found` — a newer preview by the same Reply user replaces an older one — `live_data.service_failed` or `live_data.search_in_progress`). | `provider_unavailable` | transient | Nothing; ask again. |
+| The answer passed `Plugins:Exec:OutputBytes` and was cut off. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`. |
+
+One call, `reply live-data preview`, with the definition on stdin as written, `--max-per-company` where the read names
+people per company, and `--wait-seconds` half of what the invocation's budget leaves after what the package keeps back
+and fifteen seconds more: the CLI reads Reply's job every two seconds of the wait, and those reads take the other half.
+Reply counts in a background job and samples ten people: each comes back with no identifier, since Reply's sample gives
+none, and no way to reach them — no channels, and Reply's record beside them under `raw` without the LinkedIn link Reply
+shows. Reply gives no company size or industry for a sampled person. A count Reply does not give is null. The count and
+the sample include people the account already holds, whom a search skips, so a search may find fewer. Nothing is saved,
+spent or pinned.
+
+### `audience.search`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The work item asks for people without an email (`include_without_email: true`): reply-cli takes no flag for them. Nothing is made or started. | `capability_not_offered` | permanent | Search without them. |
+| Reply refused the definition at 400 for a rule of its own (`live_data.invalid_filters`), most often account lists included beside a company filter, or a minimum revenue above the maximum. Reply's words are in the message. | `definition_rejected` | validation | Change the definition as Reply's words say. |
+| An unfinished search of the team, running or paused, has the same filters (`live_data.search_in_progress`, Reply's 409). Whatever lists, count, people per company or phones it was started with, Reply starts no second one until it ends. | `search_in_progress` | permanent | `reply live-data list` shows the team's searches with their lists: one Jason started fills a list named `Jason search` and its work item, and is read or stopped by that work item. A search started at Reply is resumed, finished or deleted there. |
+| The team cannot afford a single contact (`live_data.insufficient_credits`, Reply's 422). | `insufficient_credits` | permanent | Add credits at Reply and propose the search again. Credits that run out while a search runs are a state its status read reports, `paused_for_credits`. |
+| The user the profile signs in as may not add contacts (`access.feature_unavailable`, Reply's 403 `liveDataSearch.forbidden`). | `feature_unavailable` | permanent | An owner or an admin of the team grants the permission at Reply. |
+| The plan of the user who starts the search has no room for another contact (`live_data.contact_limit_reached`, Reply's 422). | `feature_unavailable` | permanent | Raise the plan's contact limit at Reply, or make room under it. A plan that fills up while a search runs is a state its status read reports, `paused_for_limit`. |
+| Reply's search service failed and Reply saved no search (`live_data.service_failed`), or the list made for the search was gone when it started (`contact-list.not_found`). | `provider_unavailable` | transient | Nothing; the runtime repeats the attempt. |
+| The account already holds a list of the name this attempt's list is given (`contact-list.name_taken`). | `provider_call_failed` | permanent | Rename or delete that list at Reply. |
+
+Two writes: `reply contact-list create`, a private list named `Jason search`, the work item, ` #` and the attempt's
+number, and `reply live-data start` on it, the definition on stdin as written, `--count` the work item's count,
+`--max-per-company` where it names people per company, and `--with-phones` where it asks for phones. The answer is
+`accepted`, with the reference `search-<search>-list-<list>` under `external_ids.search`: Reply runs the search on its
+own and puts each person it finds on the list, and `audience.search_status` reads them there. A start Reply refused
+deletes the list again. A create whose answer was lost may have made its list, which stays behind empty: reply-cli reads
+no list by its name, so a repeat cannot find it, and makes a list of its own attempt. A start whose answer was lost
+keeps its list, since the search may have started on it; the repeat reads the team's searches first (`reply live-data
+list`, newest first, back to an hour before the earliest attempt that may have acted, at most ten pages of a hundred,
+each search's start, which Reply writes with no zone, read as UTC whatever zone the machine is in) and answers the one
+on a list named after its work item, starting none. A search it misses is still never a second
+search on the same people: Reply refuses a second unfinished search of the same filters, `search_in_progress`. Nothing
+is pinned.
+
+### `audience.search_status`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| Reply holds no search under the reference (`live_data.not_found`), or the reference is not one this package makes. Nothing is read. | `search_not_found` | permanent | A search deleted at Reply cannot be read again; the people it already returned stay found. |
+| The cursor is not one this package writes. Nothing is read. | `provider_call_failed` | permanent | Report it: the runtime hands back the cursor the last read answered. |
+| The answer passed `Plugins:Exec:OutputBytes` and was cut off. | `provider_answer_too_large` | permanent | Ask for fewer people with `limit`, or raise `Plugins:Exec:OutputBytes`. |
+
+Two reads, then a clean-up where the search has ended: `reply live-data get` of the search, then `reply contact-list
+contacts` of its list with `--live-data-only`, `--limit` the work item's and `--offset` the cursor, and, once the search
+has ended — finished or exhausted — and the page finds nobody past the cursor, `reply contact-list delete` of the list. The
+status is read first because Reply puts a batch on the list before it sets a final status, so a search read as ended
+already has every person on its list. Reply's status is the document's state: `inProgress` is `in_progress`,
+`finished` is `finished`, `noMoreContacts` is `exhausted`, `manuallyPaused` is `paused`,
+`pausedDueToInsufficientCredits` is `paused_for_credits` and `pausedDueToContactLimit` is `paused_for_limit`; a status
+this version does not know is `paused` where Reply's word starts with `paused` and `in_progress` otherwise, and Reply's
+own word is under `vendor.status` either way. `found` is Reply's count of the contacts the search added. The cursor is
+the number of the list's people already returned, a whole number written out, `0` on a first read: Reply adds each batch
+at the end of an order that holds from page to page, and only this search fills the list. Each person is Reply's
+contact: the id as `external_id`, the names, the title, the company with its domain, Reply's size band and industry, the
+city, region and country on one line, the email, phone and LinkedIn profile Reply holds, and Reply's record as JSON text
+under `raw` — without its custom fields where they would pass 16 KiB, and null where even that would. A read that
+carries people never deletes the list: the last people of a search that ended come with `has_more` true, so the runtime
+keeps them before anything is deleted and reads once more, and that next read of the ended search, finding nobody new,
+deletes the list and answers `has_more` false. A repeat of it finds the same nobody, since Reply reads a list it no
+longer holds as empty. A delete that does not go through never holds back the answer, and the list stays at Reply.
+Nothing is pinned.
+
+### `audience.search_cancel`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| On a first attempt, Reply holds no search under the reference (`live_data.not_found`), or the reference is not one this package makes. On a later attempt the same reading answers `already_ended`, since an earlier attempt may have deleted the search. | `search_not_found` | permanent | Nothing; there is nothing to stop. |
+| Reply's search service failed, and the search was kept as it was (`live_data.service_failed`). | `provider_unavailable` | transient | Nothing; the runtime repeats the cancel. |
+
+`reply live-data get` first, on every attempt, then, for a search running or paused, `reply live-data delete`, which
+stops it, and `reply contact-list delete` of its list: the answer is `cancelled`, and a person Reply found and the
+status read had not yet returned stays Reply's contact and is not read into Jason. A search that already finished or ran
+out answers `already_ended`, with `ended_as` `finished` or `exhausted`, and nothing changes: a cancel that comes too late
+leaves the search and its list as they were, so the status read goes on reading the people it found and deletes the list
+in the read after the last of them. A search Reply no longer holds has its list deleted all the same. A cancel whose answer was lost
+is repeated, and the repeat reads the search first. Nothing is pinned.
+
+### `audience.filter_values`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The filter is none of Reply's five typeaheads: `industries`, `departments`, `seniorities`, `locations`, `job-titles`. Nothing is read. | `filter_unknown` | validation | Ask by the typeahead `jason operation describe audience.search` names for the filter. |
+| Reply's 403 (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes Live Data. |
+| Reply's search service failed (`live_data.service_failed`). | `provider_unavailable` | transient | Nothing; ask again. |
+| The answer passed `Plugins:Exec:OutputBytes` and was cut off. | `provider_answer_too_large` | permanent | Ask for fewer values with `limit`. |
+
+One read, `reply live-data filter-values` of the typeahead, with `--search` the text where there is one and `--limit` the
+work item's. The values are Reply's suggestions, in Reply's order, none twice and none longer than a filter's value may
+be, so a page may come back shorter than the limit: Reply checks no value of a definition against them, and a
+definition may name any other text. `locations` mixes countries, regions and cities, and pairs with both
+`companyLocations` and `contactLocations`; `departments` pairs with `departments` and with the department of
+`departmentHeadcountGrowth`. Nothing is pinned.
+
+### `audience.availability`
+
+Reply is not asked, so this read meets none of the endings above. Reply has no read of an account's credits or of the
+room its plan has for contacts, and a restricted user's permissions are said only by a search Reply refuses, so the
+answer is `available: true` and every other member null. The gates are the search's own answers,
+`insufficient_credits` and `feature_unavailable`, and the status read's `paused_for_credits` and `paused_for_limit`.
+
 ## What it cannot do
 
+- **A person Reply already holds is never found.** Reply skips every person the account already holds, by email, free:
+  not added, not put on the search's list, not counted, not charged. That leaves out every contact of the team — the
+  account's own earlier work, every person an earlier search found, a teammate's contacts, the people of another
+  campaign's search — however well they match: `audience.search` finds only people new to Reply, and a search of the
+  same audience again never brings back the people the first one found. Reply's start takes no list of people to leave
+  out, so a person the campaign has and Reply does not hold — someone it took from a file or from another provider — can
+  be found, added to Reply as a new contact and **charged for**, though the campaign already has them; when the runtime
+  lands the search's people, that person stays the one member of the campaign they already are, never a second contact.
+  `audience.preview` counts and samples everyone matching, the people Reply holds included, so a search may find fewer
+  than the preview's count, and may never return a person its sample showed. No operation of this package reads the
+  account's existing contacts by a definition.
+- **No people without an email.** reply-cli's `live-data start` takes no flag for Reply's `addContactsWithoutEmails`, so
+  a search asking for them is refused `capability_not_offered` before anything is made.
+- **The search in the way is not named by its id.** Reply's 409 says a search of the same filters is unfinished, not
+  which: finding it would mean reading the filters of every unfinished search of the team. The failure says how to find
+  it.
+- **A cancel ends what Jason reads of a search it stops.** The people Reply found since the last status read stay Reply's
+  contacts, and the list they were on is deleted with the search. A cancel of a search that had already ended stops
+  nothing and deletes nothing.
 - **A delete reads the stop and then deletes, in two calls.** `contact.delete` reads the contact's opt-out with `reply
   contact get` and deletes it with `reply contact delete` about a second later, so a person who opts out at Reply in
   between has that stop erased with the contact. Reply publishes no delete held to a condition, and reply-cli has none.

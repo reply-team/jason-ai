@@ -1,0 +1,17 @@
+{
+  "kind": "workitem_waiting",
+  "version": 1,
+  "case": "the claim kept a search behind another search of its campaign that has not ended, with no attempt of its own, until the claim asks again a search cadence later",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": {
+      "on": [],
+      "mode": null,
+      "until": "2026-11-10T12:05:00.000Z",
+      "deadline": "2026-11-10T12:05:00.000Z",
+      "behind_search": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRH"
+    }
+  },
+  "expect": "valid"
+}

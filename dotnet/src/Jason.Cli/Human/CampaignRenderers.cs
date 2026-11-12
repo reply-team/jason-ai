@@ -45,6 +45,11 @@ public static class CampaignRenderers
             lines.Add(Line("Review:", string.Create(CultureInfo.InvariantCulture, $"every {seconds} s")));
         }
 
+        if (campaign.AudienceThreshold is { } threshold)
+        {
+            lines.Add(Line("Reserve:", string.Create(CultureInfo.InvariantCulture, $"threshold {threshold} untouched")));
+        }
+
         // Only for a campaign created under a key: the key its creator chose, which a repeat of that create sends again.
         if (campaign.IdempotencyKey is { } key)
         {
@@ -84,8 +89,8 @@ public static class CampaignRenderers
         RenderText.Lines([$"Project: {RenderText.Shown(project)}, from the working directory (--all-projects lists every project's)", string.Empty, rows]);
 
     /// <summary>
-    /// A page of the campaigns' people: who they are, where they stand, how to recognize them, the campaigns that list them
-    /// and, under a count, what it counts them for.
+    /// A page of the campaigns' people: who they are, where they stand, how to recognize them, the campaigns that list them,
+    /// the audience a search brought them from and, under a count, what it counts them for.
     /// </summary>
     public static string? Members(string json)
     {
@@ -95,7 +100,7 @@ public static class CampaignRenderers
             return null;
         }
 
-        var table = new HumanTable("CONTACT", "NAME", "STATE", "EMAIL", "CAMPAIGNS", "WHY");
+        var table = new HumanTable("CONTACT", "NAME", "STATE", "EMAIL", "CAMPAIGNS", "SOURCE", "WHY");
         foreach (var member in page.Items)
         {
             var names = (member.Contact?.Campaigns ?? []).ToDictionary(campaign => campaign.CampaignId, campaign => campaign.CampaignName, StringComparer.Ordinal);
@@ -105,6 +110,7 @@ public static class CampaignRenderers
                 RenderText.Snake(member.State),
                 RenderText.Email(member.Contact?.Channels),
                 string.Join(", ", (member.Counted ?? []).Select(counted => names.GetValueOrDefault(counted.CampaignId, counted.CampaignId))),
+                member.Source is { } source ? string.Create(CultureInfo.InvariantCulture, $"audience {source.Audience.Number}") : null,
                 member.Why is { } why ? string.Join(" ", new[] { why.Text ?? why.Code, RenderText.Moment(why.At) }.Where(part => part is not null)) : null);
         }
 

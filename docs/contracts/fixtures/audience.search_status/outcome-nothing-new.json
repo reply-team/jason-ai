@@ -1,0 +1,32 @@
+{
+  "operation": "audience.search_status",
+  "version": 1,
+  "case": "nothing found since the last read: no people, and the same cursor back",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "state": "in_progress",
+      "found": 40,
+      "people": [],
+      "cursor": "page-2",
+      "has_more": false,
+      "vendor": {
+        "status": "running"
+      }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

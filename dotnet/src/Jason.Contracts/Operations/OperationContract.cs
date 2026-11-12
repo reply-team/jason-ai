@@ -269,6 +269,7 @@ public sealed record OperationContract(
         RefuseKeyedReadWithoutRepeat(source, contract);
         RefuseUncheckedReach(source, contract);
         RefuseUnpausableWork(source, contract);
+        RefuseUnarchivableWork(source, contract);
         RefuseUnheldReach(source, contract);
         RefuseUnaddressablePreview(source, contract);
         RefuseUndeclaredContactMode(source, contract);
@@ -587,6 +588,19 @@ public sealed record OperationContract(
     }
 
     /// <summary>
+    /// Archiving a campaign cancels its open work. Only work that runs past a pause may run past an archive too: a stop
+    /// whose not running is the harm, such as a search that goes on spending until it is stopped.
+    /// </summary>
+    private static void RefuseUnarchivableWork(string source, OperationContract contract)
+    {
+        if (contract.Dispatch.InArchivedCampaign == InArchivedCampaign.Runs && contract.Dispatch.InPausedCampaign != InPausedCampaign.Runs)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `dispatch.in_archived_campaign` is `runs`, but `dispatch.in_paused_campaign` is not; only work that runs while its campaign is paused runs after it is archived.");
+        }
+    }
+
+    /// <summary>
     /// A provider block is the provider refusing to let work reach a person, so an operation that reaches one —
     /// <c>act</c>, read as its dangerous value — waits behind it. Nothing is refused the other way: a control may wait.
     /// </summary>
@@ -640,6 +654,13 @@ public sealed record OperationContract(
         {
             ["waits"] = InPausedCampaign.Waits,
             ["runs"] = InPausedCampaign.Runs,
+        };
+
+    private static readonly IReadOnlyDictionary<string, InArchivedCampaign> InArchivedCampaignNames =
+        new Dictionary<string, InArchivedCampaign>(StringComparer.Ordinal)
+        {
+            ["cancelled"] = InArchivedCampaign.Cancelled,
+            ["runs"] = InArchivedCampaign.Runs,
         };
 
     private static readonly IReadOnlyDictionary<string, UnderProviderBlock> UnderProviderBlockNames =
@@ -699,6 +720,7 @@ public sealed record OperationContract(
         var reader = outer.Into("dispatch", dispatch);
         var value = new DispatchRule(
             reader.Enumeration("in_paused_campaign", InPausedCampaignNames),
+            reader.Enumeration("in_archived_campaign", InArchivedCampaignNames),
             reader.Enumeration("under_provider_block", UnderProviderBlockNames));
         reader.RefuseAnythingElse();
         return value;
@@ -1071,7 +1093,20 @@ public enum ProviderContact
 }
 
 /// <summary>How the dispatcher treats this operation's work beyond what every work item shares.</summary>
-public sealed record DispatchRule(InPausedCampaign InPausedCampaign, UnderProviderBlock UnderProviderBlock);
+public sealed record DispatchRule(InPausedCampaign InPausedCampaign, InArchivedCampaign InArchivedCampaign, UnderProviderBlock UnderProviderBlock);
+
+/// <summary>What archiving its campaign does to a work item naming this operation.</summary>
+public enum InArchivedCampaign
+{
+    /// <summary>The archive cancels it, as it cancels all open work, and nothing of the campaign is claimed again.</summary>
+    Cancelled,
+
+    /// <summary>
+    /// It runs: it is created, kept and claimed in an archived campaign, since its not running is the harm — a search's
+    /// stop, without which the search goes on spending.
+    /// </summary>
+    Runs,
+}
 
 /// <summary>Whether a work item naming this operation is claimed while its campaign is paused.</summary>
 public enum InPausedCampaign

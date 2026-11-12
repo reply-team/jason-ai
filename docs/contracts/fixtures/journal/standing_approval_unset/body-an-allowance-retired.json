@@ -1,0 +1,19 @@
+{
+  "kind": "standing_approval_unset",
+  "version": 1,
+  "case": "a person approves a search under another audience, which retires the allowance for audience 2",
+  "body": {
+    "key": "audience.search",
+    "old": {
+      "category": null,
+      "operations": ["audience.search"],
+      "expires_at": "2026-12-01T00:00:00.000Z",
+      "max_releases": null,
+      "audience": { "id": "aud_01JC0000000000000000000002", "number": 2 },
+      "max_people": 500,
+      "max_per_search": 100
+    },
+    "new": null
+  },
+  "expect": "valid"
+}

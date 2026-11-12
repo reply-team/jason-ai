@@ -30,7 +30,8 @@ public sealed class JournalWriter(TimeProvider clock)
         WorkItem? workItem = null,
         Attempt? attempt = null,
         Contact? contact = null,
-        int? contactId = null)
+        int? contactId = null,
+        int? campaignId = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(actor);
@@ -46,7 +47,7 @@ public sealed class JournalWriter(TimeProvider clock)
 
             // With a campaign in hand the navigation carries the key, including for a campaign that is itself
             // still being inserted; without one the item's foreign key is the denormalized answer.
-            CampaignId = campaign is null ? workItem?.CampaignId : null,
+            CampaignId = campaign is null ? campaignId ?? workItem?.CampaignId : null,
             Campaign = campaign,
             WorkItemId = workItem?.PublicId,
             AttemptId = attempt?.PublicId,

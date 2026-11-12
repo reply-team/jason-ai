@@ -6,16 +6,18 @@ namespace Jason.ReplyCliStub;
 /// The reply-cli release this stand-in answers as, which is the oldest one the official package accepts: the first that
 /// names the moment a direct send goes out after and the key it is made under, answers the send's reference, and reads a
 /// send back by it, with <c>direct-send get</c>, and the first that reads Reply's change feed, with <c>inbox changes</c>,
-/// all from 0.17.0; the first that reads <c>REPLY_CLIENT</c>, the name a call says it came through, from 0.17.2; and the
+/// all from 0.17.0; the first that reads <c>REPLY_CLIENT</c>, the name a call says it came through, from 0.17.2; the
 /// first that reads and cancels a LinkedIn send Reply holds for later by its <c>linkedin-scheduled-</c> reference, names a
 /// cancel of a send Reply is sending, a cancel Reply could not confirm and a sending schedule that cannot time a send
-/// each by a code of its own, and passes on the moment Reply expects to send one waiting for its schedule, from 0.18.0.
-/// It is named once, here; the tests hold the package's manifest, its README and its changelog to it, so moving the
-/// release is this line and the sentences they read.
+/// each by a code of its own, and passes on the moment Reply expects to send one waiting for its schedule, from 0.18.0;
+/// and the first with Live Data and the contact lists a search fills — <c>live-data preview|start|get|list|delete|
+/// filter-values</c> and <c>contact-list create|get|delete|contacts</c> — from 0.20.0. It is named once, here; the tests
+/// hold the package's manifest, its README and its changelog to it, so moving the release is this line and the sentences
+/// they read.
 /// </summary>
 public static partial class ReplyCliRelease
 {
-    public const string Version = "0.18.0";
+    public const string Version = "0.20.0";
 
     /// <summary>
     /// The User-Agent this release sends to Reply: <c>reply-cli/&lt;version&gt;</c>, with the program named by

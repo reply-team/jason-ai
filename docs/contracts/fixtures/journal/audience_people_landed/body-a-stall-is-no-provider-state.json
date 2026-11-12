@@ -1,0 +1,7 @@
+{
+  "kind": "audience_people_landed",
+  "version": 1,
+  "case": "a page is the provider's answer, and a stall is never the provider's word",
+  "body": { "key": "wi_01JC0000000000000000000002", "old": null, "new": { "audience": "aud_01JC0000000000000000000001", "plugin": "fake-provider", "state": "stalled", "people": 1, "landed": 0, "created": 0, "already_member": 0, "skipped": 1, "contact_ids": [], "created_contact_ids": [] } },
+  "expect": { "invalid": [{ "pointer": "/new/state", "reason": "enum" }] }
+}

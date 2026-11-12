@@ -1,0 +1,25 @@
+{
+  "operation": "audience.preview",
+  "case": "definition-invalid",
+  "request": {
+    "campaign_id": "cmp_1",
+    "definition": {
+      "industries": "Software"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "definition_invalid",
+      "message": "The definition composed for 'audience.preview' does not satisfy the schema 'stand-in-search' declares for an audience's definition.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "/definition/industries",
+          "code": "type",
+          "message": "Expected array here, and this is string."
+        }
+      ]
+    }
+  }
+}

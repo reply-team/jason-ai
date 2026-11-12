@@ -1,0 +1,26 @@
+{
+  "operation": "campaign.summary",
+  "case": "audience-two-campaigns",
+  "request": {
+    "campaign_ids": [
+      "cmp_1",
+      "cmp_2"
+    ],
+    "audience": 1
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: audience: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "audience",
+          "code": "invalid",
+          "message": "audience is one campaign's audience: name that campaign, and no other."
+        }
+      ]
+    }
+  }
+}

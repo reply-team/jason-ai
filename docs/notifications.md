@@ -14,7 +14,7 @@ Six things, and only these:
 - **a question a role raised** — an AI role that could not answer something itself and asked
   ([campaign-manager.md](campaign-manager.md));
 - **a protective action that failed** — work the catalogue runs even in a paused campaign, recording an opt-out,
-  pausing a campaign or taking back a send, that ended failed or expired, in a campaign of any status. A paused campaign's manager is not
+  pausing a campaign, taking back a send or stopping a search, that ended failed or expired, in a campaign of any status. A paused campaign's manager is not
   summoned ([campaign-manager.md](campaign-manager.md)), so a pointer is how such a failure reaches a person;
 - **an account whose events were not read** — a span older than the 30 days a read of an account's events reaches back,
   said once as an `events_gap_observed` line ([events.md](events.md) §5). It concerns no campaign, so no manager is
