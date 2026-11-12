@@ -23,6 +23,11 @@ interface Rig {
     outcomes: NamingOutcome[];
     again(): Chat;
     turn(chatId: string, text: string, options: unknown): Promise<ChatEvent[]>;
+    /**
+     * A turn held by its host after the host has spoken: `act` runs once the page has heard it, while the turn is certainly
+     * still running, then the turn goes on through `after` and its events are returned. No clock decides the order.
+     */
+    during(chatId: string, text: string, options: unknown, after: unknown[], act: () => void | Promise<void>): Promise<ChatEvent[]>;
     /** Every naming run started, by its host. */
     namings(): Recorded[];
     jason(): string[];
@@ -39,6 +44,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: Partia
     const events = new Map<string, ChatEvent[]>();
     const outcomes: NamingOutcome[] = [];
     const chats: Chat[] = [];
+    let gates = 0;
     const waiters: { chatId: string; take: (event: ChatEvent) => boolean; resolve: () => void }[] = [];
     const make = () => {
         const chat = new Chat({
@@ -85,6 +91,19 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: Partia
             await chat.send(chatId, text, sent);
             await done;
             return (events.get(chatId) ?? []).slice(from);
+        },
+        async during(chatId, text, sent, after, act) {
+            const gate = join(b.root, `gate-${++gates}`);
+            b.env.STUB_HOST_PLAN = JSON.stringify([{ hold: gate }, ...after]);
+            const heard = new Promise<void>((resolve) => waiters.push({ chatId, take: (event) => event.kind === 'text', resolve }));
+            const turn = this.turn(chatId, text, sent);
+            await heard;
+            try {
+                await act();
+            } finally {
+                writeFileSync(gate, '');
+            }
+            return turn;
         },
         namings: () => b.record().filter((each) => each.name.endsWith('-naming')),
         jason: () => b.record().filter((each) => each.name === 'jason').map((each) => each.args.join(' ')),
@@ -191,12 +210,10 @@ test('a campaign conversation a person renamed keeps that name across its turns,
 
 test('a set-up chat a person renamed keeps that name when its turn hands it over to a campaign, and when the person picks one', async (t) => {
     const r = rig(t);
-    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ sleep: 400 }, { campaign: { id: 'cmp_ONE', name: 'One' } }]);
     const setup = await r.chat.create();
-    const done = r.turn(setup.id, 'Make one', { host: 'claude' });
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    r.chat.rename(setup.id, 'Named while it ran');
-    const said = await done;
+    const said = await r.during(setup.id, 'Make one', { host: 'claude' }, [{ campaign: { id: 'cmp_ONE', name: 'One' } }], () => {
+        r.chat.rename(setup.id, 'Named while it ran');
+    });
     assert.deepEqual(said.filter((event) => event.kind === 'attached'), [{ kind: 'attached', campaignId: 'cmp_ONE', title: 'Named while it ran' }]);
     assert.equal(titleOf(r, setup.id), 'Named while it ran');
     assert.equal(keptOf(r, setup.id)?.campaign_id, 'cmp_ONE');
@@ -252,13 +269,11 @@ test('the naming run offers Haiku no effort below the version that makes it take
 test('a Claude Code that fell below the floor after the turn runs no naming run', async (t) => {
     const version = versionFile(t, '2.1.300');
     const r = rig(t, {}, {}, { STUB_CLAUDE_VERSION_FILE: version });
-    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ sleep: 300 }]);
     naming(r, { say: 'Dentists in Ohio' });
     const setup = await r.chat.create();
-    const done = r.turn(setup.id, 'Help me reach dentists', { host: 'claude' });
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    writeFileSync(version, JSON.stringify({ stdout: '2.1.100 (Claude Code)\n' }));
-    await done;
+    await r.during(setup.id, 'Help me reach dentists', { host: 'claude' }, [], () => {
+        writeFileSync(version, JSON.stringify({ stdout: '2.1.100 (Claude Code)\n' }));
+    });
     await r.chat.idle();
     assert.deepEqual(r.namings(), []);
     assert.deepEqual(r.outcomes, ['held']);
@@ -297,12 +312,10 @@ test('no naming run for a chat a person named, a turn that failed or was stopped
     const r = rig(t);
     naming(r, { say: 'Dentist outreach plan' });
     // Named by the person while the first turn ran.
-    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ sleep: 300 }]);
     const named = await r.chat.create();
-    const running = r.turn(named.id, 'Help me', { host: 'claude' });
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    r.chat.rename(named.id, 'Mine');
-    await running;
+    await r.during(named.id, 'Help me', { host: 'claude' }, [], () => {
+        r.chat.rename(named.id, 'Mine');
+    });
     // A first turn that failed, then a second that ended well: still no run, since it is no longer the first.
     r.b.env.STUB_HOST_PLAN = JSON.stringify([{ end: 'error', text: 'no' }]);
     const failed = await r.chat.create();
@@ -310,12 +323,10 @@ test('no naming run for a chat a person named, a turn that failed or was stopped
     r.b.env.STUB_HOST_PLAN = '[]';
     await r.turn(failed.id, 'Again', { host: 'claude' });
     // A stopped first turn.
-    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ sleep: 2000 }]);
     const stopped = await r.chat.create();
-    const stopping = r.turn(stopped.id, 'Help me', { host: 'claude' });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    r.chat.stop(stopped.id);
-    await stopping;
+    await r.during(stopped.id, 'Help me', { host: 'claude' }, [], () => {
+        r.chat.stop(stopped.id);
+    });
     // A first turn that handed the chat over to the campaign it made.
     r.b.env.STUB_HOST_PLAN = JSON.stringify([{ campaign: { id: 'cmp_ONE', name: 'One' } }]);
     const handed = await r.chat.create();
@@ -513,30 +524,45 @@ test('a rename, a removal or a hand-over while the naming run is out stands: the
     const log = join(r.b.root, 'naming.log');
     r.b.env.STUB_NAMING_LOG = log;
     const started = (count: number) => () => existsSync(log) && readFileSync(log, 'utf8').split('\n').filter((line) => line.startsWith('start')).length >= count;
-    naming(r, { say: 'Dentist outreach plan', sleep: 1500 });
+    // Each naming run is held at a gate of its own until the test has done what it tests, so no clock decides the order.
+    let gates = 0;
+    const held = () => {
+        const gate = join(r.b.root, `naming-gate-${++gates}`);
+        naming(r, { say: 'Dentist outreach plan', hold: gate });
+        return () => writeFileSync(gate, '');
+    };
 
+    let release = held();
     const renamed = await r.chat.create();
     await r.turn(renamed.id, 'First chat', { host: 'claude' });
     await until(started(1));
+    assert.ok(started(1)(), 'the naming run started');
     r.chat.rename(renamed.id, 'Mine while it ran');
+    release();
     await r.chat.idle();
     assert.equal(titleOf(r, renamed.id), 'Mine while it ran');
     assert.equal(r.outcomes.at(-1), 'overtaken');
 
+    release = held();
     const removed = await r.chat.create();
     await r.turn(removed.id, 'Second chat', { host: 'claude' });
     await until(started(2));
+    assert.ok(started(2)(), 'the naming run started');
     r.chat.remove(removed.id);
+    release();
     await r.chat.idle();
     assert.equal(r.outcomes.at(-1), 'overtaken');
     assert.equal(r.chat.list().some((each) => each.id === removed.id), false);
     assert.equal(existsSync(join(r.b.paths.conversations, `${removed.id}.json`)), false, 'no record written again');
 
+    release = held();
     const handed = await r.chat.create();
     await r.turn(handed.id, 'Third chat', { host: 'claude' });
     await until(started(3));
+    assert.ok(started(3)(), 'the naming run started');
     r.b.env.STUB_HOST_PLAN = JSON.stringify([{ campaign: { id: 'cmp_ONE', name: 'One' } }]);
     await r.turn(handed.id, 'Make it', { host: 'claude' });
+    release();
     await r.chat.idle();
     assert.equal(r.outcomes.at(-1), 'overtaken');
     assert.equal(titleOf(r, handed.id), 'One');
@@ -545,12 +571,22 @@ test('a rename, a removal or a hand-over while the naming run is out stands: the
 
 test('a turn sent while the naming run is out is neither held for it nor disturbed by the late name', async (t) => {
     const r = rig(t);
-    naming(r, { say: 'Dentist outreach plan', sleep: 4000 });
+    const gate = join(r.b.root, 'naming-gate');
+    naming(r, { say: 'Dentist outreach plan', hold: gate });
     const setup = await r.chat.create();
     await r.turn(setup.id, 'First chat', { host: 'claude' });
-    const sent = Date.now();
-    const said = await r.turn(setup.id, 'And next?', { host: 'claude' });
-    assert.ok(Date.now() - sent < 3500, 'the turn did not wait for the naming run');
+    // The naming run is held at its gate for the whole second turn: a turn that waited for it would never end.
+    let giveUp: NodeJS.Timeout | undefined;
+    const waited = new Promise<never>((_, reject) => {
+        giveUp = setTimeout(() => reject(new Error('the turn waited for the naming run')), 30_000);
+    });
+    let said: ChatEvent[];
+    try {
+        said = await Promise.race([r.turn(setup.id, 'And next?', { host: 'claude' }), waited]);
+    } finally {
+        clearTimeout(giveUp);
+        writeFileSync(gate, '');
+    }
     assert.deepEqual(said.map((event) => event.kind), ['text', 'done']);
     assert.equal(titleOf(r, setup.id), 'First chat', 'not named yet');
     await r.chat.idle();
@@ -581,13 +617,11 @@ test('a keyed Codex naming run has the provider\'s environment as its turn has i
 test('a Claude Code whose version cannot be read after the turn runs no naming run', async (t) => {
     const version = versionFile(t, '2.1.300');
     const r = rig(t, {}, {}, { STUB_CLAUDE_VERSION_FILE: version });
-    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ sleep: 300 }]);
     naming(r, { say: 'Dentists in Ohio' });
     const setup = await r.chat.create();
-    const done = r.turn(setup.id, 'Help me reach dentists', { host: 'claude' });
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    writeFileSync(version, JSON.stringify({ stdout: 'no version here' }));
-    await done;
+    await r.during(setup.id, 'Help me reach dentists', { host: 'claude' }, [], () => {
+        writeFileSync(version, JSON.stringify({ stdout: 'no version here' }));
+    });
     await r.chat.idle();
     assert.deepEqual(r.namings(), []);
     assert.deepEqual(r.outcomes, ['held']);

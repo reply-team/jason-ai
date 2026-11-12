@@ -27,6 +27,7 @@ export const invokeChannels = {
     'chat.rename': 'jason:chat.rename',
     'chat.setMode': 'jason:chat.setMode',
     'chat.feed': 'jason:chat.feed',
+    'links.take': 'jason:links.take',
 } as const;
 
 /** What the desktop sends the page. */
@@ -34,6 +35,7 @@ export const eventChannels = {
     command: 'jason:command',
     'chat.event': 'jason:chat.event',
     'setup.changed': 'jason:setup.changed',
+    'links.open': 'jason:links.open',
 } as const;
 
 export type InvokeMember = keyof typeof invokeChannels;

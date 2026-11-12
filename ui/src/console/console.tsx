@@ -11,7 +11,7 @@ import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
 import { CurrentPage } from '../app';
-import type { DesktopCommand, JasonDesktop } from '../platform/desktop';
+import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { registry } from '../platform/slots';
 import { resolvedTheme } from '../platform/theme';
@@ -21,10 +21,11 @@ import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
 import { listen } from './actions';
-import { askFeed, catchUpFeed, ChatPanel, handLine, reloadConversations, startChat } from './chat';
+import { askFeed, catchUpFeed, ChatPanel, handLine, openConversation, reloadConversations, startChat } from './chat';
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
+import { linkPlace } from './links';
 import * as needs from './needs';
 import { Painted } from './painted';
 import { sideView } from './side';
@@ -172,7 +173,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         void campaigns.reload();
         void connect.reload();
         void reloadConversations();
-        void askFeed();
+        // The Feed's id comes with the desktop's first answer, which a link to the Feed waits for.
+        const feedAsked = askFeed();
         let pending: ReturnType<typeof setTimeout> | null = null;
         const journal =
             stream ??
@@ -187,7 +189,26 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     }
                 },
             );
+        // A link opens the panel or the screen it names, and does nothing else (`links.ts`).
+        const opened = (link: DesktopLink) => {
+            const place = linkPlace(link);
+            if (place === null) return;
+            if ('feed' in place) {
+                void feedAsked
+                    .then(() => (feedId.value === null ? null : openConversation(feedId.value)))
+                    .then((held) => {
+                        if (held === null) return;
+                        feedUnseen.value = false;
+                        dock.showChat(held);
+                    });
+                return;
+            }
+            if ('route' in place) return dock.page(place.route);
+            dock.show(place.panel);
+            if (place.panel === 'needs' && place.open) void needs.attention.open(api, place.open.kind, place.open.id);
+        };
         const stops = [
+            desktop.links.onOpen(opened),
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
                 // A line the Feed took while it is not in front marks it in the sidebar; nothing else happens.
@@ -225,6 +246,12 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             }),
         ];
         journal.start();
+        void desktop.links
+            .take()
+            .then((link) => {
+                if (link !== null) opened(link);
+            })
+            .catch(() => undefined);
         const tick = setInterval(() => {
             clock.value = Date.now();
         }, 30_000);

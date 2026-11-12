@@ -72,5 +72,5 @@ test('whether the installation is new is decided in the main module before Elect
     const decided = main.indexOf('const installationWasNew = isNewInstallation(');
     const firstKeep = main.indexOf('    keepElectronUnderData();');
     assert.ok(decided > 0 && firstKeep > 0 && decided < firstKeep);
-    assert.ok(main.includes('run(installationWasNew)'));
+    assert.ok(main.includes('run(links, installationWasNew)'));
 });

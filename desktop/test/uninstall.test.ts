@@ -119,7 +119,7 @@ test('the start that stops the carried runtime exits 0 when none of its own runs
     // The packaged executable makes this start without a window, a lock or a dialog, and a rejection anywhere exits 2.
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
-    const branch = main.slice(main.indexOf('const uninstalling = uninstallStart('), main.indexOf('} else if (!app.requestSingleInstanceLock()) {'));
+    const branch = main.slice(main.indexOf('const uninstalling = uninstallStart('), main.indexOf('} else if (!app.requestSingleInstanceLock('));
     assert.ok(branch.includes('} else if (stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform })) {'));
     assert.ok(branch.includes('void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));'));
     const from = start.indexOf('export async function runStopRuntime(');
@@ -449,4 +449,38 @@ test('the logon registration is read from what jason runtime autostart status sa
     assert.equal(await autostart.registration(), null);
     assert.equal(await autostart.registration(), null);
     assert.deepEqual(asked, Array(4).fill(['runtime', 'autostart', 'status']));
+});
+
+test('the jason-desktop link registration is taken off when it names this application, left when it does not, and named when it cannot be', async (t) => {
+    const ours = bench(t);
+    let registered = true;
+    const removals: string[] = [];
+    ours.deps.link = { registered: () => registered, remove: () => (removals.push('remove'), (registered = false), true) };
+    const taken = await uninstall(ours.deps);
+    assert.ok(taken.removed.includes('The registration of jason-desktop links to this application'));
+    assert.deepEqual(removals, ['remove']);
+    assert.deepEqual(taken.steps.find((each) => each.step === 'link'), { step: 'link', outcome: 'removed' });
+
+    const another = bench(t);
+    another.deps.link = { registered: () => false, remove: () => assert.fail('a registration that is not this application\'s is never removed') };
+    const left = await uninstall(another.deps);
+    assert.ok(left.untouched.includes('jason-desktop links were not registered to this application'));
+    assert.deepEqual(left.steps.find((each) => each.step === 'link'), { step: 'link', outcome: 'was_off' });
+
+    const stuck = bench(t);
+    stuck.deps.link = { registered: () => true, remove: () => false };
+    const failed = await uninstall(stuck.deps);
+    assert.ok(failed.failed.some((line) => line.includes(String.raw`deleting HKEY_CURRENT_USER\Software\Classes\jason-desktop takes it off`)), failed.failed.join('\n'));
+    assert.deepEqual(failed.steps.find((each) => each.step === 'link'), { step: 'link', outcome: 'failed' });
+    assert.equal(uninstallExit(failed), 0, 'a step that fails is named, and the uninstall still goes on');
+
+    // Elsewhere there is no registration of the application's own, and no step.
+    assert.equal((await uninstall(bench(t).deps)).steps.some((each) => each.step === 'link'), false);
+});
+
+test('the uninstall start reads and takes off the registration as the start wrote it, with "--" before the address', () => {
+    const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
+    assert.ok(start.includes('const written = linkRegistration(process.platform, app.isPackaged, process.execPath);'));
+    assert.ok(start.includes('registered: () => app.isDefaultProtocolClient(written.scheme, written.path, written.args),'));
+    assert.ok(start.includes('remove: () => app.removeAsDefaultProtocolClient(written.scheme, written.path, written.args),'));
 });

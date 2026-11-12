@@ -482,9 +482,14 @@ test('list and open say whether a conversation\'s turn runs, so a page loaded ag
     plan(r, [{ wait: join(r.b.root, 'host.pid') }]);
     const chat = await r.chat.create('cmp_01ABC');
     assert.equal(r.chat.open(chat.id).running, false);
+    const hostPid = join(r.b.root, 'host.pid');
     await r.chat.send(chat.id, 'Wait', { host: 'claude' });
     assert.equal(r.chat.open(chat.id).running, true);
     assert.deepEqual(r.chat.list().map((each) => [each.id, each.running]), [[chat.id, true]]);
+    // The host writes that file once it is up: a stop before it would end a turn that had not begun, which is another case.
+    const deadline = Date.now() + 20_000;
+    while (!existsSync(hostPid) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.ok(existsSync(hostPid), 'the host started');
     const done = r.until(chat.id, (event) => event.kind === 'done');
     r.chat.stop(chat.id);
     await done;
