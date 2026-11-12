@@ -8,11 +8,14 @@ import { cp, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { deployReplySkills } from './reply-skills.ts';
+import { AgentFolderUnowned } from './chat-agent-folder.ts';
 import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
+import { codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
 import type { DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
@@ -81,6 +84,12 @@ export interface HostState {
      * otherwise, and for a host that is not Claude Code or a key provider on it.
      */
     belowFloor: string | null;
+    /**
+     * Why Full access cannot be chosen for a chat on this host, in the desktop's words: Codex has none, and a Claude Code
+     * older than the oldest version a Full access turn runs on, or whose version could not be read, says so
+     * (`fullAccessSentence`). Null where it can be chosen, and for a host that does not drive the chat.
+     */
+    fullAccess: string | null;
     /**
      * The models the chat's box offers on this host, each with the effort levels it takes: Claude Code's aliases at the
      * version read now, the list kept of what Codex offered, or a key provider's table (`offeredModels`).
@@ -178,6 +187,10 @@ export interface SetupDeps {
     runtimeIsOurs?(): boolean;
     settings(): DesktopSettings;
     clock?: () => number;
+    /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
+    fullAccessOffered?: boolean;
+    /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
+    ownChatFolder?: (chat: string, records: string) => void;
     /**
      * The person's yes, asked by the main process in a native box before the mailbox page is asked of Reply; absent, the
      * answer is no.
@@ -317,10 +330,13 @@ export class Setup {
         return programInstalls[program]?.npmPackage && this.#deps.programs.find('npm') !== null ? program : null;
     }
 
-    /** Claude Code's version, read at each listing and never remembered, and the sentence when it is below the floor. */
-    async #claude(): Promise<{ version: string | null; belowFloor: string | null }> {
+    /**
+     * Claude Code's version, read at each listing and never remembered, and the sentences when it is below the floor and
+     * below the floor of Full access.
+     */
+    async #claude(): Promise<{ version: string | null; belowFloor: string | null; fullAccess: string | null }> {
         const version = printedVersion(await this.#run('claude', '--version', ['--version'], { timeoutMs: versionLimitMs }));
-        return { version, belowFloor: floorSentence(version) };
+        return { version, belowFloor: floorSentence(version), fullAccess: fullAccessSentence(version) };
     }
 
     async status(): Promise<SetupState> {
@@ -332,6 +348,11 @@ export class Setup {
             const { models, typed } = offeredModels(id, kept, claude?.version ?? null);
             return { models, typedModel: typed, modelsUnread: unreadSentence(label, this.#deps.models?.unread(id) ?? null) };
         };
+        // Codex has no Full access; Claude Code has it from its floor of Full access. A Claude Code not found offers nothing yet.
+        // While this version does not offer it, every host that drives the chat says so.
+        const offeredHere = this.#deps.fullAccessOffered ?? fullAccessOffered;
+        const fullAccessOn = (program: string, drives: boolean) =>
+            !drives ? null : !offeredHere ? fullAccessNotYet : program === 'codex' ? codexFullAccess : program === 'claude' ? (claude === null ? null : claude.fullAccess) : null;
         const programHosts: HostState[] = [];
         for (const host of hosts) {
             const found = programs.find(host.program) !== null;
@@ -345,6 +366,7 @@ export class Setup {
                 drivesChat: host.drivesChat,
                 install: found ? null : this.#installable(host.program),
                 belowFloor: own?.belowFloor ?? null,
+                fullAccess: fullAccessOn(host.program, host.drivesChat),
                 ...offered(host.id, host.label),
             });
         }
@@ -357,6 +379,7 @@ export class Setup {
             drivesChat: hosts.find((host) => host.program === provider.program)?.drivesChat ?? false,
             install: null,
             belowFloor: provider.program === 'claude' ? (claude?.belowFloor ?? null) : null,
+            fullAccess: fullAccessOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             ...offered(provider.id, provider.label),
         }));
         // Shown from what is kept; Codex is asked again in the background where it is on the PATH or its key is stored.
@@ -600,21 +623,13 @@ export class Setup {
      * are left out.
      */
     async #deployReplySkills(): Promise<void> {
-        const targets = [join(this.#deps.paths.chat, '.claude', 'skills'), join(this.#deps.paths.chat, '.agents', 'skills')];
-        const place = await mkdtemp(join(tmpdir(), 'jason-reply-skills-'));
+        // The routine the start uses too (`reply-skills.ts`); what it copies is recorded outside the chat folder. A chat
+        // folder that cannot be put right is said by its code, and the sign-in's own result stands.
         try {
-            const answer = await this.#run('reply', 'skills install', ['skills', 'install', 'adapter', '--project', '--agent', 'codex'], { cwd: place, timeoutMs: installLimit });
-            if (answer.exit !== 0) return;
-            const source = join(place, '.agents', 'skills');
-            for (const name of await readdir(source).catch(() => [] as string[])) {
-                if (!name.startsWith('reply-')) continue;
-                for (const target of targets) {
-                    await rm(join(target, name), { recursive: true, force: true });
-                    await cp(join(source, name), join(target, name), { recursive: true });
-                }
-            }
-        } finally {
-            await rm(place, { recursive: true, force: true });
+            await deployReplySkills((verb, args, options) => this.#run('reply', verb, args, options), this.#deps.paths, this.#deps.ownChatFolder);
+        } catch (error) {
+            if (!(error instanceof AgentFolderUnowned)) throw error;
+            this.#deps.log.warn('agent_folder_unowned', { Code: error.code });
         }
     }
 

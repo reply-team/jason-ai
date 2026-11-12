@@ -6,6 +6,7 @@
 // sight as not sent. Two texts are never merged, and neither is dropped.
 import type {
     DesktopChatEvent,
+    DesktopChatMode,
     DesktopChatOptions,
     DesktopConversation,
     DesktopConversationRecord,
@@ -86,6 +87,11 @@ export interface Chat {
     removing: boolean;
     /** The name typed while the person renames the conversation; null when no rename is open. */
     renaming: string | null;
+    /**
+     * The conversation's access mode as the desktop holds it: from its record, from `chat.setMode`'s answer and from
+     * `mode` events, never from what the page asked for. The line that says Full access is on is drawn from this.
+     */
+    mode: DesktopChatMode;
 }
 
 /** How much of a set-up chat's first message names it, as the desktop names it. */
@@ -124,6 +130,7 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         dropped: 0,
         removing: false,
         renaming: null,
+        mode: 'ask_first',
     };
 }
 
@@ -169,7 +176,37 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         dropped: record.dropped,
         // A turn of it runs: a page loaded again shows it running, with Stop, and its events follow.
         running: record.running,
+        // A desktop of an earlier version keeps no mode: its chats run as Ask first.
+        mode: record.mode ?? 'ask_first',
     };
+}
+
+/** What the line under the composer says while the desktop holds the chat in Full access. */
+export const fullAccessLine = 'Full access: the agent acts on this computer without asking you.';
+
+/** Why Full access cannot be chosen on a host a desktop of an earlier version listed, which offers no modes. */
+export const olderDesktop = 'This version of Jason Desktop does not offer Full access.';
+
+/** The modes as the menu beside the composer names them, in its order. */
+const modeWords: Readonly<Record<DesktopChatMode, string>> = {
+    ask_first: 'Ask first',
+    plan_only: 'Plan only',
+    full_access: 'Full access',
+};
+
+/**
+ * The menu's choices on the host the next turn runs on: each mode, and why it cannot be chosen there, or null. Full
+ * access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for it; with no host, as on Codex.
+ */
+export function modeChoices(
+    host: DesktopHost | null,
+): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
+    const full = host === null ? 'Full access runs on Claude Code only.' : host.fullAccess;
+    return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
+        mode,
+        label: modeWords[mode],
+        disabled: mode === 'full_access' ? full : null,
+    }));
 }
 
 /**
@@ -178,14 +215,21 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
  */
 export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
     return hosts.map((host) => {
-        const given = host as Partial<Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread'>>;
-        return Array.isArray(given.models) && typeof given.typedModel === 'boolean' && given.modelsUnread !== undefined
+        const given = host as Partial<Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess'>>;
+        return Array.isArray(given.models) &&
+            typeof given.typedModel === 'boolean' &&
+            given.modelsUnread !== undefined &&
+            given.fullAccess !== undefined
             ? host
             : {
                   ...host,
                   models: Array.isArray(given.models) ? given.models : [],
                   typedModel: given.typedModel === true,
                   modelsUnread: typeof given.modelsUnread === 'string' ? given.modelsUnread : null,
+                  fullAccess:
+                      typeof given.fullAccess === 'string' || given.fullAccess === null
+                          ? given.fullAccess
+                          : olderDesktop,
               };
     });
 }
@@ -333,6 +377,8 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             return { ...chat, entries: [...chat.entries, { kind: 'pick', campaignIds: [...event.campaignIds] }] };
         case 'renamed':
             return { ...chat, title: event.title };
+        case 'mode':
+            return { ...chat, mode: event.mode };
         // A line never starts a turn: it goes into the thread, and nothing else of the chat changes.
         case 'line': {
             const last = chat.entries.at(-1);

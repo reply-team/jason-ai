@@ -19,13 +19,14 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             stop: (...args) => void calls.push(['stop', ...args]),
             answer: (...args) => void calls.push(['answer', ...args]),
             list: (...args) => (calls.push(['list', ...args]), []),
-            open: (...args) => (calls.push(['open', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false, entries: [], dropped: 0, chosen: null }),
-            create: async (...args) => (calls.push(['create', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false }),
+            open: (...args) => (calls.push(['open', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false, mode: 'ask_first', entries: [], dropped: 0, chosen: null }),
+            create: async (...args) => (calls.push(['create', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false, mode: 'ask_first' }),
             remove: (...args) => void calls.push(['remove', ...args]),
             restart: (...args) => void calls.push(['restart', ...args]),
-            attach: async (...args) => (calls.push(['attach', ...args]), { id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '', running: false }),
-            rename: (...args) => (calls.push(['rename', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false }),
-            feed: (...args) => (calls.push(['feed', ...args]), { id: 'conv_2', campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false }),
+            attach: async (...args) => (calls.push(['attach', ...args]), { id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '', running: false, mode: 'ask_first' }),
+            rename: (...args) => (calls.push(['rename', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false, mode: 'ask_first' }),
+            setMode: async (...args) => (calls.push(['setMode', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false, mode: 'plan_only' }),
+            feed: (...args) => (calls.push(['feed', ...args]), { id: 'conv_2', campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false, mode: 'ask_first' }),
         },
         () => origin,
         (channel, why) => refusals.push(`${channel} ${why}`),
@@ -46,6 +47,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
         'jason:chat.rename',
         'jason:chat.restart',
         'jason:chat.send',
+        'jason:chat.setMode',
         'jason:chat.stop',
     ]);
     const page = { senderFrame: { url: `${origin}/ui/#/chat`, parent: null } };
@@ -59,6 +61,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
     listeners.get('jason:chat.restart')?.(page, 'conv_1');
     await listeners.get('jason:chat.attach')?.(page, 'conv_1', 'cmp_1');
     await listeners.get('jason:chat.rename')?.(page, 'conv_1', 'Mine');
+    await listeners.get('jason:chat.setMode')?.(page, 'conv_1', 'plan_only', 'claude');
     await listeners.get('jason:chat.feed')?.(page, [], { catchUp: true });
     assert.deepEqual(calls, [
         ['send', 'c1', 'hello', { host: 'claude' }],
@@ -71,6 +74,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
         ['restart', 'conv_1'],
         ['attach', 'conv_1', 'cmp_1'],
         ['rename', 'conv_1', 'Mine'],
+        ['setMode', 'conv_1', 'plan_only', 'claude'],
         ['feed', [], { catchUp: true }],
     ]);
 });
@@ -82,7 +86,7 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
         assert.throws(() => listeners.get(channel)?.({ senderFrame: { url: `${origin}/ui/`, parent: {} } }, 'c1', 'planted words'), RefusedSender);
     }
     assert.deepEqual(calls, []);
-    assert.equal(refusals.length, 22);
+    assert.equal(refusals.length, 24);
     assert.ok(refusals.every((line) => !line.includes('planted')));
 });
 

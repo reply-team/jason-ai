@@ -96,6 +96,14 @@ export interface DesktopChatOptions {
     effort?: DesktopEffort;
 }
 
+/**
+ * A chat's access mode, chosen per conversation from the menu beside the composer. `ask_first`, the default of every new
+ * chat: the agent asks on a card before anything the desktop does not settle itself. `plan_only`: it reads and proposes,
+ * and changes nothing. `full_access`: it acts on this computer without asking; the desktop asks the person to confirm,
+ * each time it is chosen, and holds it for that conversation only until the window closes. Codex has no Full access.
+ */
+export type DesktopChatMode = 'ask_first' | 'plan_only' | 'full_access';
+
 /** A model the chat's box offers on a host: `id` the name the host takes, `label` the words to show, and its efforts. */
 export interface DesktopModel {
     id: string;
@@ -136,6 +144,11 @@ export interface DesktopConversation {
     updatedAt: string;
     /** Whether a turn of it runs now, so a page loaded again shows it running, with Stop. */
     running: boolean;
+    /**
+     * Its mode as the desktop holds it now. The line under the composer that says Full access is on is drawn from this,
+     * from `chat.setMode`'s answer and from `mode` events, never from what the page asked for.
+     */
+    mode: DesktopChatMode;
 }
 
 /**
@@ -211,6 +224,12 @@ export type DesktopChatEvent =
      */
     | { kind: 'renamed'; title: string }
     /**
+     * The conversation's mode changed: a person chose it (`chat.setMode`), or the desktop put the chat back to Ask first,
+     * because its turn ran on Codex, on a Claude Code too old for Full access, or showed a tool the desktop's check never
+     * saw.
+     */
+    | { kind: 'mode'; mode: DesktopChatMode }
+    /**
      * The Feed took a line: at its end, or, when `folded`, in place of its last line, which was of the same kind and
      * campaign. A line never starts a turn.
      */
@@ -244,6 +263,11 @@ export interface DesktopHost {
      * runs no turn on it, and the desktop refuses a turn sent to it whatever the page asked.
      */
     belowFloor: string | null;
+    /**
+     * Why Full access cannot be chosen for a chat on it, in the desktop's words: "Full access runs on Claude Code only."
+     * on Codex, or the version Claude Code needs for it; null where it can be. The menu shows the item disabled with this.
+     */
+    fullAccess: string | null;
     /**
      * The models the chat's box offers on it: Claude Code's aliases, the models Codex offered when last asked (kept by
      * the desktop and asked again at most once a day), or a key provider's own; empty for a host that offers none here.
@@ -440,6 +464,14 @@ export interface JasonDesktop {
          * nothing that shows.
          */
         rename(chatId: string, title: string): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * Chooses a conversation's mode, on `host`, the `DesktopHost.id` the next turn runs on. `full_access` is refused
+         * before anything is asked where it cannot apply (Codex, a host that does not drive the chat, a Claude Code too old
+         * for it), in the desktop's words; otherwise the desktop asks the person to confirm, every time, and their no
+         * answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes before
+         * this answers whenever the mode changed. Refused for a conversation the desktop does not keep.
+         */
+        setMode(chatId: string, mode: DesktopChatMode, host: string): Promise<DesktopConversation | DesktopRefusal>;
         /**
          * The Feed, made on the first ask, with the journal lines the page hands it: each line of a kind the Feed takes,
          * about a campaign, with every id in its shape, and not taken before, goes at its end and is said as a `line`

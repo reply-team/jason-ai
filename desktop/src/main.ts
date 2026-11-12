@@ -14,6 +14,7 @@ import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
+import { fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
@@ -428,6 +429,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
+        // The desktop asks the person itself, every time Full access is chosen: the page cannot answer for them. Only the
+        // first button says yes; Cancel is the default and Escape answers it. With no window there is no one to ask.
+        confirmFullAccess: async () => {
+            const parent = current;
+            if (parent === null) return false;
+            const { response } = await dialog.showMessageBox(parent, fullAccessDialog());
+            return response === 0;
+        },
         ...loggedTurns(log),
     });
     registerChat(ipcMain, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
@@ -459,6 +468,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             cli,
             paths,
             log,
+            programs,
             bundle,
             bundleVersion: version,
             settings,

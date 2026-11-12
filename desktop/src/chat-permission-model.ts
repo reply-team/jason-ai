@@ -111,6 +111,19 @@ const windowsNameTitle = 'Use a path Windows reads as another name';
 const guardTitles: ReadonlySet<string> = new Set([...guardedNames.map((guarded) => guarded.title), jasonFileTitle]);
 const allowedReply = [['auth', 'status'], ['account', 'list']];
 
+/**
+ * The reply commands the chat runs with no card, exactly: `reply auth status` and `reply account list`, each with at most
+ * `--json`, and the account list with at most `--channel email` or `--channel linkedin`; nothing else may follow. The
+ * host's allow rules name the same forms (`claudeAllowedTools`), and any other word, option or value is a card.
+ */
+export const replyNoCardForms: readonly string[] = (() => {
+    const forms = ['reply auth status', 'reply auth status --json', 'reply account list', 'reply account list --json'];
+    for (const channel of ['email', 'linkedin']) {
+        forms.push(`reply account list --channel ${channel}`, `reply account list --channel ${channel} --json`, `reply account list --json --channel ${channel}`);
+    }
+    return forms;
+})();
+
 const dataRefusal = 'That path is the installation\'s own data, outside the chat\'s folder: the chat neither reads nor writes it. Nothing was done.';
 const deviceRefusal = 'That path names a device or a volume, not a file in a folder: the chat neither reads nor writes it. Nothing was done.';
 const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat never writes there. Nothing was done.';
@@ -695,6 +708,10 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
     if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
+    const respelled = respelledRefusal(command, scope);
+    if (respelled !== null) return { verdict: 'deny', message: respelled };
+    const own = chatsOwnPlace(places, scope);
+    if (own !== null) return { verdict: 'deny', message: own };
     if (replyRefused(command, scope)) return { verdict: 'deny', message: replyRefusal };
     // After every refusal and before any card: a card cuts its detail at the limit, so Allow would run what nobody saw.
     // A grant is looked at only for a card, so none allows it either.
@@ -712,15 +729,300 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     // Only the Bash tool's commands are fenced by the host and may be allowed or remembered; any other tool's command is
     // the person's to answer, each time.
     if (tool !== 'Bash') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
-    if (!isCompound(command)) {
-        const tokens = command.trim().split(/\s+/);
-        if (tokens[0] === 'reply' && allowedReply.some((words) => words.every((word, index) => tokens[index + 1] === word))) return allow;
-    }
+    if (!isCompound(command) && replyNoCardForms.includes(command.trim().split(/\s+/).join(' '))) return allow;
     // A command that names a folder holding the data directory may walk it: a card each time, never covered by a grant.
     const data = located(scope.data, scope);
     const prefix = places.some((path) => inside(scope, path, data)) ? null : commandPrefix(command);
     if (prefix === null) return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: `${tool}:${prefix}`, covers: `${prefix} \u2026` };
+}
+
+const contentRefusal = 'That file names a command or an operation that is a person\'s own act or changes the installation, the variable that confines jason, or the installation\'s own data: the chat never writes it. Nothing was written.';
+
+/** The text a writer tool would put in a file: a whole file's content, or each replacement of an edit. */
+function writtenText(tool: string, input: Record<string, unknown>): string[] {
+    const texts: unknown[] = [];
+    if (tool === 'Write') texts.push(input['content']);
+    if (tool === 'Edit') texts.push(input['new_string']);
+    if (tool === 'NotebookEdit') texts.push(input['new_source']);
+    if (tool === 'MultiEdit' && Array.isArray(input['edits'])) for (const edit of input['edits'] as unknown[]) texts.push((edit as { new_string?: unknown } | null)?.new_string);
+    return texts.filter((text): text is string => typeof text === 'string');
+}
+
+/**
+ * Under Full access, where no card is shown, what a writer tool would write is read as a command is read: a file whose
+ * text runs a command of the deny list, names a deny-list operation by its dot, names the confining variable, or names
+ * the installation's data is refused, so a script the agent writes to run later is refused where the attempt shows. What
+ * a program assembles at run time is not seen here. Null for any other tool, and for text that shows none of these.
+ */
+export function writtenRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
+    for (const text of writtenText(tool, input)) {
+        if (namesConfinedVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || jasonIn(text, scope) === 'deny') return contentRefusal;
+        if (respelledRefusal(text, scope) !== null) return contentRefusal;
+    }
+    return null;
+}
+
+/** The body of a Bash `$'...'` string as the shell reads it: its escapes decoded. */
+function ansiC(body: string): string {
+    const simple: Readonly<Record<string, string>> = { n: '\n', t: '\t', r: '\r', '\\': '\\', "'": "'", '"': '"', a: '', b: '', e: '', E: '', f: '', v: '' };
+    return body.replace(/\\(x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{1,4}|U[0-9A-Fa-f]{1,8}|[0-7]{1,3}|.)/g, (_, escape: string) => {
+        if (/^[xuU]/.test(escape)) return String.fromCodePoint(Number.parseInt(escape.slice(1), 16));
+        if (/^[0-7]/.test(escape)) return String.fromCodePoint(Number.parseInt(escape, 8));
+        return simple[escape] ?? escape;
+    });
+}
+
+/** A word's brace expansions, as Bash makes them from `{a,b}`; the word itself when it has none; null past `braceLimit`. */
+const braceLimit = 64;
+function braces(word: string): string[] | null {
+    const group = /\{([^{}]*,[^{}]*)\}/.exec(word);
+    if (group === null) return [word];
+    const before = word.slice(0, group.index);
+    const after = word.slice(group.index + group[0].length);
+    const out: string[] = [];
+    for (const choice of (group[1] ?? '').split(',')) {
+        const each = braces(`${before}${choice}${after}`);
+        if (each === null || out.length + each.length > braceLimit) return null;
+        out.push(...each);
+    }
+    return out;
+}
+
+/** True when a word of the text has more brace expansions than the second look reads (`braceLimit`). */
+function overBraced(text: string): boolean {
+    return text.split(/\s+/).some((word) => braces(word) === null);
+}
+
+const bracesRefusal = 'That command expands into more words than the chat reads, so it cannot tell what would run: the chat never runs it. Write the words out. Nothing was run.';
+
+/**
+ * A text as a shell would most likely run it once it has taken its quoting away: a line continuation joined, an empty
+ * `$''` or `$""` inside a word dropped and a `$'...'` string decoded, each brace group expanded into its words, a
+ * backslash before a character inside a word and every quote removed, and a bracket, a comma or a parenthesis read as a
+ * space. So `appro\ve`, `approv''e`, `appro$''ve`, `$'\x61'pprove`, `appro\` and a new line then `ve`, `{approve,}` and
+ * a list literal (`['jason','approval','approve']`) read as the plain words they run.
+ */
+export function normalised(text: string): string {
+    return readingsOf(text)[0] ?? text;
+}
+
+/**
+ * The readings a refusal is looked for in: the text normalised (`normalised`), and the same with `\n`, `\t` and `\r` read
+ * as the space they stand for in a `printf` or `echo -e` string rather than dropped.
+ */
+function readingsOf(text: string): string[] {
+    const joined = text
+        .replace(/\\\r?\n/g, '')
+        .replace(/\$(['"])\1/g, '')
+        .replace(/\$'((?:[^'\\]|\\[\s\S])*)'/g, (_, body: string) => ansiC(body));
+    const expanded = joined.split(/(\s+)/).map((part) => (/\s/.test(part) ? part : (braces(part) ?? [part]).join(' '))).join('');
+    const rest = (value: string) => value.replace(/\\(?=\S)/g, '').replace(/['"]/g, '').replace(/[[\](),]/g, ' ');
+    return [rest(expanded), rest(expanded.replace(/\\[ntr]/g, ' '))];
+}
+
+/**
+ * The environment cleared around a jason: in one command part that begins with `env`, its option `-i`, `-`,
+ * `--ignore-environment`, `-u` or `--unset`, alone or among other short options; or Bash's `exec -c`; and that same part
+ * names jason. The confining variable goes with the rest without being named.
+ */
+function clearsEnvironment(text: string): boolean {
+    const jasonWord = /(?<![A-Za-z0-9_.-])jason(?![A-Za-z0-9_-])/i;
+    for (const part of text.split(/&&|\|\||[;|&\n\r]/)) {
+        const tokens = part.trim().split(/\s+/).map(unquoted).filter((token) => token !== '');
+        const first = tokens.findIndex((token) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token));
+        const program = (tokens[first] ?? '').split(/[\\/]/).pop()?.toLowerCase().replace(/\.exe$/, '');
+        if (program !== 'env' && program !== 'exec') continue;
+        let clears = false;
+        for (const token of tokens.slice(first + 1)) {
+            if (!token.startsWith('-')) {
+                if (program === 'env' && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) continue;
+                break;
+            }
+            if (program === 'env' && (token === '-' || token === '--ignore-environment' || /^--unset(=|$)/.test(token) || /^-[A-Za-z0-9]*[iu]/.test(token))) clears = true;
+            if (program === 'exec' && /^-[A-Za-z]*c/.test(token)) clears = true;
+        }
+        if (clears && jasonWord.test(normalised(part))) return true;
+    }
+    return false;
+}
+
+/**
+ * The refusals a text earns read a second time, over its normalised form (`normalised`): a deny-list command or an
+ * operation by its dot, the confining variable, the data directory's variable or its spellings; and the environment
+ * cleared around a jason. A hit is refused in every mode, as the plain spelling is: a re-spelled verb is never a card.
+ */
+function respelledRefusal(text: string, scope: ChatScope): string | null {
+    if (clearsEnvironment(text)) return confinedRefusal;
+    // More expansions than are read is never judged on the part that is.
+    if (overBraced(text)) return bracesRefusal;
+    for (const plain of readingsOf(text)) {
+        if (plain === text) continue;
+        if (namesConfinedVariable(plain)) return confinedRefusal;
+        if (namesDataVariable(plain, scope) || namesData(plain, scope)) return dataRefusal;
+        if (jasonIn(plain, scope) === 'deny') return commandRefusal;
+    }
+    return null;
+}
+
+/**
+ * The refusal a command earns when one of its places is the chat's own: its instructions, or its agent settings and
+ * skills, directly in the chat folder. Refused in every mode, as the file tools refuse a write there: a command cannot be
+ * told apart as a read or a write.
+ */
+function chatsOwnPlace(places: readonly string[], scope: ChatScope): string | null {
+    for (const path of places) {
+        const { parts, working } = guardedParts(scope, path);
+        if (working?.chat !== true) continue;
+        const found = guardAt(scope, parts);
+        if (found?.at === 0 && found.guarded.chatsOwn !== undefined) return found.guarded.chatsOwn === 'instructions' ? instructionsRefusal : configurationRefusal;
+    }
+    return null;
+}
+
+/**
+ * What Full access answers when the model cannot rule an act out, or the act would change what an agent loads: refused,
+ * with the way to it. One sentence for every such act.
+ */
+export const heldSentence = 'Full access does not run this, because Jason cannot read plainly what it would do or it would change what an agent loads. Switch this chat to Ask first to be asked about it. Nothing was run.';
+
+/** A Full access judgement: refused, runs with no question, or held (refused with `heldSentence`). */
+export type FullAccessJudgement = { outcome: 'refused'; message: string } | { outcome: 'runs' } | { outcome: 'held'; message: string };
+
+/** The cards a person would read plainly: in Full access these run with no question. */
+const plainCards: ReadonlySet<string> = new Set([
+    'Run a command',
+    'Change a file outside the chat\'s folders',
+    'Read a file outside the chat\'s folders',
+    ...Object.values(walkTitles),
+    'Open a web page',
+]);
+
+/**
+ * The tools a turn runs with no question in every mode (the host's allowed tools that run no command and touch no file):
+ * the skills, web search, subagents and the task list. Held to `claudeAllowedTools` by a test.
+ */
+export const toolsThatRunNothing: ReadonlySet<string> = new Set(['Skill', 'WebSearch', 'Agent', 'Task', 'TodoWrite', 'TaskCreate', 'TaskGet', 'TaskList', 'TaskUpdate']);
+
+const separators = /&&|\|\||\$\(|[;|&`\n\r<>(){}]/;
+const shellNames = '(?:sh|bash|zsh|dash|ksh|fish|pwsh|powershell|cmd)';
+/** A shell given a script by a process substitution: it reads the script as commands. */
+const pipedToShell = new RegExp(String.raw`(?<![A-Za-z0-9_.-])(?:\S*[\\/])?${shellNames}(?:\.exe)?\s+(?:-\S+\s+)*<\(`, 'i');
+/** A program a script is piped into on its standard input: a shell, an interpreter, or `xargs`, which runs what it reads. */
+const intoShell = new RegExp(String.raw`\|\s*(?:\S*[\\/])?(?:${shellNames}|python[0-9.]*|node|perl|ruby|php|xargs)(?:\.exe)?(?=\s|$|[;&|])`, 'i');
+
+/** The text without the bodies of its here-documents, and whether one of them feeds a shell or an interpreter. */
+function withoutHereDocuments(command: string): { text: string; fedToShell: boolean } {
+    const lines = command.split('\n');
+    const kept: string[] = [];
+    let fedToShell = false;
+    for (let at = 0; at < lines.length; at++) {
+        const line = lines[at] ?? '';
+        kept.push(line);
+        const opened = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/.exec(line);
+        if (opened === null) continue;
+        const before = line.slice(0, opened.index);
+        if (new RegExp(String.raw`(?<![A-Za-z0-9_.-])(?:\S*[\\/])?(?:${shellNames}|python[0-9.]*|node|perl|ruby|php)(?:\.exe)?(?:\s+-\S+)*\s*$`, 'i').test(before)) fedToShell = true;
+        const tag = opened[3];
+        while (at + 1 < lines.length) {
+            at++;
+            const body = lines[at] ?? '';
+            if ((opened[1] === '-' ? body.replace(/^\t+/, '') : body) === tag) {
+                kept.push(body);
+                break;
+            }
+        }
+    }
+    return { text: kept.join('\n'), fedToShell };
+}
+
+/**
+ * Whether a piece of a word could expand into the data directory: one that begins with `~` other than the home folder's
+ * own, one with a variable and a glob, and a glob whose fixed beginning is the data directory, a folder holding it or a
+ * name it begins with, or a place in it outside the chat folder. A `~` folder is read as the home folder.
+ */
+function couldReachData(piece: string, scope: ChatScope): boolean {
+    let value = piece;
+    if (value.startsWith('~')) {
+        if (!/^~([\\/]|$)/.test(value)) return true;
+        value = `${scope.home}${value.slice(1)}`;
+    }
+    const glob = value.search(/[*?[]/);
+    if (glob < 0) {
+        if (!piece.startsWith('~')) return false;
+        const path = spelled(value, scope);
+        return inside(scope, spelled(scope.data, scope), path) && !inside(scope, spelled(scope.chat, scope), path);
+    }
+    const fixed = value.slice(0, glob);
+    if (/[$%]/.test(fixed)) return true;
+    const drive = scope.platform === 'win32' ? /^[\\/]+([a-z])(?=[\\/]|$)/i.exec(fixed) : null;
+    const leading = drive ? `${drive[1]}:${fixed.slice(drive[0].length) || '\\'}` : fixed;
+    const partial = leading === '' || /[\\/]$/.test(leading) ? '' : (leading.split(/[\\/]/).pop() ?? '');
+    const folder = spelled(partial === '' ? leading || '.' : leading.slice(0, leading.length - partial.length) || '.', scope);
+    const start = keyOf(scope.platform, pathsOf(scope.platform).join(folder, partial));
+    const data = keyOf(scope.platform, spelled(scope.data, scope));
+    const chat = spelled(scope.chat, scope);
+    if (data === start || data.startsWith(start)) return true;
+    return inside(scope, data, folder) && !inside(scope, chat, folder);
+}
+
+/**
+ * Under Full access, whether a command is one the model cannot read plainly: a `jason` that is not the program of a
+ * plain `jason <verb>` (an argument of `xargs`, a word in an interpreter's one-liner or a list literal, a quoted text, a
+ * wrapper's argument), a variable, an expansion, `eval` or `xargs` as a program, a script handed to a shell or an
+ * interpreter on its standard input or by a here-document, and a piece of a word that could expand into the data
+ * directory. A here-document's body that feeds a program other than a shell is the program's input, never read here.
+ */
+export function unreadableCommand(command: string, scope: ChatScope): boolean {
+    const { text, fedToShell } = withoutHereDocuments(command);
+    if (fedToShell || pipedToShell.test(text) || intoShell.test(text)) return true;
+    const jasonWord = /(?<![A-Za-z0-9_.-])jason(?![A-Za-z0-9_-])/;
+    for (const part of text.split(separators)) {
+        const tokens = (part.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).filter((token) => token !== '');
+        const first = tokens.findIndex((token) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token));
+        for (const [at, token] of tokens.entries()) {
+            const word = unquoted(token);
+            if (at === first && (/^[$`]|\$[({]|`/.test(token) || ['eval', 'xargs'].includes(programOf(scope.platform, word)))) return true;
+            for (const piece of new Set([word, ...word.split(/[=@,]/)])) if (piece !== '' && couldReachData(piece, scope)) return true;
+            if (programOf(scope.platform, word) === 'jason' && token === word) {
+                if (at !== first || !/^[a-z][a-z-]*$/.test(tokens[at + 1] ?? '')) return true;
+                continue;
+            }
+            if (jasonWord.test(normalised(word))) return true;
+        }
+    }
+    return false;
+}
+
+/** Whether a command deletes, by a program that removes files or folders, or `find` with `-delete`. */
+export function deletes(command: string, platform: Platform): boolean {
+    const removers = new Set(['rm', 'rmdir', 'unlink', 'shred', 'srm', 'del', 'erase', 'rd', 'remove-item', 'ri']);
+    for (const part of command.split(separators)) {
+        for (const token of part.trim().split(/\s+/).map(unquoted)) {
+            if (removers.has(programOf(platform, token).toLowerCase())) return true;
+        }
+        if (/(?<![A-Za-z0-9_.-])find\b[^]*\s-delete\b/.test(part)) return true;
+    }
+    return false;
+}
+
+/**
+ * The one judgement of Full access, which the turn's hook and the broker share: refused where the model refuses, or where
+ * the file being written shows what it refuses; held (`heldSentence`) where the model could only have shown a card
+ * because it cannot read the act plainly or the act would change what an agent loads (a guarded name, a search variable,
+ * a local jason, a `~` or a glob into the data directory, a `jason` not plainly read); runs with no question where the
+ * model allows, for the tools that run nothing, and for the plain cards: a command it read, a write in or outside the
+ * working folders, a page, a read outside the folders.
+ */
+export function fullAccessJudgement(tool: string, input: Record<string, unknown>, scope: ChatScope): FullAccessJudgement {
+    const judged = judge(tool, input, scope);
+    if (judged.verdict === 'deny') return { outcome: 'refused', message: judged.message };
+    const written = writtenRefusal(tool, input, scope);
+    if (written !== null) return { outcome: 'refused', message: written };
+    const command = input['command'];
+    if (typeof command === 'string' && unreadableCommand(command, scope)) return { outcome: 'held', message: heldSentence };
+    if (judged.verdict === 'allow' || toolsThatRunNothing.has(tool)) return { outcome: 'runs' };
+    return plainCards.has(judged.title) ? { outcome: 'runs' } : { outcome: 'held', message: heldSentence };
 }
 
 function hostOf(url: string): string | null {

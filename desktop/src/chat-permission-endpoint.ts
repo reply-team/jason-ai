@@ -7,6 +7,9 @@
 // turn, and a stream that is cut means the host or the desktop is gone, when nothing is left to resume. That is the
 // stream 2025-03-26 describes as well, which is why that revision is still spoken. A client that wants the call back
 // cancels it (notifications/cancelled), and the card it waited on goes.
+//
+// A turn in Full access is also served its `PreToolUse` hook on the same port, at `/hook`, behind the same checks: Claude
+// Code posts each tool use there before it runs, and the broker's answer is a refusal or nothing.
 
 import { timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -27,15 +30,38 @@ export interface EndpointOptions {
     decide: (tool: string, input: Record<string, unknown>, signal: AbortSignal) => Promise<ToolAnswer>;
     /** How often a waiting call's stream says it is alive; thirty seconds unless a test shortens it. */
     keepAliveMs?: number;
+    /**
+     * A turn in Full access: what the turn's `PreToolUse` hook is answered for a tool use, by its tool, its input and the
+     * id Claude Code gave it: the refusal's reason, or null to say nothing. Absent, the hook's path is not served.
+     */
+    hook?: (tool: string, input: Record<string, unknown>, toolUseId: string | null) => string | null;
 }
 
 export interface Endpoint {
     port: number;
     url: string;
+    /** Where the turn's hook posts, on the same loopback port, behind the same secret. */
+    hookUrl: string;
     close: () => Promise<void>;
 }
 
 const path = '/mcp';
+const hookPath = '/hook';
+/** What a hook call the endpoint cannot read is answered with: a refusal, never silence, since silence lets the tool run. */
+const unreadHook = 'The desktop could not read what this tool would do, so it was not run.';
+
+/**
+ * The hook's answer, in the shape Anthropic gives (https://code.claude.com/docs/en/hooks, read 2026-11-11): a 2xx response
+ * whose JSON body's `hookSpecificOutput` names the event, and `permissionDecision` `"deny"`, which "prevents the tool
+ * call", with its reason; and "2xx with an empty body: success", which decides nothing.
+ */
+function hookAnswer(response: ServerResponse, reason: string | null): void {
+    if (reason === null) {
+        plain(response, 200);
+        return;
+    }
+    json(response, { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
+}
 const bodyLimit = 8 * 1024 * 1024;
 const inputSchema = {
     type: 'object',
@@ -177,6 +203,28 @@ export async function openEndpoint(options: EndpointOptions): Promise<Endpoint> 
         }
     }
 
+    /**
+     * One call of the turn's hook, as Claude Code posts it: the event's JSON, its tool's name, input and use id among it.
+     * A body too large or out of shape is a refusal.
+     */
+    async function serveHook(request: IncomingMessage, response: ServerResponse, hook: NonNullable<EndpointOptions['hook']>): Promise<void> {
+        const text = await readBody(request);
+        let event: unknown = null;
+        try {
+            event = text === null ? null : JSON.parse(text);
+        } catch {
+            event = null;
+        }
+        const tool = object(event) ? event['tool_name'] : undefined;
+        const input = object(event) ? event['tool_input'] : undefined;
+        if (!object(event) || typeof tool !== 'string' || !object(input)) {
+            hookAnswer(response, unreadHook);
+            return;
+        }
+        const use = event['tool_use_id'];
+        hookAnswer(response, hook(tool, input, typeof use === 'string' ? use : null));
+    }
+
     async function serve(request: IncomingMessage, response: ServerResponse): Promise<void> {
         const refused = trusted(request);
         if (refused !== null) {
@@ -184,7 +232,12 @@ export async function openEndpoint(options: EndpointOptions): Promise<Endpoint> 
             request.resume();
             return;
         }
-        if ((request.url ?? '').split('?')[0] !== path) {
+        const asked = (request.url ?? '').split('?')[0];
+        if (asked === hookPath && options.hook !== undefined && request.method === 'POST') {
+            await serveHook(request, response, options.hook);
+            return;
+        }
+        if (asked !== path) {
             plain(response, 404);
             request.resume();
             return;
@@ -234,6 +287,7 @@ export async function openEndpoint(options: EndpointOptions): Promise<Endpoint> 
     return {
         port,
         url: `http://${bound.address}:${port}${path}`,
+        hookUrl: `http://${bound.address}:${port}${hookPath}`,
         close: () =>
             new Promise<void>((resolve) => {
                 server.close(() => resolve());
