@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Human;
+using Jason.Cli.Process;
 using Jason.Contracts.Api;
 using Jason.Contracts.Notifications;
 
@@ -54,8 +55,30 @@ public static class LinkHandler
         {
             AttentionAct.Prompt => CopyPromptAsync(env, target.Kind == AttentionKind.Approval, body, cancellationToken),
             AttentionAct.Session => Session.SessionOpener.OpenAsync(env, target.Kind == AttentionKind.Approval ? PromptKind.Approval : PromptKind.Question, target.Id!, dryRun: false, human: false, cancellationToken),
-            _ => UiCommands.RunOpenAsync(env, body, noOpen: false, human: false, cancellationToken),
+            _ => OpenAsync(env, target, body, cancellationToken),
         };
+    }
+
+    /// <summary>
+    /// A link that opens a page: the desktop where it is installed for this account, its address made from the parsed
+    /// link and handed to the browser's own opener; the browser UI otherwise, and when the hand-on fails, said on stderr
+    /// by its code. The desktop is asked nothing of the runtime; it reads what waits itself.
+    /// </summary>
+    private static Task<int> OpenAsync(CliEnvironment env, AttentionTarget target, JsonObject body, CancellationToken cancellationToken)
+    {
+        if (env.Opener is { } opener && DesktopLinks.Address(target) is { } address && DesktopLinks.Present(env.Desktop))
+        {
+            var handed = opener.HandOn(address, DesktopLinks.Wait);
+            if (handed == UrlHandOff.Handed)
+            {
+                env.Error.WriteLine("Opened in the Jason desktop.");
+                return Task.FromResult(ExitCodes.Success);
+            }
+
+            env.Error.WriteLine($"The Jason desktop did not open ({DesktopLinks.Code(handed)}); opening the browser UI instead.");
+        }
+
+        return UiCommands.RunOpenAsync(env, body, noOpen: false, human: false, cancellationToken);
     }
 
     /// <summary>
