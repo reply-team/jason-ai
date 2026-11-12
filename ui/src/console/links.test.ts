@@ -32,7 +32,7 @@ describe('where a link the desktop parsed takes the console', () => {
             { page: 'chat', id: 'x' },
             { page: 'toString' },
             null,
-            'jason://needs',
+            'jason-desktop://needs',
             42,
         ]) {
             expect(linkPlace(value as DesktopLink)).toBeNull();

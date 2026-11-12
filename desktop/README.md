@@ -236,35 +236,45 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
 
 ## Links
 
-A `jason://` link opens a page of the application and does nothing else: no command, no turn, no text put into a chat,
-no card, approval or question answered, no chat mode, no setting (`src/deep-link.ts`). The addresses are a closed table:
+A `jason-desktop://` link opens a page of the application and does nothing else: no command, no turn, no text put into
+a chat, no card, approval or question answered, no chat mode, no setting (`src/deep-link.ts`). The scheme is the
+desktop's own on every platform. `jason:` is the runtime's: on Windows its toast host registers it for the command line,
+which opens `jason://attention...` in a browser ([`docs/notifications.md`](../docs/notifications.md), section 7); the
+desktop never registers, declares or removes it. The addresses are a closed table:
 
 | Address | Opens |
 | --- | --- |
-| `jason://needs` | Needs you |
-| `jason://campaigns` | Campaigns |
-| `jason://campaign/cmp_…` | that campaign's page |
-| `jason://approval/apr_…` | Needs you, with that approval open; deciding it stays a person's click |
-| `jason://question/dec_…` | Needs you, with that question open |
-| `jason://workitem/wi_…` | Work items, at that item |
-| `jason://person/cnt_…` | People, at that person |
+| `jason-desktop://needs` | Needs you |
+| `jason-desktop://campaigns` | Campaigns |
+| `jason-desktop://campaign/cmp_…` | that campaign's page |
+| `jason-desktop://approval/apr_…` | Needs you, with that approval open; deciding it stays a person's click |
+| `jason-desktop://question/dec_…` | Needs you, with that question open |
+| `jason-desktop://workitem/wi_…` | Work items, at that item |
+| `jason-desktop://person/cnt_…` | People, at that person |
 
 An id is its prefix and 26 uppercase Crockford characters; one trailing `/` is taken, and anything else (a query, a
 fragment, a percent escape, another page word, a second id, more than 64 characters) opens nothing. The page receives
-the page the desktop parsed, never the address; the log says that page, or the refusal's code, never the address.
+the page the desktop parsed, never the address. The log has three lines for links, none of which holds the address:
+`deep_link_opened` with the page, `deep_link_refused` with the refusal's code, and `deep_link_registration_failed`
+when Windows did not take the registration.
 
 - **Windows.** The installed application registers the scheme at each start under
-  `HKEY_CURRENT_USER\Software\Classes\jason`, with the command `"<Jason.exe>" "--" "%1"`: the `--` ends the switches,
-  so nothing in an address is read as one. A start whose arguments carry anything beside the address and that `--` (a
-  switch, a flag of the desktop's own, a second address, or the pieces a quote in a crafted address splits it into)
-  opens nothing and quits; a start with `--no-sandbox` is refused before that. The uninstall takes the registration off
-  when it names this application.
-- **macOS.** The bundle declares the scheme in `Info.plist`, and the system hands a link to the application, running or
-  not.
-- **Linux.** The deb's menu entry declares `MimeType=x-scheme-handler/jason;` and starts the program with the address.
-  The AppImage declares no scheme and takes no link, and neither does a development build.
+  `HKEY_CURRENT_USER\Software\Classes\jason-desktop`, with the command as Electron writes it,
+  `"<...>\Jason.exe" -- "%1"`: the executable quoted, the `--` bare, the address quoted. What keeps an address from
+  acting as a switch is that `--`, which ends Chromium's switches; the packaged build's fuse that refuses Node's
+  inspector options; and the desktop's own pick, which takes a link only when the arguments are the address alone or
+  `--` and the address. A start whose arguments carry anything beside them (a switch, a flag of the desktop's own, a
+  second address, or the pieces a quote in a crafted address splits it into) opens nothing and quits; a start with
+  `--no-sandbox` is refused before that. Electron's own check of a link's arguments stops at the first `--`, which
+  comes first here, so it plays no part. The uninstall takes the registration off when it names this application.
+- **macOS.** The bundle declares the scheme in `Info.plist`, and the system hands a link to the application by its
+  `open-url` event, running or not; a link in a start's arguments is refused there.
+- **Linux.** The deb's menu entry declares `MimeType=x-scheme-handler/jason-desktop;` and starts the program with `--`
+  before the address (`Exec=/opt/Jason/jason-desktop-app -- %U`). The AppImage declares no scheme and takes no link,
+  and neither does a development build.
 
-A link that comes before the page is loaded waits for it, the newest replacing an older one; the window comes forward.
+A link that comes before the page is loaded waits for it, the newest replacing an older one; the window comes forward,
+also when the link is refused.
 
 ## Processes
 
@@ -300,7 +310,7 @@ ends the install or the uninstall before a file is replaced, and a person is tol
 with another data directory. Where PowerShell is not available nothing is looked for: a person is asked to stop the
 runtime, and an update goes on without a look. A person's uninstall starts the application with `--uninstall`, which
 stops the runtime it carries, takes off the PATH command's files that are its own, Open Jason at Login, the runtime's
-start at logon when it starts this application's `jason`, and the `jason` link registration when it names this
+start at logon when it starts this application's `jason`, and the `jason-desktop` link registration when it names this
 application, and names what it leaves: the data directory, the harness root
 and the updater's cache.
 

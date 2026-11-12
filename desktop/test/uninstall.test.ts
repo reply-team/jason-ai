@@ -451,26 +451,26 @@ test('the logon registration is read from what jason runtime autostart status sa
     assert.deepEqual(asked, Array(4).fill(['runtime', 'autostart', 'status']));
 });
 
-test('the jason link registration is taken off when it names this application, left when it does not, and named when it cannot be', async (t) => {
+test('the jason-desktop link registration is taken off when it names this application, left when it does not, and named when it cannot be', async (t) => {
     const ours = bench(t);
     let registered = true;
     const removals: string[] = [];
     ours.deps.link = { registered: () => registered, remove: () => (removals.push('remove'), (registered = false), true) };
     const taken = await uninstall(ours.deps);
-    assert.ok(taken.removed.includes('The registration of jason links to this application'));
+    assert.ok(taken.removed.includes('The registration of jason-desktop links to this application'));
     assert.deepEqual(removals, ['remove']);
     assert.deepEqual(taken.steps.find((each) => each.step === 'link'), { step: 'link', outcome: 'removed' });
 
     const another = bench(t);
     another.deps.link = { registered: () => false, remove: () => assert.fail('a registration that is not this application\'s is never removed') };
     const left = await uninstall(another.deps);
-    assert.ok(left.untouched.includes('Links that open Jason were not registered to this application'));
+    assert.ok(left.untouched.includes('jason-desktop links were not registered to this application'));
     assert.deepEqual(left.steps.find((each) => each.step === 'link'), { step: 'link', outcome: 'was_off' });
 
     const stuck = bench(t);
     stuck.deps.link = { registered: () => true, remove: () => false };
     const failed = await uninstall(stuck.deps);
-    assert.ok(failed.failed.some((line) => line.includes(String.raw`deleting HKEY_CURRENT_USER\Software\Classes\jason takes it off`)), failed.failed.join('\n'));
+    assert.ok(failed.failed.some((line) => line.includes(String.raw`deleting HKEY_CURRENT_USER\Software\Classes\jason-desktop takes it off`)), failed.failed.join('\n'));
     assert.deepEqual(failed.steps.find((each) => each.step === 'link'), { step: 'link', outcome: 'failed' });
     assert.equal(uninstallExit(failed), 0, 'a step that fails is named, and the uninstall still goes on');
 

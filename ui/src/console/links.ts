@@ -1,4 +1,4 @@
-// Pure: where a `jason://` link takes the console. The desktop parsed the address from a closed table and hands the page
+// Pure: where a `jason-desktop://` link takes the console. The desktop parsed the address from a closed table and hands the page
 // only the page it names; the console opens that panel, or that screen at the entity, and does nothing else: no turn, no
 // text put into a chat, no answer to anything, no mode, no setting.
 import type { DesktopLink } from '../platform/desktop';

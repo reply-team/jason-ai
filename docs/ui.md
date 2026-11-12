@@ -22,7 +22,9 @@ waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>`
 put that item's prompt on the clipboard and open nothing: the text of [Copy prompt](#copy-prompt) below.
 `jason://attention/approvals/<id>/session` and `jason://attention/questions/<id>/session` start an agent session on
 that item, as `jason session open` does ([Open an AI session](#open-an-ai-session) below). Windows learns these links when
-the first toast is shown; before that a browser has no program for them.
+the first toast is shown; before that a browser has no program for them. The `jason:` scheme is the runtime's and its
+command line's; Jason Desktop's own links use another, `jason-desktop:`, which opens a page of the desktop's window and
+never touches `jason:` ([`desktop/README.md`](../desktop/README.md), Links).
 
 If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 

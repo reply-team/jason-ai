@@ -167,6 +167,7 @@ function startLog(): Logger {
 function linkArrived(raw: unknown, links: LinkPost, log: Logger): void {
     if (!linksTaken({ packaged: app.isPackaged, platform: process.platform, form: linuxForm() })) {
         log.warn('deep_link_refused', { Code: 'unregistered' });
+        showWindow();
         return;
     }
     const target = parseLink(raw);
@@ -537,7 +538,7 @@ function startDesktop(): void {
 
     // A start that carries a link carries it alone (`linkIn`): one with anything beside it, a flag of the desktop's own
     // or a switch a crafted address put there, does nothing and quits, before any other branch of a start is decided.
-    const fromArgs = linkIn(process.argv.slice(1));
+    const fromArgs = linkIn(process.argv.slice(1), process.platform);
     const early = startLog();
     if (fromArgs.kind === 'refused') {
         early.warn('deep_link_refused', { Code: fromArgs.reason });

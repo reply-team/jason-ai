@@ -99,4 +99,55 @@ describe('a link the desktop hands the console', () => {
         desktop.link({ page: 'needs' });
         await waitFor(() => expect(inFront()).toContain('Needs you'));
     });
+
+    it('to an approval that no longer waits opens Needs you on its own empty card, and nothing else', async () => {
+        const desktop = stubDesktop();
+        desktop.held = { page: 'approval', id: 'apr_2' };
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/empty')
+            .answer('decision.list', 'decision.list/empty')
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all')
+            .answer('approval.get', 'approval.get/other-pending');
+        renderConsole(desktop, fake);
+        const needs = await waitFor(() => panel('Needs you'));
+        await waitFor(() => expect(fake.calls.some((each) => each.operation === 'approval.get')).toBe(true));
+        await waitFor(() => expect(needs.querySelector('.needs-empty')).not.toBeNull());
+        // The panel read the item the link names, and it is Needs you that is in front, no page of its own.
+        await waitFor(() => expect(attention.detail.value?.item.id).toBe('apr_2'));
+        expect(inFront()).toContain('Needs you');
+        expect(inFront()).not.toContain('Page');
+        // What the screen says when nothing waits, and no detail, no button to decide, no turn.
+        expect(needs.querySelector('.ask-w')).toBeNull();
+        expect(within(needs).queryByRole('button', { name: 'Approve' })).toBeNull();
+        expect(
+            fake.calls.some((each) => each.operation === 'approval.approve' || each.operation === 'approval.reject'),
+        ).toBe(false);
+        expect(calls(desktop, 'chat.send')).toEqual([]);
+    });
+
+    it('leaves an open chat exactly as it was: its host, model, effort, mode and words in its box', async () => {
+        const desktop = stubDesktop();
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/pending')
+            .answer('decision.list', 'decision.list/pending')
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all')
+            .answer('decision.get', 'decision.get/pending-with-options');
+        renderConsole(desktop, fake);
+        await waitFor(() => expect(calls(desktop, 'links.take')).toHaveLength(1));
+        fireEvent.click(
+            within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'New chat' }),
+        );
+        const box = await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        fireEvent.change(box, { target: { value: 'Half a thought' } });
+        const [id] = Object.keys(chats.value);
+        const before = structuredClone(chats.value[id!]);
+        expect(before?.draft).toBe('Half a thought');
+        for (const link of [{ page: 'campaigns' }, { page: 'needs' }, { page: 'question', id: 'dec_1' }] as const)
+            desktop.link(link);
+        await waitFor(() => expect(inFront()).toContain('Needs you'));
+        expect(chats.value[id!]).toEqual(before);
+        expect(calls(desktop, 'chat.send')).toEqual([]);
+    });
 });

@@ -210,8 +210,9 @@ export interface UninstallDeps {
     /** Resolves a path (`resolved-path.ts`); the system's own unless a test says otherwise. */
     resolve?: Resolve;
     /**
-     * The `jason` link scheme's registration, on Windows, where the application wrote it at each start
-     * (`deep-link.ts`): whether it names this application, and taking it off. Absent elsewhere.
+     * The `jason-desktop` link scheme's registration, on Windows, where the application wrote it at each start
+     * (`deep-link.ts`): whether it names this application, and taking it off. Absent elsewhere. The runtime's `jason`
+     * scheme is never touched.
      */
     link?: { registered(): boolean; remove(): boolean };
 }
@@ -394,22 +395,22 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
         ended('command', threw ? 'failed' : took > 0 ? 'removed' : before.length > 0 ? 'another' : 'was_off');
     }
 
-    // 4b. The jason link scheme's registration, when it names this application; one that names another is left.
+    // 4b. The jason-desktop link scheme's registration, when it names this application; one that names another is left.
     if (deps.link !== undefined) {
         let outcome: string;
         try {
             if (!deps.link.registered()) {
-                untouched.push('Links that open Jason were not registered to this application');
+                untouched.push('jason-desktop links were not registered to this application');
                 outcome = 'was_off';
             } else if (deps.link.remove() && !deps.link.registered()) {
-                removed.push('The registration of jason links to this application');
+                removed.push('The registration of jason-desktop links to this application');
                 outcome = 'removed';
             } else {
-                failed.push('The registration of jason links to this application, which could not be taken off: deleting HKEY_CURRENT_USER\\Software\\Classes\\jason takes it off');
+                failed.push('The registration of jason-desktop links to this application, which could not be taken off: deleting HKEY_CURRENT_USER\\Software\\Classes\\jason-desktop takes it off');
                 outcome = 'failed';
             }
         } catch {
-            failed.push('The registration of jason links to this application, which could not be read: deleting HKEY_CURRENT_USER\\Software\\Classes\\jason takes it off');
+            failed.push('The registration of jason-desktop links to this application, which could not be read: deleting HKEY_CURRENT_USER\\Software\\Classes\\jason-desktop takes it off');
             outcome = 'failed';
         }
         ended('link', outcome);

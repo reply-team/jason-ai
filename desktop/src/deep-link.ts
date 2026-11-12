@@ -1,29 +1,38 @@
 /**
- * Pure: the desktop's links, `jason://<page>[/<id>]`. A link opens a page of the application and does nothing else: no
- * command, no turn, no text put into a chat, no card, approval or question answered, no chat mode, no setting, no route,
- * no record made. Its addresses are a closed table; anything else is refused by a closed code and opens nothing. A link
- * reaches the page as a typed value, never as the address.
+ * Pure: the desktop's links, `jason-desktop://<page>[/<id>]`. A link opens a page of the application and does nothing
+ * else: no command, no turn, no text put into a chat, no card, approval or question answered, no chat mode, no setting,
+ * no route, no record made. Its addresses are a closed table; anything else is refused by a closed code and opens
+ * nothing. A link reaches the page as a typed value, never as the address.
+ *
+ * The scheme is the desktop's own, `jason-desktop`, on every platform. `jason:` is the runtime's: on Windows its toast
+ * host registers it for the command line, which handles `jason://attention...` (docs/notifications.md); the desktop never
+ * registers, declares or removes it.
  *
  * Where a link comes from:
  *
  * - Windows: the packaged application registers the scheme at each start with `app.setAsDefaultProtocolClient(scheme,
- *   path, ['--'])`, which the pinned Electron 44.10.2 writes under `HKEY_CURRENT_USER\Software\Classes\jason` with the
- *   command `"<path>" "--" "%1"` (shell/browser/browser_win.cc, SetAsDefaultProtocolClient and GetProtocolLaunchPath).
- *   The address arrives as an argument: in `process.argv` at a cold start, and from a second start by the
- *   `additionalData` of `requestSingleInstanceLock`. The `--` ends Chromium's switches, so nothing in an address is read
- *   as one; Electron's own check of such arguments stops at `--` (shell/app/command_line_args.cc,
- *   CheckCommandLineArguments), so a start that carries anything beside the one address, a crafted address split at a
- *   quote among them, opens nothing (`linkIn`). The uninstall takes the registration off (`uninstall.ts`).
+ *   path, ['--'])`, which the pinned Electron 44.10.2 writes under `HKEY_CURRENT_USER\Software\Classes\jason-desktop`
+ *   with the command `"<path>" -- "%1"`: each part quoted only when it holds a space, a backslash or a quote, so the
+ *   executable's path is quoted and the `--` is bare (shell/browser/browser_win.cc, GetProtocolLaunchPath, and
+ *   shell/common/command_line_util_win.cc, AddQuoteForArg). The address arrives as an argument: in `process.argv` at a
+ *   cold start, and from a second start by the `additionalData` of `requestSingleInstanceLock`. What protects a start
+ *   from an address: the `--`, which ends Chromium's switches, so nothing after it is read as one; the packaged build's
+ *   fuse that refuses Node's inspector options (`enableNodeCliInspectArguments` off); and the pick (`linkIn`), which
+ *   takes a link only when the arguments are the address alone or `--` and the address, so a crafted address that a quote
+ *   splits into several arguments opens nothing. Electron's own check of such arguments
+ *   (shell/app/command_line_args.cc, CheckCommandLineArguments) stops at the first `--`, which here comes first, and so
+ *   checks nothing. The uninstall takes the registration off (`uninstall.ts`).
  * - macOS: the bundle declares the scheme (electron-builder's `mac.protocols`, written as `CFBundleURLTypes`), and the
- *   address arrives by `open-url`, at a cold start as at a running one.
- * - Linux: the deb's menu entry declares `MimeType=x-scheme-handler/jason;` (electron-builder's `deb.mimeTypes`) and
- *   starts the program with the address as its argument (`Exec=... %U`). An AppImage declares no scheme and takes no
- *   link, nor does a development build anywhere (`linksTaken`).
+ *   address arrives by `open-url` alone, at a cold start as at a running one; a link in a start's arguments is refused
+ *   there.
+ * - Linux: the deb's menu entry declares `MimeType=x-scheme-handler/jason-desktop;` (electron-builder's `deb.mimeTypes`)
+ *   and starts the program with `--` before the address (`Exec=... -- %U`, the deb's `executableArgs`). An AppImage
+ *   declares no scheme and takes no link, nor does a development build anywhere (`linksTaken`).
  */
 
 import type { LinuxPackage } from './linux-package.ts';
 
-export const linkScheme = 'jason';
+export const linkScheme = 'jason-desktop';
 
 /** A page a link opens: one of the console's panels, or a screen at one entity. */
 export type LinkTarget =
@@ -62,17 +71,19 @@ export function parseLink(raw: unknown): LinkTarget | { refused: LinkRefusal } {
     return { page, id } as LinkTarget;
 }
 
-const isLink = (arg: string) => prefix.test(arg) || /^jason:/i.test(arg);
+const isLink = (arg: string) => prefix.test(arg) || new RegExp(`^${linkScheme}:`, 'i').test(arg);
 
 /**
  * The link a start's arguments carry, the executable left out: none, one taken whole, or a refusal. A link is taken only
  * when the arguments are the address alone or `--` and the address, as the deb's menu entry and the Windows
  * registration start the application; anything beside it, a switch, a flag of the desktop's own or a stray word, is
- * `beside_flag`, and two addresses are `two_links`. A start with no address is not this rule's.
+ * `beside_flag`, and two addresses are `two_links`. On macOS, where a link comes by `open-url` alone, a link in the
+ * arguments is `unregistered`. A start with no address is not this rule's.
  */
-export function linkIn(args: readonly string[]): { kind: 'none' } | { kind: 'link'; raw: string } | { kind: 'refused'; reason: LinkRefusal } {
+export function linkIn(args: readonly string[], platform?: NodeJS.Platform): { kind: 'none' } | { kind: 'link'; raw: string } | { kind: 'refused'; reason: LinkRefusal } {
     const links = args.filter(isLink);
     if (links.length === 0) return { kind: 'none' };
+    if (platform === 'darwin') return { kind: 'refused', reason: 'unregistered' };
     if (links.length > 1) return { kind: 'refused', reason: 'two_links' };
     const raw = links[0]!;
     const alone = args.length === 1 || (args.length === 2 && args[0] === '--' && args[1] === raw);

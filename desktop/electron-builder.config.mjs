@@ -231,9 +231,10 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
                 { target: 'zip', arch: ['arm64', 'x64'] },
             ],
             category: 'public.app-category.business',
-            // The jason link scheme, written into Info.plist as CFBundleURLTypes (app-builder-lib 26.18.0,
+            // The desktop's link scheme, jason-desktop, written into Info.plist as CFBundleURLTypes (app-builder-lib 26.18.0,
             // out/electron/electronMac.js), so the system hands a link to the application by open-url (`deep-link.ts`).
-            protocols: [{ name: 'Jason', schemes: ['jason'] }],
+            // The runtime's jason scheme is never declared here.
+            protocols: [{ name: 'Jason', schemes: ['jason-desktop'] }],
             icon: 'installer/icon.icns',
             hardenedRuntime: true,
             entitlements: 'installer/entitlements.mac.plist',
@@ -277,10 +278,13 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
         // kept first; its dependencies stay electron-builder's (getDefaultDepends).
         deb: {
             artifactName: 'jason-desktop-linux-x64.${ext}',
-            // The deb's menu entry takes jason links: MimeType=x-scheme-handler/jason; beside Exec=... %U
-            // (app-builder-lib 26.18.0, out/targets/LinuxTargetHelper.js, computeDesktopEntry). The deb's options alone
-            // carry it, so the AppImage's entry declares no scheme and the AppImage takes no link.
-            mimeTypes: ['x-scheme-handler/jason'],
+            // The deb's menu entry takes jason-desktop links: MimeType=x-scheme-handler/jason-desktop; beside
+            // Exec=/opt/Jason/jason-desktop-app -- %U, the "--" ending the switches before the address (app-builder-lib
+            // 26.18.0, out/targets/LinuxTargetHelper.js, computeDesktopEntry: `exec += " " + buildExecArgs(executableArgs)`
+            // then `exec += " %U"`; FpmTarget.js deep-assigns the deb's options over linux's, arrays joined, so the deb's
+            // ["--"] stands over linux's []). The deb's options alone carry both, so the AppImage's entry declares no scheme.
+            mimeTypes: ['x-scheme-handler/jason-desktop'],
+            executableArgs: ['--'],
             recommends: ['libappindicator3-1', 'libicu78 | libicu77 | libicu76 | libicu74 | libicu72 | libicu70'],
         },
         // The AppImage's runtime: 1.0.3 is the static runtime, which needs no libfuse2, where the default, 0.0.0, is the

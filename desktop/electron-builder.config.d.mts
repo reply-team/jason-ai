@@ -55,7 +55,7 @@ export interface Configuration {
         notarize: boolean;
         forceCodeSigning: boolean;
         artifactName: string;
-        /** The jason link scheme, written into Info.plist as CFBundleURLTypes. */
+        /** The desktop's jason-desktop link scheme, written into Info.plist as CFBundleURLTypes. */
         protocols: { name: string; schemes: string[] }[];
     };
     dmg: { sign: boolean; writeUpdateInfo: boolean; artifactName: string };
@@ -70,7 +70,7 @@ export interface Configuration {
     };
     appImage: { artifactName: string };
     /** The deb's menu entry declares the jason link scheme by its MIME type; the AppImage's declares none. */
-    deb: { artifactName: string; recommends: string[]; mimeTypes: string[] };
+    deb: { artifactName: string; recommends: string[]; mimeTypes: string[]; executableArgs: string[] };
     toolsets: { appimage: string };
 }
 
