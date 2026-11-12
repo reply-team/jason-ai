@@ -98,8 +98,6 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: { conf
             modeChanged: (from, to) => void r.changes.push([from, to]),
             unchecked: () => void r.unchecked++,
             started: (_host, _resumed, mode) => void r.started.push(mode),
-            // Full access's code is tested with it switched on; the version's own switch is tested apart.
-            fullAccessOffered: true,
             ...options.chat,
         });
         made.push(chat);
@@ -605,9 +603,20 @@ test('a line the Feed takes in Full access starts no turn, and the Feed in Full 
     assert.equal(r.again().feed([]).mode, 'ask_first');
 });
 
-test('this version does not offer Full access: it is refused before any confirmation, and a chat never runs in it', async (t) => {
-    assert.equal(fullAccessOffered, false);
-    const r = rig(t, { chat: { fullAccessOffered: undefined } });
+test('the desktop as shipped offers Full access: the confirmation shows and Cancel keeps Ask first', async (t) => {
+    const yes = rig(t);
+    const a = await yes.chat.create();
+    assert.equal((await yes.chat.setMode(a.id, 'full_access', 'claude')).mode, 'full_access');
+    assert.equal(yes.confirms, 1, 'the confirmation showed');
+    const no = rig(t, { confirm: false });
+    const b = await no.chat.create();
+    assert.equal((await no.chat.setMode(b.id, 'full_access', 'claude')).mode, 'ask_first', 'Cancel keeps Ask first');
+    assert.equal(no.confirms, 1);
+});
+
+test('with the switch off Full access is refused before any confirmation, and a chat never runs in it', async (t) => {
+    assert.equal(fullAccessOffered, true, 'the desktop offers it');
+    const r = rig(t, { chat: { fullAccessOffered: false } });
     const { id } = await r.chat.create();
     await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: 'Full access is not in this version yet.' });
     assert.equal(r.confirms, 0);
