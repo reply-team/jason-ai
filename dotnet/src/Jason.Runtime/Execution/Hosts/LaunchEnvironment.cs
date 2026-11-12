@@ -4,11 +4,20 @@ using Jason.Contracts.Execution;
 namespace Jason.Runtime.Execution.Hosts;
 
 /// <summary>
-/// The environment a launched agent runs in: the runtime's own, plus the runtime's four and the constants a host's row of
-/// the host table declares, never a secret and never a value taken from a person. An unhappy agent host prints its
-/// environment, and whatever is in there is in the transcript the user keeps — so the capability token is not among
-/// these, and never will be. It lives in the descriptor file the envelope names.
+/// The environment a launched agent runs in: the runtime's own, less the runtime's configuration, plus the runtime's four
+/// and the constants a host's row of the host table declares, never a secret and never a value taken from a person. An
+/// unhappy agent host prints its environment, and whatever is in there is in the transcript the user keeps — so the
+/// capability token is not among these, and never will be. It lives in the descriptor file the envelope names.
 /// </summary>
+/// <remarks>
+/// What is taken out is every configuration override of the runtime: a name that starts with <c>JASON_</c> and holds the
+/// double underscore that separates a section from a key, <c>JASON_Dispatcher__MaxParallel</c> say, compared without
+/// regard to case. Any setting can be given that way, a plugin's secret under <c>Plugins:Config</c>
+/// (<c>JASON_Plugins__Config__&lt;id&gt;__&lt;field&gt;</c>) among them, so a person who put one in the runtime's
+/// environment would otherwise have handed it to every role's child and, through the first one that prints its
+/// environment, to a transcript. The runtime's own single-word names (<c>JASON_DATA_DIR</c> and the like) are not
+/// configuration and stay; everything else the runtime's environment holds is the person's machine and stays too.
+/// </remarks>
 public static class LaunchEnvironment
 {
     /// <summary>The search path, by the one spelling every platform answers to.</summary>
@@ -18,7 +27,14 @@ public static class LaunchEnvironment
     private const string Prefix = "JASON_";
 
     /// <summary>
-    /// Adds the four to <paramref name="environment"/>: the data directory this runtime owns, the attempt and
+    /// Whether <paramref name="name"/> sets a setting of the runtime: the <c>JASON_</c> prefix and the double underscore
+    /// that separates a section from a key, in any case, as the configuration reads such a name.
+    /// </summary>
+    public static bool IsConfigurationOverride(string name) =>
+        name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) && name.Contains("__", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Takes every configuration override of the runtime out of <paramref name="environment"/> and adds the four to <paramref name="environment"/>: the data directory this runtime owns, the attempt and
     /// the work item the child is running — both non-secret values the envelope already carries, here so that an
     /// agent reporting through the CLI is its attempt without having to remember to say so — and the directory
     /// this build of Jason lives in, at the front of the search path so the bare command word the agent was
@@ -49,6 +65,13 @@ public static class LaunchEnvironment
             {
                 throw new ArgumentException($"A host's environment constant '{name}' is one of the runtime's own names, or has none.", nameof(hostConstants));
             }
+        }
+
+        // The runtime's configuration is the runtime's, never the child's: taken out before the four are written, so the
+        // four are never mistaken for it.
+        foreach (var name in environment.Keys.Where(IsConfigurationOverride).ToList())
+        {
+            environment.Remove(name);
         }
 
         environment[JasonPaths.DataDirectoryVariable] = dataDirectory;
