@@ -2,16 +2,16 @@
   "operation": "route.resolve",
   "case": "global-default",
   "request": {
-    "campaign_id": "cmp_1",
+    "campaign_id": "cmp_2",
     "operation": "campaign.enroll"
   },
   "status": 200,
   "response": {
     "operation": "campaign.enroll",
-    "campaign_id": "cmp_1",
+    "campaign_id": "cmp_2",
     "plugin_id": "reply",
     "plugin_version": "1.0.0",
-    "digest": "sha256:recorded-1",
+    "digest": "sha256:recorded-2",
     "plugin_status": "valid",
     "scope": "global_default",
     "binding": null,
