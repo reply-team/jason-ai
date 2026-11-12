@@ -374,6 +374,31 @@ describe('the console', () => {
         expect(document.querySelector('.vsteps b, .vsteps img, .vsteps [onclick]')).toBeNull();
     });
 
+    it('shows the Windows check of Codex’s sandbox, whole and open, while the turn waits on it', async () => {
+        const fake = pending(new FakeApi());
+        const desktop = chatDesktop({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'codex' ? { ...each, found: true, version: '0.167.0', install: null } : each,
+            ),
+        });
+        renderConsole(fake, desktop);
+        const host = await waitFor(() => screen.getByRole('combobox', { name: 'Agent host' }));
+        fireEvent.change(host, { target: { value: 'codex' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'What waits?' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.find((each) => each.name === 'chat.send')).toBeTruthy());
+        const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+        // The desktop's words, as `checkingSandbox` in desktop/src/codex-sandbox.ts says them.
+        const checking =
+            "Checking Codex's sandbox… Windows may ask once for an administrator; answering No means chatting on Claude Code instead.";
+        flush(() => desktop.emit(id, { kind: 'step', text: checking }));
+        await waitFor(() => expect(document.querySelector('.vstep .chat-step-text')?.textContent).toBe(checking));
+        expect(document.querySelector('details.vsteps')?.hasAttribute('open')).toBe(true);
+        // What a Codex command can reach stays said under the composer while the check runs.
+        expect(screen.getByRole('note', { name: 'What a Codex command can reach' })).toBeTruthy();
+    });
+
     it("draws the agent's Markdown as its subset, and everything else in it as text", async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);

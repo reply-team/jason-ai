@@ -726,6 +726,12 @@ masking text that short would mangle ordinary words. And a successful result is 
 yours to keep clean, so returning a configured value is a conformance failure of your plugin, not something the host
 catches.
 
+**A value written in `settings.json` can be read by a command of a Codex chat.** The desktop's chat runs Codex in its
+read-only sandbox, which on Windows keeps only the runtime's run file from a command and on macOS and Linux keeps no
+file of the data directory from it, so a secret under `Plugins:Config` in `settings.json` is within its reach, as it is
+within reach of any program you run ([desktop.md](desktop.md)). A value given as a variable of the runtime's environment
+(`JASON_Plugins__Config__<id>__<field>`) is in no file.
+
 ### `host.log`
 
 ```js

@@ -34,6 +34,8 @@ const said = (stdout: string, exit = 0, stderr = ''): RunResult => ({ exit, stdo
 const all = said(`${markers.ran} \r\n${markers.control} \r\n${markers.reads[0]} \r\n${markers.reads[1]}\r\n`, 1);
 /** What a sandbox that keeps both files prints: the ran marker and the control's, the one file every account may read. */
 const kept = said(`${markers.ran} \r\n${markers.control} \r\n`, 1);
+/** What Codex's elevated sandbox prints: the run file kept, the settings file, with the access it inherits, read. */
+const settingsRead = said(`${markers.ran} \r\n${markers.control} \r\n${markers.reads[1]}\r\n`, 1);
 /** What a sandbox that refuses `type` or its redirection prints, whatever it keeps: the ran marker alone. */
 const ranAlone = said(`${markers.ran} \r\n`, 1);
 const nothing = said('', 2, 'error: unexpected argument found');
@@ -54,8 +56,8 @@ async function checkWith(cmd: RunResult[], codex: RunResult[]) {
             return codex.shift() ?? said('');
         },
     };
-    const answer = await runSandboxCheck(check, runs, new AbortController().signal);
-    return { answer, ran, forms };
+    const { answer, opened } = await runSandboxCheck(check, runs, new AbortController().signal);
+    return { answer, opened, ran, forms };
 }
 
 test('the check reads the system\'s hosts file as a control, then two files, the run file and one whose access is inherited, by one line cmd is given through a variable, so every run sees the same quoting', () => {
@@ -121,16 +123,43 @@ test('cmd is started by its full path under the system root, never found by its 
 test('it holds only on all markers outside, the ran and control markers alone inside, then all markers outside again', async () => {
     const held = await checkWith([all, all], [kept]);
     assert.equal(held.answer, 'holds');
+    assert.deepEqual(held.opened, [false, false], 'neither file opened inside');
     assert.deepEqual(held.ran, ['cmd', 'codex', 'cmd']);
     assert.deepEqual(held.forms, [check.forms[0]]);
 });
 
-test('a read marker inside is refused: the command read a file', async () => {
-    assert.equal((await checkWith([all, all], [all])).answer, 'reads');
-    assert.equal((await checkWith([all, all], [said(`${markers.ran}\n${markers.control}\n${markers.reads[0]}\n`)])).answer, 'reads');
-    // The inherited file alone readable is refused too.
-    assert.equal((await checkWith([all, all], [said(`${markers.ran}\n${markers.reads[1]}\n`)])).answer, 'reads');
+test('the run file\'s read marker inside is refused: the command read the run token', async () => {
+    const every = await checkWith([all, all], [all]);
+    assert.equal(every.answer, 'reads');
+    assert.deepEqual(every.opened, [true, true]);
+    const runOnly = await checkWith([all, all], [said(`${markers.ran}\n${markers.control}\n${markers.reads[0]}\n`)]);
+    assert.equal(runOnly.answer, 'reads');
+    assert.deepEqual(runOnly.opened, [true, false]);
     assert.equal((await checkWith([all, all], [said(`${markers.ran}\n${markers.reads[0]}\n`)])).answer, 'reads');
+});
+
+test('the run file kept and the settings file read inside holds, and says the settings file was read: the verdict rests on the run file', async () => {
+    const elevated = await checkWith([all, all], [settingsRead]);
+    assert.equal(elevated.answer, 'holds');
+    assert.deepEqual(elevated.opened, [false, true], 'the settings file\'s read is a fact the check reports');
+    assert.deepEqual(elevated.ran, ['cmd', 'codex', 'cmd']);
+    assert.deepEqual(elevated.forms, [check.forms[0]]);
+    assert.equal((await checkWith([all, all], [nothing, settingsRead])).answer, 'holds', 'in the worded form too');
+});
+
+test('the settings file\'s marker without the control\'s, before it, twice, or not on a line of its own proves nothing', async () => {
+    for (const stdout of [
+        `${markers.ran}\n${markers.reads[1]}\n`,
+        `${markers.ran}\n${markers.reads[1]}\n${markers.control}\n`,
+        `${markers.ran}\n${markers.control}\n${markers.reads[1]}\n${markers.reads[1]}\n`,
+        `${markers.ran}\n${markers.control}\nx ${markers.reads[1]}\n`,
+    ]) {
+        const found = await checkWith([all, all], [said(stdout, 1)]);
+        assert.equal(found.answer, 'unproven', JSON.stringify(stdout));
+        assert.equal(found.opened, null, JSON.stringify(stdout));
+    }
+    const alsoOnError = said(`${markers.ran}\n${markers.control}\n${markers.reads[1]}\n`, 1, `${markers.reads[1]}\n`);
+    assert.equal((await checkWith([all, all], [alsoOnError])).answer, 'unproven', 'and on standard error as well');
 });
 
 test('neither marker inside, in either form, is refused', async () => {
@@ -171,13 +200,14 @@ test('the control file absent or unreadable outside proves nothing, and nothing 
     assert.equal((await checkWith([all, noControl], [kept])).answer, 'unproven');
 });
 
-test('every combination but all, the ran and control markers alone, all is not proven', async () => {
+test('every combination but all, the ran and control markers with or without the settings file\'s, all is not proven', async () => {
     const shapes: [string, RunResult][] = [
         ['all', all],
         ['kept', kept],
         ['ran alone', ranAlone],
         ['nothing', nothing],
         ['one read', said(`${markers.ran}\n${markers.reads[0]}\n`)],
+        ['settings read', settingsRead],
         ['timed out', timedOut],
         ['out of order', said(`${markers.reads[0]}\n${markers.ran}\n${markers.reads[1]}\n`)],
     ];
@@ -186,7 +216,7 @@ test('every combination but all, the ran and control markers alone, all is not p
             for (const [afterName, after] of shapes) {
                 const { answer } = await checkWith([before, after], [inside, inside]);
                 const name = `${beforeName} / ${insideName} / ${afterName}`;
-                if (beforeName === 'all' && insideName === 'kept' && afterName === 'all') assert.equal(answer, 'holds', name);
+                if (beforeName === 'all' && (insideName === 'kept' || insideName === 'settings read') && afterName === 'all') assert.equal(answer, 'holds', name);
                 else assert.notEqual(answer, 'holds', name);
             }
         }
@@ -207,7 +237,9 @@ test('the kept answer is told apart by the file Codex runs from, the script it i
 });
 
 test('the words the person reads: the check, the refusal naming the setup and Claude Code, and a keyed turn\'s own', () => {
-    assert.equal(checkingSandbox, 'Checking Codex\'s sandbox…');
+    // Said before the check, on Windows alone: the administrator prompt, and the way out of it. What a Codex command can
+    // reach is said where the person chooses Codex, on every system (the page's line under the composer).
+    assert.equal(checkingSandbox, 'Checking Codex\'s sandbox… Windows may ask once for an administrator; answering No means chatting on Claude Code instead.');
     assert.match(sandboxSentence, /elevated sandbox/);
     assert.ok(sandboxSentence.includes('`codex sandbox setup --elevated`'));
     assert.match(sandboxSentence, /Claude Code/);

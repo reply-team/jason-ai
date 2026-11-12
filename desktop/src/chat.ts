@@ -276,6 +276,12 @@ export interface ChatOptions {
      * test gives a stand-in, since a test may run where there is no cmd.
      */
     sandboxOutside?: (check: SandboxCheck) => Promise<RunResult>;
+    /**
+     * Said each time the Windows check of Codex's sandbox ends, unless the turn was stopped meanwhile: its answer, and
+     * whether a command inside opened the desktop's settings file, which decides nothing; `unknown` where no run inside
+     * decided. Two closed words, never a path or what was read.
+     */
+    sandboxChecked?(answer: 'holds' | 'reads' | 'unproven', settings: 'read' | 'unread' | 'unknown'): void;
     platform?: Platform;
 }
 
@@ -1327,14 +1333,18 @@ export class Chat {
         const checking = new AbortController();
         running.checking = checking;
         let answer: 'holds' | 'reads' | 'unproven';
+        let opened: readonly boolean[] | null;
         try {
             const runs = checkRuns(launch, check, { env, cwd: paths.chat, limitMs: this.#options.sandboxLimitMs ?? sandboxLimitMs, signal: checking.signal });
             const outside = this.#options.sandboxOutside;
-            answer = await runSandboxCheck(check, outside === undefined ? runs : { ...runs, cmd: () => outside(check) }, checking.signal);
+            ({ answer, opened } = await runSandboxCheck(check, outside === undefined ? runs : { ...runs, cmd: () => outside(check) }, checking.signal));
         } finally {
             delete running.checking;
         }
         if (running.stopped) return;
+        // The settings file, the check's second, is a fact the check reports: the verdict rests on the run file.
+        const settingsOpened = opened?.[1];
+        this.#options.sandboxChecked?.(answer, settingsOpened === undefined ? 'unknown' : settingsOpened ? 'read' : 'unread');
         if (answer !== 'unproven') this.#sandboxChecked.set(key, answer === 'holds');
         if (answer !== 'holds') throw new SandboxUnproven(refused);
     }
@@ -1658,7 +1668,7 @@ export class Chat {
             effortNamed: resolved.effort !== undefined,
             ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
         });
-        // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the data directory.
+        // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run file.
         if (resolved.program === 'codex' && this.#platform === 'win32') {
             await this.#codexSandboxHolds(launch, version, env, running, resolved.keyed);
             if (running.stopped) {

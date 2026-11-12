@@ -197,6 +197,17 @@ export const fullAccessLine = 'Full access: the agent runs commands without aski
 export const codexConfigLine =
     'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.';
 
+/**
+ * What the line under the composer says while the chat's host is Codex, on the person's sign-in or on the OpenAI key:
+ * a Codex turn runs in Codex's read-only sandbox, which keeps Jason's run token from it on Windows and keeps nothing
+ * else of the data directory on any system, and it asks for nothing, so it acts through nothing.
+ */
+export const codexReachLine =
+    'A Codex command can read files on this computer, Jason’s own data and settings among them, but cannot change anything or act for you.';
+
+/** The hosts whose turns run on Codex: the person's sign-in, and the OpenAI key. */
+export const codexHosts: ReadonlySet<string> = new Set(['codex', 'codex-api-key']);
+
 /** Why Full access cannot be chosen on a host a desktop of an earlier version listed, which offers no modes. */
 export const olderDesktop = 'This version of Jason Desktop does not offer Full access.';
 

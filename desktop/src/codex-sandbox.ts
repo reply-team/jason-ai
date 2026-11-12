@@ -1,6 +1,7 @@
-// The check that, on Windows, Codex's sandbox keeps a command from reading the installation's data directory. A
-// Codex turn asks no permission and the desktop has no fence of its own around it, so on Windows its sandbox is what
-// holds it; the chat runs a Codex turn there only when this check has shown the sandbox holds. The starts here are cmd's,
+// The check that, on Windows, Codex's sandbox keeps a command from reading the runtime's run file, which holds the run
+// token, the key to Jason's API. A Codex turn asks no permission and the desktop has no fence of its own around it, so on
+// Windows its sandbox is what holds it; the chat runs a Codex turn there only when this check has shown the sandbox
+// holds. The starts here are cmd's,
 // outside any sandbox, and Codex's (`runSandboxCheck`), which the chat makes before the turn (`Chat`,
 // `#codexSandboxHolds`).
 //
@@ -12,7 +13,10 @@
 // available." So the desktop looks at the property itself: a command in the sandbox tries to read two files of the data
 // directory, and says only whether it could. The two are the runtime's run file, which has an owner-only access list of
 // its own, and the desktop's settings file, which keeps the access list the data directory inherits from the profile,
-// as the database, the logs and every other file there do; both must be unreadable inside.
+// as the database, the logs and every other file there do. The verdict rests on the run file alone, which must be
+// unreadable inside. The elevated sandbox reads the settings file, as a Codex command reads the rest of the data
+// directory on macOS and Linux too; whether it opened is reported beside the verdict (`SandboxFound.opened`), and the
+// chat logs it, never as a reason to refuse.
 //
 // What it runs, three times. One cmd line: `echo <ran>`, then `type "<file>" >nul 2>nul && echo <marker>` for the
 // control file and for each file of the data directory. It prints a random marker whatever happens and a marker of each
@@ -23,7 +27,8 @@
 // file. The line is handed to cmd in a variable (`checkVariable`), with cmd's arguments `/d /c %JASON_SANDBOX_CHECK%`,
 // so no layer between the desktop and cmd quotes it again and every run sees the same bytes. First the line runs outside
 // any sandbox, by cmd from the system folder: it must print every marker, which shows the line can read every file as
-// written. Then inside Codex's sandbox: the ran and control markers, and no read marker. Then outside once more, every
+// written. Then inside Codex's sandbox: the ran and control markers, and no run file's read marker; the settings
+// file's may follow, on a line of its own. Then outside once more, every
 // marker again, so a file gone or replaced while the check ran is not taken for a sandbox. Any other combination proves
 // nothing, and no Codex turn runs on it.
 //
@@ -45,8 +50,12 @@ import { runFile, type RunResult } from './programs.ts';
 /** How long each run of the check may take: a first start of the sandbox after an install or an update can be slow. */
 export const sandboxLimitMs = 30_000;
 
-/** What the chat shows while the check runs. */
-export const checkingSandbox = 'Checking Codex\'s sandbox…';
+/**
+ * What the chat shows while the check runs, on Windows alone: that Windows may ask for an administrator, as naming the
+ * elevated sandbox can, and the way out of that prompt. What a Codex command can reach is said where the person chooses
+ * Codex, on every system, by the page.
+ */
+export const checkingSandbox = 'Checking Codex\'s sandbox… Windows may ask once for an administrator; answering No means chatting on Claude Code instead.';
 
 /** Why a Codex turn does not run on Windows where the check did not show the sandbox holds. */
 export const sandboxSentence =
@@ -94,7 +103,7 @@ export interface SandboxCheck {
     controlFile: string;
     /** Printed only when the control file opened: inside, it shows `type` and nul work there. */
     control: string;
-    /** Printed each only when its file opened, in the files' order. */
+    /** Printed each only when its file opened, in the files' order; the first file's alone decides inside. */
     reads: string[];
 }
 
@@ -142,17 +151,38 @@ function readsAll(result: RunResult, check: SandboxCheck): boolean {
     return result.exit !== -1 && lines.length === expected.length && lines.every((line, i) => line === expected[i]);
 }
 
+/** How often `marker` stands in `text`. */
+function count(text: string, marker: string): number {
+    return text.split(marker).length - 1;
+}
+
+/** One run inside the sandbox, and which files it opened, in the files' order, where it decided. */
+interface Inside {
+    found: 'reads' | 'holds' | 'none' | 'unproven';
+    opened: boolean[] | null;
+}
+
 /**
- * One run inside the sandbox: a read marker as a whole line, the ran and control markers alone (it holds), no ran
- * marker, or anything else, the ran marker without the control's among it: then nothing shows `type` could open a file.
+ * One run inside the sandbox: the run file's read marker as a whole line (it reads); the ran and control markers, then
+ * the read markers of the other files that opened, each once and in the files' order (it holds); no ran marker; or
+ * anything else, the ran marker without the control's among it: then nothing shows `type` could open a file. A read
+ * marker anywhere but on a line of its own of standard output proves nothing.
  */
-function inside(result: RunResult, check: SandboxCheck): 'reads' | 'holds' | 'none' | 'unproven' {
-    if (result.exit === -1) return 'unproven';
+function inside(result: RunResult, check: SandboxCheck): Inside {
+    if (result.exit === -1) return { found: 'unproven', opened: null };
     const lines = linesOf(result);
-    if (lines.some((line) => check.reads.includes(line))) return 'reads';
-    if (check.reads.some((read) => result.stdout.includes(read) || result.stderr.includes(read))) return 'unproven';
-    if (lines.length === 2 && lines[0] === check.ran && lines[1] === check.control) return 'holds';
-    return lines.includes(check.ran) ? 'unproven' : 'none';
+    const opened = () => check.reads.map((read) => lines.includes(read));
+    const [gate, ...facts] = check.reads;
+    if (gate !== undefined && lines.includes(gate)) return { found: 'reads', opened: opened() };
+    if (check.reads.some((read) => result.stderr.includes(read) || count(result.stdout, read) !== lines.filter((line) => line === read).length)) {
+        return { found: 'unproven', opened: null };
+    }
+    const rest = lines.slice(2).map((line) => facts.indexOf(line));
+    const inOrder = rest.every((at, i) => at !== -1 && (i === 0 || at > (rest[i - 1] ?? -1)));
+    if (lines[0] === check.ran && lines[1] === check.control && inOrder) return { found: 'holds', opened: opened() };
+    // A read marker on a line of its own without the ran marker is printed by no shape this line has: no form is tried on it.
+    const said = lines.includes(check.ran) || lines.some((line) => check.reads.includes(line));
+    return { found: said ? 'unproven' : 'none', opened: null };
 }
 
 /** The two starts of a check: cmd outside any sandbox, and Codex with one form's arguments. */
@@ -179,26 +209,34 @@ export function checkRuns(
     };
 }
 
+/** What the check found, and which files a command inside opened, in the files' order; null where nothing decided. */
+export interface SandboxFound {
+    answer: 'holds' | 'reads' | 'unproven';
+    opened: readonly boolean[] | null;
+}
+
 /**
- * Runs the check and says what it found: `holds` only on every marker outside, the ran and control markers alone
- * inside, and every marker outside again; `reads` when a read marker stood as a line of its own inside; `unproven`
- * otherwise. The form
- * with the platform word is tried only when the one without it printed no ran marker. A read marker seen only on
- * standard error, or inside a longer line, is no read: it proves nothing, and is not kept.
+ * Runs the check and says what it found: `holds` only on every marker outside, the ran and control markers inside with
+ * no run file's read marker, and every marker outside again; `reads` when the run file's read marker stood as a line of
+ * its own inside; `unproven` otherwise. The other files' read markers inside decide nothing: which of them opened is
+ * reported beside the answer. The form with the platform word is tried only when the one without it printed no ran
+ * marker. A read marker seen only on standard error, or inside a longer line, is no read: it proves nothing, and is not
+ * kept.
  */
-export async function runSandboxCheck(check: SandboxCheck, runs: CheckRuns, signal: AbortSignal): Promise<'holds' | 'reads' | 'unproven'> {
-    if (!readsAll(await runs.cmd(), check) || signal.aborted) return 'unproven';
-    let held = false;
+export async function runSandboxCheck(check: SandboxCheck, runs: CheckRuns, signal: AbortSignal): Promise<SandboxFound> {
+    const unproven: SandboxFound = { answer: 'unproven', opened: null };
+    if (!readsAll(await runs.cmd(), check) || signal.aborted) return unproven;
+    let held: boolean[] | null = null;
     for (const form of check.forms) {
-        const found = inside(await runs.codex(form), check);
-        if (signal.aborted) return 'unproven';
-        if (found === 'reads') return 'reads';
-        if (found === 'unproven') return 'unproven';
+        const { found, opened } = inside(await runs.codex(form), check);
+        if (signal.aborted) return unproven;
+        if (found === 'reads') return { answer: 'reads', opened };
+        if (found === 'unproven') return unproven;
         if (found === 'holds') {
-            held = true;
+            held = opened;
             break;
         }
     }
-    if (!held) return 'unproven';
-    return readsAll(await runs.cmd(), check) && !signal.aborted ? 'holds' : 'unproven';
+    if (held === null) return unproven;
+    return readsAll(await runs.cmd(), check) && !signal.aborted ? { answer: 'holds', opened: held } : unproven;
 }

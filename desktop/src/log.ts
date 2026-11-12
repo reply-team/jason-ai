@@ -96,6 +96,7 @@ export const templates = {
     chat_full_folder_failed: 'A Full access folder failed at {Step} ({Code})',
     chat_full_access_standing: 'The standing choice of Full access changed ({Cause}): standing {Standing}, new chats {NewChats}',
     chat_full_access_standing_unwritten: 'The standing choice of Full access could not be written or removed ({Code})',
+    chat_sandbox_checked: 'Codex\'s sandbox on Windows was checked: {Answer}; the desktop\'s settings file inside it: {Settings}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

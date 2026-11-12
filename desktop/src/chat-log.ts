@@ -8,7 +8,8 @@
  * the two modes, and the mode of each turn started and of each request settled; a request Full access held, by the
  * literal reading's closed reason, or none; each change of the standing choice of Full access, by why it changed (one of
  * three words) and whether new chats start in it, never when it was given, and its file's error code when it could not
- * be written. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
+ * be written; each Windows check of Codex's sandbox, by its answer and whether the desktop's settings file opened
+ * inside, a closed word each. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
  * nothing. Never the words of a turn, a tool's input, a command, a path, a session, a campaign, a conversation's
  * title or entries, or a key: the host is an id from the desktop's own tables, the file is the application's own name,
  * the code is the system's (`EPERM`, say), the reason one of two words, the key source one of three, a naming run's end one of eight, a mode one of three, and everything else is a number, a boolean or an
@@ -20,7 +21,7 @@ import type { ChatOptions } from './chat.ts';
 import type { Logger } from './log.ts';
 import type { ModelListsOptions } from './model-lists.ts';
 
-type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked' | 'fullFolderFailed' | 'standingChanged' | 'standingUnwritten';
+type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked' | 'fullFolderFailed' | 'standingChanged' | 'standingUnwritten' | 'sandboxChecked';
 
 export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
     return {
@@ -48,6 +49,7 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
             else log.info('chat_full_access_standing', fields);
         },
         standingUnwritten: (code) => log.warn('chat_full_access_standing_unwritten', { Code: code }),
+        sandboxChecked: (answer, settings) => log.info('chat_sandbox_checked', { Answer: answer, Settings: settings }),
     };
 }
 

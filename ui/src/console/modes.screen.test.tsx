@@ -136,6 +136,33 @@ describe('a chat’s access mode', () => {
         await waitFor(() => expect(note()).toBeNull());
     });
 
+    it('says under the composer, on Codex and on the OpenAI key alike, what a Codex command can reach', async () => {
+        const status = structuredClone(setupFound);
+        const codex = status.hosts.find((each) => each.id === 'codex')!;
+        codex.found = true;
+        status.hosts.push({
+            ...structuredClone(codex),
+            id: 'codex-api-key',
+            label: 'OpenAI',
+            kind: 'provider',
+            version: null,
+            install: null,
+        });
+        renderConsole(chatDesktop(status));
+        await waitFor(() => menu());
+        const note = () => screen.queryByRole('note', { name: 'What a Codex command can reach' });
+        expect(note()).toBeNull();
+        for (const id of ['codex', 'codex-api-key']) {
+            fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: id } });
+            await waitFor(() => expect(note()).not.toBeNull());
+            expect(note()!.textContent).toBe(
+                'A Codex command can read files on this computer, Jason’s own data and settings among them, but cannot change anything or act for you.',
+            );
+        }
+        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'claude' } });
+        await waitFor(() => expect(note()).toBeNull());
+    });
+
     it('says a mode the desktop refused in its own words, and keeps the mode it holds', async () => {
         const desktop = chatDesktop();
         desktop.refuse.set('chat.setMode', 'That conversation is not one this desktop keeps.');
