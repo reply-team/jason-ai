@@ -374,3 +374,56 @@ test('a send during the deploy a start makes into the chat folder builds its tur
     await settled(() => said('done').length === 2);
     assert.equal(r.hosts().length, 1);
 });
+
+/** A confirmation the row answers: each box opened is counted, and stays open until the row says yes or no. */
+function heldBox() {
+    const open: ((yes: boolean) => void)[] = [];
+    let opened = 0;
+    return {
+        confirm: () =>
+            new Promise<boolean>((resolve) => {
+                opened++;
+                open.push(resolve);
+            }),
+        opened: () => opened,
+        answer(yes: boolean) {
+            for (const resolve of open.splice(0)) resolve(yes);
+        },
+    };
+}
+
+test('two requests for Full access while the first box is open show one box and give one grant', async (t) => {
+    const box = heldBox();
+    const r = rig(t, { chat: { confirmFullAccess: box.confirm } });
+    const { id } = await r.chat.create();
+    const first = r.chat.setMode(id, 'full_access', 'claude');
+    await settled(() => box.opened() === 1);
+    const second = await r.chat.setMode(id, 'full_access', 'claude');
+    assert.equal(second.mode, 'ask_first', 'the second request is answered at once with the mode as it is');
+    assert.equal(box.opened(), 1, 'no second box');
+    box.answer(true);
+    assert.equal((await first).mode, 'full_access');
+    assert.equal(box.opened(), 1);
+    assert.equal(readdirSync(r.b.paths.chatFull).length, 1, 'one grant, one folder');
+    await r.chat.setMode(id, 'ask_first');
+    assert.deepEqual(readdirSync(r.b.paths.chatFull), [], 'the one grant ended, and no folder was left behind unended');
+    // The mark is gone with the box: a later choice asks again.
+    const again = r.chat.setMode(id, 'full_access', 'claude');
+    await settled(() => box.opened() === 2);
+    box.answer(false);
+    assert.equal((await again).mode, 'ask_first');
+});
+
+test('a yes that arrives after the window closed opens nothing', async (t) => {
+    const box = heldBox();
+    const r = rig(t, { chat: { confirmFullAccess: box.confirm } });
+    const { id } = await r.chat.create();
+    const asking = r.chat.setMode(id, 'full_access', 'claude');
+    await settled(() => box.opened() === 1);
+    r.chat.closeAll();
+    box.answer(true);
+    assert.equal((await asking).mode, 'ask_first');
+    assert.ok(!existsSync(r.b.paths.chatFull) || readdirSync(r.b.paths.chatFull).length === 0, 'no grant folder was made');
+    assert.ok(!existsSync(r.b.paths.chatFullRecords) || readdirSync(r.b.paths.chatFullRecords).length === 0, 'no grant was recorded');
+    assert.deepEqual(r.events.get(id)?.filter((event) => event.kind === 'mode') ?? [], []);
+});

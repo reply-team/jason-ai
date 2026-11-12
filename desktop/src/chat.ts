@@ -446,6 +446,8 @@ export class Chat {
     #fullAccess = new Set<string>();
     /** The folder of each conversation's Full access grant, by conversation id: the grant's id. In memory only. */
     #grants = new Map<string, string>();
+    /** The conversations whose Full access confirmation is open: a second request while it is opens no second box. */
+    #asking = new Set<string>();
     /** The campaign and project folders already said to be left out, by path, so each is said once. */
     #leftOut = new Set<string>();
     /** Folders this start moved that an earlier move had failed on, by conversation: said once, when it is opened. */
@@ -546,6 +548,8 @@ export class Chat {
             if (error instanceof AgentFolderUnowned) throw new ChatRefused(error.message);
             throw error;
         }
+        // A grant is never overwritten unended: one the conversation still holds ends first.
+        this.#endGrant(conversation.id, true);
         const id = newGrantId(this.#now());
         try {
             makeGrantFolder(this.#fullFolders(), id, paths.chat, paths.skillsRecords, conversation.id);
@@ -679,12 +683,20 @@ export class Chat {
             const program = keyProvider(host)?.program ?? hosts.find((each) => each.id === host && each.drivesChat)?.program;
             if (program === 'codex') throw new ChatRefused(codexFullAccess);
             if (program !== 'claude') throw new ChatRefused(notAHost);
-            const below = fullAccessSentence(await this.#claudeVersion());
-            if (below !== null) throw new ChatRefused(below);
-            if (this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
-            const yes = (await this.#options.confirmFullAccess?.()) === true;
-            if (!yes || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
-            this.#openGrant(conversation);
+            // One box at a time for a conversation: a request while one is open is answered with the mode as it is.
+            if (this.#asking.has(conversation.id)) return this.#summaryOf(conversation);
+            this.#asking.add(conversation.id);
+            try {
+                const below = fullAccessSentence(await this.#claudeVersion());
+                if (below !== null) throw new ChatRefused(below);
+                if (this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
+                const yes = (await this.#options.confirmFullAccess?.()) === true;
+                // A yes for a conversation removed meanwhile, or after the window closed, gives nothing.
+                if (!yes || this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
+                this.#openGrant(conversation);
+            } finally {
+                this.#asking.delete(conversation.id);
+            }
         }
         this.#changeMode(conversation, mode, true);
         return this.#summaryOf(conversation);
