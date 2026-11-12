@@ -114,8 +114,9 @@ describe('the start screen', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?', level: 1 }));
         const note = screen.getByText(/This interface is optional/);
         expect(note.textContent).toMatch(/terminal/);
-        expect(note.textContent).toMatch(/agent/);
-        expect(note.textContent).toMatch(/CLI and the API/);
+        expect(note.textContent).toMatch(/with your AI/);
+        expect(note.textContent).toMatch(/CLI and API/);
+        expect(note.textContent).not.toMatch(/agent/);
     });
 
     it('takes the focus into the box when the window opens, and says why Start does nothing for an empty box', async () => {

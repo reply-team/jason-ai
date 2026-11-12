@@ -63,8 +63,8 @@ link that leaves it opens in the system browser, and only when it is `https:`.
 ## What you see
 
 The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, which
-asks "Who do you want to reach?" and says under it that this interface is optional, since a terminal and an agent drive
-Jason as well. What you type there starts a set-up chat on the AI you connected, about no campaign
+asks "Who do you want to reach?" and says under it that this interface is optional, since everything there can also be done
+from a terminal with your AI, through Jason's CLI and API. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
