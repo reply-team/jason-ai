@@ -444,15 +444,15 @@ export class Setup {
     /** Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. */
     async #reply(valid: boolean): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
-        this.#listed = [];
         if (!found) {
+            this.#listed = [];
             return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], belowMinimum: null };
         }
         const routes = valid ? await this.#deps.cli.run(['route', 'list']) : null;
         const wired = routes !== null && routes.exit === 0 && defaultRoutePlugin(routes.stdout) === 'reply';
-        const version = await this.#version('reply');
-        // Older than the account acts and Jason's Reply plugin need, the CLI is offered the update, is not asked for its
-        // accounts, and the card offers no act.
+        const version = await this.#replyVersion();
+        // Older than the card's acts need, the CLI is offered the update, is not asked for its accounts, and the card
+        // offers no act.
         const current = version !== null && versionAtLeast(version, replyMinimumVersion);
         const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
         const accounts: ReplyAccount[] = [];
@@ -473,8 +473,9 @@ export class Setup {
                 const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
                 pending.push(...(rows ?? []).filter((row) => row.channel === channel));
             }
-            this.#listed = accounts;
         }
+        // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
+        this.#listed = auth.signedIn && current ? accounts : [];
         return {
             cli: { found, version, install: current ? null : this.#installable('reply') },
             signedIn: auth.signedIn,
@@ -486,6 +487,16 @@ export class Setup {
             pending,
             belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion),
         };
+    }
+
+    /**
+     * The Reply CLI's version, read again while it is unknown or below the minimum, so an update made outside the
+     * desktop is seen at the next read; one at or above it is kept, as every program's is.
+     */
+    async #replyVersion(): Promise<string | null> {
+        const kept = this.#versions.get('reply');
+        if (kept === null || (kept !== undefined && !versionAtLeast(kept, replyMinimumVersion))) this.#versions.delete('reply');
+        return this.#version('reply');
     }
 
     /** The account the last listing gave on that channel by that id, or null: an act names only an account Reply listed. */
@@ -502,7 +513,7 @@ export class Setup {
         if (this.#acts) return refusal(said.busy);
         this.#acts = true;
         try {
-            const version = await this.#version('reply');
+            const version = await this.#replyVersion();
             if (version === null || !versionAtLeast(version, replyMinimumVersion)) return refusal(belowMinimumSentence(replyMinimumVersion));
             return await work();
         } finally {

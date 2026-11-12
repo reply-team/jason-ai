@@ -598,6 +598,8 @@ describe('the Reply card, its acts', () => {
         const odd = `Reply did not do it: the Reply CLI answered linkedin.new_code ${hostile}.`;
         expect((await ask(refusal(odd, 'linkedin.new_code'))).words).toBe(odd);
         expect(card().querySelector('img')).toBeNull();
+        // One ask per click: a reread is a read of the list, never the act again.
+        expect(desktop.calls.filter((call) => call.name === 'setup.replyPause')).toHaveLength(3);
     });
 
     it('reads a mailbox’s daily limit into a field, and sets it to what is typed on Set', async () => {
@@ -621,22 +623,42 @@ describe('the Reply card, its acts', () => {
         ]);
     });
 
-    it('below the Reply CLI the acts need, says so once and offers nothing', async () => {
+    it('below the Reply CLI the acts need, says so once, offers the desktop’s update and no act', async () => {
         const below = 'Managing Reply accounts here needs the Reply CLI 0.21.0 or later: update the Reply CLI.';
-        renderConnect({
+        const desktop = renderConnect({
             ...setupFound,
             reply: {
                 ...setupFound.reply,
-                cli: { found: true, version: '0.20.0', install: null },
+                cli: { found: true, version: '0.20.0', install: 'reply' },
                 accounts: [account('2', 'email', 'disconnected')],
                 belowMinimum: below,
             },
         });
         const connect = await openConnect();
         const card = () => replyCard(connect);
-        expect(Array.from(card().querySelectorAll('.below-minimum'), words)).toEqual([below]);
+        expect(Array.from(card().querySelectorAll('.below-minimum'), words)).toEqual([`${below} Update`]);
         expect(within(card()).queryByRole('button', { name: 'Add account' })).toBeNull();
         expect(buttonsOf(rowOf(card, 'Account 2'))).toEqual([]);
+        fireEvent.click(within(card()).getByRole('button', { name: 'Update' }));
+        await waitFor(() =>
+            expect(desktop.calls.filter((call) => call.name === 'setup.installProgram')).toEqual([
+                { name: 'setup.installProgram', args: ['reply'] },
+            ]),
+        );
+    });
+
+    it('below the minimum with no npm to update with, says so and offers no button', async () => {
+        renderConnect({
+            ...setupFound,
+            reply: {
+                ...setupFound.reply,
+                cli: { found: true, version: '0.20.0', install: null },
+                accounts: [],
+                belowMinimum: 'Managing Reply accounts here needs the Reply CLI 0.21.0 or later: update the Reply CLI.',
+            },
+        });
+        const card = replyCard(await openConnect());
+        expect(within(card.querySelector<HTMLElement>('.below-minimum')!).queryAllByRole('button')).toEqual([]);
     });
 
     it('turns every act off while one is being asked for, and on again once it answers', async () => {
@@ -699,6 +721,25 @@ describe('the Reply card, its acts', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(within(card()).queryByRole('dialog')).toBeNull();
         expect(card().textContent).not.toContain('Late.');
+    });
+
+    it('reads the list again when an act answers done or asks for a read after its dialog was closed', async () => {
+        const desktop = renderConnect(withAccounts([account('11', 'linkedin', 'enabled')]));
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        for (const late of [
+            { done: true } as const,
+            refusal('Changed meanwhile.', 'account.status_changed', null, true),
+        ]) {
+            let release: () => void = () => undefined;
+            desktop.setup.replyPause = () => new Promise((resolve) => (release = () => resolve(late)));
+            fireEvent.click(within(rowOf(card, 'Account 11')).getByRole('button', { name: 'Pause' }));
+            fireEvent.click(within(await waitFor(() => dialogOf(card))).getByRole('button', { name: 'Close' }));
+            const before = statusReads(desktop);
+            release();
+            await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
+            expect(within(card()).queryByRole('dialog')).toBeNull();
+        }
     });
 
     it('keeps a dialog to the card it was asked from: another chat’s card never shows it, and a card no longer drawn drops it', async () => {
@@ -772,6 +813,11 @@ describe('the Reply card, its acts', () => {
         expect(words(pending[2]!)).toContain('Expired');
         expect(card().querySelector('img')).toBeNull();
         for (const row of pending) expect(within(row).queryAllByRole('button')).toEqual([]);
+        // Each group with a waiting link says how to make a new one, once.
+        expect(Array.from(card().querySelectorAll('.acct-pending-hint'), words)).toEqual([
+            'A link here is not shown again: add the account again to make a new link.',
+            'A link here is not shown again: add the account again to make a new link.',
+        ]);
     });
 });
 

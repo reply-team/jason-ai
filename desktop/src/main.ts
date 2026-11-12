@@ -119,9 +119,13 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
             log.warn('link_refused', {});
             return Promise.reject(new Error('Only an https link goes to the browser.'));
         }
-        const opened = shell.openExternal(url);
-        log.info('link_opened', {});
-        return opened;
+        return shell.openExternal(url).then(
+            () => log.info('link_opened', {}),
+            (error: unknown) => {
+                log.warn('link_open_failed', {});
+                throw error;
+            },
+        );
     };
     const guard = (event: { preventDefault(): void }, url: string) => {
         const here = origin();
@@ -414,7 +418,16 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
             models,
-            confirm: (box) => askBox(current, (window, options) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons] }), box),
+            // A box is closed, and read as a no, when its window is hidden or closed.
+            confirm: (box) =>
+                askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
+                    window.once('hide', abort);
+                    window.once('close', abort);
+                    return () => {
+                        window.removeListener('hide', abort);
+                        window.removeListener('close', abort);
+                    };
+                }),
             // A link the Reply CLI made goes from here to the person's browser, the navigation lock's one way out, and is
             // kept nowhere.
             openLink: toBrowser,

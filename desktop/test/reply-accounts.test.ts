@@ -194,6 +194,9 @@ test('each code the card acts on is handled as ruled, and every other code, know
     assert.equal(refusalOf(code('email_link.not_available'), { ...connect, channel: 'linkedin' }).offer, null);
     // A signed-out LinkedIn account offers Reconnect.
     assert.deepEqual(refusalOf(code('linkedin.invalid_cookie'), pause), { refused: said.signedOut, code: 'linkedin.invalid_cookie', offer: 'reconnect', reread: false });
+    assert.equal(refusalOf(code('linkedin.invalid_cookie'), remove).offer, 'reconnect');
+    assert.equal(refusalOf(code('linkedin.invalid_cookie'), { ...pause, verb: 'reconnect' }).offer, null, 'a reconnect’s own refusal offers no second one');
+    assert.equal(said.signedOut.includes('paused'), false, 'the sentence names no act');
     // A LinkedIn account in use offers the force, never on a forced delete.
     assert.deepEqual(refusalOf(code('linkedin.account_in_use'), remove), { refused: said.inUse, code: 'linkedin.account_in_use', offer: 'force', reread: false });
     assert.equal(refusalOf(code('linkedin.account_in_use'), { ...remove, force: true }).offer, null);
@@ -290,6 +293,22 @@ test('the boxes are the main process’s own: they name the account as the list 
     const before = shown.length;
     assert.equal(await askBox(null, answering(0), sharedPageBox()), false);
     assert.equal(shown.length, before, 'no window: nothing is shown, and the answer is no');
+
+    // A window hidden or closed closes its box, and that is a no whatever the box answered; the listeners go with it.
+    const listening = new Set<() => void>();
+    const gone = (_window: string, abort: () => void) => (listening.add(abort), () => listening.delete(abort));
+    const waiting = askBox(
+        'window',
+        (_window, _options, signal) => new Promise<{ response: number }>((resolve) => signal.addEventListener('abort', () => resolve({ response: 0 }))),
+        sharedPageBox(),
+        gone,
+    );
+    assert.equal(listening.size, 1);
+    for (const abort of listening) abort();
+    assert.equal(await waiting, false);
+    assert.equal(listening.size, 0);
+    assert.equal(await askBox('window', answering(0), sharedPageBox(), gone), true, 'a box answered while its window stays is the answer');
+    assert.equal(listening.size, 0);
 });
 
 test('an id is held to Reply’s shape and a LinkedIn account’s name to one plain line of up to a hundred characters', () => {
@@ -297,7 +316,7 @@ test('an id is held to Reply’s shape and a LinkedIn account’s name to one pl
     for (const bad of ['0', '-1', '1e3', '12/../x', '01', '12345678901234567', '9007199254740993', ' 7', '', 7, null]) assert.equal(isReplyId(bad), false, String(bad));
     assert.equal(linkedInNameProblem('Made-up Sales'), null);
     assert.equal(linkedInNameProblem('😀'.repeat(100)), null);
-    for (const bad of ['', '   ', 'x'.repeat(101), 'two\nlines', `bidi${String.fromCodePoint(0x202e)}`, 7, null]) assert.equal(linkedInNameProblem(bad), said.badName, JSON.stringify(bad));
+    for (const bad of ['', '   ', 'x'.repeat(101), 'two\nlines', 'two\u2028lines', 'two\u2029paragraphs', `bidi${String.fromCodePoint(0x202e)}`, 7, null]) assert.equal(linkedInNameProblem(bad), said.badName, JSON.stringify(bad));
 });
 
 // ---- The acts, against the reply stand-in ----------------------------------------------------------------------------
@@ -485,6 +504,7 @@ test('a signed-out LinkedIn account offers Reconnect; the codes that leave the s
         ['connect', 'linkedin.account_limit_reached', false],
     ]);
     assert.equal(JSON.stringify(h.log.lines).includes('never shows'), false, 'nothing of the CLI’s words is logged');
+    assert.equal(h.verbs().length, 7, 'one start per act: nothing is repeated by itself');
 });
 
 test('the link is a secret: no log line, no file, no refusal and no answer to the page carries it', async (t) => {
@@ -552,6 +572,58 @@ test('below the Reply CLI the acts need, the card says to update it and offers n
     // At the minimum there is nothing to say.
     const current = await listedHarness(t, {});
     assert.equal((await current.setup.status()).reply.belowMinimum, null);
+});
+
+test('an act clicked while the list is being read again names the accounts the last read listed', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { ...listed, STUB_REPLY_ACCOUNT_PAUSE: print(printed.pause) } });
+    let hold: Promise<void> | null = null;
+    let release: () => void = () => undefined;
+    let arrived: () => void = () => undefined;
+    const atList = new Promise<void>((resolve) => (arrived = resolve));
+    const programs: Programs = {
+        find: (name) => b.programs.find(name),
+        run: async (name, args, options) => {
+            if (args[0] === 'account' && args[1] === 'list' && hold !== null) {
+                arrived();
+                await hold;
+            }
+            return b.programs.run(name, args, options);
+        },
+    };
+    const h = harness(b, { programs });
+    await h.setup.status();
+    hold = new Promise((resolve) => (release = resolve));
+    const reading = h.setup.status();
+    await atList;
+    assert.deepEqual(await h.setup.replyPause('34'), { done: true });
+    release();
+    await reading;
+});
+
+test('below the minimum the Reply CLI’s version is read again at each read, so an update made elsewhere is seen', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: listed });
+    let version = '0.20.0';
+    let asked = 0;
+    const programs: Programs = {
+        find: (name) => b.programs.find(name),
+        run: (name, args, options) => {
+            if (args[0] === '--version') {
+                asked += 1;
+                return Promise.resolve({ exit: 0, stdout: `reply-cli ${version}`, stderr: '' });
+            }
+            return b.programs.run(name, args, options);
+        },
+    };
+    const h = harness(b, { programs });
+    assert.notEqual((await h.setup.status()).reply.belowMinimum, null);
+    assert.notEqual((await h.setup.status()).reply.belowMinimum, null);
+    assert.equal(asked, 2, 'read again while below');
+    version = '0.21.0';
+    const { reply } = await h.setup.status();
+    assert.equal(reply.belowMinimum, null);
+    assert.equal(reply.accounts.length, 2);
+    await h.setup.status();
+    assert.equal(asked, 3, 'kept once at or above the minimum');
 });
 
 test('the links made and not used yet are read for each channel that was listed, never with a link', async (t) => {

@@ -124,8 +124,9 @@ const needsReconnect = (account: DesktopReplyAccount): boolean =>
 // ---- The acts: each one verb of the Reply CLI, which the desktop runs ------------------------------------------------
 //
 // A link the Reply CLI makes for connecting or reconnecting an account goes from the desktop straight to the person's
-// browser: the card learns only that it was opened, when it stops working and its pending entry. Every act that changes
-// an account asks the person first in a box of the desktop's own; the card can only ask for the act.
+// browser: the card learns only that it was opened, when it stops working and its pending entry. A limit's change, a
+// pause, a resume, an unblock and a delete ask the person first in a box of the desktop's own, as do the shared mailbox
+// page and a forced delete; the card can only ask for the act.
 
 /** Which of the card's places a dialog or a choice belongs to: the Connect panel's card, or the chat's. */
 type Place = string;
@@ -225,7 +226,11 @@ async function ask(
     } catch (error) {
         answer = { refused: messageOf(error), code: null, offer: null, reread: false };
     }
-    if (mine !== asked || actDialog.value === null) return;
+    if (mine !== asked || actDialog.value === null) {
+        // The dialog went while the act was asked; the list is still read again where the act was done or said to.
+        if (!('refused' in answer) || answer.reread) void reload();
+        return;
+    }
     if ('refused' in answer) {
         if (answer.offer === 'reconnect' && account !== null && !signedOut.value.includes(account.id))
             signedOut.value = [...signedOut.value, account.id];
@@ -740,7 +745,25 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
         <div class="hd"><b>Reply</b></div>
         <div class="bd">
             <div class="setrow"><div class="grow">${cli}</div></div>
-            ${state.cli.found && below !== null ? html`<div class="setrow meta below-minimum">${below}</div>` : null}
+            ${
+                state.cli.found && below !== null
+                    ? html`<div class="setrow below-minimum">
+                          <div class="grow meta">${below}</div>
+                          ${
+                              state.cli.install
+                                  ? html`<button
+                                        class="btn sm"
+                                        type="button"
+                                        ${busy}
+                                        ${act('connect.install', state.cli.install)}
+                                    >
+                                        Update
+                                    </button>`
+                                  : null
+                          }
+                      </div>`
+                    : null
+            }
             <div class="setrow">
                 <div class="grow">
                     ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
@@ -773,6 +796,13 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                                 ${offering ? limitView(account, place, asks) : null}`;
                         })}
                         ${waiting.map((row) => pendingView(row))}
+                        ${
+                            waiting.length > 0
+                                ? html`<div class="setrow meta acct-pending-hint">
+                                      A link here is not shown again: add the account again to make a new link.
+                                  </div>`
+                                : null
+                        }
                     </div>`,
             )}
             ${unlisted(state).map((line) => html`<div class="setrow meta acct-none">${line}</div>`)}

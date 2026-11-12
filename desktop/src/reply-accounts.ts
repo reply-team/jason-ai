@@ -34,7 +34,7 @@ export const replyAccountSentences = {
     notConfirmed: 'Nothing was done.',
     notOffered: 'That is offered only once Reply has said it is needed.',
     sharedPageOffer: 'This Reply does not make a link for one mailbox yet. Its shared mailbox page can be opened instead.',
-    signedOut: 'The LinkedIn account is signed out of LinkedIn, so it was not paused or resumed: reconnect it first.',
+    signedOut: 'The LinkedIn account is signed out of LinkedIn, so Reply did not do it: reconnect the account first.',
     inUse: 'Sequences use this LinkedIn account, so it was not deleted.',
     outcomeUnknown: 'Reply did not say how that ended; the list is read again to show where it stands.',
     stateChanged: 'The account’s state changed meanwhile, so nothing was changed; the list is read again.',
@@ -46,7 +46,7 @@ export const replyAccountSentences = {
     notInPlan: 'This Reply account’s plan or role does not include that.',
     sharedPageOff: 'This Reply account’s plan does not include the shared mailbox page.',
     unreached: 'The Reply CLI did not answer in time, or could not be run; try again.',
-    unreachedWrite: 'The Reply CLI did not answer in time; the list is read again to show whether it was done.',
+    unreachedWrite: 'The Reply CLI did not answer in time, or could not be run; the list is read again to show whether it was done.',
     badLink: 'The Reply CLI answered a link the desktop does not open; the list is read again.',
     notOpened: 'The browser could not be asked to open the link; the list is read again.',
 } as const;
@@ -66,7 +66,7 @@ export function linkedInNameProblem(value: unknown): string | null {
     if (typeof value !== 'string') return replyAccountSentences.badName;
     const name = value.trim();
     const length = [...name].length;
-    if (length === 0 || length > nameLimit || /[\p{Cc}\p{Cf}]/u.test(name)) return replyAccountSentences.badName;
+    if (length === 0 || length > nameLimit || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) return replyAccountSentences.badName;
     return null;
 }
 
@@ -127,7 +127,8 @@ export function refusalOf(
     if (code === codes.emailLinkNotAvailable && act.channel === 'email' && (act.verb === 'connect' || act.verb === 'reconnect') && act.sharedPage !== true) {
         return refusal(replyAccountSentences.sharedPageOffer, code, 'shared_page');
     }
-    if (code === codes.linkedInInvalidCookie) return refusal(replyAccountSentences.signedOut, code, 'reconnect');
+    // A reconnect's own refusal offers no second reconnect.
+    if (code === codes.linkedInInvalidCookie) return refusal(replyAccountSentences.signedOut, code, act.verb === 'reconnect' ? null : 'reconnect');
     if (code === codes.linkedInAccountInUse && act.verb === 'delete' && act.channel === 'linkedin' && act.force !== true) {
         return refusal(replyAccountSentences.inUse, code, 'force');
     }
@@ -237,12 +238,24 @@ export function actBox(act: 'pause' | 'resume' | 'unblock' | 'delete' | 'force' 
     }
 }
 
-/** Asks the person on the window with a box: yes only for its first button, and no where there is no window to ask on. */
+/**
+ * Asks the person on the window with a box: yes only for its first button, and no where there is no window to ask on.
+ * A box is closed when its window is hidden or closed (`gone` says when, and answers how to stop listening), and a box
+ * closed so is a no whatever it answered, so no box waits unseen while the card's acts are held for it.
+ */
 export async function askBox<Window>(
     window: Window | null,
-    show: (window: Window, options: ReplyBox) => Promise<{ response: number }>,
+    show: (window: Window, options: ReplyBox, signal: AbortSignal) => Promise<{ response: number }>,
     options: ReplyBox,
+    gone: (window: Window, abort: () => void) => () => void = () => () => undefined,
 ): Promise<boolean> {
     if (window === null) return false;
-    return (await show(window, options)).response === 0;
+    const closing = new AbortController();
+    const stop = gone(window, () => closing.abort());
+    try {
+        const { response } = await show(window, options, closing.signal);
+        return !closing.signal.aborted && response === 0;
+    } finally {
+        stop();
+    }
 }
