@@ -485,9 +485,9 @@ test('a line the Feed takes in Full access starts no turn, and the Feed in Full 
     assert.equal(r.again().feed([]).mode, 'ask_first');
 });
 
-test('this version does not offer Full access: it is refused before any confirmation, and a chat never runs in it', async (t) => {
-    assert.equal(fullAccessOffered, false);
-    const r = rig(t, { chat: { fullAccessOffered: undefined } });
+test('with the switch off Full access is not offered: it is refused before any confirmation, and a chat never runs in it', async (t) => {
+    assert.equal(fullAccessOffered, true);
+    const r = rig(t, { chat: { fullAccessOffered: false } });
     const { id } = await r.chat.create();
     await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: 'Full access is not in this version yet.' });
     assert.equal(r.confirms, 0);

@@ -10,7 +10,7 @@ import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessSentence, isChatMode, planExitRefusal, planRefusal } from '../src/chat-modes.ts';
+import { chatModes, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planRefusal } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -574,4 +574,9 @@ test('a word with more brace expansions than the second look reads is refused, n
     const many = 'echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}';
     assert.deepEqual(judge('Bash', { command: many }, scope), { verdict: 'deny', message: 'That command expands into more words than the chat reads, so it cannot tell what would run: the chat never runs it. Write the words out. Nothing was run.' });
     assert.equal(judge('Bash', { command: 'echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}' }, scope).verdict, 'ask', 'sixty-four are read, and a card');
+});
+
+test('Full access is offered, and the PowerShell tool still runs nothing unasked in it', () => {
+    assert.equal(fullAccessOffered, true);
+    assert.equal(powerShellRunsInFullAccess, false);
 });
