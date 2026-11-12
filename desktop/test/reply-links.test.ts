@@ -7,16 +7,20 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { loggedCli } from '../src/installation.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
+import type { Programs } from '../src/programs.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import {
+    askMailboxConfirmation,
     checkedLinkedInLink,
     isReplyId,
     linkedInNameProblem,
     mailboxAddress,
+    mailboxConfirmation,
     mailboxToken,
     readReplyApi,
     replyApiArguments,
     replyApiCalls,
+    replyApiLimitMs,
     replyLinkSentences as said,
 } from '../src/reply-links.ts';
 import { Setup } from '../src/setup.ts';
@@ -31,11 +35,17 @@ const token = 'madeUpToken_ForTests-0123456789abcdefghijklmnop';
 const mailboxPage = `https://run.reply.io/hosted/eac/index/${token}`;
 const detail = 'Reply detail text naming user 4242 that is never shown';
 
-function setupOn(b: Bench, log: Logger = memoryLog()): Setup {
+function setupOn(
+    b: Bench,
+    log: Logger = memoryLog(),
+    options: { confirm?: (() => Promise<boolean>) | null; programs?: Programs } = {},
+): Setup {
+    const confirm = options.confirm === undefined ? () => Promise.resolve(true) : options.confirm;
     return new Setup({
         paths: b.paths,
         cli: loggedCli(b.cli, log),
-        programs: b.programs,
+        programs: options.programs ?? b.programs,
+        ...(confirm === null ? {} : { confirmMailboxLink: confirm }),
         keys: new ProviderKeys(b.paths.providerKeys, fakeBox),
         log,
         bundleVersion: '0.36.0',
@@ -45,7 +55,8 @@ function setupOn(b: Bench, log: Logger = memoryLog()): Setup {
 }
 
 const answer = (status: number, data: unknown) => JSON.stringify({ status, data });
-const signedIn = { STUB_REPLY_SIGNED_IN: 'yes' };
+// reply-cli 0.20.0 is the first that reads a body from standard input, which the LinkedIn acts need.
+const signedIn = { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_VERSION: '0.20.0' };
 const apiCalls = (b: Bench) => b.record().filter((entry) => entry.name === 'reply' && entry.args[0] === 'api');
 
 // ---- The closed table ----------------------------------------------------------------------------------------------
@@ -110,6 +121,12 @@ test('a LinkedIn link is shown only in one of Reply’s three forms, its host re
         `https:///linkedin-connect/${hex}`,
         `https://run.reply.io /linkedin-connect/${hex}`,
         `https://rün.reply.io/linkedin-connect/${hex}`,
+        // An address written as numbers is no host name: a browser reads a last label that is a number as IPv4.
+        `https://127.0.0.1/linkedin-connect/${hex}`,
+        `https://10.0.0.1/linkedin-custom-connect/${hex}`,
+        `https://0x7f.1/linkedin-connect/${hex}`,
+        `https://run.reply.0x1/linkedin-connect/${hex}`,
+        `https://run.reply.42/linkedin-connect/${hex}`,
         'https://auth.linkedin.reply.io.evil.example/x',
         'https://evilauth.linkedin.reply.io/x',
         'https://auth.linkedin.reply.io:8443/x',
@@ -132,6 +149,9 @@ test('a mailbox page is shown only as the hosted page with its token, and Gmail�
     assert.deepEqual(mailboxToken(mailboxPage), { host: 'run.reply.io', token });
     assert.deepEqual(mailboxToken(`https://app.example-agency.test/hosted/eac/index/${token}`), { host: 'app.example-agency.test', token });
     assert.deepEqual(mailboxToken('https://RUN.reply.io/hosted/eac/index/abcdefgh'), { host: 'run.reply.io', token: 'abcdefgh' });
+    // A label of digits is a host name where the last label is not one.
+    assert.deepEqual(mailboxToken(`https://10.mail.example-agency.test/hosted/eac/index/${token}`), { host: '10.mail.example-agency.test', token });
+    assert.deepEqual(checkedLinkedInLink(`https://0x7f.example.test/linkedin-connect/${hex}`)?.host, '0x7f.example.test');
     for (const bad of [
         `http://run.reply.io/hosted/eac/index/${token}`,
         `https://run.reply.io:444/hosted/eac/index/${token}`,
@@ -146,6 +166,10 @@ test('a mailbox page is shown only as the hosted page with its token, and Gmail�
         `https://run.reply.io/hosted/eac/ConnectWithGMail?uidToken=${token}`,
         `https://run.reply.io/linkedin-connect/${hex}`,
         `https://run..reply.io/hosted/eac/index/${token}`,
+        `https://127.0.0.1/hosted/eac/index/${token}`,
+        `https://10.0.0.1/hosted/eac/index/${token}`,
+        `https://0x7f.1/hosted/eac/index/${token}`,
+        `https://0X7F.1/hosted/eac/index/${token}`,
         '',
         null,
         7,
@@ -155,7 +179,9 @@ test('a mailbox page is shown only as the hosted page with its token, and Gmail�
     assert.equal(mailboxAddress('run.reply.io', token, 'hosted'), mailboxPage);
     assert.equal(mailboxAddress('run.reply.io', token, 'gmail'), `https://run.reply.io/hosted/eac/ConnectWithGMail?uidToken=${token}`);
     assert.equal(mailboxAddress('run.reply.io', token, 'outlook'), `https://run.reply.io/hosted/eac/ConnectWithOffice?uidToken=${token}&isExchange=false`);
-    assert.equal(mailboxAddress('run.reply.io', 'a_b-c~d', 'gmail'), 'https://run.reply.io/hosted/eac/ConnectWithGMail?uidToken=a_b-c~d', 'encoded');
+    // The checked token's alphabet needs no escape; the address is still built encoded, so no token could reshape it.
+    assert.equal(mailboxAddress('run.reply.io', 'a/b?c&d#e', 'gmail'), 'https://run.reply.io/hosted/eac/ConnectWithGMail?uidToken=a%2Fb%3Fc%26d%23e');
+    assert.equal(mailboxAddress('run.reply.io', 'a/b?c', 'hosted'), 'https://run.reply.io/hosted/eac/index/a%2Fb%3Fc');
 });
 
 test('reply api’s print is read as Reply’s status and body, and anything else as no answer', () => {
@@ -259,15 +285,22 @@ test('each refusal Reply gives is one fixed sentence keyed on its status and cod
         ['409 another code', { STUB_REPLY_API_CONNECT: problem(409, { code: 'linkedInAccount.other' }) }, (s) => s.replyLinkedInConnect('x'), said.unreached],
         ['403 plan', { STUB_REPLY_API_CONNECT: problem(403, { reasons: [1] }) }, (s) => s.replyLinkedInConnect('x'), said.notInPlan],
         ['403 permission', { STUB_REPLY_API_CONNECT: problem(403, { reasons: [2] }) }, (s) => s.replyLinkedInConnect('x'), said.notPermitted],
-        ['403 with a code', { STUB_REPLY_API_CONNECT: problem(403, { code: 'x.forbidden', reasons: [1] }) }, (s) => s.replyLinkedInConnect('x'), said.unreached],
+        ['403 with a code', { STUB_REPLY_API_CONNECT: problem(403, { code: 'x.forbidden', reasons: [1] }) }, (s) => s.replyLinkedInConnect('x'), said.notMade],
+        ['403 without reasons', { STUB_REPLY_API_CONNECT: problem(403) }, (s) => s.replyLinkedInConnect('x'), said.notMade],
+        ['403 with another reason', { STUB_REPLY_API_RECONNECT: problem(403, { reasons: [9] }) }, (s) => s.replyLinkedInReconnect('77'), said.notMade],
+        ['400 another code', { STUB_REPLY_API_CONNECT: problem(400, { code: 'linkedInAccount.nameTooLong' }) }, (s) => s.replyLinkedInConnect('x'), said.notMade],
+        ['400 on reconnect', { STUB_REPLY_API_RECONNECT: problem(400, { code: 'x.y' }) }, (s) => s.replyLinkedInReconnect('77'), said.notMade],
         ['400 invalid', { STUB_REPLY_API_CONNECT: problem(400, { code: 'linkedInAccount.invalidInput' }) }, (s) => s.replyLinkedInConnect('x'), said.notMade],
         ['400 no code', { STUB_REPLY_API_CONNECT: problem(400) }, (s) => s.replyLinkedInConnect('x'), said.notMade],
         ['400 bare', { STUB_REPLY_API_CONNECT: answer(400, null) }, (s) => s.replyLinkedInConnect('x'), said.notMade],
         ['401', { STUB_REPLY_API_CONNECT: problem(401) }, (s) => s.replyLinkedInConnect('x'), said.signInAgain],
         ['429', { STUB_REPLY_API_CONNECT: problem(429) }, (s) => s.replyLinkedInConnect('x'), said.wait],
         ['500', { STUB_REPLY_API_CONNECT: problem(500) }, (s) => s.replyLinkedInConnect('x'), said.unreached],
-        ['exit 3', { STUB_REPLY_API_CONNECT: JSON.stringify({ exit: 3, stdout: detail }) }, (s) => s.replyLinkedInConnect('x'), said.unreached],
-        ['no print', { STUB_REPLY_API_CONNECT: JSON.stringify({ exit: 0, stdout: detail }) }, (s) => s.replyLinkedInConnect('x'), said.unreached],
+        // A connect may have made its waiting row before its answer was lost.
+        ['exit 3', { STUB_REPLY_API_CONNECT: JSON.stringify({ exit: 3, stdout: detail }) }, (s) => s.replyLinkedInConnect('x'), said.noAnswerInTime],
+        ['no print', { STUB_REPLY_API_CONNECT: JSON.stringify({ exit: 0, stdout: detail }) }, (s) => s.replyLinkedInConnect('x'), said.noAnswerInTime],
+        ['reconnect exit 3', { STUB_REPLY_API_RECONNECT: JSON.stringify({ exit: 3, stdout: detail }) }, (s) => s.replyLinkedInReconnect('77'), said.unreached],
+        ['mailbox no print', { STUB_REPLY_API_MAILBOX: JSON.stringify({ exit: 0, stdout: detail }) }, (s) => s.replyMailboxLink('gmail'), said.unreached],
         ['201 without a link', { STUB_REPLY_API_CONNECT: answer(201, { pendingAccountId: 41 }) }, (s) => s.replyLinkedInConnect('x'), said.badLink],
         ['201 with a link of another host', { STUB_REPLY_API_CONNECT: answer(201, { connectionLink: `https://run.reply.io.evil.example:8443/linkedin-connect/${hex}` }) }, (s) => s.replyLinkedInConnect('x'), said.badLink],
         ['404 reconnect', { STUB_REPLY_API_RECONNECT: problem(404, { code: 'linkedInAccount.notFound' }) }, (s) => s.replyLinkedInReconnect('77'), said.accountGone],
@@ -357,4 +390,92 @@ test('the address is a secret: no log line, no file of the installation and no r
         .map((line) => [line['Act'], line['Status'], line['Exit']]);
     assert.deepEqual(logged.slice(0, 3), [['linkedin_connect', 201, 0], ['linkedin_pending', 200, 0], ['linkedin_reconnect', 200, 0]]);
     assert.ok(logged.some(([act]) => act === 'mailbox_page'));
+});
+
+// ---- The fix round: the floor, the confirmation, the time limit ------------------------------------------------------
+
+test('the LinkedIn acts need reply-cli 0.20.0, which reads a body from standard input; below it they are refused and the card says so', async (t) => {
+    const old = bench(t, {
+        programs: ['reply'],
+        env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_VERSION: '0.19.0', STUB_REPLY_API_MAILBOX: answer(200, { url: mailboxPage }) },
+    });
+    const setup = setupOn(old);
+    assert.deepEqual(await setup.replyLinkedInConnect('x'), { refused: said.linkedInFloor });
+    assert.deepEqual(await setup.replyLinkedInReconnect('77'), { refused: said.linkedInFloor });
+    assert.deepEqual(await setup.replyLinkedInPendingLink('41'), { refused: said.linkedInFloor });
+    assert.equal((await setup.status()).reply.linkedinBelowFloor, said.linkedInFloor);
+    assert.deepEqual(apiCalls(old).filter((entry) => entry.args[1] !== '/v3/linkedin-accounts/pending'), [], 'no LinkedIn act was asked');
+    // The mailbox act keeps the card's own floor.
+    assert.equal(((await setup.replyMailboxLink('hosted')) as { link: string }).link, mailboxPage);
+
+    const current = bench(t, { programs: ['reply'], env: signedIn });
+    assert.equal((await setupOn(current).status()).reply.linkedinBelowFloor, null);
+    const out = bench(t, { programs: ['reply'], env: { STUB_REPLY_VERSION: '0.19.0' } });
+    assert.equal((await setupOn(out).status()).reply.linkedinBelowFloor, null, 'nothing to say while the card offers no act');
+});
+
+test('the mailbox link is asked of Reply only after the main process’s own confirmation, each time, and a cancel asks nothing', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { ...signedIn, STUB_REPLY_API_MAILBOX: answer(200, { url: mailboxPage }) } });
+    let asked = 0;
+    let yes = false;
+    const setup = setupOn(b, memoryLog(), { confirm: () => Promise.resolve((asked += 1, yes)) });
+    assert.deepEqual(await setup.replyMailboxLink('gmail'), { refused: said.mailboxNotConfirmed });
+    assert.deepEqual(apiCalls(b), [], 'cancelled: no call was made');
+    yes = true;
+    assert.equal(((await setup.replyMailboxLink('gmail')) as { kind: string }).kind, 'mailbox');
+    assert.equal(((await setup.replyMailboxLink('hosted')) as { kind: string }).kind, 'mailbox');
+    assert.equal(asked, 3, 'asked each time');
+    assert.equal(apiCalls(b).length, 2);
+    // A LinkedIn link needs none: it expires and connects one account.
+    const linked = bench(t, { programs: ['reply'], env: { ...signedIn, STUB_REPLY_API_CONNECT: answer(201, { connectionLink: connectLink }) } });
+    let linkedAsked = 0;
+    assert.equal(((await setupOn(linked, memoryLog(), { confirm: () => Promise.resolve((linkedAsked += 1, false)) }).replyLinkedInConnect('x')) as { kind: string }).kind, 'linkedin');
+    assert.equal(linkedAsked, 0);
+    // A desktop with no way to confirm asks nothing.
+    const none = bench(t, { programs: ['reply'], env: { ...signedIn, STUB_REPLY_API_MAILBOX: answer(200, { url: mailboxPage }) } });
+    assert.deepEqual(await setupOn(none, memoryLog(), { confirm: null }).replyMailboxLink('gmail'), { refused: said.mailboxNotConfirmed });
+    assert.deepEqual(apiCalls(none), []);
+});
+
+test('the confirmation is the main process’s native box: its words, Cancel focused, only the first button is yes, and no window is no', async () => {
+    assert.deepEqual(mailboxConfirmation, {
+        type: 'question',
+        title: 'Show the link for connecting mailboxes?',
+        message: 'Show the link for connecting mailboxes?',
+        detail: "Anyone who has this link can add and manage this Reply account's mailboxes, and it does not expire.",
+        buttons: ['Show the link', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true,
+    });
+    const shown: unknown[] = [];
+    const answering = (response: number) => (window: string, options: unknown) => {
+        shown.push([window, options]);
+        return Promise.resolve({ response });
+    };
+    assert.equal(await askMailboxConfirmation('window', answering(0)), true);
+    for (const response of [1, 2, -1]) assert.equal(await askMailboxConfirmation('window', answering(response)), false, String(response));
+    assert.deepEqual(shown[0], ['window', mailboxConfirmation]);
+    const before = shown.length;
+    assert.equal(await askMailboxConfirmation(null, answering(0)), false);
+    assert.equal(shown.length, before, 'no window: nothing is shown, and the answer is no');
+});
+
+test('a call is stopped at thirty seconds, and a connect stopped there says Check now shows whether one was started', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { ...signedIn, STUB_HANG: 'reply' } });
+    const limits: (number | undefined)[] = [];
+    // The stand-in hangs; its version is answered here, and the limit the desktop asks for is kept and shortened.
+    const programs: Programs = {
+        find: (name) => b.programs.find(name),
+        run: (name, args, options) => {
+            if (args[0] === '--version') return Promise.resolve({ exit: 0, stdout: 'reply-cli 0.20.0', stderr: '' });
+            limits.push(options?.timeoutMs);
+            return b.programs.run(name, args, { ...options, timeoutMs: 1_000 });
+        },
+    };
+    const setup = setupOn(b, memoryLog(), { programs });
+    assert.deepEqual(await setup.replyLinkedInConnect('x'), { refused: said.noAnswerInTime });
+    assert.deepEqual(await setup.replyMailboxLink('gmail'), { refused: said.unreached });
+    assert.equal(replyApiLimitMs, 30_000);
+    assert.deepEqual(limits, [30_000, 30_000]);
 });

@@ -37,6 +37,7 @@ import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
+import { askMailboxConfirmation } from './reply-links.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
@@ -367,6 +368,7 @@ async function run(newInstallation: boolean): Promise<void> {
             runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
             models,
+            confirmMailboxLink: () => askMailboxConfirmation(current, (window, options) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons] })),
         }),
         origin,
         log,

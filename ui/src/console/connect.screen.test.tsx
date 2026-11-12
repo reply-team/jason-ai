@@ -6,13 +6,15 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { setupFound, chatDesktop, madeUpLinks, stubStream, type StubDesktop } from '../test/desktop';
+import { setupFound, chatDesktop, madeUpLinks, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
-import { heldLink, replyAccountsAddress, resetLinks } from './connect';
+import { listen } from './actions';
+import { chatPlace, dropLinks, heldLink, replyAccountsAddress, replyCardFor, resetLinks } from './connect';
+import { Painted } from './painted';
 import { Console } from './console';
 import { attention } from './needs';
-import { chats, lines } from './state';
+import { bind, chats, lines, setup } from './state';
 
 // The Connect panel's Reply card, its accounts grouped by channel with the state Reply reports, and Disconnect on the
 // cards of the notification plugins.
@@ -546,6 +548,108 @@ describe('the Reply card, connecting an account by a link', () => {
         await waitFor(() => within(dialogOf(card)).getByRole('textbox', { name: 'Link' }));
         expect(linkCalls(desktop)[1]).toEqual(['setup.replyMailboxLink', 'outlook']);
         expect(words(dialogOf(card))).toContain(mailboxWords);
+    });
+
+    it('turns the LinkedIn acts off below the Reply CLI that reads a body from standard input, saying so once', async () => {
+        const floor = 'Connecting LinkedIn accounts here needs the Reply CLI 0.20.0 or later: update the Reply CLI.';
+        renderConnect({
+            ...setupFound,
+            reply: {
+                ...setupFound.reply,
+                accounts: [account('14', 'linkedin', 'cookieInvalid'), account('2', 'email', 'disconnected')],
+                linkedinPending: [{ id: '41', name: 'Made-up one', expiresAtUtc: null, isExpired: false }],
+                linkedinBelowFloor: floor,
+            },
+        });
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        expect(Array.from(card().querySelectorAll('.link-floor'), words)).toEqual([floor]);
+        const button = (row: Element, name: string) =>
+            within(row as HTMLElement).getByRole('button', { name }) as HTMLButtonElement;
+        const linkedinRow = Array.from(card().querySelectorAll('.acct')).find((row) =>
+            words(row).includes('Account 14'),
+        )!;
+        const emailRow = Array.from(card().querySelectorAll('.acct')).find((row) => words(row).includes('Account 2'))!;
+        expect(button(linkedinRow, 'Reconnect').disabled).toBe(true);
+        expect(button(emailRow, 'Reconnect').disabled).toBe(false);
+        const pending = card().querySelector('.acct-pending')!;
+        expect(button(pending, 'Copy link').disabled).toBe(true);
+        expect(button(pending, 'Open').disabled).toBe(true);
+        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
+        const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
+        expect(button(offered, 'LinkedIn').disabled).toBe(true);
+        expect(button(offered, 'Gmail').disabled).toBe(false);
+    });
+
+    it('turns every ask off while a link is being asked for, and on again once it comes', async () => {
+        const desktop = renderConnect({
+            ...setupFound,
+            reply: {
+                ...setupFound.reply,
+                accounts: [account('14', 'linkedin', 'cookieInvalid'), account('2', 'email', 'disconnected')],
+                linkedinPending: [{ id: '41', name: 'Made-up one', expiresAtUtc: null, isExpired: false }],
+            },
+        });
+        let release: () => void = () => undefined;
+        desktop.setup.replyLinkedInReconnect = () =>
+            new Promise((resolve) => {
+                release = () =>
+                    resolve({ kind: 'linkedin', link: madeUpLinks.linkedin, host: 'run.reply.io', expiresAtUtc: null });
+            });
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        const asks = () =>
+            Array.from(card().querySelectorAll<HTMLButtonElement>('button')).filter(
+                (each) =>
+                    ['Reconnect', 'Copy link', 'Open', 'Add account'].includes(words(each)) &&
+                    !each.closest('[role="dialog"]'),
+            );
+        const linkedinRow = Array.from(card().querySelectorAll<HTMLElement>('.acct')).find((row) =>
+            words(row).includes('Account 14'),
+        )!;
+        fireEvent.click(within(linkedinRow).getByRole('button', { name: 'Reconnect' }));
+        await waitFor(() => expect(words(dialogOf(card))).toContain('Asking Reply for the link'));
+        expect(asks().length).toBe(5);
+        expect(asks().every((each) => each.disabled)).toBe(true);
+        release();
+        await waitFor(() => within(dialogOf(card)).getByRole('textbox', { name: 'Link' }));
+        expect(asks().every((each) => !each.disabled)).toBe(true);
+    });
+
+    it('keeps a link to the card it was asked from: another chat’s card never shows it, and a card no longer drawn drops it', async () => {
+        const desktop = stubDesktop({ ...setupFound, reply: { ...setupFound.reply, accounts: [] } });
+        setup.value = desktop.status;
+        const unbind = bind({ api: new FakeApi(), desktop, dock: {} as never });
+        const one = replyCardFor('chat_one');
+        const two = replyCardFor('chat_two');
+        expect(replyCardFor('chat_one')).toBe(one);
+        const { container, rerender } = render(
+            <>
+                <div className="one">
+                    <Painted view={one} onGone={() => dropLinks(chatPlace('chat_one'))} />
+                </div>
+                <div className="two">
+                    <Painted view={two} onGone={() => dropLinks(chatPlace('chat_two'))} />
+                </div>
+            </>,
+        );
+        const stop = listen(container);
+        const cardIn = (which: string) => () => container.querySelector<HTMLElement>(`.${which} .card`)!;
+        await addAccount(cardIn('one'), 'Gmail');
+        await waitFor(() => expect(heldLink()).toBe(madeUpLinks.gmail));
+        expect(within(cardIn('one')()).queryByRole('dialog')).not.toBeNull();
+        expect(within(cardIn('two')()).queryByRole('dialog')).toBeNull();
+        rerender(
+            <>
+                <div className="one" />
+                <div className="two">
+                    <Painted view={two} onGone={() => dropLinks(chatPlace('chat_two'))} />
+                </div>
+            </>,
+        );
+        expect(heldLink()).toBeNull();
+        stop();
+        unbind();
     });
 
     it('lists the connections that wait under LinkedIn, by name, state and expiry, and asks the link again on a click', async () => {

@@ -278,6 +278,11 @@ export interface DesktopReply {
      * the list could not be read. Never with their link: `setup.replyLinkedInPendingLink` asks it again.
      */
     linkedinPending: DesktopReplyPending[];
+    /**
+     * Why the LinkedIn link acts are off: the Reply CLI is signed in but older than the one that reads a body from
+     * standard input. The desktop's one sentence, naming the update; null otherwise. The mailbox act is not affected.
+     */
+    linkedinBelowFloor: string | null;
 }
 
 /** A LinkedIn connection that waits to be finished by whoever owns the account. */

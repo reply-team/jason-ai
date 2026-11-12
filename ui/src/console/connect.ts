@@ -169,6 +169,16 @@ function closeDialog(): void {
     linkDialog.value = null;
 }
 
+/**
+ * Drops the link, the choices and the name field a card at `place` has open: called when that card is no longer drawn,
+ * so a link the person stopped seeing is not held.
+ */
+export function dropLinks(place: Place): void {
+    if (linkDialog.peek()?.place === place) closeDialog();
+    if (adding.peek() === place) adding.value = null;
+    if (naming.peek() === place) naming.value = null;
+}
+
 /** The link the card holds, in its open dialog; null once the dialog is closed. */
 export const heldLink = (): string | null => linkDialog.peek()?.link?.link ?? null;
 
@@ -397,7 +407,7 @@ function dialogView(shown: LinkDialog, busy: Html | null): Html {
 }
 
 /** Add account's choices: a mailbox's three pages where email is not absent, LinkedIn where it is not, and Cancel. */
-function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null): Html {
+function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null, linkedinOff: Html | null): Html {
     const absent = Array.isArray(state.absent) ? state.absent : [];
     return html`<div class="setrow add-account">
             ${
@@ -418,7 +428,12 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
             ${
                 absent.includes('linkedin')
                     ? null
-                    : html`<button class="btn sm" type="button" ${busy} ${act('connect.addLinkedIn', place)}>
+                    : html`<button
+                          class="btn sm"
+                          type="button"
+                          ${busy ?? linkedinOff}
+                          ${act('connect.addLinkedIn', place)}
+                      >
                           LinkedIn
                       </button>`
             }
@@ -428,7 +443,7 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
             naming.value === place
                 ? html`<div class="setrow">
                       ${field('linkedin-name', 'Name for the LinkedIn account', 'text')}
-                      <button class="btn sm" type="button" ${busy} ${act('connect.makeLinkedIn', place)}>
+                      <button class="btn sm" type="button" ${busy ?? linkedinOff} ${act('connect.makeLinkedIn', place)}>
                           Make the link
                       </button>
                   </div>`
@@ -635,10 +650,13 @@ function provider(host: DesktopHost, busy: Html | null): Html {
     </div>`;
 }
 
-function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string): Html {
-    const place: Place = label ?? 'connect';
+function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, place: Place = 'connect'): Html {
     const shown = linkDialog.value?.place === place ? linkDialog.value : null;
     const pending = Array.isArray(state.linkedinPending) ? state.linkedinPending : [];
+    // Every ask is off while a link is being asked for, and LinkedIn's below the Reply CLI that can make one.
+    const asks = busy ?? (linkDialog.value?.asking === true ? html`disabled` : null);
+    const floor = typeof state.linkedinBelowFloor === 'string' ? state.linkedinBelowFloor : null;
+    const linkedinOff = floor === null ? null : html`disabled`;
     const cli = state.cli.found
         ? html`<span class="meta">Reply CLI ${state.cli.version ?? ''}</span>`
         : html`<span class="meta">The Reply CLI was not found.</span> ${
@@ -684,7 +702,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string):
                                         ? html`<button
                                               class="btn sm"
                                               type="button"
-                                              ${busy}
+                                              ${asks ?? (account.channel === 'linkedin' ? linkedinOff : null)}
                                               ${act('connect.reconnect', place, account.channel, account.id)}
                                           >
                                               Reconnect
@@ -693,7 +711,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string):
                                 }
                             </div>`;
                         })}
-                        ${waiting.map((row) => pendingView(row, place, busy))}
+                        ${waiting.map((row) => pendingView(row, place, asks ?? linkedinOff))}
                     </div>`,
             )}
             ${unlisted(state).map((line) => html`<div class="setrow meta acct-none">${line}</div>`)}
@@ -703,13 +721,14 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string):
                               <div class="grow meta">
                                   Accounts are read again when this window takes the focus back.
                               </div>
-                              <button class="btn sm" type="button" ${busy} ${act('connect.addAccount', place)}>
+                              <button class="btn sm" type="button" ${asks} ${act('connect.addAccount', place)}>
                                   Add account
                               </button>
                               <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
                           </div>
-                          ${adding.value === place ? addView(state, place, busy) : null}
-                          ${shown !== null ? dialogView(shown, busy) : null}`
+                          ${floor !== null ? html`<div class="setrow meta link-floor">${floor}</div>` : null}
+                          ${adding.value === place ? addView(state, place, asks, linkedinOff) : null}
+                          ${shown !== null ? dialogView(shown, asks) : null}`
                     : null
             }
             <div class="setrow">
@@ -834,11 +853,31 @@ export function aiCardView(): Html {
     </div>`;
 }
 
-/** The Reply card alone, for the moment the work needs a way to send. */
-export function replyCardView(): Html {
-    const state = setup.value;
-    if (!state) return html``;
-    return reply(state.reply, setupBusy.value === null ? null : html`disabled`, 'Connect Reply');
+/** The place of a chat's Reply card: its own, so a link asked in one chat never shows in another. */
+export const chatPlace = (chatId: string): Place => `chat:${chatId}`;
+
+const chatCards = new Map<string, () => Html>();
+
+/**
+ * The Reply card alone, for the moment a chat's work needs a way to send: one view per chat, the same each time it is
+ * asked for, so a region painting it is painted once.
+ */
+export function replyCardFor(chatId: string): () => Html {
+    let view = chatCards.get(chatId);
+    if (view === undefined) {
+        view = () => {
+            const state = setup.value;
+            if (!state) return html``;
+            return reply(
+                state.reply,
+                setupBusy.value === null ? null : html`disabled`,
+                'Connect Reply',
+                chatPlace(chatId),
+            );
+        };
+        chatCards.set(chatId, view);
+    }
+    return view;
 }
 
 export function connectView(): Html {

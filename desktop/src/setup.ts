@@ -22,6 +22,7 @@ import {
     checkedLinkedInLink,
     isMailboxPage,
     isReplyId,
+    linkedInFloorVersion,
     linkedInNameProblem,
     linkedInRefusal,
     mailboxAddress,
@@ -31,6 +32,7 @@ import {
     pendingRows,
     readReplyApi,
     replyApiArguments,
+    replyApiLimitMs,
     replyLinkSentences,
     withoutLink,
     type ReplyApiAct,
@@ -108,6 +110,11 @@ export interface ReplyState {
      * link, which `replyLinkedInPendingLink` asks again on the person's click.
      */
     linkedinPending: ReplyPending[];
+    /**
+     * Why the LinkedIn link acts are off, where the Reply CLI is signed in but older than the one that reads a body from
+     * standard input; null otherwise.
+     */
+    linkedinBelowFloor: string | null;
 }
 
 /**
@@ -171,12 +178,16 @@ export interface SetupDeps {
     runtimeIsOurs?(): boolean;
     settings(): DesktopSettings;
     clock?: () => number;
+    /**
+     * The person's yes, asked by the main process in a native box before the mailbox page is asked of Reply; absent, the
+     * answer is no.
+     */
+    confirmMailboxLink?(): Promise<boolean>;
     /** The models Codex offered when last asked, and the background ask of the ones a day old (`model-lists.ts`). */
     models?: { lists(): KeptLists; refresh(hostIds: readonly string[]): void; unread(hostId: string): 'waiting' | 'failed' | null };
 }
 
 const signInLimit = 5 * 60_000;
-const replyApiLimit = 30_000;
 const installLimit = 5 * 60_000;
 
 function readText(file: string): string | null {
@@ -394,7 +405,7 @@ export class Setup {
     async #reply(valid: boolean): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], linkedinPending: [] };
+            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], linkedinPending: [], linkedinBelowFloor: null };
         }
         const routes = valid ? await this.#deps.cli.run(['route', 'list']) : null;
         const wired = routes !== null && routes.exit === 0 && defaultRoutePlugin(routes.stdout) === 'reply';
@@ -420,7 +431,8 @@ export class Setup {
                 linkedinPending = answeredWell(answer) ? (pendingRows(answer.data) ?? []).map(withoutLink) : [];
             }
         }
-        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts, absent, unread, linkedinPending };
+        const linkedinBelowFloor = auth.signedIn && current && !versionAtLeast(version, linkedInFloorVersion) ? replyLinkSentences.linkedInFloor : null;
+        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts, absent, unread, linkedinPending, linkedinBelowFloor };
     }
 
     /**
@@ -429,10 +441,16 @@ export class Setup {
      */
     async #replyApi(act: ReplyApiAct, options: { id?: string; body?: string } = {}): Promise<ReplyApiAnswer | null> {
         const args = replyApiArguments(act, options.id);
-        const result = await this.#run('reply', `api ${act}`, args, { stdin: options.body, timeoutMs: replyApiLimit });
+        const result = await this.#run('reply', `api ${act}`, args, { stdin: options.body, timeoutMs: replyApiLimitMs });
         const answer = readReplyApi(result);
         this.#deps.log.info('reply_api_answered', { Act: act, Status: answer?.status ?? 0, Exit: result.exit });
         return answer;
+    }
+
+    /** Whether the Reply CLI reads a body from standard input, which the LinkedIn acts need. */
+    async #linkedInReady(): Promise<boolean> {
+        const version = await this.#version('reply');
+        return version !== null && versionAtLeast(version, linkedInFloorVersion);
     }
 
     /** One link asked at a time; the answer is the link, or the sentence it ended with. */
@@ -454,6 +472,7 @@ export class Setup {
         const problem = linkedInNameProblem(name);
         if (problem !== null) return Promise.resolve({ refused: problem });
         return this.#asking(async () => {
+            if (!(await this.#linkedInReady())) return { refused: replyLinkSentences.linkedInFloor };
             const answer = await this.#replyApi('linkedin_connect', { body: JSON.stringify({ name: (name as string).trim() }) });
             if (!answeredWell(answer)) return { refused: linkedInRefusal(answer, 'linkedin_connect') };
             return linkedIn(field(answer.data, 'connectionLink'), null);
@@ -464,6 +483,7 @@ export class Setup {
     replyLinkedInPendingLink(pendingId: unknown): Promise<ReplyLink | LinkRefusal> {
         if (!isReplyId(pendingId)) return Promise.resolve({ refused: replyLinkSentences.badId });
         return this.#asking(async () => {
+            if (!(await this.#linkedInReady())) return { refused: replyLinkSentences.linkedInFloor };
             const answer = await this.#replyApi('linkedin_pending');
             if (!answeredWell(answer)) return { refused: linkedInRefusal(answer, 'linkedin_pending') };
             const rows = pendingRows(answer.data);
@@ -478,6 +498,7 @@ export class Setup {
     replyLinkedInReconnect(accountId: unknown): Promise<ReplyLink | LinkRefusal> {
         if (!isReplyId(accountId)) return Promise.resolve({ refused: replyLinkSentences.badId });
         return this.#asking(async () => {
+            if (!(await this.#linkedInReady())) return { refused: replyLinkSentences.linkedInFloor };
             const answer = await this.#replyApi('linkedin_reconnect', { id: accountId });
             if (!answeredWell(answer)) return { refused: linkedInRefusal(answer, 'linkedin_reconnect') };
             return linkedIn(field(answer.data, 'connectionLink'), null);
@@ -492,6 +513,9 @@ export class Setup {
     replyMailboxLink(page: unknown): Promise<ReplyLink | LinkRefusal> {
         if (!isMailboxPage(page)) return Promise.resolve({ refused: replyLinkSentences.badPage });
         return this.#asking(async () => {
+            // The one link that never expires is asked only on the person's yes in the main process's own box.
+            const confirmed = (await this.#deps.confirmMailboxLink?.()) ?? false;
+            if (!confirmed) return { refused: replyLinkSentences.mailboxNotConfirmed };
             const answer = await this.#replyApi('mailbox_page');
             if (!answeredWell(answer)) return { refused: mailboxRefusal(answer) };
             const checked = mailboxToken(mailboxAnswer(answer.data));

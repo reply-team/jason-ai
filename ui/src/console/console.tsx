@@ -92,7 +92,9 @@ const components = {
     needs: () => <Painted className="painted" view={needs.needsView} />,
     campaigns: () => <Painted className="painted" view={campaigns.campaignsView} />,
     activity: () => <Painted className="painted" view={activityView} />,
-    connect: () => <Painted className="painted" view={connect.connectView} />,
+    connect: () => (
+        <Painted className="painted" view={connect.connectView} onGone={() => connect.dropLinks('connect')} />
+    ),
     page: PagePanel,
 };
 

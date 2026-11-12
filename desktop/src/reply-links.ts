@@ -21,6 +21,12 @@ export const replyApiCalls = {
 
 export type ReplyApiAct = keyof typeof replyApiCalls;
 
+/** How long one call may take before it is stopped and ends as no answer. */
+export const replyApiLimitMs = 30_000;
+
+/** The first reply-cli that reads a body from standard input (`--body -`), which the LinkedIn acts need. */
+export const linkedInFloorVersion = '0.20.0';
+
 /** An account id as Reply gives one: digits with no leading zero, at most sixteen, a safe integer. */
 export function isReplyId(value: unknown): value is string {
     return typeof value === 'string' && /^[1-9][0-9]{0,15}$/.test(value) && Number.isSafeInteger(Number(value));
@@ -54,6 +60,9 @@ export const replyLinkSentences = {
     notInPlan: 'LinkedIn is not in this Reply account’s plan.',
     notPermitted: 'This Reply user is not permitted to add LinkedIn accounts.',
     notMade: 'Reply did not make the link.',
+    noAnswerInTime: 'Reply did not answer in time. Check now shows whether a connection was started.',
+    linkedInFloor: 'Connecting LinkedIn accounts here needs the Reply CLI 0.20.0 or later: update the Reply CLI.',
+    mailboxNotConfirmed: 'The link for connecting mailboxes was not shown.',
     mailboxPageOff: 'Connecting mailboxes by a shared page is not on for this Reply account’s plan.',
     signInAgain: 'Reply says the sign-in is no longer valid; sign in to Reply again on this card.',
     wait: 'Reply asked to wait; try again in a minute.',
@@ -117,9 +126,13 @@ function hasReason(data: unknown, reason: number): boolean {
     return Array.isArray(reasons) && reasons.some((each) => each === reason || each === String(reason));
 }
 
-/** The sentence for a LinkedIn call that did not answer a link, keyed on Reply's status and code and nothing else. */
+/**
+ * The sentence for a LinkedIn call that did not answer a link, keyed on Reply's status, and on its code only where the
+ * code picks a more specific sentence. A connect with no answer may have made its waiting row before the answer was
+ * lost, so it says how to find out.
+ */
 export function linkedInRefusal(answer: ReplyApiAnswer | null, act: ReplyApiAct): string {
-    if (answer === null) return replyLinkSentences.unreached;
+    if (answer === null) return act === 'linkedin_connect' ? replyLinkSentences.noAnswerInTime : replyLinkSentences.unreached;
     const { status, data } = answer;
     const code = codeOf(data);
     if (status === 409 && code === 'linkedinaccount.limitreached') return replyLinkSentences.limitReached;
@@ -127,7 +140,7 @@ export function linkedInRefusal(answer: ReplyApiAnswer | null, act: ReplyApiAct)
     if (status === 404 && act === 'linkedin_reconnect' && code === 'linkedinaccount.notfound') return replyLinkSentences.accountGone;
     if (status === 403 && code === null && hasReason(data, 1)) return replyLinkSentences.notInPlan;
     if (status === 403 && code === null && hasReason(data, 2)) return replyLinkSentences.notPermitted;
-    if (status === 400 && (code === null || code === 'linkedinaccount.invalidinput')) return replyLinkSentences.notMade;
+    if (status === 400 || status === 403) return replyLinkSentences.notMade;
     return common(status);
 }
 
@@ -150,6 +163,15 @@ const hostPattern = '(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-
 const connectForm = new RegExp(`^https://(${hostPattern})/linkedin-(?:custom-)?connect/[0-9a-f]{32}$`);
 /** The sign-in service a reconnect may answer directly: this host exactly, whatever its path and query. */
 const signInHost = 'auth.linkedin.reply.io';
+/**
+ * Whether a host matched by `hostPattern` is a host name and not an address written as numbers: a browser reads a host
+ * whose last label is a number (all digits, or `0x` and hex) as IPv4, so the host drawn would not be the host opened.
+ */
+function isHostName(host: string): boolean {
+    const last = host.slice(host.lastIndexOf('.') + 1);
+    return !/^[0-9]+$/.test(last) && !/^0x/i.test(last);
+}
+
 /** Printable ASCII with no space: what any address shown here is made of. */
 const plain = /^[\x21-\x7e]+$/;
 
@@ -167,7 +189,7 @@ export interface CheckedLink {
 export function checkedLinkedInLink(value: unknown): CheckedLink | null {
     if (typeof value !== 'string' || !plain.test(value)) return null;
     const form = connectForm.exec(value);
-    if (form) return { link: value, host: form[1]!.toLowerCase() };
+    if (form) return isHostName(form[1]!) ? { link: value, host: form[1]!.toLowerCase() } : null;
     if (value.startsWith(`https://${signInHost}/`) && !value.includes('#')) return { link: value, host: signInHost };
     return null;
 }
@@ -179,7 +201,7 @@ const mailboxForm = new RegExp(`^https://(${hostPattern})/hosted/eac/index/([A-Z
 export function mailboxToken(value: unknown): { host: string; token: string } | null {
     if (typeof value !== 'string') return null;
     const form = mailboxForm.exec(value);
-    return form ? { host: form[1]!.toLowerCase(), token: form[2]! } : null;
+    return form && isHostName(form[1]!) ? { host: form[1]!.toLowerCase(), token: form[2]! } : null;
 }
 
 /** The three mailbox pages the card offers: Gmail's, Outlook's, and the hosted page itself for any other mailbox. */
@@ -201,6 +223,33 @@ export function mailboxAddress(host: string, token: string, page: MailboxPage): 
 /** The address in the mailbox page's answer: the body itself as a string, or its `url`. */
 export function mailboxAnswer(data: unknown): unknown {
     return typeof data === 'string' ? data : field(data, 'url');
+}
+
+/**
+ * The native box the main process shows before the mailbox page is asked of Reply: the page cannot be told from a
+ * script running in it, and this is the one link that never expires. Cancel is focused, and only the first button is yes.
+ */
+export const mailboxConfirmation = {
+    type: 'question',
+    title: 'Show the link for connecting mailboxes?',
+    message: 'Show the link for connecting mailboxes?',
+    detail: "Anyone who has this link can add and manage this Reply account's mailboxes, and it does not expire.",
+    buttons: ['Show the link', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+} as const;
+
+/**
+ * Asks the person on the window with the box above: yes only for its first button, and no where there is no window to
+ * ask on.
+ */
+export async function askMailboxConfirmation<Window>(
+    window: Window | null,
+    show: (window: Window, options: typeof mailboxConfirmation) => Promise<{ response: number }>,
+): Promise<boolean> {
+    if (window === null) return false;
+    return (await show(window, mailboxConfirmation)).response === 0;
 }
 
 /** A LinkedIn connection waiting to be finished, as the card lists it: never with its link. */
