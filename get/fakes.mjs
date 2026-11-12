@@ -43,8 +43,10 @@ export function fakeDb({ rows = [], failing = false } = {}) {
 }
 
 /**
- * A D1 binding over a real SQLite database in memory, made from schema.sql, so a statement is run as written. D1 numbers
- * its parameters (?1, ?2); this SQLite takes them by position, so each occurrence is bound in order.
+ * A D1 binding over a real SQLite database in memory, made from schema.sql, so a statement is run as written. D1
+ * numbers its parameters (?1, ?2) and the statement goes to node:sqlite untouched. Handed the values positionally,
+ * node:sqlite (22.17) refuses a numbered parameter ("column index out of range"), so they are bound by name, '?1' for
+ * ?1, which it takes.
  */
 export function sqliteDb() {
   const database = new DatabaseSync(':memory:');
@@ -56,20 +58,16 @@ export function sqliteDb() {
     prepare(sql) {
       return {
         bind(...args) {
-          const ordered = [];
-          const positional = sql.replace(/\?(\d+)/g, (_, index) => {
-            ordered.push(args[Number(index) - 1]);
-            return '?';
-          });
-          const statement = database.prepare(positional);
+          const statement = database.prepare(sql);
+          const named = Object.fromEntries(args.map((value, index) => ['?' + (index + 1), value]));
           return {
             async run() {
-              statement.run(...ordered);
+              statement.run(named);
               return { success: true };
             },
             async all() {
               reads.push({ sql, args });
-              return { results: statement.all(...ordered).map((row) => ({ ...row })) };
+              return { results: statement.all(named).map((row) => ({ ...row })) };
             },
           };
         },
