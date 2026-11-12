@@ -1,7 +1,7 @@
 {
   "kind": "audience_reserve_recovered",
   "version": 1,
-  "since": "0.35.0",
+  "since": "0.36.0",
   "summary": "A campaign's untouched members are back at or above the threshold it set, after a line said they had fallen under it; not a trigger.",
   "subscribable": true,
   "entities": {

@@ -380,7 +380,8 @@ it in full:
 
 `last_reload.routes` lists the routes that load refused, each named the way it is written — `Routes:Default`,
 `Routes:Operations:<operation>`, `campaign:<cmp_…>/routes/<operation>` or `…/routes/default` — with its code and
-message, so it is empty when the load activated. The routes a load froze are not listed there: `routing_snapshot_id`
+message, so it is empty when the load activated; a search the load's routes would have left without its account is
+named `campaign:<cmp_…>/searches/<wi_…>`, under `route_orphans_search` ([routing](routing.md) §6). The routes a load froze are not listed there: `routing_snapshot_id`
 names the snapshot they are in, and the activation journals them in `plugins_reloaded` (below).
 `last_reload.subscriptions` is the same for the order of each journal kind's subscribers (§16): each refusal is named by
 its setting, `Subscriptions:Order:<kind>[<index>]`, with its code and message. `capabilities.subscriptions` is the kinds

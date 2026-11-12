@@ -44,6 +44,18 @@ public class AudienceSearchesSchemaTests
             ],
             await PlanAsync(db, AudienceSearches.Named(db, 1, "wi_1").Select(search => search.Cursor).ToQueryString()));
 
+        // A route change reads every search still followed, of any campaign, off the same index, with the plugin and the
+        // account each ran under: its campaign and its work item by their keys, its latest succeeded attempt by its work item.
+        Assert.Equal(
+            [
+                "SCAN a USING INDEX ix_audience_searches_in_flight",
+                "SEARCH c USING INTEGER PRIMARY KEY (rowid=?)",
+                "SEARCH w USING INTEGER PRIMARY KEY (rowid=?)",
+                "CORRELATED SCALAR SUBQUERY 1",
+                "SEARCH a0 USING INDEX ix_attempts_work_item_id_number (work_item_id=?)",
+            ],
+            await PlanAsync(db, AudienceSearches.Followed(db).ToQueryString()));
+
         // The claim asks, for every search it claims, whether another search of the campaign is in the way: its unended rows
         // off the index of the searches still followed, and its searches starting now off the index of its work by status.
         Assert.Equal(

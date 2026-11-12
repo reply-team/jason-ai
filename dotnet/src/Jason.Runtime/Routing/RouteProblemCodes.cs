@@ -53,4 +53,11 @@ public static class RouteProblemCodes
     /// must get one answer, not a 500 that says the runtime broke rather than the edit.
     /// </summary>
     public const string SettingsInvalid = "routes_settings_invalid";
+
+    /// <summary>
+    /// Not one of the eight either: a problem of the whole set rather than of one route. The set would take the last
+    /// active route naming the plugin and account a search still followed ran under away from it, so the search's reads
+    /// and its stop would have nowhere to go while it goes on spending at the provider.
+    /// </summary>
+    public const string OrphansSearch = "route_orphans_search";
 }

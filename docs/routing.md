@@ -259,7 +259,8 @@ declared.
 ## 6. Activation, and what refuses it
 
 A reload builds the whole candidate route set — the global half from `settings.json`, the campaign half
-from the rows of every campaign that is not archived — and checks every route in it against the plugin
+from the rows of every campaign that is not archived, and of an archived one while a search of it is still followed
+(below) — and checks every route in it against the plugin
 set that load produced and against the operation catalog. Only if nothing objected are the two
 registries swapped, plugins first and routes immediately after. The reload reads `settings.json`
 itself before it builds anything, so a global route written straight before it is frozen by that
@@ -299,8 +300,39 @@ until the item's attempts ran out — the start fails closed instead. At a **liv
 binding pattern whose probe times out twice is at fault: the package is refused, as any package problem is, and the
 previous snapshot stays active.
 
-**An archived campaign's routes are ignored.** History must never stand between an operator and an
-uninstall: the campaign will never dispatch again, so what its route named no longer has to exist.
+**An archived campaign's routes are ignored**, but for its searches. History must never stand between an operator and
+an uninstall: the campaign will never dispatch again, so what its route named no longer has to exist. Until each of its
+searches has ended, though, the stop its archive made still runs, and a stop goes where the search ran: so while a
+search of an archived campaign is still followed, the campaign's routes stay in the set, and each one that no longer
+holds — its plugin uninstalled, say — is left out and refuses nothing. They are routes in force like any other until
+then: `jason route list` and `route resolve` show them, the events reader reads the accounts they bind, a person's reads
+on request may go through them, and the route counts count them; the claim still runs nothing in an archived campaign
+but the stop. The next activation after its last search ends leaves them out again.
+
+**A change that would leave a search without its account is refused.** A read or a stop of a search goes where the
+search ran (§7, check 17), and a route is where a binding is kept. So when the routes in force name the plugin and the
+account a search still followed ran under — running, held at the provider, or of an archived campaign whose stop has
+not ended it yet — and the candidate set would name them nowhere, the set is refused with `route_orphans_search`, one
+detail per search, named `campaign:<cmp_…>/searches/<wi_…>`, saying what to do: stop it with `audience.search_cancel`,
+or let it end, then change the route. A paused campaign's searches are not read, so one ends only once the campaign is
+started again; an archived campaign's search is ended only by a stop: the one its archive made, which is not made again
+if it fails, so a person then makes one with `audience.search_cancel`, the one operation an archived campaign takes. `route.set` and `route.unset` answer
+`409 route_orphans_search`, `retryable: false`, and write nothing; a reload answers `409 plugin_reload_rejected` with that
+detail and keeps the routes in force, as for any problem it cannot apply, and `plugin.list` says why under
+`last_reload`. A change that leaves another of the search's campaign's routes, or a global one, naming the account goes
+through — a route of another campaign does not count, since a search is routed only by its own campaign's routes and
+the global ones — and so does any change once the search has ended. A search the provider gave no reference is read
+and stopped nowhere (§7, check 16), so no route is kept for it. A search whose start is under way has no record yet
+and is not counted: a change made while it starts can leave it without its account, and it is said as below.
+
+**The start is not refused, only reported.** A start has no routes in force to keep, and a start whose routes are
+refused leaves no plugin active at all. So routes changed outside the three doors above — the settings edited while the
+runtime was stopped — are activated as they are, and each search still followed that they leave with no route naming
+its account is said in the log at warning, with its campaign and the way out: put a route naming that account back,
+then stop the search or let it end. It is said again at each later activation, a `route.set`, a `route.unset` or a
+reload, for as long as it lasts. Until then its reads and its stop are refused at the claim (§7, check 17). A search
+that was already in that state before a `route.set`, `route.unset` or reload refuses nothing either: those refuse only a
+change that would itself take the account away.
 
 An activated load journals `plugins_reloaded` with the routes it froze beside the packages:
 `routes: {snapshot_id, global_default, override_count, campaign_route_count}`. A route write journals
@@ -367,7 +399,7 @@ is asked about work while the provider refuses it, and work a person releases st
 | 14 | `send_route_mismatch` | permanent | the send was made through another plugin, or under another binding, than this item is routed to: a reference names a send only at the provider and account that took it. Plugin and binding are compared by the plugin's id and the binding's identity, never the package's digest, so an upgraded package still reads its own sends. Route the operation the way the send was routed, then create a new item |
 | 15 | `search_unknown` | permanent | the operation reads or stops one search — its input schema names `search`, today `audience.search_status` and `audience.search_cancel` — and the work item `args.search` names is not one of this campaign's, or is not an `audience.search`. Name the work item that made the search, in this campaign; then create a new item. An operation that names no search never meets this check, nor the two after it |
 | 16 | `search_reference_absent` | permanent | the search named has no reference to act by: it has not succeeded, or it answered `finished` inside its own call — a provider that searches synchronously answers so, with every person found, and its search is never read or stopped — or the provider gave it none. The runtime composes `search.reference` from the search's own attempt and from nothing a caller writes, so there is nothing to read or to stop |
-| 17 | `search_route_mismatch` | permanent | no route active now names the plugin and the binding the search was made under. A read or a stop of a search is routed where the search ran, whatever its own operation resolves to: the operation's own route where it names that plugin and binding, then the campaign's route for `audience.search`, then any of the campaign's routes and the global ones, in the order of precedence, the binding found by its identity — so an override of the read alone, or a default moved to another account while another route still names the first, leaves it readable and stoppable at the account that is spending. A route is where a binding is kept: once no route active now names the account a search runs under — the only route that named it moved to another account — its reads and its stop are refused here, and the search goes on at the provider unread until a route names that account again. A reference names a search only at the provider and account that started it; compared by the plugin's id and the binding's identity, never the package's digest. Route an operation to that plugin and account again, then create a new item |
+| 17 | `search_route_mismatch` | permanent | no route active now names the plugin and the binding the search was made under. A read or a stop of a search is routed where the search ran, whatever its own operation resolves to: the operation's own route where it names that plugin and binding, then the campaign's route for `audience.search`, then any of the campaign's routes and the global ones, in the order of precedence, the binding found by its identity — so an override of the read alone, or a default moved to another account while another route still names the first, leaves it readable and stoppable at the account that is spending. A route is where a binding is kept, so a route change that would take the last route naming that account away from a search still followed is refused at activation, `route_orphans_search` (§6). A search reaches this check only where its account's last route went outside those doors — the settings edited while the runtime was stopped, then a start, which says the search in its log — and then its reads and its stop are refused here, and the search goes on at the provider unread until a route names that account again. A reference names a search only at the provider and account that started it; compared by the plugin's id and the binding's identity, never the package's digest. Route an operation to that plugin and account again, then create a new item |
 | 18 | `audience_unknown` | permanent | the operation carries an audience's definition — today `audience.search` and `audience.preview` — and the work item names an audience by its number under `args.audience` that the campaign does not hold: a campaign numbers its audiences from 1, in the order the claim made them ([campaign manager](campaign-manager.md) §10). Name an audience the campaign holds, or the audience by its definition, then create a new item. An item that names its audience by its definition never meets this check; one that names an audience the campaign holds is composed with the definition that audience was made from, which row 20 holds to the routed plugin's schema as it holds any |
 | 19 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each. A pattern of that schema that did not finish matching, twice, is not `input_invalid`: nothing was found wrong and nothing has run, so the attempt ends `validation_timed_out`, `transient`, and comes back under the ordinary retry rule |
 | 20 | `definition_invalid` | validation | the composed `definition` does not satisfy the schema the routed plugin declares for one under `audience_definition` (`docs/plugins.md` §3). The envelope around it is the operation's, held to its schema at `workitem.create` and at row 19; the definition is the provider's, so it is held to the routed plugin's schema here, where the route is resolved, and never at creation. The details carry a JSON pointer each, under `/definition`; `jason operation describe audience.search --campaign <id>` prints the schema. A pattern of that schema that did not finish matching, twice, is `validation_timed_out`, `transient`, as at rows 7 and 19. A search the claim lets through past this row, to run or to wait for a person, runs under one of the campaign's audiences from then on: the claim finds the audience its definition already is, or makes the next one, and records it on the item ([campaign manager](campaign-manager.md) §10); a search refused at any row makes none |
@@ -390,7 +422,7 @@ send is created only once the provider has said the earlier attempt did not act.
 disagrees with a pin is refused rather than resolved either way: the rule is to work by the pin, so the
 message names the pinned value.
 
-### At activation — eight route problems, plus one for the section
+### At activation — eight route problems, plus one for the section and one for the searches
 
 | Code | When |
 |---|---|
@@ -409,6 +441,11 @@ something no route could be built from. The options system reports that as prose
 structure, so the runtime carries the validator's own sentence through verbatim and names the setting it
 came from. It arrives as the same rejected reload, because an operator who mistypes a route must get one
 answer — and never a 500, which would say the runtime broke rather than the edit.
+
+The tenth is not a problem with one route either, but with the whole set: `route_orphans_search`, a set that would take
+the last route naming the plugin and account a search still followed ran under away from it (§6). It is asked only
+when no route in the set is wrong, and `route.set` and `route.unset` answer it under its own code rather than as a
+rejected reload.
 
 **A binding no pattern could finish measuring is none of these.** Where a pattern of the plugin's binding schema did not
 finish matching, twice, nothing was found wrong with the binding: it is not `route_binding_invalid`. Alone, it leaves

@@ -294,6 +294,7 @@ public static class ApiFixtures
         "rolenote.set/project",
         "rolenote.set/two-levels",
         "route.list/empty",
+        "route.set/orphans-search",
         "subscription.list/one-kind",
         "subscription.rewind/not-human",
         "subscription.rewind/since-without-offset",

@@ -36,7 +36,7 @@ absorbed by a release of this package alone.
 - What it cannot do: people without an email (`include_without_email`) are refused `capability_not_offered`, reply-cli
   having no flag for them.
 - Needs reply-cli 0.20.0 or newer, the release with `reply live-data` and `reply contact-list create`, `delete` and
-  `contacts`, and Jason 0.35.0 or newer, the release that publishes the audience family: an older one refuses the
+  `contacts`, and Jason 0.36.0 or newer, the release that publishes the audience family: an older one refuses the
   package at the reload, `unknown_field`, on `audience_definition`.
 
 ## 0.14.8

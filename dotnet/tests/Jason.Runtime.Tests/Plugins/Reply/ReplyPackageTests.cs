@@ -1430,7 +1430,7 @@ public class ReplyPackageTests
                 "`audience.availability`", "`audience_definition`", "`Jason search`", "`search_in_progress`", "`insufficient_credits`",
                 "`feature_unavailable`", "`paused_for_credits`", "`paused_for_limit`", "`capability_not_offered`", "`unknown_field`",
                 "the read after them, which finds nobody, deletes the list", "read as UTC", "never a second contact",
-                $"reply-cli {ReplyCliRelease.Version} or newer", "Jason 0.35.0 or newer",
+                $"reply-cli {ReplyCliRelease.Version} or newer", "Jason 0.36.0 or newer",
             },
             word => Assert.Contains(word, section, StringComparison.Ordinal));
         Assert.StartsWith(" ## 0.14.8 ", Flat(ChangelogSection(1)), StringComparison.Ordinal);

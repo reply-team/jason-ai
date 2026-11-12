@@ -174,6 +174,18 @@ public static class DomainErrors
             retryable: false,
             details);
 
+    /// <summary>
+    /// A campaign route write refused because it would leave searches still followed with no route to the account each
+    /// ran under. The details name each search; nothing was written and the routes in force stay active.
+    /// </summary>
+    public static DomainException RouteOrphansSearch(IReadOnlyList<ErrorDetail> details) =>
+        new(
+            StatusCodes.Status409Conflict,
+            Routing.RouteProblemCodes.OrphansSearch,
+            string.Create(CultureInfo.InvariantCulture, $"The route change was refused: {details.Count} search(es) still followed would have no route to the account each ran under; the routes in force stay active."),
+            retryable: false,
+            details);
+
     public static NotFoundException ApprovalNotFound(string id) => new("approval_not_found", $"No approval with id '{id}'.");
 
     /// <summary>No provider block has this id. Nothing deletes a block, so this is a wrong id.</summary>

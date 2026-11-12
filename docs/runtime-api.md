@@ -401,6 +401,11 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 - `route.set`: sends one campaign's work, or one of its operations, to a plugin.
 - `route.unset`: takes one campaign route away.
 
+  Either is refused `409` with the code `route_orphans_search`, and changes nothing, when it would take the last of the
+  search's campaign's routes and the global ones naming the plugin and account a search still followed ran under away
+  from it: its reads and its stop would have nowhere to go. Each detail names one such search and says what to do: stop the search, or let it end, then change the route
+  ([docs/routing.md](routing.md), §6).
+
 ### `operation`
 
 - `operation.describe`: what a canonical operation takes for a campaign — its argument schema and, for one that carries

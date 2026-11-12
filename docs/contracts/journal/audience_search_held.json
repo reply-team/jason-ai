@@ -1,7 +1,7 @@
 {
   "kind": "audience_search_held",
   "version": 1,
-  "since": "0.35.0",
+  "since": "0.36.0",
   "summary": "A search for a campaign's audience is held at the provider — paused, out of credits or at the plan's limit — with what it was asked for, found and landed; said when a read first reports the hold, and again only after the search moves and holds again; a default manager trigger.",
   "subscribable": true,
   "entities": {
