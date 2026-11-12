@@ -90,7 +90,7 @@ its own, so a typeahead asking a filter's values at every key starts one per key
 
 Codex in the desktop's chat reads and advises and acts through nothing: its sandbox is read-only.
 
-On Windows the chat may decline Codex even after an administrator has set up Codex's elevated sandbox: that sandbox can still read part of Jason's data, the desktop's settings file among it, and on the one real machine checked it could. The chat then declines every Codex message until the desktop quits, and its sentence still names `codex sandbox setup --elevated`, which does not help there. Use Claude Code for the chat on Windows meanwhile; the next release changes the check.
+On Windows the chat may decline Codex even after an administrator has set up Codex's elevated sandbox: that sandbox can still read part of Jason's data, a settings file in Jason's data folder among it, and on the one real machine checked it could. The chat then declines every Codex message until the desktop quits, and its sentence still names `codex sandbox setup --elevated`, which does not help there. Use Claude Code for the chat on Windows meanwhile; the next release changes the check.
 
 The Windows check of Codex's sandbox has not been seen on a real machine without the elevated setup. Whether naming the elevated sandbox raises an administrator prompt where it is not set up has not been seen.
 
