@@ -120,9 +120,8 @@ test('the confirmation says in plain words what Full access does, whose risk it 
     assert.equal(
         dialog.detail,
         'From now on, in this chat, the agent runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does. ' +
-            'Jason still asks you about a command it cannot read plainly or one that changes what an agent loads. ' +
+            'Jason still asks you about a command it cannot read plainly or one that changes what an agent loads, and a question you leave unanswered for thirty minutes is not run. ' +
             "Jason refuses the agent's commands that approve, reject, answer or clear for you; a program the agent writes and runs can still act as you, including approving. " +
-            'Every PowerShell command asks you first in Full access; only plainly read Bash commands run unasked. ' +
             'The risk is yours. ' +
             'Full access lasts until you change it or close Jason; the agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
     );

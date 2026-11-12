@@ -269,7 +269,7 @@ commands and changes files on this computer without asking, except a command Jas
 changes what an agent loads: that is a card titled "Full access asks about this one", which waits thirty minutes and
 then is not run, and the turn goes on. A held card offers no "Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever
 Ask first refuses is refused in Full access, with no card, and every `reply` command is among them but its exact no-card
-forms. Every PowerShell command is a card; only the Bash tool's plainly read commands run unasked. Jason does not read a
+forms. PowerShell is not a tool of the chat. Jason does not read a
 program the agent writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a
 program can still act as you. None of your own MCP servers or connectors reaches a turn. The agent works in a folder of
 its own; when Full access ends, the chat says where it is, with an Open folder button, and Jason removes it after seven

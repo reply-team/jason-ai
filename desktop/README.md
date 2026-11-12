@@ -274,7 +274,7 @@ applies to the turns a person starts by sending, from the next one on.
   confirmation, a message box the main process shows each time Full access is chosen, with Cancel focused and Escape
   answering Cancel. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
   2.1.322 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
-  page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the agent runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the agent can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the agent's commands that approve, reject, answer or clear for you while a program the agent writes and runs can still act as you, that every PowerShell command asks first, that the risk is the person's, and where the agent works. Full access is
+  page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the agent runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the agent can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the agent's commands that approve, reject, answer or clear for you while a program the agent writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the agent works. Full access is
   held in memory alone, for that conversation, and gone when the window closes or the chat is started afresh: a record
   never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart.
 - **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
@@ -302,8 +302,8 @@ applies to the turns a person starts by sending, from the next one on.
   earlier "Always" grant from Ask first never lets a held command through: each hold is the person's to answer every time.
 - **What Ask first refuses is refused in Full access, with no card.** Every `reply` command is refused there but its exact
   no-card forms.
-- **PowerShell is held.** Every command of the PowerShell tool in Full access is a card (`powerShellRunsInFullAccess`
-  in `src/chat-modes.ts` is off); only the Bash tool's plainly read commands run unasked.
+- **PowerShell is not a tool of the chat.** The judgement would still hold any PowerShell command that reached it, behind
+  a switch that is off (`powerShellRunsInFullAccess` in `src/chat-modes.ts`).
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
   person's own shell configuration (aliases, shell options). Neither is an MCP server or connector of the person's own:
   none reaches a turn.
