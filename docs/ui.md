@@ -248,7 +248,7 @@ acts are the desktop's and offers none. **Notifications** shows, read only, what
 notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
 with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
 The page says in one sentence where they are changed: under `Notifications:*` in the installation's settings file, or by
-asking your agent, whose `operating-the-installation` skill covers it. The page writes no setting and adds no provider.
+asking your AI, whose `operating-the-installation` skill covers it. The page writes no setting and adds no provider.
 
 ## Inside Jason Desktop
 

@@ -87,8 +87,8 @@ export function AccountsScreen() {
                         )}
                         <p className="hint">
                             These are changed under <code>Notifications:*</code> in the installation’s settings file, or
-                            by asking your agent, whose operating-the-installation skill covers them; this page only
-                            shows them.
+                            by asking your AI, whose operating-the-installation skill covers them; this page only shows
+                            them.
                         </p>
                     </section>
                 </div>
