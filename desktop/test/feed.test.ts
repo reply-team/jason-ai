@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import type { KeptEntry } from '../src/chat-conversations.ts';
 import { feedBlock } from '../src/chat-header.ts';
-import { feedKinds, feedLimit, headerLimit, keptLineOf, lineOf, linesSince, newestId, take, trimmed, type LineEntry } from '../src/feed.ts';
+import { feedKinds, feedLimit, givenUpTo, headerLimit, keptLineOf, lineOf, linesWaiting, markGiven, take, trimmed, type LineEntry } from '../src/feed.ts';
 
 const ulid = (n: number) => String(n).padStart(26, '0');
 const jrn = (n: number) => `jrn_${ulid(n)}`;
@@ -106,6 +106,8 @@ test('a line outside the table, with no campaign, or with an id or a moment out 
 
 test('a kept line is read back only with every field in shape and a count of at least one', () => {
     assert.deepEqual(keptLineOf(line(4, { count: 3, work_item_id: wi(9) })), line(4, { count: 3, work_item_id: wi(9) }));
+    assert.deepEqual(keptLineOf(line(4, { given: true })), line(4, { given: true }), 'its mark of given with it');
+    for (const mark of [false, 'yes', 1, null]) assert.deepEqual(keptLineOf({ ...line(4), given: mark }), line(4), `${String(mark)} is no mark: the line waits`);
     for (const broken of [{ count: 0 }, { count: 1.5 }, { count: -1 }, { count: '2' }, { journal_kind: 'contacts_added' }, { journal_id: 'jrn_1' }, { at: 'now' }, { campaign_id: null }, { work_item_id: 'wi_1' }]) {
         assert.equal(keptLineOf({ ...line(4), ...broken }), null, JSON.stringify(broken));
     }
@@ -140,22 +142,46 @@ test('at most five hundred lines are kept: the oldest go first and are counted, 
     assert.equal(trimmed(entries), 0);
 });
 
-test('a turn is given the lines newer than the newest one handed before, wherever they stand, the newest fifty, with the rest counted', () => {
-    const entries: KeptEntry[] = [line(1), { kind: 'user', text: 'hi' }, { kind: 'text', text: 'hello' }];
-    assert.deepEqual(linesSince(entries, jrn(1)), { lines: [], more: 0 });
-    assert.deepEqual(linesSince(entries, undefined).lines, [line(1)], 'never handed: every line, the message after it not withstanding');
+test('a turn is given the lines not marked given, wherever they stand and whatever their ids, the newest fifty, with the rest counted', () => {
+    const entries: KeptEntry[] = [line(1, { given: true }), { kind: 'user', text: 'hi' }, { kind: 'text', text: 'hello' }];
+    assert.deepEqual(linesWaiting(entries), { lines: [], more: 0, waiting: [] });
+    entries[0] = line(1);
+    assert.deepEqual(linesWaiting(entries).lines, [line(1)], 'never given: the line, the message after it not withstanding');
+    markGiven(entries, [line(1)]);
     for (let i = 2; i < 2 + headerLimit + 3; i++) entries.push(line(i, { campaign_id: cmp(i) }));
     entries.push({ kind: 'gap' });
-    const since = linesSince(entries, jrn(1));
-    assert.equal(since.lines.length, headerLimit);
-    assert.equal(since.more, 3);
-    assert.deepEqual(since.lines[0], line(5, { campaign_id: cmp(5) }), 'the oldest three are counted, not listed');
-    assert.equal(newestId(since.lines), jrn(2 + headerLimit + 2));
-    assert.equal(newestId([]), null);
-    // A line folded after it was handed stands for more lines now, under a newer id: it is given again.
-    const folded: KeptEntry[] = [line(7)];
-    take(folded, line(8));
-    assert.deepEqual(linesSince(folded, jrn(7)).lines, [line(8, { count: 2 })]);
+    const waiting = linesWaiting(entries);
+    assert.equal(waiting.lines.length, headerLimit);
+    assert.equal(waiting.more, 3);
+    assert.equal(waiting.waiting.length, headerLimit + 3, 'the ones counted are handed too');
+    assert.deepEqual(waiting.lines[0], line(5, { campaign_id: cmp(5) }), 'the oldest three are counted, not listed');
+    markGiven(entries, waiting.waiting);
+    assert.deepEqual(linesWaiting(entries).waiting, [], 'no line is given twice');
+});
+
+test('a line with an older id than one given, kept after it, waits until it is given', () => {
+    const entries: KeptEntry[] = [line(9)];
+    markGiven(entries, linesWaiting(entries).waiting);
+    take(entries, line(4, { campaign_id: cmp(2) }));
+    assert.deepEqual(linesWaiting(entries).lines, [line(4, { campaign_id: cmp(2) })]);
+});
+
+test('a fold raises the count of a given line and makes it wait again, under the id it took, an older one included', () => {
+    const entries: KeptEntry[] = [line(7)];
+    const handed = linesWaiting(entries).waiting;
+    take(entries, line(3));
+    // The turn that was handed the line before the fold marks nothing: the line kept stands for more now.
+    markGiven(entries, handed);
+    assert.deepEqual(linesWaiting(entries).lines, [line(3, { count: 2 })]);
+    markGiven(entries, linesWaiting(entries).waiting);
+    take(entries, line(8));
+    assert.deepEqual(linesWaiting(entries).lines, [line(8, { count: 3 })]);
+});
+
+test('a record an earlier desktop wrote marks given the lines up to the id it kept, and no other', () => {
+    const entries: KeptEntry[] = [line(1), line(2, { campaign_id: cmp(2) }), { kind: 'user', text: 'hi' }, line(3, { campaign_id: cmp(3) })];
+    givenUpTo(entries, jrn(2));
+    assert.deepEqual(entries, [line(1, { given: true }), line(2, { campaign_id: cmp(2), given: true }), { kind: 'user', text: 'hi' }, line(3, { campaign_id: cmp(3) })]);
 });
 
 test('the lines a turn is given are set apart as records, information and never instructions, one JSON object a line', () => {

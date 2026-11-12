@@ -68,7 +68,7 @@ import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import { codexFullAccess, feedFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
-import { feedKinds, feedTitle, lineOf, linesSince, newestId, take, trimmed, type LineEntry } from './feed.ts';
+import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs, type RunResult } from './programs.ts';
@@ -1434,10 +1434,10 @@ export class Chat {
             this.#setupBegun(conversation.id);
             before = await this.#listCampaigns();
         }
-        // A turn of the Feed is given the lines no turn was given yet, after the header, set apart as records. They count as
-        // given once its host ran (`delivered`); a line that lands from here on is newer, and the next turn's.
-        const given = main ? linesSince(conversation.entries, conversation.delivered) : null;
-        const handing = given === null ? null : newestId(given.lines);
+        // A turn of the Feed is given the lines no turn was given yet, after the header, set apart as records. They are
+        // marked given once its host ran (`markGiven`); a line that lands from here on, or folds into one of them, waits for
+        // the next turn, whatever its journal id.
+        const given = main ? linesWaiting(conversation.entries) : null;
         const block = given === null ? null : feedBlock(given.lines, given.more);
         const head = block === null ? header(about) : `${header(about)}\n\n${block}`;
         // The recap is of what came before this turn; the person's words of this turn follow it.
@@ -1702,7 +1702,7 @@ export class Chat {
             if (running.stopped || stoppedFor !== null) started.stop();
             const exit = await started.exited;
             // The lines this turn was given count as given once its host ran: a start the system refused gave none.
-            if (exit.startError === null && handing !== null && (conversation.delivered === undefined || handing > conversation.delivered)) conversation.delivered = handing;
+            if (exit.startError === null && given !== null) markGiven(conversation.entries, given.waiting);
             // Every tool use is said as a step before it runs, so a host that said nothing did nothing.
             const failedSilently = shown === 0 && (exit.code !== 0 || typeof result === 'string');
             // A key that was refused or not taken is the key's, not the session's: a fresh session would fail the same way.

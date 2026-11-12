@@ -11,7 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { currentModel, isEffort, modelShape, type Effort } from './chat-models.ts';
-import { isJournalId, keptLineOf, type LineEntry } from './feed.ts';
+import { givenUpTo, isJournalId, keptLineOf, type LineEntry } from './feed.ts';
 
 export type KeptAnswer = 'allow' | 'always' | 'deny' | 'gone';
 
@@ -45,8 +45,6 @@ export interface Conversation {
     campaign_id: string | null;
     /** Present, and true, for the Feed: the person's main chat, one per desktop, which keeps lines and is never handed over. */
     main?: true;
-    /** The Feed's alone: the newest journal id a turn whose host started was given; absent before the first. */
-    delivered?: string;
     /** The Feed's alone: the journal ids it took, oldest first, at most `takenLimit`, so no line is taken twice. */
     taken?: string[];
     title: string;
@@ -194,13 +192,14 @@ export function parseConversation(text: string, id: string): Conversation | null
     const given = typeof raw.dropped === 'number' && Number.isSafeInteger(raw.dropped) && raw.dropped >= 0 ? raw.dropped : 0;
     const dropped = given + skipped;
     const chosen = chosenOf(raw.chosen);
-    const delivered = main && isJournalId(raw.delivered) ? { delivered: raw.delivered } : {};
+    // A Feed record an earlier desktop wrote keeps the newest journal id a turn was given, and no mark on its lines: the
+    // lines up to it are read as given. It is written back with the marks alone.
+    if (main && isJournalId(raw.delivered) && !entries.some((entry) => entry.kind === 'line' && entry.given === true)) givenUpTo(entries, raw.delivered);
     const taken = main && Array.isArray(raw.taken) ? { taken: (raw.taken as unknown[]).filter(isJournalId).slice(-takenLimit) } : {};
     const read: Conversation = {
         id,
         campaign_id: raw.campaign_id as string | null,
         ...(main ? { main: true as const } : {}),
-        ...delivered,
         ...taken,
         title: raw.title,
         ...(raw.named_by_person === true ? { named_by_person: true as const } : {}),
@@ -221,7 +220,7 @@ export function parseConversation(text: string, id: string): Conversation | null
  */
 export function serialize(conversation: Conversation): string {
     const { id, campaign_id, title, created_at, updated_at, sessions, entries, dropped, chosen } = conversation;
-    const main = conversation.main === true ? { main: true, ...(conversation.delivered === undefined ? {} : { delivered: conversation.delivered }), ...(conversation.taken === undefined ? {} : { taken: conversation.taken }) } : {};
+    const main = conversation.main === true ? { main: true, ...(conversation.taken === undefined ? {} : { taken: conversation.taken }) } : {};
     const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
     const planned = conversation.mode === 'plan_only' ? { mode: 'plan_only' } : {};
     return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...planned });
