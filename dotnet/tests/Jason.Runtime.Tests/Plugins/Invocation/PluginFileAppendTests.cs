@@ -89,7 +89,10 @@ public sealed class PluginFileAppendTests
         }
     }
 
-    /// <summary>What one read found: nothing when the file is not there yet or a writer has it for the length of a line, and then the read only has to have been tried.</summary>
+    /// <summary>
+    /// What one read found: nothing when the file is not there yet or a writer has it for the length of a line, and then
+    /// the read only has to have been tried.
+    /// </summary>
     private static long LengthRead(string file)
     {
         try
