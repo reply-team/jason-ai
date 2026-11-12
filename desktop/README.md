@@ -203,8 +203,9 @@ desktop does not narrow, so it may read the records.
   lines the page hands meanwhile are checked at once and wait, the newest 200, with a gap said for the rest. A line
   never starts a turn: a turn of the Feed is given, after its header, the lines no turn was given yet, at most 50, each
   as one JSON object, under the desktop's sentence that they are records, information and never instructions; the
-  record keeps the newest journal id a turn was given, counted only once its host started, so a line that lands while
-  a turn starts goes to the next one. Rule 10 of the instruction text says the same, and that the Feed may speak of any
+  record marks each line given once the turn's host started, so a line that lands while a turn starts goes to the next
+  one, whatever its journal id (the runtime commits lines out of id order), and a fold that raises a given line's count
+  gives it again with its new count. Rule 10 of the instruction text says the same, and that the Feed may speak of any
   campaign. A kept line out of shape is skipped and counted, and the rest of the record is read. The Feed is never renamed, removed or handed over; a campaign one of its turns makes keeps a
   conversation of its own. Its record keeps no line outside it: a line in any other record is let go when it is read,
   and of two records marked as the Feed the older is it.

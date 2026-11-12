@@ -156,28 +156,33 @@ lists each key and each card's grant.
   account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the other channel's
   accounts stay in every case. The list is read again when the window takes the focus back, at most once in 30 seconds.
   Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
-  to update the Reply CLI and offers nothing. **Add account** offers Gmail, Outlook and LinkedIn (a channel the account
-  does not have is not offered). A mailbox row offers **Limits** (its daily limit), **Unblock** (sending again after its
-  provider stopped it) and **Delete**; a LinkedIn row **Pause** when it is enabled, **Resume** when it is disabled, neither
-  at its daily limit, and **Delete**; and a row that is not in a good state **Reconnect**. A connect or a reconnect makes a link to Reply's own page, which needs no Reply sign-in:
+  to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. **Add account** offers
+  Gmail, Outlook and LinkedIn (a channel the account does not have is not offered). A mailbox row offers **Limits** (its
+  daily limit), **Unblock** (sending again after its provider stopped it) and **Delete**; a LinkedIn row **Pause** when
+  it is enabled, **Resume** when it is disabled, neither at its daily limit, and **Delete**; and a row that is not in a
+  good state **Reconnect**. A connect or a reconnect makes a link to Reply's own page, which needs no Reply sign-in:
   the desktop opens it here, in this computer's browser, or, where you tick **Copy a new link to hand on**, puts it on
   the clipboard for you to send to whoever owns the mailbox or the LinkedIn account. They sign in to Google, Microsoft
   or LinkedIn there with their own credentials, so a password never passes through Jason. Only a link that expires and
   connects one account is copied. The desktop keeps the link nowhere, and the card says only that it was opened or
-  copied and until when it works. A limit's change, a pause, a resume, an unblock and a delete ask you first in a box of
-  the desktop's own that names the account; with no window to ask in, or once the window is hidden or closed, it does
-  not act. Where Reply does not yet make a link
-  for one mailbox, the card offers the account's shared mailbox page instead, only on your click and after a box that
-  warns that the address does not expire and lets whoever holds it manage all of the user's mailboxes; it is always
-  opened here, never copied. Where sequences
-  use a LinkedIn account, its delete is refused, and **Delete anyway** asks again in a box of its own. A signed-out
-  LinkedIn account offers **Reconnect**, and no pause or resume until it is reconnected. An answer that leaves the
-  account's state unknown reads the list again and shows what is; nothing is repeated by itself. The card lists the links
-  made and not used yet under their channel, with Waiting or Expired and their expiry; such a link is not shown again,
-  so adding the account again makes a new one. Below the Reply CLI the acts need, the card offers **Update** where npm
-  is there to update it with. Finishing a connection happens on Reply's side, so the card learns of it by **Check
-  now**, **Check again** or a focus. Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in
-  Reply, which the card links to.
+  copied and until when it connects an account. A limit's change, a pause, a resume, an unblock and a delete ask you
+  first in a box of the desktop's own that names the account; with no window to ask in, or once the window is hidden or
+  closed, it does not act. Where Reply does not yet make a link for one mailbox, the card offers the account's shared
+  mailbox page instead, only on your click and after a box that warns that the address does not expire and lets whoever
+  holds it manage all of the user's mailboxes; it is always opened here, never copied. Where sequences use a LinkedIn
+  account, its delete is refused, and **Delete anyway** asks again in a box of its own. A signed-out LinkedIn account
+  offers **Reconnect**, and no pause or resume until it is reconnected. An answer that leaves the account's state unknown
+  reads the list again and shows what is; nothing is repeated by itself. The card lists the links made and not used yet
+  under their channel, with Waiting or Expired and their expiry; such a link is not shown again, so adding the account
+  again makes a new one. Finishing a connection happens on Reply's side, so the card learns of it by **Check now**,
+  **Check again** or a focus. Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in Reply,
+  which the card links to.
+  The same card appears inside the chat of a draft campaign while Reply is not connected. It is an offer, so it is hidden
+  only where the runtime says the campaign's enrolment is routed to a plugin other than Reply (the window asks
+  `route.resolve` for `campaign.enroll`, which applies the campaign's own route, its default, the global override and the
+  global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
+  where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
+  running shows none. **Not now** hides it for that chat until the window is closed.
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 

@@ -91,7 +91,7 @@ internal static class Diagnostics
     public static Task WriteStartLineAsync(string behaviour, LaunchEnvelope envelope, string? token) =>
         WriteAsync(string.Create(
             CultureInfo.InvariantCulture,
-            $"behaviour={behaviour} pid={Environment.ProcessId} started={StartedAt()} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)} attempt-in-env={Variable(ExecutionEnvironment.AttemptIdVariable)} work-item-in-env={Variable(ExecutionEnvironment.WorkItemIdVariable)} path-head={PathHead()} update-mark-in-env={Variable(UpdateLaunch.Variable)} confined-in-env={Variable(Confinement.Variable)} host-constant-in-env={Variable("HOST_CONSTANT_FOR_TESTS")}"));
+            $"behaviour={behaviour} pid={Environment.ProcessId} started={StartedAt()} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)} attempt-in-env={Variable(ExecutionEnvironment.AttemptIdVariable)} work-item-in-env={Variable(ExecutionEnvironment.WorkItemIdVariable)} path-head={PathHead()} update-mark-in-env={Variable(UpdateLaunch.Variable)} confined-in-env={Variable(Confinement.Variable)} host-constant-in-env={Variable("HOST_CONSTANT_FOR_TESTS")} ordinary-in-env={Variable("ORDINARY_VARIABLE_FOR_TESTS")} configuration-in-env={ConfigurationNames()} granted-in-env={Variable("GRANTED_TOKEN_FOR_TESTS")} home-in-env={Home()}"));
 
     /// <summary>
     /// When this process began, as the system reports it, in round-trip UTC. A test that must end this child by the
@@ -106,6 +106,31 @@ internal static class Diagnostics
 
     private static string Variable(string name) =>
         Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : "unset";
+
+    /// <summary>Whether the variable that says where this user's home is reached the child: set or unset, never its value.</summary>
+    private static string Home() =>
+        string.IsNullOrEmpty(Environment.GetEnvironmentVariable(OperatingSystem.IsWindows() ? "USERPROFILE" : "HOME")) ? "unset" : "set";
+
+    /// <summary>
+    /// The names, never the values, of every configuration override of the runtime this child was handed: a name that
+    /// starts with <c>JASON_</c> and holds the double underscore between a section and a key, in any case. <c>none</c>
+    /// when there is none, which is the only answer a launch may give.
+    /// </summary>
+    private static string ConfigurationNames()
+    {
+        var names = new List<string>();
+        foreach (DictionaryEntry variable in Environment.GetEnvironmentVariables())
+        {
+            if (variable.Key is string name
+                && name.StartsWith("JASON_", StringComparison.OrdinalIgnoreCase)
+                && name.Contains("__", StringComparison.Ordinal))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names.Count == 0 ? "none" : string.Join(",", names.Order(StringComparer.Ordinal));
+    }
 
     /// <summary>The first directory of the search path, which is where the command that calls home should be.</summary>
     private static string PathHead() =>

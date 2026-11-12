@@ -14,6 +14,7 @@ export const en = {
     'attention.filter.all': 'All',
     'attention.filter.approvals': 'Approvals',
     'attention.filter.questions': 'Questions',
+    'attention.filter.loaded': 'loaded',
     'attention.filter.shown': 'Shown: {count}',
     'attention.filter.noneWaiting': 'No approvals waiting.',
     'attention.filter.noneOpen': 'No questions for you.',

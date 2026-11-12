@@ -8,6 +8,8 @@
     <ProjectReference Include="../Jason.FakeProviderCli/Jason.FakeProviderCli.csproj" />
     <!-- The stand-in for the Reply CLI, whose apphost is named `reply`, so the official package's own manifest resolves to it rather than to anything the machine has installed. -->
     <ProjectReference Include="../Jason.ReplyCliStub/Jason.ReplyCliStub.csproj" />
+    <!-- The executable with a thread that throws once its runtime has started: the line an unhandled exception leaves is read back from a real process. -->
+    <ProjectReference Include="../Jason.DyingRuntime/Jason.DyingRuntime.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The canonical plugin package, kept in one place and linked into every test project that installs it. -->

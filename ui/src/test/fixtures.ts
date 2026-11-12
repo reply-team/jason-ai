@@ -12,6 +12,8 @@ import type {
     ErrorEnvelope,
     Page,
     Project,
+    RouteResolution,
+    RouteResolveRequest,
     Routes,
     SystemInfo,
     UiRevoke,
@@ -234,6 +236,12 @@ import journalListSummer from '../../../docs/api/fixtures/journal.list/summer.js
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
 import routeListEmpty from '../../../docs/api/fixtures/route.list/empty.json';
+import routeResolveElsewhere from '../../../docs/api/fixtures/route.resolve/elsewhere.json';
+import routeResolveElsewhereFirst from '../../../docs/api/fixtures/route.resolve/elsewhere-first.json';
+import routeResolveGlobalDefault from '../../../docs/api/fixtures/route.resolve/global-default.json';
+import routeResolveNoRoute from '../../../docs/api/fixtures/route.resolve/no-route.json';
+import routeResolveOwnRoute from '../../../docs/api/fixtures/route.resolve/own-route.json';
+import routeResolveUnroutedFirst from '../../../docs/api/fixtures/route.resolve/unrouted-first.json';
 import projectGetById from '../../../docs/api/fixtures/project.get/by-id.json';
 import projectGetBySlug from '../../../docs/api/fixtures/project.get/by-slug.json';
 import systemInfoWithUi from '../../../docs/api/fixtures/system.info/with-ui.json';
@@ -805,6 +813,15 @@ export const fixtures = {
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'role.list/all': roleListAll satisfies Exchange<object, Page<Role>>,
     'route.list/empty': routeListEmpty satisfies Exchange<object, Routes>,
+    'route.resolve/elsewhere': routeResolveElsewhere satisfies Exchange<RouteResolveRequest, RouteResolution>,
+    'route.resolve/elsewhere-first': routeResolveElsewhereFirst satisfies Exchange<
+        RouteResolveRequest,
+        RouteResolution
+    >,
+    'route.resolve/global-default': routeResolveGlobalDefault satisfies Exchange<RouteResolveRequest, RouteResolution>,
+    'route.resolve/no-route': routeResolveNoRoute satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
+    'route.resolve/own-route': routeResolveOwnRoute satisfies Exchange<RouteResolveRequest, RouteResolution>,
+    'route.resolve/unrouted-first': routeResolveUnroutedFirst satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
     'project.get/by-id': projectGetById satisfies Exchange<{ project_id: string }, Project>,
     'project.get/by-slug': projectGetBySlug satisfies Exchange<{ slug: string }, Project>,
     'system.info/with-ui': systemInfoWithUi satisfies Exchange<object, SystemInfo>,
