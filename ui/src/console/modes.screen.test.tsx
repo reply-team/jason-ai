@@ -77,7 +77,9 @@ describe('a chat’s access mode', () => {
         desktop.confirmFullAccess = true;
         choose('full_access');
         await waitFor(() => expect(line()).not.toBeNull());
-        expect(line()!.textContent).toContain('Full access: the agent acts on this computer without asking you.');
+        expect(line()!.textContent).toContain(
+            'Full access: the agent runs commands without asking, except those Jason cannot read.',
+        );
         expect(menu().value).toBe('full_access');
     });
 

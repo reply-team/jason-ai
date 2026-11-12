@@ -10,7 +10,7 @@ import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessSentence, isChatMode, planExitRefusal, planRefusal } from '../src/chat-modes.ts';
+import { chatModes, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planRefusal } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -122,10 +122,11 @@ test('the confirmation says in plain words what Full access does, whose risk it 
     assert.equal(dialog.message, 'Give this chat full access?');
     assert.equal(
         dialog.detail,
-        'From now on, in this chat, the agent acts on this computer without asking you first: it runs commands, changes and deletes files and opens web pages, and a page it reads can steer what it does. ' +
+        'From now on, in this chat, the agent runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does. ' +
+            'Jason still asks you about a command it cannot read plainly or one that changes what an agent loads, and a question you leave unanswered for thirty minutes is not run. ' +
+            "Jason refuses the agent's commands that approve, reject, answer or clear for you; a program the agent writes and runs can still act as you, including approving. " +
             'The risk is yours. ' +
-            'Jason still refuses the commands that approve, reject or answer for you, and keeps its keys from the agent, wherever it can see the attempt; it cannot see inside a program the agent writes and runs. ' +
-            'Full access lasts until you change it or close Jason.',
+            'Full access lasts until you change it or close Jason; the agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
     );
     assert.deepEqual(dialog.buttons, ['Give full access', 'Cancel']);
     assert.equal(dialog.defaultId, 1);
@@ -583,6 +584,11 @@ test('a word with more brace expansions than the second look reads is refused, n
     const many = 'echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}';
     assert.deepEqual(judge('Bash', { command: many }, scope), { verdict: 'deny', message: 'That command expands into more words than the chat reads, so it cannot tell what would run: the chat never runs it. Write the words out. Nothing was run.' });
     assert.equal(judge('Bash', { command: 'echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}' }, scope).verdict, 'ask', 'sixty-four are read, and a card');
+});
+
+test('Full access is not offered yet, and the PowerShell tool still runs nothing unasked in it', () => {
+    assert.equal(fullAccessOffered, false);
+    assert.equal(powerShellRunsInFullAccess, false);
 });
 
 test('the settings of every turn, in all three modes, turn off the shell commands a skill carries', () => {

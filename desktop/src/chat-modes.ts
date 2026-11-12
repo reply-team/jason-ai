@@ -11,7 +11,7 @@ import { compareVersions } from './host-version.ts';
 export type ChatMode = 'ask_first' | 'plan_only' | 'full_access';
 
 /**
- * Whether this version offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
+ * Whether the desktop offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
  * refuses it before any confirmation. Everything else of Full access stays, behind this one switch.
  */
 export const fullAccessOffered = false;
@@ -88,10 +88,11 @@ export function fullAccessDialog(): FullAccessDialog {
         title: 'Full access',
         message: 'Give this chat full access?',
         detail: [
-            'From now on, in this chat, the agent acts on this computer without asking you first: it runs commands, changes and deletes files and opens web pages, and a page it reads can steer what it does.',
+            'From now on, in this chat, the agent runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does.',
+            'Jason still asks you about a command it cannot read plainly or one that changes what an agent loads, and a question you leave unanswered for thirty minutes is not run.',
+            "Jason refuses the agent's commands that approve, reject, answer or clear for you; a program the agent writes and runs can still act as you, including approving.",
             'The risk is yours.',
-            'Jason still refuses the commands that approve, reject or answer for you, and keeps its keys from the agent, wherever it can see the attempt; it cannot see inside a program the agent writes and runs.',
-            'Full access lasts until you change it or close Jason.',
+            'Full access lasts until you change it or close Jason; the agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
         ].join(' '),
         buttons: [fullAccessButton, 'Cancel'],
         defaultId: 1,

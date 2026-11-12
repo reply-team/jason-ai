@@ -187,7 +187,7 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
 }
 
 /** What the line under the composer says while the desktop holds the chat in Full access. */
-export const fullAccessLine = 'Full access: the agent acts on this computer without asking you.';
+export const fullAccessLine = 'Full access: the agent runs commands without asking, except those Jason cannot read.';
 
 /**
  * What the line under the composer says while the chat's host is Codex on the person's sign-in: every Codex turn leaves

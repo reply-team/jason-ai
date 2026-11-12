@@ -264,7 +264,18 @@ refusal of the next section stays. A Codex turn runs in its read-only sandbox in
 Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh** leaves it.
 Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could still ask to
 change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu also lists
-Full access, which this version does not offer: it is shown disabled and the desktop refuses it.
+Full access, which this version does not offer: it is shown disabled and the desktop refuses it. Its code stays behind one
+switch, and what follows describes it as built. Full access is chosen only after a confirmation shown each time, with Cancel focused. In Full access the agent runs
+commands and changes files on this computer without asking, except a command Jason cannot read plainly or one that
+changes what an agent loads: that is a card titled "Full access asks about this one", which waits thirty minutes and
+then is not run, and the turn goes on. A held card offers no "Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever
+Ask first refuses is refused in Full access, with no card, and every `reply` command is among them but its exact no-card
+forms. PowerShell is not a tool of the chat. Jason does not read a
+program the agent writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a
+program can still act as you. None of your own MCP servers or connectors reaches a turn. The agent works in a folder of
+its own; when Full access ends, the chat says where it is, with an Open folder button, and Jason removes it after seven
+days. Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said
+once. Full access is never a default and is gone when you close Jason.
 
 ### What runs without asking, what is refused, what is a card
 

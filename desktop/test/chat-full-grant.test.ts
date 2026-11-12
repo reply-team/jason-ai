@@ -232,6 +232,17 @@ test('the sweep takes only as many entries as the cap lets it in a pass and fini
     assert.ok(!existsSync(old));
 });
 
+test('a grant folder that could not be made is reported under the step make, with a code, and Full access is not given', async (t) => {
+    const steps: string[] = [];
+    const r = rig(t, { chat: { fullFolderFailed: (step) => void steps.push(step) } });
+    const { id } = await r.chat.create();
+    // A file where the folders of grants belong makes the folder impossible to make.
+    mkdirSync(r.b.paths.desktop, { recursive: true });
+    writeFileSync(r.b.paths.chatFull, 'in the way');
+    await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: 'The folder for Full access could not be made, so Full access was not given.' });
+    assert.deepEqual(steps, ['make']);
+});
+
 test('a folder a host still holds is left in place and a code is said; the next start moves it', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
