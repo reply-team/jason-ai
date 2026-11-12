@@ -41,13 +41,16 @@ On Windows every Codex turn names the elevated sandbox for the run (`codexWindow
 sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data directory.
 Naming it proves nothing (OpenAI's page says a fall to the unelevated sandbox can happen where the elevated one is not
 set up), so the first Codex turn of each run of the desktop checks it (`codex-sandbox.ts`). One cmd line prints a random
-marker, then a marker of each file's own only if `type` opens it, the file itself going to `nul`: the runtime's run
-file, which has an owner-only access list of its own, and the desktop's settings file, which keeps the access list the
-data directory inherits from the profile, as the database and the logs do. Each path is quoted, and a path holding
+marker, then a marker of each file's own only if `type` opens it, the file itself going to `nul`. The first file is a
+control, the system's hosts file under `SystemRoot`, which every Windows account may read and the desktop does not
+own: it opening in the sandbox shows that `type` and `nul` work there at all. Then the runtime's run file, which has an
+owner-only access list of its own, and the desktop's settings file, which keeps the access list the data directory
+inherits from the profile, as the database and the logs do; the desktop writes that file at each start when it is
+missing (`settingsAtStart`). Each path is quoted, and a path holding
 `, ; = % ^ & | < > !` or a quote is not checked, with a sentence that says so. cmd reads the line from
 `JASON_SANDBOX_CHECK`, so every run sees the same bytes, and runs it three times, each within thirty seconds: by its
 full path outside any sandbox, where it must print every marker; inside `codex sandbox`, with the turn's own `-c`
-settings and its read-only mode, where it must print the first marker alone; and outside once more, every marker
+settings and its read-only mode, where it must print the first marker and the control's alone; and outside once more, every marker
 again. Anything else proves nothing, and a read marker standing as a line of its own inside refuses. `codex sandbox`
 is tried without a platform word, as the help of 0.167.0-alpha.3.2 shows it (`test/fixtures`), and, when that printed
 no marker, as `codex sandbox windows`, the shape the reference names for older versions. The page says "Checking

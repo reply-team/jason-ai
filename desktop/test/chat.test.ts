@@ -463,7 +463,7 @@ test('on Windows the first Codex turn of the run checks the sandbox under the tu
     assert.ok(check.args.includes(codexWindowsSandbox) && check.args.includes('features.apps=false'));
     // The line reads both files, each by its quoted path, and nothing of either reaches a pipe.
     const line = check.env?.[checkVariable] ?? '';
-    assert.match(line, /^echo ran-[0-9a-f]+ & type "[^"]+runtime\.json" >nul 2>nul && echo read-[0-9a-f]+ & type "[^"]+settings\.json" >nul 2>nul && echo read-[0-9a-f]+$/);
+    assert.match(line, /^echo ran-[0-9a-f]+ & type "C:\\Windows\\System32\\drivers\\etc\\hosts" >nul 2>nul && echo control-[0-9a-f]+ & type "[^"]+runtime\.json" >nul 2>nul && echo read-[0-9a-f]+ & type "[^"]+settings\.json" >nul 2>nul && echo read-[0-9a-f]+$/);
     assert.ok(line.includes(`"${r.b.paths.runFile}"`) && line.includes(`"${r.b.paths.settings}"`));
     assert.ok(same(check.cwd ?? '', r.b.paths.chat));
     assert.ok(r.hosts()[0]?.args.includes(codexWindowsSandbox));
@@ -494,6 +494,14 @@ test('on Windows a sandbox whose command read the run file refuses every Codex t
     assert.deepEqual(r.started, []);
 });
 
+test('on Windows a sandbox that refuses type itself, so that not even the control file opens, proves nothing: the turn is refused and checked again', async (t) => {
+    const r = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'refuses-type' } });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(checks(r).map((each) => each.args), [bareForm, bareForm], 'it ran, so one form, and not remembered');
+    assert.deepEqual(r.hosts(), []);
+});
+
 test('on Windows a sandbox that keeps the run file but lets the settings file, with its inherited access, be read refuses the turn', async (t) => {
     const r = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'reads-second' } });
     assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
@@ -521,7 +529,7 @@ test('on Windows a check that printed neither marker in either form, or ran out 
 
 test('on Windows a sandbox that held proves nothing unless the same line read both files outside it, before and after', async (t) => {
     // The line could not read a file outside the sandbox either: nothing inside is run, and nothing is remembered.
-    const unreadable = rig(t, { chat: { ...onWindows, sandboxOutside: async (check) => ({ exit: 0, stdout: `${check.ran} \r\n${check.reads[0]}\r\n`, stderr: '' }) }, env: windowsEnv });
+    const unreadable = rig(t, { chat: { ...onWindows, sandboxOutside: async (check) => ({ exit: 0, stdout: `${check.ran} \r\n${check.control} \r\n${check.reads[0]}\r\n`, stderr: '' }) }, env: windowsEnv });
     assert.deepEqual(doneOf(await unreadable.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
     assert.deepEqual(checks(unreadable), []);
     assert.deepEqual(unreadable.hosts(), []);
@@ -533,7 +541,7 @@ test('on Windows a sandbox that held proves nothing unless the same line read bo
             ...onWindows,
             sandboxOutside: async (check) => {
                 outside += 1;
-                return outside === 2 ? { exit: 0, stdout: `${check.ran} \r\n${check.reads[1]}\r\n`, stderr: '' } : outsideStandIn(check);
+                return outside === 2 ? { exit: 0, stdout: `${check.ran} \r\n${check.control} \r\n${check.reads[1]}\r\n`, stderr: '' } : outsideStandIn(check);
             },
         },
         env: windowsEnv,

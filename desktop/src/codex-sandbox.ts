@@ -14,14 +14,18 @@
 // its own, and the desktop's settings file, which keeps the access list the data directory inherits from the profile,
 // as the database, the logs and every other file there do; both must be unreadable inside.
 //
-// What it runs, three times. One cmd line: `echo <ran>`, then for each file `type "<file>" >nul 2>nul && echo <read>`.
-// It prints a random marker whatever happens and a marker of each file's own only if that file opened; the files go to
-// nul, so nothing of them reaches a pipe in any run. It is handed to cmd in a variable (`checkVariable`), with cmd's
-// arguments `/d /c %JASON_SANDBOX_CHECK%`, so no layer between the desktop and cmd quotes it again and every run sees the
-// same bytes. First the line runs outside any sandbox, by cmd from the system folder: it must print every marker, which
-// shows the line can read both files as written. Then inside Codex's sandbox: the ran marker alone. Then outside once
-// more, every marker again, so a file gone or replaced while the check ran is not taken for a sandbox. Any other
-// combination proves nothing, and no Codex turn runs on it.
+// What it runs, three times. One cmd line: `echo <ran>`, then `type "<file>" >nul 2>nul && echo <marker>` for the
+// control file and for each file of the data directory. It prints a random marker whatever happens and a marker of each
+// file's own only if that file opened; the files go to nul, so nothing of them reaches a pipe in any run. The control is
+// the system's hosts file, `<SystemRoot>\System32\drivers\etc\hosts`: every Windows has it, every account may read
+// it, and the desktop does not own it, so it opening inside shows that `type` and its redirection to nul work in the
+// sandbox at all. Without it a sandbox that refused `type` or nul itself would print no read marker over a readable
+// file. The line is handed to cmd in a variable (`checkVariable`), with cmd's arguments `/d /c %JASON_SANDBOX_CHECK%`,
+// so no layer between the desktop and cmd quotes it again and every run sees the same bytes. First the line runs outside
+// any sandbox, by cmd from the system folder: it must print every marker, which shows the line can read every file as
+// written. Then inside Codex's sandbox: the ran and control markers, and no read marker. Then outside once more, every
+// marker again, so a file gone or replaced while the check ran is not taken for a sandbox. Any other combination proves
+// nothing, and no Codex turn runs on it.
 //
 // Codex's command. `codex sandbox`, "Run arbitrary commands inside Codex-provided macOS, Linux, or Windows sandboxes"
 // (https://developers.openai.com/codex/cli/reference). Its recorded help of 0.167.0-alpha.3.2 (the test's fixture) reads
@@ -58,7 +62,7 @@ export const sandboxKeyedSentence = 'Codex on a key cannot be checked on Windows
 export const sandboxUncheckedSentence = 'The chat could not check Codex\'s sandbox, because Jason\'s runtime is not running. Start it, then send again.';
 
 /** Why a Codex turn does not run on Windows when the desktop's settings file, the check's second file, is not there yet. */
-export const sandboxNoSettingsSentence = 'The chat could not check Codex\'s sandbox, because the desktop has not saved its settings yet. Change any setting, then send again.';
+export const sandboxNoSettingsSentence = 'The chat could not check Codex\'s sandbox, because the desktop\'s settings file is missing: restart Jason, which writes it when it starts, then send again.';
 
 /** Why a Codex turn does not run on Windows when a path the check reads holds a character cmd reads as more than a name. */
 export const sandboxPathSentence =
@@ -86,6 +90,10 @@ export interface SandboxCheck {
     forms: string[][];
     /** Printed whatever happens. */
     ran: string;
+    /** The control file: the system's hosts file, named from the system root. */
+    controlFile: string;
+    /** Printed only when the control file opened: inside, it shows `type` and nul work there. */
+    control: string;
     /** Printed each only when its file opened, in the files' order. */
     reads: string[];
 }
@@ -101,16 +109,19 @@ const cmdSpecial = /[%^&|<>"!,;=\r\n]/;
  * `root` when `systemRoot` (the environment's `SystemRoot`) is no absolute path of a drive. cmd is started by its full
  * path under the system root, so a cmd.exe in the chat folder, where the check runs, is never the one started.
  */
-export function sandboxCheck(files: readonly string[], systemRoot: string, markers?: { ran: string; reads: readonly string[] }): SandboxCheck | 'path' | 'root' {
+export function sandboxCheck(files: readonly string[], systemRoot: string, markers?: { ran: string; control: string; reads: readonly string[] }): SandboxCheck | 'path' | 'root' {
     if (files.length === 0 || files.some((file) => file === '' || cmdSpecial.test(file))) return 'path';
     if (!/^[A-Za-z]:\\/.test(systemRoot) || cmdSpecial.test(systemRoot)) return 'root';
     const cmd = win32.join(systemRoot, 'System32', 'cmd.exe');
     const ran = markers?.ran ?? `ran-${randomBytes(12).toString('hex')}`;
+    const controlFile = win32.join(systemRoot, 'System32', 'drivers', 'etc', 'hosts');
+    const control = markers?.control ?? `control-${randomBytes(12).toString('hex')}`;
     const reads = files.map((_, i) => markers?.reads[i] ?? `read-${randomBytes(12).toString('hex')}`);
-    const line = [`echo ${ran}`, ...files.map((file, i) => `type "${file}" >nul 2>nul && echo ${reads[i]}`)].join(' & ');
+    const opens = (file: string, marker: string) => `type "${file}" >nul 2>nul && echo ${marker}`;
+    const line = [`echo ${ran}`, opens(controlFile, control), ...files.map((file, i) => opens(file, reads[i] ?? ''))].join(' & ');
     const inner = ['/d', '/c', `%${checkVariable}%`];
     const settings = [...codexTurnSettings('win32'), 'sandbox_mode="read-only"'].flatMap((setting) => ['-c', setting]);
-    return { cmd, inner, line, forms: [['sandbox', ...settings, '--', cmd, ...inner], ['sandbox', 'windows', ...settings, '--', cmd, ...inner]], ran, reads };
+    return { cmd, inner, line, forms: [['sandbox', ...settings, '--', cmd, ...inner], ['sandbox', 'windows', ...settings, '--', cmd, ...inner]], ran, controlFile, control, reads };
 }
 
 /** What the check keeps an answer by: the file Codex runs from, the script it is handed when it is one, its version and its home. */
@@ -127,17 +138,20 @@ function linesOf(result: RunResult): string[] {
 /** Whether a run outside the sandbox printed every marker, each once, in order, and nothing else. */
 function readsAll(result: RunResult, check: SandboxCheck): boolean {
     const lines = linesOf(result);
-    const expected = [check.ran, ...check.reads];
+    const expected = [check.ran, check.control, ...check.reads];
     return result.exit !== -1 && lines.length === expected.length && lines.every((line, i) => line === expected[i]);
 }
 
-/** One run inside the sandbox: a read marker as a whole line, the ran marker alone, no ran marker, or anything else. */
+/**
+ * One run inside the sandbox: a read marker as a whole line, the ran and control markers alone (it holds), no ran
+ * marker, or anything else, the ran marker without the control's among it: then nothing shows `type` could open a file.
+ */
 function inside(result: RunResult, check: SandboxCheck): 'reads' | 'holds' | 'none' | 'unproven' {
     if (result.exit === -1) return 'unproven';
     const lines = linesOf(result);
     if (lines.some((line) => check.reads.includes(line))) return 'reads';
     if (check.reads.some((read) => result.stdout.includes(read) || result.stderr.includes(read))) return 'unproven';
-    if (lines.length === 1 && lines[0] === check.ran) return 'holds';
+    if (lines.length === 2 && lines[0] === check.ran && lines[1] === check.control) return 'holds';
     return lines.includes(check.ran) ? 'unproven' : 'none';
 }
 
@@ -166,8 +180,9 @@ export function checkRuns(
 }
 
 /**
- * Runs the check and says what it found: `holds` only on every marker outside, the ran marker alone inside, and every
- * marker outside again; `reads` when a read marker stood as a line of its own inside; `unproven` otherwise. The form
+ * Runs the check and says what it found: `holds` only on every marker outside, the ran and control markers alone
+ * inside, and every marker outside again; `reads` when a read marker stood as a line of its own inside; `unproven`
+ * otherwise. The form
  * with the platform word is tried only when the one without it printed no ran marker. A read marker seen only on
  * standard error, or inside a longer line, is no read: it proves nothing, and is not kept.
  */

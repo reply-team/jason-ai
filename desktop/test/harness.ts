@@ -182,14 +182,16 @@ export function placeSandboxFiles(b: Bench): void {
 
 /**
  * cmd outside any sandbox, as the Windows check runs its line, stood in for wherever the test runs: the ran marker, then
- * the marker of each file the line names that opens here, in order.
+ * the marker of each file the line names that opens here, in order. The control, the system's hosts file, which every
+ * Windows has, is taken as opened wherever the test runs.
  */
 export async function outsideStandIn(check: SandboxCheck): Promise<RunResult> {
-    const files = [...check.line.matchAll(/type "([^"]+)"/g)].map((match) => match[1] ?? '');
-    const opened = files.flatMap((file, i) => {
+    const parts = [...check.line.matchAll(/type "([^"]+)" >nul 2>nul && echo (\S+)/g)].map((match) => ({ file: match[1] ?? '', marker: match[2] ?? '' }));
+    const opened = parts.flatMap(({ file, marker }) => {
+        if (file === check.controlFile) return [marker];
         try {
             readFileSync(file);
-            return [check.reads[i]];
+            return [marker];
         } catch {
             return [];
         }

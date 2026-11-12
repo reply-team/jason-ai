@@ -199,14 +199,16 @@ Claude Code.
   up, so at the first send to Codex in each run of the desktop the chat checks first ("Checking Codex's sandbox…"): a
   command tries to open two files of the data directory and says only whether it could, never what is in them. One is
   the runtime's run file, which has an access list of its own; the other is the desktop's settings file, which keeps
-  the access list the rest of the data directory, the database and the logs among them, inherits. The same command
-  runs first outside any sandbox, where it must open both, then in Codex's sandbox, where it must open neither, then
-  outside again, where it must open both once more. The chat runs on Codex only on exactly that; otherwise the turn is
+  the access list the rest of the data directory, the database and the logs among them, inherits. It also opens
+  Windows' own hosts file, which every account may read, to show that it can open a file at all. The same command
+  runs first outside any sandbox, where it must open all three, then in Codex's sandbox, where it must open the hosts
+  file and neither of the two, then outside again, where it must open all three once more. The chat runs on Codex only on exactly that; otherwise the turn is
   refused with one sentence: **Codex on Windows needs its elevated sandbox, set up once by an administrator with
   `codex sandbox setup --elevated` (https://learn.chatgpt.com/docs/windows/windows-sandbox), or chat on Claude Code.**
   A turn on the OpenAI key is refused instead with **Codex on a key cannot be checked on Windows yet: sign in to Codex,
-  or chat on Claude Code.** The answer is kept for that Codex until the desktop quits. With no runtime running, or
-  before the desktop has saved its settings, there is nothing to open, and the turn is refused until there is; a data
+  or chat on Claude Code.** The answer is kept for that Codex until the desktop quits. With no runtime running there is
+  nothing to open, and the turn is refused until there is; the desktop writes its settings file at each start when it
+  is missing, and if it is missing all the same, the turn says to restart Jason. A data
   directory whose path holds one of `, ; = % ^ & | < > !` or a quote is not checked, and Codex does not run there. The
   check reads your Codex config.toml, which the turn does not, since Codex's sandbox command cannot leave it unread. It
   is not run at the Connect card, since naming the elevated sandbox may ask for an administrator.

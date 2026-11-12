@@ -28,8 +28,9 @@ if (process.env.STUB_HANG === name) {
     // reference names, `codex sandbox windows`, which no help of ours records yet. Any other version, a word where the
     // grammar has none, an option but `-c <value>`, or a command but cmd by its full path reading its line from
     // JASON_SANDBOX_CHECK ends as a usage error that prints no marker. What the command would print in a sandbox is set
-    // by STUB_CODEX_SANDBOX: `holds` (the default) the ran marker alone, `reads` every marker, `reads-second` the ran
-    // marker and the second file's, `silent` none, `hangs` nothing ever. The command itself is never run.
+    // by STUB_CODEX_SANDBOX: `holds` (the default) the ran and control markers, `refuses-type` the ran marker alone,
+    // `reads` every marker, `reads-second` those two and the second data file's, `silent` none, `hangs` nothing ever. The
+    // command itself is never run.
     const version = process.env.STUB_CODEX_VERSION || '0.167.0-alpha.3.2';
     const grammar = { '0.167.0-alpha.3.2': 'bare', '0.122.0': 'worded' }[version];
     const usage = (why) => {
@@ -54,16 +55,21 @@ if (process.env.STUB_HANG === name) {
         process.stderr.write(`'${command.join(' ')}' is not recognized as an internal or external command\n`);
         process.exit(1);
     }
+    // The line: the ran marker, then the control file's part (the system's hosts file), then each data file's.
     const ran = /^echo (\S+)/.exec(line)?.[1];
-    const reads = [...line.matchAll(/&& echo (\S+)/g)].map((match) => match[1]);
+    const parts = [...line.matchAll(/type "([^"]+)" >nul 2>nul && echo (\S+)/g)].map((match) => ({ file: match[1], marker: match[2] }));
+    const control = parts.find((part) => /\\drivers\\etc\\hosts$/.test(part.file))?.marker;
+    const reads = parts.filter((part) => part.marker !== control).map((part) => part.marker);
+    // `holds` the ran and control markers, `refuses-type` the ran marker alone (a sandbox that refuses `type` or nul).
     const shape = process.env.STUB_CODEX_SANDBOX || 'holds';
     if (shape === 'hangs') {
         if (process.env.STUB_HANG_PID) writeFileSync(process.env.STUB_HANG_PID, String(process.pid));
         setInterval(() => undefined, 60000);
     }
-    else if (shape === 'holds') process.stdout.write(`${ran} \r\n`);
-    else if (shape === 'reads') process.stdout.write([`${ran} `, ...reads].join('\r\n') + '\r\n');
-    else if (shape === 'reads-second') process.stdout.write(`${ran} \r\n${reads[1]}\r\n`);
+    else if (shape === 'holds') process.stdout.write(`${ran} \r\n${control} \r\n`);
+    else if (shape === 'refuses-type') process.stdout.write(`${ran} \r\n`);
+    else if (shape === 'reads') process.stdout.write([`${ran} `, `${control} `, ...reads].join('\r\n') + '\r\n');
+    else if (shape === 'reads-second') process.stdout.write(`${ran} \r\n${control} \r\n${reads[1]}\r\n`);
     if (shape !== 'hangs') process.exitCode = 1;
 } else if (listing) {
     require('./app-server.cjs')();
