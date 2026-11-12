@@ -270,6 +270,10 @@ applies to the turns a person starts by sending, from the next one on.
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
   page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
   it stays with the chat after a restart, an update and Start afresh.
+- **This version does not offer Full access.** The menu shows it disabled with "Full access is not in this version
+  yet.", and the desktop refuses it before any confirmation. Its code stays behind one switch (`fullAccessOffered` in
+  `src/chat-modes.ts`), and the points below describe it as built; Ask first and Plan only are the modes this version
+  runs.
 - **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
   confirmation, a message box the main process shows each time Full access is chosen, with Cancel focused and Escape
   answering Cancel. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
