@@ -583,6 +583,15 @@ describe("a chat's access mode", () => {
             disabled: 'Full access runs on Claude Code only.',
         });
         expect(modeChoices(null)[2]?.disabled).toBe('Full access runs on Claude Code only.');
+        expect(modeChoices(claude, true)[2]?.disabled).toBe(
+            'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.',
+        );
+        expect(
+            modeChoices(claude, true)
+                .slice(0, 2)
+                .map((each) => each.disabled),
+        ).toEqual([null, null]);
+        expect(modeChoices(codex, true)[2]?.disabled).toBe('Full access runs on Claude Code only.');
         expect(modeChoices(claude).map((each) => each.mode)).not.toContain('auto_edit');
     });
 

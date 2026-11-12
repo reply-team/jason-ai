@@ -1,6 +1,7 @@
 using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace Jason.App.Tests.EndToEnd;
@@ -11,6 +12,7 @@ namespace Jason.App.Tests.EndToEnd;
 /// </summary>
 public sealed class PatientStartTests : IDisposable
 {
+    // The number is no process: rows that give up build the answer from a stand-in with StillStartingAs.
     private const string StillStarting = """{"error":{"code":"runtime_start_failed","message":"The runtime process 4242 did not publish an endpoint descriptor within 30 s and is still running: it may still be starting.","retryable":true}}""";
 
     private const string Answered = """{"instance_id":"rt_PATIENT"}""";
@@ -25,7 +27,45 @@ public sealed class PatientStartTests : IDisposable
 
     public PatientStartTests() => Directory.CreateDirectory(_root);
 
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+    private readonly List<Process> _standIns = [];
+
+    public void Dispose()
+    {
+        foreach (var standIn in _standIns)
+        {
+            if (!standIn.HasExited)
+            {
+                standIn.Kill(entireProcessTree: true);
+                standIn.WaitForExit();
+            }
+
+            standIn.Dispose();
+        }
+
+        Directory.Delete(_root, recursive: true);
+    }
+
+    private static string StillStartingAs(int pid) => StillStarting.Replace("process 4242", $"process {pid}", StringComparison.Ordinal);
+
+    /// <summary>A program that starts and never publishes anything: a sleeping shell, which is all the runtime is to this helper.</summary>
+    private Process StartStandIn()
+    {
+        var start = new ProcessStartInfo("pwsh") { UseShellExecute = false, CreateNoWindow = true };
+        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 600" })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        var standIn = Process.Start(start) ?? throw new InvalidOperationException("The stand-in could not be started.");
+        _standIns.Add(standIn);
+        return standIn;
+    }
+
+    private void WriteLog(params string[] lines)
+    {
+        Directory.CreateDirectory(Paths.LogsDirectory);
+        File.WriteAllLines(Path.Combine(Paths.LogsDirectory, "jason-20260101.log"), lines);
+    }
 
     private JasonPaths Paths => new(_root);
 
@@ -91,10 +131,11 @@ public sealed class PatientStartTests : IDisposable
     public async Task A_published_runtime_that_never_answers_is_handed_back_as_the_verb_said_once_patience_runs_out()
     {
         Publish();
+        var verbSaid = StillStartingAs(StartStandIn().Id);
         var statusAsked = 0;
         var result = await PatientStart.RunAsync<(int ExitCode, string Output)>(
             Paths,
-            _ => Task.FromResult((ExitCodes.ApiError, StillStarting)),
+            _ => Task.FromResult((ExitCodes.ApiError, verbSaid)),
             () =>
             {
                 statusAsked++;
@@ -104,9 +145,9 @@ public sealed class PatientStartTests : IDisposable
             patience: TimeSpan.FromMilliseconds(600),
             say: _said.Add);
 
-        Assert.Equal((ExitCodes.ApiError, StillStarting), result);
+        Assert.Equal((ExitCodes.ApiError, verbSaid), result);
         Assert.True(statusAsked >= 1, "the published runtime was never asked");
-        Assert.Empty(_said);
+        Assert.Contains(_said, line => line.Contains("ended the runtime process", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -136,17 +177,88 @@ public sealed class PatientStartTests : IDisposable
     public async Task A_runtime_that_never_publishes_is_handed_back_as_the_verb_said_once_patience_runs_out()
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
+        var verbSaid = StillStartingAs(StartStandIn().Id);
         var result = await PatientStart.RunAsync<(int ExitCode, string Output)>(
             Paths,
-            _ => Task.FromResult((ExitCodes.ApiError, StillStarting)),
+            _ => Task.FromResult((ExitCodes.ApiError, verbSaid)),
             () => Task.FromResult((ExitCodes.RuntimeUnavailable, "{}")),
             step => step,
             patience: TimeSpan.FromMilliseconds(400),
             say: _said.Add);
 
-        Assert.Equal((ExitCodes.ApiError, StillStarting), result);
+        Assert.Equal((ExitCodes.ApiError, verbSaid), result);
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), $"patience of 0.4 s took {clock.Elapsed.TotalSeconds:F1} s");
-        Assert.Empty(_said);
+    }
+
+    /// <summary>
+    /// A start that never publishes says what the runtime log held when it gave up, each line by its time and its
+    /// template and never by the values that filled it, so a slow step can be told from a stuck one afterwards.
+    /// </summary>
+    [Fact]
+    public async Task A_start_that_never_publishes_says_the_log_times_and_templates_and_nothing_a_person_wrote()
+    {
+        WriteLog(
+            """{"@t":"2026-01-01T10:00:01.0000000Z","@mt":"Database ready","@l":"Information"}""",
+            """{"@t":"2026-01-01T10:00:04.5000000Z","@mt":"Imported {Count} things for {Campaign}","Count":3,"Campaign":"Ada secret campaign","@l":"Information"}""",
+            """{"@t":"2026-01-01T10:00:05.0000000Z","@mt":"A step failed","@x":"System.Exception: private words","@l":"Error"}""",
+            "not json at all");
+
+        await PatientStart.RunAsync<(int ExitCode, string Output)>(
+            Paths,
+            _ => Task.FromResult((ExitCodes.ApiError, StillStartingAs(StartStandIn().Id))),
+            () => Task.FromResult((ExitCodes.RuntimeUnavailable, "{}")),
+            step => step,
+            patience: TimeSpan.FromMilliseconds(300),
+            say: _said.Add);
+
+        Assert.Contains("2026-01-01T10:00:01.0000000Z Database ready", _said);
+        Assert.Contains("2026-01-01T10:00:04.5000000Z Imported {Count} things for {Campaign}", _said);
+        Assert.Contains("2026-01-01T10:00:05.0000000Z A step failed", _said);
+        var everything = string.Join('\n', _said);
+        Assert.DoesNotContain("secret campaign", everything, StringComparison.Ordinal);
+        Assert.DoesNotContain("private words", everything, StringComparison.Ordinal);
+        Assert.DoesNotContain("not json", everything, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And leaves no process behind: the one the verb named is ended by its number and is gone when the helper returns,
+    /// which is when the caller removes the folder it was using.
+    /// </summary>
+    [Fact]
+    public async Task A_start_that_never_publishes_ends_the_process_the_verb_named_and_it_is_gone_on_return()
+    {
+        var runtime = StartStandIn();
+        var bystander = StartStandIn();
+
+        await PatientStart.RunAsync<(int ExitCode, string Output)>(
+            Paths,
+            _ => Task.FromResult((ExitCodes.ApiError, StillStartingAs(runtime.Id))),
+            () => Task.FromResult((ExitCodes.RuntimeUnavailable, "{}")),
+            step => step,
+            patience: TimeSpan.FromMilliseconds(300),
+            say: _said.Add);
+
+        Assert.True(runtime.HasExited, "the runtime the verb launched outlived the start that gave up");
+        Assert.False(bystander.HasExited, "a process the verb did not name was ended");
+        Assert.Contains($"ended the runtime process {runtime.Id}", string.Join('\n', _said), StringComparison.Ordinal);
+    }
+
+    /// <summary>An answer that names no process ends none: the helper never looks for a runtime by its name.</summary>
+    [Fact]
+    public async Task A_start_that_gave_up_without_naming_a_process_ends_nothing()
+    {
+        var bystander = StartStandIn();
+
+        await PatientStart.RunAsync<(int ExitCode, string Output)>(
+            Paths,
+            _ => Task.FromResult((ExitCodes.ApiError, """{"error":{"code":"runtime_start_failed","message":"It may still be starting.","retryable":true}}""")),
+            () => Task.FromResult((ExitCodes.RuntimeUnavailable, "{}")),
+            step => step,
+            patience: TimeSpan.FromMilliseconds(300),
+            say: _said.Add);
+
+        Assert.False(bystander.HasExited);
+        Assert.Contains(_said, line => line.Contains("named no process", StringComparison.Ordinal));
     }
 
     [Fact]

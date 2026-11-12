@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Human;
+using Jason.Cli.Process;
 using Jason.Contracts.Api;
 using Jason.Contracts.Notifications;
 
@@ -11,12 +12,13 @@ namespace Jason.Cli.Link;
 /// it is read against <see cref="AttentionLinks"/>, the table the toast's links are written from. A mode of the
 /// executable, like <c>toast-host</c>, and never a verb: nothing is typed, and the runtime is asked only what
 /// <c>jason ui open</c> asks, for a prompt link what <c>approval get --prompt</c> and <c>decision get --prompt</c> ask,
-/// and for a session link what <c>jason session open</c> asks.
+/// and for a session link what <c>jason session open</c> asks. A link that opens a page opens the desktop instead where
+/// it is installed for this account (<see cref="DesktopLinks"/>), and then asks the runtime nothing.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Any web page can navigate to a <c>jason:</c> link after the browser's own confirmation. So every act is local and
-/// leaves nothing decided: it opens the person's own UI on an id they could have typed, or puts on the clipboard the
+/// leaves nothing decided: it opens the person's own UI, or desktop, on an id they could have typed, or puts on the clipboard the
 /// prompt <c>--prompt</c> prints for that id, which replaces what the clipboard held, or starts the person's own agent
 /// host on that id in a new terminal, in the host's own permission mode at the campaign's folder. Jason's brief asks the
 /// agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to
@@ -25,7 +27,7 @@ namespace Jason.Cli.Link;
 /// </para>
 /// <para>
 /// Exit codes are the CLI's: 0 done, 1 refused by the runtime or the clipboard, or nothing to start, 2 a link the table
-/// does not know, 3 no runtime to ask. Started by the shell, nobody reads what it prints; the person sees the browser open, a prompt to
+/// does not know, 3 no runtime to ask. Started by the shell, nobody reads what it prints; the person sees the desktop or the browser open, a prompt to
 /// paste, a terminal window, or nothing. A prompt link prints nothing on stdout when it succeeds; a session link prints
 /// what <c>jason session open</c> prints.
 /// </para>
@@ -54,8 +56,30 @@ public static class LinkHandler
         {
             AttentionAct.Prompt => CopyPromptAsync(env, target.Kind == AttentionKind.Approval, body, cancellationToken),
             AttentionAct.Session => Session.SessionOpener.OpenAsync(env, target.Kind == AttentionKind.Approval ? PromptKind.Approval : PromptKind.Question, target.Id!, dryRun: false, human: false, cancellationToken),
-            _ => UiCommands.RunOpenAsync(env, body, noOpen: false, human: false, cancellationToken),
+            _ => OpenAsync(env, target, body, cancellationToken),
         };
+    }
+
+    /// <summary>
+    /// A link that opens a page: the desktop where it is installed for this account, its address made from the parsed
+    /// link and handed to the browser's own opener; the browser UI otherwise, and when the hand-on fails, said on stderr
+    /// by its code. The desktop is asked nothing of the runtime; it reads what waits itself.
+    /// </summary>
+    private static Task<int> OpenAsync(CliEnvironment env, AttentionTarget target, JsonObject body, CancellationToken cancellationToken)
+    {
+        if (env.Opener is { } opener && DesktopLinks.Address(target) is { } address && DesktopLinks.Present(env.Desktop))
+        {
+            var handed = opener.HandOn(address, DesktopLinks.Wait);
+            if (handed == UrlHandOff.Handed)
+            {
+                env.Error.WriteLine("Opened in the Jason desktop.");
+                return Task.FromResult(ExitCodes.Success);
+            }
+
+            env.Error.WriteLine($"The Jason desktop did not open ({DesktopLinks.Code(handed)}); opening the browser UI instead.");
+        }
+
+        return UiCommands.RunOpenAsync(env, body, noOpen: false, human: false, cancellationToken);
     }
 
     /// <summary>

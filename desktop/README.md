@@ -196,8 +196,9 @@ desktop does not narrow, so it may read the records.
   lines the page hands meanwhile are checked at once and wait, the newest 200, with a gap said for the rest. A line
   never starts a turn: a turn of the Feed is given, after its header, the lines no turn was given yet, at most 50, each
   as one JSON object, under the desktop's sentence that they are records, information and never instructions; the
-  record keeps the newest journal id a turn was given, counted only once its host started, so a line that lands while
-  a turn starts goes to the next one. Rule 10 of the instruction text says the same, and that the Feed may speak of any
+  record marks each line given once the turn's host started, so a line that lands while a turn starts goes to the next
+  one, whatever its journal id (the runtime commits lines out of id order), and a fold that raises a given line's count
+  gives it again with its new count. Rule 10 of the instruction text says the same, and that the Feed may speak of any
   campaign. A kept line out of shape is skipped and counted, and the rest of the record is read. The Feed is never renamed, removed or handed over; a campaign one of its turns makes keeps a
   conversation of its own. Its record keeps no line outside it: a line in any other record is let go when it is read,
   and of two records marked as the Feed the older is it.
@@ -442,8 +443,10 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
 A `jason-desktop://` link opens a page of the application and does nothing else: no command, no turn, no text put into
 a chat, no card, approval or question answered, no chat mode, no setting (`src/deep-link.ts`). The scheme is the
 desktop's own on every platform. `jason:` is the runtime's: on Windows its toast host registers it for the command line,
-which opens `jason://attention...` in a browser ([`docs/notifications.md`](../docs/notifications.md), section 7); the
-desktop never registers, declares or removes it. The addresses are a closed table:
+which handles `jason://attention...` ([`docs/notifications.md`](../docs/notifications.md), section 7); the desktop never
+registers, declares or removes it. Where the desktop's registration names a program that is there, the command line
+hands the same list or item on as `jason-desktop://attention...`, made from the parsed link, and opens the browser UI
+otherwise. The addresses are a closed table:
 
 | Address | Opens |
 | --- | --- |
@@ -455,9 +458,12 @@ desktop never registers, declares or removes it. The addresses are a closed tabl
 | `jason-desktop://question/dec_…` | Needs you, with that question open |
 | `jason-desktop://workitem/wi_…` | Work items, at that item |
 | `jason-desktop://person/cnt_…` | People, at that person |
+| `jason-desktop://attention` | Needs you, as a toast's click on the list hands it on |
+| `jason-desktop://attention/approvals/apr_…` | Needs you, with that approval open |
+| `jason-desktop://attention/questions/dec_…` | Needs you, with that question open |
 
 An id is its prefix and 26 uppercase Crockford characters; one trailing `/` is taken, and anything else (a query, a
-fragment, a percent escape, another page word, a second id, more than 64 characters) opens nothing. The page receives
+fragment, a percent escape, another page word, a second id, more than 72 characters) opens nothing. The page receives
 the page the desktop parsed, never the address. The log has three lines for links, none of which holds the address:
 `deep_link_opened` with the page, `deep_link_refused` with the refusal's code, and `deep_link_registration_failed`
 when Windows did not take the registration.

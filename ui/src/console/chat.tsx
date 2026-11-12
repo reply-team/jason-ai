@@ -878,7 +878,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         value={chat.mode}
                         onChange={(event) => chooseMode(chatId, event.target.value as DesktopChatMode)}
                     >
-                        {modeChoices(host).map((each) => (
+                        {modeChoices(host, chat.main === true).map((each) => (
                             <option key={each.mode} value={each.mode} disabled={each.disabled !== null}>
                                 {each.disabled === null
                                     ? each.label

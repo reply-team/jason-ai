@@ -46,6 +46,8 @@ export interface DesktopLineEntry {
     campaign_id: string;
     work_item_id?: string;
     count: number;
+    /** Present, and true, once a turn of the Feed was given the line with this count; a fold that raises it removes it. */
+    given?: true;
 }
 
 /**
@@ -474,7 +476,7 @@ export interface JasonDesktop {
         /**
          * Chooses a conversation's mode, on `host`, the `DesktopHost.id` the next turn runs on. `full_access` is refused
          * before anything is asked where it cannot apply (Codex, a host that does not drive the chat, a Claude Code too old
-         * for it), in the desktop's words; otherwise the desktop asks the person to confirm, every time, and their no
+         * for it, the Feed), in the desktop's words; otherwise the desktop asks the person to confirm, every time, and their no
          * answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes before
          * this answers whenever the mode changed. Refused for a conversation the desktop does not keep.
          */
