@@ -346,18 +346,24 @@ test('under Full access a jason handed to xargs is held, saying to switch to Ask
     assert.match((await hooked(w, 'Bash', { command: 'printf "jason approval approve apr_1" | sh' })) ?? 'ran', /person's own act/);
 });
 
-test('an escaped or quoted deny-list verb is refused in every mode, never a card a person might allow', async (t) => {
+test('a quoted deny-list verb is refused in every mode; an escaped one is refused in Ask first and held under Full access, which reads no backslash', async (t) => {
     const w = await wired(t, 'full_access');
     for (const command of ['jason approval appro\\ve apr_1', "jason approval approv''e apr_1", 'jason approval ap"pr"ove apr_1', 'jason decision ans\\wer dec_1 --option a']) {
-        assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', /person's own act/, command);
         assert.equal(judge('Bash', { command }, w.scope).verdict, 'deny', `Ask first: ${command}`);
+    }
+    for (const command of ["jason approval approv''e apr_1", 'jason approval ap"pr"ove apr_1']) {
+        assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', /person's own act/, command);
+    }
+    for (const command of ['jason approval appro\\ve apr_1', 'jason decision ans\\wer dec_1 --option a']) {
+        assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', held, command);
     }
 });
 
-test('a jason in an interpreter\'s list form is refused for a deny-list verb in every mode, and held for any other under Full access', async (t) => {
+test('a jason in an interpreter\'s list form is refused for a deny-list verb in Ask first, and held for any verb under Full access', async (t) => {
     const w = await wired(t, 'full_access');
     const approve = `python3 -c "import subprocess; subprocess.run(['jason','approval','approve','apr_1'])"`;
-    assert.match((await hooked(w, 'Bash', { command: approve })) ?? 'ran', /person's own act/);
+    // Full access reads no code given as text: it is held, whatever the code says.
+    assert.match((await hooked(w, 'Bash', { command: approve })) ?? 'ran', held);
     assert.equal(judge('Bash', { command: approve }, w.scope).verdict, 'deny');
     const list = `python3 -c "import subprocess; subprocess.run(['jason','campaign','list'])"`;
     assert.match((await hooked(w, 'Bash', { command: list })) ?? 'ran', held);
@@ -371,12 +377,13 @@ test('under Full access a variable, an expansion or eval as the program is held'
     }
 });
 
-test('an operation re-spelled by a quote or a backslash is refused in every mode', async (t) => {
+test('an operation re-spelled by a quote is refused in every mode; by a backslash it is refused in Ask first and held under Full access', async (t) => {
     const w = await wired(t, 'full_access');
     for (const command of ["curl -X POST http://127.0.0.1:4011/v1/approval.appr''ove -d @b.json", 'curl http://127.0.0.1:4011/v1/decision.ans\\wer']) {
-        assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', /person's own act/, command);
         assert.equal(judge('Bash', { command }, w.scope).verdict, 'deny', `Ask first: ${command}`);
     }
+    assert.match((await hooked(w, 'Bash', { command: "curl -X POST http://127.0.0.1:4011/v1/approval.appr''ove -d @b.json" })) ?? 'ran', /person's own act/);
+    assert.match((await hooked(w, 'Bash', { command: 'curl http://127.0.0.1:4011/v1/decision.ans\\wer' })) ?? 'ran', held);
 });
 
 test('a script written with an escaped verb or a re-spelled operation is refused', async (t) => {
@@ -413,9 +420,13 @@ test('under Full access a glob or a ~ that could expand into the data directory 
         assert.notEqual(fullAccessJudgement('Bash', { command }, linux).outcome, 'runs', `linux: ${command}`);
     }
     // The glob spellings the plain reading misses are held, not refused: no literal path names the data there.
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat ~/.jas?n/run/runtime.json' }, linux), { outcome: 'held', message: heldSentence });
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat /c/Users/someone/.ja?on/run/runtime.json' }, windows), { outcome: 'held', message: heldSentence });
-    for (const command of ['ls *.md', 'cat notes/*.txt', 'jason campaign list', 'git status', 'jq .items[0] out.json']) {
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat ~/.jas?n/run/runtime.json' }, linux), { outcome: 'held', message: heldSentence, reason: 'glob' });
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat /c/Users/someone/.ja?on/run/runtime.json' }, windows), { outcome: 'held', message: heldSentence, reason: 'glob' });
+    // A glob is never literal, wherever it points.
+    for (const command of ['ls *.md', 'cat notes/*.txt', 'jq .items[0] out.json']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), { outcome: 'held', message: heldSentence, reason: 'glob' }, `held: ${command}`);
+    }
+    for (const command of ['jason campaign list', 'git status', "jq '.items[0]' out.json"]) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), { outcome: 'runs' }, `runs: ${command}`);
     }
 });
@@ -521,8 +532,22 @@ test('an empty $\'\' or $"" inside a word, a $\'\\xNN\' string, a line continuat
         "printf '\\njason approval approve apr_1\\n' > go.sh; sh go.sh",
     ]) {
         assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${JSON.stringify(command)}`);
-        assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `Full access: ${JSON.stringify(command)}`);
     }
+    // Full access reads none of these spellings: a $, a backslash and a brace are never literal, so the command is held.
+    for (const command of [
+        "jason approval appro$''ve apr_1",
+        'jason approval appro$""ve apr_1',
+        "jason approval $'\\x61'pprove apr_1",
+        "ja$''son approval approve apr_1",
+        'jason approval appro\\\nve apr_1',
+        'jason approval {approve,} apr_1',
+        '{jason,} approval approve apr_1',
+        'jason approval appro{v,}e apr_1',
+    ]) {
+        assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'held', `Full access: ${JSON.stringify(command)}`);
+    }
+    // A script the agent writes and then runs is a program running: what holds there is the confined CLI's own bar.
+    assert.equal(fullAccessJudgement('Bash', { command: "printf '\\njason approval approve apr_1\\n' > go.sh; sh go.sh" }, scope).outcome, 'runs');
     assert.deepEqual(judge('Bash', { command: "cat ~/.jas$''on/run/runtime.json" }, scope).verdict, 'deny', 'the data directory by an empty string');
     assert.deepEqual(judge('Bash', { command: "curl http://127.0.0.1:4011/v1/approval.appr$''ove" }, scope).verdict, 'deny');
     // What the plain spelling would not refuse stays a card.

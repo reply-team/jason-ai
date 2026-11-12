@@ -3,6 +3,7 @@
 // what to put on the person's card. The platform is passed in, so both platforms' path rules are tested on either.
 
 import { posix, win32 } from 'node:path';
+import { heldByWhatRuns, programName, readLiteral, type HeldReason, type LiteralCommand } from './chat-literal.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
 export type Platform = 'win32' | 'darwin' | 'linux';
@@ -695,18 +696,30 @@ function namesData(command: string, scope: ChatScope): boolean {
  * variable's name and the text's spellings.
  */
 function placesOf(command: string, scope: ChatScope): string[] {
+    return placesOfWords(command.split(/[\s;|&<>()`]+/).map(unquoted), scope, false);
+}
+
+/**
+ * The places words name, located as `placesOf` locates them. Resolved words (`literal`) are what the shell passes on, so
+ * none of them is left to a variable's name or a `~`.
+ */
+function placesOfWords(words: readonly string[], scope: ChatScope, literal: boolean): string[] {
     const places: string[] = [];
-    for (const word of command.split(/[\s;|&<>()`]+/).map(unquoted)) {
+    for (const word of words) {
         const pieces = new Set([word, ...word.split(/[=@,]/)]);
         for (const piece of [...pieces]) if (/^-[A-Za-z]/.test(piece)) pieces.add(piece.slice(2));
         for (const value of pieces) {
-            if (value === '' || value.length > pathLimit(scope.platform) || /^~|[$%]/.test(value)) continue;
-            // Git Bash's /c/... is the drive's own path.
-            const drive = scope.platform === 'win32' ? /^[\\/]+([a-z])(?=[\\/]|$)/i.exec(value) : null;
-            places.push(located(drive ? `${drive[1]}:${value.slice(drive[0].length) || '\\'}` : value, scope));
+            if (value === '' || value.length > pathLimit(scope.platform) || (!literal && /^~|[$%]/.test(value))) continue;
+            places.push(located(nativeSpelling(value, scope), scope));
         }
     }
     return places;
+}
+
+/** A path word as the platform spells it: Git Bash's /c/... is the drive's own path. */
+function nativeSpelling(value: string, scope: ChatScope): string {
+    const drive = scope.platform === 'win32' ? /^[\\/]+([a-z])(?=[\\/]|$)/i.exec(value) : null;
+    return drive ? `${drive[1]}:${value.slice(drive[0].length) || '\\'}` : value;
 }
 
 /** True when a place the command's words name is in the data directory outside the chat folder. */
@@ -988,8 +1001,11 @@ function chatsOwnPlace(places: readonly string[], scope: ChatScope): string | nu
  */
 export const heldSentence = 'Full access does not run this, because Jason cannot read plainly what it would do or it would change what an agent loads. Switch this chat to Ask first to be asked about it. Nothing was run.';
 
-/** A Full access judgement: refused, runs with no question, or held (refused with `heldSentence`). */
-export type FullAccessJudgement = { outcome: 'refused'; message: string } | { outcome: 'runs' } | { outcome: 'held'; message: string };
+/**
+ * A Full access judgement: refused, runs with no question, or held (`heldSentence`). A held shell command says why, by
+ * the literal reading's closed reason (`HeldReason`).
+ */
+export type FullAccessJudgement = { outcome: 'refused'; message: string } | { outcome: 'runs' } | { outcome: 'held'; message: string; reason?: HeldReason };
 
 /** The cards a person would read plainly: in Full access these run with no question. */
 const plainCards: ReadonlySet<string> = new Set([
@@ -1109,26 +1125,116 @@ export function deletes(command: string, platform: Platform): boolean {
 }
 
 /**
- * The one judgement of Full access, which the turn's hook and the broker share: refused where the model refuses, or where
- * the file being written shows what it refuses; held (`heldSentence`) where the model could only have shown a card
- * because it cannot read the act plainly or the act would change what an agent loads (a guarded name, a search variable,
- * a local jason, a `~` or a glob into the data directory, a `jason` not plainly read), and on every call of a tool of the
- * person's own MCP server; runs with no question where the
- * model allows, for the tools that run nothing, and for the plain cards: a command it read, a write in or outside the
+ * The one judgement of Full access, which the turn's hook and the broker share. A shell command is read literally
+ * (`literalJudgement`): refused by what its words say, held with a closed reason where a word is not literal or what it
+ * runs is held all the same, and otherwise run. No MCP tool is read as a shell command. Any other tool: refused where the
+ * model refuses, or where the file being written shows what it refuses; held (`heldSentence`) on every call of a tool of
+ * the person's own MCP server, whatever its input, and where the model could only have shown a card because the act
+ * would change what an agent loads (a guarded name, a local jason) or the tool is not one it knows; runs with no
+ * question where the model allows, for the tools that run nothing, and for the plain cards: a write in or outside the
  * working folders, a page, a read outside the folders.
  */
 export function fullAccessJudgement(tool: string, input: Record<string, unknown>, scope: ChatScope): FullAccessJudgement {
-    const judged = judge(tool, input, scope);
+    const command = input['command'];
+    // A shell command is read literally (`literalJudgement`), never through the second look's spellings. No MCP tool is:
+    // the chat's own keeps its refusal and a person's own is held, whatever its input names.
+    const literal = (shells.has(tool) || typeof command === 'string') && !tool.startsWith('mcp__');
+    const judged = literal ? allow : judge(tool, input, scope);
     if (judged.verdict === 'deny') return { outcome: 'refused', message: judged.message };
     const written = writtenRefusal(tool, input, scope);
     if (written !== null) return { outcome: 'refused', message: written };
     // A tool of the person's own MCP server is held on every call: its arguments are no shell words, so Jason cannot
     // read what the program does with them, whatever they are named.
     if (isPersonsTool(tool)) return { outcome: 'held', message: heldSentence };
-    const command = input['command'];
-    if (typeof command === 'string' && unreadableCommand(command, scope)) return { outcome: 'held', message: heldSentence };
+    if (literal) return literalJudgement(tool, typeof command === 'string' ? command : null, scope);
     if (judged.verdict === 'allow' || toolsThatRunNothing.has(tool)) return { outcome: 'runs' };
     return plainCards.has(judged.title) ? { outcome: 'runs' } : { outcome: 'held', message: heldSentence };
+}
+
+const heldFor = (reason: HeldReason): FullAccessJudgement => ({ outcome: 'held', message: heldSentence, reason });
+
+/**
+ * A shell command under Full access, in the order of refused, held, runs. The refusals are first read over the text as
+ * written, so that a command that is not literal is still refused where its plain words show a refusal, and never
+ * becomes a card a person might allow. Then the literal reading (`readLiteral`): a command any of whose words is not
+ * literal is held. The refusals are read again over the resolved words, then what is held all the same; anything else
+ * runs. A held command too long for its card to show whole is refused, as in Ask first.
+ */
+function literalJudgement(tool: string, command: string | null, scope: ChatScope): FullAccessJudgement {
+    if (command === null) return heldFor('syntax');
+    const asWritten = refusalOver(command, placesOf(command, scope), scope);
+    if (asWritten !== null) return { outcome: 'refused', message: asWritten };
+    if (command.split(/&&|\|\||[;|&\n\r]/).some((part) => clearsConfinement(part.trim().split(/\s+/).map(unquoted)))) return { outcome: 'refused', message: confinedRefusal };
+    const judged = literalOutcome(tool, command, scope);
+    if (judged.outcome === 'held' && command.length > detailLimit) return { outcome: 'refused', message: longRefusal };
+    return judged;
+}
+
+/** The refusals of a command's text and of the places its words name, by Ask first's own checks. */
+function refusalOver(text: string, places: readonly string[], scope: ChatScope): string | null {
+    if (namesConfinedVariable(text)) return confinedRefusal;
+    if (changesSearch(text)) return lookupRefusal;
+    if (namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(places, scope)) return dataRefusal;
+    if (jasonIn(text, scope) === 'deny') return commandRefusal;
+    return chatsOwnPlace(places, scope);
+}
+
+function literalOutcome(tool: string, command: string, scope: ChatScope): FullAccessJudgement {
+    const reading = readLiteral(tool, command, { platform: scope.platform, home: scope.home });
+    if (reading.held) return heldFor(reading.reason);
+    // Each command's words are located against the folder it runs in: a directory change's literal absolute target.
+    const commands = reading.commands.map((each) => ({ command: each, scope: each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) } }));
+    const places = commands.flatMap(({ command: each, scope: at }) => placesOfWords([...each.words, ...each.targets], at, true));
+    // (a) Refused, over the resolved words, a URL's percent-escapes decoded.
+    const resolved = reading.commands.map((each) => [...each.words, ...each.targets].join(' ')).join('\n');
+    for (const text of new Set([resolved, percentDecoded(resolved)])) {
+        const refused = refusalOver(text, places, scope);
+        if (refused !== null) return { outcome: 'refused', message: refused };
+    }
+    if (reading.commands.some((each) => clearsConfinement(each.words))) return { outcome: 'refused', message: confinedRefusal };
+    // (b) Held, every word literal: what runs, reply, a guarded name, a search variable, a jason of the agent's own, a
+    // folder that holds the data directory.
+    const runs = heldByWhatRuns(reading.commands);
+    if (runs !== null) return heldFor(runs);
+    if (reading.commands.some(heldReply)) return heldFor('reply');
+    if (guardedPlace(places, scope) !== undefined) return heldFor('guarded_name');
+    if (namesSearch(resolved)) return heldFor('search');
+    if (commands.some(({ command: each, scope: at }) => namesLocalJason([...each.words, ...each.targets].join(' '), at))) return heldFor('local_jason');
+    const data = located(scope.data, scope);
+    if (places.some((path) => inside(scope, path, data))) return heldFor('holds_data');
+    // (c) Runs.
+    return { outcome: 'runs' };
+}
+
+/** A text with each percent-escape decoded, as a URL word is read. */
+function percentDecoded(text: string): string {
+    return text.replace(/%[0-9A-Fa-f]{2}/g, (escape) => String.fromCharCode(Number.parseInt(escape.slice(1), 16)));
+}
+
+/**
+ * True when a resolved command is env clearing or unsetting the environment, or exec clearing it, around a jason: the
+ * confining variable would go with the rest without being named.
+ */
+function clearsConfinement(words: readonly string[]): boolean {
+    const program = programName(words[0] ?? '');
+    if (program !== 'env' && program !== 'exec') return false;
+    const options = words.slice(1).filter((word) => word.startsWith('-'));
+    const clears = program === 'env'
+        ? options.some((word) => word === '-' || word === '--ignore-environment' || /^--unset(=|$)/.test(word) || /^-[A-Za-z0-9]*[iu]/.test(word))
+        : options.some((word) => /^-[A-Za-z]*c/.test(word));
+    return clears && words.slice(1).some((word) => programName(word) === 'jason');
+}
+
+const packageRunners = new Set(['npx', 'bunx', 'pnpx', 'pnpm', 'yarn', 'npm']);
+
+/**
+ * True when a resolved command runs reply other than as one of its exact no-card forms (`replyNoCardForms`): reply as
+ * the program, or named to a package runner. reply acts on the provider directly, outside Jason's approvals.
+ */
+function heldReply(command: LiteralCommand): boolean {
+    const program = programName(command.words[0] ?? '');
+    if (program === 'reply' || /^reply-cli(@.*)?$/.test(program)) return command.targets.length > 0 || !replyNoCardForms.includes(command.words.join(' '));
+    return packageRunners.has(program) && command.words.slice(1).some(namesReply);
 }
 
 function hostOf(url: string): string | null {
