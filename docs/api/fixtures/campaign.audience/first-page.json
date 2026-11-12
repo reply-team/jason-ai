@@ -1,0 +1,80 @@
+{
+  "operation": "campaign.audience",
+  "case": "first-page",
+  "request": {
+    "campaign_id": "cmp_1",
+    "limit": 2
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "reserve": {
+      "untouched": 2,
+      "threshold": 3
+    },
+    "allowance": {
+      "campaign_id": "cmp_1",
+      "category": null,
+      "operations": [
+        "audience.search"
+      ],
+      "audience": {
+        "id": "aud_1",
+        "number": 2
+      },
+      "expires_at": null,
+      "max_releases": null,
+      "max_people": 100,
+      "max_per_search": 50,
+      "released": 1,
+      "people": 50,
+      "in_force": true,
+      "set_by": {
+        "type": "human",
+        "id": "Ada Example"
+      },
+      "set_at": "2026-10-16T09:00:00.000Z",
+      "line_id": "jrn_1"
+    },
+    "audiences": [
+      {
+        "id": "aud_2",
+        "number": 3,
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "definition": {
+          "industries": [
+            "Industry 3"
+          ]
+        },
+        "landed": 0,
+        "search_count": 0,
+        "searches": []
+      },
+      {
+        "id": "aud_1",
+        "number": 2,
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "definition": {
+          "industries": [
+            "Industry 2"
+          ]
+        },
+        "landed": 2,
+        "search_count": 1,
+        "searches": [
+          {
+            "search": "wi_1",
+            "state": "in_progress",
+            "asked": 50,
+            "found": null,
+            "landed": 2,
+            "began_at": "2026-10-01T11:00:00.000Z",
+            "ended_as": null,
+            "ended_at": null
+          }
+        ]
+      }
+    ],
+    "next_cursor": "Mg"
+  }
+}

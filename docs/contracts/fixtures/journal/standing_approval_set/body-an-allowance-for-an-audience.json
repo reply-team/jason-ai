@@ -1,0 +1,19 @@
+{
+  "kind": "standing_approval_set",
+  "version": 1,
+  "case": "a person lets the searches under audience 2 ask for up to five hundred people, at most a hundred at a time",
+  "body": {
+    "key": "audience.search",
+    "old": null,
+    "new": {
+      "category": null,
+      "operations": ["audience.search"],
+      "expires_at": null,
+      "max_releases": null,
+      "audience": { "id": "aud_01JC0000000000000000000002", "number": 2 },
+      "max_people": 500,
+      "max_per_search": 100
+    }
+  },
+  "expect": "valid"
+}

@@ -138,7 +138,8 @@ public partial class InteractiveSkillTests
     /// A standing approval is a person's decision made in advance, and the skill that records their decisions says how
     /// they set, list and unset one, in the words the runtime uses for it. It sits before "What an approval covers", it
     /// does not soften the rule that nobody decides for a person, and it names the three verbs and the options they take,
-    /// so a session that guessed one would be corrected by the text and not by a refusal.
+    /// and the act that approves a search and allows more people under its audience, so a session that guessed one would
+    /// be corrected by the text and not by a refusal.
     /// </summary>
     [Fact]
     public void The_approvals_skill_says_how_a_person_sets_lists_and_unsets_a_standing_approval()
@@ -159,6 +160,21 @@ public partial class InteractiveSkillTests
         Assert.Contains("**The limits are the person's to choose, and none is the default.**", skill, StringComparison.Ordinal);
         Assert.Contains("Setting one again replaces what was set and starts its count over", skill, StringComparison.Ordinal);
         Assert.Contains("`interested` covers neither `very_interested` nor `Interested`", skill, StringComparison.Ordinal);
+
+        // The allowance is set by the act a person makes when they approve a search: approve, and allow more people under
+        // its audience. A session that knew only the categories would ask the person to approve every top-up forever.
+        Assert.Contains(
+            "**A search is approved and allowed in one act**: `jason approval approve <apr_…> --allow <people> --actor human:<their id>`",
+            skill,
+            StringComparison.Ordinal);
+
+        // What a search spends is the person's: its probe always waits for them, the allowance is offered only once the
+        // audience has been judged, a new audience's search takes the old allowance back and the person hears so first,
+        // and nobody else moves it.
+        Assert.Contains("A search spends the provider's money, so the first search under an audience, its probe, always waits for the person.", skill, StringComparison.Ordinal);
+        Assert.Contains("That is the moment to offer the allowance, never before the audience has been judged", skill, StringComparison.Ordinal);
+        Assert.Contains("takes the old one back in the same act. Say so before they approve such a search", skill, StringComparison.Ordinal);
+        Assert.Contains("No act but the person's moves the allowance: no role, no verdict and no probe that waits.", skill, StringComparison.Ordinal);
 
         var printed = SkillPack.PrintedCommands(SkillPack.Find("approvals-and-questions").File);
         Assert.Contains(printed, line => line.StartsWith("jason approval set-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_requested ", StringComparison.Ordinal) && line.Contains(" --actor human:", StringComparison.Ordinal));

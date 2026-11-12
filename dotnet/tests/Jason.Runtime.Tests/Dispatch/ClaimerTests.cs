@@ -1323,7 +1323,7 @@ public partial class ClaimerTests
     /// is let back into the queue. These tests are about what the claim does with that, not about the verb.
     /// </summary>
     /// <summary>
-    /// The twentieth check parks protective work an open block holds: no attempt, a wait on the block, and the campaign
+    /// The twenty-fifth check parks protective work an open block holds: no attempt, a wait on the block, and the campaign
     /// told once — whichever of its items parks next, the line is not written again, and the block's link is never in it.
     /// </summary>
     [Fact]

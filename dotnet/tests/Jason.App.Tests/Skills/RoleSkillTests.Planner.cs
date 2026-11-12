@@ -73,6 +73,30 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A search spends the provider's money, so who forms an audience and who decides a search are the role's rules: the
+    /// planner forms it and no other role does, never asks a search for all it could give, states the cost in the
+    /// provider's own unit, and leaves the probe, the threshold and the allowance to the person.
+    /// </summary>
+    [Fact]
+    public void The_planner_forms_the_audience_and_leaves_what_it_spends_to_the_person()
+    {
+        var skill = Flattened("planner");
+
+        // One role forms an audience. A planner told nothing of the others would hand the forming to the researcher,
+        // whose brief has no definition in it, or leave the manager to widen one it only tops up.
+        Assert.Contains("You form the audience; the manager runs the campaign's pulse and the analyst judges what an audience brought, and no other role is made for this. The researcher owns no audience.", skill, StringComparison.Ordinal);
+
+        // A search asked for everything it could find spends the whole audience before anybody knows whether it works.
+        Assert.Contains("You never ask a search for the most it could give: a probe's depth is a choice you state, weighed against the audience's size.", skill, StringComparison.Ordinal);
+
+        // The cost is said in the provider's unit and at its price, and the probe waits for the person who owns the
+        // campaign: a planner that started one, or quoted a price of its own, would spend before anybody decided.
+        Assert.Contains("say what it costs beside the number, in the provider's own unit and at the provider's own price", skill, StringComparison.Ordinal);
+        Assert.Contains("The probe waits for the person who owns the campaign, who sees the definition and the number before anything is spent", skill, StringComparison.Ordinal);
+        Assert.Contains("You propose both, with the numbers, and set neither: the threshold and the allowance are the person's.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The planner's judgement on the two direct sends, which the session file shares byte for byte. Pinned here once; the
     /// craft guard carries it to the other file.
     /// </summary>

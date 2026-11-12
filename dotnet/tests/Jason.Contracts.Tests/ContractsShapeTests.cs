@@ -60,7 +60,7 @@ public class ContractsShapeTests
         var json = JsonSerializer.Serialize(dto, JasonJson.Options);
         Assert.Equal(
             "{\"id\":\"cmp_A\",\"name\":\"LatAm\",\"status\":\"draft\",\"project_id\":\"prj_A\",\"project_slug\":\"default\",\"context\":{\"icp\":\"founders\"},\"external_ids\":[],\"execution_profile\":\"local-claude\",\"review_seconds\":900,"
-                + "\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"archived_at\":null,\"folder_path\":null}",
+                + "\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"archived_at\":null,\"folder_path\":null,\"audience_threshold\":null}",
             json);
     }
 

@@ -346,7 +346,8 @@ record which standing approval authorised each act — an act whose authority ca
 afterwards was unauthorised. Where responding fast requires acting with no human present, that
 is an explicit, recorded autonomy grant and not an inference from urgency (K9).
 
-**In Jason, a standing approval is set per campaign and per category of reply.** What it names is a category in one
+**In Jason, a standing approval is set per campaign, for one category of reply or for the searches under one
+audience.** For a reply, what it names is a category in one
 campaign, compared exactly with the category of the verdict a role recorded on the reply. It names the operations it
 releases (a drafted answer, `conversation.reply`, when none is named; `message.send` only when named), carries an
 `expires_at` where the person set one and a `max_releases` ceiling where they set one, and releases a drafted answer
@@ -359,6 +360,17 @@ campaign's chronicle: that pair is how the authority is named afterwards.
 jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+**For searches, it is the campaign's allowance, and it is capped in people.** A search buys records, so the first
+search under an audience, its probe, always waits for a person. The allowance names one of the campaign's audiences
+and the operation `audience.search`, carries a ceiling in people, which is required, and where the person set them a
+cap per search and an `expires_at`. It lets the searches under that audience go without a question until the people
+they ask for, counted by each search's own count, reach the ceiling; a search that would cross it waits for the person,
+and is never trimmed to fit. What the provider charges for those people is the provider's to count. A campaign holds
+one allowance: a person sets it when they approve a search or on its own, a new one replaces the old, and approving a
+search under another audience takes the old one back in the same act. Each search it let go is an approved row with the
+reason `standing_approval` and an `approval_standing_applied` line naming the audience and the count, and
+`jason approval list-standing` shows it beside the categories, with the people it has let go so far.
+
 **Only a person sets one.** A role never does: the runtime refuses a role, and an attempt, with `approval_not_human`.
 An agent sets one only on a person's explicit word, naming them, and writes that name; it never infers one from "handle
 these" or from a person's patience. A question already put to a person stays theirs, and a draft parked before the
@@ -370,6 +382,11 @@ the reaction is a reply to the same person; never for `referral`, `opt_out` or `
 new and is a person's decision every time; an opt-out is a protective act with no reply to release; a bounce is a
 delivery failure, handled on the channel and never answered in the thread. The categories are the responder's
 `categories.json`, not copied here.
+
+**Which audience to allow, and how far.** An allowance is advisable on an audience whose probe was worked and judged
+to work, and never on one nobody has judged yet: allowing a probe's audience at once spends on people before anybody
+knows whether they answer. As guidance, its searches the size of the probe and its ceiling ten probes; the numbers are
+the person's.
 
 ### The disclosure link
 
@@ -481,6 +498,11 @@ that relies on it, so such changes need review by the owning group, not a quick 
 
 ## Changelog
 
+- 2.2.0 (2026-11-11): with Jason, a standing approval is also set for the searches under one of a campaign's
+  audiences: the allowance, capped in people, which lets a campaign's top-ups go until the people they ask for reach its
+  ceiling. The first search under an audience always waits for a person; a campaign holds one allowance, and approving
+  a search under another audience takes it back. It is advisable only on an audience judged to work, with searches the
+  size of the probe and a ceiling of ten probes as guidance.
 - 2.1.0 (2026-11-02): with Jason, a standing approval is set per campaign and per category of reply, with an
   `expires_at` and a `max_releases` where the person sets them; each act it authorised is an approved row with the
   reason `standing_approval` and an `approval_standing_applied` line. Only a person sets one. It is advisable where the

@@ -1,0 +1,7 @@
+{
+  "kind": "audience_search_ended",
+  "version": 1,
+  "case": "a search the provider paused for credits, whose reads landed nobody for the stall bound, ended by the dispatcher",
+  "body": { "key": "wi_01JC0000000000000000000001", "old": null, "new": { "audience": "aud_01JC0000000000000000000001", "plugin": "fake-provider", "ended_as": "stalled", "state": "paused_for_credits", "asked": 50, "found": 12, "landed": 12, "ended_by": null } },
+  "expect": "valid"
+}

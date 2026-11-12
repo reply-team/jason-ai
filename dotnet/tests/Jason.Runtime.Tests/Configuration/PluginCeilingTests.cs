@@ -30,7 +30,7 @@ public class PluginCeilingTests
 
         // An operator who lowered a ceiling has to be told which contract forces the number, not only the number.
         Assert.Contains("Plugins:Limits:TimeoutMs", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("campaign.enroll", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("audience.preview", failure.Message, StringComparison.Ordinal);
         Assert.Contains("300000", failure.Message, StringComparison.Ordinal);
     }
 
@@ -67,7 +67,7 @@ public class PluginCeilingTests
         var result = Validate(60_000);
 
         Assert.Contains(
-            "Plugins:Limits:TimeoutMs must be at least 300000 to hold 'campaign.enroll', the slowest operation "
+            "Plugins:Limits:TimeoutMs must be at least 300000 to hold 'audience.preview', the slowest operation "
                 + "this build publishes, for a package that declares no limit of its own; got 60000.",
             result.Failures!);
     }

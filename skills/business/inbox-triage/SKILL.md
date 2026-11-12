@@ -80,6 +80,8 @@ person. So triage starts from what the responder left, not from a raw queue, and
   verdict's line id, and leave the correction to them.
 - **A draft may have gone out without a question** where the person set a standing approval for that category in
   that campaign. Which one let it go is in the record, and `approval-boundaries` says what a standing approval is.
+  `list-standing` also shows the campaign's allowance for its searches, which is a standing approval too and lets no
+  reply go: it releases searches under one audience and nothing else.
 
 ```
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified
@@ -245,6 +247,8 @@ Conversations contain personal data; keep quotes to what the decision requires. 
 
 ## Changelog
 
+- 3.2.0 (2026-11-11): with Jason, a campaign may also hold an allowance for its searches, which `list-standing` shows
+  beside the categories; it is a standing approval too, and it lets no reply go.
 - 3.1.0 (2026-11-02): with Jason, a reply has usually been worked before the inbox is opened: a responder records
   a verdict and acts, drafts or asks. Triage reads what it left and never writes a second draft beside one; a standing
   approval is a person's own decision for one category in one campaign.

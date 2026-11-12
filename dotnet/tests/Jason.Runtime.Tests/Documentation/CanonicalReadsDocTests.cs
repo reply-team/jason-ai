@@ -244,7 +244,8 @@ public sealed partial class CanonicalReadsDocTests
     /// <summary>
     /// A page that counts the published operations counts them right: the number word is the catalog's own count, so
     /// the next operation added fails here until every page says so, and any other number in a count phrase fails
-    /// whatever it is. The five pages that count say it at least once; the divergence file may not count at all.
+    /// whatever it is. The five pages that count say it at least once; the divergence file may not count at all. The Reply
+    /// package's own README counts the operations the package performs, which is the whole catalog.
     /// </summary>
     [Theory]
     [InlineData("README.md", false)]
@@ -267,7 +268,7 @@ public sealed partial class CanonicalReadsDocTests
     [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
         "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-two",
-        "twenty-three", "twenty-four",
+        "twenty-three", "twenty-four", "twenty-five", "twenty-six", "twenty-seven", "twenty-eight", "twenty-nine", "thirty",
     ];
 
     [Fact]
@@ -335,7 +336,7 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     /// <summary>
-    /// The table of the claim's twenty answers says, at row 10, which operations the suppression register does not
+    /// The table of the claim's twenty-six answers says, at row 10, which operations the suppression register does not
     /// refuse — every one the catalog marks `not_applicable`, and the field that marks it.
     /// </summary>
     [Fact]
@@ -545,7 +546,7 @@ public sealed partial class CanonicalReadsDocTests
     /// published" names a subset, and is not a count.
     /// </summary>
     [GeneratedRegex(
-        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-four|twenty-three|twenty-two|twenty-one|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty-four|twenty-three|twenty-two|twenty-one|twenty)\b",
+        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|thirty|twenty-nine|twenty-eight|twenty-seven|twenty-six|twenty-five|twenty-four|twenty-three|twenty-two|twenty-one|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|thirty|twenty-nine|twenty-eight|twenty-seven|twenty-six|twenty-five|twenty-four|twenty-three|twenty-two|twenty-one|twenty)\b",
         RegexOptions.IgnoreCase)]
     private static partial Regex CountPhrase();
 

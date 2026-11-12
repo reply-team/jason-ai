@@ -6,12 +6,16 @@
 approval get
 approval list
 approval list-standing
+audience availability
+audience filter-values
+audience preview
 block get
 block list
 campaign activity
 campaign activity-by-period
 campaign add-contacts
 campaign archive
+campaign audience
 campaign create
 campaign get
 campaign list
@@ -39,6 +43,7 @@ journal append
 journal kinds
 journal list
 logs
+operation describe
 plugin list
 preference list
 project create

@@ -12,7 +12,8 @@ namespace Jason.Contracts.Api;
 /// <remarks>
 /// A read is known by its verb, so an operation that asks a question is a read without a second list to keep: the verb
 /// is one of <see cref="ReadVerbs"/> and the noun is not one of <see cref="ClosedNouns"/>, the installation's and the
-/// UI's own doors. A conversation read is no read here, since answering it spends a provider call. Everything that
+/// UI's own doors. A conversation read is no read here, and neither is a read a campaign's route answers — an audience's
+/// preview, a filter's values, whether the account may search — since answering each spends a provider call. Everything that
 /// changes a person's decisions, the installation, its routes and grants, or an executor's fenced attempt is in
 /// <see cref="Never"/>, and an operation added to the API is unclassified until it is a read, in a family or never,
 /// which a test holds.
@@ -34,7 +35,7 @@ public static class OperationFamilies
     public static IReadOnlySet<string> ReadVerbs { get; } = new[]
     {
         "get", "list", "count", "summary", "activity", "activity_by_period", "list_contacts", "list_standing", "resolve",
-        "sources", "kinds",
+        "sources", "kinds", "describe", "audience",
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>The nouns no read of a handler's reaches: the installation's own and the UI's own.</summary>
@@ -71,6 +72,7 @@ public static class OperationFamilies
         Operations.ProjectCreate, Operations.ProjectUpdate, Operations.ProjectLink,
         Operations.PreferenceSet, Operations.PreferenceUnset,
         Operations.ContactThreads, Operations.ContactThread,
+        Operations.AudiencePreview, Operations.AudienceFilterValues, Operations.AudienceAvailability,
         Operations.WorkItemHeartbeat, Operations.WorkItemSetResult, Operations.WorkItemComplete, Operations.WorkItemWait,
         Operations.WorkItemResume,
         Operations.ApprovalApprove, Operations.ApprovalReject, Operations.ApprovalSetStanding, Operations.ApprovalUnsetStanding,

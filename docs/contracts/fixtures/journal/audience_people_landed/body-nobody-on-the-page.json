@@ -1,0 +1,7 @@
+{
+  "kind": "audience_people_landed",
+  "version": 1,
+  "case": "a page that carried nobody is no landing, and says nothing",
+  "body": { "key": "wi_01JC0000000000000000000002", "old": null, "new": { "audience": "aud_01JC0000000000000000000001", "plugin": "fake-provider", "state": "in_progress", "people": 0, "landed": 0, "created": 0, "already_member": 0, "skipped": 0, "contact_ids": [], "created_contact_ids": [] } },
+  "expect": { "invalid": [{ "pointer": "/new/people", "reason": "minimum" }] }
+}

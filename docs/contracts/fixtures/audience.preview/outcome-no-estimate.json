@@ -1,0 +1,27 @@
+{
+  "operation": "audience.preview",
+  "version": 1,
+  "case": "a provider that gives no estimate and shows nobody: nulls and an empty sample, never a guess",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "count": null,
+      "companies": null,
+      "sample": []
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

@@ -59,7 +59,8 @@ public sealed record PluginLimitsDto(int TimeoutMs, int MemoryMb);
 /// <summary>
 /// One plugin as the registry answers for it. <c>BindingSchema</c> is the schema a route to this plugin must
 /// satisfy, exactly as the manifest declared it, so an operator can see what a route has to carry before writing
-/// one; it is null when the plugin asks a route for nothing.
+/// one; it is null when the plugin asks a route for nothing. <c>AudienceDefinition</c> is the same for an audience's
+/// definition: the schema and keys the manifest declares under <c>audience_definition</c>, null where it declares none.
 /// </summary>
 public sealed record PluginDto(
     string Id,
@@ -77,7 +78,10 @@ public sealed record PluginDto(
     PluginLimitsDto Limits,
     JsonObject? BindingSchema,
     PluginStatus Status,
-    IReadOnlyList<PluginProblemDto> Problems);
+    IReadOnlyList<PluginProblemDto> Problems)
+{
+    public JsonObject? AudienceDefinition { get; init; }
+}
 
 public sealed record SnapshotDto(string Id, DateTimeOffset LoadedAt, SnapshotSource Source, int PluginCount);
 

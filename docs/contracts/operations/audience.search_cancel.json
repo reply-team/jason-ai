@@ -1,0 +1,146 @@
+{
+  "id": "audience.search_cancel",
+  "version": 1,
+  "l1": { "name": "job.cancel", "contract_version": "2.0.0", "family": 21, "core": false },
+  "intent": "\"Stop this search\" — what it found stays found",
+
+  "reach": "control",
+  "reversibility": "irreversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": true,
+  "approval_reason": "the protective floor — a running search keeps spending after its campaign stops, so waiting for permission to stop it is the destructive choice.",
+  "before_repeating": "the search's state: an ended search answers `already_ended`, which is a success.",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["L7"],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "not_applicable", "provider_contact": "not_used" },
+  "channel_arguments": null,
+  "channel_templates": null,
+  "dispatch": { "in_paused_campaign": "runs", "in_archived_campaign": "runs", "under_provider_block": "runs" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.search_cancel:1:input",
+    "title": "audience.search_cancel input",
+    "description": "One search an earlier work item of this campaign started, stopped by the reference the provider gave it. The caller names the work item; the runtime supplies the reference, so no caller can name one.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "search", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["search"],
+        "properties": {
+          "search": {
+            "type": "string",
+            "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+            "description": "The work item of this campaign whose search is stopped: an `audience.search` that succeeded `accepted`, with a reference."
+          }
+        }
+      },
+      "search": { "$ref": "#/$defs/search" },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "$defs": {
+      "search": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["work_item", "reference"],
+        "description": "The search `args.search` names, composed by the runtime: never written by a caller.",
+        "properties": {
+          "work_item": { "type": "string", "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$", "description": "The work item that started the search, as `args.search` names it." },
+          "reference": { "type": "string", "minLength": 1, "maxLength": 256, "description": "The provider's reference for the search, as that work item's succeeded attempt returned it under `external_ids.search`." }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.search_cancel:1:output",
+    "title": "audience.search_cancel result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome for the one search.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "ended_as"],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["cancelled", "already_ended"],
+              "description": "`cancelled`: this call stopped a search that was running or paused. `already_ended`: the search had ended before the call reached it — it finished, ran out, or an earlier cancel stopped it — which is a success too."
+            },
+            "ended_as": {
+              "type": ["string", "null"],
+              "enum": ["finished", "exhausted", "cancelled", null],
+              "description": "How an already-ended search ended, as the provider holds it: `finished` and `exhausted` as `audience.search_status` says them, `cancelled` where an earlier cancel stopped it. Null when this call cancelled it, or the provider does not say."
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": {
+    "reads": "The search's state at the provider, by `search.reference`: a search that ended is the cancel done, and answers `already_ended`; one still running or paused is cancelled.",
+    "justification": "A cancel whose answer was lost may already have stopped the search, and a provider that removes what it cancels then holds nothing under the reference. Reading the state first is what tells the repeat to answer the cancel done rather than refuse it as a search the provider never held."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "search_not_found", "class": "permanent", "when": "On a first attempt, the provider holds no search under the reference, or not one this account may see. On an attempt after the first the same reading answers `already_ended`: an earlier attempt may be the one that removed the search, and nothing tells the plugin which earlier attempts reached the cancel." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so the search was not stopped. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential, or the user it signs in to the provider as, may not stop this account's searches. This code stands for an answer the plugin cannot read as a provider block; one it can is `provider_blocked`." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now, and the search was not stopped; it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, and the search was not stopped." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the search may already have stopped. The repeat reads the search's state first and answers a search that ended `already_ended`." },
+    { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "The search stopped is the one the runtime names under `search.reference`; the plugin stops nothing the caller wrote.",
+    "A search that is running or paused is stopped and answers `cancelled`; one that already ended answers `already_ended`, with `ended_as` saying how where the provider says. A cancel is never refused for having come too late.",
+    "Where the provider removes a search it cancels, a reference it does not hold fails `search_not_found` on a first attempt and answers `already_ended` with `ended_as` null on any later attempt, since an earlier attempt may have removed the search.",
+    "What the search found stays found: the people it already returned are not taken back, and the provider's charge for them stands.",
+    "The result carries exactly one item. Nothing is pinned."
+  ]
+}

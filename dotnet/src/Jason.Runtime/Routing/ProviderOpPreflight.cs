@@ -30,12 +30,12 @@ namespace Jason.Runtime.Routing;
 /// second time would make two places that can disagree about one decision.
 /// </param>
 /// <param name="Parks">
-/// True where nothing is wrong with the work and it still may not run: its operation needs a person's approval, or
+/// True where nothing is wrong with the work and it still may not run: another search of its campaign is in the way, its operation needs a person's approval, or
 /// a provider block holds it. A park carries both a code and a plan — the code is what the item says about itself
 /// while it waits, and the plan is what the subject of that decision is built from.
 /// </param>
 /// <param name="Block">
-/// The open provider block that holds this work, where one does: on the twentieth check's own park, and beside an
+/// The open provider block that holds this work, where one does: on the twenty-sixth check's own park, and beside an
 /// approval's, since the work a person releases is still held by the block until it clears or a trial gets past it.
 /// </param>
 public sealed record PreflightVerdict(
@@ -56,9 +56,9 @@ public sealed record PreflightVerdict(
 }
 
 /// <summary>
-/// Everything that can stop a provider work item, decided before a child process exists. Twenty checks in one
-/// order: what the runtime cannot do at all, then what the planner got wrong, then the approval it owes a person, and
-/// last whether the provider is refusing such work for now — so a manager meets the reasons an item can never run
+/// Everything that can stop a provider work item, decided before a child process exists. Twenty-six checks in one
+/// order: what the runtime cannot do at all, then what the planner got wrong, then whether another search of the campaign
+/// is in the way, then the approval it owes a person, and last whether the provider is refusing such work for now — so a manager meets the reasons an item can never run
 /// before the reasons that need their attention, nobody is asked to approve work that would have been refused
 /// anyway, and a block the provider holds is the one answer that says nothing about the work itself.
 /// </summary>
@@ -83,11 +83,11 @@ public static class ProviderOpPreflight
     /// <summary>The kind of the pin by which a provider knows a person.</summary>
     private const string ContactPin = "contact";
 
-    /// <summary>The twenty, in the order they are checked. The first that fails is the one the attempt records.</summary>
+    /// <summary>The twenty-six, in the order they are checked. The first that fails is the one the attempt records.</summary>
     /// <remarks>
-    /// Checks 7 and 15 have one answer more, <see cref="TransientOutcome"/>, which is not in this list because it is not
-    /// one of the reasons an item cannot run: it is what either check answers when a pattern of the schema it measures
-    /// against could not finish, twice — nothing found wrong, nothing run, and the item back in the queue.
+    /// Checks 7, 19 and 20 have one answer more, <see cref="TransientOutcome"/>, which is not in this list because it is not
+    /// one of the reasons an item cannot run: it is what each answers when a pattern of the schema it measures against
+    /// could not finish, twice — nothing found wrong, nothing run, and the item back in the queue.
     /// </remarks>
     public static IReadOnlyList<string> Codes { get; } =
     [
@@ -105,18 +105,24 @@ public static class ProviderOpPreflight
         AttemptErrors.SendUnknown,
         AttemptErrors.SendReferenceAbsent,
         AttemptErrors.SendRouteMismatch,
+        AttemptErrors.SearchUnknown,
+        AttemptErrors.SearchReferenceAbsent,
+        AttemptErrors.SearchRouteMismatch,
+        AttemptErrors.AudienceUnknown,
         AttemptErrors.InputInvalid,
+        AttemptErrors.DefinitionInvalid,
         AttemptErrors.ArgumentUnsupported,
         AttemptErrors.TemplateNotOffered,
         AttemptErrors.ProviderAnswerLost,
+        AttemptErrors.SearchUnfinished,
         AttemptErrors.ApprovalRequired,
         AttemptErrors.ProviderBlocked,
     ];
 
     /// <summary>
-    /// What checks 7 and 15 answer when a pattern of the schema they measure against — the plugin's binding schema, the
-    /// operation's input schema — did not finish matching, twice: transient, and the only answer here the claim puts
-    /// back in the queue.
+    /// What checks 7, 19 and 20 answer when a pattern of the schema they measure against — the plugin's binding schema, the
+    /// operation's input schema, the plugin's definition schema — did not finish matching, twice: transient, and the only
+    /// answer here the claim puts back in the queue.
     /// </summary>
     public const string TransientOutcome = AttemptErrors.ValidationTimedOut;
 
@@ -130,6 +136,10 @@ public static class ProviderOpPreflight
     /// </summary>
     private const string MayHaveActed =
         "An earlier attempt of this work item may have reached the person, so the work stays as unsettled as that attempt left it: find out at the provider whether it acted before creating the work again.";
+
+    /// <summary>The same for a metered operation whose earlier attempt may have acted, and be spending, at the provider.</summary>
+    private const string MayBeSpending =
+        "An earlier attempt of this work item may have acted at the provider, and be spending, so the work stays as unsettled as that attempt left it: find out at the provider whether it acted before creating the work again.";
 
     /// <summary>
     /// The refusals from <c>no_route</c> through <c>template_not_offered</c>, named by the last of them and counted by
@@ -158,12 +168,12 @@ public static class ProviderOpPreflight
             && SilentOnTheEarlierAttempt.Contains(code)
             && facts.Unsettled is not null
             && OperationCatalog.Find(facts.Item.Operation ?? string.Empty) is { } contract
-            && OutcomeContract.SettlesByKey(contract)
-            ? verdict with { Class = FailureClass.Ambiguous, Message = $"{verdict.Message} {MayHaveActed}" }
+            && OutcomeContract.HeldToTheUnsettledAttempt(contract)
+            ? verdict with { Class = FailureClass.Ambiguous, Message = $"{verdict.Message} {(OutcomeContract.SettlesByKey(contract) ? MayHaveActed : MayBeSpending)}" }
             : verdict;
     }
 
-    /// <summary>The twenty checks, in the published order: the first that fails is the verdict.</summary>
+    /// <summary>The twenty-six checks, in the published order: the first that fails is the verdict.</summary>
     private static PreflightVerdict InOrder(PreflightFacts facts, PluginSnapshot plugins, RouteSnapshot routes, PatternTiming timing)
     {
         var operation = facts.Item.Operation ?? string.Empty;
@@ -174,7 +184,7 @@ public static class ProviderOpPreflight
             return Refused(null, AttemptErrors.OperationUnknown, $"This runtime publishes no contract for operation '{operation}'.");
         }
 
-        if (RouteResolver.Resolve(routes, facts.Campaign.PublicId, operation) is not { } resolution)
+        if (Resolve(contract, facts, routes) is not { } resolution)
         {
             return Refused(null, AttemptErrors.NoRoute, $"No provider route exists yet for operation '{operation}'.");
         }
@@ -236,9 +246,31 @@ public static class ProviderOpPreflight
         // work is routed to: the reference is that provider account's. The package's digest is not compared, since a
         // reference outlives a version. It is asked before the input is composed, because the input carries that
         // reference.
-        if (CanonicalInput.NamesASend(contract) && Unnamed(facts, route, operation) is { } unnamed)
+        if (CanonicalInput.NamesASend(contract)
+            && Unnamed(facts.Send, CanonicalInput.NamedSend(facts.Item), Sends, route, operation) is { } unnamed)
         {
             return Refused(resolution, unnamed.Code, unnamed.Message);
+        }
+
+        // Fifteenth to seventeenth: a status read or a stop of a search, the same three questions of the search it names,
+        // by the reference the search's own attempt returned. A search that answered `finished` inside its call kept no
+        // reference, so there is nothing to read or to stop.
+        if (CanonicalInput.NamesASearch(contract)
+            && Unnamed(facts.Search, CanonicalInput.NamedSearch(facts.Item), Searches, route, operation) is { } unsearched)
+        {
+            return Refused(resolution, unsearched.Code, unsearched.Message);
+        }
+
+        // Eighteenth: an audience named by its number is one the campaign holds, whose definition the input then carries.
+        // Asked before the input is composed, because the input carries that definition.
+        if (CanonicalInput.CarriesADefinition(contract)
+            && CanonicalInput.NamedAudience(facts.Item) is { } number
+            && facts.Audience is null)
+        {
+            return Refused(
+                resolution,
+                AttemptErrors.AudienceUnknown,
+                string.Create(CultureInfo.InvariantCulture, $"This campaign holds no audience under {number} for '{operation}': a campaign numbers its audiences from 1, in the order their first searches were claimed, so name one it holds, or the audience by its definition."));
         }
 
         var input = CanonicalInput.Compose(contract, facts);
@@ -274,7 +306,15 @@ public static class ProviderOpPreflight
             return Unmeasured(resolution, $"A pattern in the schema '{operation}' publishes did not finish matching the composed input in time, twice, so nothing was decided about it; the item is tried again.", problems);
         }
 
-        // Sixteenth: an argument the document names per channel goes only where the routed plugin's manifest lists it
+        // Twentieth: the definition is the provider's, so it is held to the schema the routed plugin declares for it, once
+        // the envelope around it satisfies the operation's own, and before a person is asked to approve a search the
+        // provider would refuse. A refusal points into the definition, as the envelope's do into the input.
+        if (CanonicalInput.CarriesADefinition(contract) && Undefined(plugin, input, route, operation, timing) is { } undefined)
+        {
+            return undefined with { Resolution = resolution };
+        }
+
+        // Twenty-first: an argument the document names per channel goes only where the routed plugin's manifest lists it
         // for the channel the arguments name. It is asked once the input satisfies its schema, so a moment that is no
         // moment is the planner's to fix first, and before a person is asked to approve work that could not go out as
         // written. An argument the work does not carry asks nothing of the manifest.
@@ -286,9 +326,9 @@ public static class ProviderOpPreflight
                 $"'{route.PluginId}' takes no '{untaken.Argument}' for '{operation}' on the '{untaken.Channel}' channel: its manifest does not list it there. Leave the argument out and set not_before to the moment, or route the operation to a plugin that takes it.");
         }
 
-        // Seventeenth: a message written as a template goes only to a plugin whose manifest lists the operation's channel
+        // Twenty-second: a message written as a template goes only to a plugin whose manifest lists the operation's channel
         // under `templates`; an absent key means none, so a package that never said it writes a template is handed none,
-        // and nothing it would send as written or turn down reaches it. It is asked beside the sixteenth and for the same
+        // and nothing it would send as written or turn down reaches it. It is asked beside the twenty-first and for the same
         // reason: the planner can write the message as final text, or route it elsewhere, before a person approves it.
         if (Untemplated(contract, plugin, input, CanonicalInput.ConsumedChannel(contract, facts.Item)) is { } untemplated)
         {
@@ -298,7 +338,7 @@ public static class ProviderOpPreflight
                 $"'{route.PluginId}' writes no template of '{operation}' on the '{untemplated}' channel: its manifest does not list the channel under templates. Write the message as final text, or route the operation to a plugin that writes a template there.");
         }
 
-        // Eighteenth: a repeat of a send whose lost answer only the work item's key settles is made only under a plugin
+        // Twenty-third: a repeat of a send whose lost answer only the work item's key settles is made only under a plugin
         // whose manifest says it settles the send so, and only under the package, by its id and digest, and the binding
         // the attempt that lost it ran under: the key settles a send only at the provider and account that took it, and
         // another version of the package may keep its keys otherwise. And only with the input that attempt was composed
@@ -309,7 +349,9 @@ public static class ProviderOpPreflight
         // answer is not a change of the request. That attempt may have reached the person, and a repeat anywhere else could reach them again; the work is
         // as unsettled as that attempt left it, so the refusal keeps its class, and nothing has run, so it is asked before a
         // person approves.
-        if (facts.Unsettled is { } earlier && OutcomeContract.SettlesByKey(contract) && Unsettled(earlier, facts.Learned, plugin, route, operation, input) is { } unsettled)
+        if (facts.Unsettled is { } earlier
+            && OutcomeContract.HeldToTheUnsettledAttempt(contract)
+            && Unsettled(earlier, facts.Learned, plugin, route, operation, input, OutcomeContract.SettlesByKey(contract)) is { } unsettled)
         {
             return Refused(resolution, AttemptErrors.ProviderAnswerLost, unsettled, failureClass: FailureClass.Ambiguous);
         }
@@ -335,6 +377,21 @@ public static class ProviderOpPreflight
                 input)
             : null;
 
+        // Twenty-fourth: a campaign runs one search at a time, and a second one would spend beside the first — Reply's own
+        // refusal covers only a search of the same filters. Asked before the approval, so nobody is asked to approve a spend
+        // that cannot start now; not a refusal, since nothing is wrong with the work: it waits, and the claim asks again.
+        if (CanonicalInput.MakesASearch(contract.Id) && facts.SearchInTheWay is { } inTheWay)
+        {
+            return new PreflightVerdict(
+                AttemptErrors.SearchUnfinished,
+                $"This campaign's search '{inTheWay}' has not ended, and a campaign runs one search at a time, so this one waits for it and is claimed again a search cadence later, or the held cadence where the provider holds it. Let that search end, or stop it with audience.search_cancel.",
+                Class: null,
+                Details: null,
+                plan,
+                resolution,
+                Parks: true);
+        }
+
         // Asked last, and last on purpose. What a person is asked to approve is the composed input, so it has to
         // be composed and to satisfy the operation's own schema before anybody can be shown it — and nobody is
         // ever asked to approve reaching somebody the suppression register already protects.
@@ -358,7 +415,7 @@ public static class ProviderOpPreflight
                 block);
         }
 
-        // Twentieth, after the approval: a block says nothing about the work, so a person is asked about it while the
+        // Twenty-sixth, after the approval: a block says nothing about the work, so a person is asked about it while the
         // provider refuses such work, and the work they release still waits for the block. Nothing has run, so no
         // attempt is made for it unless it is the block's trial, which the claim decides.
         if (block is not null)
@@ -375,6 +432,23 @@ public static class ProviderOpPreflight
         }
 
         return new PreflightVerdict(null, null, null, null, plan, resolution);
+    }
+
+    /// <summary>
+    /// Where the work is routed: by its campaign's route for its operation, except a read or a stop of a search the
+    /// campaign made with a reference, which goes where that search ran (<see cref="RouteResolver.ForSearch"/>), whatever
+    /// its own operation resolves to now. The claim reads its facts by the same answer.
+    /// </summary>
+    public static Resolution? Resolve(OperationContract contract, PreflightFacts facts, RouteSnapshot routes)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(routes);
+        return CanonicalInput.NamesASearch(contract)
+            && facts.Search is { Status: WorkItemStatus.Succeeded, Reference: not null, PluginId: { } ranAt } search
+            && CanonicalInput.MakesASearch(search.Operation)
+            ? RouteResolver.ForSearch(routes, facts.Campaign.PublicId, contract.Id, search.Operation!, ranAt, search.BindingIdentity)
+            : RouteResolver.Resolve(routes, facts.Campaign.PublicId, contract.Id);
     }
 
     /// <summary>
@@ -562,28 +636,92 @@ public static class ProviderOpPreflight
         new(code, message, failureClass, details, null, resolution);
 
     /// <summary>
-    /// Why the send the work names under <c>args.send</c> cannot be acted on by its reference, or null where it can: the
-    /// campaign holds it, it makes a send, it succeeded with a reference, and it ran under the plugin and binding this work
-    /// is routed to.
+    /// What a later operation acts on by a provider's reference, and the three codes it is refused with: the noun the
+    /// arguments name it by, which operations make one, and what a refusal for a missing reference adds.
     /// </summary>
-    private static (string Code, string Message)? Unnamed(PreflightFacts facts, Route route, string operation)
+    private sealed record ReferenceRule(string Noun, Func<string?, bool> Makes, string Unknown, string Absent, string Mismatch, string AbsentNote);
+
+    private static readonly ReferenceRule Sends = new(
+        "send",
+        CanonicalInput.MakesASend,
+        AttemptErrors.SendUnknown,
+        AttemptErrors.SendReferenceAbsent,
+        AttemptErrors.SendRouteMismatch,
+        string.Empty);
+
+    private static readonly ReferenceRule Searches = new(
+        "search",
+        CanonicalInput.MakesASearch,
+        AttemptErrors.SearchUnknown,
+        AttemptErrors.SearchReferenceAbsent,
+        AttemptErrors.SearchRouteMismatch,
+        " A search that answered `finished` inside its own call kept nothing to read or to stop.");
+
+    /// <summary>
+    /// Why the work <paramref name="named"/> under the arguments cannot be acted on by its reference, or null where it can:
+    /// the campaign holds it, it makes what <paramref name="rule"/> names, it succeeded with a reference, and it ran under
+    /// the plugin and binding this work is routed to.
+    /// </summary>
+    private static (string Code, string Message)? Unnamed(NamedReference? found, string? named, ReferenceRule rule, Route route, string operation)
     {
-        var named = CanonicalInput.NamedSend(facts.Item);
-        if (facts.Send is not { } send || !CanonicalInput.MakesASend(send.Operation))
+        if (found is null || !rule.Makes(found.Operation))
         {
-            return (AttemptErrors.SendUnknown, $"This campaign holds no send under '{named}' for '{operation}' to act on: no work item of it by that id makes one.");
+            return (rule.Unknown, $"This campaign holds no {rule.Noun} under '{named}' for '{operation}' to act on: no work item of it by that id makes one.");
         }
 
-        if (send.Status != WorkItemStatus.Succeeded || send.Reference is null)
+        if (found.Status != WorkItemStatus.Succeeded || found.Reference is null)
         {
-            return (AttemptErrors.SendReferenceAbsent, $"The send '{send.WorkItem}' has not succeeded with a reference, so the provider kept nothing for '{operation}' to find it by.");
+            return (rule.Absent, $"The {rule.Noun} '{found.WorkItem}' has not succeeded with a reference, so the provider kept nothing for '{operation}' to find it by.{rule.AbsentNote}");
         }
 
-        return string.Equals(send.PluginId, route.PluginId, StringComparison.Ordinal)
-            && string.Equals(send.BindingIdentity, route.BindingIdentity, StringComparison.Ordinal)
+        return string.Equals(found.PluginId, route.PluginId, StringComparison.Ordinal)
+            && string.Equals(found.BindingIdentity, route.BindingIdentity, StringComparison.Ordinal)
             ? null
-            : (AttemptErrors.SendRouteMismatch, $"The send '{send.WorkItem}' was made under another plugin or account than '{operation}' is routed to, and its reference is that account's, so it is acted on there or not at all.");
+            : (rule.Mismatch, $"The {rule.Noun} '{found.WorkItem}' was made under another plugin or account than '{operation}' is routed to, and its reference is that account's, so it is acted on there or not at all.");
     }
+
+    /// <summary>
+    /// Why the composed definition is not one the routed plugin takes, or null where it is: it satisfies the schema the
+    /// plugin's manifest declares under <c>audience_definition</c>. Every problem points into the input, under
+    /// <c>/definition</c>. A plugin that performs an operation carrying a definition declares that schema, or it does not
+    /// load; one that somehow did not is refused here rather than handed a definition nothing checked.
+    /// </summary>
+    internal static PreflightVerdict? Undefined(LoadedPlugin plugin, JsonObject input, Route route, string operation, PatternTiming timing)
+    {
+        ArgumentNullException.ThrowIfNull(plugin);
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(route);
+        ArgumentNullException.ThrowIfNull(timing);
+
+        if (plugin.Manifest.AudienceDefinition is not { } declared)
+        {
+            return Refused(
+                null,
+                AttemptErrors.DefinitionInvalid,
+                $"'{route.PluginId}' declares no audience_definition, so nothing says what a definition for '{operation}' carries there.",
+                failureClass: FailureClass.Validation);
+        }
+
+        var problems = SchemaValidator.Validate(input["definition"], declared.Schema, timing)
+            .Select(problem => problem with { Pointer = DefinitionPointer + problem.Pointer })
+            .ToList();
+        if (SchemaValidator.Verdicts(problems) is { Count: > 0 } refused)
+        {
+            return Refused(
+                null,
+                AttemptErrors.DefinitionInvalid,
+                $"The definition composed for '{operation}' does not satisfy the schema '{route.PluginId}' declares for an audience's definition.",
+                Details(refused),
+                FailureClass.Validation);
+        }
+
+        return SchemaValidator.Unmeasured(problems)
+            ? Unmeasured(null, $"A pattern in the definition schema '{route.PluginId}' declares did not finish matching the composed definition in time, twice, so nothing was decided about it; the item is tried again.", problems)
+            : null;
+    }
+
+    /// <summary>Where the composed definition is in the input, as a pointer.</summary>
+    private const string DefinitionPointer = "/definition";
 
     /// <summary>
     /// Why a repeat after an attempt that lost its answer cannot be settled by the work item's key under this route, or
@@ -594,10 +732,14 @@ public static class ProviderOpPreflight
     /// the package leaves nothing to compare. One claimed before attempts named their input names none, and is held to its
     /// arguments alone, as it was when it lost its answer.
     /// </summary>
-    private static string? Unsettled(Attempt earlier, PinsLearned? learned, LoadedPlugin plugin, Route route, string operation, JsonObject input)
+    private static string? Unsettled(Attempt earlier, PinsLearned? learned, LoadedPlugin plugin, Route route, string operation, JsonObject input, bool byKey)
     {
         const string Ask = "so a repeat could make the effect twice; nothing was run. Find out from the provider whether the first attempt acted.";
-        if (!plugin.Manifest.SettlesByKey(operation))
+        var settles = byKey
+            ? "the work item's key settles a send only at the provider and the account that took it"
+            : "its recovery read finds what that attempt may have started only at the provider and the account that took it";
+        var request = byKey ? "the work item's key settles only the request it went with" : "its recovery read finds only the request that attempt went with";
+        if (byKey && !plugin.Manifest.SettlesByKey(operation))
         {
             return $"An earlier attempt of this '{operation}' lost its answer, and '{route.PluginId}' does not list '{operation}' under settles_by_key in its manifest, {Ask}";
         }
@@ -611,17 +753,17 @@ public static class ProviderOpPreflight
             || !string.Equals(provenance.PluginDigest, plugin.Digest, StringComparison.Ordinal)
             || !string.Equals(provenance.BindingIdentity, route.BindingIdentity, StringComparison.Ordinal))
         {
-            return $"An earlier attempt of this '{operation}' lost its answer under another plugin, package version or account than '{route.PluginId}' is routed to now, and the work item's key settles a send only at the provider and the account that took it, {Ask}";
+            return $"An earlier attempt of this '{operation}' lost its answer under another plugin, package version or account than '{route.PluginId}' is routed to now, and {settles}, {Ask}";
         }
 
         if (!JsonNode.DeepEquals(earlier.ContextSnapshot[WorkItemService.InputKey], input["args"]))
         {
-            return $"An earlier attempt of this '{operation}' lost its answer with other arguments than the work item carries now, and the work item's key settles only the request it went with, {Ask}";
+            return $"An earlier attempt of this '{operation}' lost its answer with other arguments than the work item carries now, and {request}, {Ask}";
         }
 
         return provenance.InputDigest is not { } composed || string.Equals(composed, CanonicalInput.Digest(learned is null ? input : CanonicalInput.Without(input, learned)), StringComparison.Ordinal)
             ? null
-            : $"An earlier attempt of this '{operation}' lost its answer with another input than the one composed for it now: what the composed input carries of the person or the campaign changed since, and the work item's key settles only the request it went with, {Ask}";
+            : $"An earlier attempt of this '{operation}' lost its answer with another input than the one composed for it now: what the composed input carries of the person or the campaign changed since, and {request}, {Ask}";
     }
 
     /// <summary>

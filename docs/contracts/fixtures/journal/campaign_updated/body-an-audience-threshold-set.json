@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_updated",
+  "version": 1,
+  "case": "a campaign set the threshold its reserve is counted against",
+  "body": { "key": "audience_threshold", "old": null, "new": 50 },
+  "expect": "valid"
+}

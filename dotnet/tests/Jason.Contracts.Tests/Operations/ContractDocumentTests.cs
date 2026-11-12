@@ -63,6 +63,8 @@ public class ContractDocumentTests
     {
         Assert.Equal(
             [
+                "audience.availability", "audience.filter_values", "audience.preview", "audience.search", "audience.search_cancel",
+                "audience.search_status",
                 "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete",
                 "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list",
                 "conversation.reopen", "conversation.reply",
@@ -145,23 +147,24 @@ public class ContractDocumentTests
 
     /// <summary>
     /// The catalogue lets an operation lower its approval only as a protective floor and raise it only by a stated
-    /// departure, and either one needs a reason. In this version three operations carry the catalogue's marks: recording
-    /// that somebody said stop, whose not running is itself the harm, on the floor; deleting a provider's contact, raised
-    /// because it destroys working history other operations key on; and an invitation to connect, raised because its note
-    /// is content addressed to a named person. Every other document says it does neither, in the two fields, rather than
-    /// leaving the reading of their absence to whoever reads it next.
+    /// departure, and either one needs a reason. In this version four operations carry the catalogue's marks: recording
+    /// that somebody said stop, whose not running is itself the harm, on the floor, and marked as a departure because its
+    /// fragment marks it so; cancelling a search, on the floor alone, because a running search keeps spending after its
+    /// campaign stops; deleting a provider's contact, raised because it destroys working history other operations key on;
+    /// and an invitation to connect, raised because its note is content addressed to a named person. Every other document
+    /// says it does neither, in the two fields, rather than leaving the reading of their absence to whoever reads it next.
     /// </summary>
     [Theory]
     [MemberData(nameof(Published))]
-    public void Only_the_record_of_a_stop_lowers_its_approval_only_it_a_delete_and_an_invitation_depart_and_each_says_why(string id)
+    public void Only_the_record_of_a_stop_and_the_cancel_of_a_search_lower_their_approval_a_delete_and_an_invitation_raise_it_and_each_says_why(string id)
     {
         var contract = Contract(id);
-        var floor = id == "optout.record";
-        var departs = floor || id is "contact.delete" or "social_invitation.send";
+        var floor = id is "optout.record" or "audience.search_cancel";
+        var departs = id is "optout.record" or "contact.delete" or "social_invitation.send";
 
         Assert.Equal(floor, contract.ProtectiveFloor);
         Assert.Equal(departs, contract.ApprovalDeparts);
-        Assert.Equal(departs, contract.ApprovalReason is not null);
+        Assert.Equal(floor || departs, contract.ApprovalReason is not null);
     }
 
     /// <summary>
@@ -205,29 +208,31 @@ public class ContractDocumentTests
     }
 
     /// <summary>
-    /// Pausing a Jason campaign holds its work, and exactly three operations run past that: the provider's own pause,
-    /// which is the incident response, the record that somebody said stop, and the cancel of a send the provider still
-    /// holds, which is wanted most just when a campaign is paused. A fourth would be a change to what a pause means, and
-    /// it is made here or not at all.
+    /// Pausing a Jason campaign holds its work, and exactly four operations run past that: the provider's own pause,
+    /// which is the incident response, the record that somebody said stop, the cancel of a send the provider still
+    /// holds, and the cancel of a search the provider is still running and charging for, both wanted most just when a
+    /// campaign is paused. A fifth would be a change to what a pause means, and it is made here or not at all.
     /// </summary>
     [Fact]
-    public void Exactly_the_incident_response_the_record_of_a_stop_and_the_cancel_of_a_send_run_in_a_paused_campaign()
+    public void Exactly_the_incident_response_the_record_of_a_stop_and_the_cancels_of_a_send_and_a_search_run_in_a_paused_campaign()
     {
-        Assert.Equal(["campaign.pause", "message.cancel", "optout.record"], OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal));
+        Assert.Equal(
+            ["audience.search_cancel", "campaign.pause", "message.cancel", "optout.record"],
+            OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal));
     }
 
     /// <summary>
-    /// The suppression register refuses what would reach a person, and exactly three operations only hold a person back:
-    /// the record that somebody said stop, taking somebody out of a campaign, and cancelling a send the provider still
-    /// holds for its moment. Every other document says the register applies, and a fourth that set it aside would be a
-    /// change to what the register protects.
+    /// The suppression register refuses what would reach a person, and exactly four operations only hold something back:
+    /// the record that somebody said stop, taking somebody out of a campaign, cancelling a send the provider still holds
+    /// for its moment, and cancelling a search the provider is still running. Every other document says the register
+    /// applies, and a fifth that set it aside would be a change to what the register protects.
     /// </summary>
     [Fact]
-    [Critical(Family.S1, "only holding a person back bypasses the register")]
-    public void Exactly_the_three_operations_that_hold_a_person_back_set_the_suppression_register_aside()
+    [Critical(Family.S1, "only holding back bypasses the register")]
+    public void Exactly_the_four_operations_that_hold_a_person_or_a_search_back_set_the_suppression_register_aside()
     {
         Assert.Equal(
-            ["enrollment.stop", "message.cancel", "optout.record"],
+            ["audience.search_cancel", "enrollment.stop", "message.cancel", "optout.record"],
             OperationCatalog.All
                 .Where(contract => contract.Preflight.Suppression == SuppressionCheck.NotApplicable)
                 .Select(contract => contract.Id)
@@ -668,7 +673,8 @@ public class ContractDocumentTests
     /// <summary>
     /// Every object a document defines — under <c>properties</c>, <c>items</c> or <c>$defs</c>, at any depth — is closed,
     /// so nothing the document did not name can ride along in an argument or an answer. The one exception is the
-    /// provider's own untranslated answer beside a read's neutral part, which is open by declaration. The branches of a
+    /// provider's own untranslated answer beside a read's neutral part and an audience's definition, which is the
+    /// provider's own shape held to the schema the routed plugin declares, both open by declaration. The branches of a
     /// combinator only add rules to the object they sit on, so they are not objects of their own. And a write answers
     /// one item for its one subject, never two.
     /// </summary>
@@ -691,7 +697,12 @@ public class ContractDocumentTests
         }
     }
 
-    private static readonly HashSet<(string, string)> OpenByDeclaration = [("campaign.get", "output_schema/properties/vendor")];
+    private static readonly HashSet<(string, string)> OpenByDeclaration =
+    [
+        ("campaign.get", "output_schema/properties/vendor"),
+        ("audience.preview", "input_schema/$defs/definition"),
+        ("audience.search", "input_schema/$defs/definition"),
+    ];
 
     private static void OpenObjects(JsonNode? node, string path, List<string> open)
     {

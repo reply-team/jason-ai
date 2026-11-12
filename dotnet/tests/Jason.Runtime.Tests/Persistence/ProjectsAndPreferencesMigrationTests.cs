@@ -163,8 +163,8 @@ public class ProjectsAndPreferencesMigrationTests
                 .Where(key => OwnTables.Contains(TableOf(key)))
                 .Where(key => !key.StartsWith("column projects.", StringComparison.Ordinal) && !key.StartsWith("column preferences.", StringComparison.Ordinal))
 
-                // A later migration's column, which the migrator applies in the same run.
-                .Where(key => key != "column campaigns.responder_watermark"));
+                // Later migrations' columns, which the migrator applies in the same run.
+                .Where(key => key is not ("column campaigns.responder_watermark" or "column campaigns.audience_threshold" or "column campaigns.audience_watermark")));
         foreach (var expected in new[]
         {
             "column campaigns.project_id | INTEGER notnull=0 default=none pk=0",

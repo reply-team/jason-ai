@@ -1,0 +1,32 @@
+{
+  "operation": "audience.search_status",
+  "version": 1,
+  "case": "a search named by its reference rather than by the work item that started it",
+  "input": {
+    "args": {
+      "search": "search-5521",
+      "limit": 100
+    },
+    "search": {
+      "work_item": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG",
+      "reference": "search-5521",
+      "cursor": null
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/args/search",
+        "reason": "pattern"
+      }
+    ]
+  }
+}

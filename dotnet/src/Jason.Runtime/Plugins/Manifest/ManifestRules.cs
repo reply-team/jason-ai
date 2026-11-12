@@ -28,11 +28,18 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     [
         "manifest_version", "id", "version", "kind", "name", "description", "homepage",
         "contracts", "operations", "entry", "capabilities", "limits", "binding", "arguments",
-        "settles_by_key", "templates", "subscriptions",
+        "settles_by_key", "templates", "subscriptions", "audience_definition",
     ];
 
     /// <summary>Where a schema problem is, spelled as the document and a pointer into it.</summary>
     private const string BindingField = "binding";
+
+    private const string AudienceDefinitionField = "audience_definition";
+    private const string AudienceSearch = "audience.search";
+    private const string AudienceSearchStatus = "audience.search_status";
+    private const string AudienceSearchCancel = "audience.search_cancel";
+    private const string AudiencePreview = "audience.preview";
+    private const int MaxDefinitionDescriptionLength = 500;
 
     private readonly List<ManifestProblem> _problems = [];
 
@@ -73,8 +80,208 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             Templates = ReadTemplates(kind, operations),
             KeyedOperations = ReadSettlesByKey(kind, operations),
             Subscriptions = ReadSubscriptions(kind),
+            AudienceDefinition = ReadAudienceDefinition(kind, operations),
         };
     }
+
+    /// <summary>
+    /// The schema an audience's definition satisfies for this provider, and the annotations of its properties. The
+    /// envelope of an audience operation is the contract's and the definition inside it the provider's, so the provider
+    /// declares that half here and the runtime holds the definition to it at the claim and at the preview. It is held
+    /// to the published dialect as a binding is, with every pattern probed now, and every property carries a bounded
+    /// description of its own, which is manifest text: read by whoever writes a definition, never logged and never in a
+    /// bundle. Required where the plugin performs an operation that carries a definition — no schema, no search — and
+    /// refused where it performs none, since nothing would read it. A search a provider keeps running is read by its
+    /// status and stopped by its stop, the one way to end its spending, so a plugin that searches performs both.
+    /// </summary>
+    private AudienceDefinition? ReadAudienceDefinition(PluginKind? kind, IReadOnlyList<string> operations)
+    {
+        var searches = operations.Contains(AudienceSearch, StringComparer.Ordinal);
+        if (searches && !operations.Contains(AudienceSearchStatus, StringComparer.Ordinal))
+        {
+            Add(
+                ProblemCodes.AudienceFamilyIncomplete,
+                "operations",
+                $"operations lists '{AudienceSearch}' without '{AudienceSearchStatus}': a search the provider keeps running is read by its status, so a plugin that searches reads the status too.");
+        }
+        else if (searches && !operations.Contains(AudienceSearchCancel, StringComparer.Ordinal))
+        {
+            Add(
+                ProblemCodes.AudienceFamilyIncomplete,
+                "operations",
+                $"operations lists '{AudienceSearch}' without '{AudienceSearchCancel}': a search the provider keeps running spends until it is stopped, so a plugin that searches stops it too.");
+        }
+
+        var carriesDefinition = searches || operations.Contains(AudiencePreview, StringComparer.Ordinal);
+        if (!Has(root, AudienceDefinitionField))
+        {
+            if (carriesDefinition)
+            {
+                Add(
+                    ProblemCodes.FieldRequired,
+                    AudienceDefinitionField,
+                    $"{AudienceDefinitionField} is required: the plugin performs an operation that carries an audience's definition, and the definition is checked against the schema it declares here.");
+            }
+
+            return null;
+        }
+
+        if (kind != PluginKind.Provider)
+        {
+            Add(ProblemCodes.FieldInvalid, AudienceDefinitionField, $"a {Word(kind)} plugin performs no audience operation, so it declares no definition.");
+            return null;
+        }
+
+        if (!carriesDefinition)
+        {
+            Add(
+                ProblemCodes.FieldInvalid,
+                AudienceDefinitionField,
+                $"{AudienceDefinitionField} is declared and the plugin performs neither '{AudienceSearch}' nor '{AudiencePreview}', so nothing would read it.");
+            return null;
+        }
+
+        if (root[AudienceDefinitionField] is not JsonObject declared)
+        {
+            Add(ProblemCodes.FieldInvalid, AudienceDefinitionField, $"{AudienceDefinitionField} is a mapping of `schema` and, optionally, `keys`.");
+            return null;
+        }
+
+        UnknownKeys(declared, AudienceDefinitionField, "schema", "keys");
+        var schema = ReadDefinitionSchema(declared);
+        var keys = ReadDefinitionKeys(declared, schema);
+        return schema is null || keys is null ? null : new AudienceDefinition(schema, keys);
+    }
+
+    private JsonObject? ReadDefinitionSchema(JsonObject declared)
+    {
+        var field = Join(AudienceDefinitionField, "schema");
+        if (!Has(declared, "schema"))
+        {
+            Add(ProblemCodes.FieldRequired, field, "schema is required: the schema an audience's definition satisfies for this provider.");
+            return null;
+        }
+
+        if (declared["schema"] is not JsonObject schema)
+        {
+            Add(ProblemCodes.FieldInvalid, field, "schema is a schema of `type: object` saying what an audience's definition carries.");
+            return null;
+        }
+
+        var dialect = SchemaValidator.CheckDialect(schema);
+        foreach (var problem in dialect)
+        {
+            Add(ProblemCodes.FieldInvalid, LocateInDefinition(problem.Pointer), problem.Message);
+        }
+
+        if (dialect.Count != 0)
+        {
+            return null;
+        }
+
+        // Probed here, as a binding's patterns are, so a pattern that cannot finish is the author's to fix at the reload
+        // and never a claim's verdict on somebody's definition.
+        foreach (var problem in SchemaValidator.ProbePatterns(schema, timing))
+        {
+            _problems.Add(new ManifestProblem(ProblemCodes.FieldInvalid, LocateInDefinition(problem.Pointer), problem.Message) { Unmeasured = true });
+        }
+
+        if (!TryText(schema["type"], out var type) || type != "object")
+        {
+            Add(ProblemCodes.FieldInvalid, field, "schema is a schema of `type: object`, because a definition is a mapping of the provider's filters.");
+        }
+
+        if (schema["properties"] is JsonObject properties)
+        {
+            foreach (var (name, property) in properties)
+            {
+                if (property is not JsonObject described
+                    || !TryText(described["description"], out var description)
+                    || description.Length is 0 or > MaxDefinitionDescriptionLength
+                    || description.Any(char.IsControl))
+                {
+                    Add(
+                        ProblemCodes.FieldInvalid,
+                        LocateInDefinition(Pointer("/properties", name)),
+                        string.Create(CultureInfo.InvariantCulture, $"'{name}' carries a description of 1 to {MaxDefinitionDescriptionLength} characters and no control character: it is what whoever writes a definition reads about the filter."));
+                }
+            }
+        }
+
+        return schema;
+    }
+
+    private Dictionary<string, DefinitionKey>? ReadDefinitionKeys(JsonObject declared, JsonObject? schema)
+    {
+        var field = Join(AudienceDefinitionField, "keys");
+        var keys = new Dictionary<string, DefinitionKey>(StringComparer.Ordinal);
+        if (!Has(declared, "keys"))
+        {
+            return keys;
+        }
+
+        if (declared["keys"] is not JsonObject listed)
+        {
+            Add(ProblemCodes.FieldInvalid, field, "keys is a mapping from a property of the schema to its annotations, `side` and `typeahead`.");
+            return null;
+        }
+
+        var properties = schema?["properties"] as JsonObject;
+        var valid = true;
+        foreach (var (name, value) in listed)
+        {
+            var at = Join(field, name);
+            if (schema is not null && properties?.ContainsKey(name) != true)
+            {
+                Add(ProblemCodes.FieldInvalid, at, $"'{name}' is not a property the schema declares, so nothing it annotates exists.");
+                valid = false;
+                continue;
+            }
+
+            if (value is not JsonObject annotation)
+            {
+                Add(ProblemCodes.FieldInvalid, at, "an annotation is a mapping of an optional `side` and an optional `typeahead`.");
+                valid = false;
+                continue;
+            }
+
+            UnknownKeys(annotation, at, "side", "typeahead");
+            string? side = null;
+            if (Has(annotation, "side"))
+            {
+                if (!TryText(annotation["side"], out var text) || text is not ("person" or "company"))
+                {
+                    Add(ProblemCodes.FieldInvalid, Join(at, "side"), "side is 'person' or 'company': the side of a person the property filters on.");
+                    valid = false;
+                }
+                else
+                {
+                    side = text;
+                }
+            }
+
+            string? typeahead = null;
+            if (Has(annotation, "typeahead"))
+            {
+                if (!TryText(annotation["typeahead"], out var text) || !FilterName().IsMatch(text))
+                {
+                    Add(ProblemCodes.FieldInvalid, Join(at, "typeahead"), "typeahead names a filter whose values the provider lists, lowercase, such as 'industries'.");
+                    valid = false;
+                }
+                else
+                {
+                    typeahead = text;
+                }
+            }
+
+            keys[name] = new DefinitionKey(side, typeahead);
+        }
+
+        return valid ? keys : null;
+    }
+
+    /// <summary>A problem inside the declared schema, located the way a binding's is.</summary>
+    private static string LocateInDefinition(string pointer) => AudienceDefinitionField + "#/schema" + pointer;
 
     /// <summary>
     /// The journal kinds the plugin handles: optional on a provider and a notification plugin, and what a subscriber is
@@ -1333,4 +1540,7 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
 
     [GeneratedRegex(@"^[A-Z][A-Z0-9_]{0,63}\z")]
     private static partial Regex VariableName();
+
+    [GeneratedRegex(@"^[a-z][a-z0-9_-]{0,63}\z")]
+    private static partial Regex FilterName();
 }

@@ -140,6 +140,24 @@ public class ConfinedVerbsTests
         Assert.Empty(run.Requests);
     }
 
+    /// <summary>
+    /// The campaign's allowance lets searches the provider charges for go without asking, so its forms are a person's word
+    /// like the verbs they ride on: approving with <c>--allow</c>, and setting or taking back a standing approval for
+    /// <c>audience.search</c>, are refused with the variable set, and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData("--actor", "human:x", "approval", "approve", "apr_A", "--allow", "100")]
+    [InlineData("--actor", "human:x", "approval", "set-standing", "cmp_A", "--operation", "audience.search", "--audience", "2", "--max-people", "250")]
+    [InlineData("--actor", "human:x", "approval", "unset-standing", "cmp_A", "--operation", "audience.search")]
+    public async Task Confined_the_allowance_forms_are_refused_and_nothing_is_sent(params string[] args)
+    {
+        var run = await DefaultActorTests.RunEachAsync(args, new Dictionary<string, string> { [Variable] = "1" });
+
+        Assert.Equal(ExitCodes.ApiError, run.Exit);
+        Assert.Empty(run.Requests);
+        Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+    }
+
     /// <summary>The verbs a role attempt and a chat's agent keep are untouched with the variable set.</summary>
     [Theory]
     [InlineData("workitem", "get", "wi_A")]

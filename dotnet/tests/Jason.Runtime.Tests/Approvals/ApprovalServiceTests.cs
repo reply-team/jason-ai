@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Domain;
@@ -315,6 +316,37 @@ public class ApprovalServiceTests
 
         Assert.Equal("approval_not_found", missing.Code);
         Assert.Equal("approval_id", Assert.Single(unnamed.Details!).Field);
+    }
+
+    /// <summary>
+    /// "Approve and allow" belongs to an approval of a search, the only work an allowance covers, and to approving it:
+    /// given anywhere else, or without the ceiling it is about, it is refused at its field and nothing is decided.
+    /// </summary>
+    [Theory]
+    [InlineData("an approval of other work", "allow", "not_allowed")]
+    [InlineData("a rejection", "allow", "not_allowed")]
+    [InlineData("no ceiling", "allow.max_people", "required")]
+    public async Task An_allowance_given_with_a_decision_it_does_not_belong_to_is_refused(string change, string field, string code)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (item, approval) = await ParkedWork.WriteAsync(db, Ct);
+        if (change == "a rejection")
+        {
+            // A search, so that the only thing wrong with the request is that it rejects.
+            approval.Operation = "audience.search";
+            item.Operation = "audience.search";
+            item.Context = new JsonObject { ["audience"] = new JsonObject { ["id"] = "aud_01K52JR0000000000000000001", ["number"] = 1 } };
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var request = new ApprovalDecisionRequest(approval.PublicId, Operator, null, new AllowanceRequest(change == "no ceiling" ? null : 500));
+
+        var refused = await Assert.ThrowsAsync<ValidationException>(
+            () => change == "a rejection" ? Service(db).RejectAsync(request, Ct) : Service(db).ApproveAsync(request, Ct));
+
+        Assert.Contains(refused.Details!, detail => detail.Field == field && detail.Code == code);
+        Assert.Equal(ApprovalStatus.Pending, (await db.Approvals.AsNoTracking().SingleAsync(Ct)).Status);
     }
 
     private static ApprovalService Service(JasonDbContext db)

@@ -223,6 +223,44 @@ public static partial class JournalKinds
     public const string ProviderBlockCleared = "provider_block_cleared";
 
     /// <summary>
+    /// A campaign's untouched members — the summary's <c>new</c> — fell under the <c>audience_threshold</c> it set: the
+    /// count and the threshold, no key. Said by the dispatcher once per crossing, which the journal decides: the latest of
+    /// this kind and <see cref="AudienceReserveRecovered"/> is where the reserve stands. A default manager trigger.
+    /// </summary>
+    public const string AudienceReserveLow = "audience_reserve_low";
+
+    /// <summary>
+    /// A campaign's untouched members are back at or above its <c>audience_threshold</c>, after a line said they had
+    /// fallen under it: the count and the threshold, no key. Not a trigger by default: the manager was told when the
+    /// reserve fell, and a reserve that recovered asks nothing of it.
+    /// </summary>
+    public const string AudienceReserveRecovered = "audience_reserve_recovered";
+
+    /// <summary>
+    /// One page of a search's people landed in its campaign: keyed by the work item whose answer carried the page — a read
+    /// of the search, or the search itself where it finished inside its call — and about the search's work item, with the
+    /// audience, the provider's state, the counts and the people it made members of, never a word of theirs. Said by the
+    /// dispatcher once per page that carried anybody. Not a trigger by default: the reserve and the summary count them.
+    /// </summary>
+    public const string AudiencePeopleLanded = "audience_people_landed";
+
+    /// <summary>
+    /// A search ended — finished, exhausted, stalled or stopped — keyed by and about its work item, with what it was asked
+    /// for, found and landed. Said by the dispatcher once per search, which the database holds. A default manager trigger:
+    /// whether the audience needs more, or another search, is the manager's.
+    /// </summary>
+    public const string AudienceSearchEnded = "audience_search_ended";
+
+    /// <summary>
+    /// A search the provider holds — paused by a person, out of credits, at the plan's limit — keyed by the read that first
+    /// said so and about the search's work item, with its audience, the state and the counts. Said by the dispatcher when a
+    /// read first reports the hold, and again only after the search moves and holds again. A default manager trigger: the
+    /// person is told through the manager's question what holds it and what to do at the provider, while the runtime goes
+    /// on reading it on a slower cadence.
+    /// </summary>
+    public const string AudienceSearchHeld = "audience_search_held";
+
+    /// <summary>
     /// A project was made: keyed by its id, with the name and slug it was made with. It names no campaign. The default
     /// project, made by the migration that brought projects in, was made by nobody and has no line.
     /// </summary>
@@ -327,6 +365,11 @@ public static partial class JournalKinds
         EventsBackfillRequested,
         ProviderBlocked,
         ProviderBlockCleared,
+        AudienceReserveLow,
+        AudienceReserveRecovered,
+        AudiencePeopleLanded,
+        AudienceSearchEnded,
+        AudienceSearchHeld,
         ProjectCreated,
         ProjectUpdated,
         ProjectLinked,

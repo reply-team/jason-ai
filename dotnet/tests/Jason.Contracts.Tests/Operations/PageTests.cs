@@ -48,19 +48,36 @@ public class PageTests
         Assert.NotEmpty(Paged());
     }
 
+    /// <summary>
+    /// A page starts where the last one stopped, found either by counting — an <c>offset</c> the caller passes — or by
+    /// the plugin's own cursor, which the runtime keeps and composes into the input and the answer hands back. A
+    /// cursor-paged read takes no offset, starts from the beginning on a null cursor, and always answers the cursor the
+    /// next read starts at, so a page is never read without knowing where the next one begins.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Paged))]
-    public void A_paged_read_takes_a_limit_and_an_offset_and_says_whether_more_follow(string id)
+    public void A_paged_read_takes_a_limit_and_an_offset_or_a_cursor_and_says_whether_more_follow(string id)
     {
         var contract = OperationCatalog.Find(id)!;
         var args = Assert.IsType<JsonObject>(contract.InputSchema["properties"]?["args"]);
         var arguments = Assert.IsType<JsonObject>(args["properties"]);
 
         Assert.Contains("limit", Required(args));
-        Assert.Contains("offset", Required(args));
         Assert.Equal(1, (int)arguments["limit"]!["minimum"]!);
-        Assert.Equal(0, (int)arguments["offset"]!["minimum"]!);
-        Assert.Equal(1_000_000, (int)arguments["offset"]!["maximum"]!);
+        if (((JsonObject)contract.OutputSchema["properties"]!).ContainsKey("cursor"))
+        {
+            Assert.False(arguments.ContainsKey("offset"), $"{id} pages by a cursor and by an offset.");
+            Assert.Contains("cursor", Required(contract.OutputSchema));
+            Assert.Equal("string", (string?)contract.OutputSchema["properties"]!["cursor"]!["type"]);
+            var cursor = Assert.Single(Cursors(contract.InputSchema, contract.InputSchema));
+            Assert.Contains("null", ((JsonArray)cursor["type"]!).Select(type => (string?)type));
+        }
+        else
+        {
+            Assert.Contains("offset", Required(args));
+            Assert.Equal(0, (int)arguments["offset"]!["minimum"]!);
+            Assert.Equal(1_000_000, (int)arguments["offset"]!["maximum"]!);
+        }
 
         Assert.Contains("has_more", Required(contract.OutputSchema));
         Assert.Equal("boolean", (string?)contract.OutputSchema["properties"]!["has_more"]!["type"]);
@@ -185,6 +202,33 @@ public class PageTests
         }
 
         return total;
+    }
+
+    /// <summary>Every member named <c>cursor</c> the input declares, at any depth, through its references.</summary>
+    private static IEnumerable<JsonObject> Cursors(JsonObject schema, JsonObject root)
+    {
+        if (schema["$ref"] is JsonValue reference)
+        {
+            foreach (var cursor in Cursors((JsonObject)root["$defs"]![((string)reference!)["#/$defs/".Length..]]!, root))
+            {
+                yield return cursor;
+            }
+        }
+
+        foreach (var (name, property) in (JsonObject?)schema["properties"] ?? [])
+        {
+            if (name == "cursor")
+            {
+                yield return (JsonObject)property!;
+            }
+            else
+            {
+                foreach (var cursor in Cursors((JsonObject)property!, root))
+                {
+                    yield return cursor;
+                }
+            }
+        }
     }
 
     private static long Measure(JsonNode node) => Encoding.UTF8.GetByteCount(node.ToJsonString());

@@ -1,0 +1,29 @@
+{
+  "kind": "audience_reserve_low",
+  "version": 1,
+  "since": "0.36.0",
+  "summary": "A campaign's untouched members fell under the threshold the campaign set, said once per crossing; a default manager trigger.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "null" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["untouched", "threshold"],
+        "properties": {
+          "untouched": { "type": "integer", "minimum": 0, "description": "The campaign's untouched members when the line was said: its current members nobody has started on." },
+          "threshold": { "type": "integer", "minimum": 1, "description": "The campaign's audience_threshold the count fell under." }
+        }
+      }
+    }
+  }
+}

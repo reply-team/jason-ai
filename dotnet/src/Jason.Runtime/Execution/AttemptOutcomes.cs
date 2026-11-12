@@ -404,6 +404,43 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     }
 
     /// <summary>
+    /// Keeps <paramref name="item"/>, a search, waiting behind <paramref name="search"/>, another search of its campaign
+    /// that has not ended: held at the claim with no attempt of its own until <paramref name="until"/>, a search cadence
+    /// off, when the claim asks again. The item's last error is <paramref name="error"/>, which names the search in the
+    /// way, and the line says what it waits behind. Nothing is counted against the item's attempts.
+    /// </summary>
+    public WorkItemWait Behind(JasonDbContext db, WorkItem item, DateTime until, AttemptErrorDto error, string search, ActorRef actor)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(error);
+        var now = clock.GetUtcNow().UtcDateTime;
+        item.LastError = error;
+        WorkItemTransitions.Apply(item, WorkItemStatus.Waiting, now);
+
+        var wait = new WorkItemWait { WorkItem = item, Until = until, Deadline = until, Status = WaitStatus.Open, OpenedAt = now };
+        db.WorkItemWaits.Add(wait);
+
+        var moment = JsonSerializer.SerializeToNode(WorkItemMapper.Utc(until), JasonJson.Options);
+        journal.Append(
+            db,
+            actor,
+            JournalKinds.WorkItemWaiting,
+            campaign: null,
+            key: null,
+            updated: new JsonObject
+            {
+                ["on"] = new JsonArray(),
+                ["mode"] = null,
+                ["until"] = moment,
+                ["deadline"] = moment?.DeepClone(),
+                ["behind_search"] = search,
+            },
+            workItem: item);
+        return wait;
+    }
+
+    /// <summary>
     /// What an attempt of an operation a provider block holds says about the blocks of its plugin and binding, after its
     /// verdict. <see cref="BlockAnswer.GotPast"/> — it succeeded, or the provider judged the work itself — clears every
     /// open block that covers it and every block it was the trial of. <see cref="BlockAnswer.Blocked"/> opens the block <paramref name="said"/> names or sees

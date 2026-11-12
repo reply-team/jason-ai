@@ -18,6 +18,7 @@ namespace Jason.Runtime.Plugins;
 /// </param>
 public sealed record PinOutcome(bool Pinned, bool Diverged, string? UndeclaredKind);
 
+
 /// <summary>
 /// Jason's record of what each plugin calls each of our entities. A pin is written once, by the attempt that
 /// learned it, and is never overwritten: when a plugin later answers with something else the disagreement is
@@ -96,7 +97,7 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
                 continue;
             }
 
-            switch (Record(db, pins, pluginId, kind, value, Origin(origins, kind), declared.Entity, item, campaign, attempt))
+            switch (Record(db, pins, pluginId, kind, value, Origin(origins, kind), declared.Entity, item, campaign, attempt, person: null))
             {
                 case Applied.Pinned:
                     pinned = true;
@@ -110,6 +111,28 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
         }
 
         return new PinOutcome(pinned, diverged, undeclared);
+    }
+
+    /// <summary>
+    /// Pins what a plugin calls a person its answer named in its result rather than as the work item's contact — the people
+    /// a page of a search found — under <paramref name="kind"/>, by the attempt that answered, on the same terms as every
+    /// other pin: written once, a different value recorded beside it, and each said in a line that names the person.
+    /// A value that identifies nobody writes nothing.
+    /// </summary>
+    /// <remarks>The person arrives with this plugin's pins loaded, as every contact this store is handed does.</remarks>
+    public void PinPerson(JasonDbContext db, Contact person, string pluginId, string kind, string value, WorkItem item, Attempt attempt)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(person);
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(kind);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(attempt);
+
+        if (Identifier(JsonValue.Create(value), out var identifier))
+        {
+            Record(db, person.ExternalIds, pluginId, kind, identifier, origin: null, PinnedEntity.Contact, item, campaign: null, attempt, person);
+        }
     }
 
     /// <summary>
@@ -180,8 +203,9 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
         string? origin,
         PinnedEntity entity,
         WorkItem item,
-        Campaign campaign,
-        Attempt attempt)
+        Campaign? campaign,
+        Attempt attempt,
+        Contact? person)
     {
         var now = clock.GetUtcNow().UtcDateTime;
         var actor = Actors.ForAttempt(attempt);
@@ -200,7 +224,7 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
                 RecordedByAttemptId = attempt.PublicId,
             });
 
-            journal.Append(db, actor, JournalKinds.ExternalIdPinned, campaign, key, updated: JsonValue.Create(value), workItem: item, attempt: attempt);
+            journal.Append(db, actor, JournalKinds.ExternalIdPinned, campaign, key, updated: JsonValue.Create(value), workItem: item, attempt: attempt, contact: person);
             Said(db, actor, campaign, key, origin, item, attempt);
             return Applied.Pinned;
         }
@@ -226,7 +250,8 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
             old: JsonValue.Create(standing.Value),
             updated: JsonValue.Create(value),
             workItem: item,
-            attempt: attempt);
+            attempt: attempt,
+            contact: person);
         Said(db, actor, campaign, key, origin, item, attempt);
         return Applied.Diverged;
     }
@@ -236,7 +261,7 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
     /// the same key, work item and attempt, so a reader knows which identifier it is about — after a divergence, the
     /// value the attempt returned.
     /// </summary>
-    private void Said(JasonDbContext db, ActorRef actor, Campaign campaign, string key, string? origin, WorkItem item, Attempt attempt)
+    private void Said(JasonDbContext db, ActorRef actor, Campaign? campaign, string key, string? origin, WorkItem item, Attempt attempt)
     {
         if (origin is null)
         {

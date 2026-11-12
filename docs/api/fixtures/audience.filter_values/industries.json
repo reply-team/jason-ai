@@ -1,0 +1,18 @@
+{
+  "operation": "audience.filter_values",
+  "case": "industries",
+  "request": {
+    "campaign_id": "cmp_1",
+    "filter": "industries",
+    "query": "Software",
+    "limit": 5
+  },
+  "status": 200,
+  "response": {
+    "plugin_id": "stand-in-search",
+    "values": [
+      "Software",
+      "Software Development"
+    ]
+  }
+}

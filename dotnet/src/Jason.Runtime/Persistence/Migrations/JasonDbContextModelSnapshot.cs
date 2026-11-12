@@ -260,6 +260,221 @@ namespace Jason.Runtime.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.Audience", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("definition_json");
+
+                    b.Property<string>("DefinitionHash")
+                        .IsRequired()
+                        .HasMaxLength(71)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("definition_hash");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("number");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audiences");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_audiences_public_id");
+
+                    b.HasIndex("CampaignId", "DefinitionHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_audiences_campaign_id_definition_hash");
+
+                    b.HasIndex("CampaignId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_audiences_campaign_id_number");
+
+                    b.ToTable("audiences", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_audiences_definition_json", "json_valid(definition_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.AudienceLanding", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AudienceId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("audience_id");
+
+                    b.Property<int>("CampaignContactId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_contact_id");
+
+                    b.Property<DateTime>("LandedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("landed_at");
+
+                    b.Property<int>("ReadWorkItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("read_work_item_id");
+
+                    b.Property<int>("SearchWorkItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("search_work_item_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audience_landings");
+
+                    b.HasIndex("AudienceId")
+                        .HasDatabaseName("ix_audience_landings_audience_id");
+
+                    b.HasIndex("CampaignContactId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_audience_landings_campaign_contact_id");
+
+                    b.HasIndex("ReadWorkItemId")
+                        .HasDatabaseName("ix_audience_landings_read_work_item_id");
+
+                    b.HasIndex("SearchWorkItemId")
+                        .HasDatabaseName("ix_audience_landings_search_work_item_id");
+
+                    b.ToTable("audience_landings", (string)null);
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.AudienceSearch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Asked")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("asked");
+
+                    b.Property<int>("AudienceId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("audience_id");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Cursor")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cursor");
+
+                    b.Property<string>("EndedAs")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ended_as");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ended_at");
+
+                    b.Property<int>("Failures")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("failures");
+
+                    b.Property<int?>("Found")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("found");
+
+                    b.Property<int>("Landed")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("landed");
+
+                    b.Property<bool>("More")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("more");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<DateTime>("QuietSince")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("quiet_since");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("read_at");
+
+                    b.Property<int?>("ReadWorkItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("read_work_item_id");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reference");
+
+                    b.Property<int>("SearchWorkItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("search_work_item_id");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audience_searches");
+
+                    b.HasIndex("AudienceId")
+                        .HasDatabaseName("ix_audience_searches_audience_id");
+
+                    b.HasIndex("CampaignId")
+                        .HasDatabaseName("ix_audience_searches_in_flight")
+                        .HasFilter("ended_as IS NULL");
+
+                    b.HasIndex("ReadWorkItemId")
+                        .HasDatabaseName("ix_audience_searches_read_work_item_id");
+
+                    b.HasIndex("SearchWorkItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_audience_searches_search_work_item_id");
+
+                    b.ToTable("audience_searches", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_audience_searches_ended_as", "(ended_as IS NULL AND ended_at IS NULL) OR (ended_as IN ('finished', 'exhausted', 'stalled', 'cancelled') AND ended_at IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_audience_searches_state", "state IS NULL OR state IN ('in_progress', 'finished', 'exhausted', 'paused', 'paused_for_credits', 'paused_for_limit')");
+                        });
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
                 {
                     b.Property<int>("Id")
@@ -270,6 +485,16 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Property<DateTime?>("ArchivedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("archived_at");
+
+                    b.Property<int?>("AudienceThreshold")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("audience_threshold");
+
+                    b.Property<int>("AudienceWatermark")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("audience_watermark");
 
                     b.Property<string>("Context")
                         .IsRequired()
@@ -1274,10 +1499,23 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_journal_campaign_kind_key")
                         .HasFilter("kind = 'inbound_reply_observed'");
 
+                    b.HasIndex(new[] { "CampaignId", "Id" }, "ix_journal_audience_reserve_low_campaign_id")
+                        .HasDatabaseName("ix_journal_audience_reserve_low_campaign_id")
+                        .HasFilter("kind = 'audience_reserve_low'");
+
+                    b.HasIndex(new[] { "CampaignId", "Id" }, "ix_journal_audience_reserve_recovered_campaign_id")
+                        .HasDatabaseName("ix_journal_audience_reserve_recovered_campaign_id")
+                        .HasFilter("kind = 'audience_reserve_recovered'");
+
                     b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_events")
                         .IsUnique()
                         .HasDatabaseName("ix_journal_campaign_kind_key_events")
                         .HasFilter("kind = 'provider_event_observed'");
+
+                    b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_searches_ended")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_campaign_kind_key_searches_ended")
+                        .HasFilter("kind = 'audience_search_ended'");
 
                     b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_sends")
                         .IsUnique()
@@ -2514,6 +2752,95 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("WorkItem");
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.Audience", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audiences_campaigns_campaign_id");
+
+                    b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.AudienceLanding", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Audience", "Audience")
+                        .WithMany()
+                        .HasForeignKey("AudienceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audience_landings_audiences_audience_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.CampaignContact", "Membership")
+                        .WithOne("Landing")
+                        .HasForeignKey("Jason.Runtime.Persistence.AudienceLanding", "CampaignContactId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audience_landings_campaign_contacts_campaign_contact_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", "ReadWorkItem")
+                        .WithMany()
+                        .HasForeignKey("ReadWorkItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audience_landings_work_items_read_work_item_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", "SearchWorkItem")
+                        .WithMany()
+                        .HasForeignKey("SearchWorkItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audience_landings_work_items_search_work_item_id");
+
+                    b.Navigation("Audience");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("ReadWorkItem");
+
+                    b.Navigation("SearchWorkItem");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.AudienceSearch", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Audience", "Audience")
+                        .WithMany()
+                        .HasForeignKey("AudienceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audience_searches_audiences_audience_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audience_searches_campaigns_campaign_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", "ReadWorkItem")
+                        .WithMany()
+                        .HasForeignKey("ReadWorkItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_audience_searches_work_items_read_work_item_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", "SearchWorkItem")
+                        .WithMany()
+                        .HasForeignKey("SearchWorkItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audience_searches_work_items_search_work_item_id");
+
+                    b.Navigation("Audience");
+
+                    b.Navigation("Campaign");
+
+                    b.Navigation("ReadWorkItem");
+
+                    b.Navigation("SearchWorkItem");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
                 {
                     b.HasOne("Jason.Runtime.Persistence.WorkItem", null)
@@ -2866,6 +3193,11 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("ExternalIds");
 
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.CampaignContact", b =>
+                {
+                    b.Navigation("Landing");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.Contact", b =>

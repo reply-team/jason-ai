@@ -1,0 +1,7 @@
+{
+  "kind": "audience_search_held",
+  "version": 1,
+  "case": "a search the provider still runs is not held",
+  "body": { "key": "wi_01JC0000000000000000000002", "old": null, "new": { "audience": "aud_01JC0000000000000000000001", "plugin": "fake-provider", "state": "in_progress", "asked": 50, "found": null, "landed": 0 } },
+  "expect": { "invalid": [{ "pointer": "/new/state", "reason": "enum" }] }
+}
