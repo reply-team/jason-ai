@@ -46,7 +46,13 @@ import { Painted } from './painted';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
 import { changeChat, chats, clock, conversations, conversationsFailure, feedId, here, messageOf, setup } from './state';
-import { fullAccessStanding, standingKnown, takeBackStanding, takeBackWords } from '../platform/full-access';
+import {
+    fullAccessStanding,
+    readStandingAgain,
+    standingKnown,
+    takeBackStanding,
+    takeBackWords,
+} from '../platform/full-access';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
 // back as events. The agent's words are drawn as a fixed subset of Markdown, every word of them as text. A message sent
@@ -140,9 +146,13 @@ async function hold(id: string): Promise<string> {
  * The conversation to show: the campaign's one, made on first use and opened with what it kept, or with no campaign
  * a new set-up chat. Resolves with its id, or with null when the desktop refused, which the sidebar says.
  */
-export async function startChat(campaign?: { id: string; name: string }): Promise<string | null> {
+export async function startChat(
+    campaign?: { id: string; name: string },
+    options: { askFirst?: boolean } = {},
+): Promise<string | null> {
     try {
-        const host = await newChatHost();
+        // Named Ask first where the person changed it before sending: no host is named, so the desktop starts it there.
+        const host = options.askFirst === true ? undefined : await newChatHost();
         const { chat } = here().desktop;
         let id: string;
         if (campaign) {
@@ -923,6 +933,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         aria-label="Access mode"
                         disabled={chat.removing}
                         value={chat.mode}
+                        onFocus={() => readStandingAgain(here().desktop)}
                         onChange={(event) =>
                             event.target.value === takeBack
                                 ? takeBackChoice(chatId)

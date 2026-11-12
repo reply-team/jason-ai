@@ -44,6 +44,32 @@ function linux(cwd = '/home/someone/.jason/desktop/chat'): ChatScope {
     };
 }
 
+/** The same installation on Windows, case-insensitive as NTFS is by default. */
+function windows(): ChatScope {
+    const existing: Record<string, string> = {
+        'c:\\': 'C:\\',
+        'c:\\users': 'C:\\Users',
+        'c:\\users\\someone': 'C:\\Users\\someone',
+        'c:\\users\\someone\\.jason': 'C:\\Users\\someone\\.jason',
+        'c:\\users\\someone\\.jason\\desktop': 'C:\\Users\\someone\\.jason\\desktop',
+        'c:\\users\\someone\\.jason\\desktop\\chat': 'C:\\Users\\someone\\.jason\\desktop\\chat',
+        'c:\\users\\someone\\.jason\\config': 'C:\\Users\\someone\\.jason\\config',
+        'c:\\users\\someone\\.jason\\run': 'C:\\Users\\someone\\.jason\\run',
+    };
+    return {
+        platform: 'win32',
+        cwd: 'C:\\Users\\someone\\.jason\\desktop\\chat',
+        chat: 'C:\\Users\\someone\\.jason\\desktop\\chat',
+        added: [],
+        data: 'C:\\Users\\someone\\.jason',
+        home: 'C:\\Users\\someone',
+        protectedFiles: ['C:\\Users\\someone\\.jason\\config\\settings.json', 'C:\\Users\\someone\\.jason\\run\\runtime.json'],
+        denied: carried.commands,
+        deniedOperations: carried.operations,
+        real: (path) => existing[path.toLowerCase()] ?? null,
+    };
+}
+
 const file = '/home/someone/.jason/desktop/full-access.json';
 const body = '{"claude":{"consent":1,"given_at":"2026-01-02T03:04:05.000Z","new_chats":true}}';
 
@@ -85,6 +111,33 @@ test('(b) a plain command of a Full access turn that would write the standing ch
         }
         assert.deepEqual(fullAccessJudgement('Write', { file_path: file, content: body }, scope), { outcome: 'refused', message: dataRefusal });
         assert.deepEqual(fullAccessJudgement('Edit', { file_path: file, old_string: 'false', new_string: 'true' }, scope), { outcome: 'refused', message: dataRefusal });
+    }
+});
+
+test('(a) and (b) hold in every spelling: from a grant folder by a relative path, in Git Bash\'s drive form, and in another case on Windows', () => {
+    const grant = linux('/home/someone/.jason/desktop/chat-full/grant-1');
+    for (const command of ['echo x > ../../full-access.json', 'cat ../../full-access.json', 'cp /home/someone/work/c.json ../../full-access.json']) {
+        const judged = judge('Bash', { command }, grant);
+        assert.equal(judged.verdict === 'deny' ? judged.message : judged.verdict, dataRefusal, command);
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, grant), { outcome: 'refused', message: dataRefusal }, command);
+    }
+    assert.deepEqual(fullAccessJudgement('Write', { file_path: '../../full-access.json', content: body }, grant), { outcome: 'refused', message: dataRefusal });
+    const scope = windows();
+    const spellings = [
+        'echo x > /c/Users/someone/.jason/desktop/full-access.json',
+        'echo x > C:\\Users\\SOMEONE\\.JASON\\Desktop\\FULL-ACCESS.JSON',
+        'echo x > c:/users/someone/.Jason/DESKTOP/Full-Access.json',
+        'echo x > /C/USERS/someone/.jason/desktop/FULL-access.json',
+    ];
+    for (const command of spellings) {
+        const judged = judge('Bash', { command }, scope);
+        assert.equal(judged.verdict === 'deny' ? judged.message : judged.verdict, dataRefusal, command);
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: dataRefusal }, command);
+    }
+    for (const path of ['C:\\Users\\someone\\.Jason\\DESKTOP\\Full-Access.json', 'C:/USERS/SOMEONE/.JASON/DESKTOP/FULL-ACCESS.JSON']) {
+        const judged = judge('Write', { file_path: path, content: body }, scope);
+        assert.equal(judged.verdict === 'deny' ? judged.message : judged.verdict, dataRefusal, path);
+        assert.deepEqual(fullAccessJudgement('Write', { file_path: path, content: body }, scope), { outcome: 'refused', message: dataRefusal }, path);
     }
 });
 
