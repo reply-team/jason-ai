@@ -18,7 +18,7 @@ import type { ChatOptions } from './chat.ts';
 import type { Logger } from './log.ts';
 import type { ModelListsOptions } from './model-lists.ts';
 
-type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked';
+type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked' | 'fullFolderFailed';
 
 export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
     return {
@@ -38,6 +38,7 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
         named: (outcome) => log.info('chat_named', { Outcome: outcome }),
         modeChanged: (from, to) => log.info('chat_mode_changed', { From: from, To: to }),
         unchecked: () => log.warn('chat_turn_stopped', { Cause: 'unchecked_tool' }),
+        fullFolderFailed: (step, code) => log.warn('chat_full_folder_failed', { Step: step, Code: code }),
     };
 }
 

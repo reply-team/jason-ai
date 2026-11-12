@@ -81,7 +81,7 @@ export interface ClaudeTurn {
  * file can set". The browser's server is `claude-in-chrome`, the name its tools are called by.
  */
 function serverDefences() {
-    return { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }] };
+    return { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }], disableSkillShellExecution: true };
 }
 
 /**
@@ -100,7 +100,9 @@ function serverDefences() {
  * `allow` takes precedence over the preapproved set, so you can block a preapproved domain or require a prompt for it.";
  * https://code.claude.com/docs/en/permissions#webfetch: "`WebFetch(domain:*)` matches every domain", and "Wildcards in
  * `WebFetch` rules require Claude Code v2.1.172 or later to match fetches.", below the floor. The settings of every mode
- * carry `serverDefences` as well.
+ * carry `serverDefences` as well, among them `"disableSkillShellExecution": true`, so the shell commands a skill carries are not
+ * run. Anthropic, https://code.claude.com/docs/en/skills (read 2026-11-12): with it set, "each command is replaced with
+ * `[shell command execution disabled by policy]`".
  */
 export const claudeTurnSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] }, ...serverDefences() });
 
@@ -329,7 +331,7 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
  * transcripts, `skills-records` what the desktop placed in the chat folder's skills folders, which these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox, which the desktop does
  * not narrow, holds it (`codexArguments`).
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {
@@ -343,12 +345,15 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
  * a read-only command such as `cat` reads outside the working directories without asking; the permission model refuses
  * the same paths when it is asked.
  */
-export function dataRules(platform: Platform, data: string, dataEntries: readonly string[], desktopEntries: readonly string[]): string[] {
+export function dataRules(platform: Platform, data: string, dataEntries: readonly string[], desktopEntries: readonly string[], grant?: { id: string; present: readonly string[] }): string[] {
     const paths = platform === 'win32' ? win32 : posix;
     const desktop = paths.join(data, 'desktop');
+    // A Full access turn runs in its grant's folder below `chat-full`: the chat folder is then closed to it as every other
+    // entry is, and so is every other grant's folder; `chat-full` itself is the one entry left open, for its own folder.
     const targets = [
         ...namesOf(knownDataEntries, dataEntries, 'desktop').map((name) => paths.join(data, name)),
-        ...namesOf(knownDesktopEntries, desktopEntries, 'chat').map((name) => paths.join(desktop, name)),
+        ...namesOf(knownDesktopEntries, desktopEntries, grant === undefined ? 'chat' : 'chat-full').map((name) => paths.join(desktop, name)),
+        ...(grant === undefined ? [] : [paths.join(desktop, 'chat'), ...grant.present.filter((name) => name !== grant.id).map((name) => paths.join(desktop, 'chat-full', name))]),
     ];
     return targets.flatMap((target) => {
         const rule = rulePath(platform, target);

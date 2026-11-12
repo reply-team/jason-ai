@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { AgentFolderUnowned, afterSkillsDeploy, beforeSkillsDeploy, ownAgentFolder, replyRecord, skillsFolders } from './chat-agent-folder.ts';
 import type { Programs } from './programs.ts';
 import { replySkillsAtStart } from './reply-skills.ts';
+import type { SkillsGate } from './skills-gate.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { pairingLink, runtimeOrigin } from './descriptor.ts';
 import type { Logger } from './log.ts';
@@ -68,7 +69,9 @@ export interface InstallationDeps {
     /** The programs on the PATH, the Reply CLI among them, for the Reply skills a start deploys (`replySkillsAtStart`). */
     programs?: Pick<Programs, 'find' | 'run'>;
     /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
-    ownChatFolder?: (chat: string, records: string) => void;
+    ownChatFolder?: (chat: string, records: string) => boolean | void;
+    /** Held from that pass to the last deploy into the chat folder, so a turn sent meanwhile waits (`SkillsGate`). */
+    gate?: SkillsGate;
 }
 
 function said(result: CliResult): string {
@@ -119,52 +122,63 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
     }
 
     mkdirSync(paths.chat, { recursive: true });
-    // The chat folder's top is put right before anything is deployed into it, so a link a last turn left at .claude or
-    // .agents is gone first; the deploy itself makes each skills folder a real one (`beforeSkillsDeploy`). A pass that
-    // cannot finish is said by its code, and this start deploys nothing into the chat folder, the Reply skills included,
-    // and keeps no mark that it did: the next start tries again, and a turn refuses on the same folder anyway.
-    let topRight = true;
+    // The skills gate is held from the pass over the chat folder to the last deploy into it, however the start ends: a turn
+    // sent meanwhile waits for it.
+    const release = deps.gate?.hold();
     try {
-        (deps.ownChatFolder ?? ownAgentFolder)(paths.chat, paths.skillsRecords);
-    } catch (error) {
-        if (!(error instanceof AgentFolderUnowned)) throw error;
-        log.warn('agent_folder_unowned', { Code: error.code });
-        topRight = false;
-    }
-    // A chat skills folder whose deployment the desktop keeps no record of is deployed afresh (`beforeSkillsDeploy`), and
-    // the Reply skills with it: their record goes too, so the step after the deploys copies them in again.
-    const unrecorded = skillsFolders.some((host) => !existsSync(join(paths.skillsRecords, host.record)));
-    if (unrecorded && topRight) rmSync(join(paths.skillsRecords, replyRecord), { force: true });
-    if (deps.settings.skillsDeployedFor !== deps.bundleVersion || unrecorded) {
-        let deployed = true;
-        if (facts.sameVersion) {
-            const roles = await cli.run(['skills', 'install', '--roles-only', '--source', deps.bundle], { timeoutMs: 300_000 });
-            log.info('skills_deployed', { Target: 'roles', Exit: roles.exit });
-            deployed = roles.exit === 0;
-        } else {
-            deployed = false;
+        // The chat folder's top is put right before anything is deployed into it, so a link a last turn left at .claude or
+        // .agents is gone first; the deploy itself makes each skills folder a real one (`beforeSkillsDeploy`). A pass that
+        // cannot finish is said by its code, and this start deploys nothing into the chat folder, the Reply skills included,
+        // and keeps no mark that it did: the next start tries again, and a turn refuses on the same folder anyway.
+        let topRight = true;
+        let removedRecorded = false;
+        try {
+            removedRecorded = (deps.ownChatFolder ?? ownAgentFolder)(paths.chat, paths.skillsRecords) === true;
+        } catch (error) {
+            if (!(error instanceof AgentFolderUnowned)) throw error;
+            log.warn('agent_folder_unowned', { Code: error.code });
+            topRight = false;
         }
-        // --root names the directory the skills are deployed into. Claude Code started in the chat folder with project
-        // settings reads them from .claude/skills there, and Codex from .agents/skills; the Reply skills are copied into
-        // both folders.
-        // The CLI's record of each deployment lives under <data>/desktop/skills-records, outside the chat folder: it is put
-        // beside the skills for the CLI to read, and moved out again once the CLI has written it.
-        if (topRight) {
-            const [claudeSkills, codexSkills] = skillsFolders;
-            if (claudeSkills === undefined || codexSkills === undefined) throw new Error('The chat has two skills folders.');
-            beforeSkillsDeploy(paths.chat, paths.skillsRecords, claudeSkills);
-            const chat = await cli.run(['skills', 'install', '--root', join(paths.chat, '.claude', 'skills'), '--host', 'claude_code', '--source', deps.bundle], { timeoutMs: 300_000 });
-            afterSkillsDeploy(paths.chat, paths.skillsRecords, claudeSkills);
-            log.info('skills_deployed', { Target: 'chat_claude_code', Exit: chat.exit });
-            beforeSkillsDeploy(paths.chat, paths.skillsRecords, codexSkills);
-            const codex = await cli.run(['skills', 'install', '--root', join(paths.chat, '.agents', 'skills'), '--host', 'codex', '--source', deps.bundle], { timeoutMs: 300_000 });
-            afterSkillsDeploy(paths.chat, paths.skillsRecords, codexSkills);
-            log.info('skills_deployed', { Target: 'chat_codex', Exit: codex.exit });
-            if (deployed && chat.exit === 0 && codex.exit === 0) deps.saveSettings({ ...deps.settings, skillsDeployedFor: deps.bundleVersion });
+        // A chat skills folder whose deployment the desktop keeps no record of is deployed afresh (`beforeSkillsDeploy`), and
+        // the Reply skills with it: their record goes too, so the step after the deploys copies them in again.
+        // A recorded skill the pass found changed was removed with it: the folder is then as good as one with no record, so its
+        // records go and this start deploys afresh.
+        if (removedRecorded) for (const host of skillsFolders) rmSync(join(paths.skillsRecords, host.record), { force: true });
+        const unrecorded = skillsFolders.some((host) => !existsSync(join(paths.skillsRecords, host.record)));
+        if (unrecorded && topRight) rmSync(join(paths.skillsRecords, replyRecord), { force: true });
+        if (deps.settings.skillsDeployedFor !== deps.bundleVersion || unrecorded) {
+            let deployed = true;
+            if (facts.sameVersion) {
+                const roles = await cli.run(['skills', 'install', '--roles-only', '--source', deps.bundle], { timeoutMs: 300_000 });
+                log.info('skills_deployed', { Target: 'roles', Exit: roles.exit });
+                deployed = roles.exit === 0;
+            } else {
+                deployed = false;
+            }
+            // --root names the directory the skills are deployed into. Claude Code started in the chat folder with project
+            // settings reads them from .claude/skills there, and Codex from .agents/skills; the Reply skills are copied into
+            // both folders.
+            // The CLI's record of each deployment lives under <data>/desktop/skills-records, outside the chat folder: it is put
+            // beside the skills for the CLI to read, and moved out again once the CLI has written it.
+            if (topRight) {
+                const [claudeSkills, codexSkills] = skillsFolders;
+                if (claudeSkills === undefined || codexSkills === undefined) throw new Error('The chat has two skills folders.');
+                beforeSkillsDeploy(paths.chat, paths.skillsRecords, claudeSkills);
+                const chat = await cli.run(['skills', 'install', '--root', join(paths.chat, '.claude', 'skills'), '--host', 'claude_code', '--source', deps.bundle], { timeoutMs: 300_000 });
+                afterSkillsDeploy(paths.chat, paths.skillsRecords, claudeSkills);
+                log.info('skills_deployed', { Target: 'chat_claude_code', Exit: chat.exit });
+                beforeSkillsDeploy(paths.chat, paths.skillsRecords, codexSkills);
+                const codex = await cli.run(['skills', 'install', '--root', join(paths.chat, '.agents', 'skills'), '--host', 'codex', '--source', deps.bundle], { timeoutMs: 300_000 });
+                afterSkillsDeploy(paths.chat, paths.skillsRecords, codexSkills);
+                log.info('skills_deployed', { Target: 'chat_codex', Exit: codex.exit });
+                if (deployed && chat.exit === 0 && codex.exit === 0) deps.saveSettings({ ...deps.settings, skillsDeployedFor: deps.bundleVersion });
+            }
         }
+        // The Reply skills, for a person already signed in, while the desktop keeps no record of them.
+        if (topRight && deps.programs !== undefined) await replySkillsAtStart(deps.programs, paths, log);
+    } finally {
+        release?.();
     }
-    // The Reply skills, for a person already signed in, while the desktop keeps no record of them.
-    if (topRight && deps.programs !== undefined) await replySkillsAtStart(deps.programs, paths, log);
 
     const open = await cli.run(['ui', 'open', '--no-open']);
     const link = open.exit === 0 ? pairingLink(open.stdout, origin) : null;

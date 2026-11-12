@@ -39,6 +39,7 @@ import { ProviderKeys } from './providers.ts';
 import { readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
+import { SkillsGate } from './skills-gate.ts';
 import { askMailboxConfirmation } from './reply-links.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
@@ -413,6 +414,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         log,
         () => current,
     );
+    // A start holds it while it deploys skills into the chat folder; a send waits for it (`SkillsGate`).
+    const skillsGate = new SkillsGate();
     const chat = new Chat({
         paths,
         env,
@@ -424,6 +427,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         models: () => models.lists(),
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,
+        skillsGate,
+        // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager shows the
+        // folder where it stands. Nothing is run or opened with a program.
+        openFolder: (path) => shell.showItemInFolder(path),
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
         // The desktop asks the person itself, every time Full access is chosen: the page cannot answer for them. Only the
         // first button says yes; Cancel is the default and Escape answers it. With no window there is no one to ask.
@@ -467,6 +474,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             programs,
             bundle,
             bundleVersion: version,
+            gate: skillsGate,
             settings,
             saveSettings(next) {
                 settings = next;

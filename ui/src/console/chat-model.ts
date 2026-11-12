@@ -47,6 +47,11 @@ export type Entry =
     | { kind: 'fresh'; reason: 'host_changed' | 'not_found' }
     /** The person started the conversation afresh: said in the page, not kept by the desktop. */
     | { kind: 'afresh' }
+    /**
+     * A sentence the desktop said once, in its own words, not kept by the desktop. `folder` is the name of an ended Full
+     * access folder the sentence points at, which its Open folder button opens; null for any other.
+     */
+    | { kind: 'notice'; text: string; folder: string | null }
     /** A line of the Feed, as the desktop kept it. */
     | { kind: 'line'; line: DesktopLineEntry }
     /** Where the Feed's catch-up read back fewer lines than were written while the window was closed. */
@@ -383,6 +388,11 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             return { ...chat, entries: [...chat.entries, { kind: 'fresh', reason: event.reason }] };
         case 'pick':
             return { ...chat, entries: [...chat.entries, { kind: 'pick', campaignIds: [...event.campaignIds] }] };
+        case 'notice':
+            return {
+                ...chat,
+                entries: [...chat.entries, { kind: 'notice', text: event.text, folder: event.folder ?? null }],
+            };
         case 'renamed':
             return { ...chat, title: event.title };
         case 'mode':

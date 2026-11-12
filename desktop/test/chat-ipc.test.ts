@@ -26,6 +26,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             attach: async (...args) => (calls.push(['attach', ...args]), { id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '', running: false, mode: 'ask_first' }),
             rename: (...args) => (calls.push(['rename', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false, mode: 'ask_first' }),
             setMode: async (...args) => (calls.push(['setMode', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false, mode: 'plan_only' }),
+            openEndedFolder: async (...args) => void calls.push(['openEndedFolder', ...args]),
             feed: (...args) => (calls.push(['feed', ...args]), { id: 'conv_2', campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false, mode: 'ask_first' }),
         },
         () => origin,
@@ -34,7 +35,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
     return { listeners, calls, refusals };
 }
 
-test('the chat registers its eleven calls, and each reaches the chat from the runtime\'s page', async () => {
+test('the chat registers its thirteen calls, and each reaches the chat from the runtime\'s page', async () => {
     const { listeners, calls } = registered();
     assert.deepEqual([...listeners.keys()].sort(), [
         'jason:chat.answer',
@@ -43,6 +44,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
         'jason:chat.feed',
         'jason:chat.list',
         'jason:chat.open',
+        'jason:chat.openFolder',
         'jason:chat.remove',
         'jason:chat.rename',
         'jason:chat.restart',
@@ -62,6 +64,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
     await listeners.get('jason:chat.attach')?.(page, 'conv_1', 'cmp_1');
     await listeners.get('jason:chat.rename')?.(page, 'conv_1', 'Mine');
     await listeners.get('jason:chat.setMode')?.(page, 'conv_1', 'plan_only', 'claude');
+    await listeners.get('jason:chat.openFolder')?.(page, 'name-1');
     await listeners.get('jason:chat.feed')?.(page, [], { catchUp: true });
     assert.deepEqual(calls, [
         ['send', 'c1', 'hello', { host: 'claude' }],
@@ -75,6 +78,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
         ['attach', 'conv_1', 'cmp_1'],
         ['rename', 'conv_1', 'Mine'],
         ['setMode', 'conv_1', 'plan_only', 'claude'],
+        ['openEndedFolder', 'name-1'],
         ['feed', [], { catchUp: true }],
     ]);
 });
@@ -86,7 +90,7 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
         assert.throws(() => listeners.get(channel)?.({ senderFrame: { url: `${origin}/ui/`, parent: {} } }, 'c1', 'planted words'), RefusedSender);
     }
     assert.deepEqual(calls, []);
-    assert.equal(refusals.length, 24);
+    assert.equal(refusals.length, 26);
     assert.ok(refusals.every((line) => !line.includes('planted')));
 });
 
