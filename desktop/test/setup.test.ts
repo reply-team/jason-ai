@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -280,9 +280,28 @@ function settingsLeaves(b: Bench): Map<string, string> {
     return existsSync(b.paths.installationSettings) ? leaves(readInstallationSettings(b)) : new Map();
 }
 
+/**
+ * The folder the system keeps temporary files in, made this process's own for one test: the desktop writes the Reply skills
+ * to a folder there, and a count of such folders in the shared one also counts another test process's, or another run's,
+ * that is made or removed meanwhile. Put back, and the private one removed, when the test ends. Returns the shared one.
+ */
+function privateTemporaryFolder(t: { after(fn: () => void): void }): string {
+    const shared = tmpdir();
+    const own = mkdtempSync(join(shared, 'jason-own-temp-'));
+    const names = ['TMPDIR', 'TMP', 'TEMP'];
+    const kept = names.map((name) => process.env[name]);
+    for (const name of names) process.env[name] = own;
+    t.after(() => {
+        names.forEach((name, at) => (kept[at] === undefined ? delete process.env[name] : (process.env[name] = kept[at])));
+        rmSync(own, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    });
+    return shared;
+}
+
 const replyLeftovers = () => readdirSync(tmpdir()).filter((name) => name.startsWith('jason-reply-skills-')).length;
 
 test('each act of the Connect cards and a chat turn writes under <data> what it names and nothing else, and nothing else under the bench\'s root', async (t) => {
+    const shared = privateTemporaryFolder(t);
     const b = bench(t, { programs: ['reply', 'npm', 'claude'] });
     writeInstallationSettings(b, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Harness: { Root: 'kept' } });
     // The bench's root holds the data directory, the stubs' PATH and Node, and the stubs' own record of what they ran.
@@ -416,6 +435,9 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     assert.equal(readFileSync(b.paths.settings, 'utf8').includes('planted'), false);
 
     assert.deepEqual(outside(), outsideBefore, 'nothing is written beside <data>');
+    // Another process's folder of the same kind, made in the shared one meanwhile, is not this test's to count.
+    const other = mkdtempSync(join(shared, 'jason-reply-skills-'));
+    t.after(() => rmSync(other, { recursive: true, force: true }));
     assert.equal(replyLeftovers(), leftoversBefore, 'the folder the Reply skills are written to is removed');
 });
 
