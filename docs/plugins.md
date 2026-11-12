@@ -190,7 +190,12 @@ old to read the key rejects the reload, as every package problem does, rather th
 0.31.0 rejects the reload, as every package problem does, by the same unknown-key rule. §9 says what the word does and
 what it costs. `capabilities.files` is additive in the same way from 0.32.0, and any kind of plugin may ask. No key of a
 manifest holds a secret: a secret belongs under `Plugins:Config` (§6, `host.config`) or in the environment (§6,
-`host.env`), never in `plugin.yaml`, which is the package and travels with it.
+`host.env`), never in `plugin.yaml`, which is the package and travels with it. A `Plugins:Config` value given as a
+variable of the runtime's environment, `JASON_Plugins__Config__<id>__<field>`, is kept from every child the runtime
+starts: a plugin host is given no `JASON_*` variable (§6), and an AI role's agent is launched without any of the
+runtime's configuration ([work-execution.md](work-execution.md)), so it reaches this plugin through `host.config` alone.
+A variable granted for `host.env` is the person's own environment, which a role's agent inherits as it inherits
+everything else the runtime's environment holds.
 
 `settles_by_key` says which of the sends whose document settles a lost answer by the work item's key — today
 `message.send` and `social_invitation.send` — the plugin makes under that key on every attempt, so that a repeat is

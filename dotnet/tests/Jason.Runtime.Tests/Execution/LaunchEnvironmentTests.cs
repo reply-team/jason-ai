@@ -5,9 +5,9 @@ using Jason.Runtime.Execution.Hosts;
 namespace Jason.Runtime.Tests.Execution;
 
 /// <summary>
-/// The environment a launched agent runs in. It is the runtime's own plus four values, and the constants a host's own row
-/// declares, and not one more: an agent host dumps its environment when it is unhappy, and everything that is in there is
-/// in the transcript the user keeps.
+/// The environment a launched agent runs in. It is the runtime's own, less the runtime's configuration, plus four values
+/// and the constants a host's own row declares, and not one more: an agent host dumps its environment when it is unhappy,
+/// and everything that is in there is in the transcript the user keeps.
 /// </summary>
 public class LaunchEnvironmentTests
 {
