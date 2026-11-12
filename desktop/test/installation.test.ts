@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
@@ -19,6 +20,7 @@ async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsD
         bundleVersion,
         settings,
         saveSettings: (next) => void saved.push(next),
+        programs: b.programs,
     });
     return { started, log, saved, verbs: b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args) };
 }
@@ -160,4 +162,72 @@ test('every CLI run is logged by its verb, exit and time, never by its arguments
     assert.equal(runs.length, 9);
     for (const run of runs) assert.deepEqual(Object.keys(run.fields).sort(), ['ElapsedMs', 'Exit', 'Verb']);
     assert.equal(JSON.stringify(log.lines).includes('manifest.json'), false);
+});
+
+// The Reply skills at the start, for a person already signed in to Reply, while the desktop keeps no record of them.
+
+const replySkillCalls = (b: Bench) => b.record().filter((entry) => entry.name === 'reply' && entry.args.join(' ') === 'skills install adapter --project --agent codex');
+const replyRecordFile = (b: Bench) => join(b.paths.skillsRecords, 'reply.json');
+
+test('a first start with no record of the Reply skills and Reply signed in deploys them and records them with their digests', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    runtimeAlreadyUp(b);
+    await start(b);
+    assert.equal(replySkillCalls(b).length, 1);
+    const kept = JSON.parse(readFileSync(replyRecordFile(b), 'utf8')) as Record<string, { path: string; sha256: string }[]>;
+    for (const folder of ['.claude', '.agents']) {
+        const skills = readdirSync(join(b.paths.chat, folder, 'skills')).filter((name) => name.startsWith('reply-')).sort();
+        assert.deepEqual(skills, ['reply-api', 'reply-cli'], folder);
+        assert.deepEqual(kept[folder]?.map((each) => each.path).sort(), ['reply-api/SKILL.md', 'reply-cli/SKILL.md'], folder);
+        assert.equal(kept[folder]?.find((each) => each.path === 'reply-cli/SKILL.md')?.sha256, createHash('sha256').update('# reply-cli\n').digest('hex'));
+    }
+    // With the record kept, a later start runs nothing of Reply's.
+    await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.equal(replySkillCalls(b).length, 1);
+});
+
+test('not signed in to Reply, or no Reply CLI, a start runs no install of the Reply skills and records nothing', async (t) => {
+    const out = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'no' } });
+    runtimeAlreadyUp(out);
+    await start(out);
+    assert.equal(replySkillCalls(out).length, 0);
+    assert.ok(!existsSync(replyRecordFile(out)));
+    const none = bench(t);
+    runtimeAlreadyUp(none);
+    await start(none);
+    assert.ok(!none.record().some((entry) => entry.name === 'reply'));
+    assert.ok(!existsSync(replyRecordFile(none)));
+});
+
+test('a reply- folder that stands there with no record is removed and the CLI\'s copy put in its place, never read or kept', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    runtimeAlreadyUp(b);
+    // Jason's own skills are deployed and recorded already, so nothing but the Reply step touches the folders.
+    mkdirSync(b.paths.skillsRecords, { recursive: true });
+    for (const name of ['claude.json', 'agents.json']) writeFileSync(join(b.paths.skillsRecords, name), '{"version":1,"packs":[]}');
+    for (const folder of ['.claude', '.agents']) {
+        mkdirSync(join(b.paths.chat, folder, 'skills', 'reply-cli'), { recursive: true });
+        writeFileSync(join(b.paths.chat, folder, 'skills', 'reply-cli', 'SKILL.md'), '---\nallowed-tools: Bash\n---');
+        mkdirSync(join(b.paths.chat, folder, 'skills', 'reply-x'), { recursive: true });
+        writeFileSync(join(b.paths.chat, folder, 'skills', 'reply-x', 'SKILL.md'), 'planted');
+    }
+    await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.equal(replySkillCalls(b).length, 1);
+    for (const folder of ['.claude', '.agents']) {
+        assert.ok(!existsSync(join(b.paths.chat, folder, 'skills', 'reply-x')), folder);
+        assert.equal(readFileSync(join(b.paths.chat, folder, 'skills', 'reply-cli', 'SKILL.md'), 'utf8'), '# reply-cli\n', folder);
+    }
+    const kept = JSON.parse(readFileSync(replyRecordFile(b), 'utf8')) as Record<string, { path: string }[]>;
+    assert.ok(!kept['.claude']?.some((each) => each.path.startsWith('reply-x/')));
+});
+
+test('a failed install of the Reply skills lets the start go on with no record, and the next start tries again', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_SKILLS_FAIL: 'yes' } });
+    runtimeAlreadyUp(b);
+    const { started, log } = await start(b);
+    assert.equal(started.link, 'http://127.0.0.1:41234/ui/#pair=planted-pair-code');
+    assert.ok(!existsSync(replyRecordFile(b)));
+    assert.ok(log.lines.some((line) => line.name === 'skills_deployed' && line.fields.Target === 'chat_reply' && line.fields.Exit === 1));
+    await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.equal(replySkillCalls(b).length, 2, 'tried again, since the record is still absent');
 });

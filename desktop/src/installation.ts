@@ -7,6 +7,8 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterSkillsDeploy, beforeSkillsDeploy, skillsFolders } from './chat-agent-folder.ts';
+import type { Programs } from './programs.ts';
+import { replySkillsAtStart } from './reply-skills.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { pairingLink, runtimeOrigin } from './descriptor.ts';
 import type { Logger } from './log.ts';
@@ -63,6 +65,8 @@ export interface InstallationDeps {
     bundleVersion: string;
     settings: DesktopSettings;
     saveSettings(settings: DesktopSettings): void;
+    /** The programs on the PATH, the Reply CLI among them, for the Reply skills a start deploys (`replySkillsAtStart`). */
+    programs?: Pick<Programs, 'find' | 'run'>;
 }
 
 function said(result: CliResult): string {
@@ -141,6 +145,8 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         log.info('skills_deployed', { Target: 'chat_codex', Exit: codex.exit });
         if (deployed && chat.exit === 0 && codex.exit === 0) deps.saveSettings({ ...deps.settings, skillsDeployedFor: deps.bundleVersion });
     }
+    // The Reply skills, for a person already signed in, while the desktop keeps no record of them.
+    if (deps.programs !== undefined) await replySkillsAtStart(deps.programs, paths, log);
 
     const open = await cli.run(['ui', 'open', '--no-open']);
     const link = open.exit === 0 ? pairingLink(open.stdout, origin) : null;

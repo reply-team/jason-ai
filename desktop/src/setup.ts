@@ -8,7 +8,7 @@ import { cp, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { recordReplySkills } from './chat-agent-folder.ts';
+import { deployReplySkills } from './reply-skills.ts';
 import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
@@ -459,24 +459,8 @@ export class Setup {
      * are left out.
      */
     async #deployReplySkills(): Promise<void> {
-        const targets = [join(this.#deps.paths.chat, '.claude', 'skills'), join(this.#deps.paths.chat, '.agents', 'skills')];
-        const place = await mkdtemp(join(tmpdir(), 'jason-reply-skills-'));
-        try {
-            const answer = await this.#run('reply', 'skills install', ['skills', 'install', 'adapter', '--project', '--agent', 'codex'], { cwd: place, timeoutMs: installLimit });
-            if (answer.exit !== 0) return;
-            const source = join(place, '.agents', 'skills');
-            for (const name of await readdir(source).catch(() => [] as string[])) {
-                if (!name.startsWith('reply-')) continue;
-                for (const target of targets) {
-                    await rm(join(target, name), { recursive: true, force: true });
-                    await cp(join(source, name), join(target, name), { recursive: true });
-                }
-            }
-            // What was copied is recorded outside the chat folder, so a turn keeps these skills and nothing planted.
-            recordReplySkills(this.#deps.paths.chat, this.#deps.paths.skillsRecords);
-        } finally {
-            await rm(place, { recursive: true, force: true });
-        }
+        // The routine the start uses too (`reply-skills.ts`); what it copies is recorded outside the chat folder.
+        await deployReplySkills((verb, args, options) => this.#run('reply', verb, args, options), this.#deps.paths);
     }
 
     setProviderKey(providerId: unknown, key: unknown): Promise<void> {

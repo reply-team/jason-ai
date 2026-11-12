@@ -265,8 +265,11 @@ applies to the turns a person starts by sending, from the next one on.
   `.agents` and `.codex` anywhere below the top is removed, since a host loads the skills of one it meets there. A link
   is removed as a link, never walked, so nothing outside the chat folder is deleted. A chat skills folder whose
   deployment the desktop keeps no record of, an installation's first start of this version included, is emptied and
-  deployed afresh at the start; the Reply skills come back with the Connect card's next sign-in. A turn does not start
-  on a folder that could not be put right.
+  deployed afresh at the start. While no record of the Reply skills is kept, a start whose `reply auth status` says
+  signed in deploys them by the sign-in's own routine and records them, in the same step as Jason's skills; a
+  `reply-*` folder that stood there is removed and replaced by the Reply CLI's copy, never kept, and an install that
+  fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not
+  start on a folder that could not be put right.
 - **When the hook did not run.** The first tool that runs without the hook having seen its use ends the turn and returns
   the chat to Ask first: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
   input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account. The

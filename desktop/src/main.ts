@@ -461,6 +461,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             cli,
             paths,
             log,
+            programs,
             bundle,
             bundleVersion: version,
             settings,
