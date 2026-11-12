@@ -10,7 +10,8 @@ import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/c
 import { instructionsFile, readFence } from '../src/chat-deny.ts';
 import { header, turnInput } from '../src/chat-header.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
-import { floorSentence, versionLimitMs } from '../src/host-version.ts';
+import { codexFloor, codexFloorSentence, floorSentence, versionLimitMs } from '../src/host-version.ts';
+import { codexWindowsSandbox } from '../src/chat-hosts.ts';
 import type { RunResult } from '../src/programs.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
 import { NamedChat } from './named-chat.ts';
@@ -313,8 +314,10 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     ]);
     await r.turn('c1', words, { host: 'codex' });
     const [first, second] = r.hosts();
-    assert.deepEqual(first?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-']);
-    assert.deepEqual(second?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', 'resume', '0199a213-81c0-7800-8aa1-bbab2a035a53', '-']);
+    // On Windows the turn names the elevated sandbox (`codexArguments`); elsewhere no kind.
+    const kind = process.platform === 'win32' ? ['-c', codexWindowsSandbox] : [];
+    assert.deepEqual(first?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-']);
+    assert.deepEqual(second?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', 'resume', '0199a213-81c0-7800-8aa1-bbab2a035a53', '-']);
     assert.equal(first?.stdin, asked(words));
     assert.ok(same(first?.cwd ?? '', r.b.paths.chat));
     // The set-up chat's one naming run ran in a folder under turns/, removed after it: no turn file is there.
@@ -424,10 +427,31 @@ test('a turn on a Claude Code below the floor is refused before any child starts
         { name: 'claude', args: ['--version'], timeoutMs: versionLimitMs },
     ]);
 
-    // Codex has no floor: its turn runs, and its version is not asked.
+    // Codex's floor is its own: the version the stand-in says is at it, so its turn runs, its version asked first.
     const codex = await r.turn('c2', words, { host: 'codex' });
     assert.deepEqual(doneOf(codex), { kind: 'done', error: null });
-    assert.equal(asked.length, 2);
+    assert.deepEqual(asked.slice(2), [{ name: 'codex', args: ['--version'], timeoutMs: versionLimitMs }]);
+});
+
+test('a turn on a Codex older than the version that leaves the person\'s configuration unread is refused before it starts, saying to update Codex', async (t) => {
+    const old = rig(t, { env: { STUB_CODEX_VERSION: '0.121.0' } });
+    assert.deepEqual(await old.turn('c1', words, { host: 'codex' }), [{ kind: 'done', error: codexFloorSentence('0.121.0') }]);
+    assert.match(codexFloorSentence('0.121.0') ?? '', /Update Codex/);
+    assert.deepEqual(old.hosts(), [], 'no Codex turn ran');
+    assert.deepEqual(old.started, []);
+
+    const unreadable = rig(t, { chat: { programs: versionSaying({ exit: 1, stdout: 'codex-cli 0.130.0\n', stderr: '' }).programs } });
+    assert.deepEqual(await unreadable.turn('c1', words, { host: 'codex' }), [{ kind: 'done', error: codexFloorSentence(null) }]);
+
+    const at = rig(t, { env: { STUB_CODEX_VERSION: codexFloor } });
+    assert.deepEqual(doneOf(await at.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null });
+    assert.ok(at.hosts()[0]?.args.includes('--ignore-user-config'));
+});
+
+test('a Claude Code turn on a host that knows --no-chrome carries it', async (t) => {
+    const r = rig(t);
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
+    assert.ok(r.hosts()[0]?.args.includes('--no-chrome'), 'the stand-in says a version above the one that added it');
 });
 
 test('a turn on a Claude Code whose version cannot be read is refused as below the floor; one exactly at the floor runs', async (t) => {
@@ -513,6 +537,8 @@ const codexKept = new Map([
 ]);
 /** The settings a Codex command line sets for the run, each the value after a `-c`. */
 const codexSettings = (args: readonly string[]) => args.flatMap((arg, i) => (args[i - 1] === '-c' ? [arg] : []));
+/** The kind a Windows Codex turn names before its other settings (`codexArguments`); elsewhere none. */
+const windowsKind = process.platform === 'win32' ? [codexWindowsSandbox] : [];
 /** The record of a conversation, read from its file. */
 const recordOf = (r: Rig, name: string) => JSON.parse(readFileSync(join(r.b.paths.conversations, `${String(r.chat.idOf(name))}.json`), 'utf8')) as { chosen?: unknown };
 
@@ -527,8 +553,8 @@ test("a turn names its model and effort as each host's own flags, resumed or not
     assert.equal(flagValue(resumed?.args ?? [], '--effort'), 'low');
     assert.ok(resumed?.args.includes('--resume'));
     for (const each of [first, resumed]) assert.ok(!('CLAUDE_CODE_EFFORT_LEVEL' in (each?.env ?? {})), 'an inherited level would override the flag');
-    assert.deepEqual(codexSettings(codex?.args ?? []), ['web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false', 'model_reasoning_effort=high']);
-    assert.deepEqual(codexSettings(codexResumed?.args ?? []), ['web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false', 'model_reasoning_effort=low']);
+    assert.deepEqual(codexSettings(codex?.args ?? []), [...windowsKind, 'web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false', 'model_reasoning_effort=high']);
+    assert.deepEqual(codexSettings(codexResumed?.args ?? []), [...windowsKind, 'web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false', 'model_reasoning_effort=low']);
     assert.ok(codexResumed?.args.includes('resume'));
     assert.deepEqual(recordOf(r, 'c1').chosen, { host: 'claude', model: 'opus', effort: 'low' });
     assert.deepEqual(recordOf(r, 'c2').chosen, { host: 'codex', model: 'gpt-6.1-sol', effort: 'low' });
@@ -542,7 +568,7 @@ test('a turn that names no effort passes none, keeps the inherited level, and th
     assert.ok(!claude?.args.includes('--effort'));
     assert.equal(flagValue(claude?.args ?? [], '--model'), 'claude-opus-5-5', 'a full name typed by the person reaches the host');
     assert.equal(claude?.env.CLAUDE_CODE_EFFORT_LEVEL, 'max');
-    assert.deepEqual(codexSettings(codex?.args ?? []), ['web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false']);
+    assert.deepEqual(codexSettings(codex?.args ?? []), [...windowsKind, 'web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false']);
     assert.ok(!codex?.args.includes('--model'));
     assert.deepEqual(recordOf(r, 'c1').chosen, { host: 'claude', model: 'claude-opus-5-5', effort: null });
     assert.deepEqual(recordOf(r, 'c2').chosen, { host: 'codex', model: null, effort: null });

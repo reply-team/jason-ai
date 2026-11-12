@@ -186,6 +186,13 @@ Claude Code.
   refused before the host starts, a key provider's turn on it included. The reason is one setting: every Claude Code turn
   carries `permissions.blockReadsOutsideWorkingDirectories`, so that a command which reads a file outside the folders
   the chat works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
+  From 2.1.285 on a turn also passes `--no-chrome`, the first version whose changelog names the flag; below it the
+  turn's settings alone keep the browser out.
+- **Codex's floor is 0.122.0**, read the same way before each turn on it: a Codex turn leaves your `config.toml` unread
+  (`--ignore-user-config`, which Codex has from that version on). Below it, or with a version that cannot be read, the
+  turn is refused before Codex starts, with a sentence that says to update Codex. **The chat does not read your Codex
+  config.toml, so a provider or profile set there is not used; connect a key on the Connect card.** Nor are the MCP
+  servers it names loaded, since Codex asks no one before such a tool runs; its sign-in is still used.
 - **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers; it acts through nothing. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
@@ -260,12 +267,19 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   Also refused: any `reply` command but the two above, any read or write under the data directory outside the chat folder (the
   settings file and the run file first among them), a command that names that directory, a command that names `JASON_CONFINED`, a command that changes
   where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a card to show whole, and a write by the
-  agent to the chat's own instruction files and to the `.claude`, `.agents` and `.codex` folders of the chat folder.
+  agent to the chat's own instruction files, to the `.claude`, `.agents` and `.codex` folders of the chat folder and to
+  its `.mcp.json`.
 - **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the chat
   folder and the added folders; a write outside them, or in a campaign's or a project's folder to a file the host loads
-  (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a web page, once per site
-  per chat, the documentation pages below aside. A path that begins with `~`
-  or is spelled in a way the system would read differently is a card too.
+  (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
+  Code reads its MCP servers from (`.mcp.json`, `.claude.json`) wherever it is, and a `claude mcp` or `codex mcp` command,
+  each time, never "Allow for this chat"; a web page, once per site per chat, the documentation pages below aside. A
+  path that begins with `~` or is spelled in a way the system would read differently is a card too.
+- **A tool of an MCP server of yours is a card each time, if one ever reaches a turn.** None does in this version (see
+  What is not here); the fence stands anyway. Its card says "Use one of your own tools", the server and the tool, and the
+  input exactly as the host would send it, never cut: an input too long to show whole is refused, and so is one any of
+  whose texts would be refused as a command (a verb of the deny list, `JASON_CONFINED`, the data directory). Full access
+  does not run it. "Allow for this chat" is never offered for it.
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
   pages of `developers.openai.com`, and all of `docs.reply.io`. A page counts only when its address is `https`, at most 300
@@ -432,6 +446,8 @@ updater's cache named above.
 
 ## What is not here
 
-Managing Reply accounts beyond connecting and reconnecting one, Codex acting in the chat (it reads and advises), your own connectors and MCP
-servers in the chat, a marketplace and plugins in frames, and a Linux build for arm64 are not here. Everything in this
+Managing Reply accounts beyond connecting and reconnecting one, Codex acting in the chat (it reads and advises), your own tools in the
+chat, a marketplace and plugins in frames, and a Linux build for arm64 are not here. Nothing of your own tools reaches a
+turn: a Claude Code turn loads none of your MCP servers, claude.ai connectors or browser, and a Codex turn does not read
+your `config.toml`, so the MCP servers it names are not loaded either. Everything in this
 page that a real machine shows and only a real machine shows is marked as built so.

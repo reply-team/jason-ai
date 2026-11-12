@@ -67,7 +67,7 @@ import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts
 import { codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesSince, newestId, take, trimmed, type LineEntry } from './feed.ts';
-import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
+import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs } from './programs.ts';
 import { hosts, keyedFolder, keyProvider, providerEnvironment, withoutKey, withoutWholeKey } from './providers-model.ts';
@@ -802,8 +802,10 @@ export class Chat {
             // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
             // answering while the version is read, so a second send is refused as busy. The version read also says
             // whether the model named takes the effort named.
-            const version = resolved.program === 'claude' ? await this.#claudeVersion() : null;
-            const below = resolved.program === 'claude' ? floorSentence(version) : null;
+            // Codex has a floor of its own, the first version that leaves the person's configuration unread.
+            const hostVersion = resolved.program === 'claude' ? await this.#claudeVersion() : await this.#codexVersion();
+            const version = resolved.program === 'claude' ? hostVersion : null;
+            const below = resolved.program === 'claude' ? floorSentence(hostVersion) : codexFloorSentence(hostVersion);
             // Full access holds only on a Claude Code whose hook blocks the tool when it fails: below that, the chat goes
             // back to Ask first and the send is refused, saying why.
             const unhooked = below === null && mode === 'full_access' ? fullAccessSentence(version) : null;
@@ -818,7 +820,7 @@ export class Chat {
                 if (unhooked !== null) this.#changeMode(conversation, 'ask_first', false);
                 return refuse(held);
             }
-            await this.#turn(conversation, text, resolved, launch, running);
+            await this.#turn(conversation, text, resolved, launch, running, hostVersion ?? '');
         } catch (error) {
             this.#running.delete(conversation.id);
             this.#setupTurns.delete(conversation.id);
@@ -881,6 +883,11 @@ export class Chat {
     /** Claude Code's version, read before each turn on it and never remembered; null when it cannot be read. */
     async #claudeVersion(): Promise<string | null> {
         return printedVersion(await this.#options.programs.run('claude', ['--version'], { timeoutMs: versionLimitMs }));
+    }
+
+    /** Codex's version, read before each turn on it and never remembered; null when it cannot be read. */
+    async #codexVersion(): Promise<string | null> {
+        return printedCodexVersion(await this.#options.programs.run('codex', ['--version'], { timeoutMs: versionLimitMs }));
     }
 
     #conversationOf(chatId: string): Conversation | undefined {
@@ -1067,7 +1074,7 @@ export class Chat {
         }
     }
 
-    async #turn(conversation: Conversation, text: string, resolved: Resolved, launch: { file: string; prefix: string[] }, running: Running): Promise<void> {
+    async #turn(conversation: Conversation, text: string, resolved: Resolved, launch: { file: string; prefix: string[] }, running: Running, version: string): Promise<void> {
         const { paths } = this.#options;
         const replyTo = running.replyTo;
         const main = conversation.main === true;
@@ -1152,9 +1159,9 @@ export class Chat {
                 const settingsFile = full ? writeTurnSettings(paths.turns, id, endpoint.hookUrl, secret) : undefined;
                 const rules = [...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop)), ...chatRules(this.#platform, paths.chat)];
                 argsFor = (resumed) =>
-                    claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed });
+                    claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed, version });
             } else {
-                argsFor = (resumed) => codexArguments({ model: resolved.model, effort: resolved.effort, resume: resumed });
+                argsFor = (resumed) => codexArguments({ platform: this.#platform, model: resolved.model, effort: resolved.effort, resume: resumed });
             }
         } catch (error) {
             // Whatever the turn had opened is closed again: its endpoint, its broker turn and its file.

@@ -20,7 +20,7 @@ import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath
 import { desktopPaths } from '../src/paths.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
-const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: ['Read(//data/desktop/turns)'] };
+const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: ['Read(//data/desktop/turns)'], version: '2.1.300' };
 const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
 const values = (args: string[], flag: string) => {
     const rest = args.slice(args.indexOf(flag) + 1);
@@ -45,7 +45,7 @@ test('Plan only starts Claude Code in plan mode, with the classifier kept out, t
     const args = claudeArguments({ ...base, mode: 'plan_only' });
     assert.equal(after(args, '--permission-mode'), 'plan');
     assert.equal(after(args, '--settings'), planTurnSettings);
-    assert.deepEqual(JSON.parse(planTurnSettings), { permissions: { blockReadsOutsideWorkingDirectories: true }, useAutoModeDuringPlan: false });
+    assert.deepEqual(JSON.parse(planTurnSettings), { permissions: { blockReadsOutsideWorkingDirectories: true }, useAutoModeDuringPlan: false, disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }] });
     const allowed = values(args, '--allowedTools');
     assert.ok(allowed.includes('Bash(jason campaign list:*)'));
     assert.ok(!allowed.includes('Bash(jason campaign create:*)'), 'a verb that changes something is not allowed in Plan only');
@@ -73,6 +73,8 @@ test('the Full access turn\'s settings: reads outside the folders still blocked,
         permissions: { blockReadsOutsideWorkingDirectories: true },
         disableAllHooks: false,
         allowedHttpHookUrls: ['http://127.0.0.1:4100/hook'],
+        disableClaudeAiConnectors: true,
+        deniedMcpServers: [{ serverName: 'claude-in-chrome' }],
         hooks: {
             PreToolUse: [
                 {

@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
+import { codexWindowsSandbox } from '../src/chat-hosts.ts';
 import { fullAccessOffered, fullAccessSentence, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
 
@@ -377,6 +378,17 @@ test('Full access is refused when it is chosen, before any confirmation, where i
     assert.equal(r.confirms, 0, 'no confirmation is shown for a mode that cannot apply');
     assert.equal(r.chat.open(id).mode, 'ask_first');
     assert.equal((await r.chat.setMode(id, 'plan_only', 'codex')).mode, 'plan_only', 'the other modes apply on any host');
+});
+
+test('a Codex turn in Plan only leaves the person\'s config.toml unread as every other mode does, and on Windows names the elevated sandbox', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    assert.equal((await r.chat.setMode(id, 'plan_only', 'codex')).mode, 'plan_only');
+    await r.turn(id, 'hello', { host: 'codex' });
+    assert.deepEqual(r.started, ['plan_only']);
+    const args = r.hosts().at(-1)?.args ?? [];
+    assert.ok(args.includes('--ignore-user-config'));
+    assert.equal(args.includes(codexWindowsSandbox), process.platform === 'win32');
 });
 
 test('Start afresh returns a chat in Full access to Ask first', async (t) => {

@@ -42,6 +42,9 @@ if (process.env.STUB_HANG === name) {
     process.stdout.write(answer.stdout ?? '');
     process.stderr.write(answer.stderr ?? '');
     process.exitCode = answer.exit ?? 0;
+} else if (said === '--version' && name === 'codex' && process.env.STUB_CODEX_VERSION) {
+    // What Codex says of its version, as `codex-cli <version>`.
+    process.stdout.write(`codex-cli ${process.env.STUB_CODEX_VERSION}\n`);
 } else if (said === '--version') {
     process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.19.0'}\n` :'10.9.2\n');
 } else if (name === 'reply' && said === 'auth status --json') {

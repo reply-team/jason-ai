@@ -30,6 +30,20 @@ Claude Code's version is read with `claude --version` at each listing of the hos
 remembered: a Claude Code older than 2.1.257 (`src/host-version.ts`), or one whose version cannot be read, is listed on
 the Connect card and in the chat's host list with a sentence naming the version found, that floor and how to update it,
 cannot be chosen there, and has every chat turn sent to it refused before the host starts, a key provider's included.
+From 2.1.285 on (`noChromeFrom`) every turn also passes `--no-chrome`: Anthropic's changelog does not say which version
+added the flag, and 2.1.285 is the first whose entry names it, so below it the turn's settings alone keep the browser out.
+
+Codex's version is read with `codex --version` before each chat turn on it, never remembered: a Codex older than 0.122.0
+(`codexFloor`), the first whose `exec` takes `--ignore-user-config`, or one whose version cannot be read, has the turn
+refused before Codex starts, with a sentence that says to update Codex.
+
+**Nothing of the person's own tools reaches a turn.** A Claude Code turn runs `--strict-mcp-config` with the turn's MCP
+file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true` and deny the browser's
+server by name (`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) in every mode. Every Codex turn, Plan only
+included, runs with `--ignore-user-config`: the chat does not read your Codex config.toml, so a provider or profile set
+there is not used; connect a key on the Connect card. Nor are the MCP servers it names loaded, since a Codex turn asks no
+one before such a tool runs. The page says the sentence under the composer while Codex is the chat's host. Its sign-in
+is still read from `CODEX_HOME`.
 
 A link Reply answers for connecting an account is checked before it is shown: https with no user, port or fragment, and
 either the connect page's exact path with no query on a host name (never an address written as numbers), any path on
@@ -255,8 +269,9 @@ applies to the turns a person starts by sending, from the next one on.
     is not the program of a plain `jason <verb>` (handed to `xargs`, inside an interpreter's one-liner or a list literal,
     behind a variable or an expansion), `eval`, a script piped into a shell or an interpreter, a search variable, a
     guarded name (a person's memory files in a campaign's or a project's folder, a folder's marker, a repository's
-    hooks), a local file named jason, and a `~` or a glob that could expand into the data directory; and, of what the host
-    still asks about, a deletion;
+    hooks, the files Claude Code reads MCP servers from), a `claude mcp` or `codex mcp` command, a local file named
+    jason, a `~` or a glob that could expand into the data directory, and every call of a tool of the person's own MCP
+    server; and, of what the host still asks about, a deletion;
   - **runs** with no question for what the model allows, the tools that run nothing (skills, web search, subagents, the
     task list) and the plain cards: a command it read, a write in or outside the working folders, a page, a read outside
     the folders.
@@ -271,9 +286,23 @@ applies to the turns a person starts by sending, from the next one on.
   `env` that clears the environment (`-i`, `-`, `-u`, `--unset`) or `exec -c`, in a command part that runs a jason,
   clears the confining variable without naming it, and is refused in every mode; an `env` elsewhere in a command list
   is not.
-- **The chat's own names, by every route.** The chat's instructions and its `.claude`, `.agents` and `.codex` folders
-  directly in the chat folder are refused in every mode to a shell command as to the file tools, and the host is denied
-  edits of them (`chatRules`).
+- **The chat's own names, by every route.** The chat's instructions, its `.claude`, `.agents` and `.codex` folders and its
+  `.mcp.json` directly in the chat folder are refused in every mode to a shell command as to the file tools, and the
+  host is denied edits of them (`chatRules`).
+- **The files and commands that add an MCP server are a card each time.** A write of `.mcp.json` anywhere else, or of
+  `.claude.json` anywhere (Claude Code keeps the user's and the local scopes' servers there), is a guarded name's card,
+  and so is a command that runs `claude` or `codex` with the word `mcp` after it (`claude mcp add`, `codex mcp add`,
+  through any folder or `npx` package name, and as the shell would read a re-spelled word). None is covered by "Allow
+  for this chat", and Full access holds each.
+- **A tool of the person's own MCP server is a card each time.** No such server reaches a turn in this version; the
+  fence stands anyway. A tool named `mcp__<server>__<tool>` of any server but the chat's own is judged before the
+  command check, so an argument named `command` or `file_path` is never read as a shell command or a file tool's path:
+  the card is "Use one of your own tools", its detail the server and the tool, then the input exactly as the host sent
+  it (`JSON.stringify`), never cut. Before the card, an input whose detail would be longer than the card shows whole
+  (4,000 characters) is refused, and so is one any of whose strings, at any depth and the keys of its objects among
+  them, is refused when read as a command's text: a deny-list verb or operation, plainly or re-spelled, `JASON_CONFINED`,
+  the data directory's variable or the data directory in any spelling, the settings file and the run file included.
+  "Allow for this chat" is never offered for it, Plan only refuses it, and Full access holds it on every call.
 - **The chat folder's top is the desktop's, in every mode.** What the desktop placed in it is recorded outside it,
   under `<data>/desktop/skills-records/`, which the chat neither reads nor writes: the record `jason skills install`
   writes of each deployment, put beside the skills only while the CLI runs and moved out after, and the Reply skills'

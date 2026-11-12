@@ -62,12 +62,17 @@ interface GuardedName {
     /**
      * What the name is directly in the chat folder, where a write of it, or under it, is refused: the chat's own
      * instructions, which the desktop writes before each turn or a host reads beside them, or the chat's own agent
-     * settings and skills, which the desktop deploys and the host reads at every turn.
+     * settings and skills, which the desktop deploys and the host reads at every turn, or a file that would name MCP
+     * servers for the chat's own agent, which the desktop never writes.
      */
-    chatsOwn?: 'instructions' | 'configuration';
+    chatsOwn?: 'instructions' | 'configuration' | 'servers';
 }
 
 const instructionsTitle = 'Change instructions an agent reads';
+/** The card's title for a tool of an MCP server of the person's own: one title, whatever the server or the tool. */
+export const personsToolTitle = 'Use one of your own tools';
+/** The card's title for a command that changes the MCP servers an agent host loads (`claude mcp`, `codex mcp`). */
+export const serversTitle = 'Change the MCP servers an agent loads';
 const loadsTitle = 'Change the skills or settings an agent loads';
 
 /**
@@ -75,10 +80,12 @@ const loadsTitle = 'Change the skills or settings an agent loads';
  * Claude Code for the next turn; `.git` holds a repository's hooks and configuration, which git runs; `.jason` holds the
  * marker a folder is known by; `.agents` holds the skills Codex and the other hosts load, and `.codex`, `.gemini`,
  * `.cursor` and `.copilot` the hosts' own settings; the instruction files are what a host reads as its instructions, the
- * person's memory file among them, which every role session in a campaign's folder loads. A write under any, anywhere on
- * the machine, is a card each time, never covered by "always"; a read in a working folder is not. Directly in the chat
- * folder, the four instruction files the hosts read and the three folders of the chat's agent configuration are the
- * chat's own (`chatsOwn`): a write of one, or under one, is refused there. One declaration, which the .NET suite holds to
+ * person's memory file among them, which every role session in a campaign's folder loads; `.mcp.json` names the MCP
+ * servers of the project at the folder Claude Code runs in, and `.claude.json` those of the user's and the local scopes,
+ * so a write of either could put a server under a name the person chose. A write under any, anywhere on the machine, is
+ * a card each time, never covered by "always"; a read in a working folder is not. Directly in the chat folder, the four
+ * instruction files the hosts read, the three folders of the chat's agent configuration and the project's server file
+ * are the chat's own (`chatsOwn`): a write of one, or under one, is refused there. One declaration, which the .NET suite holds to
  * the names the runtime and the hosts' table use.
  */
 export const guardedNames: readonly GuardedName[] = [
@@ -97,6 +104,8 @@ export const guardedNames: readonly GuardedName[] = [
     { name: 'GEMINI.md', title: instructionsTitle },
     { name: '.cursorrules', title: instructionsTitle },
     { name: '.github/copilot-instructions.md', title: instructionsTitle },
+    { name: '.mcp.json', title: serversTitle, chatsOwn: 'servers' },
+    { name: '.claude.json', title: serversTitle },
 ];
 
 /**
@@ -140,7 +149,13 @@ const confinedRefusal = 'That command names JASON_CONFINED, which confines the j
 const lookupRefusal = 'That command changes where the shell finds a program, so the jason it would start may not be the desktop\'s: the chat never runs it. Nothing was run.';
 const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';
 const configurationRefusal = 'That folder is the chat\'s own agent settings and skills, which the desktop keeps: the chat never changes it. Nothing was done.';
-const longRefusal = 'That command is longer than the card can show whole, so nobody could read what they would allow: the chat never runs it. '
+const serversRefusal = 'That file would name MCP servers for the chat\'s own agent, which only the person chooses: the chat never changes it. Nothing was done.';
+
+/** The refusal of a write of, or under, one of the chat's own names directly in the chat folder. */
+function ownRefusal(kind: NonNullable<GuardedName['chatsOwn']>): string {
+    return kind === 'instructions' ? instructionsRefusal : kind === 'servers' ? serversRefusal : configurationRefusal;
+}
+const longRefusal ='That command is longer than the card can show whole, so nobody could read what they would allow: the chat never runs it. '
     + 'Put the content in a file in the chat\'s folder and give it as --file - < <file>, or split the work. Nothing was run.';
 
 const pathsOf = (platform: Platform) => (platform === 'win32' ? win32 : posix);
@@ -263,7 +278,7 @@ function judgeWrite(scope: ChatScope, path: string): Judgement {
     const found = guardAt(scope, parts);
     const guarded = found?.guarded;
     if (working?.chat === true && found?.at === 0 && guarded?.chatsOwn !== undefined) {
-        return { verdict: 'deny', message: guarded.chatsOwn === 'instructions' ? instructionsRefusal : configurationRefusal };
+        return { verdict: 'deny', message: ownRefusal(guarded.chatsOwn) };
     }
     if (guarded !== undefined) return { verdict: 'ask', title: guarded.title, detail: shorten(path), remember: null };
     if (working !== null && parts.length === 1 && isJasonFile(scope, parts[0] ?? '')) return { verdict: 'ask', title: jasonFileTitle, detail: shorten(path), remember: null };
@@ -701,6 +716,26 @@ function wordNamesData(places: readonly string[], scope: ChatScope): boolean {
     return places.some((path) => inside(scope, data, path) && !inside(scope, chat, path));
 }
 
+/** The programs whose `mcp` command adds, removes or lists the MCP servers that host loads: Claude Code and Codex. */
+const serverHosts: ReadonlySet<string> = new Set(['claude', 'claude-code', 'codex']);
+
+/**
+ * True when a command part, as written or as a shell would most likely read it (`readingsOf`), runs Claude Code or Codex,
+ * by any folder or package name, and holds the word `mcp` after it, whatever options stand between: the command that
+ * adds a server to the person's own configuration, which a later turn of theirs may load. A part that only names the
+ * word in a text is a card too: the card shows what it is.
+ */
+function changesServers(command: string, scope: ChatScope): boolean {
+    for (const text of new Set([command, ...readingsOf(command)])) {
+        for (const part of text.split(/&&|\|\||\$\(|[;|&`\n\r<>(){}]/)) {
+            const tokens = part.trim().split(/\s+/).map(unquoted).filter((token) => token !== '');
+            const at = tokens.findIndex((token) => serverHosts.has(programOf(scope.platform, token).toLowerCase()));
+            if (at >= 0 && tokens.slice(at + 1).some((token) => token.toLowerCase() === 'mcp')) return true;
+        }
+    }
+    return false;
+}
+
 function judgeCommand(tool: string, command: string, scope: ChatScope): Judgement {
     if (namesConfinedVariable(command)) return { verdict: 'deny', message: confinedRefusal };
     if (changesSearch(command)) return { verdict: 'deny', message: lookupRefusal };
@@ -716,6 +751,7 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     // After every refusal and before any card: a card cuts its detail at the limit, so Allow would run what nobody saw.
     // A grant is looked at only for a card, so none allows it either.
     if (command.length > detailLimit) return { verdict: 'deny', message: longRefusal };
+    if (changesServers(command, scope)) return { verdict: 'ask', title: serversTitle, detail: shorten(command), remember: null };
     // A word under a guarded name in a working folder: that guard's card, never covered by a grant.
     // A command that names a search variable otherwise, a word under a guarded name, or a jason of the agent's own: each
     // is its own card, never covered by a grant.
@@ -756,11 +792,61 @@ function writtenText(tool: string, input: Record<string, unknown>): string[] {
  * a program assembles at run time is not seen here. Null for any other tool, and for text that shows none of these.
  */
 export function writtenRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
-    for (const text of writtenText(tool, input)) {
-        if (namesConfinedVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || jasonIn(text, scope) === 'deny') return contentRefusal;
-        if (respelledRefusal(text, scope) !== null) return contentRefusal;
-    }
+    for (const text of writtenText(tool, input)) if (textRefused(text, scope)) return contentRefusal;
     return null;
+}
+
+/**
+ * True when a text, read as a command's text is read, plainly and a second time over its normalised form, runs a
+ * deny-list command or names a deny-list operation by its dot, names the confining variable, the data directory's
+ * variable or the installation's data in any literal spelling, or clears the environment around a jason.
+ */
+function textRefused(text: string, scope: ChatScope): boolean {
+    if (namesConfinedVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || jasonIn(text, scope) === 'deny') return true;
+    return respelledRefusal(text, scope) !== null;
+}
+
+/** True for a tool of an MCP server other than the chat's own: `mcp__<server>__<tool>`. */
+function isPersonsTool(tool: string): boolean {
+    return tool.startsWith('mcp__') && !tool.startsWith(`mcp__${serverName}__`);
+}
+
+const personsInputRefusal = 'That tool\'s input names a command or an operation that is a person\'s own act or changes the installation, the variable that confines jason, or the installation\'s own data: the chat never sends it. Nothing was sent.';
+const personsLongRefusal = 'That tool\'s input is longer than the card can show whole, so nobody could read what they would allow: the chat never sends it. Nothing was sent.';
+
+/** Every string of a tool's input at any depth, the keys of its objects among them. */
+function stringsOf(input: unknown): string[] {
+    const found: string[] = [];
+    const pending: unknown[] = [input];
+    while (pending.length > 0) {
+        const value = pending.pop();
+        if (typeof value === 'string') found.push(value);
+        else if (Array.isArray(value)) pending.push(...value);
+        else if (value !== null && typeof value === 'object') {
+            for (const [key, each] of Object.entries(value)) {
+                found.push(key);
+                pending.push(each);
+            }
+        }
+    }
+    return found;
+}
+
+/**
+ * A tool of an MCP server of the person's own, whatever its arguments are named: never read as a shell command or a
+ * file tool, since the server, not a shell, does what it is sent. Its card's detail is the server and the tool, then the
+ * input exactly as the host sent it (`JSON.stringify`), never cut: an input whose detail would be longer than the card
+ * shows whole is refused, since Allow would send what nobody saw. Before that, every string of the input at any depth is
+ * read as a command's text is (`textRefused`), and one that shows a refusal is refused with no card. Its card is never
+ * covered by "always".
+ */
+function judgePersonsTool(tool: string, input: Record<string, unknown>, scope: ChatScope): Judgement {
+    const rest = tool.slice('mcp__'.length);
+    const cut = rest.indexOf('__');
+    const detail = `${cut < 0 ? rest : rest.slice(0, cut)} · ${cut < 0 ? '' : rest.slice(cut + 2)}\n${JSON.stringify(input)}`;
+    if (detail.length > detailLimit) return { verdict: 'deny', message: personsLongRefusal };
+    if (stringsOf(input).some((text) => textRefused(text, scope))) return { verdict: 'deny', message: personsInputRefusal };
+    return { verdict: 'ask', title: personsToolTitle, detail, remember: null };
 }
 
 /** The body of a Bash `$'...'` string as the shell reads it: its escapes decoded. */
@@ -875,7 +961,7 @@ function chatsOwnPlace(places: readonly string[], scope: ChatScope): string | nu
         const { parts, working } = guardedParts(scope, path);
         if (working?.chat !== true) continue;
         const found = guardAt(scope, parts);
-        if (found?.at === 0 && found.guarded.chatsOwn !== undefined) return found.guarded.chatsOwn === 'instructions' ? instructionsRefusal : configurationRefusal;
+        if (found?.at === 0 && found.guarded.chatsOwn !== undefined) return ownRefusal(found.guarded.chatsOwn);
     }
     return null;
 }
@@ -1010,7 +1096,8 @@ export function deletes(command: string, platform: Platform): boolean {
  * The one judgement of Full access, which the turn's hook and the broker share: refused where the model refuses, or where
  * the file being written shows what it refuses; held (`heldSentence`) where the model could only have shown a card
  * because it cannot read the act plainly or the act would change what an agent loads (a guarded name, a search variable,
- * a local jason, a `~` or a glob into the data directory, a `jason` not plainly read); runs with no question where the
+ * a local jason, a `~` or a glob into the data directory, a `jason` not plainly read), and on every call of a tool of the
+ * person's own MCP server; runs with no question where the
  * model allows, for the tools that run nothing, and for the plain cards: a command it read, a write in or outside the
  * working folders, a page, a read outside the folders.
  */
@@ -1019,6 +1106,9 @@ export function fullAccessJudgement(tool: string, input: Record<string, unknown>
     if (judged.verdict === 'deny') return { outcome: 'refused', message: judged.message };
     const written = writtenRefusal(tool, input, scope);
     if (written !== null) return { outcome: 'refused', message: written };
+    // A tool of the person's own MCP server is held on every call: its arguments are no shell words, so Jason cannot
+    // read what the program does with them, whatever they are named.
+    if (isPersonsTool(tool)) return { outcome: 'held', message: heldSentence };
     const command = input['command'];
     if (typeof command === 'string' && unreadableCommand(command, scope)) return { outcome: 'held', message: heldSentence };
     if (judged.verdict === 'allow' || toolsThatRunNothing.has(tool)) return { outcome: 'runs' };
@@ -1123,6 +1213,8 @@ export function judge(tool: string, input: Record<string, unknown>, scope: ChatS
 
 function judgeAsked(tool: string, input: Record<string, unknown>, scope: ChatScope): Judgement {
     if (tool.startsWith(`mcp__${serverName}__`)) return { verdict: 'deny', message: ownToolRefusal };
+    // Before any table and before the command check: an argument named `command` or `file_path` is the server's to read.
+    if (isPersonsTool(tool)) return judgePersonsTool(tool, input, scope);
     if (tool === 'Glob') return judgeGlob(input, scope);
     const reader = readers[tool];
     if (reader !== undefined) {
