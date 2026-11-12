@@ -39,6 +39,8 @@ export default defineConfig({
                     environment: 'happy-dom',
                     include: ['src/**/*.screen.test.tsx'],
                     setupFiles: ['src/test/setup.ts'],
+                    // Above the longest wait the screens' setup allows, so a wait fails with its own message, not the test's.
+                    testTimeout: 30_000,
                 },
             },
         ],
