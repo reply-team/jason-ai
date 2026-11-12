@@ -41,7 +41,11 @@ public sealed class DoorServiceTests : IDisposable
 
     private sealed record Seen(string Method, string Path, string? Authorization, string? ContentType, string Body);
 
-    /// <summary>A runtime that answers every call with <paramref name="status"/> and <paramref name="body"/>; with <paramref name="warmFirst"/> its first answer is at once, so a test can warm the engine and the HTTP client before it times a slow one.</summary>
+    /// <summary>
+    /// A runtime that answers every call with <paramref name="status"/> and <paramref name="body"/>; with
+    /// <paramref name="warmFirst"/> its first answer is at once, so a test can warm the engine and the HTTP client
+    /// before it times a slow one.
+    /// </summary>
     private LoopbackHttpServer Api(int status = 200, string body = """{"items":[],"next_cursor":null}""", int delayMs = 0, bool warmFirst = false)
     {
         var served = 0;
