@@ -294,6 +294,14 @@ Under the chat, these things differ from a terminal:
   the content comes on standard input: `--file - < contacts.json` or a here-document, and for long content a file in the
   chat folder given as `--file - < file`. The reason is that `jason` opens such a file itself, which the host's file rules
   never see.
+- **The person's own words and the installation's changes are refused.** The same `JASON_CONFINED=1` makes `jason` refuse, locally
+  before any request, exit 1 and one sentence, every command of the deny list's command half: approving, rejecting,
+  answering and the rest of a person's own word, and the commands that change the installation. Inside the desktop's
+  chat a decision is given in the page, or in a terminal, where the variable is not set. No attempt id in the
+  environment lifts the refusal: a role's own work never carries the variable, because the runtime drops it from what it
+  launches. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and an
+  attempt id in the environment is a claim, not a proof. The deny list's command lines are written from the CLI's one
+  table of these commands.
 - **The provider check names a program, never a path.** `jason status --provider-cli <program>` runs a bare name found on
   the search path, and a name with a directory in it is neither looked up nor started; run a path from a terminal.
 - **A credential in an environment variable does not reach the commands the agent runs.** Every Claude Code turn sets

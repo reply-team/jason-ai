@@ -101,6 +101,64 @@ public class LaunchedActorTests
     }
 
     /// <summary>
+    /// A launched executor's environment never carries <c>JASON_CONFINED</c> (the runtime drops it from what it launches),
+    /// so the two verbs the table refuses for a chat turn still reach the runtime for an attempt: the CLI does not
+    /// answer them with the confinement sentence, and the runtime does answer them.
+    /// </summary>
+    [Fact]
+    public async Task An_attempts_report_submit_and_workitem_resume_reach_the_runtime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "jason-launched-actor", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "config"));
+        var paths = new JasonPaths(root);
+        await File.WriteAllTextAsync(paths.UserSettingsFile, Settings, Ct);
+
+        try
+        {
+            AssertOk(await StartRuntimeAsync(root));
+            AssertOk(await JasonAsync(root, null, "profile", "create", "local-host", "--host", "claude_code", "--program", StandInHost));
+            var campaign = (string)Json(await JasonAsync(root, null, "campaign", "create", "--name", "Work"))["id"]!;
+            AssertOk(await JasonAsync(root, null, "campaign", "start", campaign));
+            var ancestor = await AttemptOfAsync(root, campaign, "local-host");
+
+            // Exactly the launcher's environment: the attempt set, the variable absent.
+            Assert.Null(Environment.GetEnvironmentVariable(Confinement.Variable));
+
+            var report = await JasonAsync(
+                root,
+                ancestor.AttemptId,
+                "report",
+                "submit",
+                "--effect",
+                "email_sent",
+                "--tool",
+                "some-other-cli 1.2.3",
+                "--summary",
+                "A follow-up was sent by hand.",
+                "--occurred-at",
+                "2026-09-17T11:04:00Z");
+            AssertReached(report);
+            Assert.StartsWith("rpt_", (string)Json(report)["id"]!, StringComparison.Ordinal);
+
+            // The item has finished, so the runtime refuses to resume it; what matters is that the runtime is the one saying so.
+            var resumed = await JasonAsync(root, ancestor.AttemptId, "workitem", "resume", ancestor.WorkItemId);
+            AssertReached(resumed);
+            Assert.Contains("\"error\"", resumed.Output + resumed.Error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await JasonAsync(root, null, "runtime", "stop");
+            Delete(root);
+        }
+    }
+
+    private static void AssertReached(CliResult result) =>
+        Assert.DoesNotContain(
+            Jason.Cli.ConfinedVerbs.Sentence,
+            result.Output + result.Error,
+            StringComparison.Ordinal);
+
+    /// <summary>
     /// One finished agent attempt that ran under the named profile, so there is a real run for the next piece of
     /// work to have been created by.
     /// </summary>

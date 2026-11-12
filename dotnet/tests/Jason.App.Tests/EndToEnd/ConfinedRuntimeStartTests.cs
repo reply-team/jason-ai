@@ -1,17 +1,19 @@
+using Jason.Cli;
 using Jason.Contracts.Execution;
 
 namespace Jason.App.Tests.EndToEnd;
 
 /// <summary>
-/// <c>JASON_CONFINED</c> confines the CLI call it is set on, and <c>jason runtime start</c> with the variable set starts
-/// a runtime as it does without it. The start drops the variable from the runtime it starts, so this row shows only that
-/// the start is not broken by it; that the runtime itself is indifferent is held by the foreground row in
-/// <see cref="EndToEndTests"/>, which hands the variable to the runtime's own environment.
+/// <c>runtime</c> is a whole noun in <see cref="ConfinedVerbs"/>, so <c>jason runtime start</c> under
+/// <c>JASON_CONFINED</c> is refused with the sentence before any request: no runtime is started. What the old row
+/// also protected, that a runtime started where the refusal is not in play does not carry the variable on, is held by
+/// <c>ConfinedStartTests</c> in the CLI's tests, and the runtime's indifference to the variable by the foreground row
+/// in <see cref="EndToEndTests"/>.
 /// </summary>
 public class ConfinedRuntimeStartTests
 {
     [Fact]
-    public async Task A_runtime_started_with_the_variable_set_starts_as_it_does_without_it()
+    public async Task Under_the_variable_runtime_start_is_refused_with_the_sentence_and_no_runtime_is_started()
     {
         using var it = GoldenPath.Create("start-confined");
         var confined = new Dictionary<string, string> { [Confinement.Variable] = "1" };
@@ -19,9 +21,9 @@ public class ConfinedRuntimeStartTests
         var started = await GoldenPath.JasonAsync(it, confined, "runtime", "start");
         try
         {
-            GoldenPath.AssertSuccess(started);
-            Assert.NotNull(GoldenPath.ReadDescriptor(it.Paths));
-            GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, confined, "runtime", "status"));
+            Assert.Equal(1, started.ExitCode);
+            Assert.Equal(ConfinedVerbs.Sentence, started.Error.Trim());
+            Assert.Null(GoldenPath.ReadDescriptor(it.Paths));
         }
         finally
         {

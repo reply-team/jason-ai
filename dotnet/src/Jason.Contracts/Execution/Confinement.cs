@@ -3,7 +3,8 @@ namespace Jason.Contracts.Execution;
 /// <summary>
 /// The variable that confines one call of the CLI. Set to any non-empty value, an option of an operation verb that
 /// reads a file's content into a request takes only standard input, and <c>status --provider-cli</c> runs only a
-/// program it finds by a bare name in a fully qualified entry of the search path. It confines the call it is set on and
+/// program it finds by a bare name in a fully qualified entry of the search path. It also refuses, before any request, every command of <c>Jason.Cli</c>'s <c>ConfinedVerbs</c>: a person's own word and the
+/// acts that change an installation, a higher bar and not a boundary. It confines the call it is set on and
 /// nothing that call starts: three starts drop it, a runtime the CLI starts, the role work a runtime launches and the
 /// terminal <c>session open</c> opens; every other child inherits it, and none reads it. The CLI and the runtime read
 /// the name from here, and nothing else in .NET
