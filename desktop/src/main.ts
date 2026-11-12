@@ -36,7 +36,7 @@ import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
-import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
+import { readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
 import { askMailboxConfirmation } from './reply-links.ts';
@@ -270,12 +270,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const registration = linkRegistration(process.platform, app.isPackaged, process.execPath);
     if (registration !== null && !app.setAsDefaultProtocolClient(registration.scheme, registration.path, registration.args)) log.warn('deep_link_registration_failed', {});
 
-    let settings: DesktopSettings = readSettings(paths.settings);
-    // A new installation meets Light, and is told so in its settings, so its second start is not an existing one's.
-    if (newInstallation && settings.theme === null) {
-        settings = { ...settings, theme: 'light' };
-        writeSettings(paths.settings, settings);
-    }
+    // Written when missing (a new installation meets Light there): the Windows check of Codex's sandbox reads it.
+    let settings: DesktopSettings = settingsAtStart(paths.settings, newInstallation);
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
     const jason = cliAt(executable, env);
     const cli = loggedCli(jason, log);

@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from '../src/theme.ts';
-import { parseSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
+import { parseSettings, settingsAtStart, writeSettings, type DesktopSettings } from '../src/settings.ts';
 
 const base: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: '0.35.0', theme: null };
 
@@ -73,4 +73,29 @@ test('whether the installation is new is decided in the main module before Elect
     const firstKeep = main.indexOf('    keepElectronUnderData();');
     assert.ok(decided > 0 && firstKeep > 0 && decided < firstKeep);
     assert.ok(main.includes('run(links, installationWasNew)'));
+});
+
+test('at start the settings file is written when it is missing, with a new installation meeting Light, and left as it is when it is there', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'settings-start-'));
+    const missing = join(folder, 'existing', 'desktop', 'settings.json');
+    assert.deepEqual(settingsAtStart(missing, false), { feed: null, skillsDeployedFor: null, theme: null });
+    assert.ok(existsSync(missing), 'written although nothing in it differs from the defaults');
+    assert.deepEqual(parseSettings(readFileSync(missing, 'utf8')), { feed: null, skillsDeployedFor: null, theme: null });
+
+    const fresh = join(folder, 'new', 'desktop', 'settings.json');
+    assert.equal(settingsAtStart(fresh, true).theme, 'light');
+    assert.equal(parseSettings(readFileSync(fresh, 'utf8')).theme, 'light');
+
+    const kept = join(folder, 'kept', 'desktop', 'settings.json');
+    writeSettings(kept, { ...base, theme: 'dark' });
+    const before = readFileSync(kept, 'utf8');
+    const at = statSync(kept).mtimeMs;
+    assert.deepEqual(settingsAtStart(kept, true), { ...base, theme: 'dark' });
+    assert.equal(readFileSync(kept, 'utf8'), before);
+    assert.equal(statSync(kept).mtimeMs, at, 'not written again');
+});
+
+test('the main module takes its settings at start from settingsAtStart, so the file is there before any chat', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    assert.ok(main.includes('let settings: DesktopSettings = settingsAtStart(paths.settings, newInstallation);'));
 });

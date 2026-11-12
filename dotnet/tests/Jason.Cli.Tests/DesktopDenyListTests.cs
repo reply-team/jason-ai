@@ -311,12 +311,19 @@ public class DesktopDenyListTests
     private static readonly string[] HostFilesTheTableDoesNotName = [".cursorrules", ".github/copilot-instructions.md"];
 
     /// <summary>
+    /// The files Claude Code reads the MCP servers it starts from: a project's <c>.mcp.json</c> at the folder it runs in,
+    /// and the user's and local scopes in <c>.claude.json</c>. A write of either could add a server under a name the
+    /// person chose.
+    /// </summary>
+    private static readonly string[] ServerFiles = [".mcp.json", ".claude.json"];
+
+    /// <summary>
     /// The desktop's permission model guards, as one declaration, the names whose files act on what runs next: a write
     /// under one is a card each time. It holds the names the runtime and the hosts use, read here from their own tables:
     /// the folder a marker lives in, the person's memory file, every instruction file a harness folder holds beside it, the
     /// first folder of every place a host reads a work directory's skills from, the first folder of every host's own
-    /// settings, and the files the table has no column for. A host or a file added to those tables is red here until the
-    /// model guards it too.
+    /// settings, the files the table has no column for, and the files Claude Code reads its MCP servers from. A host or a
+    /// file added to those tables is red here until the model guards it too.
     /// </summary>
     [Fact]
     public void The_desktop_s_guarded_names_hold_the_runtime_s_and_the_hosts_own_names()
@@ -338,6 +345,7 @@ public class DesktopDenyListTests
             .. AgentHosts.All.Select(facts => facts.WorkSkills.Split('/')[0]),
             .. AgentHosts.All.Select(facts => facts.HomeMarker.Split('/')[0]),
             .. HostFilesTheTableDoesNotName,
+            .. ServerFiles,
         ];
         var missing = expected.Distinct(StringComparer.Ordinal).Where(name => !guarded.Contains(name)).Order(StringComparer.Ordinal).ToList();
 
