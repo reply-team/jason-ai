@@ -290,7 +290,9 @@ jason doctor
 answers the same when the runtime is stopped, will not start, or has never run. Every filter you give must
 hold — a level and everything above it, a campaign, a work item, a moment written with `Z` or an offset —
 and the newest events that match come back, oldest first, exactly as the runtime wrote them; `--limit` says
-how many.
+how many. A runtime that an exception nothing caught ended writes one last line at level `fatal` before it goes —
+the exception's type and the methods it was thrown through, never its message — and `jason logs --level fatal`
+finds it; a runtime gone without that line or its own `stopped` line was ended from outside.
 
 `jason doctor` collects this installation into one file you can read before you share it. **Run it with
 `--dry-run` first**: that composes the whole bundle, writes nothing, and lists what a plain run would
