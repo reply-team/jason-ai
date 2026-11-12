@@ -72,6 +72,28 @@ if (process.env.STUB_HANG === name) {
     } else {
         process.stdout.write(JSON.stringify({ items: raw ? JSON.parse(raw) : [] }));
     }
+} else if (name === 'reply' && args[0] === 'api') {
+    // reply-cli 0.20.0's `reply api`: what Reply answered, printed as {"code":<status>,"data":<body>} on stdout, exit 1
+    // at a status of 400 or above, exit 3 when the connection broke. The answer is named per call by
+    // STUB_REPLY_API_<CALL> as JSON, {"status", "data"}, or {"exit", "stdout"} for an ending with no answer; the pending
+    // list answers an empty list when none is named.
+    const path = args[1] ?? '';
+    const call = path === '/v3/linkedin-accounts/connection-link' ? 'CONNECT'
+        : path === '/v3/linkedin-accounts/pending' ? 'PENDING'
+        : /^\/v3\/linkedin-accounts\/[^/]+\/reconnect$/.test(path) ? 'RECONNECT'
+        : path === '/v1/SharedPageUrl' ? 'MAILBOX' : null;
+    const named = call === null ? undefined : process.env[`STUB_REPLY_API_${call}`];
+    const answer = named ? JSON.parse(named) : call === 'PENDING' ? { status: 200, data: [] } : null;
+    if (answer === null) {
+        process.stderr.write(`the stub reply does not answer ${said}\n`);
+        process.exitCode = 2;
+    } else if (answer.status === undefined) {
+        process.stdout.write(answer.stdout ?? '');
+        process.exitCode = answer.exit ?? 0;
+    } else {
+        process.stdout.write(JSON.stringify({ code: answer.status, data: answer.data ?? null }) + String.fromCharCode(10));
+        process.exitCode = answer.exit ?? (answer.status >= 400 ? 1 : 0);
+    }
 } else if (name === 'reply' && said === 'skills install adapter --project --agent codex') {
     // STUB_REPLY_SKILLS_FAIL=yes makes the install fail before it writes anything.
     if (process.env.STUB_REPLY_SKILLS_FAIL === 'yes') process.exit(1);

@@ -7,6 +7,7 @@ import type {
     DesktopConversationRecord,
     DesktopLink,
     DesktopRefusal,
+    DesktopReplyLink,
     DesktopSetup,
     JasonDesktop,
 } from '../platform/desktop';
@@ -100,6 +101,8 @@ export const setupFound: DesktopSetup = {
         ],
         absent: [],
         unread: [],
+        linkedinPending: [],
+        linkedinBelowFloor: null,
     },
     runtimeVersion: '0.34.0',
     bundleVersion: '0.34.0',
@@ -186,11 +189,24 @@ export interface StubDesktop extends JasonDesktop {
     keep(record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord;
     /** What the person answers the desktop's own confirmation of Full access with; yes unless a test says no. */
     confirmFullAccess: boolean;
+    /**
+     * What each of the Reply card's link calls answers, by its name (`setup.replyMailboxLink` and so on), in place of
+     * the stand-in's own made-up link.
+     */
+    linkAnswers: Map<string, DesktopReplyLink | DesktopRefusal>;
     /** The link the desktop holds for the page's first `links.take`, as a cold start leaves one; null for none. */
     held: DesktopLink | null;
     /** Sends a link to the page, as the desktop does once the page has taken its links. */
     link(target: DesktopLink): void;
 }
+
+/** Made-up links in the shapes Reply answers, which the stand-in gives where a test names no answer. */
+export const madeUpLinks = {
+    linkedin: 'https://run.reply.io/linkedin-custom-connect/0123456789abcdef0123456789abcdef',
+    gmail: 'https://run.reply.io/hosted/eac/ConnectWithGMail?uidToken=madeUpToken_ForTests',
+    outlook: 'https://run.reply.io/hosted/eac/ConnectWithOffice?uidToken=madeUpToken_ForTests&isExchange=false',
+    hosted: 'https://run.reply.io/hosted/eac/index/madeUpToken_ForTests',
+} as const;
 
 /**
  * A stand-in for the desktop, as the window really is: it opens on the start screen and sends no command by itself.
@@ -203,6 +219,20 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const linkHandlers = new Set<(link: DesktopLink) => void>();
     const calls: { name: string; args: unknown[] }[] = [];
     const refuse = new Map<string, string>();
+    const linkAnswers = new Map<string, DesktopReplyLink | DesktopRefusal>();
+    /** A link call: recorded, and answered as the test named, else with a made-up link of its kind. */
+    const linking =
+        (name: string, made: (...args: unknown[]) => DesktopReplyLink) =>
+        (...args: unknown[]): Promise<DesktopReplyLink | DesktopRefusal> => {
+            calls.push({ name, args });
+            return Promise.resolve(linkAnswers.get(name) ?? made(...args));
+        };
+    const linkedIn = (): DesktopReplyLink => ({
+        kind: 'linkedin',
+        link: madeUpLinks.linkedin,
+        host: 'run.reply.io',
+        expiresAtUtc: null,
+    });
     const call =
         (name: string) =>
         (...args: unknown[]): Promise<void> => {
@@ -276,6 +306,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
         calls,
         refuse,
+        linkAnswers,
         status,
         themeKept: null,
         kept,
@@ -444,6 +475,15 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             installProgram: call('setup.installProgram'),
             configurePlugin: call('setup.configurePlugin'),
             disconnectPlugin: call('setup.disconnectPlugin'),
+            replyLinkedInConnect: linking('setup.replyLinkedInConnect', linkedIn),
+            replyLinkedInPendingLink: linking('setup.replyLinkedInPendingLink', linkedIn),
+            replyLinkedInReconnect: linking('setup.replyLinkedInReconnect', linkedIn),
+            replyMailboxLink: linking('setup.replyMailboxLink', (page) => ({
+                kind: 'mailbox',
+                link: madeUpLinks[page as 'gmail' | 'outlook' | 'hosted'],
+                host: 'run.reply.io',
+                expiresAtUtc: null,
+            })),
             onChanged(handler) {
                 changeHandlers.add(handler);
                 return () => changeHandlers.delete(handler);

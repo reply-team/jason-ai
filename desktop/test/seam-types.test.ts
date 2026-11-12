@@ -12,6 +12,7 @@ import type {
     DesktopKeptEntry,
     DesktopLink,
     DesktopRefusal,
+    DesktopReplyLink,
     DesktopSetup,
     JasonDesktop,
 } from '../../ui/src/platform/desktop.d.ts';
@@ -20,7 +21,7 @@ import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
 import type { DesktopPreload } from '../src/preload.ts';
-import type { SetupState } from '../src/setup.ts';
+import type { LinkRefusal, ReplyLink, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
 
 /** True when the two types are the same type, field by field and all the way down. */
@@ -92,11 +93,15 @@ type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<E
 // A refusal reaches the page as the value the desktop answers it with.
 type RefusalIsTheSeam = Holds<Equal<ChatRefusal, DesktopRefusal>>;
 
+// A Reply link, or the sentence its ask ended with, reaches the page as the desktop answers it.
+type ReplyLinkIsTheSeam = [Holds<Equal<ReplyLink, DesktopReplyLink>>, Holds<Equal<LinkRefusal, DesktopRefusal>>];
+
 // A link reaches the page as the page the desktop parsed it to, never as the address.
 type LinkIsTheSeam = Holds<Equal<LinkTarget, DesktopLink>>;
 
 export type SeamHeld = [
     RefusalIsTheSeam,
+    ReplyLinkIsTheSeam,
     StatusIsTheSeam,
     PreloadIsTheSeam,
     InvokeChannelsAreTheSeam,

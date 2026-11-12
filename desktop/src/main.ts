@@ -39,6 +39,7 @@ import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
+import { askMailboxConfirmation } from './reply-links.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
@@ -147,6 +148,11 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
         ['setup.installProgram', (id) => setup.installProgram(id)],
         ['setup.configurePlugin', (id, values) => setup.configurePlugin(id, values)],
         ['setup.disconnectPlugin', (id) => setup.disconnectPlugin(id)],
+        // The links answer to this window alone, on the person's click: never logged, never kept.
+        ['setup.replyLinkedInConnect', (name) => setup.replyLinkedInConnect(name)],
+        ['setup.replyLinkedInPendingLink', (id) => setup.replyLinkedInPendingLink(id)],
+        ['setup.replyLinkedInReconnect', (id) => setup.replyLinkedInReconnect(id)],
+        ['setup.replyMailboxLink', (page) => setup.replyMailboxLink(page)],
     ];
     for (const [member, handler] of members) handle(ipcMain, member, origin, handler, refused);
     setup.onChanged(() => window()?.webContents.send(eventChannels['setup.changed']));
@@ -405,6 +411,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
             models,
+            confirmMailboxLink: () => askMailboxConfirmation(current, (window, options) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons] })),
         }),
         origin,
         log,

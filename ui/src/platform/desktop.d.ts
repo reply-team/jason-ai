@@ -312,7 +312,42 @@ export interface DesktopReply {
     absent: DesktopReplyChannel[];
     /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
     unread: DesktopReplyChannel[];
+    /**
+     * The LinkedIn connections started from a link and not finished yet, read only where LinkedIn was listed; empty when
+     * the list could not be read. Never with their link: `setup.replyLinkedInPendingLink` asks it again.
+     */
+    linkedinPending: DesktopReplyPending[];
+    /**
+     * Why the LinkedIn link acts are off: the Reply CLI is signed in but older than the one that reads a body from
+     * standard input. The desktop's one sentence, naming the update; null otherwise. The mailbox act is not affected.
+     */
+    linkedinBelowFloor: string | null;
 }
+
+/** A LinkedIn connection that waits to be finished by whoever owns the account. */
+export interface DesktopReplyPending {
+    id: string;
+    /** The name typed for the account when its link was made. */
+    name: string;
+    /** When its link stops working, an ISO-8601 moment as Reply wrote it; null where Reply gave none. */
+    expiresAtUtc: string | null;
+    isExpired: boolean;
+}
+
+/**
+ * A link that connects or reconnects an account with no sign-in to Reply, checked by the desktop: `link` is https,
+ * `host` the host it leads to, drawn beside it; `expiresAtUtc` when it stops working, where Reply said. Whoever holds it
+ * can connect an account to this Reply account: the page shows it in its dialog alone and keeps it no longer.
+ */
+export interface DesktopReplyLink {
+    kind: 'linkedin' | 'mailbox';
+    link: string;
+    host: string;
+    expiresAtUtc: string | null;
+}
+
+/** The mailbox pages a mailbox link opens on: Gmail's, Outlook's, and Reply's hosted page for any other mailbox. */
+export type DesktopMailboxPage = 'gmail' | 'outlook' | 'hosted';
 
 /**
  * A plugin the release carries that the desktop can configure: the three notification channels (slack, telegram, ntfy)
@@ -498,6 +533,23 @@ export interface JasonDesktop {
          * cannot parse or keep is refused, never overwritten.
          */
         disconnectPlugin(pluginId: string): Promise<void>;
+        /**
+         * Asks Reply for a link that adds a LinkedIn account under `name` (one line, 1 to 100 characters), which also
+         * lists it in `linkedinPending` until it is finished. Answers the link, or a refusal in one of the desktop's
+         * sentences; nothing of Reply's own words.
+         */
+        replyLinkedInConnect(name: string): Promise<DesktopReplyLink | DesktopRefusal>;
+        /** Asks Reply again for the link of one of `linkedinPending` by its id, with its expiry. */
+        replyLinkedInPendingLink(pendingId: string): Promise<DesktopReplyLink | DesktopRefusal>;
+        /** Asks Reply for a link that signs a LinkedIn account it holds in again, by the account's id. */
+        replyLinkedInReconnect(accountId: string): Promise<DesktopReplyLink | DesktopRefusal>;
+        /**
+         * Asks Reply for the account's hosted mailbox page and answers one of its addresses: Gmail's or Outlook's, which
+         * connect a mailbox or reconnect the one with the same address, or the hosted page, where any other mailbox is
+         * added or put right. The address does not expire, and whoever holds it can add and manage this Reply account's
+         * mailboxes.
+         */
+        replyMailboxLink(page: DesktopMailboxPage): Promise<DesktopReplyLink | DesktopRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };
