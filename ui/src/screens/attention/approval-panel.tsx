@@ -214,6 +214,7 @@ export function ApprovalPanel({
                         approval={approval}
                         item={item}
                         busy={busy}
+                        onMoved={setItem}
                         onSaved={(saved) => {
                             setItem(saved);
                             setSavedHere(true);

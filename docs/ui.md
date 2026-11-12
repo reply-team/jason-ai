@@ -73,15 +73,20 @@ which account and on which channel, and through which provider. An approval to s
 written", before the raw request, which stays folded: an email's sender, recipient, subject and body in that order, with the
 body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
 labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it
-is made of. One sentence under it says what is not shown: the sender's signature kept at the provider, and the provider's tracking, which are added when it sends.
-A reply in a thread shows who it goes to, the channel and the text. A message written as text (not a template) and a reply can be edited there, a message's subject and body or a reply's body and nothing else: **Edit message**,
-then **Save**, which is `jason workitem update` of the message's input with you as the actor and a reason the page words.
-Saving approves nothing: the old card is gone, the page says "Jason asks again with the new text when it next takes this work" and shows the new approval when it arrives, and Approve belongs to that one; if it does not arrive while the page waits, the sentence stays true and the next refresh shows it. A card is checked against its work item
-before it offers **Approve**, and again at the press: the approval's subject, the arguments the runtime parked, is compared
-with the arguments the work item holds now, on the message's subject, body and compose, as exact strings. Where they
-differ, whether you just saved or an agent in a chat changed the text, Approve is not offered and one sentence says the text
-changed and Jason will ask again. An agent in a chat may go on editing a parked message when you ask it to, and nothing is
-sent without a new approval. The runtime's own sentence is shown for a refused edit, and what you typed stays in the box.
+is made of. One sentence under it says what is not shown: the sender's signature kept at the provider, and the
+provider's tracking, which are added when it sends. A reply in a thread shows who it goes to, the channel and the text.
+A message written as text (not a template) and a reply can be edited there, a message's subject and body or a reply's
+body and nothing else: **Edit message**, then **Save**, which is `jason workitem update` of the message's input with
+you as the actor and a reason the page words. Saving approves nothing: the old card is gone, the page says "Jason asks
+again with the new text when it next takes this work" and shows the new approval when it arrives, and Approve belongs
+to that one; if it does not arrive while the page waits, the sentence stays true and the next refresh shows it. If the
+text changed while you were editing, Save writes nothing: the page says so, shows the new text and keeps yours in the
+box. A card is checked against its work item before it offers **Approve**, and again at the press: the approval's
+subject, the arguments the runtime parked, is compared with the arguments the work item holds now, on the message's
+subject, body and compose, as exact strings. Where they differ, whether the text was changed by the AI in a chat or in
+some other way, Approve is not offered and one sentence says the text changed and Jason will ask again. The AI in a
+chat may go on editing a parked message when you ask it to, and nothing is sent without a new approval. The runtime's
+own sentence is shown for a refused edit, and what you typed stays in the box.
 A row above the list narrows it to **All**, **Approvals**
 or **Questions**, each option with how many of its kind are listed, the chosen one ticked so that it is told apart by
 more than its colour, and "Shown: N" saying how many the list shows. The filter belongs to the screen alone: it is never

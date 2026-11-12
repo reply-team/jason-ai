@@ -2,12 +2,19 @@ import { useState } from 'react';
 import { useApi } from '../../api/context';
 import type { Approval, WorkItem } from '../../api/types';
 import { Unpaired } from '../../api/client';
-import { hasSubject, heldArgs, saveEdit, sentence, wordsOf } from './message-edit';
+import { TextMoved, hasSubject, heldArgs, saveEdit, sentence, wordsOf, type Words } from './message-edit';
 
-type Props = { approval: Approval; item: WorkItem; busy: boolean; onSaved: (item: WorkItem) => void };
+type Props = {
+    approval: Approval;
+    item: WorkItem;
+    busy: boolean;
+    onSaved: (item: WorkItem) => void;
+    /** The item as it is now, when its text moved while the editor was open. */
+    onMoved: (item: WorkItem) => void;
+};
 
 /** Edits the subject and the body of the parked message, and nothing else; Save approves nothing. */
-export function MessageEditor({ approval, item, busy, onSaved }: Props) {
+export function MessageEditor({ approval, item, busy, onSaved, onMoved }: Props) {
     const api = useApi();
     const words = wordsOf(heldArgs(item), approval.operation);
     const [open, setOpen] = useState(false);
@@ -15,6 +22,9 @@ export function MessageEditor({ approval, item, busy, onSaved }: Props) {
     const [body, setBody] = useState(words.body ?? '');
     const [saving, setSaving] = useState(false);
     const [problem, setProblem] = useState<string | null>(null);
+    const [moved, setMoved] = useState<Words | null>(null);
+    // The text the editor opened with: a save is refused when the item no longer holds it.
+    const [opened, setOpened] = useState<Words>(words);
     const withSubject = hasSubject(heldArgs(item), approval.operation);
 
     if (!open) {
@@ -27,6 +37,8 @@ export function MessageEditor({ approval, item, busy, onSaved }: Props) {
                     setSubject(words.subject ?? '');
                     setBody(words.body ?? '');
                     setProblem(null);
+                    setMoved(null);
+                    setOpened(words);
                     setOpen(true);
                 }}
             >
@@ -39,10 +51,19 @@ export function MessageEditor({ approval, item, busy, onSaved }: Props) {
         setSaving(true);
         setProblem(null);
         try {
-            onSaved(await saveEdit(api, approval.operation, approval.work_item_id, subject, body));
+            onSaved(await saveEdit(api, approval.operation, approval.work_item_id, subject, body, opened));
             setOpen(false);
         } catch (error) {
             if (error instanceof Unpaired) throw error;
+            if (error instanceof TextMoved) {
+                // What the person typed stays in the box; the new text is shown beside it and is what Save checks against now.
+                const fresh = wordsOf(heldArgs(error.fresh), approval.operation);
+                setMoved(fresh);
+                setOpened(fresh);
+                setProblem(error.message);
+                onMoved(error.fresh);
+                return;
+            }
             // The box keeps what the person typed; the sentence says why it was not saved.
             setProblem(sentence(error));
         } finally {
@@ -77,6 +98,12 @@ export function MessageEditor({ approval, item, busy, onSaved }: Props) {
                 <p className="hint" role="alert">
                     {problem}
                 </p>
+            )}
+            {moved && (
+                <div className="message-card">
+                    {moved.subject && <div className="message-text">{moved.subject}</div>}
+                    {moved.body && <div className="message-text">{moved.body}</div>}
+                </div>
             )}
             <div className="actions">
                 <button className="btn primary" type="button" disabled={saving || busy} onClick={() => void save()}>

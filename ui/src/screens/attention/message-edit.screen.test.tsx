@@ -164,6 +164,33 @@ describe('editing a message before it is approved', () => {
         expect(screen.queryByText('Jason asks again with the new text when it next takes this work.')).toBeNull();
     });
 
+    it('refuses to write over text that changed while the editor was open, and keeps what was typed', async () => {
+        const approval = email();
+        const held = new Held(structuredClone(argsOf(approval)));
+        mount(held, approval);
+        await waitFor(() => screen.getByRole('button', { name: 'Edit message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
+        fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'What the person typed' } });
+        (held.input['message'] as Record<string, unknown>)['body'] = 'What a chat wrote meanwhile';
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() =>
+            expect(screen.getByText('The text changed while you were editing; here is the new text.')).toBeTruthy(),
+        );
+        expect(held.calls.some((c) => c.operation === 'workitem.update')).toBe(false);
+        expect(screen.getAllByText('What a chat wrote meanwhile').length).toBeGreaterThan(0);
+        expect((screen.getByLabelText('Body') as HTMLTextAreaElement).value).toBe('What the person typed');
+        // Save is still there, and now writes, because the editor has seen the new text.
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(held.calls.some((c) => c.operation === 'workitem.update')).toBe(true));
+        expect(
+            (
+                held.calls.find((c) => c.operation === 'workitem.update')!.body as {
+                    set: { input: { message: { body: string } } };
+                }
+            ).set.input.message.body,
+        ).toBe('What the person typed');
+    });
+
     it('removes the old card after Save, and keeps the sentence when the new approval never comes', async () => {
         const approval = email();
         const held = new Held(structuredClone(argsOf(approval)));

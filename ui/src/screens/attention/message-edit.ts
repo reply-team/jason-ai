@@ -84,15 +84,29 @@ export const sentence = (error: unknown): string => (error instanceof ApiError ?
 export const readItem = (api: Api, id: string): Promise<WorkItem> =>
     api.call<WorkItem>('workitem.get', { work_item_id: id });
 
-/** Reads the item again, then writes the edit over the arguments just read. */
+/** The text moved under the editor: what the item holds now is not what the editor opened with. */
+export class TextMoved extends Error {
+    constructor(public readonly fresh: WorkItem) {
+        super('The text changed while you were editing; here is the new text.');
+    }
+}
+
+/**
+ * Reads the item again and, if its text is still the text the editor opened with, writes the edit over the arguments
+ * just read. If the text moved meanwhile (a chat edited it), nothing is written and the fresh item comes back in the
+ * error, so a person never replaces words they have not seen.
+ */
 export async function saveEdit(
     api: Api,
     operation: string,
     id: string,
     subject: string,
     body: string,
+    opened: Words,
 ): Promise<WorkItem> {
     const item = await readItem(api, id);
+    const now = wordsOf(heldArgs(item), operation);
+    if (now.subject !== opened.subject || now.body !== opened.body) throw new TextMoved(item);
     return api.call<WorkItem>('workitem.update', editPatch(operation, id, heldArgs(item), subject, body), 'write');
 }
 
