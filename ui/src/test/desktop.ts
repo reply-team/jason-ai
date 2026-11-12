@@ -91,6 +91,8 @@ export const setupFound: DesktopSetup = {
         accounts: [
             { id: 'acc_1', channel: 'email', name: 'Sales inbox', address: 'sales@example.test', status: 'connected' },
         ],
+        absent: [],
+        unread: [],
     },
     runtimeVersion: '0.34.0',
     bundleVersion: '0.34.0',
