@@ -1125,18 +1125,6 @@ export function unreadableCommand(command: string, scope: ChatScope): boolean {
     return false;
 }
 
-/** Whether a command deletes, by a program that removes files or folders, or `find` with `-delete`. */
-export function deletes(command: string, platform: Platform): boolean {
-    const removers = new Set(['rm', 'rmdir', 'unlink', 'shred', 'srm', 'del', 'erase', 'rd', 'remove-item', 'ri']);
-    for (const part of command.split(separators)) {
-        for (const token of part.trim().split(/\s+/).map(unquoted)) {
-            if (removers.has(programOf(platform, token).toLowerCase())) return true;
-        }
-        if (/(?<![A-Za-z0-9_.-])find\b[^]*\s-delete\b/.test(part)) return true;
-    }
-    return false;
-}
-
 /**
  * The one judgement of Full access, which the turn's hook and the broker share. Full access is never weaker than Ask
  * first: whatever Ask first refuses (`judge` over the input as written, with all the readings of its second look) is

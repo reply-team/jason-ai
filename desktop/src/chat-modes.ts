@@ -1,8 +1,10 @@
 // Pure: a chat's access mode, chosen per conversation from the menu beside the composer. Ask first is the default of every
-// new chat and no setting changes it. Plan only reads and proposes and changes nothing. Full access runs Claude Code with no
-// prompts; the deny list, the chat's confinement and the keys still hold wherever the desktop can see the attempt, and it
-// is chosen only through a confirmation shown each time, held in memory for that conversation alone, and never remembered
-// past the window. Codex has no Full access. Nothing here starts a process or reads a file.
+// new chat and no setting changes it. Plan only reads and proposes and changes nothing. Full access runs Claude Code in its
+// default mode with a hook that lets a command run with no card where Jason reads it plainly, refuses what Ask first
+// refuses, and puts anything else to the person as Ask first's card; the deny list, the chat's confinement and the keys
+// still hold wherever the desktop can see the attempt, and it is chosen only through a confirmation shown each time, held
+// in memory for that conversation alone, and never remembered past the window. Codex has no Full access. Nothing here
+// starts a process or reads a file.
 
 import { compareVersions } from './host-version.ts';
 

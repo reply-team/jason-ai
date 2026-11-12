@@ -302,11 +302,11 @@ test('the log line of a hold names the outcome and the closed reason, or none, a
     loggedTurns(log).decided({ outcome: 'held', by: 'model', mode: 'full_access' });
     loggedTurns(log).decided({ outcome: 'allowed', by: 'person', mode: 'full_access' });
     assert.deepEqual(lines, [
-        { name: 'chat_request_held', fields: { Outcome: 'held', By: 'model', Mode: 'full_access', Reason: 'glob' } },
-        { name: 'chat_request_held', fields: { Outcome: 'held', By: 'model', Mode: 'full_access', Reason: 'none' } },
+        { name: 'chat_request_held', fields: { Outcome: 'held', By: 'model', Mode: 'full_access', Cause: 'glob' } },
+        { name: 'chat_request_held', fields: { Outcome: 'held', By: 'model', Mode: 'full_access', Cause: 'none' } },
         { name: 'chat_request_decided', fields: { Outcome: 'allowed', By: 'person', Mode: 'full_access' } },
     ]);
-    assert.equal(templates.chat_request_held, 'A permission request of the chat was {Outcome} by the {By} for the reason {Reason}; mode {Mode}');
+    assert.equal(templates.chat_request_held, 'A permission request of the chat was {Outcome} by the {By} for the cause {Cause}; mode {Mode}');
 });
 
 // The long wait, on a fake clock.
@@ -347,4 +347,15 @@ test('a $\'...\' escape with no digits after it, or past the last code point, is
         assert.doesNotThrow(() => judge('Bash', { command }, scope), command);
         assert.notEqual(fullAccessJudgement('Bash', { command }, scope).outcome, 'runs', command);
     }
+});
+
+test('reply in Full access: what Ask first refuses is refused with its sentence, never a card; the rest is held but for the no-card forms', () => {
+    const scope = scopes[0] as ChatScope;
+    for (const [tool, command] of [['Bash', 'reply sequence start seq_1'], ['Bash', 'reply api DELETE /v3/sequences/1'], ['Bash', 'reply account delete acc_1 --yes'], ['Bash', 'npx reply-cli sequence start seq_1'], ['PowerShell', 'reply sequence start seq_1']] as const) {
+        const asked = judge(tool, { command }, scope);
+        assert.equal(asked.verdict, 'deny', `Ask first: ${command}`);
+        assert.deepEqual(fullAccessJudgement(tool, { command }, scope), { outcome: 'refused', message: asked.verdict === 'deny' ? asked.message : '' }, command);
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply auth status --json > out.json' }, scope), { outcome: 'held', message: heldSentence, reason: 'reply' });
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply auth status --json' }, scope), { outcome: 'runs' });
 });

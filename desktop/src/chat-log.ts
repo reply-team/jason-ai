@@ -26,7 +26,7 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
         ended: (turn) => log.info('chat_turn_ended', { Host: turn.host, Exit: turn.exit, DurationMs: turn.durationMs, Steps: turn.steps, Requests: turn.requests }),
         decided: (decided) =>
             decided.outcome === 'held'
-                ? log.info('chat_request_held', { Outcome: decided.outcome, By: decided.by, Mode: decided.mode, Reason: decided.reason ?? 'none' })
+                ? log.info('chat_request_held', { Outcome: decided.outcome, By: decided.by, Mode: decided.mode, Cause: decided.reason ?? 'none' })
                 : log.info('chat_request_decided', { Outcome: decided.outcome, By: decided.by, Mode: decided.mode }),
         instructionsMissing: () => log.warn('chat_instructions_missing', { File: instructionsFile }),
         instructionsUnwritten: (file, code) => log.warn('chat_instructions_unwritten', { File: file, Code: code }),

@@ -74,9 +74,9 @@ const saidNo = 'The person said no. Do not try another way to do the same thing;
 const unanswered = 'Nobody answered within thirty minutes, so nothing was run.';
 const ended = 'The chat stopped, so nothing was run.';
 const notRunning = 'This chat is not running, so nothing was run.';
+const withdrawn = 'The request was withdrawn, so nothing was run.';
 /** The title of a card in Full access: the card is the one Ask first shows, and this says why Full access shows it. */
 export const fullAccessCardTitle = 'Full access asks about this one';
-const withdrawn = 'The request was withdrawn, so nothing was run.';
 
 function allowed(input: Record<string, unknown>): ToolAnswer {
     return JSON.stringify(input).length >= copyLimit ? { behavior: 'allow' } : { behavior: 'allow', updatedInput: input };
