@@ -28,6 +28,7 @@ The desktop's chat is fenced more tightly: it loads none of your own MCP servers
 - **The chat loads none of your own MCP servers or connectors,** on Claude Code and on Codex. Every MCP tool call the chat does make goes through its permission model. What you give up: the chat no longer reads your Codex `config.toml`, so a provider or a profile set there is not used; connect a key on the Connect card instead.
 - **On Windows, a Codex chat runs only where Codex's elevated sandbox keeps Jason's data unreadable.** The desktop checks this itself, with no model, at the first Codex message of a run. Where the check fails, the chat says so and names `codex sandbox setup --elevated`, or Claude Code.
 - **The CLI refuses a person's word and changes to the installation inside a chat turn.** Every desktop chat turn carries `JASON_CONFINED`, and under it the CLI refuses, before any request, the commands that give your word or change this installation, with one sentence and exit 1. This is a higher bar, not a boundary: a program that holds the run token can still act as you.
+- **The desktop's Reply card acts on accounts through reply-cli's own `account` verbs**: connect, reconnect, the waiting list, limits, pause and resume, unblock and delete. Each change asks you first in a confirmation that names the account and the act; a connection link opens in your browser or is copied for you, and is never logged or kept. An agent's chat is refused these acts in every mode.
 - **A plugin's secret stays out of an AI role's agent.** A secret given through the runtime's environment, by either of the two ways the plugin guide offers, no longer reaches the agent a role starts.
 
 ## Fixed since 0.36.0
@@ -42,6 +43,7 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.36.0 took
 - **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the disk image for your machine from this release, or let an installed desktop offer the update.
 - **Codex on Windows needs its elevated sandbox for the chat.** Have an administrator run `codex sandbox setup --elevated` once, or chat on Claude Code; until then the chat declines a Codex message and says so.
 - **The chat no longer uses the providers in Codex's `config.toml`.** Connect a key on the Connect card.
+- **The desktop's Reply card needs reply-cli 0.21.0 or newer;** below it, the card offers to update reply-cli where npm is installed.
 - **Claude Code older than 2.1.257 runs no chat turn;** update Claude Code first.
 - **Codex older than 0.122.0 runs no chat turn;** the chat says to update Codex.
 - **Going back:** what `jason update apply --version` to an older release does to a newer plugin package, and how to load one again, is in [Applying an older
