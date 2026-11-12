@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
+import { AgentFolderUnowned } from '../src/chat-agent-folder.ts';
 import { loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
 import type { DesktopSettings } from '../src/settings.ts';
 import { bench, memoryLog, type Bench } from './harness.ts';
 
 const bundleVersion = '0.34.0-rc.1';
 
-async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: null }) {
+async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: null }, extra: { ownChatFolder?: (chat: string, records: string) => void } = {}) {
     const log = memoryLog();
     const saved: DesktopSettings[] = [];
     const started = await startInstallation({
@@ -21,6 +22,7 @@ async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsD
         settings,
         saveSettings: (next) => void saved.push(next),
         programs: b.programs,
+        ...extra,
     });
     return { started, log, saved, verbs: b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args) };
 }
@@ -251,5 +253,65 @@ test('a start never deploys through a link at the chat folder\'s .claude: the li
     assert.equal(readFileSync(join(person, 'skills', 'mine', 'SKILL.md'), 'utf8'), 'the person\'s own skill');
     const claude = lstatSync(join(b.paths.chat, '.claude'));
     assert.ok(claude.isDirectory() && !claude.isSymbolicLink());
+    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')), ['campaign-launch']);
+});
+
+test('a lost host record costs the Reply skills nothing: their record goes with it, and the start copies them in again', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    runtimeAlreadyUp(b);
+    await start(b);
+    assert.equal(replySkillCalls(b).length, 1);
+    // The record of the Claude Code skills is lost; the Reply skills' record is still there.
+    rmSync(join(b.paths.skillsRecords, 'claude.json'));
+    await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.equal(replySkillCalls(b).length, 2, 'the Reply skills are deployed again');
+    const kept = JSON.parse(readFileSync(replyRecordFile(b), 'utf8')) as Record<string, { path: string }[]>;
+    for (const folder of ['.claude', '.agents']) {
+        assert.ok(existsSync(join(b.paths.chat, folder, 'skills', 'reply-cli', 'SKILL.md')), folder);
+        assert.ok(kept[folder]?.some((each) => each.path === 'reply-cli/SKILL.md'), folder);
+    }
+});
+
+test('a start whose pass over the chat folder\'s top fails deploys nothing into the chat folder, the Reply skills included, and marks nothing', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    runtimeAlreadyUp(b);
+    const failing = () => {
+        throw new AgentFolderUnowned('EPERM');
+    };
+    const { verbs, saved, log } = await start(b, undefined, { ownChatFolder: failing });
+    assert.ok(verbs.some((args) => args.join(' ').startsWith('skills install --roles-only')), 'the roles deploy is unaffected');
+    assert.ok(!verbs.some((args) => args.includes('--root')), 'no deploy into the chat folder');
+    assert.equal(replySkillCalls(b).length, 0);
+    assert.deepEqual(saved, []);
+    assert.ok(log.lines.some((line) => line.name === 'agent_folder_unowned' && line.fields.Code === 'EPERM'));
+});
+
+test('a link left at the skills folder\'s record name is removed as itself before the record is copied: what it names is left as it was', async (t) => {
+    const b = bench(t);
+    runtimeAlreadyUp(b);
+    mkdirSync(b.paths.skillsRecords, { recursive: true });
+    for (const name of ['claude.json', 'agents.json']) writeFileSync(join(b.paths.skillsRecords, name), '{"version":1,"packs":[]}');
+    const person = join(b.root, 'person');
+    mkdirSync(person, { recursive: true });
+    writeFileSync(join(person, 'precious.json'), 'the person\'s own');
+    const at = join(b.paths.chat, '.claude', 'skills', '.jason-skills.json');
+    mkdirSync(dirname(at), { recursive: true });
+    let linked = false;
+    for (const [target, type] of [[join(person, 'precious.json'), 'file'], [person, 'junction']] as const) {
+        try {
+            symlinkSync(target, at, type);
+            linked = true;
+            break;
+        } catch {
+            // The next kind of link, or none.
+        }
+    }
+    if (!linked) {
+        t.skip('links cannot be made here');
+        return;
+    }
+    await start(b);
+    assert.deepEqual(readdirSync(person), ['precious.json']);
+    assert.equal(readFileSync(join(person, 'precious.json'), 'utf8'), 'the person\'s own');
     assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')), ['campaign-launch']);
 });

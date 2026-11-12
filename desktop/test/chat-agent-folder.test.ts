@@ -232,3 +232,31 @@ test('a reply- folder that stands there before the Connect card\'s deploy is nei
     const again = JSON.parse(readFileSync(join(paths.skillsRecords, 'reply.json'), 'utf8')) as Record<string, { path: string }[]>;
     assert.deepEqual(again['.claude']?.map((each) => each.path), ['reply-cli/SKILL.md']);
 });
+
+test('with a record kept, a link standing at the record\'s name beside the skills is removed as itself before the copy', (t) => {
+    const { chat, records, root } = folders(t);
+    const person = join(root, 'person');
+    put(join(person, 'precious.json'), 'the person\'s own');
+    put(join(records, claude.record), deployment([]));
+    const at = join(chat, '.claude', 'skills', skillsRecordFile);
+    mkdirSync(dirname(at), { recursive: true });
+    let linked = false;
+    for (const [target, type] of [[join(person, 'precious.json'), 'file'], [person, 'junction']] as const) {
+        try {
+            symlinkSync(target, at, type);
+            linked = true;
+            break;
+        } catch {
+            // The next kind of link, or none.
+        }
+    }
+    if (!linked) {
+        t.skip('links cannot be made here');
+        return;
+    }
+    beforeSkillsDeploy(chat, records, claude);
+    assert.deepEqual(readdirSync(person), ['precious.json']);
+    assert.equal(readFileSync(join(person, 'precious.json'), 'utf8'), 'the person\'s own');
+    assert.ok(lstatSync(at).isFile() && !lstatSync(at).isSymbolicLink());
+    assert.equal(readFileSync(at, 'utf8'), readFileSync(join(records, claude.record), 'utf8'));
+});

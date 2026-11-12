@@ -144,6 +144,8 @@ export function beforeSkillsDeploy(chat: string, records: string, host: (typeof 
         for (const name of readdirSync(skills)) removed(join(skills, name));
         return;
     }
+    // Whatever stands at the record's name is removed as itself first, so the copy never writes through a link.
+    removed(join(skills, skillsRecordFile));
     copyFileSync(kept, join(skills, skillsRecordFile));
 }
 

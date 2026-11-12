@@ -224,7 +224,8 @@ applies to the turns a person starts by sending, from the next one on.
   rule, and the allow list is replaced by `chat-plan-list.txt`: the allow list's verbs that change nothing, written by
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
-  page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`).
+  page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
+  it stays with the chat after a restart, an update and Start afresh.
 - **This version does not offer Full access.** The menu shows it disabled with "Full access is not in this version
   yet.", and the desktop refuses it before any confirmation. Its code stays behind one switch (`fullAccessOffered` in
   `src/chat-modes.ts`), and the points below describe it as built; Ask first and Plan only are the modes this version
@@ -282,7 +283,9 @@ applies to the turns a person starts by sending, from the next one on.
   never goes through one: `.claude`, `.agents` and their `skills` are each made a real folder before anything is
   written into them, so nothing outside the chat folder is deleted or written. A chat skills folder whose deployment
   the desktop keeps no record of, an installation's first start of this version included, is emptied and deployed
-  afresh at the start. While no record of the Reply skills is kept, a start whose `reply auth status` says
+  afresh at the start, and the Reply skills' record goes with it, so they are copied in again by the step after. A start
+  whose pass over the top cannot finish deploys nothing into the chat folder, the Reply skills included, and marks
+  nothing as deployed: the next start tries again, and a turn refuses on the same folder anyway. While no record of the Reply skills is kept, a start whose `reply auth status` says
   signed in deploys them by the sign-in's own routine and records them, in the same step as Jason's skills; a
   `reply-*` folder that stood there is removed and replaced by the Reply CLI's copy, never kept, and an install that
   fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not

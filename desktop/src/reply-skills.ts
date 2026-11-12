@@ -25,7 +25,7 @@ export const replySkillsLimitMs = 5 * 60_000;
  * left out. Every `reply-*` folder that stood there is removed first, never read or kept, and only what the CLI wrote is
  * copied and recorded. On a failure nothing is changed and nothing is recorded.
  */
-export async function deployReplySkills(run: RunReply, paths: DesktopPaths): Promise<number> {
+export async function deployReplySkills(run: RunReply, paths: DesktopPaths, ownChatFolder: (chat: string, records: string) => void = ownAgentFolder): Promise<number> {
     const place = await mkdtemp(join(tmpdir(), 'jason-reply-skills-'));
     try {
         const answer = await run('skills install', ['skills', 'install', 'adapter', '--project', '--agent', 'codex'], { cwd: place, timeoutMs: replySkillsLimitMs });
@@ -34,7 +34,7 @@ export async function deployReplySkills(run: RunReply, paths: DesktopPaths): Pro
         const written = (await readdir(source).catch(() => [] as string[])).filter((name) => name.startsWith('reply-'));
         // The folders are put right at the top first, and each skills folder made a real one: nothing is copied through a
         // link.
-        ownAgentFolder(paths.chat, paths.skillsRecords);
+        ownChatFolder(paths.chat, paths.skillsRecords);
         const targets = skillsFolders.map((host) => realSkillsFolder(paths.chat, host));
         for (const target of targets) {
             for (const name of await readdir(target).catch(() => [] as string[])) {

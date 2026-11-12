@@ -9,6 +9,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { deployReplySkills } from './reply-skills.ts';
+import { AgentFolderUnowned } from './chat-agent-folder.ts';
 import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
@@ -188,6 +189,8 @@ export interface SetupDeps {
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
+    /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
+    ownChatFolder?: (chat: string, records: string) => void;
     /**
      * The person's yes, asked by the main process in a native box before the mailbox page is asked of Reply; absent, the
      * answer is no.
@@ -620,8 +623,14 @@ export class Setup {
      * are left out.
      */
     async #deployReplySkills(): Promise<void> {
-        // The routine the start uses too (`reply-skills.ts`); what it copies is recorded outside the chat folder.
-        await deployReplySkills((verb, args, options) => this.#run('reply', verb, args, options), this.#deps.paths);
+        // The routine the start uses too (`reply-skills.ts`); what it copies is recorded outside the chat folder. A chat
+        // folder that cannot be put right is said by its code, and the sign-in's own result stands.
+        try {
+            await deployReplySkills((verb, args, options) => this.#run('reply', verb, args, options), this.#deps.paths, this.#deps.ownChatFolder);
+        } catch (error) {
+            if (!(error instanceof AgentFolderUnowned)) throw error;
+            this.#deps.log.warn('agent_folder_unowned', { Code: error.code });
+        }
     }
 
     setProviderKey(providerId: unknown, key: unknown): Promise<void> {

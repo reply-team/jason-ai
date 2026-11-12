@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { AgentFolderUnowned } from '../src/chat-agent-folder.ts';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -961,4 +962,15 @@ test('while this version does not offer Full access every host that drives the c
     const on = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: true }).status()).hosts.map((host) => [host.id, host.fullAccess]));
     assert.equal(on.get('claude'), fullAccessSentence('2.1.290'));
     assert.equal(on.get('codex'), codexFullAccess);
+});
+
+test('a sign-in whose chat folder cannot be put right keeps its own result: the folder\'s code is logged, never its sentence said', async (t) => {
+    const b = bench(t, { programs: ['reply'] });
+    const log = memoryLog();
+    const setup = new Setup({ ...setupDeps(b, log), ownChatFolder: () => {
+        throw new AgentFolderUnowned('EBUSY');
+    } });
+    await setup.connectReplyWithKey('planted-reply-key');
+    assert.ok(log.lines.some((line) => line.name === 'agent_folder_unowned' && line.fields.Code === 'EBUSY'));
+    assert.ok(!existsSync(join(b.paths.skillsRecords, 'reply.json')), 'nothing was recorded');
 });

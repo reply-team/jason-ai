@@ -574,7 +574,7 @@ export class Chat {
         const conversation = this.#own(id);
         if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('start it afresh'));
         conversation.sessions = {};
-        // A chat started afresh is a new chat: it goes back to Ask first.
+        // A chat in Full access started afresh goes back to Ask first; Plan only stays, as on its record.
         if (this.#fullAccess.has(conversation.id)) this.#changeMode(conversation, 'ask_first', true);
         // One never sent to has no session to drop, and no record to write.
         if (this.#kept.has(conversation.id)) this.#keep(conversation);
