@@ -80,6 +80,30 @@ Nothing anywhere combines two bindings into a third.
 must name an operation this build publishes a contract for. `Binding` is optional and is whatever the
 plugin's manifest says a route to it must carry.
 
+An operation whose document names the argument a route reads its channel from may also carry **channel routes**, under
+`Channels`, one route per channel, each with its own `Plugin` and optional `Binding`:
+
+```json
+{
+  "Routes": {
+    "Operations": {
+      "message.send": {
+        "Plugin": "acme-provider",
+        "Channels": {
+          "linkedin": { "Plugin": "social-provider", "Binding": { "seat": "sales-1" } }
+        }
+      }
+    }
+  }
+}
+```
+
+The channel is a key of its own, never part of the operation's: a colon is what separates the keys of a settings path.
+Where `Channels` names a route, the operation's own `Plugin` and `Binding` may be left out, and then the operation has
+no route of its own at the global scope. A key under `Channels` that is no channel is refused with the section, as
+`routes_settings_invalid`; an operation that takes no channel routes, a channel its argument does not allow, and a
+plugin that reads no events are refused at the reload (§7). A file without `Channels` means what it always meant.
+
 **A global route is frozen into the active route snapshot by `jason plugin reload`, and by the load at
 startup — editing the file changes nothing until then.** It is the same discipline plugin grants
 already follow, and for the same reason: what is running should change when somebody says so, not when
@@ -281,7 +305,9 @@ the operator wrote it:
 |---|---|
 | the global default | `Routes:Default` |
 | a global operation override | `Routes:Operations:<operation>` |
+| a global channel route | `Routes:Operations:<operation>:Channels:<channel>` |
 | a campaign route | `campaign:<cmp_…>/routes/<operation>`, or `campaign:<cmp_…>/routes/default` |
+| a campaign channel route | `campaign:<cmp_…>/routes/<operation>/<channel>` |
 
 The load at startup takes the same path: a runtime started with a bad route reports it in the startup report and
 leaves **both** registries empty, rather than running with plugins and no routes. A pattern that could not finish
@@ -425,7 +451,7 @@ send is created only once the provider has said the earlier attempt did not act.
 disagrees with a pin is refused rather than resolved either way: the rule is to work by the pin, so the
 message names the pinned value.
 
-### At activation — ten route problems, plus one for the section and one for the searches
+### At activation — eleven route problems, plus one for the section and one for the searches
 
 | Code | When |
 |---|---|
@@ -436,18 +462,19 @@ message names the pinned value.
 | `route_channel_unknown` | the route names a channel the argument the operation's document names for routes does not allow |
 | `route_operation_unsupported` | the plugin does not list the operation the route sends it |
 | `route_contract_incompatible` | the plugin speaks no version of that operation's contract |
+| `route_channel_plugin_reads_no_events` | the route names a channel, and the plugin it names reads no events: its manifest declares no `contracts.events`. A reply to a send on a channel route reaches the campaign only through the events of the account the send went from, so it would go unseen. Asked of a channel route only, at `route.set` and at every reload, so a reload whose new package stops reading events while a channel route names it is refused whole |
 | `route_binding_secret_like` | the binding carries a field named like a credential, at any depth |
 | `route_binding_too_large` | the binding's canonical JSON is larger than the 64 KiB the protocol carries |
 | `route_binding_invalid` | the binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin whose schema refuses `{}` |
 
-The eleventh is not a problem with a route but with the **section**: `routes_settings_invalid` is the
+The twelfth is not a problem with a route but with the **section**: `routes_settings_invalid` is the
 `Routes` section itself failing the validator that reads it, which happens when the file is edited into
 something no route could be built from. The options system reports that as prose rather than as
 structure, so the runtime carries the validator's own sentence through verbatim and names the setting it
 came from. It arrives as the same rejected reload, because an operator who mistypes a route must get one
 answer — and never a 500, which would say the runtime broke rather than the edit.
 
-The twelfth is not a problem with one route either, but with the whole set: `route_orphans_search`, a set that would take
+The thirteenth is not a problem with one route either, but with the whole set: `route_orphans_search`, a set that would take
 the last route naming the plugin and account a search still followed ran under away from it (§6). It is asked only
 when no route in the set is wrong, and `route.set` and `route.unset` answer it under its own code rather than as a
 rejected reload.

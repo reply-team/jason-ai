@@ -338,12 +338,26 @@ public sealed class RouteActivator(
         }
 
         var operations = new Dictionary<string, Route>(StringComparer.Ordinal);
+        var channels = new Dictionary<string, Dictionary<string, Route>>(StringComparer.Ordinal);
         foreach (var (operation, entry) in settings.Operations)
         {
-            var route = Accept(plugins, GlobalOperationField(operation), operation, channel: null, entry?.Plugin, entry?.Binding as JsonObject, _timing, problems);
-            if (route is not null)
+            // An operation routed by its channels alone names no plugin of its own, and has no route of its own.
+            if (entry is null || entry.Plugin is not null || entry.Channels.Count == 0)
             {
-                operations[operation] = route;
+                var route = Accept(plugins, GlobalOperationField(operation), operation, channel: null, entry?.Plugin, entry?.Binding as JsonObject, _timing, problems);
+                if (route is not null)
+                {
+                    operations[operation] = route;
+                }
+            }
+
+            foreach (var (channel, channelEntry) in entry?.Channels ?? [])
+            {
+                var route = Accept(plugins, GlobalChannelField(operation, channel), operation, channel, channelEntry?.Plugin, channelEntry?.Binding as JsonObject, _timing, problems);
+                if (route is not null)
+                {
+                    Under(channels, operation)[channel] = route;
+                }
             }
         }
 
@@ -351,13 +365,32 @@ public sealed class RouteActivator(
             ? null
             : Accept(plugins, GlobalDefaultField, null, channel: null, settings.Default.Plugin, settings.Default.Binding as JsonObject, _timing, problems);
 
-        return new RouteSet(fallback, operations);
+        return new RouteSet(fallback, operations, Frozen(channels));
     }
+
+    /// <summary>The channel routes of one operation while a set is being built, made the first time one is added.</summary>
+    private static Dictionary<string, Route> Under(Dictionary<string, Dictionary<string, Route>> channels, string operation)
+    {
+        if (!channels.TryGetValue(operation, out var routes))
+        {
+            channels[operation] = routes = new Dictionary<string, Route>(StringComparer.Ordinal);
+        }
+
+        return routes;
+    }
+
+    /// <summary>The channel routes as a set holds them: none at all where none was built, the set made before channel routes existed.</summary>
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, Route>>? Frozen(Dictionary<string, Dictionary<string, Route>> channels) =>
+        channels.Count == 0
+            ? null
+            : channels.ToDictionary(entry => entry.Key, entry => (IReadOnlyDictionary<string, Route>)entry.Value, StringComparer.Ordinal);
 
     /// <summary>
     /// The global half of the snapshot that is already active, checked again against the new plugin set. It was
     /// valid against the set it was frozen with, and <c>route.set</c> runs against that same set — but checking
-    /// is cheap and the alternative is a rule that holds only because of where it is called from.
+    /// is cheap and the alternative is a rule that holds only because of where it is called from. The channel routes
+    /// are part of the global half: a campaign's route write that copied the rest and left them out would take every
+    /// global channel route away without anybody asking.
     /// </summary>
     private static RouteSet Rechecked(RouteSet active, PluginSnapshot plugins, PatternTiming timing, List<ErrorDetail> problems)
     {
@@ -371,11 +404,21 @@ public sealed class RouteActivator(
             }
         }
 
+        var channels = new Dictionary<string, Dictionary<string, Route>>(StringComparer.Ordinal);
+        foreach (var (operation, channel, route) in active.ChannelRoutes)
+        {
+            var rechecked = Accept(plugins, GlobalChannelField(operation, channel), operation, channel, route.PluginId, route.Binding, timing, problems);
+            if (rechecked is not null)
+            {
+                Under(channels, operation)[channel] = rechecked;
+            }
+        }
+
         var fallback = active.Default is null
             ? null
             : Accept(plugins, GlobalDefaultField, null, channel: null, active.Default.PluginId, active.Default.Binding, timing, problems);
 
-        return new RouteSet(fallback, operations);
+        return new RouteSet(fallback, operations, Frozen(channels));
     }
 
     private async Task<IReadOnlyDictionary<string, RouteSet>> CampaignsAsync(
@@ -519,7 +562,20 @@ public sealed class RouteActivator(
                 $"'{plugin.Manifest.Id}' does not implement '{operation}'; work is never quietly handed to a plugin that did not claim it.");
         }
 
-        return Incompatible(plugin, contract);
+        if (Incompatible(plugin, contract) is { } incompatible)
+        {
+            return incompatible;
+        }
+
+        // A send on a channel route goes out beside the provider's own campaigns, so the reply to it reaches a campaign only
+        // through the events of the account it went from. A plugin that reads none would leave that reply unseen while the
+        // campaign went on writing to a person who answered. Asked last of the operation's questions: a plugin that does
+        // not perform the operation at all is told that first.
+        return channel is not null && !plugin.Manifest.ReadsEvents
+            ? new RouteProblem(
+                RouteProblemCodes.ChannelPluginReadsNoEvents,
+                $"'{plugin.Manifest.Id}' reads no events, and a channel route needs a plugin that does: a reply to a send on the channel '{channel}' reaches the campaign only through the events of the account the send went from. Route the channel to a plugin whose manifest declares contracts.events, or route the operation without a channel.")
+            : null;
     }
 
     /// <summary>
