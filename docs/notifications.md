@@ -170,7 +170,10 @@ such a unit exists only while the person is signed in.
   it uses for a browser ([desktop.md](desktop.md), Links). Otherwise — no desktop registered, its program gone, or the
   hand-on failing, said on stderr by its code (`opener_not_started`, `opener_failed`, `opener_timed_out`) — your
   browser UI opens, paired as `jason ui open` pairs (§7). On macOS and Linux a click opens nothing of Jason's;
-  `jason ui open` reaches the same page. The real click on a real toast is not yet measured on a machine; the link's
+  `jason ui open` reaches the same page. On Windows the opener is `rundll32`, which answers 0 once the address is
+  handed to the shell and does not carry the handler's own result: a desktop that is registered and there but does not
+  start leaves the click with no page and no fallback, and `jason ui open` reaches the browser UI; `opener_failed`
+  there means the opener itself failed. The real click on a real toast is not yet measured on a machine; the link's
   handling is composed and checked by tests here.
 - **Copy prompt.** A toast for one item also has a **Copy prompt** button. It shows no page of Jason's: it puts on the
   clipboard the text `jason approval get <approval-id> --prompt` or `jason decision get <decision-id> --prompt`

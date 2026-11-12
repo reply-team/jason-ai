@@ -6,13 +6,16 @@ namespace Jason.Cli.Process;
 /// <summary>How a hand-on through the platform's opener ended.</summary>
 public enum UrlHandOff
 {
-    /// <summary>The opener started and finished in time with success: the system has the address.</summary>
+    /// <summary>
+    /// The opener started and finished in time with success: the system has the address. On Windows the opener is
+    /// <c>rundll32</c>, which answers once the shell has the address and never carries the handler's own result.
+    /// </summary>
     Handed,
 
     /// <summary>The opener could not be started.</summary>
     NotStarted,
 
-    /// <summary>The opener finished with a failure.</summary>
+    /// <summary>The opener itself finished with a failure; a handler that does not start is not seen here.</summary>
     Failed,
 
     /// <summary>The opener did not finish within the wait.</summary>
