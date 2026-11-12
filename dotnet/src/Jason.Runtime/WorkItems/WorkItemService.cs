@@ -467,7 +467,11 @@ public sealed class WorkItemService(
             item.ResultFormat = request.ResultFormat.Value?.DeepClone();
         }
 
+        // The arguments as stored before the patch, against the arguments as it will store them: what a parked item's
+        // question was about changed only where these two differ, however many keys the patch named on the way.
+        var inputBefore = item.Context[InputKey]?.DeepClone();
         var contextChanges = ApplyContext(item, request.Set, request.Unset);
+        var inputChanged = !JsonNode.DeepEquals(inputBefore, item.Context[InputKey]);
         if (changes.Count == 0 && contextChanges.Count == 0)
         {
             return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
@@ -485,7 +489,7 @@ public sealed class WorkItemService(
             journal.Append(db, actor, JournalKinds.WorkItemContextUpdated, campaign: null, key: change.Key, old: change.Old, updated: change.New, reason: reason, workItem: item);
         }
 
-        if (item.Status == WorkItemStatus.AwaitingApproval && contextChanges.Exists(change => change.Key == InputKey))
+        if (item.Status == WorkItemStatus.AwaitingApproval && inputChanged)
         {
             await WithdrawAskAsync(item, actor, now, cancellationToken).ConfigureAwait(false);
         }

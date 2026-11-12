@@ -67,6 +67,35 @@ public class ParkedEditTests
         Assert.Equal("created", (string?)lines[2].New);
     }
 
+    /// <summary>
+    /// A patch that writes the input and takes it away again ends where it began: work that carried no arguments still
+    /// carries none, so the question is still about what the item says, and only the context's own lines are written.
+    /// </summary>
+    [Fact]
+    public async Task A_patch_that_sets_and_unsets_the_input_so_it_ends_as_it_began_leaves_the_question_alone()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (item, approval) = await ParkedWork.WriteAsync(db, Ct);
+        item.Operation = "campaign.pause";
+        approval.Operation = "campaign.pause";
+        await db.SaveChangesAsync(Ct);
+
+        await Service(db).UpdateAsync(
+            Patch(item.PublicId) with { Set = new JsonObject { ["input"] = new JsonObject() }, Unset = ["input"], Actor = Editor },
+            Ct);
+
+        await using var fresh = database.Open();
+        var still = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal((approval.PublicId, ApprovalStatus.Pending), (still.PublicId, still.Status));
+        var parked = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct);
+        Assert.Equal(WorkItemStatus.AwaitingApproval, parked.Status);
+        Assert.False(parked.Context.ContainsKey("input"));
+        Assert.All(
+            await fresh.Journal.AsNoTracking().Select(e => e.Kind).ToListAsync(Ct),
+            kind => Assert.Equal(JournalKinds.WorkItemContextUpdated, kind));
+    }
+
     [Theory]
     [InlineData("the same input again")]
     [InlineData("another key of the context")]
