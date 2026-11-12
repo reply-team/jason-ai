@@ -187,3 +187,29 @@ describe('a chat’s access mode, on the host and around a running turn', () => 
         expect(screen.queryByRole('status', { name: 'Waiting message' })).toBeNull();
     });
 });
+
+describe('a change to Plan only around a running turn', () => {
+    it('gives the waiting message back, as Stop does: no turn follows by itself', async () => {
+        const desktop = renderConsole();
+        await waitFor(() => menu());
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {
+            target: { value: 'Change the steps' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {
+            target: { value: 'And then the next' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
+        await waitFor(() => expect(screen.getByRole('status', { name: 'Waiting message' })).toBeTruthy());
+        choose('plan_only');
+        await waitFor(() => expect(menu().value).toBe('plan_only'));
+        flush(() => desktop.emit(chatId(), { kind: 'done', error: null }));
+        await waitFor(() =>
+            expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' }).value).toBe(
+                'And then the next',
+            ),
+        );
+        expect(calls(desktop, 'chat.send')).toHaveLength(1);
+    });
+});

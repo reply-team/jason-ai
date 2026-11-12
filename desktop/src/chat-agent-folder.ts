@@ -1,14 +1,14 @@
-// The chat folder's agent settings, which the desktop owns as it owns the memory files. Claude Code started in the chat
-// folder with project settings reads `.claude/` there, and Codex reads `.agents/skills`; a host also loads the skills of a
-// `.claude/` it meets below the folder it started in. The desktop places only skills: those `jason skills install` wrote,
-// and the Reply skills the Connect card copies in. What it placed is recorded outside the chat folder, under
-// `<data>/desktop/skills-records/`, which the chat neither reads nor writes: the CLI's own record of each deployment,
-// moved there from the folder it deployed into, and the Reply skills' files with their digests. Before each turn:
-// `.claude/` and `.agents/` hold their `skills/` and nothing else, and in it only the files recorded there with the bytes
-// recorded; `.codex/` and the memory files the desktop does not write (`CLAUDE.local.md`, `AGENTS.override.md`) are
-// removed from the top; and every `.claude`, `.agents` and `.codex` anywhere below the top is removed. Nothing is
-// followed: a link is removed as a link, so nothing outside the chat folder is ever deleted. A turn does not start on a
-// folder this could not put right.
+// The chat folder's agent settings, which the desktop owns at the folder's top as it owns the memory files. Claude Code
+// started in the chat folder with project settings reads `.claude/` there, and Codex reads `.agents/skills`. The desktop
+// places only skills: those `jason skills install` wrote, and the Reply skills the Connect card copies in. What it placed
+// is recorded outside the chat folder, under `<data>/desktop/skills-records/`, which the chat neither reads nor writes: the
+// CLI's own record of each deployment, moved there from the folder it deployed into, and the Reply skills' files with
+// their digests. Before each turn, at the top: `.claude/` and `.agents/` hold their `skills/` and nothing else, and in it
+// only the files recorded there with the bytes recorded; `.codex/` and the memory files the desktop does not write
+// (`CLAUDE.local.md`, `AGENTS.override.md`) are removed. Nothing below the top is looked at in this version: an agent
+// folder or a memory file a host may read from a subfolder it works in is not removed. Nothing is followed: a link is
+// removed as a link, a skills folder is deployed into only once it is a real folder, so nothing outside the chat folder is
+// ever deleted or written. A turn does not start on a top or a skills folder this could not put right.
 
 import { createHash } from 'node:crypto';
 import { copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -28,9 +28,6 @@ export const skillsFolders: readonly { folder: '.claude' | '.agents'; record: st
 
 /** The record of the Reply skills the Connect card copied, by skills folder. */
 export const replyRecord = 'reply.json';
-
-/** The folder names a host loads agent settings or skills from, wherever they stand below the chat folder's top. */
-const agentFolders = new Set(['.claude', '.agents', '.codex']);
 
 /** The agent settings folder could not be put right: the system's error code, never its text or a path. */
 export class AgentFolderUnowned extends Error {
@@ -104,15 +101,6 @@ function ownSkills(skills: string, kept: Map<string, string>, remove: (path: str
     walk(skills, '');
 }
 
-/** Removes every `.claude`, `.agents` and `.codex` below a folder, never walking into a link. */
-function removeNested(folder: string, remove: (path: string) => void): void {
-    for (const name of readdirSync(folder)) {
-        const path = join(folder, name);
-        if (agentFolders.has(name.toLowerCase())) remove(path);
-        else if (kind(path) === 'folder') removeNested(path, remove);
-    }
-}
-
 /** Removes a name and what is under it; a link is removed as a link and what it names is left. */
 function removed(path: string): void {
     rmSync(path, { recursive: true, force: true });
@@ -125,12 +113,6 @@ function removed(path: string): void {
 export function ownAgentFolder(chat: string, records: string, remove: (path: string) => void = removed): void {
     try {
         for (const name of [...unwrittenMemoryFiles, '.codex']) if (kind(join(chat, name)) !== null) remove(join(chat, name));
-        for (const name of kind(chat) === 'folder' ? readdirSync(chat) : []) {
-            if (skillsFolders.some((each) => each.folder === name)) continue;
-            const path = join(chat, name);
-            if (agentFolders.has(name.toLowerCase())) remove(path);
-            else if (kind(path) === 'folder') removeNested(path, remove);
-        }
         for (const host of skillsFolders) {
             const top = join(chat, host.folder);
             const what = kind(top);
@@ -141,10 +123,8 @@ export function ownAgentFolder(chat: string, records: string, remove: (path: str
             }
             for (const name of readdirSync(top)) {
                 const path = join(top, name);
-                if (name === 'skills' && kind(path) === 'folder') {
-                    ownSkills(path, recorded(records, host), remove);
-                    removeNested(path, remove);
-                } else remove(path);
+                if (name === 'skills' && kind(path) === 'folder') ownSkills(path, recorded(records, host), remove);
+                else remove(path);
             }
         }
     } catch (error) {
@@ -158,14 +138,30 @@ export function ownAgentFolder(chat: string, records: string, remove: (path: str
  * file nobody recorded is never taken for one the CLI wrote.
  */
 export function beforeSkillsDeploy(chat: string, records: string, host: (typeof skillsFolders)[number]): void {
-    const skills = join(chat, host.folder, 'skills');
+    const skills = realSkillsFolder(chat, host);
     const kept = join(records, host.record);
     if (kind(kept) !== 'file') {
-        rmSync(skills, { recursive: true, force: true });
+        for (const name of readdirSync(skills)) removed(join(skills, name));
         return;
     }
-    mkdirSync(skills, { recursive: true });
     copyFileSync(kept, join(skills, skillsRecordFile));
+}
+
+/**
+ * A host's skills folder in the chat folder, made a real folder before anything is written into it: its `.claude` or
+ * `.agents` and its `skills`, each looked at by lstat, a link or anything else that is not a real folder removed as itself
+ * (what a link names is left) and a real folder made in its place. Returns the skills folder's path.
+ */
+export function realSkillsFolder(chat: string, host: (typeof skillsFolders)[number]): string {
+    const top = join(chat, host.folder);
+    const skills = join(top, 'skills');
+    mkdirSync(chat, { recursive: true });
+    for (const path of [top, skills]) {
+        const what = kind(path);
+        if (what !== null && what !== 'folder') removed(path);
+        if (kind(path) === null) mkdirSync(path);
+    }
+    return skills;
 }
 
 /** After `jason skills install`: its record moves out of the chat folder into the desktop's records. */
@@ -180,8 +176,11 @@ export function afterSkillsDeploy(chat: string, records: string, host: (typeof s
     rmSync(written, { force: true });
 }
 
-/** Records, by skills folder, every file of the Reply skills (`reply-*`) the Connect card copied there, with its digest. */
-export function recordReplySkills(chat: string, records: string): void {
+/**
+ * Records, by skills folder, every file of the Reply skills the Connect card copied there in this call (`names`), with
+ * its digest; a `reply-*` folder that stands there by another hand is never recorded.
+ */
+export function recordReplySkills(chat: string, records: string, names: readonly string[]): void {
     const listed: Record<string, { path: string; sha256: string }[]> = {};
     for (const host of skillsFolders) {
         const skills = join(chat, host.folder, 'skills');
@@ -195,7 +194,7 @@ export function recordReplySkills(chat: string, records: string): void {
                 else if (what === 'file') files.push({ path: rel, sha256: digest(path) });
             }
         };
-        for (const name of kind(skills) === 'folder' ? readdirSync(skills) : []) {
+        for (const name of names) {
             if (name.startsWith('reply-') && kind(join(skills, name)) === 'folder') walk(join(skills, name), name);
         }
         listed[host.folder] = files;

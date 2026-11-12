@@ -527,3 +527,22 @@ test('an empty $\'\' or $"" inside a word, a $\'\\xNN\' string, a line continuat
     assert.equal(judge('Bash', { command: "jason campaign l$''ist" }, scope).verdict, 'ask');
     assert.equal(judge('Bash', { command: 'echo {a,b}' }, scope).verdict, 'ask');
 });
+
+test('reply runs with no card only in its exact forms; one more word, option or value is a card', () => {
+    const scope = homeScope('linux', '/home/someone');
+    for (const command of ['reply auth status', 'reply auth status --json', 'reply account list', 'reply account list --json', 'reply account list --channel email --json', 'reply account list --json --channel linkedin', 'reply account list --channel linkedin']) {
+        assert.deepEqual(judge('Bash', { command }, scope), { verdict: 'allow' }, command);
+        assert.ok(claudeAllowedTools.includes(`Bash(${command})`), `the host allows ${command} as written`);
+    }
+    for (const command of ['reply auth status --anything x', 'reply account list --channel whatsapp', 'reply account list --json --json', 'reply auth status --channel email', 'reply account list --base-url http://x']) {
+        assert.equal(judge('Bash', { command }, scope).verdict, 'ask', command);
+    }
+    assert.ok(!claudeAllowedTools.some((rule) => rule.startsWith('Bash(reply') && rule.includes(':*')), 'no reply rule takes what follows unread');
+});
+
+test('a word with more brace expansions than the second look reads is refused, never judged on the first ones alone', () => {
+    const scope = homeScope('linux', '/home/someone');
+    const many = 'echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}';
+    assert.deepEqual(judge('Bash', { command: many }, scope), { verdict: 'deny', message: 'That command expands into more words than the chat reads, so it cannot tell what would run: the chat never runs it. Write the words out. Nothing was run.' });
+    assert.equal(judge('Bash', { command: 'echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}' }, scope).verdict, 'ask', 'sixty-four are read, and a card');
+});

@@ -111,6 +111,19 @@ const windowsNameTitle = 'Use a path Windows reads as another name';
 const guardTitles: ReadonlySet<string> = new Set([...guardedNames.map((guarded) => guarded.title), jasonFileTitle]);
 const allowedReply = [['auth', 'status'], ['account', 'list']];
 
+/**
+ * The reply commands the chat runs with no card, exactly: `reply auth status` and `reply account list`, each with at most
+ * `--json`, and the account list with at most `--channel email` or `--channel linkedin`; nothing else may follow. The
+ * host's allow rules name the same forms (`claudeAllowedTools`), and any other word, option or value is a card.
+ */
+export const replyNoCardForms: readonly string[] = (() => {
+    const forms = ['reply auth status', 'reply auth status --json', 'reply account list', 'reply account list --json'];
+    for (const channel of ['email', 'linkedin']) {
+        forms.push(`reply account list --channel ${channel}`, `reply account list --channel ${channel} --json`, `reply account list --json --channel ${channel}`);
+    }
+    return forms;
+})();
+
 const dataRefusal = 'That path is the installation\'s own data, outside the chat\'s folder: the chat neither reads nor writes it. Nothing was done.';
 const deviceRefusal = 'That path names a device or a volume, not a file in a folder: the chat neither reads nor writes it. Nothing was done.';
 const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat never writes there. Nothing was done.';
@@ -716,10 +729,7 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     // Only the Bash tool's commands are fenced by the host and may be allowed or remembered; any other tool's command is
     // the person's to answer, each time.
     if (tool !== 'Bash') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
-    if (!isCompound(command)) {
-        const tokens = command.trim().split(/\s+/);
-        if (tokens[0] === 'reply' && allowedReply.some((words) => words.every((word, index) => tokens[index + 1] === word))) return allow;
-    }
+    if (!isCompound(command) && replyNoCardForms.includes(command.trim().split(/\s+/).join(' '))) return allow;
     // A command that names a folder holding the data directory may walk it: a card each time, never covered by a grant.
     const data = located(scope.data, scope);
     const prefix = places.some((path) => inside(scope, path, data)) ? null : commandPrefix(command);
@@ -763,22 +773,28 @@ function ansiC(body: string): string {
     });
 }
 
-/** A word's brace expansions, as Bash makes them from `{a,b}`, at most `braceLimit` of them; the word itself when it has none. */
+/** A word's brace expansions, as Bash makes them from `{a,b}`; the word itself when it has none; null past `braceLimit`. */
 const braceLimit = 64;
-function braces(word: string): string[] {
+function braces(word: string): string[] | null {
     const group = /\{([^{}]*,[^{}]*)\}/.exec(word);
     if (group === null) return [word];
     const before = word.slice(0, group.index);
     const after = word.slice(group.index + group[0].length);
     const out: string[] = [];
     for (const choice of (group[1] ?? '').split(',')) {
-        for (const each of braces(`${before}${choice}${after}`)) {
-            if (out.length >= braceLimit) return out;
-            out.push(each);
-        }
+        const each = braces(`${before}${choice}${after}`);
+        if (each === null || out.length + each.length > braceLimit) return null;
+        out.push(...each);
     }
     return out;
 }
+
+/** True when a word of the text has more brace expansions than the second look reads (`braceLimit`). */
+function overBraced(text: string): boolean {
+    return text.split(/\s+/).some((word) => braces(word) === null);
+}
+
+const bracesRefusal = 'That command expands into more words than the chat reads, so it cannot tell what would run: the chat never runs it. Write the words out. Nothing was run.';
 
 /**
  * A text as a shell would most likely run it once it has taken its quoting away: a line continuation joined, an empty
@@ -800,7 +816,7 @@ function readingsOf(text: string): string[] {
         .replace(/\\\r?\n/g, '')
         .replace(/\$(['"])\1/g, '')
         .replace(/\$'((?:[^'\\]|\\[\s\S])*)'/g, (_, body: string) => ansiC(body));
-    const expanded = joined.split(/(\s+)/).map((part) => (/\s/.test(part) ? part : braces(part).join(' '))).join('');
+    const expanded = joined.split(/(\s+)/).map((part) => (/\s/.test(part) ? part : (braces(part) ?? [part]).join(' '))).join('');
     const rest = (value: string) => value.replace(/\\(?=\S)/g, '').replace(/['"]/g, '').replace(/[[\](),]/g, ' ');
     return [rest(expanded), rest(expanded.replace(/\\[ntr]/g, ' '))];
 }
@@ -838,6 +854,8 @@ function clearsEnvironment(text: string): boolean {
  */
 function respelledRefusal(text: string, scope: ChatScope): string | null {
     if (clearsEnvironment(text)) return confinedRefusal;
+    // More expansions than are read is never judged on the part that is.
+    if (overBraced(text)) return bracesRefusal;
     for (const plain of readingsOf(text)) {
         if (plain === text) continue;
         if (namesConfinedVariable(plain)) return confinedRefusal;

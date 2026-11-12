@@ -6,7 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterSkillsDeploy, beforeSkillsDeploy, skillsFolders } from './chat-agent-folder.ts';
+import { AgentFolderUnowned, afterSkillsDeploy, beforeSkillsDeploy, ownAgentFolder, skillsFolders } from './chat-agent-folder.ts';
 import type { Programs } from './programs.ts';
 import { replySkillsAtStart } from './reply-skills.ts';
 import type { Cli, CliResult } from './cli.ts';
@@ -117,6 +117,15 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
     }
 
     mkdirSync(paths.chat, { recursive: true });
+    // The chat folder's top is put right before anything is deployed into it, so a link a last turn left at .claude or
+    // .agents is gone first; the deploy itself makes each skills folder a real one (`beforeSkillsDeploy`). A pass that
+    // cannot finish is said by its code and the start goes on: the deploy's own checks still hold.
+    try {
+        ownAgentFolder(paths.chat, paths.skillsRecords);
+    } catch (error) {
+        if (!(error instanceof AgentFolderUnowned)) throw error;
+        log.warn('agent_folder_unowned', { Code: error.code });
+    }
     // A chat skills folder whose deployment the desktop keeps no record of is deployed afresh (`beforeSkillsDeploy`).
     const unrecorded = skillsFolders.some((host) => !existsSync(join(paths.skillsRecords, host.record)));
     if (deps.settings.skillsDeployedFor !== deps.bundleVersion || unrecorded) {

@@ -1,14 +1,16 @@
-// The chat folder's agent settings, which the desktop owns: before each turn `.claude/` and `.agents/` hold only the
-// skills the desktop recorded, outside the chat folder, as placed; no `.claude`, `.agents` or `.codex` stands below the
-// top; the memory files the desktop does not write are gone; and nothing outside the chat folder is ever deleted.
+// The chat folder's agent settings, which the desktop owns at the top: before each turn `.claude/` and `.agents/` hold
+// only the skills the desktop recorded, outside the chat folder, as placed; the memory files the desktop does not write
+// are gone; nothing below the top is looked at; and nothing outside the chat folder is ever deleted or written.
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { AgentFolderUnowned, afterSkillsDeploy, beforeSkillsDeploy, ownAgentFolder, recordReplySkills, skillsFolders, skillsRecordFile } from '../src/chat-agent-folder.ts';
+import { AgentFolderUnowned, afterSkillsDeploy, beforeSkillsDeploy, ownAgentFolder, realSkillsFolder, recordReplySkills, skillsFolders, skillsRecordFile } from '../src/chat-agent-folder.ts';
+import { deployReplySkills } from '../src/reply-skills.ts';
+import { desktopPaths } from '../src/paths.ts';
 
 function folders(t: { after(fn: () => void): void }): { chat: string; records: string; root: string } {
     const root = mkdtempSync(join(tmpdir(), 'jason-desktop-'));
@@ -68,7 +70,7 @@ test('the skills the desktop\'s records name with their bytes stay in both skill
 test('the Reply skills stay only as the Connect card recorded them; a reply- folder nobody recorded goes', (t) => {
     const { chat, records } = folders(t);
     for (const host of [claude, agents]) put(join(chat, host.folder, 'skills', 'reply-cli', 'SKILL.md'), 'reply');
-    recordReplySkills(chat, records);
+    recordReplySkills(chat, records, ['reply-cli']);
     for (const host of [claude, agents]) {
         put(join(chat, host.folder, 'skills', 'reply-x', 'SKILL.md'), '---\nallowed-tools: Bash\n---');
         put(join(chat, host.folder, 'skills', 'reply-cli', 'extra.md'), 'planted beside a recorded one');
@@ -82,20 +84,21 @@ test('the Reply skills stay only as the Connect card recorded them; a reply- fol
     assert.deepEqual(kept['.claude'], [{ path: 'reply-cli/SKILL.md', sha256: sha('reply') }]);
 });
 
-test('every .claude, .agents and .codex below the chat folder\'s top is removed, at any depth and in any letter case', (t) => {
+test('nothing below the top is looked at in this version: a subfolder\'s agent folder stays, and no subfolder can refuse a turn', (t) => {
     const { chat, records } = folders(t);
-    put(join(chat, 'notes', '.claude', 'skills', 'x', 'SKILL.md'), 'planted');
-    put(join(chat, 'a', 'b', '.agents', 'skills', 'y', 'SKILL.md'), 'planted');
-    put(join(chat, 'a', '.codex', 'config.toml'), 'planted');
-    put(join(chat, 'a', '.CLAUDE', 'settings.json'), 'planted');
+    put(join(chat, 'notes', '.claude', 'skills', 'x', 'SKILL.md'), 'below the top');
+    put(join(chat, 'a', 'b', '.codex', 'config.toml'), 'below the top');
+    // Inside a skills folder only what is recorded stays, a nested agent folder with the rest.
     put(join(chat, '.claude', 'skills', 'planted', '.claude', 'settings.json'), 'planted');
-    put(join(chat, 'notes', 'plan.md'), 'kept');
-    ownAgentFolder(chat, records);
-    assert.ok(!existsSync(join(chat, 'notes', '.claude')));
-    assert.ok(!existsSync(join(chat, 'a', 'b', '.agents')));
-    assert.ok(!existsSync(join(chat, 'a', '.codex')));
-    assert.ok(!existsSync(join(chat, 'a', '.CLAUDE')));
-    assert.ok(existsSync(join(chat, 'notes', 'plan.md')));
+    const looked: string[] = [];
+    ownAgentFolder(chat, records, (path) => {
+        looked.push(path);
+        rmSync(path, { recursive: true, force: true });
+    });
+    assert.ok(existsSync(join(chat, 'notes', '.claude', 'skills', 'x', 'SKILL.md')));
+    assert.ok(existsSync(join(chat, 'a', 'b', '.codex', 'config.toml')));
+    assert.ok(!existsSync(join(chat, '.claude', 'skills', 'planted')));
+    assert.ok(looked.every((path) => !path.startsWith(join(chat, 'notes')) && !path.startsWith(join(chat, 'a'))), looked.join(' '));
 });
 
 test('a link met anywhere is removed as a link: a junction nested in a removed folder leaves what it names', (t) => {
@@ -105,16 +108,15 @@ test('a link met anywhere is removed as a link: a junction nested in a removed f
     try {
         mkdirSync(join(chat, '.claude', 'agents'), { recursive: true });
         symlinkSync(outside, join(chat, '.claude', 'agents', 'x'), 'junction');
-        mkdirSync(join(chat, 'notes', '.claude'), { recursive: true });
-        symlinkSync(outside, join(chat, 'notes', '.claude', 'y'), 'junction');
-        symlinkSync(outside, join(chat, 'notes', 'z'), 'junction');
+        mkdirSync(join(chat, '.agents', 'skills'), { recursive: true });
+        symlinkSync(outside, join(chat, '.agents', 'skills', 'reply-y'), 'junction');
     } catch {
         t.skip('links cannot be made here');
         return;
     }
     ownAgentFolder(chat, records);
     assert.ok(!existsSync(join(chat, '.claude', 'agents')));
-    assert.ok(!existsSync(join(chat, 'notes', '.claude')));
+    assert.ok(!existsSync(join(chat, '.agents', 'skills', 'reply-y')));
     assert.ok(existsSync(join(outside, 'precious.txt')), 'nothing outside the chat folder is deleted');
     assert.deepEqual(readdirSync(outside), ['precious.txt']);
 });
@@ -148,7 +150,7 @@ test('a skills deployment reads the desktop\'s record beside the skills and leav
     // With no record kept, the folder starts empty.
     put(join(chat, '.claude', 'skills', 'planted', 'SKILL.md'), 'x');
     beforeSkillsDeploy(chat, records, claude);
-    assert.ok(!existsSync(join(chat, '.claude', 'skills')));
+    assert.deepEqual(readdirSync(join(chat, '.claude', 'skills')), []);
     // The CLI writes its skills and its record; the record moves out.
     put(join(chat, '.claude', 'skills', 'campaign-launch', 'SKILL.md'), 'launch');
     put(join(chat, '.claude', 'skills', skillsRecordFile), deployment([{ path: 'campaign-launch/SKILL.md', sha256: sha('launch') }]));
@@ -161,4 +163,72 @@ test('a skills deployment reads the desktop\'s record beside the skills and leav
     afterSkillsDeploy(chat, records, claude);
     ownAgentFolder(chat, records);
     assert.deepEqual(readdirSync(join(chat, '.claude', 'skills')), ['campaign-launch']);
+});
+
+/** A folder outside the chat folder holding a skills folder with a file, and what it holds, read back. */
+function outsideSkills(root: string): { folder: string; snapshot: () => string } {
+    const folder = join(root, 'person');
+    put(join(folder, 'skills', 'mine', 'SKILL.md'), 'the person\'s own skill');
+    put(join(folder, 'notes.md'), 'the person\'s notes');
+    const snapshot = () => JSON.stringify([readdirSync(folder).sort(), readdirSync(join(folder, 'skills')).sort(), readFileSync(join(folder, 'skills', 'mine', 'SKILL.md'), 'utf8'), readFileSync(join(folder, 'notes.md'), 'utf8')]);
+    return { folder, snapshot };
+}
+
+/** Makes a link to a folder: a junction where the system has them, else a symbolic link; false when neither can be made. */
+function linkTo(target: string, path: string, type: 'junction' | 'dir'): boolean {
+    try {
+        mkdirSync(dirname(path), { recursive: true });
+        symlinkSync(target, path, type);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+for (const type of ['junction', 'dir'] as const) {
+    for (const at of ['.claude', join('.claude', 'skills')]) {
+        for (const kept of [false, true]) {
+            test(`a deploy never goes through a ${type} link at ${at.replace(/\\/g, '/')}${kept ? ', with a record kept' : ''}: the target stays byte for byte, and the skills go into a real folder`, (t) => {
+                const { chat, records, root } = folders(t);
+                const { folder, snapshot } = outsideSkills(root);
+                const before = snapshot();
+                if (!linkTo(at === '.claude' ? folder : join(folder, 'skills'), join(chat, at), type)) {
+                    t.skip(`a ${type} link cannot be made here`);
+                    return;
+                }
+                if (kept) put(join(records, claude.record), deployment([]));
+                beforeSkillsDeploy(chat, records, claude);
+                // The CLI deploys into the folder, which is now a real one.
+                const skills = realSkillsFolder(chat, claude);
+                put(join(skills, 'campaign-launch', 'SKILL.md'), 'launch');
+                put(join(skills, skillsRecordFile), deployment([{ path: 'campaign-launch/SKILL.md', sha256: sha('launch') }]));
+                afterSkillsDeploy(chat, records, claude);
+                assert.equal(snapshot(), before, 'what the link named is as it was');
+                for (const path of [join(chat, '.claude'), join(chat, '.claude', 'skills')]) assert.ok(lstatSync(path).isDirectory() && !lstatSync(path).isSymbolicLink(), path);
+                assert.deepEqual(readdirSync(join(chat, '.claude', 'skills')), ['campaign-launch']);
+            });
+        }
+    }
+}
+
+test('a reply- folder that stands there before the Connect card\'s deploy is neither recorded nor kept', async (t) => {
+    const { root } = folders(t);
+    const paths = desktopPaths(join(root, 'data'));
+    for (const host of [claude, agents]) put(join(paths.chat, host.folder, 'skills', 'reply-planted', 'SKILL.md'), '---\nallowed-tools: Bash\n---');
+    // The Reply CLI as the routine runs it: it writes its skills into the folder it is started in.
+    const exit = await deployReplySkills(async (_verb, _args, options) => {
+        put(join(options.cwd ?? '', '.agents', 'skills', 'reply-cli', 'SKILL.md'), '# reply-cli\n');
+        return { exit: 0, stdout: '', stderr: '' };
+    }, paths);
+    assert.equal(exit, 0);
+    const kept = JSON.parse(readFileSync(join(paths.skillsRecords, 'reply.json'), 'utf8')) as Record<string, { path: string }[]>;
+    for (const host of [claude, agents]) {
+        assert.deepEqual(readdirSync(join(paths.chat, host.folder, 'skills')), ['reply-cli'], host.folder);
+        assert.deepEqual(kept[host.folder]?.map((each) => each.path), ['reply-cli/SKILL.md'], host.folder);
+    }
+    // recordReplySkills names only the folders it is given, whatever else stands there.
+    put(join(paths.chat, '.claude', 'skills', 'reply-other', 'SKILL.md'), 'x');
+    recordReplySkills(paths.chat, paths.skillsRecords, ['reply-cli']);
+    const again = JSON.parse(readFileSync(join(paths.skillsRecords, 'reply.json'), 'utf8')) as Record<string, { path: string }[]>;
+    assert.deepEqual(again['.claude']?.map((each) => each.path), ['reply-cli/SKILL.md']);
 });

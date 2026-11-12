@@ -89,6 +89,7 @@ export const templates = {
     chat_named: 'A set-up chat was asked a name by its host; the run ended {Outcome}',
     chat_mode_changed: 'A chat went from mode {From} to mode {To}',
     chat_turn_stopped: 'A chat turn was stopped by the desktop: {Cause}',
+    agent_folder_unowned: 'The chat folder\'s agent settings could not be put right at the start ({Code})',
 } as const;
 
 export type TemplateName = keyof typeof templates;

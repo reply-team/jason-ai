@@ -8,14 +8,14 @@ import { isEffort, type Effort } from './chat-models.ts';
 import { allowRules, denyRules } from './chat-deny.ts';
 import type { ChatMode } from './chat-modes.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
-import { confinedVariable, guardedNames, searchVariables, type Platform } from './chat-permission-model.ts';
+import { confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
 import { withReplyClient } from './reply-client.ts';
 import { isSessionMarker } from './session-markers.ts';
 
 /**
  * What Claude Code runs without asking anyone, beside what its own rules already let run and the allow list's jason verbs
  * (`allowRules`): the skills, web search, subagents (`Agent`, `Task` before the tool was renamed), the task list
- * (`TodoWrite`, and the `Task*` tools that replace it on newer models), and of `reply` exactly two read commands. Every
+ * (`TodoWrite`, and the `Task*` tools that replace it on newer models), and of `reply` two read commands in their exact forms. Every
  * other tool use the host would ask about goes to the permission tool, a jason command none of the verbs begins included,
  * and so does opening a web page: the agent reads text outsiders wrote, and a fetch could carry what it sees out in a URL.
  */
@@ -29,8 +29,9 @@ export const claudeAllowedTools: readonly string[] = [
     'TaskGet',
     'TaskList',
     'TaskUpdate',
-    'Bash(reply auth status:*)',
-    'Bash(reply account list:*)',
+    // Of reply, the exact forms alone (`replyNoCardForms`): a rule with no `:*` matches the command as written and no
+    // longer one.
+    ...replyNoCardForms.map((form) => `Bash(${form})`),
 ];
 
 /**

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { replyNoCardForms } from '../src/chat-permission-model.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -64,7 +65,7 @@ test('the person\'s words are never on a host\'s command line: every argument is
 
 test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, and each allowed jason verb', () => {
     assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [...claudeAllowedTools, ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`)]);
-    assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), ['Bash(reply auth status:*)', 'Bash(reply account list:*)']);
+    assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), replyNoCardForms.map((form) => `Bash(${form})`));
     assert.ok(!claudeArguments(turn).includes('Bash(jason:*)'));
     for (const tool of ['Skill', 'WebSearch', 'Task', 'TodoWrite']) assert.ok(claudeAllowedTools.includes(tool), tool);
     // A web page is opened by a card: the agent reads text outsiders wrote, and a fetch could carry what it sees out in a URL.

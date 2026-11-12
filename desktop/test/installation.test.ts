@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
@@ -230,4 +230,26 @@ test('a failed install of the Reply skills lets the start go on with no record, 
     assert.ok(log.lines.some((line) => line.name === 'skills_deployed' && line.fields.Target === 'chat_reply' && line.fields.Exit === 1));
     await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
     assert.equal(replySkillCalls(b).length, 2, 'tried again, since the record is still absent');
+});
+
+test('a start never deploys through a link at the chat folder\'s .claude: the link is removed, its target left byte for byte, the skills deployed into a real folder', async (t) => {
+    const b = bench(t);
+    runtimeAlreadyUp(b);
+    const person = join(b.root, 'person');
+    mkdirSync(join(person, 'skills', 'mine'), { recursive: true });
+    writeFileSync(join(person, 'skills', 'mine', 'SKILL.md'), 'the person\'s own skill');
+    mkdirSync(b.paths.chat, { recursive: true });
+    try {
+        symlinkSync(person, join(b.paths.chat, '.claude'), 'junction');
+    } catch {
+        t.skip('links cannot be made here');
+        return;
+    }
+    await start(b);
+    assert.deepEqual(readdirSync(person), ['skills']);
+    assert.deepEqual(readdirSync(join(person, 'skills')), ['mine']);
+    assert.equal(readFileSync(join(person, 'skills', 'mine', 'SKILL.md'), 'utf8'), 'the person\'s own skill');
+    const claude = lstatSync(join(b.paths.chat, '.claude'));
+    assert.ok(claude.isDirectory() && !claude.isSymbolicLink());
+    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')), ['campaign-launch']);
 });

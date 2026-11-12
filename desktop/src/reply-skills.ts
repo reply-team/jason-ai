@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { cp, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { recordReplySkills, replyRecord } from './chat-agent-folder.ts';
+import { ownAgentFolder, realSkillsFolder, recordReplySkills, replyRecord, skillsFolders } from './chat-agent-folder.ts';
 import type { Logger } from './log.ts';
 import type { DesktopPaths } from './paths.ts';
 import type { Programs, RunResult } from './programs.ts';
@@ -26,20 +26,23 @@ export const replySkillsLimitMs = 5 * 60_000;
  * copied and recorded. On a failure nothing is changed and nothing is recorded.
  */
 export async function deployReplySkills(run: RunReply, paths: DesktopPaths): Promise<number> {
-    const targets = [join(paths.chat, '.claude', 'skills'), join(paths.chat, '.agents', 'skills')];
     const place = await mkdtemp(join(tmpdir(), 'jason-reply-skills-'));
     try {
         const answer = await run('skills install', ['skills', 'install', 'adapter', '--project', '--agent', 'codex'], { cwd: place, timeoutMs: replySkillsLimitMs });
         if (answer.exit !== 0) return answer.exit;
         const source = join(place, '.agents', 'skills');
         const written = (await readdir(source).catch(() => [] as string[])).filter((name) => name.startsWith('reply-'));
+        // The folders are put right at the top first, and each skills folder made a real one: nothing is copied through a
+        // link.
+        ownAgentFolder(paths.chat, paths.skillsRecords);
+        const targets = skillsFolders.map((host) => realSkillsFolder(paths.chat, host));
         for (const target of targets) {
             for (const name of await readdir(target).catch(() => [] as string[])) {
                 if (name.startsWith('reply-')) await rm(join(target, name), { recursive: true, force: true });
             }
             for (const name of written) await cp(join(source, name), join(target, name), { recursive: true });
         }
-        recordReplySkills(paths.chat, paths.skillsRecords);
+        recordReplySkills(paths.chat, paths.skillsRecords, written);
         return 0;
     } finally {
         await rm(place, { recursive: true, force: true });

@@ -205,9 +205,11 @@ export function renameChat(id: string, title: string): void {
 export function chooseMode(id: string, mode: DesktopChatMode): void {
     const chat = chats.value[id];
     if (!chat) return;
-    // Leaving Full access while its turn runs stops that turn, as Stop does: the waiting message is given back, and no
-    // turn follows by itself.
-    if (chat.running && chat.mode === 'full_access' && mode !== 'full_access') changeChat(id, stopAsked);
+    // Leaving Full access while its turn runs stops that turn, and so does a change to Plan only, as Stop does: the
+    // waiting message is given back, and no turn follows by itself.
+    const stops =
+        (chat.mode === 'full_access' && mode !== 'full_access') || (mode === 'plan_only' && chat.mode !== 'plan_only');
+    if (chat.running && stops) changeChat(id, stopAsked);
     here()
         .desktop.chat.setMode(id, mode, hostOf(chat)?.id ?? '')
         .then((answer) => {

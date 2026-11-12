@@ -266,26 +266,42 @@ test('leaving Full access while its turn runs stops that turn', async (t) => {
     assert.equal(r.chat.open(id).mode, 'plan_only');
 });
 
-test('changing between Ask first and Plan only lets a running turn go on, in the mode it started in', async (t) => {
-    const r = rig(t);
-    const { id } = await r.chat.create();
-    const pidFile = join(r.b.root, 'held.pid');
-    // The host holds the turn open until the row stops it, so the change of mode always meets a running turn.
+/** Sends a turn the host holds open until the row stops it, and resolves once it runs; its `done` is `ended`. */
+async function heldTurn(r: Rig, id: string, pidFile: string): Promise<{ ended: Promise<ChatEvent> }> {
     plan(r, [{ say: 'working' }, { wait: pidFile }]);
     const ended = r.until(id, (event) => event.kind === 'done');
     await r.chat.send(id, 'go', claude);
     await r.until(id, (event) => event.kind === 'text' && event.text === 'working');
     const until = Date.now() + 10_000;
     while (!existsSync(pidFile) && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 20));
+    return { ended };
+}
+
+/** Whether a turn's end comes within two seconds: a stop takes its time to end a host's process tree. */
+const endsSoon = (ended: Promise<ChatEvent>) => Promise.race([ended.then(() => 'ended'), new Promise((resolve) => setTimeout(() => resolve('running'), 2000))]);
+
+test('a change from Plan only to Ask first lets the running turn go on, in the mode it started in', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
     await r.chat.setMode(id, 'plan_only');
+    const { ended } = await heldTurn(r, id, join(r.b.root, 'held.pid'));
     await r.chat.setMode(id, 'ask_first');
-    // A stop takes its time to end a host's process tree, so the row gives an end two seconds to come.
-    const outcome = await Promise.race([ended.then(() => 'ended'), new Promise((resolve) => setTimeout(() => resolve('running'), 2000))]);
-    assert.equal(outcome, 'running', 'no change of mode ended it');
-    assert.equal(r.chat.isRunning(id), true, 'the turn goes on');
-    assert.deepEqual(r.started, ['ask_first'], 'it runs in the mode it started in');
+    assert.equal(await endsSoon(ended), 'running', 'no change to Ask first ended it');
+    assert.equal(r.chat.isRunning(id), true);
+    assert.deepEqual(r.started, ['plan_only'], 'it runs in the mode it started in');
     r.chat.stop(id);
     assert.deepEqual(await ended, { kind: 'done', error: null });
+});
+
+test('a change to Plan only stops the running turn, so the menu never says Plan only while that turn could ask to change something', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    const { ended } = await heldTurn(r, id, join(r.b.root, 'held.pid'));
+    await r.chat.setMode(id, 'plan_only');
+    assert.equal(await endsSoon(ended), 'ended');
+    assert.deepEqual(await ended, { kind: 'done', error: null });
+    assert.equal(r.chat.isRunning(id), false);
+    assert.equal(r.chat.open(id).mode, 'plan_only');
 });
 
 test('a chat in Full access sent to Codex goes back to Ask first, and its turn runs in Codex\'s read-only sandbox', async (t) => {

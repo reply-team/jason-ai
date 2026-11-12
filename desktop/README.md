@@ -247,25 +247,29 @@ applies to the turns a person starts by sending, from the next one on.
   quotes and a backslash inside a word removed, a bracket, a comma or a parenthesis read as a space. `appro\ve`,
   `approv''e`, `approval.appr''ove` and `['jason','approval','approve']` are refused as their plain spelling is, in Ask
   first too, and so is the content of a file being written in Full access. The same look reads through an empty `$''`
-  or `$""` inside a word, a `$'\xNN'` string, a line continuation and a brace group (`{approve,}`), and reads `\n`, `\t`
-  and `\r` in a string as the space they print. What the plain spelling would not refuse stays a card in Ask first. An
+  or `$""` inside a word, a `$'\xNN'` string, a line continuation and a brace group (`{approve,}`; a word of more than
+  64 expansions is refused, never judged on the first ones), and reads `\n`, `\t` and `\r` in a string as the space they print.
+  What the plain spelling would not refuse stays a card in Ask first. An
   `env` that clears the environment (`-i`, `-`, `-u`, `--unset`) or `exec -c`, in a command part that runs a jason,
   clears the confining variable without naming it, and is refused in every mode; an `env` elsewhere in a command list
   is not.
 - **The chat's own names, by every route.** The chat's instructions and its `.claude`, `.agents` and `.codex` folders
   directly in the chat folder are refused in every mode to a shell command as to the file tools, and the host is denied
   edits of them (`chatRules`).
-- **The chat folder is the desktop's, in every mode.** What the desktop placed in it is recorded outside it, under
-  `<data>/desktop/skills-records/`, which the chat neither reads nor writes: the record `jason skills install` writes of
-  each deployment, put beside the skills only while the CLI runs and moved out after, and the Reply skills' files with
-  their digests, recorded when the Connect card copies them. Before every turn (`src/chat-agent-folder.ts`) `.claude/`
-  and `.agents/` hold their `skills/` and in it only the files those records name with the bytes recorded; everything
-  else there is removed, a settings file and a record beside the skills included; `.codex/` and the memory files the
-  desktop does not write (`CLAUDE.local.md`, `AGENTS.override.md`) are removed from the top; and every `.claude`,
-  `.agents` and `.codex` anywhere below the top is removed, since a host loads the skills of one it meets there. A link
-  is removed as a link, never walked, so nothing outside the chat folder is deleted. A chat skills folder whose
-  deployment the desktop keeps no record of, an installation's first start of this version included, is emptied and
-  deployed afresh at the start. While no record of the Reply skills is kept, a start whose `reply auth status` says
+- **The chat folder's top is the desktop's, in every mode.** What the desktop placed in it is recorded outside it,
+  under `<data>/desktop/skills-records/`, which the chat neither reads nor writes: the record `jason skills install`
+  writes of each deployment, put beside the skills only while the CLI runs and moved out after, and the Reply skills'
+  files with their digests, recorded for the folders the Connect card copies in that call and no others. At the start
+  before anything is deployed, and before every turn (`src/chat-agent-folder.ts`), the top is put right: `.claude/` and
+  `.agents/` hold their `skills/` and in it only the files those records name with the bytes recorded; everything else
+  there is removed, a settings file and a record beside the skills included; `.codex/` and the memory files the desktop
+  does not write (`CLAUDE.local.md`, `AGENTS.override.md`) are removed. Nothing below the top is looked at in this
+  version: an agent folder or a memory file in a subfolder is not removed, and a host may read instructions from a
+  folder it works in (in Ask first every write there is a card). A link is removed as a link, never walked, and a deploy
+  never goes through one: `.claude`, `.agents` and their `skills` are each made a real folder before anything is
+  written into them, so nothing outside the chat folder is deleted or written. A chat skills folder whose deployment
+  the desktop keeps no record of, an installation's first start of this version included, is emptied and deployed
+  afresh at the start. While no record of the Reply skills is kept, a start whose `reply auth status` says
   signed in deploys them by the sign-in's own routine and records them, in the same step as Jason's skills; a
   `reply-*` folder that stood there is removed and replaced by the Reply CLI's copy, never kept, and an install that
   fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not
@@ -275,8 +279,9 @@ applies to the turns a person starts by sending, from the next one on.
   input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account. The
   confirmation says so.
 - Leaving Full access while a turn runs in it stops that turn, and the page gives the waiting message back as Stop does:
-  no turn follows by itself. Changing between Ask first and Plan only lets a running turn finish in the mode it started
-  in.
+  no turn follows by itself. A change to Plan only stops the running turn the same way, so the menu never says Plan only
+  while a turn could still ask to change something; a change from Plan only to Ask first lets the running turn finish
+  in the mode it started in.
 - **No turn starts by itself.** Every turn is a person's send:
   - a message the person sends while a turn runs waits in the page and goes as the next turn once that one ends well, in
     the mode of the moment it goes;

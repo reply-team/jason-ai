@@ -524,7 +524,10 @@ export class Chat {
         this.#options.modeChanged?.(from, to);
         this.#options.emit(conversation.id, { kind: 'mode', mode: to });
         const running = this.#running.get(conversation.id);
-        if (stopTurn && from === 'full_access' && running?.mode === 'full_access') {
+        // Leaving Full access stops the turn that runs in it, and so does a change to Plan only: the menu never says Plan
+        // only while the running turn could still ask to change something.
+        const stops = (from === 'full_access' && running?.mode === 'full_access') || (to === 'plan_only' && running !== undefined && running.mode !== 'plan_only');
+        if (stopTurn && stops && running !== undefined) {
             running.stopped = true;
             running.process?.stop();
         }
