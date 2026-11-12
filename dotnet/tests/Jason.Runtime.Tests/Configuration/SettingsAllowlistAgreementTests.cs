@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using Jason.Cli.Doctor;
 using Jason.Contracts.Api;
+using Jason.Contracts.Channels;
 using Jason.Contracts.Configuration;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
@@ -232,8 +233,14 @@ public sealed class SettingsAllowlistAgreementTests
             }
             else if (propertyType.IsGenericType && propertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {
-                // The one map keyed by an operation is the routes'; the others are keyed by a plugin's id.
-                var key = property.Name == nameof(RoutesOptions.Operations) ? OperationCatalog.All[0].Id : "<id>";
+                // The one map keyed by an operation is the routes', and the one keyed by a channel is an operation's channel
+                // routes; the others are keyed by a plugin's id.
+                var key = property.Name switch
+                {
+                    nameof(RoutesOptions.Operations) => OperationCatalog.All[0].Id,
+                    nameof(OperationRouteEntry.Channels) => ChannelRules.Email,
+                    _ => "<id>",
+                };
                 var leaves = Walk(propertyType.GetGenericArguments()[1], $"{child}:{key}", [.. chain, type]).ToList();
                 Assert.True(
                     leaves.Count > 0 && !leaves.Any(leaf => leaf.Path.EndsWith(":Item", StringComparison.Ordinal)),

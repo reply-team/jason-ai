@@ -11,7 +11,7 @@ namespace Jason.Runtime.Configuration;
 /// that a settings file saying something other than an object can be reported by name instead of disappearing;
 /// validation on start refuses anything but an object, so everything downstream reads an object or nothing.
 /// </summary>
-public sealed class RouteEntry
+public class RouteEntry
 {
     public string? Plugin { get; set; }
 
@@ -19,9 +19,30 @@ public sealed class RouteEntry
 }
 
 /// <summary>
-/// The global half of routing: a default, and the operations that override it. The campaign half lives in the
-/// database, because it is edited through the API; this half lives in <c>settings.json</c>, because an installer
-/// or a bootstrap configuration has to be able to write it before a runtime has ever run.
+/// One operation's global routes: the route of the operation itself, and the channels that override it, each a route of
+/// its own under the channel it names (<c>Routes:Operations:&lt;operation&gt;:Channels:&lt;channel&gt;</c>). The channel is
+/// a key of its own rather than part of the operation's, because the colon a compound key would need is what separates
+/// the keys of a settings path. Where <see cref="Channels"/> names a route, the operation's own
+/// <see cref="RouteEntry.Plugin"/> may be left out: the operation then has channel routes and no route of its own. A file
+/// written before channel routes existed names none, and means what it meant.
+/// </summary>
+public sealed class OperationRouteEntry : RouteEntry
+{
+    public Dictionary<string, RouteEntry> Channels { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Whether text stood where the map of channels belongs, so nothing in it could be read. The validator, which knows how
+    /// to name the operation's key, refuses it: reading past it would leave the operation without its channel routes and
+    /// without a word.
+    /// </summary>
+    internal bool ChannelsUnreadable { get; set; }
+}
+
+/// <summary>
+/// The global half of routing: a default, the operations that override it, and the channels that override an
+/// operation. The campaign half lives in the database, because it is edited through the API; this half lives in
+/// <c>settings.json</c>, because an installer or a bootstrap configuration has to be able to write it before a runtime
+/// has ever run.
 /// <para>
 /// There is no shipped default. A product that routed somewhere out of the box would make its vendor-neutrality
 /// a claim contradicted by its own configuration.
@@ -36,7 +57,7 @@ public sealed partial class RoutesOptions
 
     public RouteEntry? Default { get; set; }
 
-    public Dictionary<string, RouteEntry> Operations { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, OperationRouteEntry> Operations { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Read rather than bound. The configuration system flattens a file into string keys and string values, and
@@ -89,7 +110,7 @@ public sealed partial class RoutesOptions
         options.Operations.Clear();
         foreach (var operation in section.GetSection(nameof(Operations)).GetChildren())
         {
-            options.Operations[operation.Key] = Entry(operation);
+            options.Operations[operation.Key] = OperationEntry(operation);
         }
     }
 
@@ -98,6 +119,24 @@ public sealed partial class RoutesOptions
         Plugin = section[nameof(RouteEntry.Plugin)],
         Binding = Json(section.GetSection(nameof(RouteEntry.Binding))),
     };
+
+    private static OperationRouteEntry OperationEntry(IConfigurationSection section)
+    {
+        var channels = section.GetSection(nameof(OperationRouteEntry.Channels));
+        var entry = new OperationRouteEntry
+        {
+            Plugin = section[nameof(RouteEntry.Plugin)],
+            Binding = Json(section.GetSection(nameof(RouteEntry.Binding))),
+            ChannelsUnreadable = channels.Value is { Length: > 0 },
+        };
+
+        foreach (var channel in channels.GetChildren())
+        {
+            entry.Channels[channel.Key] = Entry(channel);
+        }
+
+        return entry;
+    }
 
     internal static JsonNode? Json(IConfigurationSection section)
     {
