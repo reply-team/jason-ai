@@ -407,3 +407,36 @@ test('POSIX: a word that starts with = is held, since zsh rewrites it to a progr
     for (const command of ['echo =frobnicate', '=frobnicate a', "echo '=x' =y"]) assert.equal(reasonOf('Bash', command), 'expansion', command);
     assert.deepEqual(wordsOf('Bash', 'echo a=b --x=1'), [['echo', 'a=b', '--x=1']]);
 });
+
+test('POSIX: a character outside ASCII or a control character inside quotes is held; a here-document\'s body stays data', () => {
+    const rows: [string, HeldReason][] = [
+        ["echo '\uFF02'", 'non_ascii'],
+        ['echo "\u00E9"', 'non_ascii'],
+        ["echo 'a\u0000b'", 'control_character'],
+        ['echo "a\rb"', 'control_character'],
+        ["echo 'a\u001Bb'", 'control_character'],
+    ];
+    for (const [command, reason] of rows) assert.equal(reasonOf('Bash', command), reason, JSON.stringify(command));
+    assert.deepEqual(wordsOf('Bash', "echo 'a\tb'"), [['echo', 'a\tb']], 'a tab inside quotes is a character of the word');
+    assert.ok(!readLiteral('Bash', "frobnicate <<'EOF'\n\u00E9 \u0000\nEOF", linux).held);
+});
+
+test('POSIX: the redirections outside the literal set, a NUL outside quotes and ;& are held; a tab is a blank', () => {
+    const rows: [string, HeldReason][] = [
+        ['frobnicate <> f', 'operator'],
+        ['frobnicate >&2', 'operator'],
+        ['frobnicate <&0', 'operator'],
+        ['frobnicate 2>> f', 'operator'],
+        ['echo a ;& echo b', 'syntax'],
+        ['echo a\u0000b', 'control_character'],
+    ];
+    for (const [command, reason] of rows) assert.equal(reasonOf('Bash', command), reason, JSON.stringify(command));
+    assert.deepEqual(wordsOf('Bash', 'echo\ta\tb'), [['echo', 'a', 'b']]);
+});
+
+test('POSIX: a redirection to a device the shell emulates is held; /dev/null is a file', () => {
+    for (const command of ['frobnicate > /dev/tcp/127.0.0.1/80', 'frobnicate < /dev/udp/127.0.0.1/53', 'frobnicate 2> /dev/fd/3', 'frobnicate > /dev/stderr']) {
+        assert.equal(reasonOf('Bash', command), 'operator', command);
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'frobnicate a > /dev/null 2>&1' }, scope), runs);
+});

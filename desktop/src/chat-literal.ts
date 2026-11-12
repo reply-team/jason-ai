@@ -140,6 +140,8 @@ class Builder {
         const word = this.word;
         this.finish(this, word);
         if (this.redirect) {
+            // A device the shell emulates (`/dev/tcp/...`, `/dev/fd/...`) is not a file; only `/dev/null` is read as one.
+            if (word.startsWith('/dev/') && word !== '/dev/null') throw new Held('operator');
             this.targets.push(word);
             this.redirect = false;
         } else {
@@ -206,7 +208,8 @@ function readPosix(text: string, home: string): Parsed[] {
     while (at < text.length) {
         const c = text[at] as string;
         const code = c.codePointAt(0) ?? 0;
-        // A here-document's body is data and is never read here; everywhere else a character outside ASCII is held.
+        // A here-document's body is data and is never read here; everywhere else, quoted bodies included, a character
+        // outside ASCII or a control character is held.
         if (code > 0x7e) throw new Held('non_ascii');
         if (code < 0x20 && c !== '\n' && c !== '\t') throw new Held('control_character');
         if (c === ' ' || c === '\t') {
@@ -227,6 +230,7 @@ function readPosix(text: string, home: string): Parsed[] {
             if (end < 0) throw new Held('quote');
             const body = text.slice(at + 1, end);
             if (body.includes('\n')) throw new Held('quote');
+            asciiOnly(body);
             builder.append(body, text.slice(at, end + 1), true);
             at = end + 1;
             continue;
@@ -239,6 +243,7 @@ function readPosix(text: string, home: string): Parsed[] {
             if (body.includes('\\')) throw new Held('escape');
             if (body.includes('!')) throw new Held('history');
             if (body.includes('\n')) throw new Held('quote');
+            asciiOnly(body);
             builder.append(body, text.slice(at, end + 1), true);
             at = end + 1;
             continue;
