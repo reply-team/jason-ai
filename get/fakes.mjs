@@ -43,9 +43,10 @@ export function fakeDb({ rows = [], failing = false } = {}) {
 }
 
 /**
- * A D1 binding over a real SQLite database in memory, made from schema.sql, so a statement is run as written. D1 numbers
- * its parameters (?1, ?2) and the statement goes to node:sqlite untouched. Handed the values positionally, node:sqlite
- * (22.17) refuses a numbered parameter ("column index out of range"), so they are bound by name, '?1' for ?1, which it takes.
+ * A D1 binding over a real SQLite database in memory, made from schema.sql, so a statement is run as written. D1
+ * numbers its parameters (?1, ?2) and the statement goes to node:sqlite untouched. Handed the values positionally,
+ * node:sqlite (22.17) refuses a numbered parameter ("column index out of range"), so they are bound by name, '?1' for
+ * ?1, which it takes.
  */
 export function sqliteDb() {
   const database = new DatabaseSync(':memory:');

@@ -11,19 +11,21 @@ import { DESKTOP, INSTALL_PAGE, INSTALL_PATH, STATS_PATH } from './paths.mjs';
 import { FOLDED_SOURCE, readCounts, renderCsv, renderHtml, tabulate } from './stats.mjs';
 
 /**
- * How many distinct named sources one UTC day may name (the reserved (none) and (other) rows are not among them). A request whose source the day has not seen, once the day has this many,
- * is counted under the row /stats folds its rest into, and makes no row of its own. Without a cap, a flood of made-up
- * links grows the counts table without bound and pushes real sources into /stats' fold. The cap is half the 200 sources
- * /stats shows by name: a day's real channels and campaigns are a few dozen at most, and 100 a day bounds a day's rows to
- * 100 sources times the six paths and three client classes, plus the fold's row.
+ * How many distinct named sources one UTC day may name (the reserved (none) and (other) rows are not among them). A
+ * request whose source the day has not seen, once the day has this many, is counted under the row /stats folds its rest
+ * into, and makes no row of its own. Without a cap, a flood of made-up links grows the counts table without bound and
+ * pushes real sources into /stats' fold. The cap is half the 200 sources /stats shows by name: a day's real channels
+ * and campaigns are a few dozen at most, and 100 a day bounds a day's rows to 100 sources times the six paths and three
+ * client classes, plus the fold's row.
  */
 export const MAX_SOURCES_PER_DAY = 100;
 
 /**
  * One statement per counted request, which decides the cap in the same write so two requests cannot both pass it. The
  * source is kept when it is one of the two reserved rows, which are no source and count toward no cap, when the day
- * already has a row for it, or when the day has fewer than ?5 named sources; otherwise it is the fold's row. Cloudflare D1, https://developers.cloudflare.com/d1/platform/pricing/ : "Rows written measure how many rows were
- * written to D1 database. Write operations include `INSERT`, `UPDATE`, and `DELETE`."
+ * already has a row for it, or when the day has fewer than ?5 named sources; otherwise it is the fold's row. Cloudflare
+ * D1, https://developers.cloudflare.com/d1/platform/pricing/ : "Rows written measure how many rows were written to D1
+ * database. Write operations include `INSERT`, `UPDATE`, and `DELETE`."
  */
 const COUNT = `INSERT INTO counts (day, path, ref, client, n)
 SELECT ?1, ?2,
