@@ -1225,6 +1225,10 @@ function literalOutcome(tool: string, command: string, scope: ChatScope): FullAc
     if (reading.commands.some(heldReply)) return heldFor('reply');
     if (guardedPlace(places, scope) !== undefined) return heldFor('guarded_name');
     if (namesSearch(resolved)) return heldFor('search');
+    // Windows reads a variable's name in any case, and PowerShell passes it on as written: its words other than options
+    // are read case-folded.
+    const folded = reading.commands.map((each) => [...each.words, ...each.targets].filter((word) => !word.startsWith('-')).join(' ')).join('\n').toUpperCase();
+    if (tool === 'PowerShell' && scope.platform === 'win32' && namesSearch(folded)) return heldFor('search');
     if (commands.some(({ command: each, scope: at }) => namesLocalJason([...each.words, ...each.targets].join(' '), at))) return heldFor('local_jason');
     const data = located(scope.data, scope);
     if (places.some((path) => inside(scope, path, data))) return heldFor('holds_data');

@@ -412,6 +412,17 @@ function readPowerShell(text: string): Parsed[] {
     const builder = new Builder((b, word) => {
         if (b.raw === '--%') throw new Held('stop_parsing');
         if (word.includes('"')) throw new Held('quote');
+        // Windows PowerShell passes no empty word to a program, so every later word shifts; a word holding whitespace
+        // and a backslash is wrapped so that the program's own parser may join or split the words after it.
+        if (b.quoted && (word === '' || (/\s/.test(word) && word.includes('\\')))) throw new Held('quote');
+        // A provider-qualified path (`...\Function::name`, `Environment::path`) reaches a function, an alias or a variable.
+        if (word.includes('::')) throw new Held('builtin');
+        if (!b.quoted) {
+            // In argument mode a number literal is passed as its value, not its text; Windows PowerShell splits a dashed
+            // word that holds a dot in two.
+            if (powerShellNumber.test(word) && !/^(0|[1-9][0-9]*)$/.test(word)) throw new Held('character');
+            if (word.startsWith('-') && word.includes('.')) throw new Held('character');
+        }
         if (!b.redirect && b.words.length === 0) {
             if (b.raw === '.') throw new Held('call_operator');
             // A quoted first word is a value, not a program: PowerShell runs one only after `&`.
@@ -528,12 +539,20 @@ function readPowerShell(text: string): Parsed[] {
         throw new Held('character');
     }
     builder.endCommand('end');
+    for (const command of builder.commands) {
+        // A name with no extension may reach a batch file by PATHEXT, whose arguments pass through cmd's `%VAR%`.
+        if (!/\.(exe|com)$/i.test(command.words[0] ?? '') && command.words.slice(1).some((word) => word.includes('%'))) throw new Held('command_prompt');
+    }
     return builder.commands;
 }
 
+/** A word PowerShell's argument mode reads as a number: hexadecimal, decimal or exponent, a type suffix, a multiplier. */
+const powerShellNumber = /^[+-]?(0x[0-9a-f]+|[0-9]+\.?[0-9]*(e[+-]?[0-9]+)?|\.[0-9]+(e[+-]?[0-9]+)?)(u?l|u?s|u?y|d|n|u)?(kb|mb|gb|tb|pb)?$/i;
+
 /** A program's name as recognised: its last path part, in lower case, without an executable's extension. */
 export function programName(word: string): string {
-    const name = word.split(/[\\/]/).pop() ?? '';
+    // Windows drops the trailing dots and spaces of a name when it opens the file.
+    const name = (word.split(/[\\/]/).pop() ?? '').replace(/(?<=[^. ])[. ]+$/, '');
     return name.toLowerCase().replace(/\.(exe|com|ps1)$/, '');
 }
 
@@ -569,7 +588,10 @@ function withDirectories(parsed: readonly Parsed[], powerShell: boolean, context
     return parsed.map(({ words, targets, input, next }) => {
         if (unknown) throw new Held('directory_change');
         const read: LiteralCommand = { words, targets, input, cwd };
-        if (changes.has(programName(words[0] ?? ''))) {
+        // PowerShell's built-in functions `cd..`, `cd\` and a drive's `D:` change the folder too, to a target not read.
+        if (powerShell && /^(cd[^A-Za-z].*|[A-Za-z]:)$/i.test(words[0] ?? '')) {
+            unknown = true;
+        } else if (changes.has(programName(words[0] ?? ''))) {
             // A change in a pipeline runs in a subshell of its own; one that is not joined to the next command by `&&`
             // may fail while the next runs all the same, in the folder it started in.
             const target = directoryTarget(words, powerShell, context.home);
@@ -599,7 +621,8 @@ const runners = new Set(
         + 'start-process saps invoke-expression iex invoke-command icm start-job sajb start-threadjob invoke-item ii '
         + 'register-scheduledtask timeout nice ionice stdbuf time command builtin watch flock script caffeinate chroot '
         + 'taskset strace ltrace unbuffer parallel systemd-run busybox chronic runas psexec winrs wscript cscript mshta '
-        + 'rundll32 regsvr32 forfiles conhost fc r let mapfile readarray compgen complete').split(' '),
+        + 'rundll32 regsvr32 forfiles conhost fc r let mapfile readarray compgen complete add-type % foreach-object foreach '
+        + 'invoke-wmimethod iwmi wmic').split(' '),
 );
 
 /** The builtins that change how a later word or program is read. */
@@ -721,12 +744,13 @@ export function heldByWhatRuns(commands: readonly LiteralCommand[]): HeldReason 
         const first = command.words[0] ?? '';
         const program = programName(first);
         const args = command.words.slice(1);
-        if (program === commandPrompt || (/\.(bat|cmd)$/i.test(first) && command.words.length > 1)) return 'command_prompt';
+        if (program === commandPrompt || (/\.(bat|cmd)[. ]*$/i.test(first) && command.words.length > 1)) return 'command_prompt';
         if (takesCode(command)) return 'inline_code';
         if (runners.has(program)) return 'runner';
         if (program === 'git' && gitRuns(args)) return 'runner';
         if (program === 'find' && command.words.some((word) => /^-(exec|execdir|ok|okdir)$/.test(word))) return 'runner';
         if (startsGiven(program, args)) return 'runner';
+        if (program === 'new-object' && args.some((word) => /^-com/i.test(word))) return 'runner';
         if (builtins.has(program)) return 'builtin';
         if (command.words.some((word) => /^(alias|function|variable|env):/i.test(word))) return 'builtin';
         if (evaluatesSubscript.has(program) && args.some((word) => /[[$`]/.test(word))) return 'expansion';

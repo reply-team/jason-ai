@@ -154,7 +154,8 @@ test('POSIX: an assignment word is held only as the first word; as an argument i
 
 test('PowerShell: each bare-word character is literal and passes on as it is', () => {
     for (const character of [...'AZaz09_./\\:+=%-']) {
-        assert.deepEqual(wordsOf('PowerShell', `echo x${character}y`), [['echo', `x${character}y`]], character);
+        // An .exe, since a % in the arguments of a name PATHEXT may complete to a batch file is held.
+        assert.deepEqual(wordsOf('PowerShell', `frobnicate.exe x${character}y`), [['frobnicate.exe', `x${character}y`]], character);
     }
 });
 
@@ -564,4 +565,56 @@ test('the PowerShell tool runs nothing unasked in Full access while its switch i
     assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Invoke-Expression frobnicate' }, scope), heldAs('runner'), 'a hold of its own keeps its reason');
     assert.equal(fullAccessJudgement('PowerShell', { command: 'jason approval approve apr_1' }, scope).outcome, 'refused');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo a' }, scope), runs, 'the Bash tool\'s literal commands still run');
+});
+
+// The PowerShell fixes behind the switch: each says what its grammar holds once the switch is on.
+
+test('PowerShell: an empty quoted word, and a quoted word that holds whitespace and a backslash, are held', () => {
+    for (const command of ["git '' status", 'echo ""', "frobnicate 'a \\' b 'c -x d'", "frobnicate 'a\\b c'"]) {
+        assert.equal(reasonOf('PowerShell', command), 'quote', command);
+    }
+    assert.deepEqual(wordsOf('PowerShell', "frobnicate 'a\\b' 'c d'"), [['frobnicate', 'a\\b', 'c d']]);
+});
+
+test('PowerShell: the built-in functions that change the folder leave it unknown', () => {
+    for (const command of ['cd..; cat notes.md', 'cd.. && cat notes.md', 'cd\\; cat notes.md', 'D:; cat notes.md', 'd: && cat notes.md']) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('directory_change'), command);
+    }
+});
+
+test('PowerShell: the commands that run code from literal words are held', () => {
+    for (const command of ['Add-Type -TypeDefinition x', '% Frobnicate', 'ForEach-Object Frobnicate', 'foreach Frobnicate', 'Invoke-WmiMethod x', 'iwmi x', 'wmic x', 'New-Object -ComObject x']) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('runner'), command);
+    }
+    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'New-Object Frobnicate.Thing' }, scope), heldAs('unknown_shell'), 'held only by the switch');
+});
+
+test('PowerShell: a provider-qualified path is held, and a search variable is read case-folded on Windows', () => {
+    for (const command of ['Get-Item Microsoft.PowerShell.Core\\Function::frobnicate', 'Get-Item Environment::path', 'Get-Item Alias::x']) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('builtin'), command);
+    }
+    const windows = homeScope('win32', 'C:\\Users\\someone');
+    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'frobnicate path' }, windows), heldAs('search'));
+    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Set-Location -Path C:\\Work' }, windows), heldAs('unknown_shell'), 'an option named Path is not the variable');
+});
+
+test('PowerShell: a word read as a number other than plain digits, and a dashed word holding a dot, are held', () => {
+    for (const command of ['frobnicate 0x10', 'frobnicate 1kb', 'frobnicate 1e3', 'frobnicate 007', 'frobnicate 1.50', 'frobnicate 10L', 'frobnicate -a.b']) {
+        assert.equal(reasonOf('PowerShell', command), 'character', command);
+    }
+    for (const command of ['frobnicate 10', 'frobnicate 0', 'frobnicate a.b', 'frobnicate -level 2']) assert.equal(reasonOf('PowerShell', command), null, command);
+});
+
+test('a program is named without the trailing dots Windows drops, and % in a PowerShell program\'s arguments is held unless it is an .exe', () => {
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'bash.exe. -c x' }, scope), heldAs('inline_code'));
+    assert.deepEqual(fullAccessJudgement('Bash', { command: "'go.bat.' a" }, scope), heldAs('command_prompt'));
+    for (const command of ['frobnicate 50%', 'tools\\frobnicate a%b']) assert.equal(reasonOf('PowerShell', command), 'command_prompt', command);
+    assert.equal(reasonOf('PowerShell', 'frobnicate.exe 50%'), null);
+});
+
+test('PowerShell: a redirection to a stream and the other quotes and dashes outside ASCII are held', () => {
+    assert.equal(reasonOf('PowerShell', 'frobnicate >&1'), 'operator');
+    for (const character of ['\u201C', '\u201D', '\u201E', '\u201A', '\u201B', '\u2014', '\u2015']) {
+        assert.equal(reasonOf('PowerShell', `frobnicate ${character}a${character}`), 'non_ascii', character);
+    }
 });
