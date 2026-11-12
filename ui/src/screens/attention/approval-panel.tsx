@@ -28,6 +28,10 @@ type Props = {
     onClose: () => void;
     /** Called with the new approval once the runtime has asked again under an edited text. */
     onReasked?: (approvalId: string) => void;
+    /** Called once a saved edit has withdrawn this approval, so a list showing it can be read again. */
+    onSuperseded?: () => void;
+    /** How the card waits for the new approval; the default is a poll a second apart for half a minute. */
+    reaskPoll?: { tries?: number; delayMs?: number } | undefined;
 };
 
 export function ApprovalPanel({
@@ -42,6 +46,8 @@ export function ApprovalPanel({
     onSkip,
     onClose,
     onReasked,
+    onSuperseded,
+    reaskPoll,
 }: Props) {
     const api = useApi();
     const [rejecting, setRejecting] = useState(false);
@@ -69,7 +75,7 @@ export function ApprovalPanel({
     useEffect(() => {
         if (!savedHere) return;
         let current = true;
-        awaitNewApproval(api, approval.work_item_id, approval.id, { stopped: () => !current }).then(
+        awaitNewApproval(api, approval.work_item_id, approval.id, { ...reaskPoll, stopped: () => !current }).then(
             (id) => current && id && onReasked?.(id),
             () => {},
         );
@@ -95,6 +101,19 @@ export function ApprovalPanel({
     const { from, channel } = detail;
     const pending = approval.status === 'pending';
     const heading = title(approval.operation, approval.contact_name);
+    // A saved edit withdrew this approval: the card is gone, and the sentence says what happens next. The poll above
+    // shows the new approval when it comes; if it never does, the sentence stays true and the screen's refresh shows it.
+    if (savedHere)
+        return (
+            <div className="panel">
+                <PanelHeader title={heading} sub={<>in {approval.campaign_name}</>} onClose={onClose} />
+                <div className="panel-body">
+                    <p className="notice" role="status">
+                        Jason asks again with the new text when it next takes this work.
+                    </p>
+                </div>
+            </div>
+        );
     return (
         <div className="panel">
             <PanelHeader
@@ -134,9 +153,8 @@ export function ApprovalPanel({
             <div className="panel-body">
                 {stale && (
                     <p className="notice" role="status">
-                        {savedHere
-                            ? 'Jason asks again with the new text.'
-                            : 'The text of this message changed after this approval was asked, so Jason will ask again with the new text.'}
+                        The text of this message changed after this approval was asked, so Jason will ask again with the
+                        new text.
                     </p>
                 )}
                 {unread && (
@@ -199,6 +217,7 @@ export function ApprovalPanel({
                         onSaved={(saved) => {
                             setItem(saved);
                             setSavedHere(true);
+                            onSuperseded?.();
                         }}
                     />
                 )}

@@ -32,7 +32,13 @@ class Held implements Api {
 const email = () => structuredClone(fixtures['approval.get/email-message'].response) as unknown as Approval;
 const argsOf = (a: Approval) => (a.subject['input'] as { args: Record<string, unknown> }).args;
 
-function mount(held: Held, approval: Approval, onApprove = vi.fn(), onReasked = vi.fn()) {
+function mount(
+    held: Held,
+    approval: Approval,
+    onApprove = vi.fn(),
+    onReasked = vi.fn(),
+    reaskPoll?: { tries?: number; delayMs?: number },
+) {
     render(
         <ApiProvider api={held}>
             <ApprovalPanel
@@ -46,6 +52,7 @@ function mount(held: Held, approval: Approval, onApprove = vi.fn(), onReasked = 
                 onSkip={() => {}}
                 onClose={() => {}}
                 onReasked={onReasked}
+                reaskPoll={reaskPoll}
             />
         </ApiProvider>,
     );
@@ -124,7 +131,9 @@ describe('editing a message before it is approved', () => {
         fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'New subject' } });
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'New body\nline two' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => expect(screen.getByText('Jason asks again with the new text.')).toBeTruthy());
+        await waitFor(() =>
+            expect(screen.getByText('Jason asks again with the new text when it next takes this work.')).toBeTruthy(),
+        );
         const update = held.calls.find((c) => c.operation === 'workitem.update')!;
         expect(update.body).toEqual({
             work_item_id: 'wi_1',
@@ -138,7 +147,7 @@ describe('editing a message before it is approved', () => {
         });
         expect(held.calls.filter((c) => c.operation === 'workitem.update')).toHaveLength(1);
         expect(onApprove).not.toHaveBeenCalled();
-        expect(approveButton()?.hasAttribute('disabled')).toBe(true);
+        expect(approveButton()).toBeNull();
     });
 
     it("shows the runtime's sentence for a refusal and keeps the edit in the box", async () => {
@@ -152,7 +161,25 @@ describe('editing a message before it is approved', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(screen.getByText('The subject must be one line.')).toBeTruthy());
         expect((screen.getByLabelText('Body') as HTMLTextAreaElement).value).toBe('Typed but refused');
-        expect(screen.queryByText('Jason asks again with the new text.')).toBeNull();
+        expect(screen.queryByText('Jason asks again with the new text when it next takes this work.')).toBeNull();
+    });
+
+    it('removes the old card after Save, and keeps the sentence when the new approval never comes', async () => {
+        const approval = email();
+        const held = new Held(structuredClone(argsOf(approval)));
+        const onReasked = vi.fn();
+        mount(held, approval, vi.fn(), onReasked, { tries: 2, delayMs: 0 });
+        await waitFor(() => screen.getByRole('button', { name: 'Edit message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => screen.getByText('Jason asks again with the new text when it next takes this work.'));
+        expect(approveButton()).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
+        expect(screen.queryByText('The message as written')).toBeNull();
+        await waitFor(() => expect(held.calls.filter((c) => c.operation === 'approval.list')).toHaveLength(2));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(onReasked).not.toHaveBeenCalled();
+        expect(screen.getByText('Jason asks again with the new text when it next takes this work.')).toBeTruthy();
     });
 
     it('hands on the new approval once the runtime has asked again, and not before', async () => {
@@ -164,7 +191,7 @@ describe('editing a message before it is approved', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'New body' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => screen.getByText('Jason asks again with the new text.'));
+        await waitFor(() => screen.getByText('Jason asks again with the new text when it next takes this work.'));
         expect(onReasked).not.toHaveBeenCalled();
         held.pending = ['apr_9'];
         await waitFor(() => expect(onReasked).toHaveBeenCalledWith('apr_9'), { timeout: 3000 });
@@ -181,7 +208,9 @@ describe('editing a message before it is approved', () => {
         expect(screen.queryByLabelText('Subject')).toBeNull();
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'Thursday is better.' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => expect(screen.getByText('Jason asks again with the new text.')).toBeTruthy());
+        await waitFor(() =>
+            expect(screen.getByText('Jason asks again with the new text when it next takes this work.')).toBeTruthy(),
+        );
         expect(held.calls.find((c) => c.operation === 'workitem.update')!.body).toEqual({
             work_item_id: 'wi_1',
             set: { input: { ...input, body: 'Thursday is better.' } },
