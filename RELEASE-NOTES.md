@@ -42,13 +42,12 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.35.0 took
 - **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the disk image for your machine from this release, or let an installed desktop offer the update.
 - **Codex on Windows needs its elevated sandbox for the chat.** Have an administrator run `codex sandbox setup --elevated` once, or chat on Claude Code; until then the chat declines a Codex message and says so.
 - **The chat no longer uses the providers in Codex's `config.toml`.** Connect a key on the Connect card.
+- **Claude Code older than 2.1.257 runs no chat turn;** update Claude Code first.
 - **Going back:** what `jason update apply --version` to an older release does to a newer plugin package, and how to load one again, is in [Applying an older
   release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release).
 - **From 0.34.x or earlier,** the notes of each release in between apply as well.
 
 ## Known issues
-
-Full access, the chat's third mode, is still not available: the menu shows it disabled.
 
 Codex in the desktop's chat reads and advises and acts through nothing: its sandbox is read-only.
 
