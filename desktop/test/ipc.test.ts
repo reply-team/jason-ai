@@ -119,6 +119,10 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             feed: 'function',
         },
         theme: { get: 'function', set: 'function' },
+        links: {
+            take: 'function',
+            onOpen: 'function',
+        },
         setup: {
             status: 'function',
             connectReply: 'function',
@@ -147,6 +151,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.attach', ['conv_01', 'cmp_01']],
         ['chat.rename', ['conv_01', 'Mine']],
         ['chat.feed', [[], { catchUp: true }]],
+        ['links.take', []],
         ['theme.get', []],
         ['theme.set', ['dark']],
         ['setup.status', []],
@@ -170,5 +175,6 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
     (api as unknown as { onCommand: (handler: () => void) => () => void }).onCommand(() => undefined);
     void api.chat?.onEvent?.(() => undefined);
     void api.setup?.onChanged?.(() => undefined);
-    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed']]);
+    void api.links?.onOpen?.(() => undefined);
+    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed'], eventChannels['links.open']]);
 });

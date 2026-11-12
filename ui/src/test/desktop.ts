@@ -5,6 +5,7 @@ import type {
     DesktopCommand,
     DesktopConversation,
     DesktopConversationRecord,
+    DesktopLink,
     DesktopRefusal,
     DesktopSetup,
     JasonDesktop,
@@ -179,6 +180,10 @@ export interface StubDesktop extends JasonDesktop {
     names: Map<string, string>;
     /** Keeps a conversation as a desktop that kept it before this window opened. */
     keep(record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord;
+    /** The link the desktop holds for the page's first `links.take`, as a cold start leaves one; null for none. */
+    held: DesktopLink | null;
+    /** Sends a link to the page, as the desktop does once the page has taken its links. */
+    link(target: DesktopLink): void;
 }
 
 /**
@@ -189,6 +194,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const chatHandlers = new Set<(chatId: string, event: DesktopChatEvent) => void>();
     const changeHandlers = new Set<() => void>();
     const commandHandlers = new Set<(command: DesktopCommand) => void>();
+    const linkHandlers = new Set<(link: DesktopLink) => void>();
     const calls: { name: string; args: unknown[] }[] = [];
     const refuse = new Map<string, string>();
     const call =
@@ -266,6 +272,20 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         kept,
         names,
         keep,
+        held: null,
+        link: (target) => linkHandlers.forEach((handler) => handler(target)),
+        links: {
+            take: () => {
+                calls.push({ name: 'links.take', args: [] });
+                const held = stub.held;
+                stub.held = null;
+                return Promise.resolve(held);
+            },
+            onOpen(handler) {
+                linkHandlers.add(handler);
+                return () => linkHandlers.delete(handler);
+            },
+        },
         onCommand(handler) {
             commandHandlers.add(handler);
             if (options.newChat === true) queueMicrotask(() => handler('chat.new'));

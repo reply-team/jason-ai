@@ -11,6 +11,7 @@
  */
 
 import { app, dialog } from 'electron';
+import { linkRegistration } from './deep-link.ts';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -42,6 +43,18 @@ function carried() {
     const cli = loggedCli(cliAt(executable, withPath(process.env, pathOf(process.env))), log);
     const own = ownRuntimeDeps(process.platform, executable, paths.runFile, cli);
     return { home, paths, log, executable, cli, own };
+}
+
+/** The link scheme's registration this application wrote, read and taken off as it was written (`linkRegistration`). */
+function linkStep(): { link?: { registered(): boolean; remove(): boolean } } {
+    const written = linkRegistration(process.platform, app.isPackaged, process.execPath);
+    if (written === null) return {};
+    return {
+        link: {
+            registered: () => app.isDefaultProtocolClient(written.scheme, written.path, written.args),
+            remove: () => app.removeAsDefaultProtocolClient(written.scheme, written.path, written.args),
+        },
+    };
 }
 
 /** Returns the start's exit code (`stopRuntimeCode`). */
@@ -78,6 +91,7 @@ export async function runUninstall(quiet: boolean): Promise<number> {
         harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
         updaterCache: updaterCache(process.env, home, process.platform),
         log,
+        ...linkStep(),
     });
     if (!quiet) {
         const { message, detail } = uninstallText(report);

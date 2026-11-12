@@ -83,6 +83,44 @@ export function updateFile(app, platform) {
     return join(app, 'resources', 'app-update.yml');
 }
 
+/**
+ * The desktop's link scheme, which the macOS bundle and the deb's menu entry declare, and the AppImage does not; the
+ * runtime's own `jason` scheme is declared by none of them.
+ */
+const linkScheme = 'jason-desktop';
+const schemeType = `x-scheme-handler/${linkScheme}`;
+const runtimeType = 'x-scheme-handler/jason';
+
+/** The macOS bundle declares the scheme in Info.plist, so the system hands a link to the application by open-url. */
+function checkMacScheme(app) {
+    const file = join(app, 'Contents', 'Info.plist');
+    if (!existsSync(file)) throw new Error(`${file} is not there, so no link scheme can be read.`);
+    const plist = readFileSync(file, 'utf8');
+    const declared = /<key>CFBundleURLSchemes<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(plist);
+    if (declared === null || !new RegExp(`<string>${linkScheme}</string>`).test(declared[1])) throw new Error(`${file} declares no CFBundleURLSchemes holding ${linkScheme}, so the desktop's links would not reach the application.`);
+    if (/<string>jason<\/string>/.test(declared[1])) throw new Error(`${file} declares the runtime's jason scheme, which the desktop never takes.`);
+    return [`Info.plist: CFBundleURLSchemes holds ${linkScheme}`];
+}
+
+/** The deb's menu entry takes the desktop's links: it declares the scheme's type and starts the program with -- and the address. */
+function checkDebScheme(app) {
+    const folder = join(iconRoot(app, 'deb'), 'usr', 'share', 'applications');
+    const entries = existsSync(folder) ? readdirSync(folder).filter((name) => name.endsWith('.desktop')).sort() : [];
+    if (entries.length === 0) throw new Error(`${folder} holds no .desktop menu entry, so no link scheme can be read.`);
+    const said = [];
+    for (const entry of entries) {
+        const lines = readFileSync(join(folder, entry), 'utf8').split(/\r?\n/);
+        const mime = lines.find((line) => line.startsWith('MimeType='));
+        const exec = lines.find((line) => line.startsWith('Exec='));
+        const types = mime === undefined ? [] : mime.slice('MimeType='.length).split(';');
+        if (!types.includes(schemeType)) throw new Error(`${entry} declares no MimeType ${schemeType}, so the deb would take no link of the desktop's.`);
+        if (types.includes(runtimeType)) throw new Error(`${entry} declares ${runtimeType}, the runtime's scheme, which the desktop never takes.`);
+        if (exec === undefined || !/^Exec=\S+ -- %U$/.test(exec)) throw new Error(`${entry} does not start the program with -- before the address (-- %U): ${exec ?? 'no Exec line'}`);
+        said.push(`${entry}: ${mime}`);
+    }
+    return said;
+}
+
 const stateOf = (byte) => (byte === 0x30 ? 'disabled' : byte === 0x31 ? 'enabled' : byte === 0x72 ? 'removed' : `the byte ${byte}`);
 
 /** The keys of app-update.yml: each `key: value` line, and the items of a list under `key:`. */
@@ -190,7 +228,7 @@ function checkForm(app, form) {
             throw new Error(`resources/apparmor-profile does not let ${program} make user namespaces, which its sandbox uses.`);
         }
         said.push(`apparmor-profile: userns for ${program}`);
-        return [...said, ...checkIcons(app, form)];
+        return [...said, ...checkDebScheme(app), ...checkIcons(app, form)];
     }
     if (!appRun) throw new Error(`${app} holds no AppRun; it is not an AppImage's contents.`);
     if (type !== null) throw new Error(`The AppImage carries resources/package-type saying ${type}, so electron-updater would update it as a ${type}.`);
@@ -201,6 +239,7 @@ function checkForm(app, form) {
         const exec = readFileSync(join(app, entry), 'utf8').split(/\r?\n/).find((line) => line.startsWith('Exec='));
         if (exec === undefined) throw new Error(`${entry} has no Exec line, so what the menu starts cannot be read.`);
         if (/(^|\s)--no-sandbox(\s|$)/.test(exec.slice('Exec='.length))) throw new Error(`${entry} starts the program with --no-sandbox: ${exec}`);
+        if (/x-scheme-handler\/jason/.test(readFileSync(join(app, entry), 'utf8'))) throw new Error(`${entry} declares a jason scheme, and the AppImage takes no link.`);
         said.push(`${entry}: ${exec}`);
     }
     return [...said, ...checkIcons(app, form)];
@@ -213,7 +252,7 @@ function checkForm(app, form) {
 export function checkPackage(app, platform, form) {
     if (platform === 'linux' && form !== 'deb' && form !== 'appimage') throw new Error(`A Linux package is a deb or an AppImage: --form deb|appimage, not ${String(form)}.`);
     if (platform !== 'linux' && form !== undefined) throw new Error(`Only a Linux package has a form, and this one is ${platform}'s.`);
-    return [checkUpdater(app, platform), ...checkFuses(app, platform), ...(platform === 'linux' ? checkForm(app, form) : [])];
+    return [checkUpdater(app, platform), ...checkFuses(app, platform), ...(platform === 'linux' ? checkForm(app, form) : []), ...(platform === 'darwin' ? checkMacScheme(app) : [])];
 }
 
 function main(argv) {
