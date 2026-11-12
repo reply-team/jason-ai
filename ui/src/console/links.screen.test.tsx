@@ -150,4 +150,19 @@ describe('a link the desktop hands the console', () => {
         expect(chats.value[id!]).toEqual(before);
         expect(calls(desktop, 'chat.send')).toEqual([]);
     });
+
+    it("to the Feed opens the Feed, the cold start's link waiting until the desktop has answered for it", async () => {
+        const desktop = stubDesktop();
+        desktop.held = { page: 'feed' };
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/pending')
+            .answer('decision.list', 'decision.list/pending')
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all');
+        renderConsole(desktop, fake);
+        await waitFor(() => screen.getByRole('heading', { name: 'The Feed' }));
+        expect(inFront()).toContain('Feed');
+        expect(calls(desktop, 'chat.send')).toEqual([]);
+        expect(calls(desktop, 'chat.create')).toEqual([]);
+    });
 });

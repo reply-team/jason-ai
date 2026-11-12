@@ -263,6 +263,7 @@ desktop never registers, declares or removes it. The addresses are a closed tabl
 
 | Address | Opens |
 | --- | --- |
+| `jason-desktop://feed` | the Feed |
 | `jason-desktop://needs` | Needs you |
 | `jason-desktop://campaigns` | Campaigns |
 | `jason-desktop://campaign/cmp_…` | that campaign's page |

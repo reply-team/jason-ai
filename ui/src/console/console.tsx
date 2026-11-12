@@ -21,7 +21,7 @@ import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
 import { listen } from './actions';
-import { askFeed, catchUpFeed, ChatPanel, handLine, reloadConversations, startChat } from './chat';
+import { askFeed, catchUpFeed, ChatPanel, handLine, openConversation, reloadConversations, startChat } from './chat';
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
@@ -173,7 +173,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         void campaigns.reload();
         void connect.reload();
         void reloadConversations();
-        void askFeed();
+        // The Feed's id comes with the desktop's first answer, which a link to the Feed waits for.
+        const feedAsked = askFeed();
         let pending: ReturnType<typeof setTimeout> | null = null;
         const journal =
             stream ??
@@ -192,6 +193,16 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         const opened = (link: DesktopLink) => {
             const place = linkPlace(link);
             if (place === null) return;
+            if ('feed' in place) {
+                void feedAsked
+                    .then(() => (feedId.value === null ? null : openConversation(feedId.value)))
+                    .then((held) => {
+                        if (held === null) return;
+                        feedUnseen.value = false;
+                        dock.showChat(held);
+                    });
+                return;
+            }
             if ('route' in place) return dock.page(place.route);
             dock.show(place.panel);
             if (place.panel === 'needs' && place.open) void needs.attention.open(api, place.open.kind, place.open.id);

@@ -15,6 +15,7 @@ const id = (prefix: string, n = 1) => `${prefix}_${String(n).padStart(26, '0')}`
 test('every address of the table opens its page, and nothing else is an address', () => {
     assert.equal(linkScheme, 'jason-desktop');
     const table: [string, LinkTarget][] = [
+        ['jason-desktop://feed', { page: 'feed' }],
         ['jason-desktop://needs', { page: 'needs' }],
         ['jason-desktop://campaigns', { page: 'campaigns' }],
         [`jason-desktop://campaign/${id('cmp')}`, { page: 'campaign', id: id('cmp') }],
@@ -44,7 +45,6 @@ test('an address out of the table is refused by a closed code, and never opens a
         [42, 'not_a_link'],
         [null, 'not_a_link'],
         ['jason-desktop://Needs', 'unknown_page'],
-        ['jason-desktop://feed', 'unknown_page'],
         ['jason-desktop://settings', 'unknown_page'],
         ['jason-desktop://chat', 'unknown_page'],
         ['jason-desktop://needs?mode=full', 'unknown_page'],

@@ -49,10 +49,12 @@ export interface DesktopLineEntry {
 }
 
 /**
- * A page a `jason://` link opens, as the desktop parsed it from a closed table of addresses: one of the console's panels,
- * or a screen at one entity whose id the desktop held to its shape. A link opens that page and does nothing else.
+ * A page a `jason-desktop://` link opens, as the desktop parsed it from a closed table of addresses: the Feed, one of the
+ * console's panels, or a screen at one entity whose id the desktop held to its shape. A link opens that page and does
+ * nothing else.
  */
 export type DesktopLink =
+    | { page: 'feed' }
     | { page: 'needs' }
     | { page: 'campaigns' }
     | { page: 'campaign'; id: string }

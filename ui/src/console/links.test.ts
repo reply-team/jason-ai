@@ -8,6 +8,7 @@ const id = (prefix: string) => `${prefix}_01JD0000000000000000000001`;
 describe('where a link the desktop parsed takes the console', () => {
     it('opens a panel, or a screen at the entity, and nothing else', () => {
         const table: [DesktopLink, unknown][] = [
+            [{ page: 'feed' }, { feed: true }],
             [{ page: 'needs' }, { panel: 'needs' }],
             [{ page: 'campaigns' }, { panel: 'campaigns' }],
             [

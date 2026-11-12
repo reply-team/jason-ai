@@ -5,6 +5,7 @@ import type { DesktopLink } from '../platform/desktop';
 import { parseRoute, type Route } from '../router';
 
 export type LinkPlace =
+    | { feed: true }
     | { panel: 'needs'; open?: { kind: 'approvals' | 'questions'; id: string } }
     | { panel: 'campaigns' }
     | { route: Route };
@@ -16,6 +17,8 @@ export function linkPlace(link: DesktopLink): LinkPlace | null {
     if (link === null || typeof link !== 'object') return null;
     const id = 'id' in link && typeof link.id === 'string' ? link.id : null;
     switch (link.page) {
+        case 'feed':
+            return { feed: true };
         case 'needs':
             return { panel: 'needs' };
         case 'campaigns':

@@ -36,6 +36,7 @@ export const linkScheme = 'jason-desktop';
 
 /** A page a link opens: one of the console's panels, or a screen at one entity. */
 export type LinkTarget =
+    | { page: 'feed' }
     | { page: 'needs' }
     | { page: 'campaigns' }
     | { page: 'campaign'; id: string }
@@ -51,7 +52,7 @@ export const linkLimit = 64;
 
 const crockford = '[0-9A-HJKMNP-TV-Z]{26}';
 /** The pages that take no id, and the pages that take one, with the prefix its id carries. */
-const plain = new Set(['needs', 'campaigns']);
+const plain = new Set(['feed', 'needs', 'campaigns']);
 const withId: Readonly<Record<string, string>> = { campaign: 'cmp', approval: 'apr', question: 'dec', workitem: 'wi', person: 'cnt' };
 const prefix = new RegExp(`^${linkScheme}://`, 'i');
 
