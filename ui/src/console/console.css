@@ -253,6 +253,9 @@
     text-align: center;
     color: var(--faint);
 }
+.jc-console .empty-start p {
+    margin: 0 0 10px;
+}
 .jc-console .note {
     background: var(--blue-2);
     border: 1px solid #c6d6f0;
@@ -365,16 +368,20 @@
     align-items: center;
     gap: 9px;
     padding: 18px 18px 12px;
-    font-weight: 750;
-    font-size: 18px;
-    letter-spacing: -0.01em;
 }
-.jc-console .glyph {
-    width: 19px;
-    height: 19px;
-    border: 2.2px solid var(--ink);
-    border-radius: 6px 6px 6px 1.5px;
-    display: inline-block;
+.jc-console .brand .mark {
+    width: 26px;
+    height: 26px;
+    flex: none;
+}
+.jc-console .brand .wordmark {
+    height: 15px;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+}
+.jc-console .brand .wordmark.dark {
+    display: none;
 }
 .jc-console .newbtn {
     margin: 2px 14px 8px;
@@ -429,6 +436,9 @@
 .jc-console .sfoot {
     border-top: 1px solid var(--line);
     padding: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .jc-console .pillc {
     display: inline-flex;
@@ -710,6 +720,27 @@
     gap: 6px;
     margin-left: -6px;
 }
+/* A host held below the floor is listed with a whole sentence; the closed list keeps to the row all the same. */
+.jc-console .composer select {
+    min-width: 0;
+    max-width: 60%;
+    text-overflow: ellipsis;
+}
+/* The model, its typed name and its effort sit beside the host, each kept short so the row holds on a narrow window. */
+.jc-console .composer select.model,
+.jc-console .composer select.effort,
+.jc-console .composer select.mode {
+    max-width: 22%;
+}
+/* While the desktop holds the chat in Full access, the line under the composer says so; it is never dismissed. */
+.jc-console .composer .full-access {
+    margin-top: 6px;
+}
+.jc-console .composer .model-name {
+    min-width: 0;
+    width: 11em;
+    max-width: 30%;
+}
 .jc-console .send {
     margin-left: auto;
     width: 34px;
@@ -819,6 +850,12 @@
 
 /* The console's own rules: the dock, the panels, a dark theme, and what the live panels draw. */
 @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .brand .wordmark.light {
+        display: none;
+    }
+    :root:not([data-theme='light']) .jc-console .brand .wordmark.dark {
+        display: inline;
+    }
     :root:not([data-theme='light']) .jc-console {
         --bg: #0c0c0e;
         --panel: #141417;
@@ -847,6 +884,12 @@
         --gray-2: #1f1f24;
         color-scheme: dark;
     }
+}
+:root[data-theme='dark'] .jc-console .brand .wordmark.light {
+    display: none;
+}
+:root[data-theme='dark'] .jc-console .brand .wordmark.dark {
+    display: inline;
 }
 :root[data-theme='dark'] .jc-console {
     --bg: #0c0c0e;
@@ -962,6 +1005,48 @@ body,
     margin-top: 6px;
     color: var(--ink);
 }
+.jc-console .chat-bar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 8px 16px 0;
+}
+.jc-console .chat-remove {
+    margin: 8px 16px 0;
+}
+.jc-console .chat-rename {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+    min-width: 0;
+}
+.jc-console .chat-rename input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+}
+.jc-console .chat-note {
+    color: var(--mute);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+.jc-console .chat-pick .ask-a {
+    flex-wrap: wrap;
+}
+.jc-console .feed-line {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 13px;
+    margin: 0 0 10px;
+    overflow-wrap: anywhere;
+}
+.jc-console .side-note {
+    margin: 0 8px 10px;
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+}
 .jc-console .pillc.green {
     color: var(--green);
     background: var(--green-2);
@@ -1019,4 +1104,30 @@ body,
 .jc-console .needs-empty {
     color: var(--faint);
     text-align: center;
+}
+.jc-console .needs-empty > .ask-a {
+    justify-content: center;
+    margin: 0 0 16px;
+}
+
+/* The start screen: one question, centred, with the AI card above the box when no AI is connected. */
+.jc-console .start .panel-body {
+    max-width: 720px;
+    margin: 8vh auto 0;
+}
+.jc-console .start .composer {
+    margin-top: 14px;
+}
+.jc-console .start .start-waiting {
+    margin-top: 14px;
+}
+.jc-console .chat-panel .chat-reply {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    max-width: 820px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 20px;
 }

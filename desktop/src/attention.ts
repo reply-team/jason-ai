@@ -136,6 +136,11 @@ export class AttentionWatcher {
         this.deps.show(this.shown);
     }
 
+    /** Whether it reads the count: from `start` until `stop`. */
+    get reading(): boolean {
+        return this.running;
+    }
+
     stop(): void {
         this.running = false;
         if (this.handle !== null) this.timers.clearTimeout(this.handle);

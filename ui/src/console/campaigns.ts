@@ -41,6 +41,8 @@ export async function reload(): Promise<void> {
     }
 }
 
+define('campaigns.start', () => here().dock.chat());
+
 define('campaigns.open', ([id]) => {
     if (typeof id === 'string') here().dock.page(parseRoute(`#/campaigns/${encodeURIComponent(id)}`));
 });
@@ -65,7 +67,13 @@ export function campaignsView(): Html {
             !read.value && !shownFailure
                 ? html`<div class="empty">Reading the campaigns…</div>`
                 : rows.length === 0
-                  ? html`<div class="empty">No campaigns yet. Ask the chat to start one.</div>`
+                  ? html`<div class="empty empty-start">
+                        <p>
+                            No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and
+                            the agent sets it up with you.
+                        </p>
+                        <button class="btn sm p" type="button" ${act('campaigns.start')}>New chat</button>
+                    </div>`
                   : html`<table class="t">
                         <thead>
                             <tr>

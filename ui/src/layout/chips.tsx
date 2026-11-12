@@ -37,6 +37,8 @@ export function Chips<T extends string>({
             {buttons}
         </div>
     ) : (
-        <div className="pfilters">{buttons}</div>
+        <div className="pfilters" role="group" aria-label={label}>
+            {buttons}
+        </div>
     );
 }

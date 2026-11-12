@@ -2,14 +2,16 @@
 // provider's key are planted, and none of them is found; the lines are the chat's three templates and the CLI's verbs.
 
 import assert from 'node:assert/strict';
-import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
-import { loggedTurns } from '../src/chat-log.ts';
+import { loggedModels, loggedTurns } from '../src/chat-log.ts';
+import { newConversationId, writeConversation, type Conversation } from '../src/chat-conversations.ts';
 import { loggedCli } from '../src/installation.ts';
 import { fileLogger } from '../src/log.ts';
+import { NamedChat } from './named-chat.ts';
 import { bench } from './harness.ts';
 
 const lines0 = (text: string) => text.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
@@ -17,7 +19,13 @@ const fence = readFence(join(import.meta.dirname, '..'));
 
 test('the chat’s log carries none of a turn’s words, commands, paths or keys', async (t) => {
     const removals: (() => void)[] = [];
-    t.after(() => removals.forEach((remove) => remove()));
+    let held: Chat | undefined;
+    // A set-up chat's naming run, which a turn that ended well starts, ends before the folder goes.
+    t.after(async () => {
+        held?.closeAll();
+        await held?.idle();
+        removals.forEach((remove) => remove());
+    });
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
     const planted = {
         prompt: 'planted words about the Acme renewal',
@@ -39,25 +47,28 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     const events: ChatEvent[] = [];
     let ended: () => void = () => undefined;
     const done = new Promise<void>((resolve) => (ended = resolve));
+    const named = new NamedChat(() => chat);
     const chat: Chat = new Chat({
         paths: b.paths,
         env: b.env,
         bundle: join(b.root, 'bundle'),
         dataNamed: true,
+        bundleVersion: null,
         cli: loggedCli(b.cli, log),
+        programs: b.programs,
         keyFor: (id) => (id === 'deepseek' ? planted.key : undefined),
         fence: () => fence,
         emit(_chatId, event) {
             events.push(event);
             // Every card is answered yes, so each request is settled by the person or the model and logged.
-            if (event.kind === 'permission') chat.answer('c1', event.request, { allow: true, always: false });
+            if (event.kind === 'permission') named.answer('c1', event.request, { allow: true, always: false });
             if (event.kind === 'done') ended();
         },
         ...loggedTurns(log),
     });
-    t.after(() => chat.closeAll());
+    held = chat;
 
-    await chat.send('c1', planted.prompt, { host: 'deepseek', campaignId: planted.campaign });
+    await named.send('c1', planted.prompt, { host: 'deepseek', campaignId: planted.campaign });
     await done;
     assert.deepEqual(events.at(-1), { kind: 'done', error: null });
     assert.ok(events.some((event) => event.kind === 'permission'), 'a card was made and answered');
@@ -67,14 +78,16 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     assert.equal(text.includes('planted'), false, 'nothing planted reached the log');
     assert.equal(text.includes(folder), false, 'the campaign folder is not logged');
     const names = text.split('\n').filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName);
-    assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
-    assert.deepEqual(lines0(text).filter((line) => line.EventName === 'cli_exited').map((line) => line.Verb), ['campaign get', 'project get']);
+    assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_conversations_read', 'chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
+    // The campaign's conversation is made by reading the campaign; its turn reads it again, with its project.
+    assert.deepEqual(lines0(text).filter((line) => line.EventName === 'cli_exited').map((line) => line.Verb), ['campaign get', 'campaign get', 'project get']);
     const lines = text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
     const { '@t': _at, ...startLine } = lines.find((line) => line.EventName === 'chat_turn_started') ?? {};
     assert.deepEqual(startLine, {
-        '@mt': 'A chat turn started on {Host}; resumed {Resumed}',
+        '@mt': 'A chat turn started on {Host}; resumed {Resumed}; mode {Mode}',
         Host: 'deepseek',
         Resumed: false,
+        Mode: 'ask_first',
         SourceContext: 'Jason.Desktop',
         EventName: 'chat_turn_started',
     });
@@ -90,28 +103,37 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
 
 test('a missing instruction text is logged once, by a closed line that names the file and nothing of a turn', async (t) => {
     const removals: (() => void)[] = [];
-    t.after(() => removals.forEach((remove) => remove()));
+    let held: Chat | undefined;
+    // A set-up chat's naming run, which a turn that ended well starts, ends before the folder goes.
+    t.after(async () => {
+        held?.closeAll();
+        await held?.idle();
+        removals.forEach((remove) => remove());
+    });
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
     const log = fileLogger(b.paths.logs);
     let ends = 0;
     let ended: () => void = () => undefined;
     const done = new Promise<void>((resolve) => (ended = resolve));
+    const named = new NamedChat(() => chat);
     const chat: Chat = new Chat({
         paths: b.paths,
         env: b.env,
         bundle: join(b.root, 'bundle'),
         dataNamed: true,
+        bundleVersion: null,
         cli: b.cli,
+        programs: b.programs,
         keyFor: () => undefined,
         fence: () => ({ ...fence, instructions: null }),
         emit(_chatId, event) {
             if (event.kind === 'done' && ++ends === 2) ended();
-            if (event.kind === 'done' && ends === 1) void chat.send('c1', 'planted second words', { host: 'claude' });
+            if (event.kind === 'done' && ends === 1) void named.send('c1', 'planted second words', { host: 'claude' });
         },
         ...loggedTurns(log),
     });
-    t.after(() => chat.closeAll());
-    await chat.send('c1', 'planted words', { host: 'claude' });
+    held = chat;
+    await named.send('c1', 'planted words', { host: 'claude' });
     await done;
     const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
     const missing = lines0(text).filter((line) => line.EventName === 'chat_instructions_missing');
@@ -129,19 +151,28 @@ test('a missing instruction text is logged once, by a closed line that names the
 
 test('an instruction file that cannot be written is logged by a closed line that names the file and its error code, at the start and at the turn it refuses', async (t) => {
     const removals: (() => void)[] = [];
-    t.after(() => removals.forEach((remove) => remove()));
+    let held: Chat | undefined;
+    // A set-up chat's naming run, which a turn that ended well starts, ends before the folder goes.
+    t.after(async () => {
+        held?.closeAll();
+        await held?.idle();
+        removals.forEach((remove) => remove());
+    });
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
     mkdirSync(join(b.paths.chat, 'CLAUDE.md'), { recursive: true });
     const log = fileLogger(b.paths.logs);
     let ended: () => void = () => undefined;
     const done = new Promise<void>((resolve) => (ended = resolve));
     const said: ChatEvent[] = [];
-    const chat = new Chat({
+    const named = new NamedChat(() => chat);
+    const chat: Chat = new Chat({
         paths: b.paths,
         env: b.env,
         bundle: join(b.root, 'bundle'),
         dataNamed: true,
+        bundleVersion: null,
         cli: b.cli,
+        programs: b.programs,
         keyFor: () => undefined,
         fence: () => fence,
         emit(_chatId, event) {
@@ -150,8 +181,8 @@ test('an instruction file that cannot be written is logged by a closed line that
         },
         ...loggedTurns(log),
     });
-    t.after(() => chat.closeAll());
-    await chat.send('c1', 'planted words', { host: 'claude' });
+    held = chat;
+    await named.send('c1', 'planted words', { host: 'claude' });
     await done;
     assert.equal(said.length, 1);
     const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
@@ -171,4 +202,122 @@ test('an instruction file that cannot be written is logged by a closed line that
     assert.equal(text.includes('planted'), false);
     assert.equal(text.includes(b.paths.chat), false, 'no path');
     assert.equal(text.includes(JSON.stringify(b.paths.chat).slice(1, -1)), false, 'no path, escaped either');
+});
+
+test('no conversation reaches the log: a planted record, a lost session and a set-up turn leave counts and closed words alone', async (t) => {
+    const removals: (() => void)[] = [];
+    let held: Chat | undefined;
+    // A set-up chat's naming run, which a turn that ended well starts, ends before the folder goes.
+    t.after(async () => {
+        held?.closeAll();
+        await held?.idle();
+        removals.forEach((remove) => remove());
+    });
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
+    const campaigns = join(b.root, 'campaigns.json');
+    writeFileSync(campaigns, '[]');
+    b.env.STUB_CAMPAIGNS_FILE = campaigns;
+    b.env.STUB_CAMPAIGN_NAME = 'planted campaign name';
+    const kept: Conversation = {
+        id: newConversationId(),
+        campaign_id: 'cmp_01PLANTEDCONVERSATION',
+        title: 'planted title',
+        created_at: '2026-11-11T10:00:00.000Z',
+        updated_at: '2026-11-11T10:00:00.000Z',
+        sessions: { claude: 'planted-session-id' },
+        entries: [
+            { kind: 'user', text: 'planted earlier words' },
+            { kind: 'step', text: 'Ran a jason command', detail: 'jason planted-verb' },
+            { kind: 'text', text: 'planted earlier answer' },
+        ],
+        dropped: 0,
+    };
+    writeConversation(b.paths.conversations, kept);
+    writeFileSync(join(b.paths.conversations, `${newConversationId()}.json`), '{"planted": "not a record"}');
+    const log = fileLogger(b.paths.logs);
+    const waiting = new Map<string, () => void>();
+    const chat: Chat = new Chat({
+        paths: b.paths,
+        env: b.env,
+        bundle: join(b.root, 'bundle'),
+        dataNamed: true,
+        bundleVersion: null,
+        cli: loggedCli(b.cli, log),
+        programs: b.programs,
+        keyFor: () => undefined,
+        fence: () => fence,
+        emit(chatId, event) {
+            if (event.kind === 'done') waiting.get(chatId)?.();
+        },
+        ...loggedTurns(log),
+    });
+    held = chat;
+    const turn = async (chatId: string, words: string) => {
+        const done = new Promise<void>((resolve) => waiting.set(chatId, resolve));
+        await chat.send(chatId, words, { host: 'claude' });
+        await done;
+    };
+    b.env.STUB_RESUME = 'missing';
+    await turn(kept.id, 'planted new words');
+    delete b.env.STUB_RESUME;
+    b.env.STUB_HOST_PLAN = JSON.stringify([{ campaign: 'planted first campaign' }, { campaign: 'planted second campaign' }]);
+    const setup = await chat.create();
+    await turn(setup.id, 'planted set-up words');
+
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    assert.equal(text.includes('planted'), false, 'nothing planted reached the log');
+    for (const value of [kept.id, setup.id, kept.campaign_id!, 'stub-session']) assert.equal(text.includes(value), false, value);
+    const fields = (name: string) =>
+        lines0(text)
+            .filter((line) => line.EventName === name)
+            .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
+    assert.deepEqual(fields('chat_conversations_read'), [{ Conversations: 1, Unreadable: 1 }]);
+    assert.deepEqual(fields('chat_turn_fresh'), [{ Cause: 'not_found' }]);
+    assert.deepEqual(fields('chat_setup_ended'), [{ ListRead: true, Found: 2, HandedOver: false }]);
+    assert.deepEqual(fields('chat_conversation_unwritten'), []);
+});
+
+test('a key source that stops nothing is logged by its word alone', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    for (const source of ['unexplained', 'unlisted', 'absent'] as const) loggedTurns(log).keySource(source);
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_key_source')
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
+    assert.deepEqual(said, (['unexplained', 'unlisted', 'absent'] as const).map((source) => ({ '@l': 'Warning', Source: source })));
+});
+
+test('an ask of the models Codex offers is logged by its host id and a count, or the kind of its failure, and nothing the host said', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const logged = loggedModels(log);
+    logged.listed('codex', 3);
+    logged.failed('codex-api-key', 'bound');
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => typeof line.EventName === 'string' && line.EventName.startsWith('chat_models_'))
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
+    assert.deepEqual(said, [
+        { EventName: 'chat_models_listed', Host: 'codex', Models: 3 },
+        { '@l': 'Warning', EventName: 'chat_models_unlisted', Host: 'codex-api-key', Kind: 'bound' },
+    ]);
+});
+
+test('a naming run of a set-up chat is logged by how it ended, one word, never the name or the words it was given', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const outcomes = ['named', 'refused', 'failed', 'timed_out', 'stopped', 'held', 'not_started', 'overtaken'] as const;
+    for (const outcome of outcomes) loggedTurns(log).named(outcome);
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_named')
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
+    assert.deepEqual(said, outcomes.map((outcome) => ({ Outcome: outcome })));
 });

@@ -104,7 +104,26 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
     assert.deepEqual(shape(exposed.get('jasonDesktop')), {
         platform: 'string',
         onCommand: 'function',
-        chat: { send: 'function', stop: 'function', answer: 'function', onEvent: 'function' },
+        chat: {
+            send: 'function',
+            stop: 'function',
+            answer: 'function',
+            onEvent: 'function',
+            list: 'function',
+            open: 'function',
+            create: 'function',
+            remove: 'function',
+            restart: 'function',
+            attach: 'function',
+            rename: 'function',
+            setMode: 'function',
+            feed: 'function',
+        },
+        theme: { get: 'function', set: 'function' },
+        links: {
+            take: 'function',
+            onOpen: 'function',
+        },
         setup: {
             status: 'function',
             connectReply: 'function',
@@ -113,6 +132,10 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             installProgram: 'function',
             configurePlugin: 'function',
             disconnectPlugin: 'function',
+            replyLinkedInConnect: 'function',
+            replyLinkedInPendingLink: 'function',
+            replyLinkedInReconnect: 'function',
+            replyMailboxLink: 'function',
             onChanged: 'function',
         },
     });
@@ -125,6 +148,18 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.send', ['c1', 'hello', { host: 'claude' }]],
         ['chat.stop', ['c1']],
         ['chat.answer', ['c1', 'r1', { allow: true, always: false }]],
+        ['chat.list', []],
+        ['chat.open', ['conv_01']],
+        ['chat.create', ['cmp_01']],
+        ['chat.remove', ['conv_01']],
+        ['chat.restart', ['conv_01']],
+        ['chat.attach', ['conv_01', 'cmp_01']],
+        ['chat.rename', ['conv_01', 'Mine']],
+        ['chat.setMode', ['conv_01', 'plan_only', 'claude']],
+        ['chat.feed', [[], { catchUp: true }]],
+        ['links.take', []],
+        ['theme.get', []],
+        ['theme.set', ['dark']],
         ['setup.status', []],
         ['setup.connectReply', []],
         ['setup.connectReplyWithKey', ['k']],
@@ -132,6 +167,10 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['setup.installProgram', ['claude']],
         ['setup.configurePlugin', ['slack', { token: 't', target: 'C1' }]],
         ['setup.disconnectPlugin', ['slack']],
+        ['setup.replyLinkedInConnect', ['Made-up name']],
+        ['setup.replyLinkedInPendingLink', ['41']],
+        ['setup.replyLinkedInReconnect', ['77']],
+        ['setup.replyMailboxLink', ['gmail']],
     ];
     for (const [member, args] of calls) {
         const [group, name] = member.split('.') as [string, string];
@@ -146,5 +185,6 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
     (api as unknown as { onCommand: (handler: () => void) => () => void }).onCommand(() => undefined);
     void api.chat?.onEvent?.(() => undefined);
     void api.setup?.onChanged?.(() => undefined);
-    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed']]);
+    void api.links?.onOpen?.(() => undefined);
+    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed'], eventChannels['links.open']]);
 });

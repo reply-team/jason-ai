@@ -13,26 +13,45 @@ public partial class ReleaseWorkflowTests
 {
     private const string WindowsDesktop = "inputs.rid == 'win-x64' && inputs.sign-windows == 'true' && inputs.desktop == 'true'";
     private const string MacDesktop = "inputs.rid == 'osx-x64' && inputs.sign-macos == 'true' && inputs.desktop == 'true'";
+    private const string LinuxDesktop = "inputs.rid == 'linux-x64' && inputs.desktop == 'true'";
+
+    private const string LinuxDesktopBuild = "Build the desktop's Linux packages";
+    private const string LinuxDesktopVerify = "Verify the desktop's Linux packages and what they carry";
+    private const string LinuxDesktopStart = "Start the desktop's Linux packages under a virtual display";
 
     /// <summary>
-    /// The action builds no desktop unless a call asks, and only the release asks, on the two calls that hold a signing
-    /// identity the desktop is signed with: win-x64 and osx-x64. A pull request's build never builds one.
+    /// The action builds no desktop unless a call asks. The release asks on the two calls that hold a signing identity the
+    /// desktop is signed with, win-x64 and osx-x64, and on its Linux leg, whose matrix is linux-x64 alone and which signs
+    /// nothing. CI asks once, in its desktop job, for linux-x64, under an artifact of that job's own; no platform build of
+    /// a pull request builds one.
     /// </summary>
     [Fact]
-    public void Only_the_release_s_win_x64_and_osx_x64_calls_build_the_desktop()
+    public void Only_the_release_s_three_desktop_calls_and_ci_s_desktop_job_build_the_desktop()
     {
         var input = Mapping(Mapping(Parse(Read(Action)), "inputs"), "desktop");
         Assert.Equal("false", Scalar(input, "default"));
         Assert.Equal("false", Scalar(input, "required"));
 
+        // The Linux leg's call names its platform by the matrix, which holds linux-x64 alone.
+        var legs = Assert.IsType<YamlSequenceNode>(Node(Mapping(MatrixJob(), "strategy"), "matrix") is YamlMappingNode matrix ? Node(matrix, "include") : null);
+        var leg = Assert.IsType<YamlMappingNode>(Assert.Single(legs.Children));
+        Assert.Equal("linux-x64", Scalar(leg, "rid"));
+        string? Rid(YamlMappingNode call) => Scalar(Mapping(call, "with"), "rid") is "${{ matrix.rid }}" ? Scalar(leg, "rid") : Scalar(Mapping(call, "with"), "rid");
+
         var asking = PackagingCalls(Release)
             .Where(call => Scalar(Mapping(call, "with"), "desktop") is { } said && said != "false")
-            .Select(call => (Rid: Scalar(Mapping(call, "with"), "rid"), Said: Scalar(Mapping(call, "with"), "desktop")))
+            .Select(call => (Rid: Rid(call), Said: Scalar(Mapping(call, "with"), "desktop")))
             .OrderBy(call => call.Rid, StringComparer.Ordinal)
             .ToList();
-        Assert.Equal([("osx-x64", "true"), ("win-x64", "true")], asking);
+        Assert.Equal([("linux-x64", "true"), ("osx-x64", "true"), ("win-x64", "true")], asking);
 
-        Assert.All(PackagingCalls(Ci), call => Assert.Null(Node(Mapping(call, "with"), "desktop")));
+        var ci = PackagingCalls(Ci).Where(call => Node(Mapping(call, "with"), "desktop") is not null).ToList();
+        var desktop = Assert.Single(ci);
+        Assert.Equal("linux-x64", Scalar(Mapping(desktop, "with"), "rid"));
+        Assert.Equal("true", Scalar(Mapping(desktop, "with"), "desktop"));
+        Assert.Equal("ci-desktop-linux-x64", Scalar(Mapping(desktop, "with"), "artifact"));
+        var inJob = Assert.Single(JobSteps(Mapping(Mapping(Parse(Read(Ci)), "jobs"), "desktop")), step => Scalar(step, "uses") == "./.github/actions/package");
+        Assert.Equal("true", Scalar(Mapping(inJob, "with"), "desktop"));
     }
 
     /// <summary>
@@ -49,14 +68,23 @@ public partial class ReleaseWorkflowTests
         var steps = ActionSteps();
         var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses") ?? "").ToList();
 
-        // Every step that reads the desktop input runs under one of the two whole conditions, nothing looser.
+        // Every step that reads the desktop input runs under one of the three whole conditions, nothing looser.
         Assert.All(steps.Where(step => (Scalar(step, "if") ?? "").Contains("inputs.desktop", StringComparison.Ordinal)),
-            step => Assert.Contains(Scalar(step, "if"), new[] { WindowsDesktop, MacDesktop }));
+            step => Assert.Contains(Scalar(step, "if"), new[] { WindowsDesktop, MacDesktop, LinuxDesktop }));
         // And so is every step that works in desktop/ or reads what it built.
         Assert.All(steps.Where(step => Scalar(step, "working-directory") == "desktop"
                 || (Scalar(step, "run") ?? "").Contains("desktop/", StringComparison.Ordinal)
                 || (Scalar(Node(step, "with") as YamlMappingNode ?? new YamlMappingNode(), "path") ?? "").Contains("desktop/", StringComparison.Ordinal)),
-            step => Assert.Contains(Scalar(step, "if"), new[] { WindowsDesktop, MacDesktop }));
+            step => Assert.Contains(Scalar(step, "if"), new[] { WindowsDesktop, MacDesktop, LinuxDesktop }));
+
+        // The Linux call holds no identity: its desktop steps are Node, the build, the check, the start and the upload, one
+        // after another, and none of them, nor any step of a Linux call, names a secret or a signing input.
+        var linux = steps.Select((step, index) => (Step: step, Index: index)).Where(each => Scalar(each.Step, "if") == LinuxDesktop).ToList();
+        Assert.Equal(Enumerable.Range(linux[0].Index, linux.Count), linux.Select(each => each.Index));
+        Assert.Equal(
+            ["actions/setup-node@v5", LinuxDesktopBuild, LinuxDesktopVerify, LinuxDesktopStart, "actions/upload-artifact@v7"],
+            linux.Select(each => Scalar(each.Step, "uses") ?? Scalar(each.Step, "name")));
+        Assert.All(linux, each => Assert.DoesNotMatch(@"secrets\.|inputs\.(sign|apple|azure)|IDENTITY|KEYCHAIN|JASON_WINDOWS_SIGN", string.Join('\n', Scalars(each.Step))));
 
         foreach (var (condition, taken, after, window, forget) in new[]
         {
@@ -100,7 +128,8 @@ public partial class ReleaseWorkflowTests
     {
         var windows = ActionStep("Build the desktop's Windows installer, each file signed as it is made");
         var mac = ActionStep("Build the desktop's Mac packages, signed and notarized");
-        foreach (var (build, package) in new[] { (windows, "npm run package -- --win --x64"), (mac, "npm run package -- --mac --arm64 --x64") })
+        var linux = ActionStep(LinuxDesktopBuild);
+        foreach (var (build, package) in new[] { (windows, "npm run package -- --win --x64"), (mac, "npm run package -- --mac --arm64 --x64"), (linux, "npm run package -- --linux --x64") })
         {
             var run = Scalar(build, "run") ?? "";
             Assert.Equal("desktop", Scalar(build, "working-directory"));
@@ -123,6 +152,7 @@ public partial class ReleaseWorkflowTests
 
         Assert.Contains("$env:JASON_WINDOWS_SIGN = '1'", Scalar(windows, "run"), StringComparison.Ordinal);
         Assert.DoesNotContain("JASON_WINDOWS_SIGN", Scalar(mac, "run"), StringComparison.Ordinal);
+        Assert.DoesNotContain("JASON_WINDOWS_SIGN", Scalar(linux, "run"), StringComparison.Ordinal);
         Assert.All(ActionSteps().Where(step => Scalar(step, "uses") == "actions/setup-node@v5"),
             step => Assert.Equal("24", Scalar(Mapping(step, "with"), "node-version")));
     }
@@ -186,9 +216,9 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// What the two desktop uploads carry is exactly the desktop's part of what a release publishes, each under an
+    /// What the three desktop uploads carry is exactly the desktop's part of what a release publishes, each under an
     /// artifact the release's download collects; the osx-x64 executable, which a release never publishes, is uploaded
-    /// under a name that download does not collect.
+    /// under a name that download does not collect, and so are CI's Linux packages and the archive its desktop job makes.
     /// </summary>
     [Fact]
     public void The_desktop_s_uploads_are_exactly_the_desktop_files_a_release_publishes()
@@ -196,7 +226,8 @@ public partial class ReleaseWorkflowTests
         var uploads = ActionSteps()
             .Where(step => Scalar(step, "uses") == "actions/upload-artifact@v7" && (Scalar(step, "if") ?? "").Contains("inputs.desktop == 'true'", StringComparison.Ordinal))
             .ToList();
-        Assert.Equal(["jason-desktop-osx-x64", "jason-desktop-win-x64"], uploads.Select(step => Scalar(Mapping(step, "with"), "name")).Order(StringComparer.Ordinal));
+        const string linuxName = "${{ inputs.artifact != '' && format('{0}-desktop', inputs.artifact) || 'jason-desktop-linux-x64' }}";
+        Assert.Equal([linuxName, "jason-desktop-osx-x64", "jason-desktop-win-x64"], uploads.Select(step => Scalar(Mapping(step, "with"), "name")).Order(StringComparer.Ordinal));
 
         var files = uploads
             .SelectMany(step => (Scalar(Mapping(step, "with"), "path") ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -208,10 +239,20 @@ public partial class ReleaseWorkflowTests
         var download = Assert.Single(Read(Release).Split('\n'), line => line.Trim().StartsWith("pattern:", StringComparison.Ordinal)).Trim()["pattern:".Length..].Trim();
         Assert.Equal("jason-*", download);
         var collected = new Regex("^" + Regex.Escape(download).Replace(@"\*", ".*", StringComparison.Ordinal) + "$");
-        Assert.All(uploads, step => Assert.Matches(collected, Scalar(Mapping(step, "with"), "name") ?? ""));
+        // The release names no artifact on its Linux leg, so its Linux packages go up as jason-desktop-linux-x64.
+        Assert.All(uploads, step => Assert.Matches(collected, (Scalar(Mapping(step, "with"), "name") ?? "").Replace(linuxName, "jason-desktop-linux-x64", StringComparison.Ordinal)));
+        var leg = Assert.Single(PackagingCalls(Release), call => Scalar(Mapping(call, "with"), "rid") == "${{ matrix.rid }}");
+        Assert.Null(Node(Mapping(leg, "with"), "artifact"));
 
         var x64 = Assert.Single(PackagingCalls(Release), call => Scalar(Mapping(call, "with"), "rid") == "osx-x64");
         Assert.DoesNotMatch(collected, Scalar(Mapping(x64, "with"), "artifact") ?? "");
+
+        // CI's desktop job names its own artifact, so neither its archive nor its packages are what a jason-* download
+        // collects: install.sh's job assembles its feed from exactly that pattern.
+        var ci = Assert.Single(PackagingCalls(Ci), call => Node(Mapping(call, "with"), "desktop") is not null);
+        var named = Scalar(Mapping(ci, "with"), "artifact") ?? "";
+        Assert.DoesNotMatch(collected, named);
+        Assert.DoesNotMatch(collected, named + "-desktop");
     }
 
     /// <summary>
@@ -226,7 +267,7 @@ public partial class ReleaseWorkflowTests
         var notes = Regex.Replace(Read(Notes), @"\s+", " ");
         foreach (var said in (string[])
         [
-            "in three packages: Windows on x64, macOS on Apple silicon and macOS on Intel.",
+            "in five packages: Windows on x64, macOS on Apple silicon, macOS on Intel, and Linux on x64 as a deb and as an AppImage.",
             "the test suite does not run on an Intel Mac.",
             "on your word, and to stable releases only.",
             "Installing an update restarts the runtime: the runtime the application carries is stopped first, with `jason runtime stop`, as the menu's Restart Jason and Its Runtime to Install says, and the new version starts it again when it opens.",
@@ -234,6 +275,10 @@ public partial class ReleaseWorkflowTests
             "the application as it was is copied under `~/.jason/desktop/rollback/<version>/`, and the Jason menu names that copy until the next update replaces it.",
             "to go back, quit Jason and put that folder back in the place of the installed application by hand.",
             "Uninstalling the desktop on Windows stops the runtime the application carries first, and removes nothing when that runtime does not stop.",
+            "On Linux, choose Remove What Jason Placed… in the Jason menu first:",
+            "What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `~/.cache/jason-desktop-updater`.",
+            "On macOS, choose Remove What Jason Placed… in the Jason menu first, then move Jason.app to the Trash.",
+            "What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `~/Library/Caches/jason-desktop-updater`.",
         ])
         {
             Assert.Contains(said, notes, StringComparison.Ordinal);
@@ -242,11 +287,13 @@ public partial class ReleaseWorkflowTests
         var guide = Regex.Replace(Read(["docs", "release-and-update.md"]), @"\s+", " ");
         foreach (var said in (string[])
         [
-            "on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason` the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.",
+            "on an Intel Mac `jason update apply` refuses with `update_carried_by_desktop` and the `jason` the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.",
             "the desktop updates to stable releases only.",
             "Installing a desktop update restarts the runtime.",
             "the descriptor's `installed_image` is the application's own `jason`",
             "going back is quitting Jason and putting that folder back in the place of the installed application by hand",
+            "Removing the desktop on Linux starts with Remove What Jason Placed… in the Jason menu,",
+            "and the data directory, the harness root and the updater's cache, `~/.cache/jason-desktop-updater`, stay.",
         ])
         {
             Assert.Contains(said, guide, StringComparison.Ordinal);
@@ -317,13 +364,209 @@ public partial class ReleaseWorkflowTests
         Assert.Contains("node scripts/prepare.mjs --rid osx-x64 --output bundles/x64 --version \"$VERSION\" --executable \"$GITHUB_WORKSPACE/$EXECUTABLE\"", mac, StringComparison.Ordinal);
         Assert.Contains("JASON_VERSION=\"$VERSION\"", mac, StringComparison.Ordinal);
 
+        var linux = Scalar(ActionStep(LinuxDesktopBuild), "run")!;
+        Assert.Equal("${{ inputs.version }}", Scalar(Mapping(ActionStep(LinuxDesktopBuild), "env"), "VERSION"));
+        Assert.Equal("${{ steps.publish.outputs.executable }}", Scalar(Mapping(ActionStep(LinuxDesktopBuild), "env"), "EXECUTABLE"));
+        Assert.Contains("node scripts/prepare.mjs --rid linux-x64 --output bundles/x64 --version \"$VERSION\" --executable \"$GITHUB_WORKSPACE/$EXECUTABLE\"", linux, StringComparison.Ordinal);
+        Assert.Contains("JASON_VERSION=\"$VERSION\" npm run package -- --linux --x64", linux, StringComparison.Ordinal);
+
         var configuration = Read(["desktop", "electron-builder.config.mjs"]);
-        Assert.Contains("beforePack: async (context) => checkBundle(bundleFolder(context.arch), version, context.electronPlatformName),", configuration, StringComparison.Ordinal);
+        Assert.Contains("            checkBundle(bundleFolder(context.arch), version, context.electronPlatformName);\n", configuration, StringComparison.Ordinal);
+        Assert.Contains("beforePack: async (context) => {", configuration, StringComparison.Ordinal);
         Assert.Contains("return configuration({ version: releaseVersion(process.env['JASON_VERSION']), sign });", configuration, StringComparison.Ordinal);
 
         // The executable says the version itself: each call's smoke test refuses another, and so does the Rosetta start.
         var release = Read(Release);
         Assert.Equal(3, Regex.Count(release, Regex.Escape("if (($version -split '\\+')[0] -ne $env:VERSION) { throw \"jason --version says '$version', and the tag says $env:VERSION\" }")));
         Assert.Contains("[ \"${said%%+*}\" = \"$VERSION\" ] || { echo \"::error title=osx-x64::The osx-x64 executable says '$said', and the tag says $VERSION.\"; exit 1; }", release, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The deb's file name, wherever the desktop names it to a person (the update's going-back notice and the sandbox
+    /// refusal both take <c>debFile</c> from <c>desktop/src/updates.ts</c>, and the README's apt line), is the name of a
+    /// file a release publishes.
+    /// </summary>
+    [Fact]
+    public void The_deb_the_desktop_names_is_a_file_a_release_publishes()
+    {
+        var updates = Read(["desktop", "src", "updates.ts"]);
+        var named = Regex.Match(updates, "^export const debFile = '([^']+)';$", RegexOptions.Multiline);
+        Assert.True(named.Success, "desktop/src/updates.ts names no debFile.");
+        Assert.Contains(named.Groups[1].Value, ReleaseAssets.Published);
+
+        var readme = Read(["desktop", "README.md"]);
+        var apt = Regex.Matches(readme, @"sudo apt install \./(?<file>[A-Za-z0-9._-]+\.deb)");
+        Assert.NotEmpty(apt);
+        Assert.All(apt, match => Assert.Contains(match.Groups["file"].Value, ReleaseAssets.Published));
+
+        Assert.Contains("${debFile}", Read(["desktop", "src", "sandbox.ts"]), StringComparison.Ordinal);
+    }
+
+    // --- the Linux packages: what the check reads back, how each is started, and CI's desktop job ---------------------
+
+    private static List<string> LinuxLines(string step) =>
+        [.. Scalar(ActionStep(step), "run")!.Split('\n').Select(line => line.Trim())];
+
+    /// <summary>
+    /// The Linux check holds its feed to the two files electron-updater downloads from it, the deb and the AppImage, which
+    /// are the release's own Linux files but the feed, through the same script the other two checks run, as its last line;
+    /// a refusal fails the step.
+    /// </summary>
+    [Fact]
+    public void The_linux_check_holds_its_feed_to_the_deb_and_the_appimage()
+    {
+        var lines = LinuxLines(LinuxDesktopVerify);
+        Assert.Equal(
+            "pwsh -NoProfile -File .github/scripts/Assert-UpdateFeed.ps1 -Feed \"$feed\" -Version \"$VERSION\" -Expect jason-desktop-linux-x64.deb,jason-desktop-linux-x64.AppImage || { echo \"::error title=Desktop::latest-linux.yml does not describe the files beside it as they will be published.\"; exit 1; }",
+            lines.Last(line => line.Length > 0));
+        Assert.Contains("feed=\"$dist/latest-linux.yml\"", lines);
+        Assert.Equal(
+            ["jason-desktop-linux-x64.AppImage", "jason-desktop-linux-x64.deb"],
+            ReleaseAssets.Desktop.Where(name => name.StartsWith("jason-desktop-linux-", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
+        Assert.Contains("latest-linux.yml", ReleaseAssets.Desktop);
+    }
+
+    /// <summary>
+    /// The deb is read for its control fields (the package jason-desktop, the release's version as dpkg spells it, amd64),
+    /// unpacked, and its /opt/Jason held by check-package to the configuration as a deb, which must carry package-type;
+    /// the AppImage's runtime is refused when it names a shared library or an interpreter, which is how it needs no
+    /// libfuse2, and its contents, extracted by that runtime, are held as an AppImage, which must carry none. Each carries
+    /// the executable this call published, byte for byte and runnable, with its notices and version.json, and the deb's menu
+    /// entry is refused when it starts the program with --no-sandbox.
+    /// </summary>
+    [Fact]
+    public void The_linux_check_reads_the_deb_and_the_appimage_back()
+    {
+        var lines = LinuxLines(LinuxDesktopVerify);
+        InOrder(lines,
+        [
+            "[ \"$(dpkg-deb --field \"$deb\" Package)\" = jason-desktop ] || { echo \"::error title=Desktop::The deb is not the package jason-desktop.\"; exit 1; }",
+            "[ \"$(dpkg-deb --field \"$deb\" Version)\" = \"${VERSION//-/\\~}\" ] || { echo \"::error title=Desktop::The deb's version is not $VERSION as dpkg spells it.\"; exit 1; }",
+            "[ \"$(dpkg-deb --field \"$deb\" Architecture)\" = amd64 ] || { echo \"::error title=Desktop::The deb is not for amd64.\"; exit 1; }",
+            "dpkg-deb --field \"$deb\" Recommends | grep -q 'libicu74 | libicu72' || { echo \"::error title=Desktop::The deb does not recommend the ICU library its jason needs.\"; exit 1; }",
+            "if dpkg-deb --field \"$deb\" Depends | grep -q libicu; then echo \"::error title=Desktop::The deb depends on an ICU library by one name; it recommends it by alternatives.\"; exit 1; fi",
+            "dpkg-deb --extract \"$deb\" \"$opened\"",
+            "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses, its updater or its AppArmor profile.\"; exit 1; }",
+            "dpkg-deb --control \"$deb\" \"$control\"",
+            "grep -q 'apparmor_parser --replace' \"$control/postinst\" || { echo \"::error title=Desktop::The deb's after-install loads no AppArmor profile for its sandbox.\"; exit 1; }",
+            "carries \"$opened/opt/Jason\" deb",
+            "if grep -q -e '--no-sandbox' \"${entries[@]}\"; then echo \"::error title=Desktop::The deb's menu entry starts the program with --no-sandbox.\"; exit 1; fi",
+            "readelf -lW -d \"$appimage\" | grep -E '\\(NEEDED\\)|^ *INTERP ' && { echo \"::error title=Desktop::The AppImage's runtime names an interpreter or a shared library, libfuse2 among them maybe.\"; exit 1; }",
+            "(cd \"$extracted\" && \"$appimage\" --appimage-extract > /dev/null)",
+            "node desktop/scripts/check-package.mjs --app \"$extracted/squashfs-root\" --platform linux --form appimage || { echo \"::error title=Desktop::The AppImage's application is not what it was configured to be: its feed, its fuses or its updater.\"; exit 1; }",
+            "carries \"$extracted/squashfs-root\" AppImage",
+        ],
+            "The Linux check");
+
+        // What each form carries: the executable the publish step names, byte for byte and runnable, its notices and the
+        // release's version.
+        InOrder(lines,
+        [
+            "cmp \"$bundle/jason\" \"$published\" || { echo \"::error title=Desktop::The $2's jason is not the executable this call published.\"; return 1; }",
+            "[ -x \"$bundle/jason\" ] || { echo \"::error title=Desktop::The $2's jason is not executable.\"; return 1; }",
+            "for notice in \"$bundle/LICENSE\" \"$bundle/THIRD-PARTY-NOTICES\" \"$1/resources/notices/LICENSES.chromium.html\"; do",
+            "grep -q \"\\\"version\\\": \\\"$VERSION\\\"\" \"$bundle/version.json\" || { echo \"::error title=Desktop::The $2's version.json does not name $VERSION.\"; return 1; }",
+        ],
+            "The Linux check's carries");
+        Assert.Contains("published=\"$GITHUB_WORKSPACE/$EXECUTABLE\"", lines);
+        Assert.Equal("${{ steps.publish.outputs.executable }}", Scalar(Mapping(ActionStep(LinuxDesktopVerify), "env"), "EXECUTABLE"));
+        Assert.Equal("${{ inputs.version }}", Scalar(Mapping(ActionStep(LinuxDesktopVerify), "env"), "VERSION"));
+    }
+
+    /// <summary>
+    /// Each Linux package is started once before anything is published, as a person starts it: the deb installed by apt
+    /// and started by the link it puts on the PATH, then removed; the AppImage run as the file it is, through FUSE where the
+    /// runner has it and by its runtime's own extraction where it does not. Each start has a data directory and a harness
+    /// root of its own, never the runner's home, with a one-page UI build in ui/custom, and the runtime's update check off.
+    /// A start passes when the desktop logs desktop_started and window_loaded, its program runs without --no-sandbox, it
+    /// quits when told, and the runtime it left running stops with the jason that package carries.
+    /// </summary>
+    [Fact]
+    public void Each_linux_package_is_started_once_under_a_virtual_display()
+    {
+        var step = ActionStep(LinuxDesktopStart);
+        Assert.Equal("false", Scalar(Mapping(step, "env"), "JASON_Update__CheckEnabled"));
+        var lines = LinuxLines(LinuxDesktopStart);
+        InOrder(lines,
+        [
+            "program='^[^ ]*/jason-desktop-app( |$)'",
+            "if pgrep -f -- \"$program\" > /dev/null; then pgrep -a -f -- \"$program\"; echo \"::error title=Desktop::A process of the application runs before the $form starts.\"; return 1; fi",
+            "mkdir -p \"$data/ui/custom\"",
+            "JASON_DATA_DIR=\"$data\" JASON_Harness__Root=\"$data-harness\" xvfb-run --auto-servernum \"$@\" > \"$data.out\" 2>&1 &",
+            "if grep -qs '\"EventName\":\"window_loaded\"' \"$data\"/logs/desktop-*.jsonl; then loaded=yes; break; fi",
+            "grep -qs '\"EventName\":\"desktop_started\"' \"$data\"/logs/desktop-*.jsonl || { echo \"::error title=Desktop::The $form logged no desktop_started.\"; return 1; }",
+            "case \" $said \" in *' --no-sandbox '*) echo \"::error title=Desktop::The $form runs with --no-sandbox.\"; return 1 ;; esac",
+            "kill -TERM \"$main\"",
+            "if kill -0 \"$main\" 2> /dev/null; then echo \"::error title=Desktop::The $form did not quit.\"; return 1; fi",
+            "if pgrep -f -- \"$program\" > /dev/null; then pgrep -a -f -- \"$program\"; echo \"::error title=Desktop::The $form left a process of the application running.\"; return 1; fi",
+            "JASON_DATA_DIR=\"$data\" \"$jason\" runtime stop || { echo \"::error title=Desktop::The runtime the $form started did not stop with the jason it carries.\"; return 1; }",
+            "sudo apt-get -o Acquire::Retries=5 update -qq",
+            "sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \"$dist/jason-desktop-linux-x64.deb\"",
+            "if [ -e /etc/apparmor.d/jason-desktop-app ]; then echo \"The deb installed its AppArmor profile.\"; else echo \"The deb installed no AppArmor profile: this runner's AppArmor reads none.\"; fi",
+            "started deb \"$RUNNER_TEMP/jason-desktop-deb-data\" /opt/Jason/resources/bundle/jason /usr/bin/jason-desktop-app",
+            "sudo apt-get -o Acquire::Retries=5 remove -y jason-desktop",
+            "if ! unshare -Ur true 2> /dev/null; then",
+            "sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0",
+            "unshare -Ur true || { echo \"::error title=Desktop::This runner refuses unprivileged user namespaces with AppArmor's restriction off.\"; exit 1; }",
+            "export APPIMAGE_EXTRACT_AND_RUN=1",
+            "started AppImage \"$data\" \"$data/desktop/bundle/$VERSION/jason\" \"$dist/jason-desktop-linux-x64.AppImage\"",
+        ],
+            "The Linux start");
+        Assert.All(lines.Where(line => line.Contains("JASON_DATA_DIR=", StringComparison.Ordinal)), line => Assert.Contains("\"$data\"", line, StringComparison.Ordinal));
+        Assert.Contains("data=\"$RUNNER_TEMP/jason-desktop-appimage-data\"", lines);
+        Assert.DoesNotContain(lines, line => Regex.IsMatch(line, @"\$HOME|~/"));
+
+        // Every apt-get call asks again when the archive does not answer at once: a hosted runner's name lookups fail
+        // now and then, before anything of the step has changed the system.
+        var apt = lines.Where(line => line.Contains("apt-get", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, apt.Count);
+        Assert.All(apt, line => Assert.StartsWith("sudo apt-get -o Acquire::Retries=5 ", line, StringComparison.Ordinal));
+
+        // The switch is named on one line alone, the one that refuses a start carrying it.
+        const string refusal = "case \" $said \" in *' --no-sandbox '*) echo \"::error title=Desktop::The $form runs with --no-sandbox.\"; return 1 ;; esac";
+        Assert.Equal([refusal], lines.Where(line => line.Contains("--no-sandbox", StringComparison.Ordinal)));
+
+        // The application's processes are found by the program's own first word, never a wrapper's command line that
+        // ends with it: no other pattern is handed to pgrep or pkill, and nothing is killed by a pattern at all.
+        Assert.All(lines.Where(line => Regex.IsMatch(line, @"\bpgrep\b")), line => Assert.DoesNotMatch(@"pgrep [^|;]*'", line));
+        Assert.All(lines.Where(line => Regex.IsMatch(line, @"\bpgrep\b")), line => Assert.Contains("-- \"$program\"", line, StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => line.Contains("pkill", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => line.Contains("kill -0 \"$desktop\" 2> /dev/null; then", StringComparison.Ordinal));
+
+        // The runner's restriction is lifted only inside the one test that finds it refusing user namespaces, after the
+        // deb has started as shipped, and nowhere else.
+        var sysctl = Assert.Single(lines.Select((line, index) => (Line: line, Index: index)), each => each.Line.Contains("sysctl", StringComparison.Ordinal));
+        Assert.Equal("sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0", sysctl.Line);
+        var opened = lines.FindLastIndex(sysctl.Index, line => line.StartsWith("if ", StringComparison.Ordinal) || line == "fi");
+        Assert.Equal("if ! unshare -Ur true 2> /dev/null; then", lines[opened]);
+        var closed = lines.FindIndex(sysctl.Index, line => line == "fi" || line.StartsWith("if ", StringComparison.Ordinal));
+        Assert.Equal("fi", lines[closed]);
+        Assert.True(opened > lines.FindIndex(line => line.StartsWith("started deb ", StringComparison.Ordinal)), "The runner's restriction is lifted before the deb starts as shipped.");
+    }
+
+    /// <summary>
+    /// CI's desktop job builds the Linux packages as a release does, through the same action, after its node tests and on
+    /// the run's own SDK, at a candidate's version: the release this tree is on the way to with a ci word and the run's
+    /// number, since a package is never built at the -dev version the tree carries. It adds steps and no job. The
+    /// download address's tests run between the desktop's node tests and the SDK, on the node the job set up.
+    /// </summary>
+    [Fact]
+    public void Ci_s_desktop_job_builds_the_linux_packages_as_a_release_does()
+    {
+        var job = Mapping(Mapping(Parse(Read(Ci)), "jobs"), "desktop");
+        Assert.Equal("The desktop on ubuntu", Scalar(job, "name"));
+        Assert.Equal("ubuntu-latest", Scalar(job, "runs-on"));
+        var steps = JobSteps(job).ToList();
+        var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses")).ToList();
+        Assert.Equal(
+            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does"],
+            names);
+        Assert.Equal("${{ needs.version.outputs.sdk }}", Scalar(Mapping(steps[6], "with"), "sdk-version"));
+        var with = Mapping(steps[7], "with");
+        Assert.Equal("./.github/actions/package", Scalar(steps[7], "uses"));
+        Assert.Equal("linux-x64", Scalar(with, "rid"));
+        Assert.Equal("${{ needs.version.outputs.release }}-ci.${{ github.run_number }}", Scalar(with, "version"));
+        Assert.Equal("true", Scalar(with, "desktop"));
+        Assert.Equal("3", Scalar(with, "retention-days"));
     }
 }

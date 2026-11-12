@@ -5,6 +5,7 @@ import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import { App } from '../../app';
 import { CampaignChat } from './campaign-chat';
+import { stageWord } from '../people/standing';
 import { href, parseRoute, route, type Route } from '../../router';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock, in UTC here.
@@ -247,6 +248,31 @@ describe('The campaign panel', () => {
         expect(screen.queryByRole('button', { name: 'Chat' })).toBeNull();
     });
 
+    it('says a Campaigns list with nothing in it and how a campaign starts: the sentence alone in a browser, a New chat inside the desktop', async () => {
+        const api = new FakeApi().answer('campaign.list', 'campaign.list/screen-empty');
+        open(api);
+        await screen.findByText(
+            'No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and the agent sets it up with you.',
+        );
+        expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull();
+        expect(sent(api, 'campaign.list')).toEqual([fixtures['campaign.list/screen-empty'].request]);
+        expect(sent(api, 'campaign.summary')).toEqual([]);
+
+        const inside = new FakeApi().answer('campaign.list', 'campaign.list/screen-empty');
+        const chat = vi.fn();
+        const { rerender } = renderApp(inside);
+        rerender(
+            <CampaignChat.Provider value={chat}>
+                <App api={inside} uiApiVersion="v1" />
+            </CampaignChat.Provider>,
+        );
+        location.hash = href(table);
+        route.value = table;
+        fireEvent.click(await screen.findByRole('button', { name: 'New chat' }));
+        expect(chat).toHaveBeenCalledTimes(1);
+        expect(chat).toHaveBeenCalledWith();
+    });
+
     it('inside the desktop has a Chat tab, which opens a chat about the campaign and moves nowhere', async () => {
         const api = panelApi();
         const chat = vi.fn();
@@ -279,7 +305,8 @@ describe('The campaign panel', () => {
     it('drops a campaign the runtime no longer knows, and says so', async () => {
         const api = new FakeApi()
             .answer('campaign.list', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all')
+            // The People page asks for its chips' numbers too, archived people left out.
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/everyone-without-archived')
             .answer('campaign.get', 'campaign.get/unknown')
             .answer('contact.list', 'contact.list/by-activity');
         open(api, { ...table, id: fixtures['campaign.get/unknown'].request.campaign_id, tab: 'sequence' });
@@ -450,6 +477,30 @@ describe('A campaign’s people', () => {
             expect(new Set(counted.map((body) => JSON.stringify(body))).size).toBe(2);
         },
     );
+
+    it('a removed person’s badge and the Removed chip say the one word the stage map holds, the badge in outline', async () => {
+        const api = peopleApi('campaign.list_contacts/summary-removed');
+        open(api, people('removed', 'summary'));
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+        const word = stageWord('removed')!.label;
+
+        const badge = (await row('Oli Example')).querySelector('.meta .badge')!;
+        expect(badge.textContent).toBe(word);
+        expect(badge.className).toBe('badge outline');
+        // The chip is the same count, named from the same map.
+        expect(await screen.findByRole('button', { name: new RegExp(`^${word}\\s*1$`), pressed: true })).toBeTruthy();
+    });
+
+    it("each row says where the person stands in this campaign, from the runtime's own standing", async () => {
+        const api = peopleApi('campaign.list_contacts/everyone');
+        open(api, people(undefined, 'summary'));
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+        const stage = async (name: string) =>
+            Array.from((await row(name)).querySelectorAll('.stage')).map((s) => s.textContent);
+        expect(await stage('Ada Example')).toEqual(['Waiting']);
+        expect(await stage('Ben Example')).toEqual(['Waiting', 'Idle']);
+        expect(await stage('Pia Example')).toEqual(['Waiting', 'Failed']);
+    });
 
     it('in Activity, the tab is People Activity, and All lists everyone something happened to in the period', async () => {
         const api = peopleApi('campaign.list_contacts/activity-people');
@@ -805,6 +856,27 @@ describe('A campaign’s Sequence', () => {
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(4));
         expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign'].request);
     });
+
+    it('left for another screen and opened again by its address, the campaign starts on All', async () => {
+        const api = timelineApi();
+        const sequence: Route = { ...table, id: 'cmp_1', tab: 'sequence' };
+        open(api, sequence);
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Changes' }));
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(2));
+        expect(await screen.findByText(/Holding the sends over the holiday\./)).toBeTruthy();
+
+        // Another screen takes the page, and the campaign's address brings it back: the campaign opens again.
+        location.hash = href({ screen: 'chat' });
+        route.value = { screen: 'chat' };
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Changes' })).toBeNull());
+        location.hash = href(sequence);
+        route.value = sequence;
+
+        await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(3));
+        expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign'].request);
+        expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+    });
 });
 
 describe('A campaign’s Inbox', () => {
@@ -1054,8 +1126,15 @@ describe('What the panel does', () => {
     }
 
     const actions = () => document.querySelector('.panel > .panel-actions') as HTMLElement;
-    /** Settings' own row: where a campaign is started, paused and resumed. */
-    const settings = () => document.querySelector('.campaign-tabs-settings') as HTMLElement;
+    /** The Settings tab's body: the campaign's record, and none of the moves its header offers. */
+    const settings = () => document.querySelector('.facts')!.closest('.panel-body') as HTMLElement;
+    const moves = ['Start', 'Pause', 'Resume'];
+    /** The moves a part of the panel offers, by their names. */
+    const offered = (part: HTMLElement) =>
+        within(part)
+            .queryAllByRole('button')
+            .map((each) => each.textContent?.trim())
+            .filter((name) => moves.includes(name ?? ''));
 
     /** Chooses a person in the open Add people dialog, searching for them first when the first page does not offer them. */
     async function choose(dialog: HTMLElement, name: string, search?: string) {
@@ -1074,13 +1153,15 @@ describe('What the panel does', () => {
         open(api, details);
         await screen.findByRole('heading', { level: 2, name: 'Spring' });
 
-        fireEvent.click(within(settings()).getByRole('button', { name: 'Pause' }));
+        expect(offered(actions())).toEqual(['Pause']);
+        expect(offered(settings())).toEqual([]);
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
         const left = await screen.findByRole('dialog', { name: 'Pause Spring' });
         await waitFor(() => expect(left.contains(document.activeElement)).toBe(true));
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
-        fireEvent.click(within(settings()).getByRole('button', { name: 'Pause' }));
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
         const dialog = await screen.findByRole('dialog', { name: 'Pause Spring' });
         expect(dialog.textContent).toContain(
             "Jason stops releasing this campaign's work. Work already running finishes. Reply's sequence keeps sending until a role pauses it there. Your reason is recorded.",
@@ -1097,9 +1178,11 @@ describe('What the panel does', () => {
             expect((document.querySelector('.panel-header') as HTMLElement).textContent).toContain('paused'),
         );
 
-        // Pause and Resume are not in the header: Settings holds them, and Add people stays where it was.
-        expect(within(actions()).queryByRole('button', { name: 'Resume' })).toBeNull();
-        fireEvent.click(within(settings()).getByRole('button', { name: 'Resume' }));
+        // The header offers the one move the new status allows, beside Add people; Settings offers none.
+        await waitFor(() => expect(offered(actions())).toEqual(['Resume']));
+        expect(within(actions()).getByRole('button', { name: 'Add people' })).toBeTruthy();
+        expect(offered(settings())).toEqual([]);
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Resume' }));
         const start = await screen.findByRole('dialog', { name: 'Resume Spring' });
         expect(start.textContent).toContain("Jason releases this campaign's work again.");
         // Another campaign is opened while Resume is on its way: the answer, and what is read after it, leave it open.
@@ -1124,7 +1207,37 @@ describe('What the panel does', () => {
         expect(screen.getByRole('heading', { level: 2, name: 'Autumn' })).toBeTruthy();
     });
 
-    it('a draft is started from Settings, saying that its work is released for the first time', async () => {
+    it('the header’s move is offered and done on a tab other than Settings, and the tab stays', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/some', 'campaign.summary/all')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.list_contacts', 'campaign.list_contacts/everyone')
+            .answer('campaign.pause', 'campaign.pause/with-reason');
+        const people: Route = { ...details, tab: 'people' };
+        open(api, people);
+        await screen.findByRole('heading', { level: 2, name: 'Spring' });
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+
+        expect(offered(actions())).toEqual(['Pause']);
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Pause Spring' });
+        fireEvent.input(within(dialog).getByRole('textbox', { name: 'Reason' }), {
+            target: { value: 'Holding the sends over the holiday.' },
+        });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Pause' }));
+
+        await waitFor(() =>
+            expect(sent(api, 'campaign.pause')).toEqual([written(fixtures['campaign.pause/with-reason'].request)]),
+        );
+        await waitFor(() => expect(offered(actions())).toEqual(['Resume']));
+        expect(route.value).toEqual(people);
+        expect(screen.getByRole('tab', { name: /^People/ }).getAttribute('aria-selected')).toBe('true');
+        // The People tab is read again under the new status, as it was asked for.
+        await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(2));
+    });
+
+    it("a draft is started from the campaign's header, saying that its work is released for the first time", async () => {
         const autumn = fixtures['campaign.get/unlinked'].response;
         const api = new FakeApi()
             .answer('campaign.list', 'campaign.list/screen')
@@ -1133,9 +1246,9 @@ describe('What the panel does', () => {
         open(api, { ...details, id: autumn.id });
         await screen.findByRole('heading', { level: 2, name: autumn.name });
 
-        expect(within(settings()).queryByRole('button', { name: 'Pause' })).toBeNull();
-        expect(within(settings()).queryByRole('button', { name: 'Resume' })).toBeNull();
-        fireEvent.click(within(settings()).getByRole('button', { name: 'Start' }));
+        expect(offered(actions())).toEqual(['Start']);
+        expect(offered(settings())).toEqual([]);
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Start' }));
         const start = await screen.findByRole('dialog', { name: `Start ${autumn.name}` });
         expect(start.textContent).toContain("Jason starts releasing this campaign's work.");
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
@@ -1180,8 +1293,9 @@ describe('What the panel does', () => {
         await screen.findByRole('heading', { level: 2, name: winter.name });
 
         expect(screen.getByText('Raw campaign record')).toBeTruthy();
-        // Settings offers no move to an archived campaign: its row of moves is not drawn at all.
-        expect(settings()).toBeNull();
+        // The header offers no move to an archived campaign, and Settings none either.
+        expect(offered(actions())).toEqual([]);
+        expect(offered(settings())).toEqual([]);
         fireEvent.click(within(actions()).getByRole('button', { name: 'Add people' }));
         const dialog = await screen.findByRole('dialog', { name: `Add people to ${winter.name}` });
         await choose(dialog, 'Hal Example');

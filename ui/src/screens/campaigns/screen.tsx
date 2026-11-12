@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApi } from '../../api/context';
 import { FiltersBar } from '../../layout/filters-bar';
 import { PeriodSwitch } from '../../layout/period-switch';
@@ -33,6 +33,8 @@ import { CampaignTimeline } from './timeline';
 import * as store from './store';
 import { CampaignTable } from './table';
 import { Notice } from '../../layout/notice';
+import { EmptyStart } from '../../layout/empty-start';
+import { useCampaignChat } from './campaign-chat';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -60,6 +62,13 @@ export function CampaignsScreen() {
         void store.load(api, table, new Date(), zone);
     }, [api, key]);
 
+    // A campaign opened starts its timeline on All; Back from what opened in place, or another tab, keeps the chip. It is
+    // set before any effect runs, because a campaign still held from before this screen was shown paints its timeline
+    // on the first frame, and that timeline's own read runs before this screen's effects.
+    useLayoutEffect(() => {
+        if (selected) timeline.chip.value = 'all';
+    }, [selected]);
+
     // A campaign the address names is read with its numbers; one the runtime no longer knows is closed, and said so.
     useEffect(() => {
         if (!selected) {
@@ -67,8 +76,6 @@ export function CampaignsScreen() {
             return;
         }
         store.notice.value = null;
-        // A campaign opened starts its timeline on All; Back from what opened in place, or another tab, keeps the chip.
-        timeline.chip.value = 'all';
         void store.open(api, selected, table, new Date(), zone, at.tab !== 'people').then((known) => {
             if (known) return;
             store.notice.value = 'The campaign in this address no longer exists; it was closed.';
@@ -187,6 +194,7 @@ export function CampaignsScreen() {
     const campaign = store.campaign.value;
     const waiting = store.waiting.value?.campaignId === selected ? store.waiting.value : null;
     const filtered = Boolean(at.filters.q || at.filters.archived);
+    const chat = useCampaignChat();
     const numbers = store.countedFor(selected, table);
     const sequence =
         numbers && 'sequence_linked' in numbers ? numbers : selected ? store.summary.value[selected] : undefined;
@@ -245,7 +253,14 @@ export function CampaignsScreen() {
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {store.actionFailure.value && <Notice danger>{store.actionFailure.value}</Notice>}
                 {ready && campaigns.length === 0 ? (
-                    <div className="empty">{filtered ? 'No campaign matches.' : 'No campaigns yet.'}</div>
+                    filtered ? (
+                        <div className="empty">No campaign matches.</div>
+                    ) : (
+                        <EmptyStart
+                            sentence="No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and the agent sets it up with you."
+                            start={chat ? () => chat() : null}
+                        />
+                    )
                 ) : (
                     <CampaignTable
                         campaigns={campaigns}
@@ -380,7 +395,7 @@ export function CampaignsScreen() {
                                 />
                             )}
                             {at.tab === 'settings' && (
-                                <CampaignSettings campaign={campaign} now={new Date()} zone={zone} onAct={setActing} />
+                                <CampaignSettings campaign={campaign} now={new Date()} zone={zone} />
                             )}
                         </>
                     )}

@@ -94,22 +94,25 @@ public static class ReleaseAssets
     public const string Skills = "jason-skills.zip";
 
     /// <summary>
-    /// The desktop's files, which electron-builder writes in the release's two signing jobs: the Windows installer, signed
-    /// as its executable and its uninstaller are, with its blockmap and the feed the installed desktop's updater reads;
-    /// for each Mac architecture a dmg to install by hand and a zip the updater installs, with the zip's blockmap; and the
-    /// Mac feed, which names both zips.
+    /// The desktop's files, which electron-builder writes in the release's two signing jobs and its Linux build: the
+    /// Windows installer, signed as its executable and its uninstaller are, with its blockmap and the feed the installed
+    /// desktop's updater reads; for each Mac architecture a dmg to install by hand and a zip the updater installs, with
+    /// the zip's blockmap; the Mac feed, which names both zips; and for Linux on x64 a deb and an AppImage, both of which
+    /// update themselves, neither signed, with the Linux feed, which names both.
     /// </summary>
     /// <remarks>
     /// Listed in <see cref="Checksums"/> and never in the <see cref="Manifest"/>, which names platforms and plugins; the
     /// runtime never reads them. The names carry no version, so a latest-download URL resolves for every release, and the
-    /// feeds carry the stable names <c>latest.yml</c> and <c>latest-mac.yml</c> for a candidate too: a candidate is kept
-    /// from stable installations by the release's prerelease flag, never by a channel of its own.
+    /// feeds carry the stable names <c>latest.yml</c>, <c>latest-mac.yml</c> and <c>latest-linux.yml</c> for a candidate
+    /// too: a candidate is kept from stable installations by the release's prerelease flag, never by a channel of its own.
+    /// An AppImage carries its blockmap inside the file, and a deb is downloaded whole, so neither has one beside it.
     /// </remarks>
     public static IReadOnlyList<string> Desktop { get; } =
     [
         "jason-desktop-windows-x64-setup.exe", "jason-desktop-windows-x64-setup.exe.blockmap", "latest.yml",
         "jason-desktop-macos-arm64.dmg", "jason-desktop-macos-arm64.zip", "jason-desktop-macos-arm64.zip.blockmap",
         "jason-desktop-macos-x64.dmg", "jason-desktop-macos-x64.zip", "jason-desktop-macos-x64.zip.blockmap", "latest-mac.yml",
+        "jason-desktop-linux-x64.deb", "jason-desktop-linux-x64.AppImage", "latest-linux.yml",
     ];
 
     /// <summary>Every file a release carries, in the order the release workflow attaches them.</summary>

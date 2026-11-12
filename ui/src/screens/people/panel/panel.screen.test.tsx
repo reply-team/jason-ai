@@ -28,6 +28,8 @@ const aguilar = fixtures['contact.get/no-first-name'].response;
 
 /** Opens People with one person beside the list, the way an address does. */
 function open(api: FakeApi, id: string, tab: PersonTab = 'timeline', filters: PeopleFilters = {}) {
+    // The list beside the panel asks for its chips' numbers, archived people left out as the list leaves them out.
+    if (!api.offers('campaign.summary')) api.answer('campaign.summary', 'campaign.summary/everyone-without-archived');
     renderApp(api);
     const to = { screen: 'people' as const, id, tab, filters };
     location.hash = href(to);
@@ -325,13 +327,13 @@ describe('Saving the person', () => {
         const kinds = within(panel()).getAllByRole<HTMLSelectElement>('combobox', { name: 'Kind' });
         fireEvent.change(kinds.at(-1)!, { target: { value: 'phone' } });
         const values = within(panel()).getAllByRole<HTMLInputElement>('textbox', { name: 'Address' });
-        fireEvent.input(values.at(-1)!, { target: { value: '+4791234567' } });
+        fireEvent.input(values.at(-1)!, { target: { value: '+12125550147' } });
         reason('Gave a phone number.');
         fireEvent.click(within(panel()).getByRole('button', { name: 'Save' }));
 
         await waitFor(() => expect(asked(api, 'contact.update')).toHaveLength(1));
         expect(asked(api, 'contact.update')).toEqual([recorded('contact.update/person-channels')]);
-        expect(await within(panel()).findByText('+4791234567')).toBeTruthy();
+        expect(await within(panel()).findByText('+12125550147')).toBeTruthy();
     });
 
     it('picks a primary per kind: a pick changes its own kind only, and a row moved onto a kind with one is not primary', async () => {
@@ -675,7 +677,7 @@ describe('Move', () => {
         expect(asked(api, 'campaign.remove_contacts')).toEqual([recorded('campaign.remove_contacts/move-out')]);
         const order = api.calls
             .map((call) => call.operation)
-            .filter((op) => op.startsWith('campaign.') && op !== 'campaign.list');
+            .filter((op) => op.startsWith('campaign.') && op !== 'campaign.list' && op !== 'campaign.summary');
         expect(order).toEqual(['campaign.add_contacts', 'campaign.remove_contacts']);
         await waitFor(() => expect(membership('Nordic pilot').textContent).toContain('Excluded'));
         expect(membership('Q4 follow-ups').textContent).toContain('Enrolled');

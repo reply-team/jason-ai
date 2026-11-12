@@ -8,7 +8,7 @@ The browser UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/`. One mo
 
 Node 24. `npm ci`, then `npm run build` writes `dist/`, with the `THIRD-PARTY-NOTICES` of exactly the packages the
 bundle carries. `npm run package` wraps it as `artifacts/jason-ui.zip`: `index.html`,
-`manifest.json`, `favicon.svg`, `assets/*`, `THIRD-PARTY-NOTICES` at the root. The build refuses a package it carries
+`manifest.json`, `favicon.svg` (the mark), `brand-wordmark.svg` and `brand-wordmark-dark.svg` (the wordmark for a light and a dark ground), `assets/*`, `THIRD-PARTY-NOTICES` at the root. The build refuses a package it carries
 that has no licence file, and the package step refuses notices that leave out a package `package.json` names as a
 dependency.
 
@@ -50,8 +50,9 @@ classic screens in the page panel take the browser's stylesheet, scoped under `.
 (`src/console/scope.ts`), so the two stylesheets do not meet.
 
 **Words and theme.** The browser shell's words are in `src/locale/en.ts`, one table read through `t()`. The theme
-(light, dark, or the system's) is chosen under Settings and kept in this browser, never sent to the runtime; the
-document's `lang` is `en`. The console's own words are English in this release: the table serves the browser shell's.
+(light, dark, or the system's) is chosen under Settings; light is what an installation that has chosen nothing meets.
+The choice is kept in this browser and never sent to the runtime; inside the desktop it is also told to the desktop, which
+keeps it so its window and starting page open in the same theme before the page loads. The document's `lang` is `en`. The console's own words are English in this release: the table serves the browser shell's.
 
 ## Dev loop
 

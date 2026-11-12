@@ -48,6 +48,8 @@ An act this page marks **Ask first.** needs the word of the person you install f
 yes. With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to
 ask.
 
+This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
+
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
   §7 takes the installation off again.
@@ -259,6 +261,17 @@ To install without running a downloaded script, take the steps the script takes,
 Once `jason --version` answers there, the archive, `checksums.txt` and the temporary directory you unpacked into
 have done their work: you may delete those three — only those — with `Remove-Item -Recurse <path>` on Windows and
 `rm -r <path>` elsewhere.
+
+### Jason Desktop
+
+A person who would rather have a window than a terminal can install [Jason Desktop](desktop.md) instead of, or beside, the
+executable above, from the latest release's downloads: `jason-desktop-windows-x64-setup.exe` for Windows on x64,
+`jason-desktop-macos-arm64.dmg` or `jason-desktop-macos-x64.dmg` for macOS, and for Linux on x64
+`jason-desktop-linux-x64.deb` (`sudo apt install ./jason-desktop-linux-x64.deb`, the one to take on Ubuntu 24.04 and later)
+or `jason-desktop-linux-x64.AppImage`; `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac`, `/desktop/mac-intel`,
+`/desktop/linux-deb` and `/desktop/linux-appimage` send you to the latest release's file. Each carries the release's own `jason` and works on this same installation. The
+Linux packages are not signed, and are built so, not yet seen on a real machine. Install it only when the person asks for
+it: the line in this section is the agent's way, and it never needs the desktop.
 
 ---
 
@@ -486,6 +499,10 @@ given as a path is looked up in its own directory and reads no PATH, so the answ
 exception: an npm shim given as a path takes its `node.exe` from the PATH when none stands beside it, and then the answer
 says whose PATH that was.
 
+Under Jason Desktop's chat the check is held tighter: the chat runs `jason` with `JASON_CONFINED` set, so the program is
+named by name and found on the search path, and a name with a directory in it is neither looked up nor started. Run a
+path from a terminal.
+
 **When something does not work**, run `jason doctor --dry-run`, then `jason doctor`, and open an
 [issue](https://github.com/reply-team/jason-ai/issues/new?template=problem.yml) with the file it wrote attached: the
 address it prints fills in the version and the platform. Help with your own data, or a file made with
@@ -626,6 +643,14 @@ when everything it set out to remove is gone, and 1 when it did not get there �
 not stop, a purge you did not confirm), something it set out to remove is still there (a record it could not
 read, a file it could not remove, a moved copy nothing will remove), or it stopped part-way. Every step that did
 happen is listed either way: in the report on stdout, or on stderr where the report itself could not be written.
+
+### Jason Desktop
+
+The desktop is taken off its own way, because it places things `jason uninstall` has no receipt for. On Windows, remove
+Jason from Installed apps in Settings. On macOS and Linux, choose Remove What Jason Placed… in the Jason menu first, then
+remove the application: move Jason.app to the Trash, `sudo apt remove jason-desktop` for the deb, or delete the AppImage
+file. [desktop.md](desktop.md) says what each step takes off, what stays (the data directory, the harness root and the
+updater's cache) and what to do by hand when Jason will not start.
 
 ## 8. Moving the installation to another machine
 

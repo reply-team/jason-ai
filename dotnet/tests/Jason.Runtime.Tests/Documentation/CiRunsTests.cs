@@ -1413,6 +1413,26 @@ public class CiRunsTests
     }
 
     /// <summary>
+    /// The download address's short paths, <c>get/</c>, are tested by Node's own runner in the desktop job, which already
+    /// has a node of 22.13 or later, the first 22 to run <c>node:sqlite</c> without a flag: a step of its own, in its own
+    /// folder, after the node is set up, which neither fails quietly nor is skipped. <c>get/</c> has no dependencies, so
+    /// nothing is installed for it. Pinned by its text: node may be absent where these tests run.
+    /// </summary>
+    [Fact]
+    public void The_download_address_is_tested_by_node_in_the_desktop_job()
+    {
+        var steps = Steps(Mapping(Jobs(), "desktop"));
+        var testing = Assert.Single(steps, step => Scalar(step, "name") == "The download address's tests");
+        Assert.Equal("node --test", Scalar(testing, "run")?.Trim());
+        Assert.Equal("get", Scalar(testing, "working-directory"));
+        Assert.Null(Node(testing, "if"));
+        Assert.Null(Node(testing, "continue-on-error"));
+
+        var node = steps.FindIndex(step => Scalar(step, "uses")?.StartsWith("actions/setup-node@", StringComparison.Ordinal) == true);
+        Assert.InRange(steps.IndexOf(testing), node + 1, steps.Count - 1);
+    }
+
+    /// <summary>
     /// Every plugin package's JavaScript is parsed by node, on the one runner that has it, before the runtime is built and
     /// anything of the UI is installed, so a syntax error is reported in seconds rather than after a full build: the files
     /// are found under <c>plugins/*/</c>, so a package joins by being there, and the step names none. Pinned by its text:
@@ -1477,11 +1497,12 @@ public class CiRunsTests
         var action = Parse(Read(Action));
         var retention = Mapping(Mapping(action, "inputs"), "retention-days");
         Assert.Equal("0", Scalar(retention, "default"));
-        // The platform's upload, and the desktop's two, which only a release's calls make.
+        // The platform's upload, and the desktop's three: Windows' and the Macs', which only a release's calls make, and
+        // Linux's, which CI's desktop job makes too, kept three days as everything CI uploads.
         var uploads = Assert.IsType<YamlSequenceNode>(Node(Mapping(action, "runs"), "steps")).Children.Cast<YamlMappingNode>()
             .Where(step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true)
             .ToList();
-        Assert.Equal(3, uploads.Count);
+        Assert.Equal(4, uploads.Count);
         Assert.All(uploads, upload => Assert.Equal("${{ inputs.retention-days }}", Scalar(Mapping(upload, "with"), "retention-days")));
 
         var ci = PackagingCalls(Ci);

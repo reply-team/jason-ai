@@ -2,7 +2,7 @@
   "operation": "contact.list",
   "case": "query-phone",
   "request": {
-    "query": "+48 601 234 567",
+    "query": "+1 312 555 0118",
     "limit": 10
   },
   "status": 200,
@@ -25,7 +25,7 @@
           },
           {
             "channel": "phone",
-            "value": "+48601234567",
+            "value": "+13125550118",
             "label": null,
             "primary": true,
             "data": null

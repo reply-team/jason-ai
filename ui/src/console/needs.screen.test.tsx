@@ -4,7 +4,7 @@ import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
-import { stubDesktop, stubStream } from '../test/desktop';
+import { chatDesktop, stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
@@ -28,7 +28,7 @@ function renderConsole(fake: FakeApi) {
     fake.answer('system.info', 'system.info/with-ui')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    render(<Console api={fake} desktop={stubDesktop()} stream={stubStream().stream} />);
+    render(<Console api={fake} desktop={chatDesktop()} stream={stubStream().stream} />);
 }
 
 const needs = () => screen.getByRole('heading', { name: 'Needs you', level: 1 }).closest<HTMLElement>('.painted')!;
@@ -65,8 +65,25 @@ describe('Needs you', () => {
             new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
         );
         await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
-        expect(words(needs().querySelector('.card.needs-empty')!)).toBe("You're all caught up");
+        expect(words(needs().querySelector('.card.needs-empty .bd')!)).toBe("You're all caught up");
         expect(needs().querySelector('.ask')).toBeNull();
+    });
+
+    it('offers the campaigns from the card, and its one control opens their panel', async () => {
+        renderConsole(
+            new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
+        );
+        await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
+        const card = needs().querySelector<HTMLElement>('.card.needs-empty')!;
+        expect(
+            within(card)
+                .getAllByRole('button')
+                .map((each) => words(each)),
+        ).toEqual(['Open your campaigns']);
+        expect(screen.queryByRole('heading', { name: 'Campaigns', level: 1 })).toBeNull();
+
+        fireEvent.click(within(card).getByRole('button', { name: 'Open your campaigns' }));
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Campaigns', level: 1 })).toBeTruthy());
     });
 
     it('filters to approvals or to questions, and says in a line of its own when a filter holds nothing', async () => {

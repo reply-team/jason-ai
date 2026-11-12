@@ -43,6 +43,8 @@ describe('parseRoute', () => {
             '#/people/cnt_7/details?q=ada&campaign=cmp_1&archived=1&t=abc',
             { screen: 'people', id: 'cnt_7', tab: 'details', filters: { q: 'ada', campaign: 'cmp_1', archived: true } },
         ],
+        ['#/people?stage=waiting', { screen: 'people', tab: 'timeline', filters: { stage: 'waiting' } }],
+        ['#/people?stage=removed', { screen: 'people', tab: 'timeline', filters: {} }],
         ['#/people/cnt_7/threads', { screen: 'people', id: 'cnt_7', tab: 'threads', filters: {} }],
         ['#/people/cnt_7/sequences', { screen: 'people', id: 'cnt_7', tab: 'sequences', filters: {} }],
         ['#/people/cnt_7/next', { screen: 'people', id: 'cnt_7', tab: 'next', filters: {} }],
@@ -242,6 +244,14 @@ describe('href', () => {
         [
             { screen: 'people' as const, id: 'cnt 7', tab: 'details' as const, filters: { archived: true, q: 'a b' } },
             '#/people/cnt%207/details?q=a%20b&archived=1',
+        ],
+        [
+            {
+                screen: 'people' as const,
+                tab: 'timeline' as const,
+                filters: { stage: 'idle' as const, archived: true },
+            },
+            '#/people?stage=idle&archived=1',
         ],
         [{ screen: 'people' as const, id: 'cnt_7', tab: 'threads' as const, filters: {} }, '#/people/cnt_7/threads'],
         [

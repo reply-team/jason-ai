@@ -19,9 +19,10 @@ public sealed class CampaignNumbers(JasonDbContext db)
         ArgumentNullException.ThrowIfNull(request);
         var campaigns = await CampaignsAsync(request.CampaignIds, cancellationToken).ConfigureAwait(false);
         var ids = campaigns.Select(campaign => campaign.Id).ToList();
-        var counts = await CampaignPeople.SummaryCountsAsync(db, ids, cancellationToken).ConfigureAwait(false);
+        var withoutArchived = request.ExcludeArchivedContacts == true;
+        var counts = await CampaignPeople.SummaryCountsAsync(db, ids, withoutArchived, cancellationToken).ConfigureAwait(false);
         var pinned = await CampaignPeople.PinnedAsync(db, ids, cancellationToken).ConfigureAwait(false);
-        var t = await CampaignPeople.SummaryTotalAsync(db, ids, cancellationToken).ConfigureAwait(false);
+        var t = await CampaignPeople.SummaryTotalAsync(db, ids, withoutArchived, cancellationToken).ConfigureAwait(false);
         return new CampaignSummaryResponse(
             [.. campaigns.Select(campaign => counts.TryGetValue(campaign.Id, out var c)
                 ? new CampaignSummaryRow(campaign.PublicId, c.People, c.Waiting, c.Failed, c.Working, c.New, c.Idle, c.Sequence, c.Out, c.Removed, pinned.Contains(campaign.Id))

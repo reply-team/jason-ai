@@ -20,6 +20,7 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { posix, win32 } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
+import { sameResolved } from './resolved-path.ts';
 
 export interface OwnRuntimeDeps {
     platform: NodeJS.Platform;
@@ -106,24 +107,24 @@ export function ownRuntimeDeps(platform: NodeJS.Platform, executable: string, ru
  * and names its process, and starts in place of one whose process has gone or now belongs to another program); end the
  * process only once it is known to be a runtime that never answers; and delete the run file only when no runtime runs.
  */
-export function unansweredWords(outcome: { pid: number | null; runFile: string; unreadable?: true }): { why: string; next: string } {
+export function unansweredWords(outcome: { pid: number | null; runFile: string; unreadable?: true }, jason = 'jason'): { why: string; next: string } {
     const deleting = `If no Jason runtime is running, deleting ${outcome.runFile} lets this go on.`;
     if (outcome.unreadable) {
         return {
             why: `a runtime may be running: its run file, ${outcome.runFile}, is there and could not be read`,
-            next: `jason runtime status answers once the runtime does. ${deleting}`,
+            next: `${jason} runtime status answers once the runtime does. ${deleting}`,
         };
     }
     const pid = outcome.pid;
     if (pid === null) {
         return {
             why: 'a runtime may be running that did not answer, and its run file names no process',
-            next: `jason runtime status answers once the runtime does, and jason runtime start starts one in place of a run file left behind. ${deleting}`,
+            next: `${jason} runtime status answers once the runtime does, and ${jason} runtime start starts one in place of a run file left behind. ${deleting}`,
         };
     }
     return {
         why: `a runtime may be running that did not answer: its run file names process ${pid}, which is running`,
-        next: `jason runtime status answers once the runtime does. jason runtime start says whether process ${pid} is the runtime: it names it if it is, and starts one in place of the run file if it is not. If it is the runtime and never answers, end process ${pid}. ${deleting}`,
+        next: `${jason} runtime status answers once the runtime does. ${jason} runtime start says whether process ${pid} is the runtime: it names it if it is, and starts one in place of the run file if it is not. If it is the runtime and never answers, end process ${pid}. ${deleting}`,
     };
 }
 
@@ -146,15 +147,7 @@ function errorCode(result: CliResult): string | null {
 function namesCarried(deps: OwnRuntimeDeps, image: unknown): boolean {
     if (typeof image !== 'string' || image === '') return false;
     if (!(deps.platform === 'win32' ? win32 : posix).isAbsolute(image)) return false;
-    let named: string;
-    let carried: string;
-    try {
-        named = deps.realpath(image);
-        carried = deps.realpath(deps.executable);
-    } catch {
-        return false;
-    }
-    return deps.platform === 'win32' ? named.toLowerCase() === carried.toLowerCase() : named === carried;
+    return sameResolved(deps.platform, image, deps.executable, deps.realpath);
 }
 
 /** Whose the runtime the run file names is, and the process it names. */

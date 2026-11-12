@@ -59,6 +59,11 @@ export class FakeApi implements Api {
         return this;
     }
 
+    /** Whether the test has said which cases an operation may answer with. */
+    offers(operation: string): boolean {
+        return this.answers.has(operation);
+    }
+
     /**
      * Holds the answers to an operation — those whose request matches, when a test says which — until the release it
      * returns is called: what a screen shows while it waits. A call not held takes its case first.

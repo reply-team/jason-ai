@@ -4,9 +4,24 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { DesktopSetup, JasonDesktop } from '../../ui/src/platform/desktop.d.ts';
+import type {
+    DesktopChatEvent,
+    DesktopChatOptions,
+    DesktopConversation,
+    DesktopConversationRecord,
+    DesktopKeptEntry,
+    DesktopLink,
+    DesktopRefusal,
+    DesktopReplyLink,
+    DesktopSetup,
+    JasonDesktop,
+} from '../../ui/src/platform/desktop.d.ts';
+import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummary } from '../src/chat.ts';
+import type { KeptEntry } from '../src/chat-conversations.ts';
+import type { ChatRefusal } from '../src/chat-ipc.ts';
+import type { LinkTarget } from '../src/deep-link.ts';
 import type { DesktopPreload } from '../src/preload.ts';
-import type { SetupState } from '../src/setup.ts';
+import type { LinkRefusal, ReplyLink, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
 
 /** True when the two types are the same type, field by field and all the way down. */
@@ -21,6 +36,8 @@ type PreloadIsTheSeam = [
     Holds<Equal<keyof DesktopPreload, keyof JasonDesktop>>,
     Holds<Equal<keyof DesktopPreload['chat'], keyof JasonDesktop['chat']>>,
     Holds<Equal<keyof DesktopPreload['setup'], keyof JasonDesktop['setup']>>,
+    Holds<Equal<keyof DesktopPreload['links'], keyof JasonDesktop['links']>>,
+    Holds<Equal<keyof DesktopPreload['theme'], keyof JasonDesktop['theme']>>,
     Holds<DesktopPreload extends JasonDesktop ? true : false>,
 ];
 
@@ -34,11 +51,16 @@ type Subscriptions<Part, Prefix extends string> = {
     [Name in keyof Part & string]: Part[Name] extends (handler: never) => () => void ? `${Prefix}${Name}` : never;
 }[keyof Part & string];
 
-type DeclaredCalls = Calls<JasonDesktop['chat'], 'chat'> | Calls<JasonDesktop['setup'], 'setup'>;
+type DeclaredCalls =
+    | Calls<JasonDesktop['chat'], 'chat'>
+    | Calls<JasonDesktop['setup'], 'setup'>
+    | Calls<JasonDesktop['links'], 'links'>
+    | Calls<JasonDesktop['theme'], 'theme'>;
 type DeclaredSubscriptions =
     | Subscriptions<JasonDesktop, ''>
     | Subscriptions<JasonDesktop['chat'], 'chat.'>
-    | Subscriptions<JasonDesktop['setup'], 'setup.'>;
+    | Subscriptions<JasonDesktop['setup'], 'setup.'>
+    | Subscriptions<JasonDesktop['links'], 'links.'>;
 
 // ipc.ts registers a channel for every call the page declares, and for nothing else.
 type InvokeChannelsAreTheSeam = Holds<Equal<InvokeMember, DeclaredCalls>>;
@@ -48,14 +70,47 @@ const eventChannelOf = {
     onCommand: 'command',
     'chat.onEvent': 'chat.event',
     'setup.onChanged': 'setup.changed',
+    'links.onOpen': 'links.open',
 } as const satisfies Record<DeclaredSubscriptions, keyof typeof eventChannels>;
 type EventChannelsAreTheSeam = [
     Holds<Equal<keyof typeof eventChannelOf, DeclaredSubscriptions>>,
     Holds<Equal<(typeof eventChannelOf)[keyof typeof eventChannelOf], keyof typeof eventChannels>>,
 ];
 
-export type SeamHeld = [StatusIsTheSeam, PreloadIsTheSeam, InvokeChannelsAreTheSeam, EventChannelsAreTheSeam];
+// A conversation, its kept entries and the events of the conversations reach the page exactly as the desktop makes them.
+type Conversational = 'attached' | 'fresh' | 'pick' | 'renamed' | 'mode' | 'line' | 'gap';
+type ConversationsAreTheSeam = [
+    Holds<Equal<ConversationSummary, DesktopConversation>>,
+    Holds<Equal<ConversationOpened, DesktopConversationRecord>>,
+    Holds<Equal<KeptEntry, DesktopKeptEntry>>,
+    Holds<Equal<Extract<ChatEvent, { kind: Conversational }>, Extract<DesktopChatEvent, { kind: Conversational }>>>,
+];
+
+// A turn names the conversation and the host, the model and the effort; never a campaign, which the conversation's
+// record decides.
+type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort'>>];
+
+// A refusal reaches the page as the value the desktop answers it with.
+type RefusalIsTheSeam = Holds<Equal<ChatRefusal, DesktopRefusal>>;
+
+// A Reply link, or the sentence its ask ended with, reaches the page as the desktop answers it.
+type ReplyLinkIsTheSeam = [Holds<Equal<ReplyLink, DesktopReplyLink>>, Holds<Equal<LinkRefusal, DesktopRefusal>>];
+
+// A link reaches the page as the page the desktop parsed it to, never as the address.
+type LinkIsTheSeam = Holds<Equal<LinkTarget, DesktopLink>>;
+
+export type SeamHeld = [
+    RefusalIsTheSeam,
+    ReplyLinkIsTheSeam,
+    StatusIsTheSeam,
+    PreloadIsTheSeam,
+    InvokeChannelsAreTheSeam,
+    EventChannelsAreTheSeam,
+    ConversationsAreTheSeam,
+    SendIsTheSeam,
+    LinkIsTheSeam,
+];
 
 test('the desktop implements the seam ui/src/platform/desktop.d.ts declares (checked by npm run check)', () => {
-    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged']);
+    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen']);
 });

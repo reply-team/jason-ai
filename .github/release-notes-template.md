@@ -43,6 +43,9 @@ at this version and released only after its tests passed.
 | `jason-desktop-macos-x64.zip` | the same application for Intel, as the Mac desktop's updater downloads it |
 | `jason-desktop-macos-x64.zip.blockmap` | what the Mac desktop's updater reads to download only the parts of the Intel zip that changed |
 | `latest-mac.yml` | the Mac desktop's update feed: this version, each zip's name and its SHA-512 |
+| `jason-desktop-linux-x64.deb` | Jason Desktop for Linux on x64, as a package for Debian and Ubuntu: `sudo apt install ./jason-desktop-linux-x64.deb` |
+| `jason-desktop-linux-x64.AppImage` | the same application for Linux on x64 as one file, to make executable and run from wherever you keep it, on a system that lets it run its sandbox |
+| `latest-linux.yml` | the Linux desktop's update feed: this version, the deb's and the AppImage's names and their SHA-512 |
 
 Each archive holds the executable, `LICENSE` (the MIT licence, which covers the whole repository, the runtime
 included) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by
@@ -60,18 +63,29 @@ not start.
 
 ## Desktop
 
-Jason Desktop is a window onto this same Jason, in three packages: Windows on x64, macOS on Apple silicon and macOS
-on Intel. Each carries this release's executable, signed as the archive's is, with `LICENSE` and `THIRD-PARTY-NOTICES`
-beside it, and talks to it as the CLI does. On Windows, run
+Jason Desktop is a window onto this same Jason, in five packages: Windows on x64, macOS on Apple silicon, macOS on
+Intel, and Linux on x64 as a deb and as an AppImage. Each carries this release's executable, signed as the archive's
+is, with `LICENSE` and `THIRD-PARTY-NOTICES` beside it, and talks to it as the CLI does. On Windows, run
 `jason-desktop-windows-x64-setup.exe`; the installer, its uninstaller, `Jason.exe` and the `jason.exe` it carries are
 each signed with Reply's certificate and timestamped. On macOS, open the dmg for your Mac and drag Jason into
 Applications; the application, the `jason` it carries and the dmg are signed with Reply's Developer ID and notarized,
 and the application and the dmg are stapled. The Intel application's `jason` is built and signed as the Apple silicon one is, and started once under
 Rosetta where the release's runner has it; the test suite does not run on an Intel Mac.
 
-The desktop updates itself from the latest release's `latest.yml` or `latest-mac.yml`, on your word, and to stable
-releases only. A candidate's feed files stay on the candidate's own page, which never becomes the latest release, so an
-installed desktop, a candidate included, never moves to a candidate.
+On Linux, install the deb with `sudo apt install ./jason-desktop-linux-x64.deb`; it puts Jason in `/opt/Jason` and
+in the applications menu. Or make the AppImage executable, `chmod +x jason-desktop-linux-x64.AppImage`, and run it
+from wherever you keep it; it is built on the AppImage runtime that needs no libfuse2. Jason never runs without
+Chromium's sandbox, so the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04
+and later, as shipped, the AppImage says so, does not start, and names the deb, whose install brings an AppArmor profile
+for its sandbox there; this release's build machine started both packages sandboxed, and neither has yet been seen on
+such a machine. Neither is signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
+`sha256sum --check --ignore-missing checksums.txt` proves it is the file this release published, not who built it;
+checked beside the AppImage, it proves the same of the AppImage and no more. The `jason` they carry needs the ICU
+library (`libicu`), as the archive's does.
+
+The desktop updates itself from the latest release's `latest.yml`, `latest-mac.yml` or `latest-linux.yml`, on your
+word, and to stable releases only. A candidate's feed files stay on the candidate's own page, which never becomes the
+latest release, so an installed desktop, a candidate included, never moves to a candidate.
 
 Installing an update restarts the runtime: the runtime the application carries is stopped first, with
 `jason runtime stop`, as the menu's Restart Jason and Its Runtime to Install says, and the new version starts it again
@@ -82,11 +96,24 @@ puts it back by itself: to go back, quit Jason and put that folder back in the p
 hand. That puts back the previous application and the `jason` it carried; the data directory stays as the newer
 version left it.
 
+On Linux the updates are built as follows, and not yet seen on a real machine. The deb's update installs the new deb
+with `dpkg`, which asks for an administrator's password every time, through the first of `gksudo`, `kdesudo`,
+`pkexec` and `beesu` the system has, else `sudo`: an account that cannot give one cannot install the update, and
+Jason stays open and says so. A deb update keeps no copy; to go back, install the previous release's
+`jason-desktop-linux-x64.deb` the same way. An AppImage update replaces the file where it is, so you need to be able to
+write to its folder, and keeps the file as it was under `~/.jason/desktop/rollback/<version>/`.
+
 Uninstalling the desktop on Windows stops the runtime the application carries first, and removes nothing when that
 runtime does not stop. It then takes off what it put there - the `jason` command it placed on the PATH, Open Jason at
 login, and the runtime's logon start when that start names the application's own folder - and leaves the data
 directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `%LOCALAPPDATA%\jason-desktop-updater`,
-saying so.
+saying so. On Linux, choose Remove What Jason Placed… in the Jason menu first: it stops the runtime the application
+carries and takes off what Jason placed, the `jason` command, Open Jason at Login and the runtime's start at logon,
+then says what removes the application. `sudo apt remove jason-desktop` removes the deb, and deleting the file
+removes the AppImage. What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's
+cache, `~/.cache/jason-desktop-updater`. On macOS, choose Remove What Jason Placed… in the Jason menu first, then move
+Jason.app to the Trash. What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's
+cache, `~/Library/Caches/jason-desktop-updater`.
 
 ## Installing
 

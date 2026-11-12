@@ -3,7 +3,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { allowListFile, allowRules, denyListFile, denyRules, fenceRefusal, instructionsFile, parseAllowList, parseDenyList, readFence } from '../src/chat-deny.ts';
+import { allowListFile, allowRules, denyListFile, denyRules, fenceRefusal, instructionsFile, parsePlanList, parseAllowList, parseDenyList, planListFile, readFence } from '../src/chat-deny.ts';
 
 const desktop = join(import.meta.dirname, '..');
 const list = parseDenyList(readFileSync(join(desktop, denyListFile), 'utf8'));
@@ -48,6 +48,18 @@ test('the file\'s second section names the operations the denied verbs call, eac
     assert.ok(!list.operations.some((operation) => operation.startsWith('runtime.')));
 });
 
+// On Linux Claude Code's environment scrub runs a Bash command in a PID namespace of its own, where ps and kill cannot
+// see the host's processes: jason runtime start would read a running runtime's process as gone and start another over
+// it, which dies with the namespace; jason runtime stop would see it gone at once. jason status asks over the loopback
+// and reads no process, so it stays allowed. Whatever a later change allows elsewhere, runtime stays refused there.
+test('runtime stays refused to the chat, since on Linux its commands would misread the runtime from the scrub’s PID namespace', () => {
+    assert.ok(entries.includes('runtime'), 'runtime is no longer on the deny list');
+    assert.ok(denyRules(entries).includes('Bash(jason runtime:*)'));
+    const allowed = parseAllowList(readFileSync(join(desktop, allowListFile), 'utf8'));
+    assert.ok(!allowed.some((verb) => verb === 'runtime' || verb.startsWith('runtime ')), 'a runtime verb is allowed');
+    assert.ok(allowed.includes('status'), 'jason status reads no process and stays allowed');
+});
+
 test('the allow list is one file of jason verbs, none of them covered by the deny list, and not doctor', () => {
     const allowed = parseAllowList(readFileSync(join(desktop, allowListFile), 'utf8'));
     assert.ok(allowed.length > 40);
@@ -69,6 +81,9 @@ test('the fence is read from the two files beside the desktop\'s package', () =>
     assert.deepEqual(fence.commands, entries);
     assert.deepEqual(fence.operations, list.operations);
     assert.deepEqual(fence.allowed, parseAllowList(readFileSync(join(desktop, allowListFile), 'utf8')));
+    assert.equal(planListFile, 'chat-plan-list.txt');
+    assert.deepEqual(fence.reads, parsePlanList(readFileSync(join(desktop, planListFile), 'utf8'), fence.allowed));
+    assert.ok(fence.reads.includes('campaign list') && !fence.reads.includes('campaign create'));
     assert.equal(instructionsFile, 'chat-instructions.md');
     assert.equal(fence.instructions, readFileSync(join(desktop, instructionsFile), 'utf8'));
 });
@@ -77,7 +92,7 @@ test('a folder without the instruction text gives a fence without it, and the li
     const folder = mkdtempSync(join(tmpdir(), 'jason-fence-'));
     t.after(() => rmSync(folder, { recursive: true, force: true }));
     assert.throws(() => readFence(folder));
-    for (const file of [denyListFile, allowListFile]) copyFileSync(join(desktop, file), join(folder, file));
+    for (const file of [denyListFile, allowListFile, planListFile]) copyFileSync(join(desktop, file), join(folder, file));
     assert.equal(readFence(folder).instructions, null);
     mkdirSync(join(folder, instructionsFile));
     assert.throws(() => readFence(folder), 'an instruction text that is there and cannot be read refuses the fence');
@@ -99,8 +114,18 @@ test('a fence that cannot be read says which of its files failed: the instructio
     copyFileSync(join(desktop, denyListFile), join(folder, denyListFile));
     assert.equal(refusalOf(), lists, 'the allow list is not there');
     copyFileSync(join(desktop, allowListFile), join(folder, allowListFile));
+    assert.equal(refusalOf(), lists, 'the plan list is not there');
+    copyFileSync(join(desktop, planListFile), join(folder, planListFile));
     assert.equal(refusalOf(), 'read');
     mkdirSync(join(folder, instructionsFile));
     assert.equal(refusalOf(), 'The chat’s instruction text could not be read.');
     assert.equal(fenceRefusal(new Error('anything else')), lists);
+});
+
+test('the plan list names verbs of the allow list only, each once: a verb that is not on the allow list refuses the whole file', () => {
+    const lines = (...each: string[]) => each.join('\n');
+    assert.deepEqual(parsePlanList(lines('# reads', 'campaign list', '', 'status', ''), ['campaign list', 'campaign create', 'status']), ['campaign list', 'status']);
+    assert.throws(() => parsePlanList(lines('campaign list', 'campaign create'), ['campaign list']), /not on the allow list/);
+    assert.throws(() => parsePlanList(lines('status', 'status'), ['status']), /twice/);
+    assert.throws(() => parsePlanList(lines('--yes'), ['status']));
 });

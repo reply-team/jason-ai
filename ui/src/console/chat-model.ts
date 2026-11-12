@@ -1,9 +1,21 @@
-// Pure: a chat as the page keeps it, and what each event of the desktop's does to it. The desktop runs the turn; the
-// page keeps what was said, in memory, for as long as the window is open. A message the person sends while a turn runs
+// Pure: a chat as the page keeps it, and what each event of the desktop's does to it. The desktop runs the turn and
+// keeps the conversation, what the page drew included; the page holds what it shows, and a conversation reopened is
+// drawn from what the desktop kept by the same code as a live turn. A message the person sends while a turn runs
 // waits here, one at a time, and nowhere else: it becomes the next turn when this one ends well. When the turn fails, or
 // the moment the person stops it, the message is given back: into the box when the box is empty, and otherwise kept in
 // sight as not sent. Two texts are never merged, and neither is dropped.
-import type { DesktopChatEvent } from '../platform/desktop';
+import type {
+    DesktopChatEvent,
+    DesktopChatMode,
+    DesktopChatOptions,
+    DesktopConversation,
+    DesktopConversationRecord,
+    DesktopEffort,
+    DesktopHost,
+    DesktopKeptEntry,
+    DesktopLineEntry,
+    DesktopModel,
+} from '../platform/desktop';
 
 export type Answer = 'allow' | 'always' | 'deny' | 'gone';
 
@@ -26,15 +38,35 @@ export type Entry =
           remember: string | null;
           answer: Answer | null;
       }
-    | { kind: 'error'; text: string };
+    | { kind: 'error'; text: string }
+    /** The campaigns a set-up turn made, for the person to pick the one this chat is about. */
+    | { kind: 'pick'; campaignIds: string[] }
+    /** The set-up chat became the conversation of the campaign named: said in the page, not kept by the desktop. */
+    | { kind: 'attached'; title: string }
+    /** The turn started a fresh session of the host, and why: said in the page, not kept by the desktop. */
+    | { kind: 'fresh'; reason: 'host_changed' | 'not_found' }
+    /** The person started the conversation afresh: said in the page, not kept by the desktop. */
+    | { kind: 'afresh' }
+    /** A line of the Feed, as the desktop kept it. */
+    | { kind: 'line'; line: DesktopLineEntry }
+    /** Where the Feed's catch-up read back fewer lines than were written while the window was closed. */
+    | { kind: 'gap' };
 
 export interface Chat {
-    /** The id the page made up for the chat, and every turn of it carries. */
+    /** The conversation's id, the desktop's, which every turn of it carries. */
     id: string;
     title: string;
     campaignId: string | null;
+    /** Whether it is the Feed, the person's main chat, which keeps its name and is never handed over. */
+    main: boolean;
     /** The host the next turn runs on: a `DesktopHost.id`, or null when none that drives the chat was found. */
     host: string | null;
+    /** The model the next turn names, as the host takes it; null for the host's own. */
+    model: string | null;
+    /** The effort the next turn names, where its model takes it; null for the host's own. */
+    effort: DesktopEffort | null;
+    /** Whether the person chose to type a model's full name, on a host that takes one. */
+    typing: boolean;
     entries: Entry[];
     running: boolean;
     /** What is typed in the message box. */
@@ -49,16 +81,44 @@ export interface Chat {
     outbox: string | null;
     /** The running turn's words when they were the waiting message, given back if that turn fails. */
     resent: string | null;
+    /** How many of the oldest entries the desktop let go to keep the conversation within its size. */
+    dropped: number;
+    /** Whether the person asked to remove the conversation and has not yet said again. */
+    removing: boolean;
+    /** The name typed while the person renames the conversation; null when no rename is open. */
+    renaming: string | null;
+    /**
+     * The conversation's access mode as the desktop holds it: from its record, from `chat.setMode`'s answer and from
+     * `mode` events, never from what the page asked for. The line that says Full access is on is drawn from this.
+     */
+    mode: DesktopChatMode;
 }
 
-const titleLength = 48;
+/** How much of a set-up chat's first message names it, as the desktop names it. */
+const titleLength = 60;
+
+/**
+ * What a title never shows, as the desktop drops it: every control and format character, the two separators, and
+ * every default-ignorable code point.
+ */
+export const unseen = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/gu;
+
+/** A set-up chat's title from the person's first message, as the desktop names it: its first sixty characters, on one line. */
+function titleOf(text: string): string {
+    const characters = Array.from(text.replace(/\s+/g, ' ').replace(unseen, '').trim());
+    return characters.length === 0 ? 'New chat' : characters.slice(0, titleLength).join('');
+}
 
 export function newChat(id: string, host: string | null, campaign?: { id: string; name: string }): Chat {
     return {
         id,
         title: campaign ? campaign.name : 'New chat',
         campaignId: campaign?.id ?? null,
+        main: false,
         host,
+        model: null,
+        effort: null,
+        typing: false,
         entries: [],
         running: false,
         draft: '',
@@ -67,19 +127,210 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         stopping: false,
         outbox: null,
         resent: null,
+        dropped: 0,
+        removing: false,
+        renaming: null,
+        mode: 'ask_first',
     };
 }
+
+/** What the desktop kept of a thing the page drew, as the page draws it; a kept card waits for nothing. */
+function entryOf(entry: DesktopKeptEntry): Entry {
+    switch (entry.kind) {
+        case 'step':
+            return {
+                kind: 'step',
+                step: entry.detail === undefined ? { text: entry.text } : { text: entry.text, detail: entry.detail },
+            };
+        case 'permission':
+            return {
+                kind: 'permission',
+                request: '',
+                title: entry.title,
+                detail: entry.detail,
+                remember: null,
+                answer: entry.answer ?? 'gone',
+            };
+        case 'pick':
+            return { kind: 'pick', campaignIds: [...entry.campaignIds] };
+        case 'line':
+            return { kind: 'line', line: { ...entry } };
+        case 'gap':
+            return { kind: 'gap' };
+        default:
+            return { kind: entry.kind, text: entry.text };
+    }
+}
+
+/** A conversation the desktop kept, opened: what the page drew before, and no turn running. */
+export function fromRecord(record: DesktopConversationRecord, host: string | null): Chat {
+    const chosen = record.chosen;
+    return {
+        ...newChat(record.id, chosen?.host ?? host),
+        model: chosen?.model ?? null,
+        effort: chosen?.effort ?? null,
+        title: record.title,
+        campaignId: record.campaignId,
+        main: record.main === true,
+        entries: record.entries.map(entryOf),
+        dropped: record.dropped,
+        // A turn of it runs: a page loaded again shows it running, with Stop, and its events follow.
+        running: record.running,
+        // A desktop of an earlier version keeps no mode: its chats run as Ask first.
+        mode: record.mode ?? 'ask_first',
+    };
+}
+
+/** What the line under the composer says while the desktop holds the chat in Full access. */
+export const fullAccessLine = 'Full access: the agent acts on this computer without asking you.';
+
+/** Why Full access cannot be chosen on a host a desktop of an earlier version listed, which offers no modes. */
+export const olderDesktop = 'This version of Jason Desktop does not offer Full access.';
+
+/** The modes as the menu beside the composer names them, in its order. */
+const modeWords: Readonly<Record<DesktopChatMode, string>> = {
+    ask_first: 'Ask first',
+    plan_only: 'Plan only',
+    full_access: 'Full access',
+};
+
+/**
+ * The menu's choices on the host the next turn runs on: each mode, and why it cannot be chosen there, or null. Full
+ * access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for it; with no host, as on Codex.
+ */
+export function modeChoices(
+    host: DesktopHost | null,
+): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
+    const full = host === null ? 'Full access runs on Claude Code only.' : host.fullAccess;
+    return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
+        mode,
+        label: modeWords[mode],
+        disabled: mode === 'full_access' ? full : null,
+    }));
+}
+
+/**
+ * The hosts as the page reads them: a desktop of an earlier version, whose runtime serves this page, lists none of the
+ * models a host offers, and such a host offers none here and takes no typed name.
+ */
+export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
+    return hosts.map((host) => {
+        const given = host as Partial<Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess'>>;
+        return Array.isArray(given.models) &&
+            typeof given.typedModel === 'boolean' &&
+            given.modelsUnread !== undefined &&
+            given.fullAccess !== undefined
+            ? host
+            : {
+                  ...host,
+                  models: Array.isArray(given.models) ? given.models : [],
+                  typedModel: given.typedModel === true,
+                  modelsUnread: typeof given.modelsUnread === 'string' ? given.modelsUnread : null,
+                  fullAccess:
+                      typeof given.fullAccess === 'string' || given.fullAccess === null
+                          ? given.fullAccess
+                          : olderDesktop,
+              };
+    });
+}
+
+/** What the model menu's last option stands for: the person types a model's full name. No model is named so. */
+export const anotherModel = '-another';
+
+/** Another host: its own model and effort, until the person chooses others. */
+export const hostChosen = (chat: Chat, host: string): Chat => ({
+    ...chat,
+    host,
+    model: null,
+    effort: null,
+    typing: false,
+});
+
+/**
+ * The chat as it stands on the host its next turn runs on: as it is on the host it names; on another, that host's own
+ * model and effort, so a model is never sent to a host it was not chosen on; one that names no host yet takes it.
+ */
+export const onHost = (chat: Chat, host: string): Chat =>
+    chat.host === host ? chat : chat.host === null ? { ...chat, host } : hostChosen(chat, host);
+
+/** The effort chosen kept when the model takes it too, else the host's own. */
+const effortFor = (effort: DesktopEffort | null, offer: DesktopModel | undefined): DesktopEffort | null =>
+    effort !== null && offer?.efforts.includes(effort) ? effort : null;
+
+/** A choice in the model menu: the host's own (''), a model the host offers, or `anotherModel` to type one. */
+export function modelChosen(chat: Chat, host: DesktopHost, value: string): Chat {
+    if (value === '') return { ...chat, host: host.id, model: null, effort: null, typing: false };
+    if (value === anotherModel) return { ...chat, host: host.id, model: null, effort: null, typing: true };
+    return {
+        ...chat,
+        host: host.id,
+        model: value,
+        effort: effortFor(
+            chat.effort,
+            host.models.find((each) => each.id === value),
+        ),
+        typing: false,
+    };
+}
+
+/** A model's full name as the person types it; the turn takes it trimmed. */
+export const modelTyped = (chat: Chat, text: string): Chat => ({
+    ...chat,
+    model: text === '' ? null : text,
+    effort: null,
+});
+
+/** A choice in the effort menu: the host's own ('') or one of the levels. */
+export const effortChosen = (chat: Chat, value: DesktopEffort | ''): Chat => ({
+    ...chat,
+    effort: value === '' ? null : value,
+});
+
+/**
+ * What the box shows of the chat's model on a host: the host's model it names, if any; whether the person types one;
+ * and a model the host no longer offers and takes no typed name for, which is shown as kept and sent as it is.
+ */
+export function modelView(
+    chat: Chat,
+    host: DesktopHost,
+): { offer: DesktopModel | null; typing: boolean; kept: string | null } {
+    const name = chat.model?.trim() ?? '';
+    const offer = host.models.find((each) => each.id === name) ?? null;
+    const typing = host.typedModel && (chat.typing || (name !== '' && offer === null));
+    return { offer, typing, kept: !host.typedModel && name !== '' && offer === null ? name : null };
+}
+
+/** What a turn is sent with: the host, the model when one is named, and the effort when that model takes it. */
+export function turnOptions(chat: Chat, host: DesktopHost): DesktopChatOptions {
+    const model = chat.model?.trim() ?? '';
+    const offer = host.models.find((each) => each.id === model);
+    // A model the host no longer offers, and takes no typed name for, is not one the desktop takes: the host's own goes.
+    if (model === '' || (offer === undefined && !host.typedModel)) return { host: host.id };
+    const effort = effortFor(chat.effort, offer);
+    return effort === null ? { host: host.id, model } : { host: host.id, model, effort };
+}
+
+/** Whether the send waits: "Another model" is chosen and no name is typed yet. */
+export function sendHeld(chat: Chat, host: DesktopHost): boolean {
+    return modelView(chat, host).typing && (chat.model?.trim() ?? '') === '';
+}
+
+/** The person picked the campaign a set-up chat is about, and the desktop made it that campaign's conversation. */
+export const pickedFor = (chat: Chat, conversation: DesktopConversation): Chat => ({
+    ...chat,
+    campaignId: conversation.campaignId,
+    title: conversation.title,
+});
 
 /**
  * The person's words go into the chat and its turn starts; the first words of a chat give it its title. `resent` says
  * the words were the waiting message, which the turn gives back if it fails.
  */
 export function said(chat: Chat, text: string, resent = false): Chat {
-    const first = chat.campaignId === null && !chat.entries.some((each) => each.kind === 'user');
-    const title = text.length > titleLength ? `${text.slice(0, titleLength - 1)}…` : text;
+    const first = chat.campaignId === null && !chat.main && !chat.entries.some((each) => each.kind === 'user');
     return {
         ...chat,
-        title: first ? title : chat.title,
+        title: first ? titleOf(text) : chat.title,
         entries: [...chat.entries, { kind: 'user', text }],
         running: true,
         resent: resent ? text : null,
@@ -113,6 +364,31 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             };
         case 'permission_gone':
             return answered(chat, event.request, 'gone');
+        case 'attached':
+            return {
+                ...chat,
+                campaignId: event.campaignId,
+                title: event.title,
+                entries: [...chat.entries, { kind: 'attached', title: event.title }],
+            };
+        case 'fresh':
+            return { ...chat, entries: [...chat.entries, { kind: 'fresh', reason: event.reason }] };
+        case 'pick':
+            return { ...chat, entries: [...chat.entries, { kind: 'pick', campaignIds: [...event.campaignIds] }] };
+        case 'renamed':
+            return { ...chat, title: event.title };
+        case 'mode':
+            return { ...chat, mode: event.mode };
+        // A line never starts a turn: it goes into the thread, and nothing else of the chat changes.
+        case 'line': {
+            const last = chat.entries.at(-1);
+            const entry: Entry = { kind: 'line', line: { ...event.line } };
+            if (event.folded && last?.kind === 'line')
+                return { ...chat, entries: [...chat.entries.slice(0, -1), entry] };
+            return { ...chat, entries: [...chat.entries, entry] };
+        }
+        case 'gap':
+            return { ...chat, entries: [...chat.entries, { kind: 'gap' }] };
         case 'done': {
             const over = ended(chat);
             if (event.error === null)
@@ -229,6 +505,15 @@ export function failed(chat: Chat, error: string): Chat {
         entries: [...over.entries, { kind: 'error', text: error }],
     });
 }
+
+/** Something the desktop refused, said in the chat in its words; a turn that runs goes on. */
+export const told = (chat: Chat, error: string): Chat => ({
+    ...chat,
+    entries: [...chat.entries, { kind: 'error', text: error }],
+});
+
+/** The person asked to start the conversation afresh, and the desktop did. */
+export const afresh = (chat: Chat): Chat => ({ ...chat, entries: [...chat.entries, { kind: 'afresh' }] });
 
 /** The steps between two messages fold into one line; the last group stays open while the turn runs. */
 export type Shown = { kind: 'steps'; steps: Step[]; open: boolean } | Exclude<Entry, { kind: 'step' }>;

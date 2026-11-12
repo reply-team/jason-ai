@@ -37,7 +37,10 @@
               "campaign_name": "Spring",
               "state": "enrolled",
               "added_at": "2026-10-01T10:00:00.000Z",
-              "updated_at": "2026-10-01T10:00:00.000Z"
+              "updated_at": "2026-10-01T10:00:00.000Z",
+              "standing": [
+                "failed"
+              ]
             }
           ],
           "last_activity": {
@@ -121,7 +124,10 @@
               "campaign_name": "Spring",
               "state": "enrolled",
               "added_at": "2026-10-01T10:00:00.000Z",
-              "updated_at": "2026-10-01T10:00:00.000Z"
+              "updated_at": "2026-10-01T10:00:00.000Z",
+              "standing": [
+                "failed"
+              ]
             }
           ],
           "last_activity": null
@@ -179,7 +185,11 @@
               "campaign_name": "Spring",
               "state": "enrolled",
               "added_at": "2026-10-01T10:00:00.000Z",
-              "updated_at": "2026-10-01T10:00:00.000Z"
+              "updated_at": "2026-10-01T10:00:00.000Z",
+              "standing": [
+                "waiting",
+                "failed"
+              ]
             }
           ],
           "last_activity": null

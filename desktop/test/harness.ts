@@ -62,9 +62,33 @@ function nodeOnly(folder: string): void {
     }
 }
 
-export function bench(t: { after(fn: () => void): void }, options: { programs?: string[]; env?: Record<string, string> } = {}): Bench {
+/**
+ * Ends, once the row is over, the processes it left running, by the ids `ids` gives then, and waits until they have gone.
+ * A row registers it before its bench: a row's after hooks run in the order they were registered, and on Windows a
+ * running stand-in holds the bench's copy of Node, which the bench's removal of its folder would otherwise meet.
+ */
+export function endWhenOver(t: { after(fn: () => Promise<void>): void }, ids: () => readonly number[]): void {
+    const alive = (id: number) => {
+        try {
+            process.kill(id, 0);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+    t.after(async () => {
+        const left = ids().filter(alive);
+        for (const id of left) process.kill(id);
+        const started = Date.now();
+        while (left.some(alive) && Date.now() - started < 10_000) await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+}
+
+export function bench(t: { after(fn: () => void): void }, options: { programs?: string[]; env?: Record<string, string>; bundleVersion?: string } = {}): Bench {
     const root = mkdtempSync(join(tmpdir(), 'jason-desktop-test-'));
-    t.after(() => rmSync(root, { recursive: true, force: true }));
+    // On Windows a program that has just ended can hold its image for a moment longer, and a folder holding it refuses
+    // removal with EPERM until it lets go; the removal is retried, as Node retries EPERM and EBUSY.
+    t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
     const data = join(root, 'data');
     const bin = join(root, 'bin');
     const node = join(root, 'node');
@@ -87,7 +111,7 @@ export function bench(t: { after(fn: () => void): void }, options: { programs?: 
         paths: desktopPaths(data),
         env,
         cli: cliAt(process.execPath, env, [join(stubs, 'jason.cjs')]),
-        programs: programsOn(env),
+        programs: programsOn(env, options.bundleVersion ?? null),
         record() {
             try {
                 return readFileSync(recordFile, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as Recorded);
@@ -139,4 +163,6 @@ export const fakeBox: SecretBox = {
     isEncryptionAvailable: () => true,
     encryptString: (text) => Buffer.from([...Buffer.from(text, 'utf8')].map((byte) => byte ^ 0x5a)),
     decryptString: (encrypted) => Buffer.from([...encrypted].map((byte) => byte ^ 0x5a)).toString('utf8'),
+    // A keyring, so the rows read alike on a Linux runner.
+    getSelectedStorageBackend: () => 'gnome_libsecret',
 };

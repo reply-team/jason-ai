@@ -5,10 +5,12 @@ import { info } from '../shell/shell';
 import { act, define } from './actions';
 import { html, type Html } from './html';
 import { svg, type IconName } from './icons';
-import { chats, here, type PanelName } from './state';
+import { openConversation } from './chat';
+import { chats, conversations, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 
-// The console's sidebar: a new chat, the chats open, the console's own panels, and the browser shell's screens that
-// the console has no panel of its own for, shown in the page panel.
+// The console's sidebar: the Feed first, a new chat, the other conversations the desktop keeps, newest first, the
+// console's own panels, and the browser shell's screens that the console has no panel of its own for, shown in the page
+// panel.
 
 const panels: readonly { panel: PanelName; label: string; icon: IconName }[] = [
     { panel: 'needs', label: 'Needs you', icon: 'att' },
@@ -29,8 +31,20 @@ const icons: Readonly<Record<string, IconName>> = {
 };
 
 define('side.new', () => here().dock.chat());
+define('side.feed', () => {
+    const id = feedId.value;
+    if (id === null) return;
+    void openConversation(id).then((held) => {
+        if (held === null) return;
+        feedUnseen.value = false;
+        here().dock.showChat(held);
+    });
+});
 define('side.chat', ([id]) => {
-    if (typeof id === 'string') here().dock.showChat(id);
+    if (typeof id !== 'string') return;
+    void openConversation(id).then((held) => {
+        if (held !== null) here().dock.showChat(held);
+    });
 });
 define('side.show', ([panel]) => {
     if (panel === 'needs' || panel === 'campaigns' || panel === 'activity' || panel === 'connect')
@@ -40,19 +54,55 @@ define('side.page', ([hash]) => {
     if (typeof hash === 'string') here().dock.page(parseRoute(hash));
 });
 
+/** Where the build's own files are served from: the runtime serves the build under /ui/. */
+const assets = import.meta.env.BASE_URL;
+
 export function sideView(): Html {
     const marked = pendingMark.value;
     const screens = registry.list('screen').filter((each) => !ownPanels.has(each.id));
-    return html`<div class="brand"><span class="glyph"></span>Jason</div>
+    // A long version is cut with an ellipsis at the sidebar's width; the title keeps all of it.
+    const version = `Jason ${info.value?.runtime_version ?? '…'}`;
+    const feed = feedId.value;
+    return html`<div class="brand">
+            <img class="mark" src="${assets}favicon.svg" alt="" />
+            <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
+            <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
+        </div>
+        ${
+            feed === null
+                ? null
+                : html`<nav class="list" aria-label="Feed">
+                      <button
+                          class="item"
+                          type="button"
+                          ${feed === currentChat.value ? html`aria-current="true"` : null}
+                          ${act('side.feed')}
+                      >
+                          ${svg('pulse', 15)}<span>Feed</span>
+                          ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
+                      </button>
+                  </nav>`
+        }
         <button class="newbtn" type="button" ${act('side.new')}>${svg('plus', 15)}New chat</button>
-        <nav class="list" aria-label="Chats">
-            ${Object.values(chats.value).map(
-                (chat) =>
-                    html`<button class="item" type="button" ${act('side.chat', chat.id)}>
-                        ${svg('chat', 15)}<span>${chat.title}</span>
-                    </button>`,
-            )}
+        <nav class="list" aria-label="Conversations">
+            ${conversations.value
+                .filter((conversation) => conversation.main !== true)
+                .map(
+                    // A chat the console holds says its title as it is now; the list says it as the desktop kept it.
+                    (conversation) =>
+                        html`<button
+                            class="item"
+                            type="button"
+                            ${conversation.id === currentChat.value ? html`aria-current="true"` : null}
+                            ${act('side.chat', conversation.id)}
+                        >
+                            ${svg(conversation.campaignId === null ? 'chat' : 'camp', 15)}<span
+                                >${chats.value[conversation.id]?.title ?? conversation.title}</span
+                            >
+                        </button>`,
+                )}
         </nav>
+
         <nav class="list" aria-label="Console">
             ${panels.map(
                 (each) =>
@@ -70,5 +120,5 @@ export function sideView(): Html {
                     </button>`,
             )}
         </nav>
-        <div class="sfoot meta">Jason ${info.value?.runtime_version ?? '…'}</div>`;
+        <div class="sfoot meta" title="${version}">${version}</div>`;
 }

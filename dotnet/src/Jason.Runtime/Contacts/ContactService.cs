@@ -64,6 +64,12 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
             }
         }
 
+        // A count lists people by where they stand, a channel by an address: one request asks one of the two.
+        if (request.Summary is not null && (!string.IsNullOrWhiteSpace(request.Channel) || !string.IsNullOrWhiteSpace(request.Value)))
+        {
+            errors.Add("summary", "invalid", "summary lists people by where they stand; send it without channel and value.");
+        }
+
         var text = string.IsNullOrWhiteSpace(request.Query) ? null : request.Query.Trim();
         if (text is { Length: > ContactSearch.MaxLength })
         {
@@ -75,9 +81,20 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         var after = Paging.DecodeCursor(request.Cursor);
 
         var query = db.Contacts.AsQueryable();
-        if (!string.IsNullOrWhiteSpace(request.CampaignId))
+        var campaign = string.IsNullOrWhiteSpace(request.CampaignId)
+            ? null
+            : await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+        if (request.Summary is { } summary)
         {
-            var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+            // The count's own definition decides who is in, removed people too under removed, in the one campaign named or
+            // in any campaign campaign.summary counts when none is.
+            List<int> counting = campaign is not null
+                ? [campaign.Id]
+                : [.. (await CampaignNumbers.ResolveAsync(db, null, cancellationToken).ConfigureAwait(false)).Select(shown => shown.Id)];
+            query = Counted(db, query, counting, summary);
+        }
+        else if (campaign is not null)
+        {
             query = query.Where(contact => db.CampaignContacts.Any(member =>
                 member.ContactId == contact.Id && member.CampaignId == campaign.Id && member.State != MembershipState.Excluded));
         }
@@ -124,12 +141,23 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         return new Page<ContactDto>(await WithCampaignsAndLatestLineAsync(db, byId.Items, cancellationToken).ConfigureAwait(false), byId.NextCursor);
     }
 
+    /// <summary>
+    /// The people among these whom one Summary count counts in at least one of the campaigns, read once for all of them
+    /// rather than per person: apart so that its plan can be read.
+    /// </summary>
+    internal static IQueryable<Contact> Counted(JasonDbContext db, IQueryable<Contact> contacts, IReadOnlyCollection<int> campaigns, CampaignSummaryFilter summary)
+    {
+        var counted = CampaignPeople.Matching(db, campaigns, summary).Select(membership => membership.ContactId);
+        return contacts.Where(contact => counted.Contains(contact.Id));
+    }
+
     private static IQueryable<Contact> WithChannelsAndPins(IQueryable<Contact> contacts) =>
         contacts.Include(contact => contact.Channels).Include(contact => contact.ExternalIds);
 
     /// <summary>
-    /// The people as the reads of people answer them: each with the campaigns they are on, in any state, and the newest
-    /// line about them. One query for the memberships and one for the lines of the whole page, never one per person.
+    /// The people as the reads of people answer them: each with the campaigns they are on, in any state, where they stand
+    /// in each, and the newest line about them. One query for the memberships, one for where they stand and one for the
+    /// lines of the whole page, never one per person.
     /// </summary>
     internal static async Task<IReadOnlyList<ContactDto>> WithCampaignsAndLatestLineAsync(JasonDbContext db, IReadOnlyList<Contact> contacts, CancellationToken ct)
     {
@@ -138,9 +166,12 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
             .Where(member => keys.Contains(member.ContactId))
             .OrderBy(member => member.AddedAt)
             .ThenBy(member => member.Id)
-            .Select(member => new { member.ContactId, member.Campaign!.PublicId, member.Campaign.Name, member.State, member.AddedAt, member.UpdatedAt })
+            .Select(member => new { member.ContactId, member.CampaignId, member.Campaign!.PublicId, member.Campaign.Name, member.State, member.AddedAt, member.UpdatedAt })
             .ToListAsync(ct)
             .ConfigureAwait(false);
+        var standing = memberships.Count == 0
+            ? new Dictionary<(int ContactId, int CampaignId), IReadOnlyList<CampaignSummaryFilter>>()
+            : await CampaignPeople.StandingAsync(db, [.. memberships.Select(member => member.CampaignId).Distinct()], keys, ct).ConfigureAwait(false);
         var newest = await db.Journal.AsNoTracking()
             .Where(entry => entry.ContactId != null && keys.Contains(entry.ContactId.Value))
             .GroupBy(entry => entry.ContactId)
@@ -156,7 +187,8 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         {
             Campaigns = [.. memberships
                 .Where(member => member.ContactId == contact.Id)
-                .Select(member => new ContactCampaignDto(member.PublicId, member.Name, member.State, ContactMapper.ToOffset(member.AddedAt), ContactMapper.ToOffset(member.UpdatedAt)))],
+                .Select(member => new ContactCampaignDto(member.PublicId, member.Name, member.State, ContactMapper.ToOffset(member.AddedAt), ContactMapper.ToOffset(member.UpdatedAt),
+                    standing.GetValueOrDefault((member.ContactId, member.CampaignId), [])))],
             LastActivity = latest.GetValueOrDefault(contact.Id),
         }).ToList();
     }

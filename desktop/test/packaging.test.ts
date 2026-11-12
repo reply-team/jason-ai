@@ -3,12 +3,14 @@
 // from, and the release's own steps read the built package back.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { allowListFile, denyListFile, instructionsFile } from '../src/chat-deny.ts';
+import { allowListFile, denyListFile, instructionsFile, planListFile } from '../src/chat-deny.ts';
+import { planCommand } from '../src/command-line.ts';
+import { debFile } from '../src/updates.ts';
 import { bundleFiles, bundleFolder, chatFiles, checkBundle, configuration, copyChromiumNotices, fuses, releaseVersion, signer } from '../electron-builder.config.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,7 +41,7 @@ test('each Electron zip a pack unpacks is held to the sha256 the lockfile’s el
     assert.equal(installed.version, lock.packages['node_modules/electron']?.version);
     assert.match(lock.packages['node_modules/electron']?.integrity ?? '', /^sha512-/);
     assert.deepEqual(built.electronDownload, { checksums });
-    for (const zip of ['win32-x64', 'darwin-arm64', 'darwin-x64']) {
+    for (const zip of ['win32-x64', 'darwin-arm64', 'darwin-x64', 'linux-x64']) {
         assert.match(checksums[`electron-v${installed.version}-${zip}.zip`] ?? '', /^[0-9a-f]{64}$/, `no sha256 for Electron's ${zip} zip`);
     }
     // No distribution of its own: the one fetched is the one checked.
@@ -129,6 +131,102 @@ test('Windows gets one per-user nsis installer; each Mac architecture a dmg and 
     assert.ok(built.mac.artifactName.includes('${arch}'));
 });
 
+test('Linux gets an AppImage and a deb for x64 alone, under names with no version, the deb’s the one a deb update’s notice names', () => {
+    assert.deepEqual(built.linux.target, [
+        { target: 'AppImage', arch: ['x64'] },
+        { target: 'deb', arch: ['x64'] },
+    ]);
+    // electron-builder spells x64 as x86_64 in an AppImage's name and amd64 in a deb's (builder-util's
+    // getArtifactArchName), so the names say x64 themselves rather than through ${arch}.
+    assert.equal(built.appImage.artifactName, 'jason-desktop-linux-x64.${ext}');
+    assert.equal(built.deb.artifactName, 'jason-desktop-linux-x64.${ext}');
+    assert.equal(built.deb.artifactName.replace('${ext}', 'deb'), debFile);
+    assert.equal('artifactName' in built.linux, false);
+});
+
+test('on Linux the program is jason-desktop-app, so the deb’s /usr/bin link never takes the PATH command’s fallback name', () => {
+    // The deb links /usr/bin/<executable> (app-builder-lib's after-install.tpl); without a name of its own the
+    // executable is the package's name lowercased, jason-desktop, which is the name the PATH command falls back to.
+    assert.equal(built.linux.executableName, 'jason-desktop-app');
+    assert.equal(planCommand('/usr/local/bin/jason', null).name, 'jason-desktop');
+    assert.notEqual(built.linux.executableName, planCommand('/usr/local/bin/jason', null).name);
+});
+
+test('the AppImage is packed with the static runtime, which needs no libfuse2, and nothing it starts carries --no-sandbox', () => {
+    // app-builder-lib 26.18.0, out/configuration.d.ts: toolsets.appimage "0.0.0" is the legacy toolset, "1.0.3" the
+    // runtime of 20251108; out/targets/appimage/AppImageTarget.js builds the first with buildLegacyFuse2AppImage and any
+    // other with buildStaticRuntimeAppImage, and writes --no-sandbox into the menu entry's Exec only for the first.
+    assert.deepEqual(built.toolsets, { appimage: '1.0.3' });
+    assert.deepEqual(built.linux.executableArgs, []);
+    assert.ok(!JSON.stringify(built).includes('no-sandbox'));
+});
+
+test('the deb recommends the ICU library the jason it carries needs, by alternatives, keeping electron-builder’s own recommendation and its dependencies', () => {
+    // app-builder-lib 26.18.0, out/targets/FpmTarget.js: a deb's recommends replace getDefaultRecommends ("libappindicator3-1"),
+    // and a depends would replace getDefaultDepends, so none is set.
+    assert.deepEqual(built.deb.recommends, ['libappindicator3-1', 'libicu78 | libicu77 | libicu76 | libicu74 | libicu72 | libicu70']);
+    for (const options of [built.linux, built.deb] as Record<string, unknown>[]) assert.equal('depends' in options, false);
+    assert.equal('recommends' in built.linux, false);
+});
+
+test('the deb names its maintainer and its home page, which a deb must, and its category in the menu', () => {
+    assert.equal(built.linux.maintainer, 'ReplyApp Inc. <support@reply.io>');
+    assert.equal(built.extraMetadata.homepage, 'https://github.com/reply-team/jason-ai');
+    assert.equal(built.linux.category, 'Office');
+    assert.equal(built.linux.icon, 'installer/linux-icons');
+});
+
+test('the Linux icon folder holds the icon set’s own PNGs, each named by its size, which the packer reads the size from', () => {
+    // app-builder-lib 26.18.0, out/options/linuxOptions.d.ts, icon: "The path to icon set directory or one png file,
+    // relative to the build resources or to the project directory. The icon filename must contain the size (e.g.
+    // 32x32.png) of the icon."
+    const folder = join(root, 'installer', 'linux-icons');
+    const names = readdirSync(folder).sort();
+    assert.deepEqual(names, ['1024x1024.png', '128x128.png', '256x256.png', '32x32.png', '512x512.png', '64x64.png']);
+    for (const name of names) {
+        const bytes = readFileSync(join(folder, name));
+        const size = Number(name.split('x')[0]);
+        assert.equal(bytes.readUInt32BE(16), size, name);
+        assert.equal(bytes.readUInt32BE(20), size, name);
+    }
+});
+
+test('when one pack makes both Linux forms, the deb starts once the AppImage is built, so the AppImage never carries package-type', async () => {
+    // Both targets build at once from the one unpacked folder, and the deb writes resources/package-type into it as it
+    // starts (app-builder-lib 26.18.0, out/targets/FpmTarget.js, build); the hooks are awaited (out/packager.js,
+    // emitArtifactBuildStarted, emitArtifactBuildCompleted).
+    const order = configuration({ version: '0.35.0' });
+    const targets = [{ name: 'appImage' }, { name: 'deb' }];
+    await order.beforePack({ electronPlatformName: 'linux', arch: 1, targets, appOutDir: '/x', outDir: '/x', packager: null }).catch(() => undefined);
+    let debStarted = false;
+    const deb = Promise.resolve(order.artifactBuildStarted({ targetPresentableName: 'deb', file: '/x/jason-desktop-linux-x64.deb', arch: 1 })).then(() => {
+        debStarted = true;
+    });
+    await order.artifactBuildStarted({ targetPresentableName: 'AppImage', file: '/x/jason-desktop-linux-x64.AppImage', arch: 1 });
+    await new Promise((done) => setImmediate(done));
+    assert.equal(debStarted, false, 'the deb started before the AppImage was built');
+    await order.artifactBuildCompleted({ target: { name: 'appImage' }, file: '/x/jason-desktop-linux-x64.AppImage', arch: 1 });
+    await deb;
+    assert.equal(debStarted, true);
+});
+
+test('a deb packed without an AppImage, and every other package, starts at once', async () => {
+    for (const [platform, targets] of [['linux', [{ name: 'deb' }]], ['win32', [{ name: 'nsis' }]], ['darwin', [{ name: 'dmg' }, { name: 'zip' }]]] as const) {
+        const order = configuration({ version: '0.35.0' });
+        await order.beforePack({ electronPlatformName: platform, arch: 1, targets, appOutDir: '/x', outDir: '/x', packager: null }).catch(() => undefined);
+        for (const target of targets) await order.artifactBuildStarted({ targetPresentableName: target.name, file: '/x/f', arch: 1 });
+    }
+});
+
+test('a deb that waits for an AppImage that never comes stops the pack, saying why, rather than wait for ever', async () => {
+    const order = configuration({ version: '0.35.0', linuxWaitMs: 20 });
+    await order.beforePack({ electronPlatformName: 'linux', arch: 1, targets: [{ name: 'appImage' }, { name: 'deb' }], appOutDir: '/x', outDir: '/x', packager: null }).catch(() => undefined);
+    await assert.rejects(
+        Promise.resolve(order.artifactBuildStarted({ targetPresentableName: 'deb', file: '/x/jason-desktop-linux-x64.deb', arch: 1 })),
+        /The deb waited for the AppImage, which was not built/,
+    );
+});
+
 test('a Windows package is signed when a signing module is given, and every Mac package always', () => {
     assert.equal('sign' in built.win.signtoolOptions, false);
     assert.equal('forceCodeSigning' in built.win, false);
@@ -155,9 +253,9 @@ test('the bundled jason keeps its own signature on macOS, and the application as
 });
 
 test('app.asar carries the main process, the starting page, the tray icons, the chat’s lists and instruction text, and package.json', () => {
-    assert.deepEqual(built.files, ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', 'chat-deny-list.txt', 'chat-allow-list.txt', 'chat-instructions.md']);
-    assert.deepEqual(chatFiles, ['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-instructions.md']);
-    for (const icon of ['resources/icon.png', 'resources/tray/trayTemplate.png', 'resources/tray/trayTemplate@2x.png']) assert.ok(existsSync(join(root, icon)), icon);
+    assert.deepEqual(built.files, ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', 'chat-deny-list.txt', 'chat-allow-list.txt', 'chat-plan-list.txt', 'chat-instructions.md']);
+    assert.deepEqual(chatFiles, ['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-plan-list.txt', 'chat-instructions.md']);
+    for (const icon of ['resources/icon.png', 'resources/tray/tray.png', 'resources/tray/trayTemplate.png', 'resources/tray/trayTemplate@2x.png']) assert.ok(existsSync(join(root, icon)), icon);
     // buildResources is left out of app.asar by electron-builder, so it is never resources/.
     assert.equal(built.directories.buildResources, 'installer');
 });
@@ -202,12 +300,18 @@ test('Chromium’s notices go into the package’s notices folder, and a distrib
     assert.equal(typeof built.beforePack, 'function');
 });
 
-test('after each pack the Chromium notices land in that platform’s resources folder, from where electron-builder left them: beside Jason.exe, or inside Jason.app', async (t) => {
+test('after each pack the Chromium notices land in that platform’s resources folder, from where electron-builder left them: beside the program, or inside Jason.app', async (t) => {
     // Windows: electron-builder's unpacked folder, Electron's notices at its top, resources/ beside the program.
     const win = temporary(t);
     writeFileSync(join(win, 'LICENSES.chromium.html'), '<html>chromium win32</html>');
     await built.afterPack({ appOutDir: win, electronPlatformName: 'win32', arch: 1 });
     assert.equal(readFileSync(join(win, 'resources', 'notices', 'LICENSES.chromium.html'), 'utf8'), '<html>chromium win32</html>');
+
+    // Linux: the same, beside the program, the folder the deb and the AppImage are both made from.
+    const linux = temporary(t);
+    writeFileSync(join(linux, 'LICENSES.chromium.html'), '<html>chromium linux</html>');
+    await built.afterPack({ appOutDir: linux, electronPlatformName: 'linux', arch: 1 });
+    assert.equal(readFileSync(join(linux, 'resources', 'notices', 'LICENSES.chromium.html'), 'utf8'), '<html>chromium linux</html>');
 
     // macOS: electron-builder has already moved Electron's notices from beside the .app into its resources folder, so
     // that the application carries them; nothing is left beside Jason.app.
@@ -236,9 +340,12 @@ test('the package carries no UI zip: the CLI installs the UI of the runtime’s 
     assert.ok(!bundleFiles('win32').some((name) => /ui/i.test(name)));
 });
 
-test('no protocol and no file type is registered: the package opens no link and no document', () => {
-    const text = JSON.stringify(built);
-    assert.ok(!/protocols|fileAssociations|jason:/.test(text));
+test('the one link the package registers is the desktop\'s jason-desktop scheme, on macOS and the deb alone, and no file type is registered', () => {
+    const { mac, deb, ...rest } = built as typeof built & { mac: { protocols?: unknown }; deb: { mimeTypes?: unknown } };
+    assert.deepEqual(mac.protocols, [{ name: 'Jason', schemes: ['jason-desktop'] }]);
+    assert.deepEqual(deb.mimeTypes, ['x-scheme-handler/jason-desktop']);
+    const elsewhere = JSON.stringify({ ...rest, mac: { ...mac, protocols: undefined }, deb: { ...deb, mimeTypes: undefined } });
+    assert.ok(!/protocols|fileAssociations|mimeTypes|jason:|x-scheme-handler/.test(elsewhere), elsewhere);
 });
 
 test('DevTools are closed in a packaged build, the window’s and the key that would open them', () => {
@@ -249,9 +356,9 @@ test('DevTools are closed in a packaged build, the window’s and the key that w
     assert.match(keys, /binding\.does\.window === 'devtools' && packaged/);
 });
 
-test('both chat list files and the instruction text are packaged where the main process reads them', () => {
+test('the chat’s three list files and the instruction text are packaged where the main process reads them', () => {
     // The fence's own names, each a file at the application's root, which files puts in app.asar and main.ts reads.
-    assert.deepEqual([...chatFiles].sort(), [denyListFile, allowListFile, instructionsFile].sort());
+    assert.deepEqual([...chatFiles].sort(), [denyListFile, allowListFile, planListFile, instructionsFile].sort());
     for (const name of chatFiles) assert.ok(existsSync(join(root, name)), name);
     const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
     assert.match(main, /readFence\(app\.getAppPath\(\)\)/);
