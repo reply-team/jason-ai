@@ -63,6 +63,8 @@ interface Harness {
     setup: Setup;
     boxes: ReplyBox[];
     opened: string[];
+    /** The links written to the clipboard. */
+    copied: string[];
     log: Logger & { lines: { level: string; name: string; fields: Record<string, unknown> }[] };
     /** The account verbs `reply` was started with, each its arguments. */
     verbs(): string[][];
@@ -70,10 +72,18 @@ interface Harness {
 
 function harness(
     b: Bench,
-    options: { yes?: boolean | (() => boolean); open?: ((link: string) => Promise<void>) | null; confirm?: null; programs?: Programs; log?: Logger } = {},
+    options: {
+        yes?: boolean | (() => boolean);
+        open?: ((link: string) => Promise<void>) | null;
+        copy?: null;
+        confirm?: null;
+        programs?: Programs;
+        log?: Logger;
+    } = {},
 ): Harness {
     const boxes: ReplyBox[] = [];
     const opened: string[] = [];
+    const copied: string[] = [];
     const log = memoryLog();
     const yes = options.yes ?? true;
     const setup = new Setup({
@@ -89,6 +99,7 @@ function harness(
                   },
               }),
         ...(options.open === null ? {} : { openLink: options.open ?? ((link: string) => (opened.push(link), Promise.resolve())) }),
+        ...(options.copy === null ? {} : { copyLink: (link: string) => void copied.push(link) }),
         keys: new ProviderKeys(b.paths.providerKeys, fakeBox),
         log: options.log ?? log,
         bundleVersion: '0.37.0',
@@ -96,7 +107,7 @@ function harness(
         settings: () => ({ feed: null, skillsDeployedFor: null, theme: null }),
     });
     const verbs = () => b.record().filter((entry) => entry.name === 'reply' && entry.args[0] === 'account' && entry.args[1] !== 'list' && entry.args[1] !== 'pending').map((entry) => entry.args);
-    return { setup, boxes, opened, log, verbs };
+    return { setup, boxes, opened, copied, log, verbs };
 }
 
 /** A harness whose card has read the list, as a person's click always follows one. */
@@ -547,6 +558,44 @@ test('the link is a secret: no log line, no file, no refusal and no answer to th
         for (const path of files.keys()) assert.equal(readFileSync(join(root, path), 'latin1').includes(secret), false, `${path} carries the link`);
     }
     assert.equal(h.opened.length, 2);
+});
+
+test('a link that expires is copied instead of opened where the page asks, and the page learns only that it was', async (t) => {
+    const h = await listedHarness(t, { STUB_REPLY_ACCOUNT_CONNECT: print(printed.connectLinkedIn), STUB_REPLY_ACCOUNT_RECONNECT: print(printed.reconnectEmail) });
+    const answers = [await h.setup.replyConnect('linkedin', { name: 'Made-up Ada', copy: true }), await h.setup.replyReconnect('email', '12', { copy: true })];
+    assert.deepEqual(answers, [
+        { copied: true, channel: 'linkedin', kind: 'connect', linkKind: 'connection_link', expiresAt: null, pendingId: 51 },
+        { copied: true, channel: 'email', kind: 'reconnect', linkKind: 'connection_link', expiresAt: '2026-11-18T12:00:00Z', pendingId: 52 },
+    ]);
+    assert.deepEqual(h.copied, [fixtureLinks.linkedinConnect, fixtureLinks.emailConnect]);
+    assert.deepEqual(h.opened, [], 'copied, not opened');
+    assert.equal(JSON.stringify(answers).includes(fixtureLinks.token), false, 'no answer to the page carries the link');
+    assert.equal(JSON.stringify(h.log.lines).includes(fixtureLinks.token), false, 'nothing logs it');
+    assert.deepEqual(h.verbs(), [
+        ['account', 'connect', '--channel', 'linkedin', '--name=Made-up Ada', '--json'],
+        ['account', 'reconnect', '12', '--channel', 'email', '--json'],
+    ], 'the copy is the desktop’s: the verb is the same');
+    // With no clipboard to write to, nothing is copied and the page is told.
+    const none = await listedHarness(t, { STUB_REPLY_ACCOUNT_CONNECT: print(printed.connectLinkedIn) }, { copy: null });
+    assert.deepEqual(await none.setup.replyConnect('linkedin', { name: 'x', copy: true }), { refused: said.notCopied, code: null, offer: null, reread: true });
+    assert.deepEqual([none.copied, none.opened], [[], []]);
+});
+
+test('the shared mailbox page is never copied, whatever the page asks, nor opened in its place', async (t) => {
+    const h = await listedHarness(t, {
+        STUB_REPLY_ACCOUNT_CONNECT: refused('email_link.not_available'),
+        STUB_REPLY_ACCOUNT_CONNECT_SHARED: print(printed.connectEmailShared),
+        // A shared page printed where none was asked for is held to the same rule.
+        STUB_REPLY_ACCOUNT_RECONNECT: print(printed.reconnectEmailShared),
+    });
+    await h.setup.replyConnect('email', { provider: 'gmail', copy: true });
+    const answers = [
+        await h.setup.replyConnect('email', { provider: 'gmail', sharedPage: true, copy: true }),
+        await h.setup.replyReconnect('email', '12', { copy: true }),
+    ];
+    for (const answer of answers) assert.deepEqual(answer, { refused: said.sharedPageNotCopied, code: null, offer: null, reread: false });
+    assert.deepEqual([h.copied, h.opened], [[], []]);
+    assert.equal(JSON.stringify(answers).includes(fixtureLinks.token), false);
 });
 
 test('the opener is the only way out: with none, or one that fails, the page is told and nothing else holds the link', async (t) => {

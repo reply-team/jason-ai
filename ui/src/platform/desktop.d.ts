@@ -370,6 +370,20 @@ export interface DesktopReplyRefusal {
     reread: boolean;
 }
 
+/**
+ * A link the Reply CLI made that expires and connects one account, written to the clipboard by the desktop's main process
+ * for the person to hand on to whoever owns the account. The page learns that it was copied, when it stops working and
+ * its pending entry; never the link. The shared mailbox page is never copied.
+ */
+export interface DesktopReplyCopied {
+    copied: true;
+    channel: DesktopReplyChannel;
+    kind: 'connect' | 'reconnect';
+    linkKind: 'connection_link';
+    expiresAt: string | null;
+    pendingId: number | null;
+}
+
 /** An act on a Reply account that the CLI did. */
 export interface DesktopReplyDone {
     done: true;
@@ -569,17 +583,21 @@ export interface JasonDesktop {
          * LinkedIn account under `name` (one line, 1 to 100 characters), a mailbox for its `provider`. `sharedPage`
          * asks for the account's shared mailbox page instead, and only after this ask answered the offer
          * `shared_page`; the desktop then asks the person in a box of its own, with the CLI's warning, first.
+         * `copy` asks the desktop to put a link that expires on the clipboard instead of opening it, for the person to
+         * hand on; the shared mailbox page is never copied, whatever the page asks.
          */
         replyConnect(
             channel: DesktopReplyChannel,
-            options: { name: string } | { provider: 'gmail' | 'office365'; sharedPage?: boolean },
-        ): Promise<DesktopReplyOpened | DesktopReplyRefusal>;
-        /** Reconnects an account `accounts` lists, the same way; `sharedPage` for a mailbox only, as above. */
+            options: ({ name: string } | { provider: 'gmail' | 'office365'; sharedPage?: boolean }) & {
+                copy?: boolean;
+            },
+        ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
+        /** Reconnects an account `accounts` lists, the same way; `sharedPage` for a mailbox only, and `copy`, as above. */
         replyReconnect(
             channel: DesktopReplyChannel,
             accountId: string,
-            options?: { sharedPage?: boolean },
-        ): Promise<DesktopReplyOpened | DesktopReplyRefusal>;
+            options?: { sharedPage?: boolean; copy?: boolean },
+        ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
         /**
          * A mailbox's daily limit: read without `daily`, set to it with one, after the person's yes in the desktop's
          * own box.

@@ -49,6 +49,8 @@ export const replyAccountSentences = {
     unreachedWrite: 'The Reply CLI did not answer in time, or could not be run; the list is read again to show whether it was done.',
     badLink: 'The Reply CLI answered a link the desktop does not open; the list is read again.',
     notOpened: 'The browser could not be asked to open the link; the list is read again.',
+    notCopied: 'The link could not be put on the clipboard; the list is read again.',
+    sharedPageNotCopied: 'Reply’s shared mailbox page is never copied, since it does not expire: ask for it again without a copy to open it here.',
 } as const;
 
 /** Every code the desktop does not act on, known or not, in one sentence that carries it. */

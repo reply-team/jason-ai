@@ -4,6 +4,7 @@ import type {
     DesktopPlugin,
     DesktopReplyAccount,
     DesktopReplyChannel,
+    DesktopReplyCopied,
     DesktopReplyDone,
     DesktopReplyOpened,
     DesktopReplyPending,
@@ -134,13 +135,18 @@ type Place = string;
 type Channel = DesktopReplyChannel;
 
 /** What the card may do next after a refusal offered it: the same ask again with the shared page, or forced. */
-type Again = () => Promise<DesktopReplyOpened | DesktopReplyDone | DesktopReplyRefusal>;
+type Again = () => Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyDone | DesktopReplyRefusal>;
+
+/** A link act's answer: opened in the browser, copied for the person to hand on, or refused. */
+type LinkAnswer = DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal;
 
 interface ActDialog {
     place: Place;
     title: string;
     asking: boolean;
     opened: DesktopReplyOpened | null;
+    /** A link the desktop put on the clipboard for the person to hand on; the card never holds the link itself. */
+    copied: DesktopReplyCopied | null;
     done: boolean;
     refused: DesktopReplyRefusal | null;
     /** The account the act was on, for a Reconnect a signed-out refusal offers; null for a new account. */
@@ -156,6 +162,11 @@ const adding = signal<Place | null>(null);
 const naming = signal<Place | null>(null);
 /** The mailbox whose daily limit is shown for a change, at its place; null when none is. */
 const limiting = signal<{ place: Place; id: string; daily: number | null } | null>(null);
+/**
+ * Whether a new link is copied to hand on instead of opened here. The desktop copies only a link that expires, never the
+ * shared mailbox page, which is always opened here.
+ */
+const copying = signal(false);
 /** The LinkedIn accounts the CLI said are signed out, by id: Pause and Resume are not offered while that stands. */
 const signedOut = signal<readonly string[]>([]);
 /** Moves on at each ask and each close, so an answer that comes after its dialog was closed or replaced is dropped. */
@@ -196,6 +207,7 @@ export function resetDialogs(): void {
     naming.value = null;
     limiting.value = null;
     signedOut.value = [];
+    copying.value = false;
 }
 
 const listedAccount = (channel: unknown, id: unknown): DesktopReplyAccount | undefined =>
@@ -211,7 +223,9 @@ async function ask(
     place: Place,
     title: string,
     account: ActDialog['account'],
-    run: () => Promise<DesktopReplyOpened | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null }>,
+    run: () => Promise<
+        DesktopReplyOpened | DesktopReplyCopied | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null }
+    >,
     again: (refusal: DesktopReplyRefusal) => Again | null = () => null,
 ): Promise<void> {
     asked += 1;
@@ -219,8 +233,19 @@ async function ask(
     adding.value = null;
     naming.value = null;
     limiting.value = null;
-    actDialog.value = { place, title, asking: true, opened: null, done: false, refused: null, account, again: null };
-    let answer: DesktopReplyOpened | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null };
+    actDialog.value = {
+        place,
+        title,
+        asking: true,
+        opened: null,
+        copied: null,
+        done: false,
+        refused: null,
+        account,
+        again: null,
+    };
+    let answer:
+        DesktopReplyOpened | DesktopReplyCopied | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null };
     try {
         answer = await run();
     } catch (error) {
@@ -251,26 +276,35 @@ async function ask(
         ...actDialog.value,
         asking: false,
         opened: 'opened' in answer ? answer : null,
+        copied: 'copied' in answer ? answer : null,
         done: 'done' in answer,
     };
     void reload();
 }
 
-/** A link act: connect or reconnect, whose refusal may offer the shared page, asked again with it only on a click. */
+/**
+ * A link act: connect or reconnect, copied instead of opened where the person asked so, whose refusal may offer the
+ * shared page, asked again with it only on a click and always to open: the shared page is never copied.
+ */
 function askLink(
     place: Place,
     title: string,
     account: ActDialog['account'],
-    run: (sharedPage: boolean) => Promise<DesktopReplyOpened | DesktopReplyRefusal>,
+    run: (how: { sharedPage?: true; copy?: true }) => Promise<LinkAnswer>,
 ): Promise<void> {
+    const copy = copying.value;
     return ask(
         place,
         title,
         account,
-        () => run(false),
-        (refusal) => (refusal.offer === 'shared_page' ? () => run(true) : null),
+        () => run(copy ? { copy } : {}),
+        (refusal) => (refusal.offer === 'shared_page' ? () => run({ sharedPage: true }) : null),
     );
 }
+
+define('connect.copyLinks', (_args, element) => {
+    if (element instanceof HTMLInputElement) copying.value = element.checked;
+});
 
 define('connect.addAccount', ([place]) => {
     if (typeof place !== 'string') return;
@@ -286,8 +320,8 @@ define('connect.addCancel', () => {
 define('connect.addMailbox', ([place, provider]) => {
     if (typeof place !== 'string' || !isProvider(provider)) return;
     const name = mailboxProviders.find(([each]) => each === provider)![1];
-    void askLink(place, `Connect a ${name} mailbox`, null, (sharedPage) =>
-        here().desktop.setup.replyConnect('email', { provider, ...(sharedPage ? { sharedPage } : {}) }),
+    void askLink(place, `Connect a ${name} mailbox`, null, (how) =>
+        here().desktop.setup.replyConnect('email', { provider, ...how }),
     );
 });
 
@@ -298,8 +332,9 @@ define('connect.addLinkedIn', ([place]) => {
 define('connect.makeLinkedIn', ([place]) => {
     const name = typedOf('linkedin-name');
     if (typeof place !== 'string' || !name) return;
+    const copy = copying.value;
     void ask(place, 'Connect a LinkedIn account', null, async () => {
-        const answer = await here().desktop.setup.replyConnect('linkedin', { name });
+        const answer = await here().desktop.setup.replyConnect('linkedin', { name, ...(copy ? { copy } : {}) });
         if (!('refused' in answer)) forget('linkedin-name');
         return answer;
     });
@@ -309,8 +344,8 @@ define('connect.reconnect', ([place, channel, id]) => {
     const account = listedAccount(channel, id);
     if (typeof place !== 'string' || !isChannel(channel) || !account) return;
     signedOut.value = signedOut.value.filter((each) => each !== account.id);
-    void askLink(place, `Reconnect ${accountTitle(account)}`, { channel, id: account.id }, (sharedPage) =>
-        here().desktop.setup.replyReconnect(channel, account.id, sharedPage ? { sharedPage } : undefined),
+    void askLink(place, `Reconnect ${accountTitle(account)}`, { channel, id: account.id }, (how) =>
+        here().desktop.setup.replyReconnect(channel, account.id, how.sharedPage || how.copy ? how : undefined),
     );
 });
 
@@ -447,6 +482,24 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
                           <div class="grow meta">
                               The account appears in the list when the sign-in there is finished.
                           </div>
+                          <button class="btn sm" type="button" ${act('connect.checkNow')}>Check now</button>
+                      </div>`
+                : null
+        }
+        ${
+            shown.copied !== null
+                ? html`<div class="meta" role="status">The link was copied.</div>
+                      <p class="meta link-note">
+                          Hand it to whoever owns the account: it works once and connects one account to this Reply
+                          account, so send it to no one
+                          else.${
+                              momentOf(shown.copied.expiresAt)
+                                  ? ` Valid until ${momentOf(shown.copied.expiresAt)}.`
+                                  : ''
+                          }
+                      </p>
+                      <div class="setrow">
+                          <div class="grow meta">The account appears in the list when they finish.</div>
                           <button class="btn sm" type="button" ${act('connect.checkNow')}>Check now</button>
                       </div>`
                 : null
@@ -817,6 +870,14 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                               </button>
                               <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
                           </div>
+                          <label class="setrow meta link-copy">
+                              <input
+                                  type="checkbox"
+                                  data-change="connect.copyLinks"
+                                  ${copying.value ? html`checked` : null}
+                              />
+                              Copy a new link to hand on to whoever owns the account, instead of opening it here
+                          </label>
                           ${adding.value === place ? addView(state, place, asks) : null}
                           ${shown !== null ? dialogView(shown, asks) : null}`
                     : null

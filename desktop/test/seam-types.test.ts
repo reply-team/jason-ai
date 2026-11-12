@@ -12,6 +12,7 @@ import type {
     DesktopKeptEntry,
     DesktopLink,
     DesktopRefusal,
+    DesktopReplyCopied,
     DesktopReplyDone,
     DesktopReplyOpened,
     DesktopReplyRefusal,
@@ -23,7 +24,7 @@ import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
 import type { DesktopPreload } from '../src/preload.ts';
-import type { ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
+import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
 
 /** True when the two types are the same type, field by field and all the way down. */
@@ -100,6 +101,8 @@ type ReplyLinkIsTheSeam = [
     Holds<Equal<ReplyOpened, DesktopReplyOpened>>,
     Holds<Equal<ReplyRefusal, DesktopReplyRefusal>>,
     Holds<Equal<ReplyDone, DesktopReplyDone>>,
+    Holds<Equal<ReplyCopied, DesktopReplyCopied>>,
+    Holds<Equal<keyof DesktopReplyCopied, 'copied' | 'channel' | 'kind' | 'linkKind' | 'expiresAt' | 'pendingId'>>,
     Holds<Equal<keyof DesktopReplyOpened, 'opened' | 'channel' | 'kind' | 'linkKind' | 'expiresAt' | 'pendingId'>>,
 ];
 

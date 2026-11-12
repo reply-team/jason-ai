@@ -7,6 +7,7 @@ import type {
     DesktopConversationRecord,
     DesktopLink,
     DesktopRefusal,
+    DesktopReplyCopied,
     DesktopReplyDone,
     DesktopReplyOpened,
     DesktopReplyRefusal,
@@ -203,7 +204,8 @@ export interface StubDesktop extends JasonDesktop {
 }
 
 /** What one of the Reply card's acts answers the page. */
-export type ReplyAnswer = DesktopReplyOpened | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null };
+export type ReplyAnswer =
+    DesktopReplyOpened | DesktopReplyCopied | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null };
 
 /**
  * A stand-in for the desktop, as the window really is: it opens on the start screen and sends no command by itself.
@@ -234,6 +236,18 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         expiresAt: null,
         pendingId: kind === 'connect' ? 51 : null,
     });
+    /** A link answer: copied where the page asked for a copy, else opened. */
+    const linked = (
+        channel: unknown,
+        kind: 'connect' | 'reconnect',
+        options: unknown,
+    ): DesktopReplyOpened | DesktopReplyCopied => {
+        const link = opened(channel, kind);
+        const copy = typeof options === 'object' && options !== null && (options as { copy?: unknown }).copy === true;
+        if (!copy) return link;
+        const { channel: on, expiresAt, pendingId } = link;
+        return { copied: true, channel: on, kind, linkKind: 'connection_link', expiresAt, pendingId };
+    };
     const done = (): DesktopReplyDone => ({ done: true });
     const call =
         (name: string) =>
@@ -483,8 +497,10 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             installProgram: call('setup.installProgram'),
             configurePlugin: call('setup.configurePlugin'),
             disconnectPlugin: call('setup.disconnectPlugin'),
-            replyConnect: acting('setup.replyConnect', (channel) => opened(channel, 'connect')),
-            replyReconnect: acting('setup.replyReconnect', (channel) => opened(channel, 'reconnect')),
+            replyConnect: acting('setup.replyConnect', (channel, options) => linked(channel, 'connect', options)),
+            replyReconnect: acting('setup.replyReconnect', (channel, _id, options) =>
+                linked(channel, 'reconnect', options),
+            ),
             replyLimits: acting('setup.replyLimits', () => ({ daily: 500 })),
             replyPause: acting('setup.replyPause', done),
             replyResume: acting('setup.replyResume', done),

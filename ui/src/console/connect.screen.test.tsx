@@ -468,6 +468,63 @@ describe('the Reply card, its acts', () => {
         expect(words(dialogOf(card))).toContain('shared mailbox page, which does not expire');
     });
 
+    it('copies a new link instead of opening it where the person ticks so, and says until when it works', async () => {
+        const desktop = renderConnect(withAccounts([account('14', 'linkedin', 'cookieInvalid')]));
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        const box = within(card()).getByRole('checkbox', {
+            name: 'Copy a new link to hand on to whoever owns the account, instead of opening it here',
+        }) as HTMLInputElement;
+        expect(box.checked).toBe(false);
+        fireEvent.click(box);
+        desktop.actAnswers.set('setup.replyConnect', {
+            copied: true,
+            channel: 'email',
+            kind: 'connect',
+            linkKind: 'connection_link',
+            expiresAt: '2026-11-18T12:00:00Z',
+            pendingId: 50,
+        });
+        await addAccount(card, 'Gmail');
+        await waitFor(() => expect(words(dialogOf(card))).toContain('The link was copied.'));
+        expect(words(dialogOf(card))).toContain('Valid until 2026-11-18 12:00 UTC');
+        expect(words(dialogOf(card))).not.toContain(opened);
+        fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Close' }));
+        fireEvent.click(within(rowOf(card, 'Account 14')).getByRole('button', { name: 'Reconnect' }));
+        await waitFor(() => expect(words(dialogOf(card))).toContain('The link was copied.'));
+        expect(actCalls(desktop)).toEqual([
+            ['setup.replyConnect', 'email', { provider: 'gmail', copy: true }],
+            ['setup.replyReconnect', 'linkedin', '14', { copy: true }],
+        ]);
+    });
+
+    it('opens the shared mailbox page even where a copy was ticked, and never asks the desktop to copy it', async () => {
+        const desktop = renderConnect(withAccounts([]));
+        desktop.actAnswers.set('setup.replyConnect', [
+            refusal('Its shared mailbox page can be opened instead.', 'email_link.not_available', 'shared_page'),
+            {
+                opened: true,
+                channel: 'email',
+                kind: 'connect',
+                linkKind: 'shared_page',
+                expiresAt: null,
+                pendingId: null,
+            },
+        ]);
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        fireEvent.click(within(card()).getByRole('checkbox'));
+        await addAccount(card, 'Outlook');
+        fireEvent.click(
+            await waitFor(() => within(dialogOf(card)).getByRole('button', { name: 'Open the shared mailbox page…' })),
+        );
+        await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
+        expect(actCalls(desktop)).toEqual([
+            ['setup.replyConnect', 'email', { provider: 'office365', copy: true }],
+            ['setup.replyConnect', 'email', { provider: 'office365', sharedPage: true }],
+        ]);
+    });
+
     it('offers each row the acts its channel and state take, and Reconnect only where the state is not good', async () => {
         renderConnect(
             withAccounts([

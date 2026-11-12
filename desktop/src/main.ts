@@ -5,7 +5,7 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, safeStorage, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -431,6 +431,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             // A link the Reply CLI made goes from here to the person's browser, the navigation lock's one way out, and is
             // kept nowhere.
             openLink: toBrowser,
+            // A link the person asked to hand on goes from here to the clipboard, and is neither kept nor logged.
+            copyLink: (link) => clipboard.writeText(link),
         }),
         origin,
         log,
