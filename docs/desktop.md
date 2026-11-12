@@ -109,6 +109,9 @@ them on.
   desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
 - `<data>/desktop/models.json`: the models Codex offered when it was last asked.
+- `<data>/desktop/full-access.json`: the standing choice of Full access (below), kept for each host program that can take
+  it and removed when you take it back. No chat can read or change it, in any mode; a program the agent writes and runs
+  in Full access could, as it could any file of yours, and the confirmation says so.
 - `<data>/desktop/skills-records/`: the record of what the desktop placed in the chat folder's skills folders, kept outside
   the chat folder, which the chat can neither read nor write.
 - `<data>/desktop/rollback/<version>/`: the application as it was before the last update (below).
@@ -281,8 +284,8 @@ refusal of the next section stays. A Codex turn runs in its read-only sandbox in
 Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh**
 leaves it. Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
-also lists Full access. Full access is chosen only after a confirmation shown
-each time, with Cancel focused. In Full access the agent runs commands and changes files on this computer without
+also lists Full access. Full access is chosen only after a confirmation, with Cancel focused and Escape answering
+Cancel, unless you gave the standing choice (below). In Full access the agent runs commands and changes files on this computer without
 asking, except a command Jason cannot read plainly or one that changes what an agent loads: that is a card titled "Full
 access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. A held card offers no
 "Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer
@@ -294,8 +297,22 @@ connectors reaches a turn. The agent works in a folder of its own; when Full acc
 with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
 so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
 Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said once.
-Full access is never a default and is gone when you close Jason. It is not offered for the Feed, whose turns are handed
-lines that others and providers wrote without you asking for them.
+Out of the box Full access is never a default; given this time, it is gone when you close Jason. It is not offered for
+the Feed, whose turns are handed lines that others and providers wrote without you asking for them.
+
+The confirmation is answered in one of two ways. **Give full access this time** holds for that chat until you change
+its mode or close Jason. **Always on this computer** is the standing choice: every Claude Code chat on this computer
+then enters Full access from its menu without the confirmation, after a restart too. With **With Always, also start new
+chats in Full access** ticked, a new chat whose host can take Full access starts in it, its line under the composer
+shown from the first moment; a new chat on a host that cannot, Codex or a Claude Code too old for it, starts in Ask
+first with no notice, and the menu shows the mode it has. With This time that box is ignored, and its label says so. A
+chat reopened after a restart is in Ask first as before: the standing choice skips the confirmation, it never enters
+Full access by itself. You take it back with **Full access: ask each time again** in the mode menu, or **Ask each time
+again** on the System screen's Full access card, which only the desktop shows; a chat that is in Full access stays in
+it, its line still shown, and the next entry asks again. The page only reads the standing choice and takes it back;
+only the confirmation gives it. A tool that ran without Jason having seen it takes the standing choice back as well as
+ending the turn. A release that widens what Full access reaches asks again; a change of wording alone does not. The
+Feed is refused whatever stands, and a held card still offers no "Always".
 
 ### What runs without asking, what is refused, what is a card
 
