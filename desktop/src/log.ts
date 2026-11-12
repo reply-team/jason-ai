@@ -37,7 +37,7 @@ export const templates = {
     reply_connected: 'Reply sign-in by {Method} exited {Exit}',
     reply_wired: 'Jason’s Reply plugin was placed and granted reply; global default written {RouteWritten}; jason plugin reload exited {Exit}',
     program_installed: 'npm install of {Program} exited {Exit}',
-    reply_api_answered: 'reply api {Act} answered status {Status}, exit {Exit}',
+    reply_account_act: 'reply account {Act} on {Channel} exited {Exit} with code {Code}; a usage error {Usage}',
     // The desk: the tray, its notifications.
     tray_state: 'The tray shows the state {State}',
     attention_notified: 'A notification said that {Approvals} approvals and {Questions} questions wait on the person',

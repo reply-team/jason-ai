@@ -320,41 +320,60 @@ export interface DesktopReply {
     /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
     unread: DesktopReplyChannel[];
     /**
-     * The LinkedIn connections started from a link and not finished yet, read only where LinkedIn was listed; empty when
-     * the list could not be read. Never with their link: `setup.replyLinkedInPendingLink` asks it again.
+     * The links made and not used yet (`reply account pending`), read for each channel that was listed; empty for a
+     * channel whose read failed. Never with a link, which the Reply CLI does not print.
      */
-    linkedinPending: DesktopReplyPending[];
+    pending: DesktopReplyPending[];
     /**
-     * Why the LinkedIn link acts are off: the Reply CLI is signed in but older than the one that reads a body from
-     * standard input. The desktop's one sentence, naming the update; null otherwise. The mailbox act is not affected.
+     * Where the Reply CLI is older than the one the account acts and Jason's Reply plugin need, the desktop's sentence
+     * naming the update; the card then offers no act. Null otherwise.
      */
-    linkedinBelowFloor: string | null;
+    belowMinimum: string | null;
 }
 
-/** A LinkedIn connection that waits to be finished by whoever owns the account. */
+/** A link made for connecting or reconnecting an account, and not used yet. */
 export interface DesktopReplyPending {
+    channel: DesktopReplyChannel;
     id: string;
-    /** The name typed for the account when its link was made. */
+    /** The name the link was made under; empty where Reply gave none. */
     name: string;
-    /** When its link stops working, an ISO-8601 moment as Reply wrote it; null where Reply gave none. */
-    expiresAtUtc: string | null;
-    isExpired: boolean;
+    kind: 'connect' | 'reconnect' | null;
+    /** When it stops working, an ISO-8601 moment as Reply wrote it; null where Reply gave none. */
+    expiresAt: string | null;
+    expired: boolean;
 }
 
 /**
- * A link that connects or reconnects an account with no sign-in to Reply, checked by the desktop: `link` is https,
- * `host` the host it leads to, drawn beside it; `expiresAtUtc` when it stops working, where Reply said. Whoever holds it
- * can connect an account to this Reply account: the page shows it in its dialog alone and keeps it no longer.
+ * A link the Reply CLI made, opened in the person's browser by the desktop's main process. The page learns that it was
+ * opened, when it stops working and its pending entry, where the CLI said; never the link, which is the person's secret.
+ * A `shared_page` link is the account's shared mailbox page, which does not expire.
  */
-export interface DesktopReplyLink {
-    kind: 'linkedin' | 'mailbox';
-    link: string;
-    host: string;
-    expiresAtUtc: string | null;
+export interface DesktopReplyOpened {
+    opened: true;
+    channel: DesktopReplyChannel;
+    kind: 'connect' | 'reconnect';
+    linkKind: 'connection_link' | 'shared_page';
+    expiresAt: string | null;
+    pendingId: number | null;
 }
 
-/** The mailbox pages a mailbox link opens on: Gmail's, Outlook's, and Reply's hosted page for any other mailbox. */
-export type DesktopMailboxPage = 'gmail' | 'outlook' | 'hosted';
+/**
+ * An act on a Reply account that ended without its effect: the desktop's sentence; the Reply CLI's code where it gave
+ * one, which an unknown code carries in the sentence too; what the card may offer next (the shared mailbox page after
+ * `email_link.not_available`, a forced delete after `linkedin.account_in_use`, Reconnect after
+ * `linkedin.invalid_cookie`); and whether the card reads the list again to show where things stand.
+ */
+export interface DesktopReplyRefusal {
+    refused: string;
+    code: string | null;
+    offer: 'shared_page' | 'force' | 'reconnect' | null;
+    reread: boolean;
+}
+
+/** An act on a Reply account that the CLI did. */
+export interface DesktopReplyDone {
+    done: true;
+}
 
 /**
  * A plugin the release carries that the desktop can configure: the three notification channels (slack, telegram, ntfy)
@@ -546,22 +565,42 @@ export interface JasonDesktop {
          */
         disconnectPlugin(pluginId: string): Promise<void>;
         /**
-         * Asks Reply for a link that adds a LinkedIn account under `name` (one line, 1 to 100 characters), which also
-         * lists it in `linkedinPending` until it is finished. Answers the link, or a refusal in one of the desktop's
-         * sentences; nothing of Reply's own words.
+         * Connects a new account by a link the Reply CLI makes, which the desktop opens in the person's browser: a
+         * LinkedIn account under `name` (one line, 1 to 100 characters), a mailbox for its `provider`. `sharedPage`
+         * asks for the account's shared mailbox page instead, and only after this ask answered the offer
+         * `shared_page`; the desktop then asks the person in a box of its own, with the CLI's warning, first.
          */
-        replyLinkedInConnect(name: string): Promise<DesktopReplyLink | DesktopRefusal>;
-        /** Asks Reply again for the link of one of `linkedinPending` by its id, with its expiry. */
-        replyLinkedInPendingLink(pendingId: string): Promise<DesktopReplyLink | DesktopRefusal>;
-        /** Asks Reply for a link that signs a LinkedIn account it holds in again, by the account's id. */
-        replyLinkedInReconnect(accountId: string): Promise<DesktopReplyLink | DesktopRefusal>;
+        replyConnect(
+            channel: DesktopReplyChannel,
+            options: { name: string } | { provider: 'gmail' | 'office365'; sharedPage?: boolean },
+        ): Promise<DesktopReplyOpened | DesktopReplyRefusal>;
+        /** Reconnects an account `accounts` lists, the same way; `sharedPage` for a mailbox only, as above. */
+        replyReconnect(
+            channel: DesktopReplyChannel,
+            accountId: string,
+            options?: { sharedPage?: boolean },
+        ): Promise<DesktopReplyOpened | DesktopReplyRefusal>;
         /**
-         * Asks Reply for the account's hosted mailbox page and answers one of its addresses: Gmail's or Outlook's, which
-         * connect a mailbox or reconnect the one with the same address, or the hosted page, where any other mailbox is
-         * added or put right. The address does not expire, and whoever holds it can add and manage this Reply account's
-         * mailboxes.
+         * A mailbox's daily limit: read without `daily`, set to it with one, after the person's yes in the desktop's
+         * own box.
          */
-        replyMailboxLink(page: DesktopMailboxPage): Promise<DesktopReplyLink | DesktopRefusal>;
+        replyLimits(accountId: string, daily?: number): Promise<{ daily: number | null } | DesktopReplyRefusal>;
+        /** Pauses a LinkedIn account `accounts` lists, after the person's yes in the desktop's own box. */
+        replyPause(accountId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /** Resumes a LinkedIn account `accounts` lists, after the person's yes in the desktop's own box. */
+        replyResume(accountId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /** Lets a mailbox its provider stopped send again, after the person's yes in the desktop's own box. */
+        replyUnblock(accountId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Deletes an account `accounts` lists from Reply, after the person's yes in the desktop's own box. `force` deletes
+         * a LinkedIn account sequences use, only after a delete of it answered the offer `force`, and after a box of
+         * its own.
+         */
+        replyDelete(
+            channel: DesktopReplyChannel,
+            accountId: string,
+            options?: { force?: boolean },
+        ): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

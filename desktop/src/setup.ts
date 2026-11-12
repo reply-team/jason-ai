@@ -21,27 +21,39 @@ import { isProgramName, type ProgramName, type Programs, type RunResult } from '
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
 import type { ProviderKeys } from './providers.ts';
 import {
-    answeredWell,
-    checkedLinkedInLink,
-    isMailboxPage,
+    actBox,
+    belowMinimumSentence,
+    dailyLimitMost,
+    isOpenableLink,
+    isReplyChannel,
     isReplyId,
-    linkedInFloorVersion,
+    isUsageCode,
     linkedInNameProblem,
-    linkedInRefusal,
-    mailboxAddress,
-    mailboxAnswer,
-    mailboxRefusal,
-    mailboxToken,
-    pendingRows,
-    readReplyApi,
-    replyApiArguments,
-    replyApiLimitMs,
-    replyLinkSentences,
-    withoutLink,
-    type ReplyApiAct,
-    type ReplyApiAnswer,
-    type ReplyPending,
-} from './reply-links.ts';
+    refusalOf,
+    replyAccountSentences as said,
+    replyActLimitMs,
+    sharedPageBox,
+    type ReplyAct,
+    type ReplyBox,
+    type ReplyRefusal,
+} from './reply-accounts.ts';
+import {
+    connectArguments,
+    deleteArguments,
+    limitsArguments,
+    pendingArguments,
+    readDailyLimit,
+    readDone,
+    readLink,
+    readPending,
+    readState,
+    reconnectArguments,
+    replyCliEnding,
+    stateArguments,
+    unblockArguments,
+    type ReplyCliChannel,
+    type ReplyCliPending,
+} from './reply-cli-account.ts';
 import type { DesktopSettings } from './settings.ts';
 import {
     bundledPlugin,
@@ -115,32 +127,36 @@ export interface ReplyState {
     /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
     unread: ReplyChannel[];
     /**
-     * The LinkedIn connections started from a link and not finished yet, read where LinkedIn was listed; never with their
-     * link, which `replyLinkedInPendingLink` asks again on the person's click.
+     * The links made and not used yet (`reply account pending`), read for each channel that was listed; never with a
+     * link, which the CLI does not print.
      */
-    linkedinPending: ReplyPending[];
+    pending: ReplyCliPending[];
     /**
-     * Why the LinkedIn link acts are off, where the Reply CLI is signed in but older than the one that reads a body from
-     * standard input; null otherwise.
+     * Where the Reply CLI is older than the one the account acts and Jason's Reply plugin need, the sentence that says
+     * so; the card then offers no act. Null otherwise.
      */
-    linkedinBelowFloor: string | null;
+    belowMinimum: string | null;
 }
 
 /**
- * A link Reply answered for connecting or reconnecting an account, checked: what the person opens or sends to whoever
- * owns the account, the host it leads to, and when it stops working where Reply said.
+ * A link the Reply CLI made, opened in the person's browser by the main process: what the page learns of it. The link
+ * itself never reaches the page.
  */
-export interface ReplyLink {
-    kind: 'linkedin' | 'mailbox';
-    link: string;
-    host: string;
-    expiresAtUtc: string | null;
+export interface ReplyOpened {
+    opened: true;
+    channel: ReplyCliChannel;
+    kind: 'connect' | 'reconnect';
+    linkKind: 'connection_link' | 'shared_page';
+    expiresAt: string | null;
+    pendingId: number | null;
 }
 
-/** A link's ask that ended without one, in one sentence of the desktop's. */
-export interface LinkRefusal {
-    refused: string;
+/** An act on an account that the CLI did. */
+export interface ReplyDone {
+    done: true;
 }
+
+export type { ReplyRefusal } from './reply-accounts.ts';
 
 export interface PluginState {
     id: string;
@@ -192,10 +208,12 @@ export interface SetupDeps {
     /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
     ownChatFolder?: (chat: string, records: string) => void;
     /**
-     * The person's yes, asked by the main process in a native box before the mailbox page is asked of Reply; absent, the
+     * The person's yes to one of the Reply card's acts, asked by the main process in a native box of its own; absent, the
      * answer is no.
      */
-    confirmMailboxLink?(): Promise<boolean>;
+    confirm?(box: ReplyBox): Promise<boolean>;
+    /** Hands a link to the system opener, the person's browser; absent, no link is opened. */
+    openLink?(link: string): Promise<void>;
     /** The models Codex offered when last asked, and the background ask of the ones a day old (`model-lists.ts`). */
     models?: { lists(): KeptLists; refresh(hostIds: readonly string[]): void; unread(hostId: string): 'waiting' | 'failed' | null };
 }
@@ -270,14 +288,9 @@ export function unreadSentence(label: string, unread: 'waiting' | 'failed' | nul
     return null;
 }
 
-function field(data: unknown, name: string): unknown {
-    return typeof data === 'object' && data !== null && !Array.isArray(data) ? (data as Record<string, unknown>)[name] : undefined;
-}
-
-/** A LinkedIn link answered, checked; refused in one sentence where it is not of Reply's forms. */
-function linkedIn(value: unknown, expiresAtUtc: string | null): ReplyLink | LinkRefusal {
-    const checked = checkedLinkedInLink(value);
-    return checked === null ? { refused: replyLinkSentences.badLink } : { kind: 'linkedin', link: checked.link, host: checked.host, expiresAtUtc };
+/** An act refused by the desktop itself, before or after the CLI: its sentence, no code and nothing offered. */
+function refusal(refused: string, reread = false): ReplyRefusal {
+    return { refused, code: null, offer: null, reread };
 }
 
 export class Setup {
@@ -287,8 +300,12 @@ export class Setup {
     #queue: Promise<unknown> = Promise.resolve();
     /** What the last reload said about the settings file, when it could not read it. */
     #reloadRefusal: string | null = null;
-    /** Whether a link is being asked of Reply: one at a time, and a second click meanwhile is refused. */
-    #linking = false;
+    /** Whether an act on a Reply account is going: one at a time, and a second click meanwhile is refused. */
+    #acts = false;
+    /** The accounts the last listing gave: an act names only one of them, and its box names it as the list does. */
+    #listed: ReplyAccount[] = [];
+    /** The offers a refusal opened, each for the one ask it answered: the shared page, and a forced delete. */
+    #doors = new Set<string>();
 
     constructor(deps: SetupDeps) {
         this.#deps = deps;
@@ -427,20 +444,21 @@ export class Setup {
     /** Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. */
     async #reply(valid: boolean): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
+        this.#listed = [];
         if (!found) {
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], linkedinPending: [], linkedinBelowFloor: null };
+            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], belowMinimum: null };
         }
         const routes = valid ? await this.#deps.cli.run(['route', 'list']) : null;
         const wired = routes !== null && routes.exit === 0 && defaultRoutePlugin(routes.stdout) === 'reply';
         const version = await this.#version('reply');
-        // Older than Jason's Reply plugin requires, the CLI is offered the update and is not asked for its accounts,
-        // which it has no command for.
+        // Older than the account acts and Jason's Reply plugin need, the CLI is offered the update, is not asked for its
+        // accounts, and the card offers no act.
         const current = version !== null && versionAtLeast(version, replyMinimumVersion);
         const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
         const accounts: ReplyAccount[] = [];
         const absent: ReplyChannel[] = [];
         const unread: ReplyChannel[] = [];
-        let linkedinPending: ReplyPending[] = [];
+        const pending: ReplyCliPending[] = [];
         if (auth.signedIn && current) {
             // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
             for (const channel of replyChannels) {
@@ -448,102 +466,222 @@ export class Setup {
                 if (read.kind === 'listed') accounts.push(...read.accounts);
                 else (read.kind === 'absent' ? absent : unread).push(channel);
             }
-            // The connections under way, read where LinkedIn was listed; their links are dropped here, in main.
-            if (!absent.includes('linkedin') && !unread.includes('linkedin')) {
-                const answer = await this.#replyApi('linkedin_pending');
-                linkedinPending = answeredWell(answer) ? (pendingRows(answer.data) ?? []).map(withoutLink) : [];
+            // The links made and not used yet, for each channel that was listed; a read that fails lists none.
+            for (const channel of replyChannels) {
+                if (absent.includes(channel) || unread.includes(channel)) continue;
+                const ending = replyCliEnding(await this.#run('reply', 'account pending', pendingArguments(channel), { timeoutMs: replyActLimitMs }));
+                const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
+                pending.push(...(rows ?? []).filter((row) => row.channel === channel));
             }
+            this.#listed = accounts;
         }
-        const linkedinBelowFloor = auth.signedIn && current && !versionAtLeast(version, linkedInFloorVersion) ? replyLinkSentences.linkedInFloor : null;
-        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts, absent, unread, linkedinPending, linkedinBelowFloor };
+        return {
+            cli: { found, version, install: current ? null : this.#installable('reply') },
+            signedIn: auth.signedIn,
+            user: auth.user,
+            wired,
+            accounts,
+            absent,
+            unread,
+            pending,
+            belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion),
+        };
+    }
+
+    /** The account the last listing gave on that channel by that id, or null: an act names only an account Reply listed. */
+    #account(channel: ReplyCliChannel, id: unknown): ReplyAccount | null {
+        if (!isReplyId(id)) return null;
+        return this.#listed.find((each) => each.channel === channel && each.id === id) ?? null;
     }
 
     /**
-     * One call of the closed table through `reply api`, with the body on standard input for the one call that has one.
-     * Logged by the call's name, Reply's status and the exit code only: never the path's id, the body or what was printed.
+     * One act at a time, at or above the Reply CLI the acts need; a second click meanwhile is refused. The answer is the
+     * act's, or the sentence it ended with.
      */
-    async #replyApi(act: ReplyApiAct, options: { id?: string; body?: string } = {}): Promise<ReplyApiAnswer | null> {
-        const args = replyApiArguments(act, options.id);
-        const result = await this.#run('reply', `api ${act}`, args, { stdin: options.body, timeoutMs: replyApiLimitMs });
-        const answer = readReplyApi(result);
-        this.#deps.log.info('reply_api_answered', { Act: act, Status: answer?.status ?? 0, Exit: result.exit });
-        return answer;
-    }
-
-    /** Whether the Reply CLI reads a body from standard input, which the LinkedIn acts need. */
-    async #linkedInReady(): Promise<boolean> {
-        const version = await this.#version('reply');
-        return version !== null && versionAtLeast(version, linkedInFloorVersion);
-    }
-
-    /** One link asked at a time; the answer is the link, or the sentence it ended with. */
-    async #asking(work: () => Promise<ReplyLink | LinkRefusal>): Promise<ReplyLink | LinkRefusal> {
-        if (this.#linking) return { refused: replyLinkSentences.busy };
-        this.#linking = true;
+    async #acting<T>(work: () => Promise<T | ReplyRefusal>): Promise<T | ReplyRefusal> {
+        if (this.#acts) return refusal(said.busy);
+        this.#acts = true;
         try {
+            const version = await this.#version('reply');
+            if (version === null || !versionAtLeast(version, replyMinimumVersion)) return refusal(belowMinimumSentence(replyMinimumVersion));
             return await work();
         } finally {
-            this.#linking = false;
+            this.#acts = false;
         }
     }
 
-    /**
-     * Adds a LinkedIn account by a link Reply makes for it (`connection-link`), which also lists it as waiting until it
-     * is finished. The name the person typed goes to Reply as the JSON body on standard input, never on a command line.
-     */
-    replyLinkedInConnect(name: unknown): Promise<ReplyLink | LinkRefusal> {
-        const problem = linkedInNameProblem(name);
-        if (problem !== null) return Promise.resolve({ refused: problem });
-        return this.#asking(async () => {
-            if (!(await this.#linkedInReady())) return { refused: replyLinkSentences.linkedInFloor };
-            const answer = await this.#replyApi('linkedin_connect', { body: JSON.stringify({ name: (name as string).trim() }) });
-            if (!answeredWell(answer)) return { refused: linkedInRefusal(answer, 'linkedin_connect') };
-            return linkedIn(field(answer.data, 'connectionLink'), null);
-        });
-    }
-
-    /** The link of a LinkedIn connection that waits, asked again from the pending list by its id, never kept. */
-    replyLinkedInPendingLink(pendingId: unknown): Promise<ReplyLink | LinkRefusal> {
-        if (!isReplyId(pendingId)) return Promise.resolve({ refused: replyLinkSentences.badId });
-        return this.#asking(async () => {
-            if (!(await this.#linkedInReady())) return { refused: replyLinkSentences.linkedInFloor };
-            const answer = await this.#replyApi('linkedin_pending');
-            if (!answeredWell(answer)) return { refused: linkedInRefusal(answer, 'linkedin_pending') };
-            const rows = pendingRows(answer.data);
-            if (rows === null) return { refused: replyLinkSentences.unreached };
-            const row = rows.find((each) => each.id === pendingId);
-            if (row === undefined) return { refused: replyLinkSentences.pendingGone };
-            return linkedIn(row.connectionLink, row.expiresAtUtc);
-        });
-    }
-
-    /** A link that signs a LinkedIn account Reply holds in again, by the account's id. */
-    replyLinkedInReconnect(accountId: unknown): Promise<ReplyLink | LinkRefusal> {
-        if (!isReplyId(accountId)) return Promise.resolve({ refused: replyLinkSentences.badId });
-        return this.#asking(async () => {
-            if (!(await this.#linkedInReady())) return { refused: replyLinkSentences.linkedInFloor };
-            const answer = await this.#replyApi('linkedin_reconnect', { id: accountId });
-            if (!answeredWell(answer)) return { refused: linkedInRefusal(answer, 'linkedin_reconnect') };
-            return linkedIn(field(answer.data, 'connectionLink'), null);
-        });
+    /** The person's yes in the main process's own box; no box to ask in is a no. */
+    async #confirmed(box: ReplyBox): Promise<boolean> {
+        return (await this.#deps.confirm?.(box)) ?? false;
     }
 
     /**
-     * One of the account's mailbox pages: Gmail's or Outlook's, which connect a mailbox or reconnect the one with the
-     * same address, or the hosted page itself, where any other mailbox is added or put right. Each is built from the
-     * checked token of the address Reply answers, and nothing else of the answer.
+     * Runs one verb. The log says the act, the channel, the exit and the CLI's code, never what the verb printed or
+     * wrote on stderr: a link's stdout is never logged, recorded or put into an error.
      */
-    replyMailboxLink(page: unknown): Promise<ReplyLink | LinkRefusal> {
-        if (!isMailboxPage(page)) return Promise.resolve({ refused: replyLinkSentences.badPage });
-        return this.#asking(async () => {
-            // The one link that never expires is asked only on the person's yes in the main process's own box.
-            const confirmed = (await this.#deps.confirmMailboxLink?.()) ?? false;
-            if (!confirmed) return { refused: replyLinkSentences.mailboxNotConfirmed };
-            const answer = await this.#replyApi('mailbox_page');
-            if (!answeredWell(answer)) return { refused: mailboxRefusal(answer) };
-            const checked = mailboxToken(mailboxAnswer(answer.data));
-            if (checked === null) return { refused: replyLinkSentences.badLink };
-            return { kind: 'mailbox', link: mailboxAddress(checked.host, checked.token, page), host: checked.host, expiresAtUtc: null };
+    async #verb(act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; sharedPage?: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
+        const result = await this.#run('reply', `account ${act}`, args, { timeoutMs: replyActLimitMs });
+        const ending = replyCliEnding(result);
+        const code = ending.kind === 'refused' ? ending.code : ending.kind === 'unknown' ? 'outcome.unknown' : null;
+        this.#deps.log.info('reply_account_act', { Act: act, Channel: channel, Exit: result.exit, Code: code ?? 'none', Usage: isUsageCode(code) });
+        if (ending.kind === 'done') return { stdout: ending.stdout };
+        return refusalOf(ending, { verb: act, channel, write: options.write, sharedPage: options.sharedPage, force: options.force });
+    }
+
+    /**
+     * A link verb's ending: the link checked and handed to the system opener, and the page told only that it was
+     * opened, when it expires and its pending entry. The link is kept nowhere.
+     */
+    async #open(answer: { stdout: string } | ReplyRefusal): Promise<ReplyOpened | ReplyRefusal> {
+        if ('refused' in answer) return answer;
+        const printed = readLink(answer.stdout);
+        if (printed === null) return refusal(said.outcomeUnknown, true);
+        if (!isOpenableLink(printed.link) || this.#deps.openLink === undefined) return refusal(said.badLink, true);
+        try {
+            await this.#deps.openLink(printed.link);
+        } catch {
+            return refusal(said.notOpened, true);
+        }
+        return { opened: true, channel: printed.channel, kind: printed.kind, linkKind: printed.linkKind, expiresAt: printed.expiresAt, pendingId: printed.pendingId };
+    }
+
+    /**
+     * The shared page's door: open only after the CLI answered `email_link.not_available` to the same ask made without
+     * it, and gone through only on the person's yes to the box that carries the CLI's warning.
+     */
+    async #sharedPage(door: string): Promise<ReplyRefusal | null> {
+        if (!this.#doors.has(door)) return refusal(said.notOffered);
+        if (!(await this.#confirmed(sharedPageBox()))) return refusal(said.notConfirmed);
+        this.#doors.delete(door);
+        return null;
+    }
+
+    /** Keeps the door a refusal opened: the shared page after `not_available`, a forced delete after `account_in_use`. */
+    #keepDoor(door: string, answer: { stdout: string } | ReplyRefusal, offer: 'shared_page' | 'force'): void {
+        if ('refused' in answer && answer.offer === offer) this.#doors.add(door);
+    }
+
+    /**
+     * Connects a new account by a link the CLI makes (`reply account connect`): LinkedIn under the name typed for it, a
+     * mailbox for its provider. With `sharedPage`, only after the CLI said one-mailbox links are not available here, and
+     * only on the person's yes, the same ask is made again with `--allow-shared-page`.
+     */
+    replyConnect(channel: unknown, options: unknown): Promise<ReplyOpened | ReplyRefusal> {
+        const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
+        if (channel === 'linkedin') {
+            const problem = linkedInNameProblem(asked['name']);
+            if (problem !== null) return Promise.resolve(refusal(problem));
+            if (asked['sharedPage'] === true || asked['provider'] !== undefined) return Promise.resolve(refusal(said.badRequest));
+            const name = (asked['name'] as string).trim();
+            return this.#acting(async () => this.#open(await this.#verb('connect', 'linkedin', connectArguments({ channel: 'linkedin', name }), { write: true })));
+        }
+        const provider = asked['provider'];
+        if (channel !== 'email' || (provider !== 'gmail' && provider !== 'office365')) return Promise.resolve(refusal(said.badRequest));
+        const shared = asked['sharedPage'] === true;
+        const door = `connect:email:${provider}`;
+        return this.#acting(async () => {
+            if (shared) {
+                const closed = await this.#sharedPage(door);
+                if (closed !== null) return closed;
+            }
+            const answer = await this.#verb('connect', 'email', connectArguments({ channel: 'email', provider, allowSharedPage: shared }), { write: true, sharedPage: shared });
+            this.#keepDoor(door, answer, 'shared_page');
+            return this.#open(answer);
+        });
+    }
+
+    /** Reconnects an account the list gave (`reply account reconnect`) by a link the CLI makes; the shared page as above. */
+    replyReconnect(channel: unknown, accountId: unknown, options: unknown = {}): Promise<ReplyOpened | ReplyRefusal> {
+        const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
+        if (!isReplyChannel(channel)) return Promise.resolve(refusal(said.badRequest));
+        const shared = asked['sharedPage'] === true;
+        if (shared && channel !== 'email') return Promise.resolve(refusal(said.badRequest));
+        const account = this.#account(channel, accountId);
+        if (account === null) return Promise.resolve(refusal(said.badId));
+        const door = `reconnect:email:${account.id}`;
+        return this.#acting(async () => {
+            if (shared) {
+                const closed = await this.#sharedPage(door);
+                if (closed !== null) return closed;
+            }
+            const answer = await this.#verb('reconnect', channel, reconnectArguments(channel, account.id, shared), { write: true, sharedPage: shared });
+            if (channel === 'email') this.#keepDoor(door, answer, 'shared_page');
+            return this.#open(answer);
+        });
+    }
+
+    /**
+     * A mailbox's daily limit (`reply account limits --channel email`): read with no limit given, and set to the one
+     * given only on the person's yes to the box that names the mailbox.
+     */
+    replyLimits(accountId: unknown, daily?: unknown): Promise<{ daily: number | null } | ReplyRefusal> {
+        const account = this.#account('email', accountId);
+        if (account === null) return Promise.resolve(refusal(said.badId));
+        if (daily !== undefined && (typeof daily !== 'number' || !Number.isSafeInteger(daily) || daily < 0 || daily > dailyLimitMost)) {
+            return Promise.resolve(refusal(said.badLimit));
+        }
+        return this.#acting(async () => {
+            if (daily !== undefined && !(await this.#confirmed(actBox('limits', account, daily)))) return refusal(said.notConfirmed);
+            const answer = await this.#verb('limits', 'email', limitsArguments(account.id, daily), { write: daily !== undefined });
+            if ('refused' in answer) return answer;
+            return readDailyLimit(answer.stdout) ?? refusal(said.outcomeUnknown, true);
+        });
+    }
+
+    /** Pauses a LinkedIn account the list gave, on the person's yes (`reply account pause`). */
+    replyPause(accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
+        return this.#state('pause', accountId);
+    }
+
+    /** Resumes a LinkedIn account the list gave, on the person's yes (`reply account resume`). */
+    replyResume(accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
+        return this.#state('resume', accountId);
+    }
+
+    #state(verb: 'pause' | 'resume', accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = this.#account('linkedin', accountId);
+        if (account === null) return Promise.resolve(refusal(said.badId));
+        return this.#acting(async () => {
+            if (!(await this.#confirmed(actBox(verb, account)))) return refusal(said.notConfirmed);
+            const answer = await this.#verb(verb, 'linkedin', stateArguments(verb, account.id), { write: true });
+            if ('refused' in answer) return answer;
+            return readState(answer.stdout) === null ? refusal(said.outcomeUnknown, true) : { done: true };
+        });
+    }
+
+    /** Lets a mailbox the list gave send again after its provider stopped it, on the person's yes (`reply account unblock`). */
+    replyUnblock(accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = this.#account('email', accountId);
+        if (account === null) return Promise.resolve(refusal(said.badId));
+        return this.#acting(async () => {
+            if (!(await this.#confirmed(actBox('unblock', account)))) return refusal(said.notConfirmed);
+            const answer = await this.#verb('unblock', 'email', unblockArguments(account.id), { write: true });
+            if ('refused' in answer) return answer;
+            return readDone(answer.stdout, 'unblocked') ? { done: true } : refusal(said.outcomeUnknown, true);
+        });
+    }
+
+    /**
+     * Deletes an account the list gave (`reply account delete`), passing `--yes` only after the person's yes to the box
+     * that names it. With `force`, only after the CLI answered `linkedin.account_in_use` to a delete of that account
+     * without it, and only on the person's yes to a box of its own that says sequences use it.
+     */
+    replyDelete(channel: unknown, accountId: unknown, options: unknown = {}): Promise<ReplyDone | ReplyRefusal> {
+        const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
+        if (!isReplyChannel(channel)) return Promise.resolve(refusal(said.badRequest));
+        const force = asked['force'] === true;
+        if (force && channel !== 'linkedin') return Promise.resolve(refusal(said.badRequest));
+        const account = this.#account(channel, accountId);
+        if (account === null) return Promise.resolve(refusal(said.badId));
+        const door = `delete:linkedin:${account.id}`;
+        return this.#acting(async () => {
+            if (force && !this.#doors.has(door)) return refusal(said.notOffered);
+            if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', account)))) return refusal(said.notConfirmed);
+            if (force) this.#doors.delete(door);
+            const answer = await this.#verb('delete', channel, deleteArguments(channel, account.id, force), { write: true, force });
+            if (channel === 'linkedin') this.#keepDoor(door, answer, 'force');
+            if ('refused' in answer) return answer;
+            return readDone(answer.stdout, 'deleted') ? { done: true } : refusal(said.outcomeUnknown, true);
         });
     }
 

@@ -12,7 +12,9 @@ import type {
     DesktopKeptEntry,
     DesktopLink,
     DesktopRefusal,
-    DesktopReplyLink,
+    DesktopReplyDone,
+    DesktopReplyOpened,
+    DesktopReplyRefusal,
     DesktopSetup,
     JasonDesktop,
 } from '../../ui/src/platform/desktop.d.ts';
@@ -21,7 +23,7 @@ import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
 import type { DesktopPreload } from '../src/preload.ts';
-import type { LinkRefusal, ReplyLink, SetupState } from '../src/setup.ts';
+import type { ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
 
 /** True when the two types are the same type, field by field and all the way down. */
@@ -93,8 +95,13 @@ type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<E
 // A refusal reaches the page as the value the desktop answers it with.
 type RefusalIsTheSeam = Holds<Equal<ChatRefusal, DesktopRefusal>>;
 
-// A Reply link, or the sentence its ask ended with, reaches the page as the desktop answers it.
-type ReplyLinkIsTheSeam = [Holds<Equal<ReplyLink, DesktopReplyLink>>, Holds<Equal<LinkRefusal, DesktopRefusal>>];
+// A Reply act's answer reaches the page as the desktop answers it: that a link was opened, never the link.
+type ReplyLinkIsTheSeam = [
+    Holds<Equal<ReplyOpened, DesktopReplyOpened>>,
+    Holds<Equal<ReplyRefusal, DesktopReplyRefusal>>,
+    Holds<Equal<ReplyDone, DesktopReplyDone>>,
+    Holds<Equal<keyof DesktopReplyOpened, 'opened' | 'channel' | 'kind' | 'linkKind' | 'expiresAt' | 'pendingId'>>,
+];
 
 // A link reaches the page as the page the desktop parsed it to, never as the address.
 type LinkIsTheSeam = Holds<Equal<LinkTarget, DesktopLink>>;
