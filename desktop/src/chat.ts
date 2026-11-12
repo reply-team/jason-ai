@@ -1178,6 +1178,8 @@ export class Chat {
         mkdirSync(paths.chat, { recursive: true });
 
         let turnId: string | null = null;
+        /** A Claude Code turn: the folder its judgement reads a `~` against, which a Full access turn names to its host as HOME. */
+        let turnHome: string | undefined;
         let endpoint: Endpoint | null = null;
         let argsFor: (resume: string | undefined) => string[];
         let requests = 0;
@@ -1200,6 +1202,7 @@ export class Chat {
             ownAgentFolder(paths.chat, paths.skillsRecords);
             if (resolved.folder !== null) makePrivate(resolved.label, resolved.program === 'claude' ? paths.claudeKeyed : paths.codexKeyed, resolved.folder);
             if (resolved.program === 'claude') {
+                turnHome = Object.entries(this.#options.env).find(([name, value]) => (this.#platform === 'win32' ? name.toUpperCase() : name) === 'HOME' && value !== undefined && value !== '')?.[1] ?? homedir();
                 const id = newTurnId();
                 turnId = id;
                 running.turnId = id;
@@ -1210,8 +1213,9 @@ export class Chat {
                     added,
                     data: paths.data,
                     home: homedir(),
-                    // The host's environment is built from this one (`hostEnvironment`), so its shell's `~` is this HOME.
-                    shellHome: Object.entries(this.#options.env).find(([name, value]) => (this.#platform === 'win32' ? name.toUpperCase() : name) === 'HOME' && value !== undefined && value !== '')?.[1] ?? homedir(),
+                    // The host's environment is built from this one (`hostEnvironment`), so its shell's `~` is this HOME;
+                    // a Full access turn names it to the host explicitly (`turnHome`), so the two cannot differ.
+                    shellHome: turnHome,
                     protectedFiles: [paths.installationSettings, paths.runFile],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
@@ -1259,6 +1263,7 @@ export class Chat {
             provider: resolved.provider,
             bundleVersion: this.#options.bundleVersion,
             effortNamed: resolved.effort !== undefined,
+            ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
         });
         // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the data directory.
         if (resolved.program === 'codex' && this.#platform === 'win32') {
