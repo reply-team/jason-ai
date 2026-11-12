@@ -121,8 +121,9 @@ export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsid
  * mode auto-approves", `"deny"` "prevents the tool call", `"ask"` "prompts the user to confirm", and "Deny and ask rules
  * are still evaluated regardless of what the hook returns"; a matcher of `"*"` "fires on every occurrence of the event";
  * "To block the action instead, set `"onFailure": "block"` on a `command` or `http` hook. Requires Claude Code v2.1.295
- * or later." (`fullAccessFloor`). Under `-p` in the default mode a hook's `ask` reaches the permission prompt tool and
- * the turn waits for its answer: seen on Claude Code 2.1.322, which no page states in one sentence.
+ * or later." Under `-p` in the default mode a hook's `ask` overrides an allow rule, so an allowed command the hook holds
+ * still reaches the permission prompt tool, and the turn waits for its answer: seen on Claude Code 2.1.322, which no page
+ * states in one sentence, and which is therefore Full access's floor (`fullAccessFloor`).
  */
 export function fullAccessSettings(hookUrl: string, secret: string) {
     return {
@@ -490,7 +491,9 @@ export function hostEnvironment(
         effortNamed?: boolean;
         /**
          * A Full access turn: the folder its judgement reads a `~` against (`ChatScope.shellHome`), set as `HOME` in place
-         * of any spelling of it the base carries, so the host's shell and the judgement take the same home.
+         * of any spelling of it the base carries, so the host's shell and the judgement take the same home. That folder is
+         * the desktop's own environment's HOME, or the profile's home folder (`homedir()`) when the environment names none.
+         * Where the environment's HOME is another folder than the profile's, the judgement holds every `~`.
          */
         home?: string;
     },

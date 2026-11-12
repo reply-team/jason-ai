@@ -36,7 +36,8 @@ const scopes: readonly ChatScope[] = [homeScope('linux', '/home/someone'), homeS
 /**
  * Every string the chat's suites hold, every `test/chat-*.test.ts`: the commands and paths of their rows, and the rest
  * of their words, which a judgement reads as harmlessly as any other text. Read by the TypeScript parser, so a row's text
- * is exactly what its row gives.
+ * is exactly what its row gives. A template literal that holds a substitution is left out: its text is known only when
+ * the row runs, and the row's own assertions judge it there.
  */
 function suiteStrings(): string[] {
     const found = new Set<string>();
@@ -93,7 +94,7 @@ const shapes: readonly { tool: string; input: (text: string) => Record<string, u
 test('every input Ask first refuses is refused by Full access\'s own judgement with the same sentence, never held and never run', () => {
     // The table is every string the chat's suites hold, so a refusal row added to any of them joins it by itself.
     const strings = [...new Set([...suiteStrings(), ...spellings])];
-    let refusals = 0;
+    const refusals = new Map<string, number>();
     for (const scope of scopes) {
         for (const shape of shapes) {
             if (shape.win32Only === true && scope.platform !== 'win32') continue;
@@ -101,13 +102,24 @@ test('every input Ask first refuses is refused by Full access\'s own judgement w
                 const input = shape.input(text);
                 const asked = judge(shape.tool, input, scope);
                 if (asked.verdict !== 'deny') continue;
-                refusals++;
+                const key = `${scope.platform} ${shape.tool}`;
+                refusals.set(key, (refusals.get(key) ?? 0) + 1);
                 assert.deepEqual(fullAccessJudgement(shape.tool, input, scope), { outcome: 'refused', message: asked.message }, `${scope.platform} ${shape.tool}: ${JSON.stringify(text)}`);
             }
         }
     }
-    // The table is the suites' own: thousands of refusals, not a handful.
-    assert.ok(refusals > 1000, `only ${refusals} refusals were read`);
+    // The table is the suites' own, and every route of Ask first's refusals is read on every platform, never only the
+    // chat's own tool, which Ask first refuses whatever its input: a floor for each shape that has refusals of its own.
+    const floors: Readonly<Record<string, number>> = { Bash: 300, Monitor: 300, Read: 30, Write: 40, Edit: 40, Glob: 100, Grep: 40, LS: 40, mcp__frobnicate__run: 150 };
+    for (const scope of scopes) {
+        for (const [tool, floor] of Object.entries({ ...floors, ...(scope.platform === 'win32' ? { PowerShell: 300 } : {}) })) {
+            const read = refusals.get(`${scope.platform} ${tool}`) ?? 0;
+            assert.ok(read >= floor, `${scope.platform} ${tool}: only ${read} refusals were read, fewer than ${floor}`);
+        }
+        // Ask first refuses no web page (`judge` shows a card or opens it), so WebFetch has no floor: its shape is read so
+        // that a refusal of a page, once there is one, joins the table by itself.
+        assert.equal(refusals.get(`${scope.platform} WebFetch`) ?? 0, 0, 'a refusal of a page now exists: give WebFetch its floor');
+    }
 });
 
 test('the named row: jason approval appro\\ve is refused in Full access, by the hook and by the prompt tool, with no card', async (t) => {
@@ -261,7 +273,7 @@ test('a held command Ask first would run with no card runs with no card: a card 
     assert.deepEqual(w.cards, []);
 });
 
-test('"always for this chat" works in Full access as in Ask first', async (t) => {
+test('"always for this chat" works in Full access as in Ask first for what Full access would run', async (t) => {
     const w = await wired(t);
     const first = w.broker.ask(w.id, 'Bash', { command: 'git push' });
     await settle();
@@ -271,6 +283,72 @@ test('"always for this chat" works in Full access as in Ask first', async (t) =>
     assert.equal((await first).behavior, 'allow');
     assert.equal((await w.broker.ask(w.id, 'Bash', { command: 'git push' })).behavior, 'allow');
     assert.equal(w.cards.filter((each) => each.kind === 'permission').length, 1, 'the second is settled without a card');
+});
+
+test('in Full access a held command is answered by the person each time: no "Always" given in Ask first covers it, and its card offers none', async () => {
+    const cards: BrokerEvent[] = [];
+    const decided: Decided[] = [];
+    const broker = new PermissionBroker({ emit: (_chat, event) => cards.push(event), decided: (each) => decided.push(each) });
+    try {
+        const scope = scopes[0] as ChatScope;
+        const pairs = [
+            ['frobnicate mcp list', 'frobnicate mcp add srv'],
+            ['git config --list', 'git config core.hooksPath x'],
+        ] as const;
+        // In Ask first the person allows each read form for the chat, always.
+        broker.openTurn('chat_a', 'turn_ask', scope, 'ask_first');
+        for (const [granted] of pairs) {
+            const answer = broker.ask('turn_ask', 'Bash', { command: granted });
+            const card = cards.at(-1);
+            assert.ok(card?.kind === 'permission' && card.remember !== null, granted);
+            broker.answer('chat_a', card.request, { allow: true, always: true });
+            assert.equal((await answer).behavior, 'allow');
+        }
+        broker.endTurn('turn_ask');
+        // In Full access the same chat's held command with those two words is still a card, and that card offers no "Always".
+        broker.openTurn('chat_a', 'turn_full', scope, 'full_access');
+        for (const [granted, held] of pairs) {
+            assert.equal(fullAccessJudgement('Bash', { command: held }, scope).outcome, 'held', held);
+            const key = (command: string) => {
+                const judged = judge('Bash', { command }, scope);
+                return judged.verdict === 'ask' ? judged.remember : null;
+            };
+            assert.equal(key(held), key(granted), `Ask first's grant on ${granted} would cover ${held}`);
+            const before = cards.length;
+            const answer = broker.ask('turn_full', 'Bash', { command: held });
+            const card = cards.at(-1);
+            assert.equal(cards.length, before + 1, `${held} is a card, not covered by the grant on ${granted}`);
+            assert.ok(card?.kind === 'permission');
+            assert.equal(card.title, fullTitle);
+            assert.equal(card.remember, null, `${held}: its card offers no "Always"`);
+            broker.answer('chat_a', card.request, { allow: true, always: true });
+            assert.equal((await answer).behavior, 'allow');
+            // Even a click on "Always" for it keeps nothing: the next one is a card again.
+            const again = broker.ask('turn_full', 'Bash', { command: held });
+            assert.equal(cards.at(-1)?.kind, 'permission');
+            broker.endTurn('turn_full');
+            await again;
+            broker.openTurn('chat_a', 'turn_full', scope, 'full_access');
+        }
+        // What Full access would run is still covered by the grant, as in Ask first.
+        assert.equal((await broker.ask('turn_full', 'Bash', { command: 'git config --list' })).behavior, 'allow');
+    } finally {
+        broker.endAll();
+    }
+});
+
+test('a shell command longer than the card shows is refused in Full access, as in Ask first, a literal one too', async (t) => {
+    const w = await wired(t);
+    const long = `echo ${'a'.repeat(4100)}`;
+    const here = `frobnicate --file - <<'EOF'\n${'line of a brief\n'.repeat(300)}EOF`;
+    for (const command of [long, here]) {
+        const asked = judge('Bash', { command }, w.scope);
+        assert.equal(asked.verdict, 'deny');
+        assert.match(asked.verdict === 'deny' ? asked.message : '', /longer than|cannot show/);
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, w.scope), { outcome: 'refused', message: asked.verdict === 'deny' ? asked.message : '' });
+        assert.equal((await hooked(w, 'Bash', { command })).decision, 'deny');
+    }
+    assert.deepEqual(w.cards, []);
 });
 
 test('a tool the hook never saw that reaches the prompt tool in Full access is a card, not a run', async (t) => {

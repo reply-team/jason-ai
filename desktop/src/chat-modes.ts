@@ -34,11 +34,13 @@ export function isChatMode(value: unknown): value is ChatMode {
 }
 
 /**
- * The oldest Claude Code a turn in Full access runs on: the turn's hook blocks the tool when it fails only from this
- * version on. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): "To block the action instead, set
- * `"onFailure": "block"` on a `command` or `http` hook. Requires Claude Code v2.1.295 or later."
+ * The oldest Claude Code a turn in Full access runs on: the version on which a hook's `ask` under `-p`, in the default
+ * mode, was seen to override an allow rule, reach the permission prompt tool and wait for its answer, which no page
+ * states. Below it, Full access would rest on a precedence nobody has seen. It is above the version from which the hook
+ * blocks the tool when it fails. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): "To block the action
+ * instead, set `"onFailure": "block"` on a `command` or `http` hook. Requires Claude Code v2.1.295 or later."
  */
-export const fullAccessFloor = '2.1.295';
+export const fullAccessFloor = '2.1.322';
 
 /**
  * Why Full access cannot be chosen on a Claude Code of this version, read as the chat's floor is read (`floorSentence`);

@@ -137,14 +137,17 @@ export class PermissionBroker {
         const judged = judge(tool, input, turn.scope);
         if (judged.verdict === 'allow') return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
         if (judged.verdict === 'deny') return refused(judged.message);
+        // What Full access holds the person answers each time: no "Always" covers it, and its card offers none.
+        let remember = judged.remember;
         if (mode === 'full_access') {
             // What Full access refuses is refused here too, whichever way the request came; anything else is judged and
             // carded as in Ask first.
             const full = fullAccessJudgement(tool, input, turn.scope);
             if (full.outcome === 'refused') return refused(full.message);
+            if (full.outcome === 'held') remember = null;
         }
         if (mode === 'plan_only' && !planCards.has(tool)) return refused(planRefusal);
-        if (judged.remember !== null && this.#always.get(turn.chat)?.has(judged.remember) === true) {
+        if (remember !== null && this.#always.get(turn.chat)?.has(remember) === true) {
             return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'person', mode }));
         }
         if (signal?.aborted === true) return Promise.resolve(this.#decided({ behavior: 'deny', message: withdrawn }, { outcome: 'withdrawn', by: 'host', mode }));
@@ -158,9 +161,9 @@ export class PermissionBroker {
             };
             signal?.addEventListener('abort', withdraw, { once: true });
             const forget = () => signal?.removeEventListener('abort', withdraw);
-            this.#pending.set(request, { chat: turn.chat, turn: turnId, mode, input, remember: judged.remember, timer, settle, forget });
+            this.#pending.set(request, { chat: turn.chat, turn: turnId, mode, input, remember, timer, settle, forget });
             const title = mode === 'full_access' ? fullAccessCardTitle : judged.title;
-            this.#options.emit(turn.chat, { kind: 'permission', request, title, detail: judged.detail, remember: judged.remember === null ? null : judged.covers });
+            this.#options.emit(turn.chat, { kind: 'permission', request, title, detail: judged.detail, remember: remember === null || judged.remember === null ? null : judged.covers });
         });
     }
 

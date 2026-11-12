@@ -105,12 +105,13 @@ test('the turn\'s settings file sits beside its MCP file, readable by its user a
     assert.deepEqual(readdirSync(turns), [], 'a settings file a desktop left is swept at the next start');
 });
 
-test('Full access is offered from Claude Code 2.1.295, read as the floor is read, and never on Codex', () => {
-    assert.equal(fullAccessFloor, '2.1.295');
-    assert.equal(fullAccessSentence('2.1.295'), null);
+test('Full access is offered from Claude Code 2.1.322, read as the floor is read, and never on Codex', () => {
+    assert.equal(fullAccessFloor, '2.1.322');
+    assert.equal(fullAccessSentence('2.1.322'), null);
     assert.equal(fullAccessSentence('2.2.0'), null);
-    assert.equal(fullAccessSentence('2.1.294'), 'Full access needs Claude Code 2.1.295 or newer; this one is 2.1.294. Update Claude Code, for example by running `claude update` in a terminal.');
-    assert.notEqual(fullAccessSentence('2.1.295-beta.1'), null, 'a pre-release of the floor is below it');
+    assert.equal(fullAccessSentence('2.1.321'), 'Full access needs Claude Code 2.1.322 or newer; this one is 2.1.321. Update Claude Code, for example by running `claude update` in a terminal.');
+    assert.notEqual(fullAccessSentence('2.1.295'), null, 'the version that first blocks on a failed hook is below it');
+    assert.notEqual(fullAccessSentence('2.1.322-beta.1'), null, 'a pre-release of the floor is below it');
     assert.match(fullAccessSentence(null) ?? '', /could not be read/);
     assert.equal(codexFullAccess, 'Full access runs on Claude Code only.');
 });

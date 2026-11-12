@@ -440,18 +440,18 @@ test('a chat in Full access sent to Codex goes back to Ask first, and its turn r
     assert.equal(r.chat.open(id).mode, 'ask_first');
 });
 
-test('a Full access send to a Claude Code older than 2.1.295 is refused, saying why, and the chat goes back to Ask first', async (t) => {
+test('a Full access send to a Claude Code older than 2.1.322 is refused, saying why, and the chat goes back to Ask first', async (t) => {
     const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
     t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
-    writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.300 (Claude Code)' }));
+    writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.322 (Claude Code)' }));
     const r = rig(t, { env: { STUB_CLAUDE_VERSION_FILE: versionFile } });
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'full_access', 'claude');
     // Claude Code is put back to an older version after Full access was chosen.
-    writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.290 (Claude Code)' }));
+    writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.300 (Claude Code)' }));
     const said = await r.turn(id, 'hello', claude);
     assert.deepEqual(modes(said), ['ask_first']);
-    assert.deepEqual(done(said), { kind: 'done', error: fullAccessSentence('2.1.290') });
+    assert.deepEqual(done(said), { kind: 'done', error: fullAccessSentence('2.1.300') });
     assert.deepEqual(r.hosts(), [], 'no host started');
     assert.deepEqual(done(await r.turn(id, 'hello', claude)), { kind: 'done', error: null }, 'Ask first runs on it');
 });
