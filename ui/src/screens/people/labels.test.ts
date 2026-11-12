@@ -41,3 +41,17 @@ describe('entryLabel', () => {
         expect(entryLabel(entry('campaign_paused', { type: 'system', id: null }), 'me').title).toBe('Jason paused it');
     });
 });
+
+describe('the line a work item is put back under', () => {
+    it('does not promise a retry, since an approval, a retry and a withdrawn ask after an edit all write it', () => {
+        for (const actor of [
+            { type: 'system', id: null },
+            { type: 'human', id: 'ada' },
+        ] as const) {
+            const label = entryLabel(entry('workitem_released', actor), 'me');
+            expect(label.title).toMatch(/was put back to be taken again$/);
+            expect(label.short).toMatch(/ put back$/);
+            expect(`${label.title} ${label.short}`).not.toMatch(/tried again|try again/);
+        }
+    });
+});
