@@ -58,7 +58,8 @@ public class ShutdownTests
         }
 
         // The acknowledgement is written before the host stops, so waiting is what proves the stop happened.
-        await runtime.WaitForShutdownAsync(Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        // The shutdown itself ends the wait; the bound only fails a hang, and is sized to the slowest runner's pause.
+        await runtime.WaitForShutdownAsync(Ct).WaitAsync(TimeSpan.FromSeconds(60), Ct);
         await runtime.StopAsync();
 
         Assert.False(File.Exists(dir.Paths.DescriptorFile));

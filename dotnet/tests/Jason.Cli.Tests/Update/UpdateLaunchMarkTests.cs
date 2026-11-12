@@ -53,7 +53,8 @@ public class UpdateLaunchMarkTests
         installation.Killed(UpdateStep.Swapped);
         installation.Processes.OnLaunch = _ => Exited();
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(Ct);
-        bounded.CancelAfter(TimeSpan.FromSeconds(10));
+        // The apply ends on the runtime's exit, never on this bound; it only fails a hang, and is sized to the slowest runner.
+        bounded.CancelAfter(TimeSpan.FromSeconds(60));
 
         var refused = await Assert.ThrowsAsync<UpdateException>(() =>
             installation.Applier(Unmoved()).ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.FromSeconds(5)), bounded.Token));
@@ -73,7 +74,8 @@ public class UpdateLaunchMarkTests
         installation.Killed(UpdateStep.Healthy);
         installation.Processes.OnLaunch = _ => Exited();
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(Ct);
-        bounded.CancelAfter(TimeSpan.FromSeconds(10));
+        // The apply ends on the runtime's exit, never on this bound; it only fails a hang, and is sized to the slowest runner.
+        bounded.CancelAfter(TimeSpan.FromSeconds(60));
 
         var rollback = installation.Rollback(Unmoved());
         await rollback.RollBackAsync(bounded.Token);

@@ -250,7 +250,7 @@ public sealed class KillGraceTests : IDisposable
 
             Assert.True(result["timed_out"]!.GetValue<bool>());
             Assert.NotNull(program);
-            Assert.True(Gone(program, TimeSpan.FromSeconds(10)), $"Process {program.Id} still runs after the kill that finished once the call had answered.");
+            Assert.True(Gone(program, TimeSpan.FromSeconds(60)), $"Process {program.Id} still runs after the kill that finished once the call had answered.");
         }
         finally
         {

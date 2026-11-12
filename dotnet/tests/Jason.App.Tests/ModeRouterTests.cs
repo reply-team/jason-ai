@@ -109,8 +109,10 @@ public class ModeRouterTests
     /// runtime mode for real. With the usage refusal removed it does not fail — it starts an in-process runtime
     /// on <b>the default data directory</b> and waits there. Measured: <c>~/.jason</c> created in a home
     /// directory, with a database, a descriptor, a log, and an update check on its way to the internet once the
-    /// first delay was up. So the variable points at this test's own tree, and the run is given a second before
-    /// it is cancelled: a regression fails in a temporary directory, quickly, and reaches nothing.
+    /// first delay was up. So the variable points at this test's own tree, and the run is given thirty seconds before
+    /// it is cancelled: the usage refusal ends the run at once, so the bound is only a guard against a hang, sized to the
+    /// slowest runner's start; a regression fails in a temporary directory and reaches nothing, since the update check's
+    /// first delay is five minutes.
     /// </remarks>
     [Fact]
     public async Task A_data_dir_with_no_path_after_it_starts_no_runtime()
@@ -124,7 +126,7 @@ public class ModeRouterTests
         Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, root);
         Console.SetError(error);
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        bounded.CancelAfter(TimeSpan.FromSeconds(1));
+        bounded.CancelAfter(TimeSpan.FromSeconds(30));
         try
         {
             var exit = await ModeRouter.RunAsync(["runtime", "run", "--data-dir"], bounded.Token);
