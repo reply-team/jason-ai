@@ -64,6 +64,18 @@ test('a shell is named only by the login-shell lookup, which returns before it a
     assert.notDeepEqual(processViolations('src/shell-path.ts', "if (process.platform !== 'darwin') return x;\nexecFile(process.env.SHELL ?? '/bin/zsh', ['-ilc', '']);"), []);
 });
 
+test('the Windows sandbox check may name cmd.exe and no other shell, and no other module may name it', () => {
+    assert.deepEqual(processViolations('src/codex-sandbox.ts', "const cmd = win32.join(systemRoot, 'System32', 'cmd.exe');"), []);
+    assert.notDeepEqual(processViolations('src/codex-sandbox.ts', "const shell = 'powershell.exe';"), []);
+    assert.notDeepEqual(processViolations('src/codex-sandbox.ts', "const shell = 'cmd';"), []);
+    assert.notDeepEqual(processViolations('src/codex-sandbox.ts', 'const shell = process.env.ComSpec;'), []);
+    assert.notDeepEqual(processViolations('src/chat.ts', "const cmd = win32.join(systemRoot, 'System32', 'cmd.exe');"), []);
+    // It runs the check by the runner once, and imports nothing that starts a process itself.
+    assert.notDeepEqual(processViolations('src/codex-sandbox.ts', "import { spawn } from 'node:child_process';"), []);
+    assert.notDeepEqual(processViolations('src/codex-sandbox.ts', 'runFile(a, b, c);\nrunFile(a, b, c);'), []);
+    assert.notDeepEqual(processViolations('src/chat.ts', "import { runFile } from './programs.ts';"), []);
+});
+
 test('a require of child_process is refused even in a named module, destructured or whole, since only an import names what it takes', () => {
     assert.notDeepEqual(processViolations('src/cli.ts', "const { exec } = require('node:child_process');"), []);
     assert.notDeepEqual(processViolations('src/cli.ts', "const { execFile } = require('child_process');"), []);
@@ -133,8 +145,8 @@ test('a process is signalled only on two lines: a look whether a process runs, w
     assert.notDeepEqual(processViolations('src/chat-process.ts', '(target) => process.kill(target, 0),'), []);
 });
 
-test('the program runner is called with a command line of a module\'s own only by the runner itself and by a set-up chat\'s one naming run', () => {
-    assert.deepEqual(runFileCalls, { 'src/programs.ts': 1, 'src/chat-naming.ts': 1 });
+test('the program runner is called with a command line of a module\'s own only by the runner itself, by a set-up chat\'s one naming run and by the Windows check of Codex\'s sandbox', () => {
+    assert.deepEqual(runFileCalls, { 'src/programs.ts': 1, 'src/chat-naming.ts': 1, 'src/codex-sandbox.ts': 1 });
     assert.match(processModules['src/programs.ts'] ?? '', /an agent host's one naming run of a set-up chat/);
     for (const [path, calls] of Object.entries(runFileCalls)) {
         const text = readFileSync(join(root, path), 'utf8');

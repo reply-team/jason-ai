@@ -193,6 +193,15 @@ Claude Code.
   turn is refused before Codex starts, with a sentence that says to update Codex. **The chat does not read your Codex
   config.toml, so a provider or profile set there is not used; connect a key on the Connect card.** Nor are the MCP
   servers it names loaded, since Codex asks no one before such a tool runs; its sign-in is still used.
+- **On Windows, Codex needs its elevated sandbox.** Every Windows Codex turn names it (`windows.sandbox="elevated"`),
+  since a command in Codex's other Windows sandbox can read Jason's data directory. Naming it does not prove it is set
+  up, so at the first send to Codex in each run of the desktop the chat checks first ("Checking Codex's sandbox…"): a
+  command in that sandbox tries to open the runtime's run file and says only whether it could. The chat runs on Codex
+  only when the command ran and could not open the file; otherwise the turn is refused with one sentence: **Codex on
+  Windows needs its elevated sandbox, set up once by an administrator with `codex sandbox setup --elevated`
+  (https://learn.chatgpt.com/docs/windows/windows-sandbox), or chat on Claude Code.** The answer is kept for that Codex until the desktop quits; with no runtime running there is nothing to
+  open, and the turn is refused until there is. The check is not run at the Connect card, since naming the elevated
+  sandbox may ask for an administrator.
 - **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers; it acts through nothing. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's

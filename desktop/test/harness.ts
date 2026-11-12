@@ -166,3 +166,12 @@ export const fakeBox: SecretBox = {
     // A keyring, so the rows read alike on a Linux runner.
     getSelectedStorageBackend: () => 'gnome_libsecret',
 };
+
+/**
+ * Writes a runtime's run file, naming no address, into the bench's data directory: what the Windows check of Codex's
+ * sandbox reads before a chat's first Codex turn (`codex-sandbox.ts`), and finds nothing to read without.
+ */
+export function placeRunFile(b: Bench): void {
+    mkdirSync(dirname(b.paths.runFile), { recursive: true });
+    writeFileSync(b.paths.runFile, '{}');
+}

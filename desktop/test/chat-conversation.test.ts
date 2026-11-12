@@ -11,7 +11,7 @@ import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { readConversations } from '../src/chat-conversations.ts';
 import { floorSentence } from '../src/host-version.ts';
-import { bench, type Bench, type Recorded } from './harness.ts';
+import { bench, placeRunFile, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 
@@ -31,6 +31,7 @@ interface Rig {
 function rig(t: { after(fn: () => void | Promise<void>): void }, chatOptions: Partial<ChatOptions> = {}): Rig {
     const removals: (() => void)[] = [];
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude', 'codex'] });
+    placeRunFile(b);
     const campaigns = join(b.root, 'campaigns.json');
     writeFileSync(campaigns, '[]');
     b.env.STUB_CAMPAIGNS_FILE = campaigns;

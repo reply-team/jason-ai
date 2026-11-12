@@ -228,6 +228,14 @@ export const codexSearchSettings: readonly string[] = ['web_search=cached', 'fea
 export const codexWindowsSandbox = 'windows.sandbox="elevated"';
 
 /**
+ * The settings every Codex turn on a platform sets for the run by `-c`, before the model and the effort: on Windows the
+ * sandbox's kind, then the search settings. The Windows sandbox check runs under the same set (`codex-sandbox.ts`).
+ */
+export function codexTurnSettings(platform: Platform): string[] {
+    return [...(platform === 'win32' ? [codexWindowsSandbox] : []), ...codexSearchSettings];
+}
+
+/**
  * The command line of one Codex turn: `codex exec` in its read-only sandbox, emitting JSON events, the prompt read from
  * standard input (`-`), resumed as `codex exec resume <thread>` from the chat's second turn on.
  *
@@ -268,8 +276,7 @@ export const codexWindowsSandbox = 'windows.sandbox="elevated"';
  * (`codexToolsOff`). The settings are `codexSearchSettings`.
  */
 export function codexArguments(turn: { platform: Platform; model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
-    const kind = turn.platform === 'win32' ? ['-c', codexWindowsSandbox] : [];
-    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, ...codexSearchSettings.flatMap((setting) => ['-c', setting])];
+    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...codexTurnSettings(turn.platform).flatMap((setting) => ['-c', setting])];
     if (turn.model) args.push('--model', turn.model);
     if (turn.effort !== undefined) args.push('-c', `model_reasoning_effort=${effortWord(turn.effort)}`);
     if (turn.resume) args.push('resume', resumable(turn.resume));

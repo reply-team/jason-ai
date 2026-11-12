@@ -12,7 +12,9 @@ const stdin = listing ? '' : record.readStdin();
 // A run that asks a host to name a set-up chat, told apart by the flag that keeps nothing of it, is recorded by a name of
 // its own, so what a test reads of the chat's turns is the turns alone.
 const naming = (name === 'claude' && args.includes('--no-session-persistence')) || (name === 'codex' && args.includes('--ephemeral'));
-record(naming ? `${name}-naming` : name, args, stdin);
+// The Windows check of Codex's sandbox is recorded by a name of its own too, so a test's turns are the turns alone.
+const sandboxCheck = name === 'codex' && args[0] === 'sandbox';
+record(naming ? `${name}-naming` : sandboxCheck ? 'codex-sandbox' : name, args, stdin);
 const said = args.join(' ');
 
 if (process.env.STUB_HANG === name) {
@@ -20,6 +22,20 @@ if (process.env.STUB_HANG === name) {
     // for. Its id is written to the file STUB_HANG_PID names, so a test can see it has gone.
     if (process.env.STUB_HANG_PID) writeFileSync(process.env.STUB_HANG_PID, String(process.pid));
     setInterval(() => undefined, 60000);
+} else if (sandboxCheck) {
+    // What the command after `--` would print in a sandbox, by STUB_CODEX_SANDBOX: `holds` (the default) the first
+    // marker alone, `reads` both markers, `silent` neither, `hangs` nothing ever. The command itself is never run.
+    const command = args.slice(args.indexOf('--') + 1);
+    const ran = command[command.indexOf('echo') + 1];
+    const read = command[command.lastIndexOf('echo') + 1];
+    const shape = process.env.STUB_CODEX_SANDBOX || 'holds';
+    if (shape === 'hangs') {
+        if (process.env.STUB_HANG_PID) writeFileSync(process.env.STUB_HANG_PID, String(process.pid));
+        setInterval(() => undefined, 60000);
+    }
+    else if (shape === 'holds') process.stdout.write(`${ran} \r\n`);
+    else if (shape === 'reads') process.stdout.write(`${ran} \r\n${read}\r\n`);
+    if (shape !== 'hangs') process.exitCode = 1;
 } else if (listing) {
     require('./app-server.cjs')();
 } else if (said === '--version' && name === 'claude' && process.env.STUB_CLAUDE_VERSION_STUCK) {

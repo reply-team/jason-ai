@@ -37,6 +37,17 @@ Codex's version is read with `codex --version` before each chat turn on it, neve
 (`codexFloor`), the first whose `exec` takes `--ignore-user-config`, or one whose version cannot be read, has the turn
 refused before Codex starts, with a sentence that says to update Codex.
 
+On Windows every Codex turn names the elevated sandbox for the run (`codexWindowsSandbox`): the person's own choice of
+sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data directory.
+Naming it proves nothing (OpenAI's page says a fall to the unelevated sandbox can happen where the elevated one is not
+set up), so the first Codex turn of each run of the desktop checks it (`codex-sandbox.ts`): `codex sandbox`, with the
+turn's own `-c` settings and its read-only mode, runs `cmd.exe` by its full path to print one random marker and a
+second only if `type` opens the run file, which it never prints. The turn runs only on the first marker alone, within
+thirty seconds; the second marker refuses it, and anything else proves nothing. The page says "Checking Codex's
+sandbox…" while it runs. The answer is kept by Codex's file, version and `CODEX_HOME` until the desktop quits; a check
+that proved nothing, or found no run file, runs again at the next send. `codex sandbox` has no `--ignore-user-config`
+and still reads the rest of the person's config.toml; only what `-c` sets is set over it.
+
 **Nothing of the person's own tools reaches a turn.** A Claude Code turn runs `--strict-mcp-config` with the turn's MCP
 file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true` and deny the browser's
 server by name (`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) in every mode. Every Codex turn, Plan only

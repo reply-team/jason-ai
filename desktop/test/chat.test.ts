@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/chat.ts';
@@ -12,8 +13,9 @@ import { header, turnInput } from '../src/chat-header.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { codexFloor, codexFloorSentence, floorSentence, versionLimitMs } from '../src/host-version.ts';
 import { codexWindowsSandbox } from '../src/chat-hosts.ts';
+import { checkingSandbox, sandboxSentence, sandboxUncheckedSentence } from '../src/codex-sandbox.ts';
 import type { RunResult } from '../src/programs.ts';
-import { bench, type Bench, type Recorded } from './harness.ts';
+import { bench, placeRunFile, type Bench, type Recorded } from './harness.ts';
 import { NamedChat } from './named-chat.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -42,6 +44,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
     // The bench's folder is removed only after every turn has been stopped and its host has exited.
     const removals: (() => void)[] = [];
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: options.programs ?? ['claude', 'codex', 'gemini'], env: { JASON_Plugins__Grants__slack__Env__0: 'SLACK_PROXY', CLAUDE_AUTO_BACKGROUND_TASKS: '1', ...options.env } });
+    placeRunFile(b);
     const bundle = join(b.root, 'bundle');
     mkdirSync(bundle, { recursive: true });
     mkdirSync(join(b.paths.data, 'config'), { recursive: true });
@@ -121,6 +124,8 @@ const plan = (r: Rig, steps: unknown[]) => {
 const texts = (events: ChatEvent[]) => events.flatMap((event) => (event.kind === 'text' ? [event.text] : []));
 const kinds = (events: ChatEvent[]) => events.map((event) => event.kind);
 const doneOf = (events: ChatEvent[]) => events.at(-1);
+/** What a turn said but the Windows check of Codex's sandbox, which a Codex turn on Windows says first. */
+const unchecked = (events: ChatEvent[]) => events.filter((event) => !(event.kind === 'step' && event.text === checkingSandbox));
 const same = (a: string, b: string) => realpathSync.native(a).toLowerCase() === realpathSync.native(b).toLowerCase();
 const flagValue = (args: string[], flag: string) => args[args.indexOf(flag) + 1] ?? '';
 /** The elements after a flag that takes a list, up to the next flag. */
@@ -307,7 +312,7 @@ test('a card nobody answers is refused when its window ends, and the card goes',
 test('a Codex turn runs read-only with the words on stdin, shows its steps, and resumes its thread', async (t) => {
     const r = rig(t);
     const said = await r.turn('c1', words, { host: 'codex' });
-    assert.deepEqual(said, [
+    assert.deepEqual(unchecked(said), [
         { kind: 'step', text: 'Ran a jason command', detail: 'jason campaign list --json' },
         { kind: 'text', text: `heard ${asked(words).length} characters` },
         { kind: 'done', error: null },
@@ -355,7 +360,7 @@ test('a conversation keeps a session per host: a turn resumes its own host\'s, a
     await r.turn('c1', 'Back on Claude Code', { host: 'claude' });
     const [, codex, claude] = r.hosts();
     assert.ok(!codex?.args.includes('resume'), 'Codex has no session of this conversation');
-    assert.deepEqual(switched[0], { kind: 'fresh', reason: 'host_changed' }, 'the page is told first');
+    assert.deepEqual(unchecked(switched)[0], { kind: 'fresh', reason: 'host_changed' }, 'the page is told first');
     const recapped = ['<earlier-messages>', `person: "${words}"`, /agent: "heard \d+ characters"/.source, '</earlier-messages>', '', 'And on Codex?'];
     const lines = (codex?.stdin ?? '').split('\n').slice(-6);
     assert.equal(lines.length, 6, codex?.stdin);
@@ -431,6 +436,77 @@ test('a turn on a Claude Code below the floor is refused before any child starts
     const codex = await r.turn('c2', words, { host: 'codex' });
     assert.deepEqual(doneOf(codex), { kind: 'done', error: null });
     assert.deepEqual(asked.slice(2), [{ name: 'codex', args: ['--version'], timeoutMs: versionLimitMs }]);
+});
+
+// The Windows check of Codex's sandbox, on a chat told it runs on Windows wherever the test runs; the stand-in answers
+// for the sandbox by STUB_CODEX_SANDBOX and never runs the command.
+const onWindows = { platform: 'win32' as const };
+const windowsEnv = { SystemRoot: 'C:\\Windows' };
+const checks = (r: Rig) => r.b.record().filter((each) => each.name === 'codex-sandbox');
+
+test('on Windows the first Codex turn of the run checks the sandbox under the turn\'s settings, says so, and runs when it holds; the next turn does not check again', async (t) => {
+    const r = rig(t, { chat: onWindows, env: windowsEnv });
+    const said = await r.turn('c1', words, { host: 'codex' });
+    assert.deepEqual(said[0], { kind: 'step', text: checkingSandbox });
+    assert.deepEqual(doneOf(said), { kind: 'done', error: null });
+    assert.equal(r.hosts().length, 1);
+    const [check] = checks(r);
+    assert.ok(check !== undefined);
+    assert.ok(check.args.includes(codexWindowsSandbox), 'the turn\'s own kind');
+    assert.ok(same(check.cwd ?? '', r.b.paths.chat));
+    assert.ok(r.hosts()[0]?.args.includes(codexWindowsSandbox));
+
+    const again = await r.turn('c1', words, { host: 'codex' });
+    assert.ok(!again.some((event) => event.kind === 'step' && event.text === checkingSandbox));
+    assert.equal(checks(r).length, 1, 'remembered for the run');
+    assert.equal(r.hosts().length, 2);
+});
+
+test('on Windows a sandbox whose command read the run file refuses every Codex turn of the run, naming the setup and Claude Code', async (t) => {
+    const r = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'reads' } });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(r.hosts(), [], 'no Codex turn ran');
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.equal(checks(r).length, 1, 'remembered for the run');
+    assert.deepEqual(r.started, []);
+});
+
+test('on Windows a check that printed neither marker, or ran out of time, refuses the turn and checks again at the next send', async (t) => {
+    const silent = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'silent' } });
+    assert.deepEqual(doneOf(await silent.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(doneOf(await silent.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.equal(checks(silent).length, 2, 'proved nothing, so not remembered');
+    assert.deepEqual(silent.hosts(), []);
+
+    const pidFile = join(realpathSync(tmpdir()), `jason-sandbox-check-${process.pid}-${Date.now()}.pid`);
+    t.after(() => rmSync(pidFile, { force: true }));
+    const hung = rig(t, { chat: { ...onWindows, sandboxLimitMs: 300 }, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'hangs', STUB_HANG_PID: pidFile } });
+    assert.deepEqual(doneOf(await hung.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(hung.hosts(), []);
+    // The check is ended at its limit, as a stop ends a host.
+    assert.ok(await settle(() => existsSync(pidFile) && gone(Number(readFileSync(pidFile, 'utf8')))));
+});
+
+test('on Windows with no run file to read the check proves nothing: the turn is refused saying so, and nothing is remembered', async (t) => {
+    const r = rig(t, { chat: onWindows, env: windowsEnv });
+    rmSync(r.b.paths.runFile);
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxUncheckedSentence });
+    assert.deepEqual(checks(r), []);
+    assert.deepEqual(r.hosts(), []);
+    writeFileSync(r.b.paths.runFile, '{}');
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null });
+    assert.equal(checks(r).length, 1);
+});
+
+test('on macOS and Linux, and for a Claude Code turn on Windows, no sandbox check runs', async (t) => {
+    for (const platform of ['darwin', 'linux'] as const) {
+        const r = rig(t, { chat: { platform }, env: { STUB_CODEX_SANDBOX: 'reads' } });
+        assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null }, platform);
+        assert.deepEqual(checks(r), [], platform);
+    }
+    const claude = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'reads' } });
+    assert.deepEqual(doneOf(await claude.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
+    assert.deepEqual(checks(claude), []);
 });
 
 test('a turn on a Codex older than the version that leaves the person\'s configuration unread is refused before it starts, saying to update Codex', async (t) => {

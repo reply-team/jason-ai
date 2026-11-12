@@ -36,10 +36,18 @@ const listingStart = /\bstartListing\b/;
 
 /**
  * The modules that call the program runner, `runFile`, with a command line of their own, and how many calls each makes:
- * the runner's own run of a program the PATH finds, and a set-up chat's one naming run. Anything else starts a program
- * through `Programs.run`, by a name the desktop knows.
+ * the runner's own run of a program the PATH finds, a set-up chat's one naming run, and on Windows the check of Codex's
+ * sandbox before a chat's first Codex turn. Anything else starts a program through `Programs.run`, by a name the
+ * desktop knows.
  */
-export const runFileCalls: Readonly<Record<string, number>> = { 'src/programs.ts': 1, 'src/chat-naming.ts': 1 };
+export const runFileCalls: Readonly<Record<string, number>> = { 'src/programs.ts': 1, 'src/chat-naming.ts': 1, 'src/codex-sandbox.ts': 1 };
+
+/**
+ * The one module that may name a shell other than the login-shell lookup, and only cmd.exe: it is the command
+ * `codex sandbox` runs inside Codex's Windows sandbox for the check, by its full path under the system folder. The
+ * desktop starts Codex there, never cmd.
+ */
+export const sandboxedShell: Readonly<Record<string, string>> = { 'src/codex-sandbox.ts': "'cmd.exe'" };
 
 const runFileCall = /\brunFile\s*\(/g;
 const runFileDefinition = /function\s+runFile\s*\(/g;
@@ -100,7 +108,9 @@ export function processViolations(path: string, text: string): string[] {
         }
     }
     if (shellOption.test(text)) found.push(`${path} sets a shell option, which nothing in the desktop may`);
-    if (path !== 'src/shell-path.ts' && (shellName.test(text) || shellVariable.test(text))) {
+    const sandboxed = sandboxedShell[path];
+    const shellText = sandboxed === undefined ? text : text.split(sandboxed).join("''");
+    if (path !== 'src/shell-path.ts' && (shellName.test(shellText) || shellVariable.test(text))) {
         found.push(`${path} names a shell, which only the login-shell lookup of macOS and Linux in src/shell-path.ts may`);
     }
     if (path === 'src/shell-path.ts' && !/process\.platform\s*!==\s*'darwin'\s*&&\s*process\.platform\s*!==\s*'linux'\)\s*return/.test(text)) {
