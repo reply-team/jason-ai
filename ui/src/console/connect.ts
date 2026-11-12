@@ -562,9 +562,10 @@ function rowActs(account: DesktopReplyAccount, place: Place, busy: Html | null):
         account.status !== 'cookieInvalid' &&
         !signedOut.value.includes(account.id)
     ) {
+        // Reply's one call flips the state, so Pause is offered only from enabled and Resume only from disabled; an
+        // account at its daily limit is on and offers neither.
         if (account.status === 'disabled') acts.push(button('Resume', 'connect.resume', account.id));
-        else if (account.status === 'enabled' || account.status === 'dailyLimitReached')
-            acts.push(button('Pause', 'connect.pause', account.id));
+        else if (account.status === 'enabled') acts.push(button('Pause', 'connect.pause', account.id));
     }
     if (account.channel === 'email' || account.channel === 'linkedin')
         acts.push(button('Delete', 'connect.delete', account.channel, account.id));

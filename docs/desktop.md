@@ -158,8 +158,8 @@ lists each key and each card's grant.
   Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
   to update the Reply CLI and offers nothing. **Add account** offers Gmail, Outlook and LinkedIn (a channel the account
   does not have is not offered). A mailbox row offers **Limits** (its daily limit), **Unblock** (sending again after its
-  provider stopped it) and **Delete**; a LinkedIn row **Pause** or **Resume** and **Delete**; and a row that is not in a
-  good state **Reconnect**. A connect or a reconnect makes a link to Reply's own page, which needs no Reply sign-in:
+  provider stopped it) and **Delete**; a LinkedIn row **Pause** when it is enabled, **Resume** when it is disabled, neither
+  at its daily limit, and **Delete**; and a row that is not in a good state **Reconnect**. A connect or a reconnect makes a link to Reply's own page, which needs no Reply sign-in:
   the desktop opens it here, in this computer's browser, or, where you tick **Copy a new link to hand on**, puts it on
   the clipboard for you to send to whoever owns the mailbox or the LinkedIn account. They sign in to Google, Microsoft
   or LinkedIn there with their own credentials, so a password never passes through Jason. Only a link that expires and

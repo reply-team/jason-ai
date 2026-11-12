@@ -216,6 +216,7 @@ test('each code the card acts on is handled as ruled, and every other code, know
         ['outcome.unknown', said.outcomeUnknown],
         ['account.status_changed', said.stateChanged],
         ['account.status_unknown', said.stateUnknown],
+        ['account.pause_unavailable', said.pauseUnavailable],
         ['email_account.not_found', said.accountGone],
         ['linkedin.account_not_found', said.accountGone],
     ] as const) {

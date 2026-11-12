@@ -39,6 +39,7 @@ export const replyAccountSentences = {
     outcomeUnknown: 'Reply did not say how that ended; the list is read again to show where it stands.',
     stateChanged: 'The account’s state changed meanwhile, so nothing was changed; the list is read again.',
     stateUnknown: 'Reply gave the account a state the desktop does not know, so nothing was changed; the list is read again.',
+    pauseUnavailable: 'Reply cannot pause this account from the status it is in.',
     accountGone: 'Reply no longer has that account; the list is read again.',
     mailboxLimit: 'This Reply account has reached the number of mailboxes its plan allows.',
     mailboxSeat: 'One more mailbox would need another paid seat in Reply.',
@@ -105,6 +106,7 @@ const rereads: Readonly<Record<string, string>> = {
     [codes.outcomeUnknown]: replyAccountSentences.outcomeUnknown,
     [codes.accountStatusChanged]: replyAccountSentences.stateChanged,
     [codes.accountStatusUnknown]: replyAccountSentences.stateUnknown,
+    [codes.accountPauseUnavailable]: replyAccountSentences.pauseUnavailable,
     [codes.emailAccountNotFound]: replyAccountSentences.accountGone,
     [codes.linkedInAccountNotFound]: replyAccountSentences.accountGone,
 };

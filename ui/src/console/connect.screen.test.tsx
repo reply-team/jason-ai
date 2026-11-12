@@ -549,7 +549,7 @@ describe('the Reply card, its acts', () => {
             ['2', ['Reconnect', 'Limits', 'Unblock', 'Delete']],
             ['11', ['Pause', 'Delete']],
             ['12', ['Resume', 'Delete']],
-            ['13', ['Pause', 'Delete']],
+            ['13', ['Delete']],
             ['14', ['Reconnect', 'Delete']],
             ['15', ['Reconnect', 'Delete']],
             ['21', []],

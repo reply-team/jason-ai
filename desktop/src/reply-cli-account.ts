@@ -27,6 +27,7 @@ export const replyCliCodes = {
     linkedInAccountInUse: 'linkedin.account_in_use',
     accountStatusUnknown: 'account.status_unknown',
     accountStatusChanged: 'account.status_changed',
+    accountPauseUnavailable: 'account.pause_unavailable',
     accessFeatureUnavailable: 'access.feature_unavailable',
     outcomeUnknown: 'outcome.unknown',
 } as const;
