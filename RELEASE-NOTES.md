@@ -19,36 +19,71 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.36.0-unwritten
+# Jason 0.37.0-unwritten
 
-## What is new since 0.35.0
+## What is new since 0.36.0
 
 The desktop's chat is fenced more tightly: it loads none of your own MCP servers or connectors, it runs Codex on Windows only where Codex's sandbox keeps Jason's data unreadable, and the CLI declines, inside a chat turn, the commands that give your word or change the installation.
 
 - **The chat loads none of your own MCP servers or connectors,** on Claude Code and on Codex. Every MCP tool call the chat does make goes through its permission model. What you give up: the chat no longer reads your Codex `config.toml`, so a provider or a profile set there is not used; connect a key on the Connect card instead.
 - **On Windows, a Codex chat runs only where Codex's elevated sandbox keeps Jason's data unreadable.** The desktop checks this itself, with no model, at the first Codex message of a run. Where the check fails, the chat says so and names `codex sandbox setup --elevated`, or Claude Code.
 - **The CLI refuses a person's word and changes to the installation inside a chat turn.** Every desktop chat turn carries `JASON_CONFINED`, and under it the CLI refuses, before any request, the commands that give your word or change this installation, with one sentence and exit 1. This is a higher bar, not a boundary: a program that holds the run token can still act as you.
+- **The desktop's Reply card acts on accounts through reply-cli's own `account` verbs**: connect, reconnect and the waiting list; an email account's daily limit; pause and resume of a LinkedIn account; unblock of a mailbox; and delete of either. Each change asks you first in a confirmation that names the account and the act; a connection link opens in your browser or is copied for you, and is never logged or kept. An agent's chat is refused these acts in every mode.
 - **A plugin's secret stays out of an AI role's agent.** A secret given through the runtime's environment, by either of the two ways the plugin guide offers, no longer reaches the agent a role starts.
 
-## Fixed since 0.35.0
+## Fixed since 0.36.0
 
 - **Appending to a file several plugins write at once** no longer fails one of them while the others keep writing: the wait for the file counts as stuck only while nobody makes progress, and a holder that writes nothing still fails the append after ten seconds.
 
-## Upgrading from 0.35.0
+## Upgrading from 0.36.0
 
-Nothing stops: no setting is renamed, and no start refuses a setting 0.35.0 took. This release adds no database migration.
+Nothing stops: no setting is renamed, and no start refuses a setting 0.36.0 took. This release adds no database migration.
 
 - **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` and `jason ui install` follow, and `jason plugin install <id> --replace` for each package you installed and did not edit.
 - **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the disk image for your machine from this release, or let an installed desktop offer the update.
 - **Codex on Windows needs its elevated sandbox for the chat.** Have an administrator run `codex sandbox setup --elevated` once, or chat on Claude Code; until then the chat declines a Codex message and says so.
 - **The chat no longer uses the providers in Codex's `config.toml`.** Connect a key on the Connect card.
+- **The desktop's Reply card needs reply-cli 0.21.0 or newer;** below it, the card offers to update reply-cli where npm is installed.
 - **Claude Code older than 2.1.257 runs no chat turn;** update Claude Code first.
 - **Codex older than 0.122.0 runs no chat turn;** the chat says to update Codex.
 - **Going back:** what `jason update apply --version` to an older release does to a newer plugin package, and how to load one again, is in [Applying an older
   release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release).
-- **From 0.34.x or earlier,** the notes of each release in between apply as well.
+- **From 0.35.x or earlier,** the notes of each release in between apply as well.
 
 ## Known issues
+
+Through Reply, a person the account already holds is never found by `audience.search`, however well they match, while
+`audience.preview` counts and samples them, so a search can find fewer people than its preview said. A person the
+campaign holds and Reply does not, one brought from a file say, can be found by a search again and is charged for; Jason
+keeps them the one member they are.
+
+A person the campaign holds from elsewhere, found by a search under another address, with no LinkedIn profile the two
+share and no identifier of that provider pinned, becomes a second contact: a name never matches anybody.
+
+Through Reply, a stop deletes the search's list: the people Reply found since the last read are charged, stay Reply's
+contacts and never land in the campaign.
+
+A search a person resumes at the provider after it ended `stalled` is not followed by the poll again; a read anybody
+makes still lands its page: `jason workitem create <campaign-id> --kind provider_op --operation audience.search_status
+--input '{"search":"<the search's work item>","limit":100}'`.
+
+A threshold set while nobody is on the campaign says at once that the reserve is low, since a count of nobody is under
+any threshold, and wakes the manager for nothing. Set it once a search's people have landed.
+
+Routes changed while the runtime was stopped, the settings file edited by hand say, are not refused at the next start,
+which has no routes in force to keep, and a search whose start is under way when a route changes is not counted yet. A
+search still followed whose account the routes then name nowhere is said in the log at warning, with its campaign; until
+a route names that account again, its reads and its stop are refused and it goes on at the provider to its count.
+
+A search the provider had already ended when its campaign was archived ends as it ended, and through Reply its list
+stays at Reply with any people not yet read. A search whose start was under way when its campaign was archived has no
+record yet, so nothing stops it: whether Reply took the start is read at Reply.
+
+Full access, the chat's third mode, is not in this version: the menu shows it disabled. Its code is in the release, switched off, because in two readings its refusals did not hold against commands spelled another way.
+
+In Ask first, and in Plan only, the desktop's chat runs `jason audience preview`, `jason audience filter-values` and
+`jason audience availability` without a card, as in 0.36.0. Each one asks the provider, and nothing in Jason limits how
+often a chat makes them.
 
 Codex in the desktop's chat reads and advises and acts through nothing: its sandbox is read-only.
 
