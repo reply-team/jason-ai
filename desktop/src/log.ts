@@ -91,6 +91,8 @@ export const templates = {
     chat_mode_changed: 'A chat went from mode {From} to mode {To}',
     chat_turn_stopped: 'A chat turn was stopped by the desktop: {Cause}',
     agent_folder_unowned: 'The chat folder\'s agent settings could not be put right at the start ({Code})',
+    chat_full_folder_failed: 'A Full access folder failed at {Step} ({Code})',
+    chat_full_folder_open_failed: 'The Open folder button could not open a Full access folder',
 } as const;
 
 export type TemplateName = keyof typeof templates;

@@ -30,6 +30,7 @@ export const invokeChannels = {
     'chat.attach': 'jason:chat.attach',
     'chat.rename': 'jason:chat.rename',
     'chat.setMode': 'jason:chat.setMode',
+    'chat.openFolder': 'jason:chat.openFolder',
     'chat.feed': 'jason:chat.feed',
     'links.take': 'jason:links.take',
 } as const;

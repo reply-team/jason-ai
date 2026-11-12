@@ -236,6 +236,13 @@ export type DesktopChatEvent =
     | { kind: 'line'; line: DesktopLineEntry; folded: boolean }
     /** The Feed's catch-up read back fewer lines than were written while the window was closed; newer ones follow. */
     | { kind: 'gap' }
+    /**
+     * A sentence the desktop says once, in its own words: a campaign's or project's folder left out of the chat because its
+     * `.claude` holds skills, agents or commands, or, with `folder`, the name of the folder a Full access grant worked in,
+     * kept for seven days after Full access ended, which `chat.openFolder` opens. A notice is not kept with the
+     * conversation.
+     */
+    | { kind: 'notice'; text: string; folder?: string }
     /** The turn is over: `error` is null when it ended well, else the host's own words for why it did not. */
     | { kind: 'done'; error: string | null };
 
@@ -472,6 +479,11 @@ export interface JasonDesktop {
          * this answers whenever the mode changed. Refused for a conversation the desktop does not keep.
          */
         setMode(chatId: string, mode: DesktopChatMode, host: string): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * The Open folder button of a `notice` that carries a `folder`: opens that ended Full access folder in the system's
+         * file manager. Only a folder of that name the desktop keeps is opened; anything else is refused.
+         */
+        openFolder(name: string): Promise<DesktopRefusal | null>;
         /**
          * The Feed, made on the first ask, with the journal lines the page hands it: each line of a kind the Feed takes,
          * about a campaign, with every id in its shape, and not taken before, goes at its end and is said as a `line`

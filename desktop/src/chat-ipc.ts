@@ -17,7 +17,7 @@
 import { ChatRefused, type Chat } from './chat.ts';
 import { handle, type IpcRegistrar, type Refusal } from './ipc.ts';
 
-export type ChatCalls = Pick<Chat, 'send' | 'stop' | 'answer' | 'list' | 'open' | 'create' | 'remove' | 'restart' | 'attach' | 'rename' | 'setMode' | 'feed'>;
+export type ChatCalls = Pick<Chat, 'send' | 'stop' | 'answer' | 'list' | 'open' | 'create' | 'remove' | 'restart' | 'attach' | 'rename' | 'setMode' | 'openEndedFolder' | 'feed'>;
 
 /** What the page is answered with when the chat refused a call: `DesktopRefusal` on the page's side. */
 export interface ChatRefusal {
@@ -47,5 +47,6 @@ export function registerChat(ipc: IpcRegistrar, chat: ChatCalls, origin: () => s
     handle(ipc, 'chat.attach', origin, (chatId, campaignId) => answered(() => chat.attach(chatId, campaignId)), refused);
     handle(ipc, 'chat.rename', origin, (chatId, title) => answered(() => chat.rename(chatId, title)), refused);
     handle(ipc, 'chat.setMode', origin, (chatId, mode, host) => answered(() => chat.setMode(chatId, mode, host)), refused);
+    handle(ipc, 'chat.openFolder', origin, (name) => answered(() => chat.openEndedFolder(name)), refused);
     handle(ipc, 'chat.feed', origin, (lines, options) => answered(() => chat.feed(lines, options)), refused);
 }

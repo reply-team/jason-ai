@@ -305,6 +305,17 @@ define('feed.campaign', ([id]) => {
 
 define('feed.needs', () => here().dock.show('needs'));
 
+/** The Open folder button of the notice that says a Full access folder is kept: the desktop opens that folder alone. */
+define('chat.openFolder', ([id, name]) => {
+    if (typeof id !== 'string' || typeof name !== 'string') return;
+    here()
+        .desktop.chat.openFolder(name)
+        .then((answer) => {
+            if (isRefusal(answer)) changeChat(id, (chat) => told(chat, answer.refused));
+        })
+        .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
+});
+
 define('chat.attach', ([id, campaignId]) => {
     if (typeof id !== 'string' || typeof campaignId !== 'string') return;
     here()
@@ -453,6 +464,15 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                         ? `${host?.label ?? 'This agent host'} has not seen this conversation; it was given the last messages.`
                         : "The agent's memory of this conversation was gone; it starts from the last messages.",
                 );
+            case 'notice':
+                return entry.folder === null
+                    ? noteLine(entry.text)
+                    : html`<div class="note chat-note">
+                          ${entry.text}
+                          <button class="btn sm" type="button" ${act('chat.openFolder', chat.id, entry.folder)}>
+                              Open folder
+                          </button>
+                      </div>`;
             case 'afresh':
                 return noteLine(
                     "Started afresh: the agent's next turn begins without its memory of this conversation.",

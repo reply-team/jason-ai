@@ -187,8 +187,8 @@ export interface ChatOptions {
     sweepCap?: number;
     /** Opens a folder for the person to see (the Open folder button); absent, nothing is opened. */
     openFolder?(path: string): void | Promise<void>;
-    /** Said when a grant's folder could not be moved to the ended place or swept, by the system's error code. */
-    fullFolderFailed?(step: 'move' | 'sweep', code: string): void;
+    /** Said when a grant's folder could not be made, moved to the ended place or swept, by the system's error code. */
+    fullFolderFailed?(step: 'make' | 'move' | 'sweep', code: string): void;
     started?(host: string, resumed: boolean, mode: ChatMode): void;
     ended?(turn: TurnEnded): void;
     decided?(decided: Decided): void;
