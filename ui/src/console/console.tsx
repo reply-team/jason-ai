@@ -164,6 +164,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     const dock = useMemo(() => makeDock(() => dockApi.current), []);
     useEffect(() => {
         const unbind = bind({ api, desktop, dock });
+        const onFocus = () => connect.reloadOnFocus();
+        window.addEventListener('focus', onFocus);
         const unlisten = root.current ? listen(root.current) : () => undefined;
         void shell.load(api);
         void needs.reload();
@@ -232,6 +234,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             clearInterval(tick);
             if (pending !== null) clearTimeout(pending);
             unlisten();
+            window.removeEventListener('focus', onFocus);
             unbind();
         };
     }, [api, desktop, dock, stream]);

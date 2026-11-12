@@ -27,6 +27,7 @@ function standInDesktop(): void {
     (window as unknown as { jasonDesktop: unknown }).jasonDesktop = {
         platform: 'win32',
         onCommand: quiet,
+        theme: { get: () => Promise.resolve(null), set: () => Promise.resolve() },
         chat: {
             send: (id: unknown) => Promise.resolve(kept(id) ? (sent.add(id as string), null) : notKept),
             stop: done,
