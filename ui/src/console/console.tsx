@@ -94,7 +94,7 @@ const components = {
     campaigns: () => <Painted className="painted" view={campaigns.campaignsView} />,
     activity: () => <Painted className="painted" view={activityView} />,
     connect: () => (
-        <Painted className="painted" view={connect.connectView} onGone={() => connect.dropLinks('connect')} />
+        <Painted className="painted" view={connect.connectView} onGone={() => connect.dropDialogs('connect')} />
     ),
     page: PagePanel,
 };
@@ -264,8 +264,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             if (pending !== null) clearTimeout(pending);
             unlisten();
             window.removeEventListener('focus', onFocus);
-            // A link the Reply card was showing is not kept past the console that showed it.
-            connect.resetLinks();
+            // A dialog the Reply card was showing is not kept past the console that showed it.
+            connect.resetDialogs();
             unbind();
         };
     }, [api, desktop, dock, stream]);
