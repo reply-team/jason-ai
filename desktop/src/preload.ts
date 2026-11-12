@@ -26,7 +26,7 @@ const desktop = {
         onEvent: (handler: Handler) => subscribe('jason:chat.event', handler),
         list: () => ipcRenderer.invoke('jason:chat.list'),
         open: (chatId: string) => ipcRenderer.invoke('jason:chat.open', chatId),
-        create: (campaignId?: string) => ipcRenderer.invoke('jason:chat.create', campaignId),
+        create: (campaignId?: string, host?: string) => ipcRenderer.invoke('jason:chat.create', campaignId, host),
         remove: (chatId: string) => ipcRenderer.invoke('jason:chat.remove', chatId),
         restart: (chatId: string) => ipcRenderer.invoke('jason:chat.restart', chatId),
         attach: (chatId: string, campaignId: string) => ipcRenderer.invoke('jason:chat.attach', chatId, campaignId),
@@ -34,6 +34,11 @@ const desktop = {
         setMode: (chatId: string, mode: string, host: string) => ipcRenderer.invoke('jason:chat.setMode', chatId, mode, host),
         openFolder: (name: string) => ipcRenderer.invoke('jason:chat.openFolder', name),
         feed: (lines: unknown, options?: unknown) => ipcRenderer.invoke('jason:chat.feed', lines, options),
+    },
+    fullAccess: {
+        standing: () => ipcRenderer.invoke('jason:fullAccess.standing'),
+        takeBack: () => ipcRenderer.invoke('jason:fullAccess.takeBack'),
+        onChanged: (handler: Handler) => subscribe('jason:fullAccess.changed', handler),
     },
     theme: {
         get: () => ipcRenderer.invoke('jason:theme.get'),

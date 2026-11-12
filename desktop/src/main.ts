@@ -466,6 +466,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             return fullAccessAnswer(response, checkboxChecked);
         },
         ...loggedTurns(log),
+        // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
+        standingChanged: (standing, why) => {
+            loggedTurns(log).standingChanged(standing, why);
+            current?.webContents.send(eventChannels['fullAccess.changed'], standing);
+        },
     });
     registerChat(ipcMain, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     // A turn never outlives the window: closing it stops every host and forgets every "always".

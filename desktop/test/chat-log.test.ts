@@ -321,3 +321,25 @@ test('a naming run of a set-up chat is logged by how it ended, one word, never t
         .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
     assert.deepEqual(said, outcomes.map((outcome) => ({ Outcome: outcome })));
 });
+
+test('the standing choice of Full access is logged by why it changed and whether new chats start in it, or by the code that kept it from its file', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    loggedTurns(log).standingChanged({ givenAt: '2026-01-02T03:04:05.000Z', newChats: true }, 'given');
+    loggedTurns(log).standingChanged(null, 'taken_back');
+    loggedTurns(log).standingChanged(null, 'unchecked');
+    loggedTurns(log).standingUnwritten('EPERM');
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => String(line.EventName).startsWith('chat_full_access_standing'))
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
+    assert.deepEqual(said, [
+        { EventName: 'chat_full_access_standing', Cause: 'given', Standing: true, NewChats: true },
+        { EventName: 'chat_full_access_standing', Cause: 'taken_back', Standing: false, NewChats: false },
+        { '@l': 'Warning', EventName: 'chat_full_access_standing', Cause: 'unchecked', Standing: false, NewChats: false },
+        { '@l': 'Warning', EventName: 'chat_full_access_standing_unwritten', Code: 'EPERM' },
+    ]);
+    assert.ok(!text.includes('2026-01-02'), 'not when it was given');
+});
