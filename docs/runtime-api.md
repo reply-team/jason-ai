@@ -300,7 +300,7 @@ that is not that attempt does not call them.
   approval of a search may carry `allow`, which sets the campaign's allowance for the search's audience in the same act;
   approving a search under another audience than the allowance names takes the allowance back in the same act.
 - `approval.reject`: the work ends, carrying the decision and the person who made it.
-- An approval whose work had its input edited while it was pending is `superseded`, by the person who edited it, and
+- An approval whose work had its input edited while it was pending is `superseded`, by whoever edited it, and
   either verb naming it answers `approval_not_pending`. [`docs/work-execution.md`](work-execution.md), "Approvals".
 - `approval.set_standing`: a person's word in advance for one campaign and one category of verdict: a drafted reply
   that answers such a verdict goes without being asked, under the operations, expiry and ceiling it names. With the
