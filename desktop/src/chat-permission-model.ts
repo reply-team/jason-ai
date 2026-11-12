@@ -3,6 +3,7 @@
 // what to put on the person's card. The platform is passed in, so both platforms' path rules are tested on either.
 
 import { posix, win32 } from 'node:path';
+import { fileCommandsOf } from './chat-auto-edit.ts';
 import { heldByWhatRuns, programName, readLiteral, type HeldReason, type LiteralCommand } from './chat-literal.ts';
 import { powerShellRunsInFullAccess } from './chat-modes.ts';
 import { serverName } from './chat-permission-endpoint.ts';
@@ -1241,6 +1242,80 @@ function literalOutcome(tool: string, command: string, scope: ChatScope): FullAc
     if (places.some((path) => inside(scope, path, data))) return heldFor('holds_data');
     // (c) Runs.
     return { outcome: 'runs' };
+}
+
+/**
+ * The one judgement of Auto-edit: Ask first's (`judge`), except that a Bash command Ask first would put on a card runs
+ * with no card where it is only the six file commands (`fileCommandsOf`) on paths in the chat's own folder. It is never
+ * wider than that: a refusal, an allow and every other card are Ask first's own, word for word.
+ */
+export function autoEditJudgement(tool: string, input: Record<string, unknown>, scope: ChatScope): Judgement {
+    const judged = judge(tool, input, scope);
+    const command = input['command'];
+    if (judged.verdict !== 'ask' || tool !== 'Bash' || typeof command !== 'string') return judged;
+    // Whatever goes wrong while the command is read, it keeps its card: a reading that failed never runs anything.
+    try {
+        return editsOnlyTheChatFolder(command, scope) ? allow : judged;
+    } catch {
+        return judged;
+    }
+}
+
+/**
+ * True when a command is read literally, with no `~` taken (`readLiteral`), as file commands alone, every operand of
+ * which lies strictly inside the chat folder (`chatFolderPlace`), no operand of a later command at or under one an
+ * earlier `mv` or `cp` of it named, nothing under a guarded name, no jason of the agent's own, and none of Ask first's
+ * refusals over the words as the shell passes them on. The judgement is made before the command runs: a later command
+ * is judged against the folder as it is now, and a move or a copy could put a link where it looks, so what follows one
+ * may not look there.
+ */
+function editsOnlyTheChatFolder(command: string, scope: ChatScope): boolean {
+    const reading = readLiteral('Bash', command, { platform: scope.platform, home: null });
+    if (reading.held) return false;
+    const files = fileCommandsOf(reading.commands);
+    if (files === null) return false;
+    const chat = { spelled: spelled(scope.chat, scope), located: located(scope.chat, scope) };
+    const moved: string[] = [];
+    const places: string[] = [];
+    for (const file of files) {
+        const named: string[] = [];
+        for (const operand of file.operands) {
+            const place = chatFolderPlace(operand, scope, chat);
+            if (place === null || moved.some((earlier) => inside(scope, earlier, place))) return false;
+            named.push(place);
+        }
+        places.push(...named);
+        if (file.program === 'mv' || file.program === 'cp') moved.push(...named);
+    }
+    const resolved = reading.commands.map((each) => each.words.join(' ')).join('\n');
+    if (refusalOver(resolved, places, scope) !== null) return false;
+    if (guardedPlace(places, scope) !== undefined || namesLocalJason(resolved, scope)) return false;
+    return true;
+}
+
+/** A name Windows opens as a device in any folder, with any extension: `nul`, `con.txt`, `COM1`. */
+const deviceName = /^(con|prn|aux|nul|com[0-9]|lpt[0-9]|conin\$|conout\$)(\..*)?$/i;
+
+/**
+ * Where an operand lies when it lies strictly inside the chat folder, the folder itself never; null otherwise. No `..`
+ * component is taken, since the system reads `link/..` as the parent of where the link leads and a spelling as the
+ * parent of the link. On Windows, a name the system reads as another (a trailing dot or space, a stream, a device form)
+ * and a device's name are not taken either. Inside twice over: as spelled, and as located, through links, junctions and
+ * short names, compared as the platform folds case.
+ */
+function chatFolderPlace(operand: string, scope: ChatScope, chat: { spelled: string; located: string }): string | null {
+    const parts = operand.split(/[\\/]/);
+    if (parts.includes('..') || judgeSpelling(operand, scope) !== null) return null;
+    if (scope.platform === 'win32' && parts.some((part) => deviceName.test(part))) return null;
+    const native = nativeSpelling(operand, scope);
+    const lexical = spelled(native, scope);
+    if (!strictlyInside(scope, chat.spelled, lexical)) return null;
+    const place = located(native, scope);
+    return strictlyInside(scope, chat.located, place) ? place : null;
+}
+
+function strictlyInside(scope: ChatScope, folder: string, path: string): boolean {
+    return inside(scope, folder, path) && keyOf(scope.platform, folder) !== keyOf(scope.platform, path);
 }
 
 /** A text with each percent-escape decoded, as a URL word is read. */
