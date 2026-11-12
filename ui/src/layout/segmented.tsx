@@ -1,6 +1,6 @@
 import { number } from '../time/format';
 
-export type Option<T> = { value: T; label: string; count?: number | null };
+export type Option<T> = { value: T; label: string; count?: number | null; note?: string | undefined };
 
 /**
  * A row of square buttons, one of them on: the switch beside a title, and the choices in a filters bar. With `tick`
@@ -38,6 +38,7 @@ export function Segmented<T>({
                     )}
                     {option.label}
                     {option.count != null && <span className="count"> {number.format(option.count)}</span>}
+                    {option.count != null && option.note && <span className="count"> {option.note}</span>}
                 </button>
             ))}
         </div>
