@@ -274,7 +274,8 @@ forms. PowerShell is not a tool of the chat. Jason does not read a
 program the agent writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a
 program can still act as you. None of your own MCP servers or connectors reaches a turn. The agent works in a folder of
 its own; when Full access ends, the chat says where it is, with an Open folder button, and Jason removes it after seven
-days. Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said
+days. The host keeps a session by the folder it began in, so the first turn after a change into or out of Full access
+starts a fresh session, with a recap of the last words. Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said
 once. Full access is never a default and is gone when you close Jason.
 
 ### What runs without asking, what is refused, what is a card
