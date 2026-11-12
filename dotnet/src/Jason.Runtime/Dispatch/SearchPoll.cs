@@ -11,8 +11,11 @@ using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Dispatch;
 
-/// <summary>What one poll did: the reads of searches it made, and the searches it ended as stalled.</summary>
-public sealed record SearchPollReport(int Read, int Stalled);
+/// <summary>
+/// What one poll did: the reads of searches it made, the searches it ended as stalled, and the stops it made for the
+/// searches of campaigns archived while they ran.
+/// </summary>
+public sealed record SearchPollReport(int Read, int Stalled, int Stopped = 0);
 
 /// <summary>
 /// The step of a scan that follows each search a campaign's audience is filled by, after the inbound read and before the
@@ -27,10 +30,12 @@ public sealed record SearchPollReport(int Read, int Stalled);
 /// lands what it reads wherever it ends. The step keeps nothing; a runtime started again reads the same rows.
 /// </para>
 /// <para>
-/// The stall is measured from the start of the quiet — the search's start, or the last landing that made somebody a
-/// member — to the moment the dispatcher made its latest read, once that read has ended: so a campaign paused for hours
-/// is read once more before its search is called stalled. A read that failed lands nobody too, and so does one the provider answered
-/// paused: the bound counts whatever kept the people from coming.
+/// The stall is measured from the start of the quiet — the search's start, the last landing that made somebody a member,
+/// or the last change between held and moving — to the moment the dispatcher made its latest read, once that read has
+/// ended: so a campaign paused for hours is read once more before its search is called stalled. A read that failed lands
+/// nobody too. A search the provider holds — paused, out of credits, at the plan's limit — is read on
+/// <c>Dispatcher:SearchHeldCadenceSeconds</c> and called stalled only after <c>Dispatcher:SearchHeldStallSeconds</c>, its
+/// state named in the line, since it spends nothing until a person acts at the provider and may be resumed there.
 /// </para>
 /// </summary>
 public sealed class SearchPoll(
@@ -66,10 +71,11 @@ public sealed class SearchPoll(
         ArgumentNullException.ThrowIfNull(db);
         var options = settings.Current;
         var now = clock.GetUtcNow().UtcDateTime;
+        var stopped = await StopArchivedAsync(db, ct).ConfigureAwait(false);
         var followed = await Following(db).ToListAsync(ct).ConfigureAwait(false);
         if (followed.Count == 0)
         {
-            return new SearchPollReport(0, 0);
+            return new SearchPollReport(0, 0, stopped);
         }
 
         // A first look, outside any transaction, so a scan with nothing to do takes no writer: it is looked again inside the
@@ -102,7 +108,43 @@ public sealed class SearchPoll(
             }
         }
 
-        return new SearchPollReport(read, stalled);
+        return new SearchPollReport(read, stalled, stopped);
+    }
+
+    /// <summary>
+    /// Archiving is how a person stops a campaign, and a search goes on spending at the provider until it is stopped: so
+    /// each search of an archived campaign still in flight, with no stop of it open and none made since the archive, gets
+    /// one stop, made by the dispatcher and claimed in the archived campaign. A stop that then fails is not made again: it
+    /// is protective work, and its failure is a person's to read.
+    /// </summary>
+    private async Task<int> StopArchivedAsync(JasonDbContext db, CancellationToken ct)
+    {
+        var archived = await ArchivedInFlight(db).ToListAsync(ct).ConfigureAwait(false);
+        var stopped = 0;
+        foreach (var search in archived)
+        {
+            try
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+                var made = await StopsSince(db, search.CampaignId, search.ArchivedAt ?? DateTime.MinValue).ToListAsync(ct).ConfigureAwait(false);
+                if (made.Exists(context => context["input"]?["search"] is JsonValue named && named.TryGetValue(out string? stop) && stop == search.WorkItem))
+                {
+                    await transaction.RollbackAsync(ct).ConfigureAwait(false);
+                    continue;
+                }
+
+                await items.CreateCoreAsync(StopRequest(search.Campaign, search.WorkItem), Actors.Dispatcher, LineageRecord.Root, ct).ConfigureAwait(false);
+                await transaction.CommitAsync(ct).ConfigureAwait(false);
+                stopped++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                PollFailed(search.Campaign, ex);
+                db.ChangeTracker.Clear();
+            }
+        }
+
+        return stopped;
     }
 
     /// <summary>
@@ -120,7 +162,12 @@ public sealed class SearchPoll(
             return Decision.None;
         }
 
-        if (search.ReadAt is { } last && last - search.QuietSince >= TimeSpan.FromSeconds(options.SearchStallSeconds))
+        // A search the provider holds spends nothing until a person acts there, so it is read on a cadence and bound of its
+        // own, from the moment it was held; one that moves again is read on the ordinary pair from the moment it moved.
+        var held = SearchLanding.IsHeld(search.State);
+        var bound = held ? options.SearchHeldStallSeconds : options.SearchStallSeconds;
+        var cadence = held ? options.SearchHeldCadenceSeconds : options.SearchCadenceSeconds;
+        if (search.ReadAt is { } last && last - search.QuietSince >= TimeSpan.FromSeconds(bound))
         {
             return Decision.Stall;
         }
@@ -131,7 +178,7 @@ public sealed class SearchPoll(
             return Decision.Read;
         }
 
-        var wait = Math.Min(options.SearchCadenceSeconds * Math.Pow(2, Math.Clamp(streak, 0, 32)), MaximumWaitSeconds);
+        var wait = Math.Min(cadence * Math.Pow(2, Math.Clamp(streak, 0, 32)), MaximumWaitSeconds);
         return now >= (search.ReadAt ?? search.CreatedAt).AddSeconds(wait) ? Decision.Read : Decision.None;
     }
 
@@ -163,7 +210,8 @@ public sealed class SearchPoll(
                 search.ReadWorkItem == null ? null : search.ReadWorkItem.Status,
                 search.Failures,
                 search.QuietSince,
-                search.CreatedAt));
+                search.CreatedAt,
+                search.State));
 
     /// <summary>
     /// The searches that have work under way in these campaigns, whoever made it — a read of their people or a stop: one
@@ -255,6 +303,50 @@ public sealed class SearchPoll(
             && row.QuietSince == search.QuietSince
             && row.More == search.More);
 
+    /// <summary>The searches still in flight of the campaigns archived: each one's campaign, when it was archived, and its work item.</summary>
+    internal static IQueryable<ArchivedSearch> ArchivedInFlight(JasonDbContext db) =>
+        db.AudienceSearches
+            .AsNoTracking()
+            .Where(search => search.EndedAs == null && search.Campaign!.Status == CampaignStatus.Archived)
+            .Select(search => new ArchivedSearch(search.CampaignId, search.Campaign!.PublicId, search.Campaign.ArchivedAt, search.SearchWorkItem!.PublicId));
+
+    /// <summary>
+    /// The stops of a campaign's searches still open, or finished since <paramref name="since"/>: what each was asked to
+    /// stop. A stop made since then is one or the other, and each half is read off an index of the campaign's work, by
+    /// status and by when it finished, never the campaign's whole history.
+    /// </summary>
+    internal static IQueryable<System.Text.Json.Nodes.JsonObject> StopsSince(JasonDbContext db, int campaignId, DateTime since) =>
+        db.WorkItems
+            .AsNoTracking()
+            .Where(item => item.CampaignId == campaignId && AudienceSearches.Open.Contains(item.Status) && item.Operation == SearchLanding.Stop)
+            .Select(item => item.Context)
+            .Concat(db.WorkItems
+                .AsNoTracking()
+                .Where(item => item.CampaignId == campaignId && item.FinishedAt >= since && item.Operation == SearchLanding.Stop)
+                .Select(item => item.Context));
+
+    /// <summary>One search of an archived campaign still in flight.</summary>
+    internal sealed record ArchivedSearch(int CampaignId, string Campaign, DateTime? ArchivedAt, string WorkItem);
+
+    private static WorkItemCreateRequest StopRequest(string campaign, string search) =>
+        new(
+            campaign,
+            WorkItemKind.ProviderOp,
+            Role: null,
+            SearchLanding.Stop,
+            ContactId: null,
+            ExecutionProfile: null,
+            Priority: null,
+            NotBefore: null,
+            DueAt: null,
+            TimeoutSeconds: null,
+            HeartbeatSeconds: null,
+            MaxAttempts: null,
+            new JsonObject { ["input"] = new JsonObject { ["search"] = search } },
+            ResultFormat: null,
+            Actor: null,
+            Reason: "campaign archived");
+
     private static WorkItemCreateRequest Request(Followed search) =>
         new(
             search.CampaignPublicId,
@@ -297,7 +389,8 @@ public sealed class SearchPoll(
         WorkItemStatus? ReadStatus,
         int Failures,
         DateTime QuietSince,
-        DateTime CreatedAt);
+        DateTime CreatedAt,
+        string? State = null);
 
     /// <summary>What the step does with one search this scan.</summary>
     internal enum Decision

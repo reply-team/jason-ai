@@ -18,14 +18,16 @@ charge for them stands.
 It reaches nobody and only stops spending, so it carries the catalogue's protective floor: it runs `auto`, where the
 catalogue's `job.cancel` asks for `confirm_once`, because waiting for permission to stop a search that spends is the
 destructive choice. For the same reason nothing in Jason holds it back. It names nobody, so the do-not-contact register
-has nothing to refuse; it runs while its campaign is paused, which is when it is wanted most; and under an open block
+has nothing to refuse; it runs while its campaign is paused, which is when it is wanted most, and in a campaign archived
+while the search ran, whose searches the dispatcher stops this way; and under an open block
 of the account it does not wait — a `blocked` answer ends it, final, a protective action that failed.
 
 ## Naming the search
 
 As for [`audience.search_status`](audience.search_status.md): the caller names the work item in `args.search`, and the
 runtime composes the reference under `search` at the claim, refusing `search_unknown`, `search_reference_absent` or
-`search_route_mismatch` before anything is run. A plugin stops the search by `search.reference` and by nothing the
+`search_route_mismatch` before anything is run, and routing the stop where the search ran, whatever
+`audience.search_cancel` itself resolves to. A plugin stops the search by `search.reference` and by nothing the
 caller wrote. A search that answered `finished` inside its own call has nothing to stop.
 
 ## The input you receive
@@ -85,6 +87,7 @@ reads: it ended by itself, and what it found is still to be read
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `not_applicable`, provider contact `not_used` |
 | in a paused campaign | `runs` |
+| in an archived campaign | `runs` |
 | under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |

@@ -27,8 +27,9 @@ run, each permanent:
 - `search_unknown` — the campaign holds no work item under `args.search`, or that item is not an `audience.search`;
 - `search_reference_absent` — that item has not succeeded, or its search came back with no reference: a search that
   answered `finished` inside its own call has nothing more to read;
-- `search_route_mismatch` — this item is routed to another plugin, or under another binding, than the search was
-  started with. The reference is that provider account's, so it is read there or not at all.
+- `search_route_mismatch` — no route active now names the plugin and binding the search was started with. A read is
+  routed where the search ran, whatever `audience.search_status` itself resolves to; the reference is that provider
+  account's, so it is read there or not at all.
 
 ## The cursor
 
@@ -139,6 +140,7 @@ each search it follows, and stops when the search ends or its reads land nobody 
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |

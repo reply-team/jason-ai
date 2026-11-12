@@ -35,7 +35,7 @@ Thirty operations — the whole set this build publishes: eighteen that write an
 | `message.cancel` | Takes back one direct send Reply still holds for its moment, by that same reference. One cancelled before answers the same; one that went, that Reply is sending or that failed is refused, and nothing changes. |
 | `audience.preview` | Asks Reply's Live Data how many people and companies a definition matches, and shows up to ten of them with no way to reach them. Reply saves and charges nothing. |
 | `audience.search` | Starts a Live Data search for up to the count asked, on a contact list of its own that Reply puts the people it finds on, once a person approves it. Reply charges per person found. **A person Reply already holds is never found:** Reply skips everyone the account holds — every person an earlier search found among them — and never puts them on the list. See [What it cannot do](#what-it-cannot-do). |
-| `audience.search_status` | Reads a search's status and a page of the people on its list from where the last read stopped, each with Reply's contact id. The read that returns the last person of a search that ended deletes the list. |
+| `audience.search_status` | Reads a search's status and a page of the people on its list from where the last read stopped, each with Reply's contact id. The last people of a search that ended come with more to read, and the read after them, which finds nobody, deletes the list. |
 | `audience.search_cancel` | Stops a search running or paused by deleting it at Reply, and deletes its list; the people it already added stay Reply's contacts. A search that ended answers how it ended. |
 | `audience.filter_values` | Reads the values Reply suggests for one of its five typeaheads — industries, departments, seniorities, locations, job titles — containing some text. |
 | `audience.availability` | Answers that the account may search, and nothing more: Reply has no read of an account's credits or of its plan's room for contacts. Reply is not asked. |
@@ -452,7 +452,7 @@ route's binding names them.
 | `live-data get <search>` | read | One search's status and Reply's count of the people it found, never the people: what `audience.search_status` reads first, and the read `audience.search_cancel` makes before it stops anything. |
 | `contact-list contacts <list> --live-data-only --limit --offset` | read | One page of the people Live Data put on the search's list, oldest first, from the number already read: what `audience.search_status` answers its people from. |
 | `live-data delete <search>` | write | Deletes the search, whatever its status, which stops it: what `audience.search_cancel` does to a search running or paused. Run again after a lost answer, it answers that Reply holds the search no longer. |
-| `contact-list delete <list>` | write | Deletes a search's list once the search has ended and its last person is read, or once it is cancelled; the contacts on it stay in the account. How it ends changes nothing the operation answers. |
+| `contact-list delete <list>` | write | Deletes a search's list once the search has ended and a read past its last person finds nobody, or once it is cancelled; the contacts on it stay in the account. How it ends changes nothing the operation answers. |
 | `live-data filter-values <kind> [--search] --limit` | read | The values Reply suggests for one of its five typeaheads, containing the text given: what `audience.filter_values` answers from. The text is on the command line, the only place reply-cli takes it. |
 
 ### Endings every operation can meet
@@ -1064,8 +1064,9 @@ own and puts each person it finds on the list, and `audience.search_status` read
 deletes the list again. A create whose answer was lost may have made its list, which stays behind empty: reply-cli reads
 no list by its name, so a repeat cannot find it, and makes a list of its own attempt. A start whose answer was lost
 keeps its list, since the search may have started on it; the repeat reads the team's searches first (`reply live-data
-list`, newest first, back to an hour before the earliest attempt that may have acted, at most ten pages of a hundred)
-and answers the one on a list named after its work item, starting none. A search it misses is still never a second
+list`, newest first, back to an hour before the earliest attempt that may have acted, at most ten pages of a hundred,
+each search's start, which Reply writes with no zone, read as UTC whatever zone the machine is in) and answers the one
+on a list named after its work item, starting none. A search it misses is still never a second
 search on the same people: Reply refuses a second unfinished search of the same filters, `search_in_progress`. Nothing
 is pinned.
 
@@ -1079,7 +1080,7 @@ is pinned.
 
 Two reads, then a clean-up where the search has ended: `reply live-data get` of the search, then `reply contact-list
 contacts` of its list with `--live-data-only`, `--limit` the work item's and `--offset` the cursor, and, once the search
-has ended — finished or exhausted — and the page reaches the last person, `reply contact-list delete` of the list. The
+has ended — finished or exhausted — and the page finds nobody past the cursor, `reply contact-list delete` of the list. The
 status is read first because Reply puts a batch on the list before it sets a final status, so a search read as ended
 already has every person on its list. Reply's status is the document's state: `inProgress` is `in_progress`,
 `finished` is `finished`, `noMoreContacts` is `exhausted`, `manuallyPaused` is `paused`,
@@ -1090,9 +1091,12 @@ the number of the list's people already returned, a whole number written out, `0
 at the end of an order that holds from page to page, and only this search fills the list. Each person is Reply's
 contact: the id as `external_id`, the names, the title, the company with its domain, Reply's size band and industry, the
 city, region and country on one line, the email, phone and LinkedIn profile Reply holds, and Reply's record as JSON text
-under `raw` — without its custom fields where they would pass 16 KiB, and null where even that would. A delete that does
-not go through never holds back the people read: the read answers them all the same, and the next read of the ended
-search, finding nobody new, deletes the list. Nothing is pinned.
+under `raw` — without its custom fields where they would pass 16 KiB, and null where even that would. A read that
+carries people never deletes the list: the last people of a search that ended come with `has_more` true, so the runtime
+keeps them before anything is deleted and reads once more, and that next read of the ended search, finding nobody new,
+deletes the list and answers `has_more` false. A repeat of it finds the same nobody, since Reply reads a list it no
+longer holds as empty. A delete that does not go through never holds back the answer, and the list stays at Reply.
+Nothing is pinned.
 
 ### `audience.search_cancel`
 
@@ -1106,7 +1110,7 @@ stops it, and `reply contact-list delete` of its list: the answer is `cancelled`
 status read had not yet returned stays Reply's contact and is not read into Jason. A search that already finished or ran
 out answers `already_ended`, with `ended_as` `finished` or `exhausted`, and nothing changes: a cancel that comes too late
 leaves the search and its list as they were, so the status read goes on reading the people it found and deletes the list
-after the last of them. A search Reply no longer holds has its list deleted all the same. A cancel whose answer was lost
+in the read after the last of them. A search Reply no longer holds has its list deleted all the same. A cancel whose answer was lost
 is repeated, and the repeat reads the search first. Nothing is pinned.
 
 ### `audience.filter_values`

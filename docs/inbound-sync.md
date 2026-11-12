@@ -11,8 +11,8 @@ reply means, and what to do about it, is the responder's first and the manager's
 
 ## 1. Where it runs
 
-Each scan runs in eleven short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **reserve**,
-**summon**, **resume**, **claim**, **notify** ([work execution](work-execution.md)). Sync comes before the respond step and the
+Each scan runs in twelve short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **reserve**,
+**summon**, **resume**, **claim**, **notify**, **subscribe** ([work execution](work-execution.md)). Sync comes before the respond step and the
 summon, so a reply it says wakes the responder and the manager in the same scan, and before the claim, so a read it
 starts can be claimed in the same scan. Events, before it, hands a read of an account's events to a reader that runs off the scan
 ([events](events.md) §5).

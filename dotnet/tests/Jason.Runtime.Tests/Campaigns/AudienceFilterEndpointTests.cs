@@ -75,7 +75,7 @@ public class AudienceFilterEndpointTests
             Ct);
 
         Assert.Equal(["Ada", "Ben", "Cleo", "Jon", "Quinn"], Names(members));
-        Assert.All(members.Items, member => Assert.Equal(1, member.Source!.Number));
+        Assert.All(members.Items, member => Assert.Equal(1, member.Source!.Audience.Number));
         Assert.Equal(["Ada", "Ben"], Names(waiting));
         Assert.Equal(["Oli"], Names(replied));
     }

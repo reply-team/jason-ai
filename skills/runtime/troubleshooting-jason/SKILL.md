@@ -107,10 +107,12 @@ when the moment arrives. Say when that is, and stop.
 ### 2. Paused or archived
 
 **How you recognise it.** The item looks perfectly healthy and is never claimed — and the campaign it belongs
-to is not active. Only an active campaign's work is claimed, with one exception: a paused campaign still lets
+to is not active. Only an active campaign's work is claimed, with two exceptions: a paused campaign still lets
 through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record`,
-`campaign.pause`, `message.cancel` and `audience.search_cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one
-holds every item but theirs.
+`campaign.pause`, `message.cancel` and `audience.search_cancel`), and an archived one a stop of a search, whose
+operation declares `dispatch.in_archived_campaign: runs` (`audience.search_cancel`). So a still-draft campaign holds
+every one of its items at once, a paused one holds every item but theirs, and an archived one every item but a
+search's stop.
 
 **What it means.** This is about the *campaign*, not the item, which is why reading the item over and over
 tells you nothing. Somebody paused it, or it was never started. Say which campaign and in which status; the

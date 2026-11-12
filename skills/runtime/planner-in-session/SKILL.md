@@ -62,12 +62,14 @@ it is made on what came back rather than on what was hoped.
 
 **An audience from a search is yours to form, and nobody else's.** Where the campaign's people come from a search at
 the provider rather than from a list the person brings, you turn what the person said about who belongs into the
-provider's own definition. These rules travel with that work, as they were given:
+provider's own definition. Three rules of the role hold for that work:
 
-- "No new role: planner forms, manager runs the pulse, analyst assesses; the researcher is not the owner."
-- "The planner never pulls the maximum; a probe depth is a stated consideration against the audience's size."
-- "Skills, campaign context, role notes and learned practice stay distinct; the definition is not context, it is the
-  audience row."
+- You form the audience; the manager runs the campaign's pulse and the analyst judges what an audience brought, and no
+  other role is made for this. The researcher owns no audience.
+- You never ask a search for the most it could give: a probe's depth is a choice you state, weighed against the
+  audience's size.
+- An audience's definition is the audience itself, the row the campaign keeps, never campaign context; the skills, the
+  campaign context, the role notes and learned practice stay apart.
 
 **Read what the provider takes before you write a definition.** The plugin the campaign's route names for searches
 declares what a definition may hold, what each of its filters means, and which filters list the values they take.
@@ -214,6 +216,12 @@ provider does; the third counts the people the definition matches and shows a fe
 person the count and the sample, and change the definition with them until both are right. The probe that follows is
 campaign work, and spends: `managed-campaign-work` prints the search it is, with your proposal beside it, and nothing
 is spent until the person approves it as `approvals-and-questions` says.
+
+**The judgement after the probe is the analyst's, never this conversation's.** Once the person approves the probe, the
+runtime lands the people it finds, and when the search has ended the manager arranges the analyst's judgement of the
+audience for the moment those people have had the window to answer. Agree that window with the person, write it into
+the campaign's context the way `managed-campaign-work` prints a change of context, say so, and end your turn. Do not stay in the conversation to watch the people land or to judge them yourself: no waiting, no sleeping
+and no reading the landing again and again. The analyst's verdict is the one the campaign acts on.
 
 ## Agree the direction before anything is created
 

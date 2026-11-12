@@ -1,0 +1,31 @@
+{
+  "kind": "standing_approval_unset",
+  "version": 1,
+  "case": "an allowance is taken back under the key of a category of reply, not audience.search",
+  "body": {
+    "key": "interested",
+    "old": {
+      "category": null,
+      "operations": [
+        "audience.search"
+      ],
+      "expires_at": null,
+      "max_releases": null,
+      "audience": {
+        "id": "aud_01JC0000000000000000000002",
+        "number": 2
+      },
+      "max_people": 500,
+      "max_per_search": 100
+    },
+    "new": null
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "",
+        "reason": "any_of"
+      }
+    ]
+  }
+}

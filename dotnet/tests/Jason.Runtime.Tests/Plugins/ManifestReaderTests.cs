@@ -401,7 +401,7 @@ public class ManifestReaderTests : IDisposable
     }
 
     /// <summary>The search and its status read, which a provider that searches performs together.</summary>
-    private const string Searches = "operations: [audience.search, audience.search_status]\n";
+    private const string Searches = "operations: [audience.search, audience.search_status, audience.search_cancel]\n";
 
     /// <summary>A definition schema of one filter, enough for a rule that is not about the schema's own shape.</summary>
     private const string Definition =
@@ -412,9 +412,11 @@ public class ManifestReaderTests : IDisposable
     /// <summary>
     /// An audience's definition is the provider's own shape, so a provider that performs an operation carrying one
     /// declares its schema, and the loader holds that declaration where its author can fix it: no schema, no search; a
-    /// schema nothing reads is misplaced; a search is read by its status, so a plugin that searches reads the status too;
-    /// the schema is in the published dialect and of a mapping, every filter in it says what it is, and an annotation
-    /// names a filter the schema declares and nothing but its side and its typeahead.
+    /// schema nothing reads is misplaced; a search is read by its status and stopped by its stop, so a plugin that searches
+    /// performs both;
+    /// the schema is in the published dialect and of a mapping, every filter in it says what it is in plain text, which a
+    /// terminal shows as written and so holds no control character, and an annotation names a filter the schema declares
+    /// and nothing but its side and its typeahead.
     /// </summary>
     [Theory]
     [InlineData(Searches + Definition, null, null)]
@@ -424,12 +426,14 @@ public class ManifestReaderTests : IDisposable
     [InlineData("operations: [audience.preview]\n", "field_required", "audience_definition")]
     [InlineData("operations: [audience.search_status]\n" + Definition, "field_invalid", "audience_definition")]
     [InlineData("operations: [audience.search, audience.preview]\n" + Definition, "audience_family_incomplete", "operations")]
+    [InlineData("operations: [audience.search, audience.search_status]\n" + Definition, "audience_family_incomplete", "operations")]
     [InlineData(Searches + "audience_definition: industries\n", "field_invalid", "audience_definition")]
     [InlineData(Searches + "audience_definition:\n  keys: {}\n", "field_required", "audience_definition.schema")]
     [InlineData(Searches + Definition + "  examples: []\n", "unknown_field", "audience_definition.examples")]
     [InlineData(Searches + "audience_definition:\n  schema:\n    type: array\n    items:\n      type: string\n      maxLength: 200\n    maxItems: 5\n", "field_invalid", "audience_definition.schema")]
     [InlineData(Searches + Definition + "    unevaluatedProperties: false\n", "field_invalid", "audience_definition#/schema/unevaluatedProperties")]
     [InlineData(Searches + "audience_definition:\n  schema:\n    type: object\n    properties:\n      industries:\n        type: string\n        maxLength: 200\n", "field_invalid", "audience_definition#/schema/properties/industries")]
+    [InlineData(Searches + "audience_definition:\n  schema:\n    type: object\n    properties:\n      industries:\n        description: \"Industries\\e[2J\"\n        type: string\n        maxLength: 200\n", "field_invalid", "audience_definition#/schema/properties/industries")]
     [InlineData(Searches + Definition + "  keys:\n    headcount:\n      side: company\n", "field_invalid", "audience_definition.keys.headcount")]
     [InlineData(Searches + Definition + "  keys:\n    industries:\n      label: Industry\n", "unknown_field", "audience_definition.keys.industries.label")]
     [InlineData(Searches + Definition + "  keys:\n    industries:\n      side: account\n", "field_invalid", "audience_definition.keys.industries.side")]

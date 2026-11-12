@@ -211,6 +211,7 @@ fallback or as `[name]`, and listed under `unfilled`. The fixtures
 | arguments a plugin takes per channel | `send_after`, only on a channel the routed plugin's manifest lists it for |
 | channels its message may be a template on | `email`, `linkedin`, each only where the routed plugin's manifest lists it under `templates` |
 | in a paused campaign | `waits` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | The person's contact at the provider is reached at the consumed value — on LinkedIn, it carries no other profile than the one consumed — and the provider does not hold them as opted out; a contact that carries no LinkedIn profile is given the consumed one before a LinkedIn message is sent. |

@@ -102,8 +102,10 @@
           }
         ],
         "source": {
-          "audience": "aud_1",
-          "number": 1,
+          "audience": {
+            "id": "aud_1",
+            "number": 1
+          },
           "search": "wi_1",
           "landed_at": "2026-10-01T11:00:00.000Z"
         }

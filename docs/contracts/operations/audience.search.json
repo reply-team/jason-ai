@@ -5,7 +5,7 @@
   "intent": "\"Find up to this many people matching this definition, and make them ours\" — one search the provider runs and charges for, its people revealed",
 
   "reach": "control",
-  "reversibility": "compensatable",
+  "reversibility": "irreversible",
   "approval": "confirm_once",
   "approval_artefact": null,
   "approval_departs": false,
@@ -23,7 +23,7 @@
   "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
   "channel_arguments": null,
   "channel_templates": null,
-  "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "runs" },
+  "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "runs" },
   "contact_projection": null,
   "precondition": "none",
   "preview": {

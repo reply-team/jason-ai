@@ -251,7 +251,7 @@ internal static partial class Account
         {
             ["id"] = id,
             ["status"] = "inProgress",
-            ["startedAt"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.ffZ", CultureInfo.InvariantCulture),
+            ["startedAt"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.ff", CultureInfo.InvariantCulture),
             ["contactsFound"] = 0,
             ["usedCredits"] = 0,
             ["userId"] = 501,
@@ -288,7 +288,7 @@ internal static partial class Account
         }
 
         var searches = Records(root, SearchesFile)
-            .OrderByDescending(search => DateTimeOffset.TryParse(Text(search, "startedAt"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var at) ? at : DateTimeOffset.MinValue)
+            .OrderByDescending(search => DateTimeOffset.TryParse(Text(search, "startedAt"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) ? at : DateTimeOffset.MinValue)
             .ThenByDescending(search => search["id"]!.GetValue<int>())
             .ToList();
         var items = new JsonArray();

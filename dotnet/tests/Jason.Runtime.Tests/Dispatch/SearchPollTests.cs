@@ -82,7 +82,7 @@ public sealed class SearchPollTests
 
     /// <summary>
     /// A search whose reads have landed nobody from the start of the quiet to the start of a read that began the stall
-    /// bound later ends stalled once that read is over: the line says why the provider kept it still, wakes the review in
+    /// bound later ends stalled once that read is over: the line says the provider's last word for it, wakes the review in
     /// the same scan, and no read of the search is made again. A read that began a minute short of the bound is followed by
     /// one more, so a campaign that sat still for hours is read before its search is called stalled.
     /// </summary>
@@ -91,7 +91,7 @@ public sealed class SearchPollTests
     {
         using var harness = new DispatchHarness(Noon);
         harness.Status.State = DispatcherState.Draining;
-        var search = await SearchAsync(harness, readAt: Noon.AddMinutes(59), state: "paused_for_credits", found: 12, landed: 12);
+        var search = await SearchAsync(harness, readAt: Noon.AddMinutes(59), state: "in_progress", found: 12, landed: 12);
         harness.Clock.Advance(TimeSpan.FromHours(3));
 
         Assert.Equal(new SearchPollReport(1, 0), await harness.PollAsync(Ct));
@@ -107,13 +107,41 @@ public sealed class SearchPollTests
             var line = Assert.Single(await db.Journal.AsNoTracking().Where(entry => entry.Kind == JournalKinds.AudienceSearchEnded).ToListAsync(Ct));
             Assert.Equal((ActorType.System, "dispatcher", search.WorkItem, search.WorkItem), (line.ActorType, line.ActorId, line.Key, line.WorkItemId));
             Assert.Equal(
-                $$"""{"audience":"{{search.Audience}}","plugin":"stand-in-search","ended_as":"stalled","state":"paused_for_credits","asked":25,"found":12,"landed":12,"ended_by":null}""",
+                $$"""{"audience":"{{search.Audience}}","plugin":"stand-in-search","ended_as":"stalled","state":"in_progress","asked":25,"found":12,"landed":12,"ended_by":null}""",
                 line.New!.ToJsonString());
         }
 
         harness.Clock.Advance(TimeSpan.FromDays(1));
         Assert.Equal(new SearchPollReport(0, 0), await harness.PollAsync(Ct));
         Assert.Single(await ReadsAsync(harness));
+    }
+
+    /// <summary>
+    /// A search the provider holds spends nothing until a person acts there, so it is followed on the slower cadence of a
+    /// held search and under its long bound: read an hour after the last read, never called stalled at the hour an
+    /// ordinary search would be, and ended stalled, its state named, only once its reads have landed nobody for a week.
+    /// </summary>
+    [Fact]
+    public async Task A_held_search_is_read_on_the_held_cadence_and_stalls_only_at_its_own_bound()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var search = await SearchAsync(harness, readAt: Noon, state: "paused_for_credits", found: 12, landed: 12);
+
+        harness.Clock.Now = new DateTimeOffset(Noon.AddMinutes(59));
+        Assert.Equal(new SearchPollReport(0, 0), await harness.PollAsync(Ct));
+        harness.Clock.Now = new DateTimeOffset(Noon.AddMinutes(60));
+        Assert.Equal(new SearchPollReport(1, 0), await harness.PollAsync(Ct));
+        await EndAsync(harness, (await ReadsAsync(harness))[^1], WorkItemStatus.Succeeded);
+        Assert.Equal(new SearchPollReport(0, 0), await harness.PollAsync(Ct));
+
+        harness.Clock.Now = new DateTimeOffset(Noon.AddDays(7));
+        Assert.Equal(new SearchPollReport(1, 0), await harness.PollAsync(Ct));
+        await EndAsync(harness, (await ReadsAsync(harness))[^1], WorkItemStatus.Succeeded);
+        Assert.Equal(new SearchPollReport(0, 1), await harness.PollAsync(Ct));
+
+        await using var db = harness.Open();
+        var line = Assert.Single(await db.Journal.AsNoTracking().Where(entry => entry.Kind == JournalKinds.AudienceSearchEnded).ToListAsync(Ct));
+        Assert.Equal((search.WorkItem, "stalled", "paused_for_credits"), (line.Key, (string?)line.New!["ended_as"], (string?)line.New["state"]));
     }
 
     /// <summary>
@@ -206,7 +234,7 @@ public sealed class SearchPollTests
     [InlineData(WorkItemStatus.Expired, 0, "None")]
     public void Only_a_read_that_ended_without_an_answer_lengthens_the_wait(WorkItemStatus read, int failures, string expected)
     {
-        var search = new SearchPoll.Followed(1, 1, "cmp_1", "wi_1", More: false, ReadAt: Noon, read, failures, QuietSince: Noon, CreatedAt: Noon);
+        var search = new SearchPoll.Followed(1, 1, "cmp_1", "wi_1", More: false, ReadAt: Noon, read, failures, QuietSince: Noon, CreatedAt: Noon, State: "in_progress");
 
         Assert.Equal(expected, SearchPoll.Decide(search, new DispatcherOptions(), Noon.AddMinutes(5)).ToString());
     }

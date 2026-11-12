@@ -62,6 +62,7 @@ internal static partial class WorkItemValidation
         {
             if (ValidateOperation(request.Operation, errors) is { } operation)
             {
+                AudienceReadService.RefuseAsWork(operation, errors);
                 ValidateProviderOperation(operation, request.Context?[WorkItemService.InputKey], timing, errors);
                 CampaignAudiences.RefuseWritten(operation, request.Context?.ContainsKey(CampaignAudiences.ContextKey) == true, errors);
                 ValidateProviderTimeout(operation, request.TimeoutSeconds, killGraceMs, errors);

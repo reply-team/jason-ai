@@ -15,5 +15,5 @@
       "max_per_search": null
     }
   },
-  "expect": { "invalid": [{ "pointer": "/new/audience/number", "reason": "required" }] }
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }, { "pointer": "/new", "reason": "any_of" }] }
 }

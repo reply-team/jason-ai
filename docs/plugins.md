@@ -134,7 +134,7 @@ subscriptions: [workitem_failed] # optional; required for a subscriber: the jour
 | `contracts.events` | optional, and only on a provider; when present, must include `1` | `field_invalid`, `contract_unsupported`, `events_not_allowed` |
 | `operations` | required non-empty for a provider; each `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$` — at least one dot — and unique | `field_required`, `field_invalid`, `operation_invalid`, `operation_duplicate` |
 | `operations` on a `notification` or a `subscriber` | must be absent or empty | `operations_not_allowed` |
-| `operations` listing `audience.search` | lists `audience.search_status` too: a search the provider keeps running is read by its status | `audience_family_incomplete` |
+| `operations` listing `audience.search` | lists `audience.search_status` and `audience.search_cancel` too: a search the provider keeps running is read by its status, and spends until its stop ends it | `audience_family_incomplete` |
 | `entry.module` | `.js` or `.mjs`, relative, no `..` segments, inside the package, must exist | `field_invalid`, `entry_module_outside_package`, `entry_module_missing` |
 | `entry.function` | `^[A-Za-z_$][A-Za-z0-9_$]*$` | `entry_function_invalid` |
 | `capabilities.exec.executables` | required inside `exec`; 1..16 entries | `field_required`, `field_invalid` |
@@ -268,13 +268,13 @@ The claim holds a search's definition to that schema, `definition_invalid`, clas
 it satisfies the operation's own schema, and `audience.preview` holds it there before anything runs; never
 `workitem.create`, which validates the envelope only, because the route, and so the schema, is resolved at the claim. Every
 property carries a description of its own, which is what whoever writes a definition reads: `jason operation describe
-audience.search --campaign <id>` prints the schema and the keys. A description is manifest text, so it is bounded, never
-logged and never in a bundle. `keys` sits beside the schema rather than inside it because the dialect refuses a keyword
+audience.search --campaign <id>` prints the schema and the keys. A description is manifest text, so it is bounded, holds
+no control character, since a terminal prints it as written, and is never logged and never in a bundle. `keys` sits beside the schema rather than inside it because the dialect refuses a keyword
 it does not publish: `side` says which side of a person a property filters on, and `typeahead` names the filter
 `audience.filter_values` lists values for. The runtime reads neither and answers both as declared. The key is required
 where the plugin performs either operation — no schema, no search — and refused where it performs neither, since nothing
-would read it; a plugin that performs `audience.search` performs `audience.search_status` too
-(`audience_family_incomplete`), and one whose provider searches inside one call answers `finished`, so its status read is
+would read it; a plugin that performs `audience.search` performs `audience.search_status` and `audience.search_cancel`
+too (`audience_family_incomplete`), and one whose provider searches inside one call answers `finished`, so its status read is
 never created. Like `arguments` the key asks for nothing a person grants, is optional and additive, and leaves
 `manifest_version` at `1`: a runtime too old to read it rejects the reload with `unknown_field`, and publishes no audience
 operation either. `plugin.list` shows it as `audience_definition`, beside `binding_schema`, and null where the plugin
@@ -880,7 +880,7 @@ The plugin-host process — and therefore every program `host.exec` starts — i
   `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `ProgramData`, `ProgramFiles`,
   `ProgramFiles(x86)`, `ProgramW6432`, `NUMBER_OF_PROCESSORS`, `PROCESSOR_ARCHITECTURE`, `OS`,
   `USERNAME`;
-- on everything else: `HOME`, `XDG_CONFIG_HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `LC_CTYPE`, `USER`,
+- on everything else: `HOME`, `XDG_CONFIG_HOME`, `TMPDIR`, `TZ`, `LANG`, `LC_ALL`, `LC_CTYPE`, `USER`,
   `LOGNAME`, `SHELL`, `TERM`;
 - plus the granted `env` variables, by name.
 
@@ -1015,8 +1015,8 @@ pinned, and the invocation's `context` carries no attempt, work item or campaign
 it runs outside the handler pool `Dispatcher:MaxParallel` sizes, one child each.
 
 Three more are invoked for a campaign when a person or an agent asks: `audience.preview`, `audience.filter_values` and
-`audience.availability`. Each is routed by the campaign's route for the operation, not by a person's pin, and held to the
-same half of the claim; the input carries the campaign with your own pins of it, and the preview's carries the
+`audience.availability`. Each is routed by the campaign's route for `audience.search`, the search it serves, not by a
+person's pin, and held to the same half of the claim for its own operation; the input carries the campaign with your own pins of it, and the preview's carries the
 definition, held to your declared schema first. Nothing else differs: nothing is recorded, and nothing you return is
 pinned.
 

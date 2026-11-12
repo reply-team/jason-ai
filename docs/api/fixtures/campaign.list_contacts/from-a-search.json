@@ -87,8 +87,10 @@
           }
         ],
         "source": {
-          "audience": "aud_1",
-          "number": 1,
+          "audience": {
+            "id": "aud_1",
+            "number": 1
+          },
           "search": "wi_2",
           "landed_at": "2026-10-16T09:00:00.000Z"
         }
@@ -173,8 +175,10 @@
           }
         ],
         "source": {
-          "audience": "aud_1",
-          "number": 1,
+          "audience": {
+            "id": "aud_1",
+            "number": 1
+          },
           "search": "wi_2",
           "landed_at": "2026-10-16T09:00:00.000Z"
         }
@@ -259,8 +263,10 @@
           }
         ],
         "source": {
-          "audience": "aud_1",
-          "number": 1,
+          "audience": {
+            "id": "aud_1",
+            "number": 1
+          },
           "search": "wi_2",
           "landed_at": "2026-10-16T09:00:00.000Z"
         }

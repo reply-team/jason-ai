@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -25,11 +26,13 @@ public sealed class OperationDescribeService(JasonDbContext db, RouteRegistry ro
         var contract = RouteService.RequireContract(request.Operation);
         var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
         var snapshot = plugins.Snapshot;
-        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, contract.Id) is not { } resolution)
+        // What is described is the plugin the work would reach: a campaign's read on request goes where its searches go.
+        var routedAs = AudienceReadService.RoutedAs(contract.Id);
+        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, routedAs) is not { } resolution)
         {
             throw new NotFoundException(
                 AttemptErrors.NoRoute,
-                $"No route sends '{contract.Id}' anywhere for campaign '{campaign.PublicId}'. Write one with route.set, or a global one in the settings file.");
+                $"No route sends '{routedAs}' anywhere for campaign '{campaign.PublicId}'. Write one with route.set, or a global one in the settings file.");
         }
 
         var route = resolution.Route;

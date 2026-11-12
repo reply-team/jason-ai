@@ -24,7 +24,8 @@ public class CampaignAudienceThresholdTests
 
     /// <summary>
     /// Set, it is on the campaign and in its chronicle; asked for again, nothing is written; absent from a patch, it is left
-    /// alone; null takes it away, with its line.
+    /// alone; null takes it away, with its line. Unset, the campaign's answer says null, as its other fields that may hold
+    /// nothing do, rather than leaving it out.
     /// </summary>
     [Fact]
     public async Task A_threshold_is_set_kept_and_cleared_with_one_line_per_change()
@@ -34,6 +35,7 @@ public class CampaignAudienceThresholdTests
         var service = NewService(db);
         var created = await service.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct);
         Assert.Null(created.AudienceThreshold);
+        Assert.Contains("\"audience_threshold\":null", System.Text.Json.JsonSerializer.Serialize(created, JasonJson.Options), StringComparison.Ordinal);
 
         Assert.Equal(50, (await service.UpdateAsync(Patch(created.Id, 50), Ct)).AudienceThreshold);
         await service.UpdateAsync(Patch(created.Id, 50), Ct);

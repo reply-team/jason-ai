@@ -36,7 +36,9 @@ namespace Jason.Runtime.Audiences;
 /// <para>
 /// Lines are facts, never a person's words: one for each page that carried anybody, with the counts and the people's
 /// ids, and one when the search ends, which the row and a unique index hold to once. A campaign has at most one item
-/// running at a time, so two answers about one search never land at once.
+/// running at a time, so two answers about one search never land at once; and an answer that lands people opens the
+/// write transaction before it reads who is known, which the attempt's handler commits with the save, so an import into
+/// the campaign at that moment waits for it rather than falling between the read and the save.
 /// </para>
 /// </remarks>
 public sealed class SearchLanding(JournalWriter journal, ExternalIdStore identifiers, TimeProvider clock, ILogger<SearchLanding>? logger = null)
@@ -59,6 +61,12 @@ public sealed class SearchLanding(JournalWriter journal, ExternalIdStore identif
 
     /// <summary>The two states that end a search, once a read says either with nothing more to read.</summary>
     private static readonly string[] Final = ["finished", "exhausted"];
+
+    /// <summary>The states in which the provider holds a search until a person acts there: paused, out of credits, at the plan's limit.</summary>
+    public static readonly string[] Held = ["paused", "paused_for_credits", "paused_for_limit"];
+
+    /// <summary>Whether <paramref name="state"/>, a provider's word for a search, is one in which it holds the search.</summary>
+    public static bool IsHeld(string? state) => state is not null && Held.Contains(state, StringComparer.Ordinal);
 
     /// <summary>
     /// Adds to the context's change set (not saved here) what <paramref name="item"/>'s answer does to its campaign's
@@ -85,6 +93,7 @@ public sealed class SearchLanding(JournalWriter journal, ExternalIdStore identif
         {
             if (result?["items"]?[0] is JsonObject answer)
             {
+                await HoldAsync(db, ct).ConfigureAwait(false);
                 await MadeAsync(db, item, attempt, pluginId, answer, ct).ConfigureAwait(false);
             }
 
@@ -106,11 +115,24 @@ public sealed class SearchLanding(JournalWriter journal, ExternalIdStore identif
 
         if (item.Operation == Status && result is JsonObject page)
         {
+            await HoldAsync(db, ct).ConfigureAwait(false);
             await ReadAsync(db, row, item, attempt, pluginId, page, ct).ConfigureAwait(false);
         }
         else if (item.Operation == Stop && result?["items"]?[0] is JsonObject stopped)
         {
-            Stopped(db, row, item, stopped);
+            await StoppedAsync(db, row, item, stopped, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The write transaction the landing reads in, begun here unless the context is in one already: from the reads of who
+    /// is known to the save, no other writer — an import above all — runs. Whoever saves the change set commits it.
+    /// </summary>
+    private static async Task HoldAsync(JasonDbContext db, CancellationToken ct)
+    {
+        if (db.Database.CurrentTransaction is null)
+        {
+            await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         }
     }
 
@@ -161,36 +183,85 @@ public sealed class SearchLanding(JournalWriter journal, ExternalIdStore identif
     private async Task ReadAsync(JasonDbContext db, AudienceSearch row, WorkItem read, Attempt attempt, string pluginId, JsonObject page, CancellationToken ct)
     {
         var now = clock.GetUtcNow().UtcDateTime;
+        var wasHeld = IsHeld(row.State);
         row.State = Text(page["state"]);
         row.Cursor = Text(page["cursor"]);
         row.Found = Number(page["found"]);
-        row.More = page["has_more"] is JsonValue more && more.TryGetValue(out bool readable) && readable;
+
+        // More brings the next read at once only after a page that carried somebody: a provider that says more is readable
+        // and gives nobody is read again a cadence later, not back to back. Whether anything is left to read is still the
+        // provider's word, and only that ends a search.
+        var readable = page["has_more"] is JsonValue more && more.TryGetValue(out bool said) && said;
+        row.More = readable && page["people"] is JsonArray { Count: > 0 };
 
         // An answer, whoever asked: the search is readable, and the dispatcher's next read waits only the cadence.
         row.Failures = 0;
         await LandAsync(db, row, read, attempt, pluginId, page["people"] as JsonArray, now, ct).ConfigureAwait(false);
-        if (row.EndedAs is null && !row.More && Final.Contains(row.State))
+
+        // A hold, or a move out of one, starts the quiet afresh: a held search is bound by the long wait of a hold from the
+        // moment it was held, and one that moves again by the ordinary bound from the moment it moved.
+        if (IsHeld(row.State) != wasHeld)
+        {
+            row.QuietSince = now;
+        }
+
+        if (IsHeld(row.State) && !wasHeld)
+        {
+            HeldNow(db, row, read);
+        }
+
+        if (row.EndedAs is null && !readable && Final.Contains(row.State))
         {
             End(db, row, row.State!, read);
         }
     }
 
     /// <summary>
+    /// The line that a search is held at the provider, keyed by the read that first said so: once per hold, since a read
+    /// that says it is still held, in any of the three words, finds it held already.
+    /// </summary>
+    private void HeldNow(JasonDbContext db, AudienceSearch row, WorkItem read) =>
+        journal.Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.AudienceSearchHeld,
+            campaign: null,
+            key: read.PublicId,
+            updated: new JsonObject
+            {
+                ["audience"] = row.Audience!.PublicId,
+                ["plugin"] = row.PluginId,
+                ["state"] = row.State,
+                ["asked"] = row.Asked,
+                ["found"] = row.Found,
+                ["landed"] = row.Landed,
+            },
+            workItem: row.SearchWorkItem);
+
+    /// <summary>
     /// A stop that stopped the search, or found it stopped by an earlier stop, or gone from the provider, ends it
     /// <c>cancelled</c>. One that found it ended by itself leaves it to the reads: what it found is still readable, and
-    /// the read that reaches the last person ends it as it really ended.
+    /// the read that finds nobody past its last person ends it as it really ended — except in an archived campaign, whose
+    /// searches nobody reads again, where it ends there as the provider ended it.
     /// </summary>
-    private void Stopped(JasonDbContext db, AudienceSearch row, WorkItem stop, JsonObject answer)
+    private async Task StoppedAsync(JasonDbContext db, AudienceSearch row, WorkItem stop, JsonObject answer, CancellationToken ct)
     {
-        var stopped = Text(answer["status"]) switch
+        if (row.EndedAs is not null)
         {
-            "cancelled" => true,
-            "already_ended" => Text(answer["ended_as"]) is null or "cancelled",
-            _ => false,
-        };
-        if (stopped && row.EndedAs is null)
+            return;
+        }
+
+        var ended = Text(answer["ended_as"]);
+        switch (Text(answer["status"]))
         {
-            End(db, row, "cancelled", stop);
+            case "cancelled":
+            case "already_ended" when ended is null or "cancelled":
+                End(db, row, "cancelled", stop);
+                break;
+            case "already_ended" when Final.Contains(ended)
+                && await db.Campaigns.AnyAsync(campaign => campaign.Id == row.CampaignId && campaign.Status == CampaignStatus.Archived, ct).ConfigureAwait(false):
+                End(db, row, ended!, stop);
+                break;
         }
     }
 

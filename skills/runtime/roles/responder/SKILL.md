@@ -333,10 +333,20 @@ exactly as it is, with its arguments, and nothing else:
 jason workitem heartbeat wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-What you are granted is **the plain callback**: the word, its verb and its arguments, as one command. Anything
-built around it — a redirect, a pipe, a chain of two commands — is **neither promised to run nor promised to be
-refused**, so do not build one; if you try and it is refused, that is the shape of what you typed and not an
-answer about the work.
+What you are granted is **the plain callback**: the word, its verb and its arguments, as one command, exactly
+`jason <verb> …` and nothing around it. Anything built around it is **neither promised to run nor promised to be
+refused**, so do not build one:
+
+- no `cd` before it, and no variable set before it or inside it (`C=cmp_… jason …`);
+- no `;`, `&&`, `|`, redirect or `$(…)` joining it to anything else;
+- every id written out in full, every time, never through a variable you set earlier.
+
+**A refusal is about the call's shape, not the work.** Type the same call again as one plain line, and go on.
+
+**A run never ends without its item.** Whatever happened, your last call is `jason workitem complete` for this item,
+with `--status succeeded` or with `--status failed` and the reason, or `jason workitem wait` where "When other work has
+to be done first" says to wait. A run that exits without one of them leaves the work it was started for undone, and
+nobody is told.
 
 Some of what you might reach for is refused outright: you have **no file-writing tool** in this version;
 on a host whose callback is a file, the one result file it names. On any other host there is no file to write first and

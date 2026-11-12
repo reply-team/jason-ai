@@ -111,6 +111,19 @@ public sealed class DispatcherOptions
     /// </summary>
     public int SearchStallSeconds { get; set; } = 3_600;
 
+    /// <summary>
+    /// 60..86400; how long after the dispatcher's last read of a search the provider holds — paused, out of credits, at
+    /// the plan's limit — the next is due: a held search spends nothing until a person acts at the provider, so it is read
+    /// rarely, and read at the ordinary cadence again once it moves. An hour unless set.
+    /// </summary>
+    public int SearchHeldCadenceSeconds { get; set; } = 3_600;
+
+    /// <summary>
+    /// 60..604800; how long a search may stay held at the provider before the dispatcher calls it stalled, its state named,
+    /// and stops reading it, so no search is read for ever. A week unless set.
+    /// </summary>
+    public int SearchHeldStallSeconds { get; set; } = 604_800;
+
     public AiRoleDefaults AiRole { get; set; } = new() { TimeoutSeconds = 3600, HeartbeatSeconds = 120, MaxAttempts = 3 };
 
     /// <summary>

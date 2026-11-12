@@ -209,10 +209,17 @@ public static class AttemptHandler
         try
         {
             await db.SaveChangesAsync().ConfigureAwait(false);
+
+            // A transaction a recorder step opened before its reads — a search's landing does — commits with the save.
+            if (db.Database.CurrentTransaction is { } open)
+            {
+                await open.CommitAsync().ConfigureAwait(false);
+            }
         }
         catch (DbUpdateException failure) when (!again
             && (ProviderBlocks.OpenedFirstElsewhere(failure) || ProviderBlocks.ClearedFirstElsewhere(failure)))
         {
+            await RollBackAsync(db).ConfigureAwait(false);
             // Another attempt on the same account changed its blocks between this one's read of them and its save: it
             // opened first the block this one met, or cleared first a block this one got past or met again. One block
             // is kept open per account and per sender and a block's status guards it, so this save was refused whole.
@@ -222,8 +229,18 @@ public static class AttemptHandler
         }
         catch (DbUpdateConcurrencyException)
         {
+            await RollBackAsync(db).ConfigureAwait(false);
             OutcomeNotRecorded(logger, work.AttemptPublicId, null);
             await RecordLaunchAsync(scopes, work, outcome).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Gives back a transaction a recorder step opened, before another context is asked to write.</summary>
+    private static async Task RollBackAsync(JasonDbContext db)
+    {
+        if (db.Database.CurrentTransaction is { } open)
+        {
+            await open.RollbackAsync().ConfigureAwait(false);
         }
     }
 

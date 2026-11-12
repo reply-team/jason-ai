@@ -17,6 +17,7 @@
     "created_at": "2026-10-16T09:00:00.000Z",
     "updated_at": "2026-10-16T09:00:00.000Z",
     "archived_at": null,
-    "folder_path": "~/Jason/projects/acme-corp/campaigns/q3-leads"
+    "folder_path": "~/Jason/projects/acme-corp/campaigns/q3-leads",
+    "audience_threshold": null
   }
 }

@@ -508,7 +508,7 @@ public sealed class JournalForwarderPackageTests
         Assert.NotNull(plugin);
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Equal(PluginKind.Subscriber, plugin.Manifest.Kind);
-        Assert.Equal("1.4.0", plugin.Manifest.Version);
+        Assert.Equal("1.3.0", plugin.Manifest.Version);
         Assert.Equal(["localhost:8787"], plugin.Manifest.Capabilities.Http!.Hosts);
         Assert.True(plugin.Manifest.Capabilities.Http.AnyGrantedHost);
         Assert.Equal([UrlVariable, TokenVariable, FileVariable], plugin.Manifest.Capabilities.Env!.Variables);
@@ -912,7 +912,7 @@ public sealed class JournalForwarderPackageTests
         Assert.Contains("\"url\": \"https://receiver.example.com/jason\", \"token\": \"a-token-of-yours\"", elsewhere, StringComparison.Ordinal);
         Assert.Contains("`jason plugin reload`", elsewhere, StringComparison.Ordinal);
         Assert.DoesNotContain("From then on the copy is yours.", elsewhere, StringComparison.Ordinal);
-        Assert.Contains("**Jason 0.32.0 or newer**", Section(readme, "What you need"), StringComparison.Ordinal);
+        Assert.Contains("**Jason 0.35.0 or newer**", Section(readme, "What you need"), StringComparison.Ordinal);
         Assert.DoesNotContain("no way to write a file", readme, StringComparison.Ordinal);
         Assert.Contains("`forwarder_receiver_missing`", readme, StringComparison.Ordinal);
         Assert.Contains("\"Files\": [\"", Section(readme, "A file instead of a receiver, or beside one"), StringComparison.Ordinal);

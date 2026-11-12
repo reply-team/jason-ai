@@ -105,6 +105,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.AudienceReserveRecovered,
         JournalKinds.AudiencePeopleLanded,
         JournalKinds.AudienceSearchEnded,
+        JournalKinds.AudienceSearchHeld,
         JournalKinds.PreferenceSet,
         JournalKinds.PreferenceUnset,
         JournalKinds.SubscriptionFailed,

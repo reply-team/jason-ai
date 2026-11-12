@@ -21,15 +21,18 @@ public class ReplyAudienceReadTests
 
     /// <summary>
     /// A preview answers Reply's counts and its sample, each person in Jason's shape with no way to reach them: no channels,
-    /// and Reply's record beside them without the LinkedIn link Reply shows. People per company go to Reply as its flag, and
+    /// and beside them only the keys of Reply's record that are meant to be shown — never the LinkedIn link Reply shows, nor
+    /// an address, a number or a key Reply adds later. People per company go to Reply as its flag, and
     /// the wait Reply's job is given is at most half the invocation's budget, the reads around it having the other half.
     /// </summary>
     [Fact]
     public async Task A_preview_answers_reply_s_counts_and_a_sample_nobody_can_be_reached_from()
     {
-        using var account = new ReplyAccount().WithPreview(1200, 340,
-            ReplyAccount.Sampled("Lena", "Novak", "CTO", "Porto, Portugal", "https://www.linkedin.com/in/lena-novak-example", "Northwind Freight", "northwind.example"),
-            ReplyAccount.Sampled(null, null, null, null, null, null, null));
+        var reachable = ReplyAccount.Sampled("Lena", "Novak", "CTO", "Porto, Portugal", "https://www.linkedin.com/in/lena-novak-example", "Northwind Freight", "northwind.example");
+        reachable["email"] = "lena.novak@northwind.example";
+        reachable["phone"] = "+351 555 0100";
+        reachable["twitter_url"] = "https://social.example/lena-novak";
+        using var account = new ReplyAccount().WithPreview(1200, 340, reachable, ReplyAccount.Sampled(null, null, null, null, null, null, null));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -40,7 +43,9 @@ public class ReplyAudienceReadTests
         Assert.Equal(
             """{"external_id":null,"first_name":"Lena","last_name":"Novak","title":"CTO","company":{"name":"Northwind Freight","domain":"northwind.example","size":null,"industry":null},"location":"Porto, Portugal"}""",
             new JsonObject(lena.Where(member => member.Key != "raw").Select(member => KeyValuePair.Create(member.Key, member.Value?.DeepClone()))).ToJsonString());
-        Assert.DoesNotContain("linkedin", (string)lena["raw"]!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            ["company_domain", "company_name", "first_name", "job_title", "last_name", "location"],
+            JsonNode.Parse((string)lena["raw"]!)!.AsObject().Select(member => member.Key).Order(StringComparer.Ordinal));
         Assert.Equal("Northwind Freight", (string?)JsonNode.Parse((string)lena["raw"]!)!["company_name"]);
         Assert.Equal(
             """{"external_id":null,"first_name":null,"last_name":null,"title":null,"company":{"name":null,"domain":null,"size":null,"industry":null},"location":null}""",

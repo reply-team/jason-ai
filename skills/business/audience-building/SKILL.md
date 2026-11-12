@@ -115,8 +115,9 @@ operations of its own, and their names are not the catalogue's:
   nobody approves it: the catalogue's `segment.preview`, asked of the provider's database rather than of the people we
   already hold.
 - `audience.search` finds up to a count of people and makes them the campaign's: `candidate.search` and
-  `candidate.promote` in one act, because every person it finds is revealed and charged. That is why the first search
-  under a definition waits for a person.
+  `candidate.promote` in one act, because the provider makes every person it finds ours, with no step between finding
+  and taking. It is metered, at the provider's own price, which is why the first search under a definition waits for a
+  person.
 - `audience.search_status` and `audience.search_cancel` read and stop one search that runs at the provider, as
   `job.get` and `job.cancel` do queued work; the runtime reads it by itself.
 - `audience.filter_values` lists the values one of the provider's filters takes, as the provider spells them, and

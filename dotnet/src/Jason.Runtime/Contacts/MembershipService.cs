@@ -321,7 +321,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
                 lead.Why,
                 [.. mine.Select(entry => new CountedIn(publicIds[entry.Membership.CampaignId], entry.Why))],
                 lead.Membership.Source is { } source
-                    ? new MembershipSource(source.Audience, source.Number, source.Search, ContactMapper.ToOffset(source.LandedAt))
+                    ? new MembershipSource(new AudienceRef(source.Audience, source.Number), source.Search, ContactMapper.ToOffset(source.LandedAt))
                     : null));
         }
 

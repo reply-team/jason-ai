@@ -178,7 +178,7 @@ public sealed class WorkItemService(
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
         var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
-        if (campaign.Status == CampaignStatus.Archived)
+        if (campaign.Status == CampaignStatus.Archived && !OperationCatalog.RunsInArchivedCampaign.Contains(Trimmed(request.Operation) ?? string.Empty, StringComparer.Ordinal))
         {
             throw DomainErrors.CampaignArchived(campaign.PublicId);
         }

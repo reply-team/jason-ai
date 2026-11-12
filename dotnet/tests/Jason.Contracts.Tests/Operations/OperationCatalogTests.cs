@@ -214,8 +214,9 @@ public class OperationCatalogTests
     [InlineData("dispatch", "{}")]
     [InlineData("dispatch", "{\"in_paused_campaign\": \"sometimes\", \"under_provider_block\": \"runs\"}")]
     [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\"}")]
-    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"under_provider_block\": \"sometimes\"}")]
-    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"under_provider_block\": \"runs\", \"in_draft_campaign\": \"waits\"}")]
+    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"in_archived_campaign\": \"sometimes\", \"under_provider_block\": \"runs\"}")]
+    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"in_archived_campaign\": \"cancelled\", \"under_provider_block\": \"sometimes\"}")]
+    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"in_archived_campaign\": \"cancelled\", \"under_provider_block\": \"runs\", \"in_draft_campaign\": \"waits\"}")]
     [InlineData("channel_arguments", "\"send_after\"")]
     [InlineData("channel_arguments", "[1]")]
     [InlineData("channel_arguments", "{}")]
@@ -531,11 +532,34 @@ public class OperationCatalogTests
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
         document["reach"] = "control";
-        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs", "under_provider_block": "waits" }""");
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs", "in_archived_campaign": "cancelled", "under_provider_block": "waits" }""");
 
         var contract = OperationContract.Parse("campaign.pause.json", document);
 
         Assert.Equal(InPausedCampaign.Runs, contract.Dispatch.InPausedCampaign);
+    }
+
+    /// <summary>
+    /// Archiving a campaign cancels its work, and only work that runs past a pause may run past an archive: a search's
+    /// stop, without which the search goes on spending. Anything else that says it runs in an archived campaign is refused.
+    /// </summary>
+    [Theory]
+    [InlineData("waits", false)]
+    [InlineData("runs", true)]
+    public void Only_work_that_runs_in_a_paused_campaign_may_run_in_an_archived_one(string paused, bool parses)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = "control";
+        document["dispatch"] = JsonNode.Parse($$"""{ "in_paused_campaign": "{{paused}}", "in_archived_campaign": "runs", "under_provider_block": "runs" }""");
+
+        if (parses)
+        {
+            Assert.Equal(InArchivedCampaign.Runs, OperationContract.Parse("audience.search_cancel.json", document).Dispatch.InArchivedCampaign);
+            return;
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("audience.search_cancel.json", document));
+        Assert.Contains("dispatch.in_archived_campaign", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -553,7 +577,7 @@ public class OperationCatalogTests
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
         document["reach"] = JsonNode.Parse(reach);
         document["approval"] = JsonNode.Parse(approval);
-        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs", "under_provider_block": "waits" }""");
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs", "in_archived_campaign": "cancelled", "under_provider_block": "waits" }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.activate.json", document));
 
@@ -574,7 +598,7 @@ public class OperationCatalogTests
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
         document["reach"] = JsonNode.Parse(reach);
-        document["dispatch"] = new JsonObject { ["in_paused_campaign"] = "waits", ["under_provider_block"] = value };
+        document["dispatch"] = new JsonObject { ["in_paused_campaign"] = "waits", ["in_archived_campaign"] = "cancelled", ["under_provider_block"] = value };
 
         var contract = OperationContract.Parse("campaign.get.json", document);
 
@@ -592,7 +616,7 @@ public class OperationCatalogTests
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
         document["reach"] = JsonNode.Parse(reach);
-        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "waits", "under_provider_block": "runs" }""");
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "runs" }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.activate.json", document));
 
@@ -625,7 +649,7 @@ public class OperationCatalogTests
     [InlineData("approval_reason", "null")]
     [InlineData("approval_reason", "\"   \"")]
     [InlineData("preflight", """{ "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_or_create" }""")]
-    [InlineData("dispatch", """{ "in_paused_campaign": "waits", "under_provider_block": "waits" }""")]
+    [InlineData("dispatch", """{ "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "waits" }""")]
     public void The_protective_floor_is_refused_where_anything_it_implies_does_not_hold(string field, string value)
     {
         var document = Floor();
@@ -939,7 +963,7 @@ public class OperationCatalogTests
         document["protective_floor"] = true;
         document["approval_reason"] = "the protective floor: waiting for permission to stop is the destructive choice.";
         document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable", "provider_contact": "find_or_create" }""");
-        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs", "under_provider_block": "waits" }""");
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs", "in_archived_campaign": "cancelled", "under_provider_block": "waits" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
         DeclaresAContactIdentifier(document);
         return document;
@@ -1029,7 +1053,7 @@ public class OperationCatalogTests
           "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
           "channel_arguments": null,
           "channel_templates": null,
-          "dispatch": { "in_paused_campaign": "waits", "under_provider_block": "waits" },
+          "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "waits" },
           "contact_projection": null,
           "precondition": "none",
           "preview": null,

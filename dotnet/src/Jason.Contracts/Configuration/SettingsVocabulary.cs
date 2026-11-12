@@ -27,7 +27,7 @@ public static class SettingsVocabulary
         "MinimumLevel", "RetainedFileCountLimit", "FileSizeLimitBytes",
 
         // Dispatcher, and the defaults of each kind of work it names.
-        "Enabled", "TickSeconds", "MaxParallel", "DrainSeconds", "RetryDelaySeconds", "ExitGraceSeconds", "EventsCadenceSeconds", "SearchCadenceSeconds", "SearchStallSeconds", "AiRole", "ProviderOp",
+        "Enabled", "TickSeconds", "MaxParallel", "DrainSeconds", "RetryDelaySeconds", "ExitGraceSeconds", "EventsCadenceSeconds", "SearchCadenceSeconds", "SearchStallSeconds", "SearchHeldCadenceSeconds", "SearchHeldStallSeconds", "AiRole", "ProviderOp",
         "TimeoutSeconds", "HeartbeatSeconds", "MaxAttempts",
 
         // How an AI role waits: MaxWaits here, and its ceiling MaxWaitSeconds, a name Notifications shares, below.

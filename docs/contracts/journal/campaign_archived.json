@@ -2,7 +2,7 @@
   "kind": "campaign_archived",
   "version": 1,
   "since": "0.1.0",
-  "summary": "A campaign was archived for good: its open work and its pending questions are cancelled and it never runs again.",
+  "summary": "A campaign was archived for good: its open work and its pending questions are cancelled and it never runs again, but for the stop of each search still running.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" }

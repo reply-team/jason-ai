@@ -25,7 +25,9 @@ public partial class ProviderOpPreflightTests
     /// Each reason the named send or search cannot be acted on by its reference, for each operation that acts on one, and
     /// the one that can: the campaign's, made by the operation that makes it, succeeded with a reference, under the plugin
     /// and binding the work is routed to. A search the provider finished inside its own call kept no reference, so its
-    /// status is never read. The package's digest is not among the reasons, since a reference outlives a version.
+    /// status is never read. The package's digest is not among the reasons, since a reference outlives a version. A read or
+    /// a stop of a search goes where the search ran, whatever its own operation resolves to: an override that sends it to
+    /// another plugin leaves the search readable and stoppable at the account that is spending.
     /// </summary>
     [Theory]
     [InlineData(Status, "none", AttemptErrors.SendUnknown)]
@@ -44,10 +46,12 @@ public partial class ProviderOpPreflightTests
     [InlineData(SearchStatus, "no reference", AttemptErrors.SearchReferenceAbsent)]
     [InlineData(SearchStatus, "another binding", AttemptErrors.SearchRouteMismatch)]
     [InlineData(SearchStatus, "the one", null)]
+    [InlineData(SearchStatus, "the one, its read routed elsewhere", null)]
     [InlineData(SearchCancel, "none", AttemptErrors.SearchUnknown)]
     [InlineData(SearchCancel, "failed", AttemptErrors.SearchReferenceAbsent)]
     [InlineData(SearchCancel, "another plugin", AttemptErrors.SearchRouteMismatch)]
     [InlineData(SearchCancel, "the one", null)]
+    [InlineData(SearchCancel, "the one, its stop routed elsewhere", null)]
     public void A_send_or_a_search_is_acted_on_only_where_this_campaign_made_it_with_a_reference_under_this_route(string operation, string made, string? expected)
     {
         var scenario = Naming(operation, made switch
@@ -60,6 +64,11 @@ public partial class ProviderOpPreflightTests
             "another binding" => MadeFor(operation) with { BindingIdentity = "sha256:east" },
             _ => MadeFor(operation),
         });
+        if (made.EndsWith("routed elsewhere", StringComparison.Ordinal))
+        {
+            scenario.CampaignRoute = new Route("another-provider", null, null);
+            scenario.Others = [Scenario.Package("another-provider", operations: [operation])];
+        }
 
         var verdict = scenario.Check();
 
@@ -68,6 +77,10 @@ public partial class ProviderOpPreflightTests
         {
             Assert.Equal(FailureClass.Permanent, verdict.Class);
             Assert.True(verdict.Refused);
+        }
+        else
+        {
+            Assert.Equal(Scenario.PluginId, verdict.Plan!.Plugin.Manifest.Id);
         }
     }
 

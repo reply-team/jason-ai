@@ -148,6 +148,7 @@ public static class ApprovalCommands
         command.SetAction((parseResult, cancellationToken) =>
         {
             var operations = parseResult.GetValue(operation);
+            NamesItsSubject(parseResult.GetValue(category), operations ?? []);
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(id))
                 .Set("category", parseResult.GetValue(category))
@@ -167,6 +168,47 @@ public static class ApprovalCommands
 
         return command;
     }
+
+    /// <summary>
+    /// The approval as a person reads it and, for a search, where the campaign's allowance stands after it: the one
+    /// <c>--allow</c> set, or none in force where approving another audience's search took it back. One read of the
+    /// campaign's standing approvals, made only for a search.
+    /// </summary>
+    private static async Task<string?> ApprovedAsync(CliEnvironment env, string json, CancellationToken cancellationToken)
+    {
+        var rendered = ApprovalRenderers.Approval(json);
+        if (rendered is null || RenderText.Read<ApprovalDto>(json) is not { Operation: AllowanceOperation, CampaignId: { } campaign })
+        {
+            return rendered;
+        }
+
+        var (_, response) = await OperationRunner.SendAsync(
+            env with { Out = TextWriter.Null }, Operations.ApprovalListStanding, RequestBody.Empty().Set("campaign_id", campaign), cancellationToken)
+            .ConfigureAwait(false);
+        return rendered + Environment.NewLine + (response is { IsSuccess: true }
+            ? ApprovalRenderers.AllowanceAfter(response.Body)
+            : $"The campaign's allowance could not be read: jason approval list-standing {campaign}");
+    }
+
+    /// <summary>
+    /// A standing approval is for a category of verdict or for the allowance, named by its operation, and never both: a
+    /// usage error, refused before the runtime is asked, when neither is given or a category comes beside the allowance's.
+    /// </summary>
+    private static void NamesItsSubject(string? category, IReadOnlyCollection<string> operations)
+    {
+        var allowance = operations.Contains(AllowanceOperation, StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(category) && !allowance)
+        {
+            throw new UsageException($"Name what it is for: --category for a category of verdict, or --operation {AllowanceOperation} for the campaign's allowance.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(category) && allowance)
+        {
+            throw new UsageException($"--category names a category of verdict and --operation {AllowanceOperation} the campaign's allowance, which has none; give one of them.");
+        }
+    }
+
+    private const string AllowanceOperation = "audience.search";
 
     /// <summary>Takes a standing approval back. Any named person may; the drafts already let go stay let go.</summary>
     private static Command UnsetStanding(CliEnvironment env, Option<string?> actor)
@@ -189,6 +231,7 @@ public static class ApprovalCommands
 
         command.SetAction((parseResult, cancellationToken) =>
         {
+            NamesItsSubject(parseResult.GetValue(category), parseResult.GetValue(operation) is { } named ? [named] : []);
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(id))
                 .Set("category", parseResult.GetValue(category))
@@ -246,7 +289,9 @@ public static class ApprovalCommands
         var human = VerbOptions.Human();
         var allow = new Option<int?>("--allow")
         {
-            Description = "Approve a search and allow up to this many more people under its audience, from 1 to 100000: the campaign's allowance, set in the same act.",
+            Description = "Approve a search and allow up to this many more people under its audience, from 1 to 100000: from then on, later searches under "
+                + "this audience start without asking anybody until the people they ask for reach this number, and the provider charges for each person "
+                + "they find. It is the campaign's one allowance, set in the same act, and it replaces the one before, whichever audience that named.",
         };
         var allowPerSearch = new Option<int?>("--allow-per-search") { Description = "With --allow: the most people one search under it may ask for, from 1 to 1000." };
         var allowExpiresAt = new Option<string?>("--allow-expires-at") { Description = "With --allow: when the allowance stops, as ISO-8601 UTC. It never stops when absent." };
@@ -285,8 +330,14 @@ public static class ApprovalCommands
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, $"approval {verb}", "an approval is decided on a person's word");
 
-            return OperationRunner.RunAsync(
-                env, operation, body, new RunOptions(parseResult.GetValue(human), ApprovalRenderers.Approval), cancellationToken);
+            var options = new RunOptions(parseResult.GetValue(human), ApprovalRenderers.Approval);
+            if (allows)
+            {
+                // Approving a search moves the campaign's allowance in the same act, so a person is told where it stands now.
+                options = options with { RenderHumanAsync = (json, ct) => ApprovedAsync(env, json, ct) };
+            }
+
+            return OperationRunner.RunAsync(env, operation, body, options, cancellationToken);
         });
 
         return command;

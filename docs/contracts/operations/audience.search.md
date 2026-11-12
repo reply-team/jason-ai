@@ -162,6 +162,13 @@ reads the provider's searches started since `context.unsettled_since` first, fin
 key where the provider keeps one for a search, or else by its definition and options, and answers it `accepted` with
 its reference, whatever state it is in. Only where none matches does the repeat start a search.
 
+The runtime holds such a repeat to the attempt that may have started the search, as it holds a repeated send: the
+package by its id and digest, the account, the arguments and the input that attempt was composed with
+([routing](../../routing.md) §7, row 23). A route moved to another account, a package replaced, or a count or a
+definition edited while the item waited would make the recovery read look in the wrong place, or for another request,
+and start a second search that spends while the first goes on unseen; so the repeat is refused, `provider_answer_lost`,
+ambiguous and final, and a person finds out at the provider whether the first attempt started a search.
+
 ## The preview a person reads
 
 ```text
@@ -179,7 +186,7 @@ person approving reads what will be searched and what it may cost.
 | Property | Value | Detail |
 |---|---|---|
 | `reach` | `control` | — |
-| `reversibility` | `compensatable` | — |
+| `reversibility` | `irreversible` | — |
 | `approval` | `confirm_once` | — |
 | `protective_floor` | `false` | — |
 | `before_repeating` | the provider's searches started since `context.unsettled_since`: one of them may be this request's, and repeating spends again. | — |
@@ -191,6 +198,7 @@ person approving reads what will be searched and what it may cost.
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |

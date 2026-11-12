@@ -105,6 +105,8 @@ public sealed class SettingsAllowlist
         new("Dispatcher:EventsCadenceSeconds", Kind.Integer32),
         new("Dispatcher:SearchCadenceSeconds", Kind.Integer32),
         new("Dispatcher:SearchStallSeconds", Kind.Integer32),
+        new("Dispatcher:SearchHeldCadenceSeconds", Kind.Integer32),
+        new("Dispatcher:SearchHeldStallSeconds", Kind.Integer32),
         new("Dispatcher:AiRole:TimeoutSeconds", Kind.Integer32),
         new("Dispatcher:AiRole:HeartbeatSeconds", Kind.Integer32),
         new("Dispatcher:AiRole:MaxAttempts", Kind.Integer32),

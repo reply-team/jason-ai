@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Audiences;
 
@@ -22,6 +23,29 @@ internal static class AudienceSearches
     /// <summary>The searches still followed, of the campaigns that run: off the index that holds only those.</summary>
     public static IQueryable<AudienceSearch> InFlight(JasonDbContext db) =>
         db.AudienceSearches.Where(search => search.EndedAs == null && search.Campaign!.Status == CampaignStatus.Active);
+
+    /// <summary>
+    /// The work item of a search of the campaign that has not ended, other than <paramref name="itemId"/>: a row still
+    /// followed — running, or held at the provider — the oldest first, off the index that holds only those; or else a
+    /// search of the campaign running now. Null where there is none.
+    /// </summary>
+    public static async Task<string?> InTheWayAsync(JasonDbContext db, int campaignId, int itemId, CancellationToken ct) =>
+        await Unended(db, campaignId, itemId).FirstOrDefaultAsync(ct).ConfigureAwait(false)
+        ?? await Starting(db, campaignId, itemId).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+
+    /// <summary>The work items of a campaign's searches whose rows have not ended, other than <paramref name="itemId"/>'s, the oldest first.</summary>
+    internal static IQueryable<string> Unended(JasonDbContext db, int campaignId, int itemId) =>
+        db.AudienceSearches
+            .Where(search => search.CampaignId == campaignId && search.EndedAs == null && search.SearchWorkItemId != itemId)
+            .OrderBy(search => search.Id)
+            .Select(search => search.SearchWorkItem!.PublicId);
+
+    /// <summary>A campaign's search items running now, other than <paramref name="itemId"/>: started, with no row yet.</summary>
+    internal static IQueryable<string> Starting(JasonDbContext db, int campaignId, int itemId) =>
+        db.WorkItems
+            .Where(item => item.CampaignId == campaignId && item.Id != itemId && item.Operation == SearchLanding.Search
+                && (item.Status == WorkItemStatus.Scheduled || item.Status == WorkItemStatus.Processing))
+            .Select(item => item.PublicId);
 
     /// <summary>The row of the search a campaign's work names by its work item, in that campaign alone.</summary>
     public static IQueryable<AudienceSearch> Named(JasonDbContext db, int campaignId, string searchWorkItem) =>
