@@ -78,7 +78,7 @@ type EventChannelsAreTheSeam = [
 ];
 
 // A conversation, its kept entries and the events of the conversations reach the page exactly as the desktop makes them.
-type Conversational = 'attached' | 'fresh' | 'pick' | 'renamed' | 'mode' | 'line' | 'gap';
+type Conversational = 'attached' | 'fresh' | 'pick' | 'renamed' | 'mode' | 'line' | 'gap' | 'notice';
 type ConversationsAreTheSeam = [
     Holds<Equal<ConversationSummary, DesktopConversation>>,
     Holds<Equal<ConversationOpened, DesktopConversationRecord>>,

@@ -306,6 +306,30 @@ describe('the desktop’s conversations', () => {
         );
     });
 
+    it('says a notice once in the thread, and its Open folder button asks the desktop to open that folder alone', async () => {
+        const { desktop } = renderConsole();
+        const id = await send(desktop, 'Go');
+        flush(() => desktop.emit(id, { kind: 'notice', text: 'Left out of this chat: the folder “x” has skills.' }));
+        await waitFor(() => screen.getByText('Left out of this chat: the folder “x” has skills.'));
+        expect(screen.queryByRole('button', { name: 'Open folder' })).toBeNull();
+        flush(() =>
+            desktop.emit(id, {
+                kind: 'notice',
+                text: 'Full access has ended. The folder is kept for seven days and then removed: /d/01JD0000000000000000000000-1788000000000',
+                folder: '01JD0000000000000000000000-1788000000000',
+            }),
+        );
+        await waitFor(() =>
+            screen.getByText(/kept for seven days and then removed: \/d\/01JD0000000000000000000000-1788000000000/),
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
+        await waitFor(() =>
+            expect(calls(desktop, 'chat.openFolder').map((each) => each.args)).toEqual([
+                ['01JD0000000000000000000000-1788000000000'],
+            ]),
+        );
+    });
+
     it('starts a conversation afresh, and removes one only once asked again, saying the host keeps its transcript', async () => {
         const { desktop } = renderConsole();
         const id = await send(desktop, 'Go');

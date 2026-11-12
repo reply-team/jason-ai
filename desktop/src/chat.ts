@@ -26,10 +26,11 @@
  * lines reach the agent only with the person's next message, after the header, set apart as records.
  */
 
-import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder } from './chat-agent-folder.ts';
+import { GrantFolderUnmade, endGrantFolder, endedNameShape, makeGrantFolder, moveLeftovers, newGrantId, sweepCap, sweepEnded } from './chat-full-folder.ts';
 import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
 import {
     bounded,
@@ -61,6 +62,7 @@ import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
+import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
@@ -106,6 +108,12 @@ export type ChatEvent =
     | { kind: 'line'; line: LineEntry; folded: boolean }
     /** The lines written while the window was closed were more than one read brings back: the older ones are not shown. */
     | { kind: 'gap' }
+    /**
+     * A sentence the desktop says to the person, once: a folder left out of the chat, or the folder a Full access grant
+     * worked in, now kept seven days. `folder` is present for the latter, the name of that ended folder, for the Open
+     * folder button (`openEndedFolder`).
+     */
+    | { kind: 'notice'; text: string; folder?: string }
     | { kind: 'done'; error: string | null };
 
 /** What a send names besides its conversation and its words: never a campaign, which the conversation's record decides. */
@@ -186,6 +194,16 @@ export interface ChatOptions {
     unchecked?(): void;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
     fullAccessOffered?: boolean;
+    /** Held by a start while it deploys skills into the chat folder: a send waits for it before it builds a turn. */
+    skillsGate?: Pick<SkillsGate, 'held' | 'wait'>;
+    /** The clock, in milliseconds; absent, the system's. A test gives its own to age a folder. */
+    now?(): number;
+    /** How many entries one pass of the sweep of the ended grants' folders takes; absent, `sweepCap`. */
+    sweepCap?: number;
+    /** Opens a folder for the person to see (the Open folder button); absent, nothing is opened. */
+    openFolder?(path: string): void | Promise<void>;
+    /** Said when a grant's folder could not be made, moved to the ended place or swept, by the system's error code. */
+    fullFolderFailed?(step: 'make' | 'move' | 'sweep', code: string): void;
     started?(host: string, resumed: boolean, mode: ChatMode): void;
     ended?(turn: TurnEnded): void;
     decided?(decided: Decided): void;
@@ -426,6 +444,12 @@ export class Chat {
     #namingNow: { stop: AbortController; folder: string } | null = null;
     /** The conversations in Full access, by id. In memory only: never on a record, gone with the window. */
     #fullAccess = new Set<string>();
+    /** The folder of each conversation's Full access grant, by conversation id: the grant's id. In memory only. */
+    #grants = new Map<string, string>();
+    /** The campaign and project folders already said to be left out, by path, so each is said once. */
+    #leftOut = new Set<string>();
+    /** Folders this start moved that an earlier move had failed on, by conversation: said once, when it is opened. */
+    #movedAtStart = new Map<string, string>();
     /**
      * What the Windows check of Codex's sandbox found, for this run of the desktop, by Codex's file, its version and the
      * Codex home the turn names: true where the sandbox held, false where a command in it read the run file. A check
@@ -471,6 +495,134 @@ export class Chat {
             ...(options.decided ? { decided: options.decided } : {}),
             ...(options.answerWindowMs !== undefined ? { timeoutMs: options.answerWindowMs } : {}),
         });
+        this.#sweepAtStart();
+    }
+
+    #now(): number {
+        return this.#options.now?.() ?? Date.now();
+    }
+
+    #fullFolders() {
+        const { chatFull, chatFullEnded, chatFullRecords } = this.#options.paths;
+        return { full: chatFull, ended: chatFullEnded, records: chatFullRecords };
+    }
+
+    /**
+     * At the start no grant runs, so a grants' folder still standing is a leftover (a window closed on a turn that held
+     * it, or a move that failed): it moves to the ended place, its seven days counted from now. Then the ended place is
+     * swept, off the send path and bounded; a failure leaves the folder and says a code, and a turn is never refused for it.
+     */
+    #sweepAtStart(): void {
+        try {
+            for (const each of moveLeftovers(this.#fullFolders(), this.#now(), (code) => this.#options.fullFolderFailed?.('move', code))) {
+                if (each.conversation !== null && conversationIdShape.test(each.conversation)) this.#movedAtStart.set(each.conversation, each.name);
+            }
+        } catch {
+            // Nothing to move.
+        }
+        this.#sweepLater();
+    }
+
+    #sweepLater(): void {
+        const timer = setTimeout(() => {
+            try {
+                sweepEnded(this.#fullFolders(), { now: this.#now(), cap: this.#options.sweepCap ?? sweepCap, said: (code) => this.#options.fullFolderFailed?.('sweep', code) });
+            } catch (error) {
+                this.#options.fullFolderFailed?.('sweep', (error as NodeJS.ErrnoException | null)?.code ?? 'unknown');
+            }
+        }, 0);
+        timer.unref();
+    }
+
+    /**
+     * Makes the folder of a new Full access grant, with the recorded skills in it, before the mode is given. The chat
+     * folder's agent settings are put right first, so the copy is of what the desktop placed.
+     */
+    #openGrant(conversation: Conversation): void {
+        const { paths } = this.#options;
+        try {
+            ownAgentFolder(paths.chat, paths.skillsRecords);
+        } catch (error) {
+            if (error instanceof AgentFolderUnowned) throw new ChatRefused(error.message);
+            throw error;
+        }
+        const id = newGrantId(this.#now());
+        try {
+            makeGrantFolder(this.#fullFolders(), id, paths.chat, paths.skillsRecords, conversation.id);
+        } catch (error) {
+            if (error instanceof GrantFolderUnmade) {
+                this.#options.fullFolderFailed?.('move', error.code);
+                throw new ChatRefused(error.message);
+            }
+            throw error;
+        }
+        this.#grants.set(conversation.id, id);
+    }
+
+    /**
+     * A grant ends: its folder moves to the ended place at once, and the chat says once, with the folder's path, that it
+     * is kept seven days. A folder that cannot be moved (a host still holds it) stays, a code is said, and the next start
+     * moves it; nothing is said to the page of a folder that did not move. `say` false when no page is to hear it.
+     */
+    #endGrant(conversationId: string, say: boolean): void {
+        const id = this.#grants.get(conversationId);
+        if (id === undefined) return;
+        this.#grants.delete(conversationId);
+        const name = endGrantFolder(this.#fullFolders(), id, this.#now(), (code) => this.#options.fullFolderFailed?.('move', code));
+        if (name === null) return;
+        this.#sweepLater();
+        if (!say) return;
+        const path = join(this.#options.paths.chatFullEnded, name);
+        this.#options.emit(conversationId, {
+            kind: 'notice',
+            text: `Full access has ended. The folder the agent worked in is kept for seven days and then removed: ${path}`,
+            folder: name,
+        });
+    }
+
+    /** The Open folder button of that notice: opens the ended folder of that name, and no other path. */
+    async openEndedFolder(name: unknown): Promise<void> {
+        const { chatFullEnded } = this.#options.paths;
+        const notAFolder = 'That is not a folder the desktop keeps.';
+        if (typeof name !== 'string' || !endedNameShape.test(name)) throw new ChatRefused(notAFolder);
+        const path = join(chatFullEnded, name);
+        try {
+            if (!lstatSync(path).isDirectory()) throw new ChatRefused(notAFolder);
+        } catch {
+            throw new ChatRefused(notAFolder);
+        }
+        await this.#options.openFolder?.(path);
+    }
+
+    /**
+     * A folder a campaign or project names is added to a Claude Code turn only when its .claude holds no skills, agents
+     * or commands, which the host would load from there into every turn that adds it. A folder left out is said once, by
+     * its name and the reason.
+     */
+    #addable(folders: readonly string[], replyTo: string): string[] {
+        const kept: string[] = [];
+        for (const folder of folders) {
+            const holds = ['skills', 'agents', 'commands'].some((name) => {
+                try {
+                    lstatSync(join(folder, '.claude', name));
+                    return true;
+                } catch (error) {
+                    return (error as NodeJS.ErrnoException).code !== 'ENOENT';
+                }
+            });
+            if (!holds) {
+                kept.push(folder);
+                continue;
+            }
+            if (this.#leftOut.has(folder)) continue;
+            this.#leftOut.add(folder);
+            const name = folder.split(/[\\/]/).filter(Boolean).at(-1) ?? folder;
+            this.#options.emit(replyTo, {
+                kind: 'notice',
+                text: `Left out of this chat: the folder “${name}” has skills, agents or commands of its own in its .claude folder, and a chat does not load those.`,
+            });
+        }
+        return kept;
     }
 
     /** Whether a turn of this chat is running. */
@@ -532,6 +684,7 @@ export class Chat {
             if (this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
             const yes = (await this.#options.confirmFullAccess?.()) === true;
             if (!yes || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
+            this.#openGrant(conversation);
         }
         this.#changeMode(conversation, mode, true);
         return this.#summaryOf(conversation);
@@ -546,6 +699,7 @@ export class Chat {
         if (from === to) return;
         if (to === 'full_access') this.#fullAccess.add(conversation.id);
         else this.#fullAccess.delete(conversation.id);
+        if (from === 'full_access') this.#endGrant(conversation.id, true);
         if (to !== 'full_access') {
             const before = conversation.mode;
             if (to === 'plan_only') conversation.mode = 'plan_only';
@@ -568,6 +722,18 @@ export class Chat {
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
     open(id: unknown): ConversationOpened {
         const conversation = this.#own(id);
+        const moved = this.#movedAtStart.get(conversation.id);
+        if (moved !== undefined) {
+            this.#movedAtStart.delete(conversation.id);
+            const path = join(this.#options.paths.chatFullEnded, moved);
+            queueMicrotask(() =>
+                this.#options.emit(conversation.id, {
+                    kind: 'notice',
+                    text: `Full access has ended. The folder the agent worked in is kept for seven days and then removed: ${path}`,
+                    folder: moved,
+                }),
+            );
+        }
         return { ...this.#summaryOf(conversation), entries: structuredClone(conversation.entries), dropped: conversation.dropped, chosen: conversation.chosen === undefined ? null : { ...conversation.chosen } };
     }
 
@@ -599,6 +765,7 @@ export class Chat {
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
         this.#fullAccess.delete(conversation.id);
+        this.#endGrant(conversation.id, false);
     }
 
     /** "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept. One whose turn runs is refused. */
@@ -831,6 +998,8 @@ export class Chat {
         // Any turn that begins while a set-up turn runs could make the campaign that set-up turn would take for its own.
         for (const [id, each] of this.#setupTurns) if (id !== conversation.id) each.overlapped = true;
         try {
+            // A start that deploys skills into the chat folder holds the gate: the turn is built after it lets go.
+            if (this.#options.skillsGate?.held) await this.#options.skillsGate.wait();
             // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
             // answering while the version is read, so a second send is refused as busy. The version read also says
             // whether the model named takes the effort named.
@@ -894,8 +1063,10 @@ export class Chat {
      */
     closeAll(): void {
         this.#closed = true;
-        // Full access is gone with the window, as every "always" is.
+        // Full access is gone with the window, as every "always" is; each grant's folder moves to the ended place, and a
+        // folder a host still holds waits there for the next start.
         this.#fullAccess.clear();
+        for (const id of [...this.#grants.keys()]) this.#endGrant(id, false);
         for (const running of [...this.#running.values()]) {
             running.stopped = true;
             running.process?.stop();
@@ -1131,14 +1302,14 @@ export class Chat {
      * application, nothing is written and the gap is said once; a file that cannot be written is said and thrown, and
      * the turn it was written for is refused in the desktop's words.
      */
-    #placeInstructions(fence: ChatFence): void {
+    #placeInstructions(fence: ChatFence, folder: string = this.#options.paths.chat): void {
         if (fence.instructions === null) {
             if (!this.#missingSaid) this.#options.instructionsMissing?.();
             this.#missingSaid = true;
             return;
         }
         try {
-            placeInstructions(this.#options.paths.chat, fence.instructions);
+            placeInstructions(folder, fence.instructions);
         } catch (error) {
             if (error instanceof InstructionsUnwritten) this.#options.instructionsUnwritten?.(error.file, error.code);
             throw error;
@@ -1157,7 +1328,7 @@ export class Chat {
         if (conversation.campaign_id !== null) {
             const read = await this.#readCampaign(conversation.campaign_id, resolved.program === 'claude');
             about = read.about;
-            added = read.added;
+            added = this.#addable(read.added, replyTo);
             const name = read.about.campaign?.name;
             if (name && conversation.named_by_person !== true) conversation.title = nameOf(name) || conversation.title;
         } else if (setup) {
@@ -1174,6 +1345,10 @@ export class Chat {
         // The recap is of what came before this turn; the person's words of this turn follow it.
         const earlier = recap(conversation.entries);
         const resume = conversation.sessions[resolved.host];
+        // A Full access turn runs in its grant's own folder, and nothing else does; every other turn, and a Full access turn
+        // with no grant to run in, in the chat folder.
+        const grantId = running.mode === 'full_access' ? this.#grants.get(conversation.id) : undefined;
+        const folder = grantId === undefined ? paths.chat : join(paths.chatFull, grantId);
         const hostChanged = resume === undefined && Object.keys(conversation.sessions).length > 0;
         mkdirSync(paths.chat, { recursive: true });
 
@@ -1198,8 +1373,13 @@ export class Chat {
             // First of all a turn does: the chat folder is found to be the desktop's own, and its memory files written,
             // before the turn's file, its endpoint or the host that starts in that folder.
             this.#placeInstructions(fence);
-            // The chat folder's agent settings hold only what the desktop placed (`chat-agent-folder.ts`).
+            // The chat folder's agent settings hold only what the desktop placed (`chat-agent-folder.ts`), and so does the
+            // top of a grant's folder, which gets the memory files too.
             ownAgentFolder(paths.chat, paths.skillsRecords);
+            if (grantId !== undefined) {
+                this.#placeInstructions(fence, folder);
+                ownAgentFolder(folder, paths.skillsRecords);
+            }
             if (resolved.folder !== null) makePrivate(resolved.label, resolved.program === 'claude' ? paths.claudeKeyed : paths.codexKeyed, resolved.folder);
             if (resolved.program === 'claude') {
                 turnHome = Object.entries(this.#options.env).find(([name, value]) => (this.#platform === 'win32' ? name.toUpperCase() : name) === 'HOME' && value !== undefined && value !== '')?.[1] ?? homedir();
@@ -1208,8 +1388,8 @@ export class Chat {
                 running.turnId = id;
                 const scope: ChatScope = {
                     platform: this.#platform,
-                    cwd: paths.chat,
-                    chat: paths.chat,
+                    cwd: folder,
+                    chat: folder,
                     added,
                     data: paths.data,
                     home: homedir(),
@@ -1234,7 +1414,10 @@ export class Chat {
                 });
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
                 const settingsFile = full ? writeTurnSettings(paths.turns, id, endpoint.hookUrl, secret) : undefined;
-                const rules = [...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop)), ...chatRules(this.#platform, paths.chat)];
+                const rules = [
+                    ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), grantId === undefined ? undefined : { id: grantId, present: entriesOf(paths.chatFull) }),
+                    ...chatRules(this.#platform, folder),
+                ];
                 argsFor = (resumed) =>
                     claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed, version });
             } else {
@@ -1399,7 +1582,7 @@ export class Chat {
             let started: HostProcess;
             try {
                 started = startHost(launch, argsFor(resumed), {
-                    cwd: paths.chat,
+                    cwd: folder,
                     env,
                     stdin: turnInput(head, recapped ? earlier : null, text),
                     onLine: (line) => {

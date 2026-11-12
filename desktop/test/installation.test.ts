@@ -5,16 +5,18 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { AgentFolderUnowned } from '../src/chat-agent-folder.ts';
 import { loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
+import { SkillsGate } from '../src/skills-gate.ts';
 import type { DesktopSettings } from '../src/settings.ts';
 import { bench, memoryLog, type Bench } from './harness.ts';
 
 const bundleVersion = '0.34.0-rc.1';
 
-async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: null }, extra: { ownChatFolder?: (chat: string, records: string) => void } = {}) {
+async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: null }, extra: { ownChatFolder?: (chat: string, records: string) => boolean | void; gate?: SkillsGate; cli?: (cli: Bench['cli']) => Bench['cli'] } = {}) {
     const log = memoryLog();
     const saved: DesktopSettings[] = [];
+    const { cli: wrap, ...deps } = extra;
     const started = await startInstallation({
-        cli: loggedCli(b.cli, log),
+        cli: loggedCli(wrap ? wrap(b.cli) : b.cli, log),
         paths: b.paths,
         log,
         bundle: join(b.root, 'bundle'),
@@ -22,7 +24,7 @@ async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsD
         settings,
         saveSettings: (next) => void saved.push(next),
         programs: b.programs,
-        ...extra,
+        ...deps,
     });
     return { started, log, saved, verbs: b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args) };
 }
@@ -314,4 +316,55 @@ test('a link left at the skills folder\'s record name is removed as itself befor
     assert.deepEqual(readdirSync(person), ['precious.json']);
     assert.equal(readFileSync(join(person, 'precious.json'), 'utf8'), 'the person\'s own');
     assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')), ['campaign-launch']);
+});
+
+test('a recorded skill whose bytes changed is gone at the next start and deployed again, though the bundle was deployed already', async (t) => {
+    const b = bench(t);
+    runtimeAlreadyUp(b);
+    await start(b);
+    const skill = join(b.paths.chat, '.claude', 'skills', 'campaign-launch', 'SKILL.md');
+    writeFileSync(skill, '# campaign-launch allowed-tools: Bash');
+    const again = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.ok(again.verbs.some((args) => args[0] === 'skills' && args.includes('claude_code')), 'the chat folder is deployed again');
+    assert.equal(readFileSync(skill, 'utf8'), '# campaign-launch\n');
+    assert.deepEqual(readdirSync(b.paths.skillsRecords).sort(), ['agents.json', 'claude.json']);
+    const quiet = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.equal(quiet.verbs.slice(again.verbs.length).some((args) => args[0] === 'skills'), false, 'with nothing changed the next start deploys nothing');
+});
+
+test('a start holds the skills gate from the pass over the chat folder to the last deploy, and lets it go however the start ends', async (t) => {
+    const b = bench(t);
+    runtimeAlreadyUp(b);
+    const gate = new SkillsGate();
+    const heldAt: boolean[] = [];
+    const watching = (cli: Bench['cli']): Bench['cli'] => ({
+        async run(args, options) {
+            if (args[0] === 'skills' && args.includes('--root')) heldAt.push(gate.held);
+            return cli.run(args, options);
+        },
+    });
+    assert.equal(gate.held, false);
+    await start(b, undefined, { gate, cli: watching });
+    assert.deepEqual(heldAt, [true, true], 'both deploys into the chat folder ran with the gate held');
+    assert.equal(gate.held, false);
+    const failing = () => {
+        throw new Error('the pass failed');
+    };
+    await assert.rejects(start(b, undefined, { gate, ownChatFolder: failing }));
+    assert.equal(gate.held, false, 'a start that throws lets the gate go');
+});
+
+test('a send during the deploy starts only after it ends', async () => {
+    const gate = new SkillsGate();
+    await gate.wait();
+    const release = gate.hold();
+    const order: string[] = [];
+    const waiting = gate.wait().then(() => order.push('send went on'));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    order.push('deploy ended');
+    release();
+    release();
+    await waiting;
+    assert.deepEqual(order, ['deploy ended', 'send went on']);
+    assert.equal(gate.held, false);
 });

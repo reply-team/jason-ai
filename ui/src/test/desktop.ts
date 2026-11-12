@@ -456,6 +456,12 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 stub.emit(record.id, { kind: 'mode', mode });
                 return summaryOf(record);
             }),
+            openFolder: answering('chat.openFolder', (name) => {
+                // As the desktop does: only the name of a folder it keeps is opened.
+                return typeof name === 'string' && /^[0-9A-HJKMNP-TV-Z]{26}-[0-9]{10,16}$/.test(name)
+                    ? null
+                    : { refused: 'That is not a folder the desktop keeps.' };
+            }),
             feed: answering('chat.feed', (): DesktopConversation => {
                 const feed =
                     [...kept.values()].find((each) => each.main === true) ??

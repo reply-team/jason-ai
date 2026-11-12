@@ -29,6 +29,7 @@ const chat = {
     attach: true,
     rename: true,
     setMode: true,
+    openFolder: true,
     feed: true,
 } as const satisfies Record<keyof JasonDesktop['chat'], true>;
 const links = { take: true, onOpen: true } as const satisfies Record<keyof JasonDesktop['links'], true>;
@@ -94,6 +95,7 @@ describe('the desktop seam', () => {
             'chat.attach',
             'chat.rename',
             'chat.setMode',
+            'chat.openFolder',
             'chat.feed',
             'links.take',
             'links.onOpen',

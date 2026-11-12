@@ -45,7 +45,7 @@ test('Plan only starts Claude Code in plan mode, with the classifier kept out, t
     const args = claudeArguments({ ...base, mode: 'plan_only' });
     assert.equal(after(args, '--permission-mode'), 'plan');
     assert.equal(after(args, '--settings'), planTurnSettings);
-    assert.deepEqual(JSON.parse(planTurnSettings), { permissions: { blockReadsOutsideWorkingDirectories: true }, useAutoModeDuringPlan: false, disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }] });
+    assert.deepEqual(JSON.parse(planTurnSettings), { permissions: { blockReadsOutsideWorkingDirectories: true }, useAutoModeDuringPlan: false, disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }], disableSkillShellExecution: true });
     const allowed = values(args, '--allowedTools');
     assert.ok(allowed.includes('Bash(jason campaign list:*)'));
     assert.ok(!allowed.includes('Bash(jason campaign create:*)'), 'a verb that changes something is not allowed in Plan only');
@@ -72,6 +72,7 @@ test('the Full access turn\'s settings: reads outside the folders still blocked,
     const settings = fullAccessSettings('http://127.0.0.1:4100/hook', 'the-secret');
     assert.deepEqual(settings, {
         permissions: { blockReadsOutsideWorkingDirectories: true },
+        disableSkillShellExecution: true,
         disableAllHooks: false,
         allowedHttpHookUrls: ['http://127.0.0.1:4100/hook'],
         disableClaudeAiConnectors: true,
@@ -588,4 +589,10 @@ test('a word with more brace expansions than the second look reads is refused, n
 test('Full access is not offered yet, and the PowerShell tool still runs nothing unasked in it', () => {
     assert.equal(fullAccessOffered, false);
     assert.equal(powerShellRunsInFullAccess, false);
+});
+
+test('the settings of every turn, in all three modes, turn off the shell commands a skill carries', () => {
+    assert.equal(JSON.parse(claudeTurnSettings).disableSkillShellExecution, true);
+    assert.equal(JSON.parse(planTurnSettings).disableSkillShellExecution, true);
+    assert.equal(fullAccessSettings('http://127.0.0.1:4100/hook', 's').disableSkillShellExecution, true);
 });

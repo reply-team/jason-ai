@@ -99,6 +99,18 @@ describe('a chat as the page keeps it', () => {
         expect(lost(allowed, 'req_1').entries[1]).toMatchObject({ answer: 'gone' });
     });
 
+    it('keeps a notice the desktop says in the thread, with the folder it names for the Open folder button', () => {
+        const chat = said(newChat('conv_1', 'claude'), 'Go');
+        expect(received(chat, { kind: 'notice', text: 'Left out of this chat: x.' }).entries.at(-1)).toEqual({
+            kind: 'notice',
+            text: 'Left out of this chat: x.',
+            folder: null,
+        });
+        expect(
+            received(chat, { kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' }).entries.at(-1),
+        ).toEqual({ kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' });
+    });
+
     it('becomes a campaign’s conversation on a hand-over, and keeps a fresh session and a pick in its thread', () => {
         const chat = said(newChat('conv_1', 'claude'), 'Set up an autumn campaign');
         const attached = received(chat, { kind: 'attached', campaignId: 'cmp_1', title: 'Autumn outreach' });
