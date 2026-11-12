@@ -4,9 +4,11 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Routing;
 
@@ -14,8 +16,9 @@ namespace Jason.Runtime.Tests.Routing;
 /// The global half of channel routes: written in the settings file under an operation, frozen by a reload like every
 /// other global route, held to the checks a campaign's channel route is held to and refused with the same codes, and
 /// kept when a campaign's route is written. And the rule that a channel route names a plugin that reads its accounts'
-/// events, since a reply to a direct send reaches a campaign only through them: refused at a reload, at
-/// <c>route.set</c>, and at a reload whose new package stops reading them while a channel route names it.
+/// events, since a reply to a direct send reaches a campaign only through them: refused at a reload, of a global route
+/// and of a stored campaign row alike, at <c>route.set</c>, and at a reload whose new package stops reading them while a
+/// channel route names it.
 /// </summary>
 public class GlobalChannelRouteTests
 {
@@ -171,6 +174,38 @@ public class GlobalChannelRouteTests
         Assert.Equal(before, api.Resolve<RouteRegistry>().Snapshot.Id);
         var listed = await api.PostOkAsync<RoutesDto>(Operations.RouteList, new { campaign_id = campaign }, Ct);
         Assert.All(listed.Campaigns, routes => Assert.True(routes.Default is null && routes.Operations.Count == 0));
+    }
+
+    /// <summary>
+    /// R6 at the reload's campaign half: a stored campaign row is checked again at every reload, whoever wrote it, so a row
+    /// naming a channel route to a plugin that never read events refuses the reload whole as the settings' would.
+    /// </summary>
+    [Fact]
+    public async Task A_stored_campaign_channel_route_to_a_plugin_that_reads_no_events_rejects_the_whole_reload()
+    {
+        await using var api = await StartAsync(paths => Install(paths, Deaf, readsEvents: false));
+        var campaign = await CampaignAsync(api);
+        var before = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
+
+        await using (var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile)))
+        {
+            var id = await db.Campaigns.Where(c => c.PublicId == campaign).Select(c => c.Id).SingleAsync(Ct);
+            db.CampaignRoutes.Add(new CampaignRoute
+            {
+                CampaignId = id,
+                Operation = "message.send",
+                Channel = "linkedin",
+                PluginId = Deaf,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var detail = await RefusedAsync(api);
+
+        Assert.Equal($"campaign:{campaign}/routes/message.send/linkedin", detail.Field);
+        Assert.Equal(RouteProblemCodes.ChannelPluginReadsNoEvents, detail.Code);
+        await KeptAsync(api, before);
     }
 
     /// <summary>
