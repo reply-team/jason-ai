@@ -43,6 +43,7 @@ import { markdownView } from './markdown-view';
 import { svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
+import { offersReply, readEnrolRoute } from './enrol-route';
 import { chatPlace, dropLinks, replyCardFor, replyDismissed, reload as listHosts } from './connect';
 import { changeChat, chats, clock, conversations, conversationsFailure, feedId, here, messageOf, setup } from './state';
 
@@ -555,6 +556,18 @@ export function ChatPanel({ chatId }: { chatId: string }) {
         wasRemoving.current = removing;
     }, [removing]);
     const chat = chats.value[chatId];
+    // Reply is offered unless the campaign's enrolment is routed to another plugin: read when the chat is of a draft campaign
+    // while Reply is not connected, and read again if the campaign or what is connected changes.
+    const draftCampaignId =
+        chat?.campaignId != null &&
+        campaigns.value.find((each) => each.id === chat.campaignId)?.status === 'draft' &&
+        setup.value &&
+        !(setup.value.reply.signedIn && setup.value.reply.wired)
+            ? chat.campaignId
+            : null;
+    useEffect(() => {
+        if (draftCampaignId !== null) void readEnrolRoute(draftCampaignId);
+    }, [draftCampaignId]);
     if (!chat) return null;
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
     // A conversation the desktop keeps is listed; one never sent to has no record to rename yet.
@@ -687,11 +700,14 @@ export function ChatPanel({ chatId }: { chatId: string }) {
             )}
             <Painted className="thread" view={view} />
             {/* Reply is asked for only where the work needs a way to send: the chat of a campaign still a draft, while
-                Reply is not connected. A campaign on another provider, or one already running, never carries it. */}
+                Reply is not connected. It is an offer, so it is hidden only where the runtime says the campaign's enrolment is routed to
+                another plugin, or the campaign already runs; no route and a route that cannot be read leave it, and nothing shows
+                while the route is being read. */}
             {chat.campaignId !== null &&
                 campaigns.value.find((each) => each.id === chat.campaignId)?.status === 'draft' &&
                 setup.value &&
                 !(setup.value.reply.signedIn && setup.value.reply.wired) &&
+                offersReply(chat.campaignId) &&
                 !replyDismissed.value.includes(chatId) && (
                     <div className="chat-reply">
                         <Painted view={replyCardFor(chatId)} onGone={() => dropLinks(chatPlace(chatId))} />

@@ -1,0 +1,16 @@
+{
+  "operation": "route.resolve",
+  "case": "no-route",
+  "request": {
+    "campaign_id": "cmp_2",
+    "operation": "campaign.enroll"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "no_route",
+      "message": "No route sends 'campaign.enroll' anywhere for campaign 'cmp_2'. Write one with route.set, or a global one in the settings file.",
+      "retryable": false
+    }
+  }
+}

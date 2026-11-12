@@ -166,6 +166,12 @@ lists each key and each card's grant.
   before showing it, shows it only on your click, and keeps it nowhere after the dialog closes. Finishing happens on
   Reply's side, so the card learns of it by **Check now**, **Check again** or a focus. Limits, signatures, pauses and
   removal stay in Reply.
+  The same card appears inside the chat of a draft campaign while Reply is not connected. It is an offer, so it is hidden
+  only where the runtime says the campaign's enrolment is routed to a plugin other than Reply (the window asks
+  `route.resolve` for `campaign.enroll`, which applies the campaign's own route, its default, the global override and the
+  global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
+  where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
+  running shows none. **Not now** hides it for that chat until the window is closed.
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 
