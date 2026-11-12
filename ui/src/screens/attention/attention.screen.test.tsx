@@ -217,6 +217,25 @@ describe('Attention', () => {
             expect(labels).toEqual(['All 2', '✓ Approvals 0', 'Questions 2']);
         });
 
+        it('says beside an option that its count is of what is loaded where more pages wait', async () => {
+            renderApp(pendingFake());
+            await waitFor(() => screen.getByText('Enroll Ada Lovelace'));
+            const labels = () =>
+                within(row())
+                    .getAllByRole('button')
+                    .map((each) => each.textContent?.replace(/\s+/g, ' ').trim());
+            expect(labels()).toEqual(['✓ All 4', 'Approvals 2', 'Questions 2']);
+
+            // More approvals wait at the runtime: the kind and All say their counts are of what is loaded; Questions does not.
+            store.approvalsCursor.value = 'next-page';
+            await waitFor(() => expect(labels()).toEqual(['✓ All 4 loaded', 'Approvals 2 loaded', 'Questions 2']));
+
+            store.questionsCursor.value = 'next-page';
+            await waitFor(() =>
+                expect(labels()).toEqual(['✓ All 4 loaded', 'Approvals 2 loaded', 'Questions 2 loaded']),
+            );
+        });
+
         it('shows everything again once nothing was listed, so an approval that arrives then is shown', async () => {
             renderApp(
                 new FakeApi()
