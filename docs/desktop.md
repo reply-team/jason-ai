@@ -114,7 +114,8 @@ them on.
   it, in any mode; where Codex's sandbox reads Jason's data folder a Codex command can read it, and it holds no secret. A
   program the AI writes and that you let run, in any mode, can change it, as it can anything you can, and the
   confirmation says so. Beside it, `full-access-taken-back` marks a take-back the file would not take: Jason holds the
-  choice as taken back while it is there and removes the file when it next starts.
+  choice as taken back while it is there and removes the file when it next starts. Where the folder takes no new file
+  when Jason starts, so that a take-back could not be marked, the choice is held as taken back until it next starts.
 - `<data>/desktop/skills-records/`: the record of what the desktop placed in the chat folder's skills folders, kept outside
   the chat folder, which the chat can neither read nor write.
 - `<data>/desktop/rollback/<version>/`: the application as it was before the last update (below).

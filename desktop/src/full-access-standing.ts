@@ -16,6 +16,7 @@
  *
  * A take-back the file would not take (`takeBackOwed`) leaves a mark beside it, `full-access-taken-back`: while the mark
  * is there the main process holds the choice as taken back, and the next start removes the file before any chat is made.
+ * Where the folder takes no new file at a start (`folderTakesFiles`), the choice is held as taken back for that run.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -138,6 +139,26 @@ export function writeStanding(file: string, host: StandingHost, standing: Standi
             // What could not be removed is never read: a read takes the file alone.
         }
         throw error;
+    }
+}
+
+/**
+ * Whether the file's folder takes a new file: an empty one under a name no one can foretell, made only where nothing is,
+ * and removed again. Where it does not, a take-back could not be recorded there either.
+ */
+export function folderTakesFiles(file: string): boolean {
+    const probe = join(dirname(file), `full-access.${randomBytes(8).toString('hex')}.probe`);
+    try {
+        writeFileSync(probe, '', { mode: 0o600, flag: 'wx' });
+        rmSync(probe, { force: true });
+        return true;
+    } catch {
+        try {
+            rmSync(probe, { force: true });
+        } catch {
+            // Nothing more to do: the choice is held as taken back.
+        }
+        return false;
     }
 }
 
