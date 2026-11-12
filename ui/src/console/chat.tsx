@@ -40,7 +40,7 @@ import { markdownView } from './markdown-view';
 import { svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
-import { reload as listHosts } from './connect';
+import { replyCardView, replyDismissed, reload as listHosts } from './connect';
 import { changeChat, chats, clock, conversations, conversationsFailure, feedId, here, messageOf, setup } from './state';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
@@ -630,6 +630,24 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 </div>
             )}
             <Painted className="thread" view={view} />
+            {/* Reply is asked for only where the work needs a way to send: the chat of a campaign still a draft, while
+                Reply is not connected. A campaign on another provider, or one already running, never carries it. */}
+            {chat.campaignId !== null &&
+                campaigns.value.find((each) => each.id === chat.campaignId)?.status === 'draft' &&
+                setup.value &&
+                !(setup.value.reply.signedIn && setup.value.reply.wired) &&
+                !replyDismissed.value.includes(chatId) && (
+                    <div className="chat-reply">
+                        <Painted view={replyCardView} />
+                        <button
+                            className="btn sm"
+                            type="button"
+                            onClick={() => (replyDismissed.value = [...replyDismissed.value, chatId])}
+                        >
+                            Not now
+                        </button>
+                    </div>
+                )}
             <form className="composer" onSubmit={send} aria-label="Message">
                 {setup.value && !host && held.length > 0 && (
                     <div className="note am host-held">

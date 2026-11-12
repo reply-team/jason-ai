@@ -28,6 +28,7 @@ import * as connect from './connect';
 import * as needs from './needs';
 import { Painted } from './painted';
 import { sideView } from './side';
+import { StartPanel, startMaking, startWaiting } from './start';
 import {
     bind,
     changeChat,
@@ -49,6 +50,7 @@ import {
 // window opens on the same one.
 
 const titles: Readonly<Record<PanelName, string>> = {
+    start: 'Start',
     needs: 'Needs you',
     campaigns: 'Campaigns',
     activity: 'Activity',
@@ -86,6 +88,7 @@ function PagePanel() {
 
 const components = {
     chat: ChatTab,
+    start: StartPanel,
     needs: () => <Painted className="painted" view={needs.needsView} />,
     campaigns: () => <Painted className="painted" view={campaigns.campaignsView} />,
     activity: () => <Painted className="painted" view={activityView} />,
@@ -138,6 +141,7 @@ function makeDock(get: () => DockviewApi | null): Dock {
     };
     return {
         show,
+        close: (panel) => get()?.getPanel(panel)?.api.close(),
         showChat,
         chat: (campaign) =>
             void startChat(campaign).then((id) => {
@@ -158,22 +162,6 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     const root = useRef<HTMLDivElement>(null);
     const dockApi = useRef<DockviewApi | null>(null);
     const dock = useMemo(() => makeDock(() => dockApi.current), []);
-    // The set-up chat the window opens on, placed once both the desktop has made it and the dock is ready.
-    const first = useRef<string | null>(null);
-    const placeFirst = () => {
-        const dock = dockApi.current;
-        const id = first.current;
-        if (!dock || id === null || dock.getPanel(`chat:${id}`)) return;
-        dock.addPanel({
-            id: `chat:${id}`,
-            component: 'chat',
-            title: chats.value[id]?.title ?? 'Chat',
-            params: { chatId: id },
-            ...(dock.getPanel('needs') ? { position: { referencePanel: 'needs', direction: 'left' as const } } : {}),
-        });
-        dock.getPanel(`chat:${id}`)?.api.setActive();
-    };
-
     useEffect(() => {
         const unbind = bind({ api, desktop, dock });
         const unlisten = root.current ? listen(root.current) : () => undefined;
@@ -183,10 +171,6 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         void connect.reload();
         void reloadConversations();
         void askFeed();
-        void startChat().then((id) => {
-            first.current = id;
-            placeFirst();
-        });
         let pending: ReturnType<typeof setTimeout> | null = null;
         const journal =
             stream ??
@@ -210,6 +194,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 // The desktop renamed or reordered its conversations: a hand-over, a new title, or a turn's end.
                 if (event.kind === 'attached' || event.kind === 'renamed' || event.kind === 'done')
                     void reloadConversations();
+                // A hand-over makes a draft campaign the chat is about; the Reply card reads its status from the list.
+                if (event.kind === 'attached') void campaigns.reload();
             }),
             desktop.setup.onChanged(() => void connect.reload()),
             desktop.onCommand((command) => {
@@ -267,7 +253,21 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             position: { referencePanel: 'needs' },
         });
         event.api.getPanel('needs')?.api.setActive();
-        placeFirst();
+        // The window opens on the start screen, beside what needs the person, the campaigns and the activity.
+        const placeStart = () => {
+            event.api.addPanel({
+                id: 'start',
+                component: 'start',
+                title: titles.start,
+                position: { referencePanel: 'needs', direction: 'left' },
+            });
+            event.api.getPanel('start')?.api.setActive();
+        };
+        placeStart();
+        // A message that waits is never out of sight: the tab cannot be closed while one waits or a chat is being made.
+        event.api.onDidRemovePanel((panel) => {
+            if (panel.id === 'start' && (startWaiting.value !== null || startMaking.value !== null)) placeStart();
+        });
     };
 
     return (

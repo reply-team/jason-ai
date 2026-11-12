@@ -177,7 +177,11 @@ export interface StubDesktop extends JasonDesktop {
     keep(record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord;
 }
 
-export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
+/**
+ * A stand-in for the desktop, as the window really is: it opens on the start screen and sends no command by itself.
+ * `newChat` has it send the menu's New chat command as the console starts, which opens a chat; `chatDesktop` is that.
+ */
+export function stubDesktop(status: DesktopSetup = setupFound, options: { newChat?: boolean } = {}): StubDesktop {
     const chatHandlers = new Set<(chatId: string, event: DesktopChatEvent) => void>();
     const changeHandlers = new Set<() => void>();
     const commandHandlers = new Set<(command: DesktopCommand) => void>();
@@ -258,6 +262,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         keep,
         onCommand(handler) {
             commandHandlers.add(handler);
+            if (options.newChat === true) queueMicrotask(() => handler('chat.new'));
             return () => commandHandlers.delete(handler);
         },
         chat: {
@@ -377,7 +382,8 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         setup: {
             status: () => {
                 calls.push({ name: 'setup.status', args: [] });
-                return Promise.resolve(stub.status);
+                const reason = refuse.get('setup.status');
+                return reason === undefined ? Promise.resolve(stub.status) : Promise.reject(new Error(reason));
             },
             connectReply: call('setup.connectReply'),
             connectReplyWithKey: call('setup.connectReplyWithKey'),
@@ -445,3 +451,6 @@ export const journalLine = (fields: Partial<JournalEntry>): JournalEntry => ({
     ...fixtures['journal.list/oli'].response.items[0]!,
     ...fields,
 });
+
+/** A stand-in for a desktop whose person chose New chat as the window opened: the tests of a chat start from one. */
+export const chatDesktop = (status: DesktopSetup = setupFound): StubDesktop => stubDesktop(status, { newChat: true });

@@ -50,10 +50,12 @@ export const messageOf = (error: unknown): string =>
     error instanceof ApiError || error instanceof Error ? error.message : String(error);
 
 /** The panels of the dock, by the name the dock knows each by. */
-export type PanelName = 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
+export type PanelName = 'start' | 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
 
 export interface Dock {
     show(panel: PanelName): void;
+    /** Takes a panel out of the dock. */
+    close(panel: PanelName): void;
     /**
      * Shows a conversation: the campaign's one, made on first use, when a campaign is given, else a new set-up chat.
      */
