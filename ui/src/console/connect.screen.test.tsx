@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import type { DesktopReplyAccount, DesktopReplyChannel, DesktopSetup } from '../platform/desktop';
@@ -6,10 +6,10 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { setupFound, chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { setupFound, chatDesktop, madeUpLinks, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
-import { replyAccountsAddress } from './connect';
+import { heldLink, replyAccountsAddress, resetLinks } from './connect';
 import { Console } from './console';
 import { attention } from './needs';
 import { chats, lines } from './state';
@@ -307,6 +307,292 @@ describe('the Reply card, reading again', () => {
         focusBack();
         expect(statusReads(desktop)).toBe(first + 1);
         release();
+    });
+});
+
+describe('the Reply card, connecting an account by a link', () => {
+    const clipboard = { writeText: vi.fn((text: string) => Promise.resolve(text.length)) };
+    beforeEach(() => {
+        resetLinks();
+        clipboard.writeText.mockClear();
+        Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true });
+    });
+    afterEach(() => {
+        Reflect.deleteProperty(navigator, 'clipboard');
+        vi.restoreAllMocks();
+    });
+
+    const linkCalls = (desktop: StubDesktop) =>
+        desktop.calls.filter((call) => call.name.startsWith('setup.reply')).map((call) => [call.name, ...call.args]);
+    const dialogOf = (card: () => HTMLElement) => within(card()).getByRole('dialog');
+    const addAccount = async (card: () => HTMLElement, choice: string) => {
+        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(await waitFor(() => within(card()).getByRole('button', { name: choice })));
+    };
+    const mailboxWords =
+        "No Reply sign-in is needed, so you can send this link to whoever owns the mailbox. Anyone who has it can add and manage this Reply account's mailboxes, and it does not expire: send it only to someone you trust.";
+    const linkedinWords =
+        'No Reply sign-in is needed, so you can send this link to whoever owns the account. Anyone who has it can connect an account to this Reply account: send it only to them.';
+    const limited = 'Valid for a limited time; if it stopped working, make a new one.';
+    const stored = () => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage });
+
+    it('offers Gmail, Outlook, another mailbox and LinkedIn, and no form that takes a password', async () => {
+        renderConnect(withAccounts([]));
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
+        const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
+        expect(within(offered).getAllByRole('button').map(words)).toEqual([
+            'Gmail',
+            'Outlook',
+            'Another mailbox',
+            'LinkedIn',
+            'Cancel',
+        ]);
+        expect(card().querySelector('input[type="password"]:not([aria-label="Reply API key"])')).toBeNull();
+    });
+
+    it('offers no channel the CLI says is not in the plan or role, and nothing before a sign-in', async () => {
+        renderConnect({ ...setupFound, reply: { ...setupFound.reply, accounts: [], absent: ['email'] } });
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
+        const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
+        expect(within(offered).getAllByRole('button').map(words)).toEqual(['LinkedIn', 'Cancel']);
+    });
+
+    it('has no Add account before the CLI is signed in', async () => {
+        renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: false, user: null, accounts: [] } });
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        expect(within(card()).queryByRole('button', { name: 'Add account' })).toBeNull();
+    });
+
+    it('asks Reply for Gmail’s page on the click, and shows it with its host, Copy link, Open in the browser and Check now', async () => {
+        const desktop = renderConnect(withAccounts([]));
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        expect(linkCalls(desktop)).toEqual([]);
+        await addAccount(card, 'Gmail');
+        await waitFor(() => expect(within(dialogOf(card)).getByRole('textbox', { name: 'Link' })).toBeTruthy());
+        expect(linkCalls(desktop)).toEqual([['setup.replyMailboxLink', 'gmail']]);
+        const dialog = dialogOf(card);
+        expect((within(dialog).getByRole('textbox', { name: 'Link' }) as HTMLInputElement).value).toBe(
+            madeUpLinks.gmail,
+        );
+        expect(words(dialog.querySelector('.link-host')!)).toBe('run.reply.io');
+        expect(words(dialog)).toContain(mailboxWords);
+        expect(words(dialog)).not.toContain(limited);
+        const open = within(dialog).getByRole('link', { name: 'Open in the browser' }) as HTMLAnchorElement;
+        expect(open.getAttribute('href')).toBe(madeUpLinks.gmail);
+        expect(open.getAttribute('target')).toBe('_blank');
+        expect(open.getAttribute('rel')).toBe('noreferrer');
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Copy link' }));
+        await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith(madeUpLinks.gmail));
+        await waitFor(() => expect(words(dialogOf(card))).toContain('Copied.'));
+
+        const before = statusReads(desktop);
+        fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Check now' }));
+        await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
+    });
+
+    it('asks Outlook’s page and the hosted page for another mailbox, each by its own name', async () => {
+        const desktop = renderConnect(withAccounts([]));
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        await addAccount(card, 'Outlook');
+        await waitFor(() => within(dialogOf(card)).getByRole('textbox', { name: 'Link' }));
+        expect((within(dialogOf(card)).getByRole('textbox', { name: 'Link' }) as HTMLInputElement).value).toBe(
+            madeUpLinks.outlook,
+        );
+        fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Close' }));
+        await addAccount(card, 'Another mailbox');
+        await waitFor(() =>
+            expect((within(dialogOf(card)).getByRole('textbox', { name: 'Link' }) as HTMLInputElement).value).toBe(
+                madeUpLinks.hosted,
+            ),
+        );
+        expect(linkCalls(desktop)).toEqual([
+            ['setup.replyMailboxLink', 'outlook'],
+            ['setup.replyMailboxLink', 'hosted'],
+        ]);
+    });
+
+    it('asks a LinkedIn account’s name, then a link for it, says it is valid for a limited time, and reads the list again', async () => {
+        const desktop = renderConnect(withAccounts([]));
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        await addAccount(card, 'LinkedIn');
+        const name = await waitFor(() =>
+            within(card()).getByRole('textbox', { name: 'Name for the LinkedIn account' }),
+        );
+        fireEvent.click(within(card()).getByRole('button', { name: 'Make the link' }));
+        expect(linkCalls(desktop)).toEqual([]);
+        fireEvent.input(name, { target: { value: '  Made-up Sales  ' } });
+        const before = statusReads(desktop);
+        fireEvent.click(within(card()).getByRole('button', { name: 'Make the link' }));
+        await waitFor(() => within(dialogOf(card)).getByRole('textbox', { name: 'Link' }));
+        expect(linkCalls(desktop)).toEqual([['setup.replyLinkedInConnect', 'Made-up Sales']]);
+        const dialog = dialogOf(card);
+        expect(words(dialog)).toContain(linkedinWords);
+        expect(words(dialog)).toContain(limited);
+        expect(words(dialog.querySelector('.link-host')!)).toBe('run.reply.io');
+        await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
+    });
+
+    it('forgets the link when the dialog closes: nothing of it stays on the page or in the page’s storage', async () => {
+        const desktop = renderConnect(withAccounts([]));
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        await addAccount(card, 'Gmail');
+        await waitFor(() => within(dialogOf(card)).getByRole('textbox', { name: 'Link' }));
+        expect(document.body.innerHTML).toContain('madeUpToken_ForTests');
+        expect(heldLink()).toBe(madeUpLinks.gmail);
+        fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Close' }));
+        await waitFor(() => expect(within(card()).queryByRole('dialog')).toBeNull());
+        expect(heldLink()).toBeNull();
+        expect(document.body.innerHTML).not.toContain('madeUpToken_ForTests');
+        expect(stored()).not.toContain('madeUpToken_ForTests');
+        // A read of the list afterwards brings nothing of it back.
+        desktop.changed();
+        await waitFor(() => expect(statusReads(desktop)).toBeGreaterThan(0));
+        expect(document.body.innerHTML).not.toContain('madeUpToken_ForTests');
+    });
+
+    it('takes the link with it when the console goes away', async () => {
+        renderConnect(withAccounts([]));
+        const connect = await openConnect();
+        await addAccount(() => replyCard(connect), 'Gmail');
+        await waitFor(() => expect(heldLink()).toBe(madeUpLinks.gmail));
+        cleanup();
+        expect(heldLink()).toBeNull();
+    });
+
+    it('drops an answer that comes after its dialog was closed', async () => {
+        const desktop = renderConnect(withAccounts([]));
+        let release: () => void = () => undefined;
+        desktop.setup.replyMailboxLink = () =>
+            new Promise((resolve) => {
+                release = () =>
+                    resolve({ kind: 'mailbox', link: madeUpLinks.gmail, host: 'run.reply.io', expiresAtUtc: null });
+            });
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        await addAccount(card, 'Gmail');
+        const dialog = await waitFor(() => dialogOf(card));
+        expect(words(dialog)).toContain('Asking Reply for the link');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+        release();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(within(card()).queryByRole('dialog')).toBeNull();
+        expect(document.body.innerHTML).not.toContain('madeUpToken_ForTests');
+    });
+
+    it('says a refusal as the desktop’s sentence, inert, in the dialog', async () => {
+        const desktop = renderConnect(withAccounts([]));
+        desktop.linkAnswers.set('setup.replyMailboxLink', { refused: `Not on for this plan. ${hostile}` });
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        await addAccount(card, 'Gmail');
+        const alert = await waitFor(() => within(dialogOf(card)).getByRole('alert'));
+        expect(words(alert)).toBe(`Not on for this plan. ${hostile}`);
+        expect(card().querySelector('img')).toBeNull();
+        expect(within(dialogOf(card)).queryByRole('link')).toBeNull();
+    });
+
+    it('offers Reconnect on a row that is not in a good state, and none on one that is', async () => {
+        renderConnect(
+            withAccounts([
+                account('1', 'email', 'connected'),
+                account('2', 'email', 'disconnected'),
+                account('3', 'email', 'unknown'),
+                account('11', 'linkedin', 'enabled'),
+                account('12', 'linkedin', 'disabled'),
+                account('13', 'linkedin', 'dailyLimitReached'),
+                account('14', 'linkedin', 'cookieInvalid'),
+                account('15', 'linkedin', ''),
+                account('21', 'whatsapp', 'broken'),
+            ]),
+        );
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        const reconnectable = Array.from(card().querySelectorAll<HTMLElement>('.acct'))
+            .filter((row) => within(row).queryByRole('button', { name: 'Reconnect' }) !== null)
+            .map((row) => words(row.querySelector('b')!));
+        expect(reconnectable).toEqual(['Account 2', 'Account 3', 'Account 14', 'Account 15']);
+    });
+
+    it('reconnects a LinkedIn account by its id, and a mailbox through the page of the provider the person picks', async () => {
+        const desktop = renderConnect(
+            withAccounts([account('2', 'email', 'disconnected'), account('14', 'linkedin', 'cookieInvalid')]),
+        );
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        const row = (name: string) =>
+            Array.from(card().querySelectorAll<HTMLElement>('.acct')).find(
+                (each) => words(each.querySelector('b')!) === name,
+            )!;
+        fireEvent.click(within(row('Account 14')).getByRole('button', { name: 'Reconnect' }));
+        await waitFor(() => within(dialogOf(card)).getByRole('textbox', { name: 'Link' }));
+        expect(linkCalls(desktop)).toEqual([['setup.replyLinkedInReconnect', '14']]);
+        fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Close' }));
+
+        fireEvent.click(within(row('Account 2')).getByRole('button', { name: 'Reconnect' }));
+        const choosing = await waitFor(() => dialogOf(card));
+        expect(linkCalls(desktop)).toHaveLength(1);
+        expect(words(choosing)).toContain('makes no second one');
+        fireEvent.click(within(choosing).getByRole('button', { name: 'Outlook' }));
+        await waitFor(() => within(dialogOf(card)).getByRole('textbox', { name: 'Link' }));
+        expect(linkCalls(desktop)[1]).toEqual(['setup.replyMailboxLink', 'outlook']);
+        expect(words(dialogOf(card))).toContain(mailboxWords);
+    });
+
+    it('lists the connections that wait under LinkedIn, by name, state and expiry, and asks the link again on a click', async () => {
+        const desktop = renderConnect({
+            ...setupFound,
+            reply: {
+                ...setupFound.reply,
+                accounts: [],
+                linkedinPending: [
+                    { id: '41', name: 'Made-up one', expiresAtUtc: '2026-11-19T04:59:00Z', isExpired: false },
+                    { id: '42', name: hostile, expiresAtUtc: null, isExpired: true },
+                ],
+            },
+        });
+        const connect = await openConnect();
+        const card = () => replyCard(connect);
+        const pending = Array.from(card().querySelectorAll<HTMLElement>('.acct-pending'));
+        expect(pending.map((row) => words(row.closest('.acct-group')!.querySelector('.acct-hd')!))).toEqual([
+            'LinkedIn',
+            'LinkedIn',
+        ]);
+        expect(words(pending[0]!)).toContain('Made-up one');
+        expect(words(pending[0]!)).toContain('Waiting');
+        expect(words(pending[0]!)).toContain('2026-11-19 04:59 UTC');
+        expect(words(pending[1]!)).toContain('Expired');
+        expect(card().querySelector('img')).toBeNull();
+        expect(card().innerHTML).not.toContain('linkedin-custom-connect');
+
+        desktop.linkAnswers.set('setup.replyLinkedInPendingLink', {
+            kind: 'linkedin',
+            link: madeUpLinks.linkedin,
+            host: 'run.reply.io',
+            expiresAtUtc: '2026-11-19T04:59:00Z',
+        });
+        fireEvent.click(within(pending[0]!).getByRole('button', { name: 'Copy link' }));
+        await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith(madeUpLinks.linkedin));
+        expect(linkCalls(desktop)).toEqual([['setup.replyLinkedInPendingLink', '41']]);
+        const dialog = dialogOf(card);
+        expect(words(dialog)).toContain('Valid until 2026-11-19 04:59 UTC');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+
+        const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+        fireEvent.click(
+            within(card().querySelectorAll<HTMLElement>('.acct-pending')[1]!).getByRole('button', { name: 'Open' }),
+        );
+        await waitFor(() => expect(opened).toHaveBeenCalledWith(madeUpLinks.linkedin, '_blank', 'noopener,noreferrer'));
+        expect(linkCalls(desktop)[1]).toEqual(['setup.replyLinkedInPendingLink', '42']);
     });
 });
 

@@ -145,6 +145,11 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
         ['setup.installProgram', (id) => setup.installProgram(id)],
         ['setup.configurePlugin', (id, values) => setup.configurePlugin(id, values)],
         ['setup.disconnectPlugin', (id) => setup.disconnectPlugin(id)],
+        // The links answer to this window alone, on the person's click: never logged, never kept.
+        ['setup.replyLinkedInConnect', (name) => setup.replyLinkedInConnect(name)],
+        ['setup.replyLinkedInPendingLink', (id) => setup.replyLinkedInPendingLink(id)],
+        ['setup.replyLinkedInReconnect', (id) => setup.replyLinkedInReconnect(id)],
+        ['setup.replyMailboxLink', (page) => setup.replyMailboxLink(page)],
     ];
     for (const [member, handler] of members) handle(ipcMain, member, origin, handler, refused);
     setup.onChanged(() => window()?.webContents.send(eventChannels['setup.changed']));

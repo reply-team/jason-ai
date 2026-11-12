@@ -650,7 +650,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
-    assert.deepEqual(reply, { cli: { found: true, version: '0.19.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [] });
+    assert.deepEqual(reply, { cli: { found: true, version: '0.19.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], linkedinPending: [] });
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
     assert.ok(asked.includes('account list --channel email --json') && asked.includes('account list --channel linkedin --json'));
     assert.equal(asked.includes('account list --json'), false, 'one read per channel, never the unsplit list');

@@ -224,6 +224,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             if (pending !== null) clearTimeout(pending);
             unlisten();
             window.removeEventListener('focus', onFocus);
+            // A link the Reply card was showing is not kept past the console that showed it.
+            connect.resetLinks();
             unbind();
         };
     }, [api, desktop, dock, stream]);
