@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
-import { fullAccessSentence, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { fullAccessOffered, fullAccessSentence, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -94,6 +94,8 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: { conf
             modeChanged: (from, to) => void r.changes.push([from, to]),
             unchecked: () => void r.unchecked++,
             started: (_host, _resumed, mode) => void r.started.push(mode),
+            // Full access's code is tested with it switched on; the version's own switch is tested apart.
+            fullAccessOffered: true,
             ...options.chat,
         });
         made.push(chat);
@@ -268,14 +270,22 @@ test('changing between Ask first and Plan only lets a running turn go on, in the
     const r = rig(t);
     const { id } = await r.chat.create();
     const pidFile = join(r.b.root, 'held.pid');
-    plan(r, [{ say: 'working' }, { sleep: 400 }, { say: 'finished' }]);
+    // The host holds the turn open until the row stops it, so the change of mode always meets a running turn.
+    plan(r, [{ say: 'working' }, { wait: pidFile }]);
     const ended = r.until(id, (event) => event.kind === 'done');
     await r.chat.send(id, 'go', claude);
     await r.until(id, (event) => event.kind === 'text' && event.text === 'working');
+    const until = Date.now() + 10_000;
+    while (!existsSync(pidFile) && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 20));
     await r.chat.setMode(id, 'plan_only');
+    await r.chat.setMode(id, 'ask_first');
+    // A stop takes its time to end a host's process tree, so the row gives an end two seconds to come.
+    const outcome = await Promise.race([ended.then(() => 'ended'), new Promise((resolve) => setTimeout(() => resolve('running'), 2000))]);
+    assert.equal(outcome, 'running', 'no change of mode ended it');
+    assert.equal(r.chat.isRunning(id), true, 'the turn goes on');
+    assert.deepEqual(r.started, ['ask_first'], 'it runs in the mode it started in');
+    r.chat.stop(id);
     assert.deepEqual(await ended, { kind: 'done', error: null });
-    assert.ok(texts(r.events.get(id) ?? []).includes('finished'));
-    assert.ok(!existsSync(pidFile));
 });
 
 test('a chat in Full access sent to Codex goes back to Ask first, and its turn runs in Codex\'s read-only sandbox', async (t) => {
@@ -443,4 +453,16 @@ test('a line the Feed takes in Full access starts no turn, and the Feed in Full 
     assert.deepEqual(r.hosts(), [], 'a line never starts a turn');
     assert.deepEqual(r.started, []);
     assert.equal(r.again().feed([]).mode, 'ask_first');
+});
+
+test('this version does not offer Full access: it is refused before any confirmation, and a chat never runs in it', async (t) => {
+    assert.equal(fullAccessOffered, false);
+    const r = rig(t, { chat: { fullAccessOffered: undefined } });
+    const { id } = await r.chat.create();
+    await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: 'Full access is not in this version yet.' });
+    assert.equal(r.confirms, 0);
+    assert.equal(r.chat.open(id).mode, 'ask_first');
+    assert.equal((await r.chat.setMode(id, 'plan_only', 'claude')).mode, 'plan_only', 'Plan only is offered');
+    await r.turn(id, 'hello', claude);
+    assert.deepEqual(r.started, ['plan_only']);
 });

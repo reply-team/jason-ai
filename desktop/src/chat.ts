@@ -64,7 +64,7 @@ import { realPathOf } from './chat-real-path.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
-import { codexFullAccess, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
+import { codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesSince, newestId, take, trimmed, type LineEntry } from './feed.ts';
 import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
@@ -169,6 +169,8 @@ export interface ChatOptions {
     modeChanged?(from: ChatMode, to: ChatMode): void;
     /** Said when a Full access turn is stopped because a tool ran that its hook never saw. */
     unchecked?(): void;
+    /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
+    fullAccessOffered?: boolean;
     started?(host: string, resumed: boolean, mode: ChatMode): void;
     ended?(turn: TurnEnded): void;
     decided?(decided: Decided): void;
@@ -469,6 +471,10 @@ export class Chat {
         };
     }
 
+    #fullAccessOffered(): boolean {
+        return this.#options.fullAccessOffered ?? fullAccessOffered;
+    }
+
     #modeOf(conversation: Conversation): ChatMode {
         return this.#fullAccess.has(conversation.id) ? 'full_access' : (conversation.mode ?? 'ask_first');
     }
@@ -486,6 +492,7 @@ export class Chat {
         if (!isChatMode(mode)) throw new ChatRefused('That is not a mode of the chat.');
         if (mode === this.#modeOf(conversation)) return this.#summaryOf(conversation);
         if (mode === 'full_access') {
+            if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
             const program = keyProvider(host)?.program ?? hosts.find((each) => each.id === host && each.drivesChat)?.program;
             if (program === 'codex') throw new ChatRefused(codexFullAccess);
             if (program !== 'claude') throw new ChatRefused(notAHost);
@@ -778,8 +785,9 @@ export class Chat {
         if (notOffered !== null) return refuse(notOffered);
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
-        // Codex has no Full access: a chat in it goes back to Ask first, and its turn runs there.
-        if (resolved.program === 'codex' && this.#modeOf(conversation) === 'full_access') this.#changeMode(conversation, 'ask_first', true);
+        // Codex has no Full access, nor does a version that does not offer it: a chat in it goes back to Ask first, and its
+        // turn runs there.
+        if ((resolved.program === 'codex' || !this.#fullAccessOffered()) && this.#modeOf(conversation) === 'full_access') this.#changeMode(conversation, 'ask_first', true);
         const mode = this.#modeOf(conversation);
 
         const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map(), mode };
@@ -1108,7 +1116,7 @@ export class Chat {
             // before the turn's file, its endpoint or the host that starts in that folder.
             this.#placeInstructions(fence);
             // The chat folder's agent settings hold only what the desktop placed (`chat-agent-folder.ts`).
-            ownAgentFolder(paths.chat);
+            ownAgentFolder(paths.chat, paths.skillsRecords);
             if (resolved.folder !== null) makePrivate(resolved.label, resolved.program === 'claude' ? paths.claudeKeyed : paths.codexKeyed, resolved.folder);
             if (resolved.program === 'claude') {
                 const id = newTurnId();

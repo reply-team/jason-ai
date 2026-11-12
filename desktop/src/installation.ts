@@ -4,8 +4,9 @@
  * the CLI's pairing prints. Nothing here starts a runtime as the desktop's own child or writes the runtime's files.
  */
 
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { afterSkillsDeploy, beforeSkillsDeploy, skillsFolders } from './chat-agent-folder.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { pairingLink, runtimeOrigin } from './descriptor.ts';
 import type { Logger } from './log.ts';
@@ -112,7 +113,9 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
     }
 
     mkdirSync(paths.chat, { recursive: true });
-    if (deps.settings.skillsDeployedFor !== deps.bundleVersion) {
+    // A chat skills folder whose deployment the desktop keeps no record of is deployed afresh (`beforeSkillsDeploy`).
+    const unrecorded = skillsFolders.some((host) => !existsSync(join(paths.skillsRecords, host.record)));
+    if (deps.settings.skillsDeployedFor !== deps.bundleVersion || unrecorded) {
         let deployed = true;
         if (facts.sameVersion) {
             const roles = await cli.run(['skills', 'install', '--roles-only', '--source', deps.bundle], { timeoutMs: 300_000 });
@@ -124,9 +127,17 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         // --root names the directory the skills are deployed into. Claude Code started in the chat folder with project
         // settings reads them from .claude/skills there, and Codex from .agents/skills; the Reply skills are copied into
         // both folders.
+        // The CLI's record of each deployment lives under <data>/desktop/skills-records, outside the chat folder: it is put
+        // beside the skills for the CLI to read, and moved out again once the CLI has written it.
+        const [claudeSkills, codexSkills] = skillsFolders;
+        if (claudeSkills === undefined || codexSkills === undefined) throw new Error('The chat has two skills folders.');
+        beforeSkillsDeploy(paths.chat, paths.skillsRecords, claudeSkills);
         const chat = await cli.run(['skills', 'install', '--root', join(paths.chat, '.claude', 'skills'), '--host', 'claude_code', '--source', deps.bundle], { timeoutMs: 300_000 });
+        afterSkillsDeploy(paths.chat, paths.skillsRecords, claudeSkills);
         log.info('skills_deployed', { Target: 'chat_claude_code', Exit: chat.exit });
+        beforeSkillsDeploy(paths.chat, paths.skillsRecords, codexSkills);
         const codex = await cli.run(['skills', 'install', '--root', join(paths.chat, '.agents', 'skills'), '--host', 'codex', '--source', deps.bundle], { timeoutMs: 300_000 });
+        afterSkillsDeploy(paths.chat, paths.skillsRecords, codexSkills);
         log.info('skills_deployed', { Target: 'chat_codex', Exit: codex.exit });
         if (deployed && chat.exit === 0 && codex.exit === 0) deps.saveSettings({ ...deps.settings, skillsDeployedFor: deps.bundleVersion });
     }

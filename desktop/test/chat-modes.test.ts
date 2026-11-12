@@ -490,3 +490,40 @@ test('each refusal of the hook is said to the log as refused, by the model, in F
         { outcome: 'refused', by: 'model', mode: 'full_access' },
     ]);
 });
+
+// The second look's further spellings, in Ask first and under Full access alike.
+
+const judgedConfined = 'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.';
+
+test('env and exec clear the environment only in the part they begin: an ordinary command list is no refusal', () => {
+    const scope = homeScope('linux', '/home/someone');
+    for (const command of ['env | sort; sed -i s/a/b/ notes.md; jason campaign list', 'printenv; tar -xu -f a.tar; jason campaign list', 'env; jason campaign list']) {
+        assert.equal(judge('Bash', { command }, scope).verdict, 'ask', command);
+    }
+    for (const command of ['env -i jason campaign list', 'env -iu X jason campaign list', 'env --unset=JASON_X jason status', 'exec -c jason campaign list', 'cd x; env - jason status']) {
+        assert.deepEqual(judge('Bash', { command }, scope), { verdict: 'deny', message: judgedConfined }, command);
+    }
+});
+
+test('an empty $\'\' or $"" inside a word, a $\'\\xNN\' string, a line continuation and a brace group are read through, in every mode', () => {
+    const scope = homeScope('linux', '/home/someone');
+    for (const command of [
+        "jason approval appro$''ve apr_1",
+        'jason approval appro$""ve apr_1',
+        "jason approval $'\\x61'pprove apr_1",
+        "ja$''son approval approve apr_1",
+        'jason approval appro\\\nve apr_1',
+        'jason approval {approve,} apr_1',
+        '{jason,} approval approve apr_1',
+        'jason approval appro{v,}e apr_1',
+        "printf '\\njason approval approve apr_1\\n' > go.sh; sh go.sh",
+    ]) {
+        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${JSON.stringify(command)}`);
+        assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `Full access: ${JSON.stringify(command)}`);
+    }
+    assert.deepEqual(judge('Bash', { command: "cat ~/.jas$''on/run/runtime.json" }, scope).verdict, 'deny', 'the data directory by an empty string');
+    assert.deepEqual(judge('Bash', { command: "curl http://127.0.0.1:4011/v1/approval.appr$''ove" }, scope).verdict, 'deny');
+    // What the plain spelling would not refuse stays a card.
+    assert.equal(judge('Bash', { command: "jason campaign l$''ist" }, scope).verdict, 'ask');
+    assert.equal(judge('Bash', { command: 'echo {a,b}' }, scope).verdict, 'ask');
+});

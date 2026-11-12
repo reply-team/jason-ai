@@ -53,8 +53,10 @@ test('with no runtime up, the desktop starts one through jason runtime start and
     assert.deepEqual(readdirSync(b.paths.chat).sort(), ['.agents', '.claude']);
     for (const host of ['.claude', '.agents']) {
         assert.deepEqual(readdirSync(join(b.paths.chat, host)), ['skills']);
-        assert.deepEqual(readdirSync(join(b.paths.chat, host, 'skills')).sort(), ['.jason-skills.json', 'campaign-launch'], host);
+        assert.deepEqual(readdirSync(join(b.paths.chat, host, 'skills')).sort(), ['campaign-launch'], host);
     }
+    // Each deployment's record lives outside the chat folder, under the desktop's own folder.
+    assert.deepEqual(readdirSync(b.paths.skillsRecords).sort(), ['agents.json', 'claude.json']);
     assert.deepEqual(saved, [{ feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: bundleVersion, theme: null }]);
 });
 
@@ -116,8 +118,22 @@ test('a UI that is served but not this runtime’s is installed again, and an in
 test('the skills are deployed once per bundle version', async (t) => {
     const b = bench(t);
     runtimeAlreadyUp(b);
+    mkdirSync(b.paths.skillsRecords, { recursive: true });
+    for (const name of ['claude.json', 'agents.json']) writeFileSync(join(b.paths.skillsRecords, name), '{"version":1,"packs":[]}');
     const { verbs } = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
     assert.equal(verbs.some((args) => args[0] === 'skills'), false);
+});
+
+test('a chat skills folder whose deployment the desktop keeps no record of is deployed afresh, and what stood there unrecorded is gone', async (t) => {
+    const b = bench(t);
+    runtimeAlreadyUp(b);
+    mkdirSync(join(b.paths.chat, '.claude', 'skills', 'planted'), { recursive: true });
+    writeFileSync(join(b.paths.chat, '.claude', 'skills', 'planted', 'SKILL.md'), '---\nallowed-tools: Bash\n---');
+    writeFileSync(join(b.paths.chat, '.claude', 'skills', '.jason-skills.json'), '{"version":1,"packs":[]}');
+    const { verbs } = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.ok(verbs.some((args) => args[0] === 'skills' && args.includes('claude_code')));
+    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')), ['campaign-launch']);
+    assert.deepEqual(readdirSync(b.paths.skillsRecords).sort(), ['agents.json', 'claude.json']);
 });
 
 test('a start that fails, or a link that is not the runtime’s UI, stops with what the CLI said', async (t) => {

@@ -8,6 +8,15 @@ import { compareVersions } from './host-version.ts';
 
 export type ChatMode = 'ask_first' | 'plan_only' | 'full_access';
 
+/**
+ * Whether this version offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
+ * refuses it before any confirmation. Everything else of Full access stays, behind this one switch.
+ */
+export const fullAccessOffered = false;
+
+/** What the menu and the desktop say of Full access while this version does not offer it. */
+export const fullAccessNotYet = 'Full access is not in this version yet.';
+
 export const chatModes: readonly ChatMode[] = ['ask_first', 'plan_only', 'full_access'];
 
 export function isChatMode(value: unknown): value is ChatMode {

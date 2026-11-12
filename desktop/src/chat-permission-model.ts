@@ -753,22 +753,82 @@ export function writtenRefusal(tool: string, input: Record<string, unknown>, sco
     return null;
 }
 
-/**
- * A text as a shell would most likely run it once it has taken its quoting away: a backslash before a character inside a
- * word and every quote removed, and a bracket, a comma or a parenthesis read as a space, so that `appro\ve`, `approv''e`,
- * `ap"pr"ove` and a list literal (`['jason','approval','approve']`) read as the plain words they run.
- */
-export function normalised(text: string): string {
-    return text.replace(/\\(?=\S)/g, '').replace(/['"]/g, '').replace(/[[\](),]/g, ' ');
+/** The body of a Bash `$'...'` string as the shell reads it: its escapes decoded. */
+function ansiC(body: string): string {
+    const simple: Readonly<Record<string, string>> = { n: '\n', t: '\t', r: '\r', '\\': '\\', "'": "'", '"': '"', a: '', b: '', e: '', E: '', f: '', v: '' };
+    return body.replace(/\\(x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{1,4}|U[0-9A-Fa-f]{1,8}|[0-7]{1,3}|.)/g, (_, escape: string) => {
+        if (/^[xuU]/.test(escape)) return String.fromCodePoint(Number.parseInt(escape.slice(1), 16));
+        if (/^[0-7]/.test(escape)) return String.fromCodePoint(Number.parseInt(escape, 8));
+        return simple[escape] ?? escape;
+    });
+}
+
+/** A word's brace expansions, as Bash makes them from `{a,b}`, at most `braceLimit` of them; the word itself when it has none. */
+const braceLimit = 64;
+function braces(word: string): string[] {
+    const group = /\{([^{}]*,[^{}]*)\}/.exec(word);
+    if (group === null) return [word];
+    const before = word.slice(0, group.index);
+    const after = word.slice(group.index + group[0].length);
+    const out: string[] = [];
+    for (const choice of (group[1] ?? '').split(',')) {
+        for (const each of braces(`${before}${choice}${after}`)) {
+            if (out.length >= braceLimit) return out;
+            out.push(each);
+        }
+    }
+    return out;
 }
 
 /**
- * The environment cleared around a jason: `env -i`, `env -`, `env -u`, `env --ignore-environment` or `--unset`, and Bash's
- * `exec -c`, in a text that names jason anywhere. The confining variable goes with the rest without being named.
+ * A text as a shell would most likely run it once it has taken its quoting away: a line continuation joined, an empty
+ * `$''` or `$""` inside a word dropped and a `$'...'` string decoded, each brace group expanded into its words, a
+ * backslash before a character inside a word and every quote removed, and a bracket, a comma or a parenthesis read as a
+ * space. So `appro\ve`, `approv''e`, `appro$''ve`, `$'\x61'pprove`, `appro\` and a new line then `ve`, `{approve,}` and
+ * a list literal (`['jason','approval','approve']`) read as the plain words they run.
+ */
+export function normalised(text: string): string {
+    return readingsOf(text)[0] ?? text;
+}
+
+/**
+ * The readings a refusal is looked for in: the text normalised (`normalised`), and the same with `\n`, `\t` and `\r` read
+ * as the space they stand for in a `printf` or `echo -e` string rather than dropped.
+ */
+function readingsOf(text: string): string[] {
+    const joined = text
+        .replace(/\\\r?\n/g, '')
+        .replace(/\$(['"])\1/g, '')
+        .replace(/\$'((?:[^'\\]|\\[\s\S])*)'/g, (_, body: string) => ansiC(body));
+    const expanded = joined.split(/(\s+)/).map((part) => (/\s/.test(part) ? part : braces(part).join(' '))).join('');
+    const rest = (value: string) => value.replace(/\\(?=\S)/g, '').replace(/['"]/g, '').replace(/[[\](),]/g, ' ');
+    return [rest(expanded), rest(expanded.replace(/\\[ntr]/g, ' '))];
+}
+
+/**
+ * The environment cleared around a jason: in one command part that begins with `env`, its option `-i`, `-`,
+ * `--ignore-environment`, `-u` or `--unset`, alone or among other short options; or Bash's `exec -c`; and that same part
+ * names jason. The confining variable goes with the rest without being named.
  */
 function clearsEnvironment(text: string): boolean {
-    const clears = /(?<![A-Za-z0-9_.-])(?:env(?:\.exe)?(?:\s+\S+)*?\s+(?:-[A-Za-z]*[iu][A-Za-z]*|-|--ignore-environment|--unset(?:=\S*)?)(?=\s|$)|exec\s+(?:-\S*\s+)*-[A-Za-z]*c)/;
-    return clears.test(text) && /(?<![A-Za-z0-9_.-])jason(?![A-Za-z0-9_-])/i.test(normalised(text));
+    const jasonWord = /(?<![A-Za-z0-9_.-])jason(?![A-Za-z0-9_-])/i;
+    for (const part of text.split(/&&|\|\||[;|&\n\r]/)) {
+        const tokens = part.trim().split(/\s+/).map(unquoted).filter((token) => token !== '');
+        const first = tokens.findIndex((token) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token));
+        const program = (tokens[first] ?? '').split(/[\\/]/).pop()?.toLowerCase().replace(/\.exe$/, '');
+        if (program !== 'env' && program !== 'exec') continue;
+        let clears = false;
+        for (const token of tokens.slice(first + 1)) {
+            if (!token.startsWith('-')) {
+                if (program === 'env' && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) continue;
+                break;
+            }
+            if (program === 'env' && (token === '-' || token === '--ignore-environment' || /^--unset(=|$)/.test(token) || /^-[A-Za-z0-9]*[iu]/.test(token))) clears = true;
+            if (program === 'exec' && /^-[A-Za-z]*c/.test(token)) clears = true;
+        }
+        if (clears && jasonWord.test(normalised(part))) return true;
+    }
+    return false;
 }
 
 /**
@@ -778,11 +838,12 @@ function clearsEnvironment(text: string): boolean {
  */
 function respelledRefusal(text: string, scope: ChatScope): string | null {
     if (clearsEnvironment(text)) return confinedRefusal;
-    const plain = normalised(text);
-    if (plain === text) return null;
-    if (namesConfinedVariable(plain)) return confinedRefusal;
-    if (namesDataVariable(plain, scope) || namesData(plain, scope)) return dataRefusal;
-    if (jasonIn(plain, scope) === 'deny') return commandRefusal;
+    for (const plain of readingsOf(text)) {
+        if (plain === text) continue;
+        if (namesConfinedVariable(plain)) return confinedRefusal;
+        if (namesDataVariable(plain, scope) || namesData(plain, scope)) return dataRefusal;
+        if (jasonIn(plain, scope) === 'deny') return commandRefusal;
+    }
     return null;
 }
 

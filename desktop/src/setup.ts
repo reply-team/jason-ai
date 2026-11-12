@@ -8,12 +8,13 @@ import { cp, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { recordReplySkills } from './chat-agent-folder.ts';
 import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
-import { codexFullAccess, fullAccessSentence } from './chat-modes.ts';
+import { codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
 import type { DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
@@ -137,6 +138,8 @@ export interface SetupDeps {
     runtimeIsOurs?(): boolean;
     settings(): DesktopSettings;
     clock?: () => number;
+    /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
+    fullAccessOffered?: boolean;
     /** The models Codex offered when last asked, and the background ask of the ones a day old (`model-lists.ts`). */
     models?: { lists(): KeptLists; refresh(hostIds: readonly string[]): void; unread(hostId: string): 'waiting' | 'failed' | null };
 }
@@ -278,8 +281,10 @@ export class Setup {
             return { models, typedModel: typed, modelsUnread: unreadSentence(label, this.#deps.models?.unread(id) ?? null) };
         };
         // Codex has no Full access; Claude Code has it from its floor of Full access. A Claude Code not found offers nothing yet.
+        // While this version does not offer it, every host that drives the chat says so.
+        const offeredHere = this.#deps.fullAccessOffered ?? fullAccessOffered;
         const fullAccessOn = (program: string, drives: boolean) =>
-            !drives ? null : program === 'codex' ? codexFullAccess : program === 'claude' ? (claude === null ? null : claude.fullAccess) : null;
+            !drives ? null : !offeredHere ? fullAccessNotYet : program === 'codex' ? codexFullAccess : program === 'claude' ? (claude === null ? null : claude.fullAccess) : null;
         const programHosts: HostState[] = [];
         for (const host of hosts) {
             const found = programs.find(host.program) !== null;
@@ -467,6 +472,8 @@ export class Setup {
                     await cp(join(source, name), join(target, name), { recursive: true });
                 }
             }
+            // What was copied is recorded outside the chat folder, so a turn keeps these skills and nothing planted.
+            recordReplySkills(this.#deps.paths.chat, this.#deps.paths.skillsRecords);
         } finally {
             await rm(place, { recursive: true, force: true });
         }

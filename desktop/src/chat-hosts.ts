@@ -267,10 +267,10 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
  * `rollback` the application an update kept aside and the record the next start acts on, `bundle` an AppImage's copy of
  * the jason it carries, `conversations` the record of every conversation, `models.json` the models Codex offered when
  * last asked, `claude-keyed` and `codex-keyed` the hosts' folders for the turns on a provider's key with those turns'
- * transcripts, which these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox, which the desktop does
+ * transcripts, `skills-records` what the desktop placed in the chat folder's skills folders, which these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox, which the desktop does
  * not narrow, holds it (`codexArguments`).
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {

@@ -7,7 +7,7 @@ import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { floorSentence, sharingVersionReads, versionLimitMs } from '../src/host-version.ts';
-import { fullAccessSentence } from '../src/chat-modes.ts';
+import { codexFullAccess, fullAccessNotYet, fullAccessSentence } from '../src/chat-modes.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
@@ -308,7 +308,7 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     };
 
     // The desktop deploys Jason's skills for the chat through the CLI, into the folders Claude Code and Codex read them from.
-    const jasonSkills = /^desktop\/chat\/\.(?:claude|agents)\/skills\/(?:\.jason-skills\.json|[a-z-]+\/SKILL\.md)$/;
+    const jasonSkills = /^desktop\/(?:chat\/\.(?:claude|agents)\/skills\/[a-z-]+\/SKILL\.md|skills-records\/(?:claude|agents)\.json)$/;
     let desktopSettings: DesktopSettings = readSettings(b.paths.settings);
     await act('the start', () => startInstallation({
         cli: loggedCli(b.cli, log),
@@ -324,7 +324,7 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     }), ['run/runtime.json', 'desktop/settings.json', jasonSkills], []);
 
     const setup = setupOn(b, log, desktopSettings);
-    const replySkills = /^desktop\/chat\/\.(?:claude|agents)\/skills\/reply-[a-z-]+\/SKILL\.md$/;
+    const replySkills = /^desktop\/(?:chat\/\.(?:claude|agents)\/skills\/reply-[a-z-]+\/SKILL\.md|skills-records\/reply\.json)$/;
     const replyKeys = ['Plugins:Grants:reply:Exec', 'Routes:Default'];
     const pluginKeys = (id: string) => [`Plugins:Config:${id}`, `Plugins:Grants:${id}:Http`, `Notifications:Plugins:${id}:Binding`];
     await act('status', () => setup.status(), [], []);
@@ -387,7 +387,7 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     for (const host of ['.claude', '.agents']) {
         assert.deepEqual(readdirSync(join(b.paths.chat, host)), ['skills']);
         const skills = readdirSync(join(b.paths.chat, host, 'skills')).sort();
-        assert.deepEqual(skills.filter((name) => !name.startsWith('reply-')), ['.jason-skills.json', 'campaign-launch'], host);
+        assert.deepEqual(skills.filter((name) => !name.startsWith('reply-')), ['campaign-launch'], host);
         assert.ok(skills.some((name) => name.startsWith('reply-')), `the Reply skills beside Jason's in ${host}: ${skills.join(', ')}`);
     }
 
@@ -720,7 +720,7 @@ test('every host is listed, found or not; the missing ones name an install only 
     const b = bench(t, { programs: ['claude', 'gemini', 'npm'] });
     const { hosts } = await setupOn(b).status();
     const byId = new Map(hosts.map((host) => [host.id, host]));
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null, fullAccess: null, models: claudeCodeModels('10.9.2'), typedModel: true, modelsUnread: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null, fullAccess: fullAccessNotYet, models: claudeCodeModels('10.9.2'), typedModel: true, modelsUnread: null });
     assert.equal(byId.get('codex')?.found, false);
     assert.equal(byId.get('codex')?.install, 'codex');
     assert.equal(byId.get('gemini')?.found, true);
@@ -786,7 +786,7 @@ test('a Claude Code below the floor is listed and marked with the version found,
     const byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
     const sentence = floorSentence('2.1.200');
     assert.ok(sentence);
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence, fullAccess: fullAccessSentence('2.1.200'), models: claudeCodeModels('2.1.200'), typedModel: true, modelsUnread: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence, fullAccess: fullAccessNotYet, models: claudeCodeModels('2.1.200'), typedModel: true, modelsUnread: null });
     assert.equal(byId.get('claude-api-key')?.belowFloor, sentence, 'a key provider runs on that same claude');
     assert.equal(byId.get('deepseek')?.belowFloor, sentence);
     assert.equal(byId.get('codex')?.belowFloor, null, 'only Claude Code has a floor');
@@ -926,4 +926,16 @@ test('on Linux a key is neither kept nor read where the store is basic_text or n
     }
     const elsewhere = new ProviderKeys(file, { ...fakeBox, getSelectedStorageBackend: () => 'basic_text' }, 'darwin');
     assert.equal(elsewhere.keyFor('moonshot'), 'sk-planted-before', 'the backend is Linux’s question only');
+});
+
+test('while this version does not offer Full access every host that drives the chat says so, and once offered each says why it cannot be chosen', async (t) => {
+    const { b, say } = claudeSaying(t);
+    say({ stdout: '2.1.290 (Claude Code)\n' });
+    const off = new Map((await setupOn(b).status()).hosts.map((host) => [host.id, host.fullAccess]));
+    assert.equal(off.get('claude'), fullAccessNotYet);
+    assert.equal(off.get('codex'), fullAccessNotYet);
+    assert.equal(off.get('gemini'), null, 'a host that does not drive the chat offers no mode');
+    const on = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: true }).status()).hosts.map((host) => [host.id, host.fullAccess]));
+    assert.equal(on.get('claude'), fullAccessSentence('2.1.290'));
+    assert.equal(on.get('codex'), codexFullAccess);
 });

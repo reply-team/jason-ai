@@ -26,6 +26,11 @@ export interface DesktopPaths {
     turns: string;
     /** `<data>/desktop/models.json`: the models Codex offered when last asked, on the person's sign-in and on the OpenAI key. */
     models: string;
+    /**
+     * `<data>/desktop/skills-records/`: what the desktop placed in the chat folder's skills folders, outside the chat
+     * folder: the record of each skills deployment, and the Reply skills' files with their digests (`chat-agent-folder.ts`).
+     */
+    skillsRecords: string;
     /** `<data>/desktop/rollback/`: the previous application an update kept aside, and the record of that update. */
     rollback: string;
     /** `<data>/desktop/bundle/`: on an AppImage, the copy of the jason it carries, one folder per version (`bundle-copy.ts`). */
@@ -65,6 +70,7 @@ export function desktopPaths(data: string): DesktopPaths {
         codexKeyed: join(desktop, 'codex-keyed'),
         turns: join(desktop, 'turns'),
         models: join(desktop, 'models.json'),
+        skillsRecords: join(desktop, 'skills-records'),
         rollback: join(desktop, 'rollback'),
         bundle: join(desktop, 'bundle'),
         electron: join(desktop, 'electron'),

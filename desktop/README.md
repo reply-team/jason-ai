@@ -212,6 +212,10 @@ applies to the turns a person starts by sending, from the next one on.
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
   page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`).
+- **This version does not offer Full access.** The menu shows it disabled with "Full access is not in this version
+  yet.", and the desktop refuses it before any confirmation. Its code stays behind one switch (`fullAccessOffered` in
+  `src/chat-modes.ts`), and the points below describe it as built; Ask first and Plan only are the modes this version
+  runs.
 - **Full access** acts on this computer without asking. It is given only after the person says yes to the desktop's own
   confirmation, a message box the main process shows each time Full access is chosen, with Cancel focused and Escape
   answering Cancel. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
@@ -242,14 +246,27 @@ applies to the turns a person starts by sending, from the next one on.
   their dots, the confining variable and the data directory's names are looked for a second time over a normalised text:
   quotes and a backslash inside a word removed, a bracket, a comma or a parenthesis read as a space. `appro\ve`,
   `approv''e`, `approval.appr''ove` and `['jason','approval','approve']` are refused as their plain spelling is, in Ask
-  first too, and so is the content of a file being written in Full access. `env -i`, `env -u` and `exec -c` around a
-  jason clear the confining variable without naming it, and are refused in every mode.
+  first too, and so is the content of a file being written in Full access. The same look reads through an empty `$''`
+  or `$""` inside a word, a `$'\xNN'` string, a line continuation and a brace group (`{approve,}`), and reads `\n`, `\t`
+  and `\r` in a string as the space they print. What the plain spelling would not refuse stays a card in Ask first. An
+  `env` that clears the environment (`-i`, `-`, `-u`, `--unset`) or `exec -c`, in a command part that runs a jason,
+  clears the confining variable without naming it, and is refused in every mode; an `env` elsewhere in a command list
+  is not.
 - **The chat's own names, by every route.** The chat's instructions and its `.claude`, `.agents` and `.codex` folders
   directly in the chat folder are refused in every mode to a shell command as to the file tools, and the host is denied
-  edits of them (`chatRules`). Before every turn the desktop puts `.claude/` right (`src/chat-agent-folder.ts`): it holds
-  the skills `jason skills install` recorded with their digests and the Reply skills the Connect card copied, and
-  everything else there is removed, a settings file included; so are the memory files the desktop does not write
-  (`CLAUDE.local.md`, `AGENTS.override.md`). A turn does not start on a folder that could not be put right.
+  edits of them (`chatRules`).
+- **The chat folder is the desktop's, in every mode.** What the desktop placed in it is recorded outside it, under
+  `<data>/desktop/skills-records/`, which the chat neither reads nor writes: the record `jason skills install` writes of
+  each deployment, put beside the skills only while the CLI runs and moved out after, and the Reply skills' files with
+  their digests, recorded when the Connect card copies them. Before every turn (`src/chat-agent-folder.ts`) `.claude/`
+  and `.agents/` hold their `skills/` and in it only the files those records name with the bytes recorded; everything
+  else there is removed, a settings file and a record beside the skills included; `.codex/` and the memory files the
+  desktop does not write (`CLAUDE.local.md`, `AGENTS.override.md`) are removed from the top; and every `.claude`,
+  `.agents` and `.codex` anywhere below the top is removed, since a host loads the skills of one it meets there. A link
+  is removed as a link, never walked, so nothing outside the chat folder is deleted. A chat skills folder whose
+  deployment the desktop keeps no record of, an installation's first start of this version included, is emptied and
+  deployed afresh at the start; the Reply skills come back with the Connect card's next sign-in. A turn does not start
+  on a folder that could not be put right.
 - **When the hook did not run.** The first tool that runs without the hook having seen its use ends the turn and returns
   the chat to Ask first: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
   input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account. The
