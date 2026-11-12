@@ -690,7 +690,8 @@ public sealed class InstallScriptHeldTests : IDisposable
             children = Children(pids);
             foreach (var child in children)
             {
-                Assert.True(child.Process.WaitForExit(TimeSpan.FromSeconds(10)), $"Process {child.Id}, which the script started or was, still runs after the kill.");
+                // The exit ends the wait at once; the bound only fails a process the kill missed, and is sized to the slowest runner.
+                Assert.True(child.Process.WaitForExit(TimeSpan.FromSeconds(60)), $"Process {child.Id}, which the script started or was, still runs after the kill.");
             }
         }
         finally

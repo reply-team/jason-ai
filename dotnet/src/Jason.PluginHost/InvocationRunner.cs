@@ -35,6 +35,12 @@ public sealed class InvocationRunner : IInvocationRunner
     /// </summary>
     internal Action<Process>? Kill { get; init; }
 
+    /// <summary>
+    /// How long <c>host.files.append</c> waits for a file another writer holds, when not as long as it always does. Set by a
+    /// test's own host, so a row about a held file ends on that wait running out and never on the invocation's clock.
+    /// </summary>
+    internal TimeSpan? SharingWait { get; init; }
+
     public PluginOutcome Run(PluginInvocation invocation, HostDiagnostics diagnostics, UnfinishedKills kills, CancellationToken deadline)
     {
         ArgumentNullException.ThrowIfNull(invocation);
@@ -57,7 +63,7 @@ public sealed class InvocationRunner : IInvocationRunner
         using var http = new HttpService(services);
         using var door = invocation.Door is null ? null : new DoorService(services, invocation.Door);
         var exec = Kill is null ? new ExecService(services) : new ExecService(services) { Kill = Kill };
-        var files = new FilesService(services);
+        var files = SharingWait is null ? new FilesService(services) : new FilesService(services) { SharingWait = SharingWait.Value };
         engine.SetValue(
             HostObject.Name,
             HostObject.Build(engine, services, exec, http, new EnvService(services), new ConfigService(services), new LogService(services), files, door));

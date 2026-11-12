@@ -13,30 +13,60 @@ namespace Jason.Runtime.Tests.Notifications;
 /// </summary>
 internal sealed class LoopbackNtfy : IDisposable
 {
-    private readonly HttpListener _listener = new();
+    private readonly HttpListener _listener;
     private readonly CancellationTokenSource _stopping = new();
     private readonly ConcurrentQueue<Received> _requests = new();
     private readonly Task _serving;
 
     public LoopbackNtfy()
     {
-        Port = FreePort();
-        Host = "127.0.0.1";
-        _listener.Prefixes.Add(BaseUrl);
-        try
+        // A port found free can be taken by another process before the listener binds it, and a listener whose start failed
+        // is disposed, so every try is a new listener on a new port. Five tries, since two collisions in a row are already
+        // rare and a sixth would hide a runner that cannot bind at all; the last failure is thrown as it came.
+        const int Tries = 5;
+        for (var attempt = 1; ; attempt++)
         {
-            _listener.Start();
-        }
-        catch (HttpListenerException)
-        {
-            // Windows reserves 'localhost' for every user but not always a literal address; either is loopback.
-            _listener.Prefixes.Clear();
-            Host = "localhost";
-            _listener.Prefixes.Add(BaseUrl);
-            _listener.Start();
+            Port = FreePort();
+            try
+            {
+                _listener = Started("127.0.0.1");
+                Host = "127.0.0.1";
+            }
+            catch (HttpListenerException)
+            {
+                // Windows reserves 'localhost' for every user but not always a literal address; either is loopback.
+                try
+                {
+                    _listener = Started("localhost");
+                    Host = "localhost";
+                }
+                catch (HttpListenerException) when (attempt < Tries)
+                {
+                    continue;
+                }
+            }
+
+            break;
         }
 
         _serving = Task.Run(ServeAsync);
+    }
+
+    private HttpListener Started(string host)
+    {
+        var listener = new HttpListener();
+        listener.Prefixes.Add(string.Create(CultureInfo.InvariantCulture, $"http://{host}:{Port}/"));
+        try
+        {
+            listener.Start();
+        }
+        catch
+        {
+            listener.Close();
+            throw;
+        }
+
+        return listener;
     }
 
     /// <summary>One request as the server saw it: the method, the path, every header and the body.</summary>

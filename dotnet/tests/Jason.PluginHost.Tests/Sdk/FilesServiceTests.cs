@@ -703,7 +703,7 @@ public sealed class FilesServiceTests : IDisposable
               {{Call(File("a.log"), "here")}};
               return { result: null };
             }
-            """, timeoutMs: 500, deadlineMs: 10_000);
+            """, sharingWait: TimeSpan.FromMilliseconds(50));
 
         Assert.Equal(OutcomeStatus.Failed, outcome.Status);
         Assert.Equal(FailureClass.Transient, outcome.Error!.Class);
@@ -760,7 +760,7 @@ public sealed class FilesServiceTests : IDisposable
     }
 
     /// <summary>A real run. The two clocks part only for a row where the wait, which reads the first, has to end before the second.</summary>
-    private PluginOutcome Run(string mainJs, int timeoutMs = 10_000, int deadlineMs = 10_000)
+    private PluginOutcome Run(string mainJs, int timeoutMs = 10_000, int deadlineMs = 10_000, TimeSpan? sharingWait = null)
     {
         using var package = new TempPackage(mainJs);
         var invocation = InvocationFactory.Create(package.Root, "echo.run", configure: builder =>
@@ -772,7 +772,7 @@ public sealed class FilesServiceTests : IDisposable
         var diagnostics = SdkHarness.DiagnosticsFor(stderr, invocation);
         using var deadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(deadlineMs));
 
-        return new InvocationRunner().Run(invocation, diagnostics, new UnfinishedKills(), deadline.Token);
+        return new InvocationRunner { SharingWait = sharingWait }.Run(invocation, diagnostics, new UnfinishedKills(), deadline.Token);
     }
 
     /// <summary>A program that keeps the file to itself, as a second host does for the length of one line.</summary>
