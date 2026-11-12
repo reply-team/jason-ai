@@ -33,6 +33,10 @@ const desktop = {
         rename: (chatId: string, title: string) => ipcRenderer.invoke('jason:chat.rename', chatId, title),
         setMode: (chatId: string, mode: string, host: string) => ipcRenderer.invoke('jason:chat.setMode', chatId, mode, host),
     },
+    theme: {
+        get: () => ipcRenderer.invoke('jason:theme.get'),
+        set: (choice: 'system' | 'light' | 'dark') => ipcRenderer.invoke('jason:theme.set', choice),
+    },
     setup: {
         status: () => ipcRenderer.invoke('jason:setup.status'),
         connectReply: () => ipcRenderer.invoke('jason:setup.connectReply'),

@@ -5,7 +5,7 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -36,6 +36,7 @@ import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
+import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
@@ -153,7 +154,7 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
 /** Brings the window forward; the desk's own once it is open. */
 let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
 
-async function run(): Promise<void> {
+async function run(newInstallation: boolean): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
@@ -176,6 +177,8 @@ async function run(): Promise<void> {
 
     const conduct = windowConduct(process.platform);
     const atLogin = openedAtLogin(process.argv);
+    // The theme the person chose last, before any page is drawn: the window's first paint and the starting page follow it.
+    nativeTheme.themeSource = startingTheme(readSettings(paths.settings).theme, newInstallation);
     const window = new BrowserWindow({
         width: 1280,
         height: 860,
@@ -185,7 +188,7 @@ async function run(): Promise<void> {
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
         show: !atLogin || conduct.atLogin === 'minimized',
-        backgroundColor: '#f7f7f5',
+        backgroundColor: nativeTheme.shouldUseDarkColors ? darkBackground : lightBackground,
         webPreferences: {
             preload: join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -220,6 +223,11 @@ async function run(): Promise<void> {
     lockNavigation(window.webContents, origin, log);
 
     let settings: DesktopSettings = readSettings(paths.settings);
+    // A new installation meets Light, and is told so in its settings, so its second start is not an existing one's.
+    if (newInstallation && settings.theme === null) {
+        settings = { ...settings, theme: 'light' };
+        writeSettings(paths.settings, settings);
+    }
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
     const jason = cliAt(executable, env);
     const cli = loggedCli(jason, log);
@@ -333,6 +341,16 @@ async function run(): Promise<void> {
         changed: () => current?.webContents.send(eventChannels['setup.changed']),
         ...loggedModels(log),
     });
+    const refusedTheme = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
+    const themeDeps = {
+        setSource: (choice: 'system' | 'light' | 'dark') => {
+            nativeTheme.themeSource = choice;
+            window.setBackgroundColor(nativeTheme.shouldUseDarkColors ? darkBackground : lightBackground);
+        },
+        write: (next: DesktopSettings) => writeSettings(paths.settings, next),
+    };
+    handle(ipcMain, 'theme.get', origin, () => settings.theme, refusedTheme);
+    handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refusedTheme);
     registerSetup(
         new Setup({
             paths,
@@ -467,6 +485,9 @@ function keepElectronUnderData(): void {
 // --no-sandbox, which an AppImage's launcher adds where the system refuses the sandbox, says why once Electron is ready
 // and quits, with no lock taken, no copy made, no jason started and no window made (`sandbox.ts`).
 const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), process.argv, linuxForm());
+// Whether this installation is new is read next: before Electron makes its profile under the data directory, before the
+// single-instance lock, before anything is written there, on either start below.
+const installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {
@@ -501,6 +522,6 @@ function startDesktop(): void {
         });
         app.on('activate', () => showWindow());
         app.on('window-all-closed', () => app.quit());
-        void app.whenReady().then(run);
+        void app.whenReady().then(() => run(installationWasNew));
     }
 }

@@ -222,6 +222,9 @@ export interface DesktopReplyAccount {
     status: string;
 }
 
+/** A channel Reply lists accounts for. */
+export type DesktopReplyChannel = 'email' | 'linkedin';
+
 /** The Reply connection: the Reply CLI, its sign-in, and whether Jason's Reply plugin is set up to use it. */
 export interface DesktopReply {
     /** Whether the Reply CLI was found, its version, and the `programId` that installs it when it was not. */
@@ -232,6 +235,10 @@ export interface DesktopReply {
     /** Whether the runtime has the Reply plugin set up with this sign-in. */
     wired: boolean;
     accounts: DesktopReplyAccount[];
+    /** The channels the Reply CLI says are not in this account's plan or role. */
+    absent: DesktopReplyChannel[];
+    /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
+    unread: DesktopReplyChannel[];
 }
 
 /**
@@ -294,6 +301,15 @@ export interface JasonDesktop {
     platform: 'darwin' | 'win32' | 'linux';
     /** Calls `handler` with each command; the function it returns stops that. */
     onCommand(handler: (command: DesktopCommand) => void): () => void;
+    theme: {
+        /** The theme the desktop keeps, or null when the person never told it one; the page reads it before its first paint. */
+        get(): Promise<'system' | 'light' | 'dark' | null>;
+        /**
+         * Tells the desktop the theme the person chose, `system`, `light` or `dark`, which it keeps and shows in its own
+         * window and starting page. The page calls it as it starts and whenever the choice changes.
+         */
+        set(choice: 'system' | 'light' | 'dark'): Promise<void>;
+    };
     chat: {
         /**
          * Starts a turn of the conversation `chatId`, an id `chat.create` or `chat.list` gave; null once started, or a

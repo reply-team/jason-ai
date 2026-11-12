@@ -11,7 +11,7 @@ import { permissionAllowed } from '../src/permissions.ts';
 import { findOnPath, launchOf, npmScript } from '../src/program-path.ts';
 import { pathOf, withPath } from '../src/programs.ts';
 import { hosts, keyedFolder, keyProviders, keyWord, notTheChatYet, providerEnvironment, signInSentence, withoutKey } from '../src/providers-model.ts';
-import { isFeed, parseSettings } from '../src/settings.ts';
+import { isFeed, isTheme, parseSettings } from '../src/settings.ts';
 import { versionsDifferSentence } from '../src/setup.ts';
 import { pluginValid, runtimeVersionIn, statusFacts, versionAtLeast, versionIn } from '../src/setup-model.ts';
 import { loginShell, loginShellOptions, pathFromOutput, withUsualPlaces } from '../src/shell-path.ts';
@@ -143,8 +143,8 @@ test('a log names a CLI verb by its closed list, never by its arguments', () => 
 });
 
 test('the feed setting is passed as --feed, and a feed the CLI would refuse is never kept', () => {
-    assert.deepEqual(feedArguments({ feed: null, skillsDeployedFor: null }), []);
-    assert.deepEqual(feedArguments({ feed: 'http://127.0.0.1:8/manifest.json', skillsDeployedFor: null }), ['--feed', 'http://127.0.0.1:8/manifest.json']);
+    assert.deepEqual(feedArguments({ feed: null, skillsDeployedFor: null, theme: null }), []);
+    assert.deepEqual(feedArguments({ feed: 'http://127.0.0.1:8/manifest.json', skillsDeployedFor: null, theme: null }), ['--feed', 'http://127.0.0.1:8/manifest.json']);
     assert.equal(isFeed('https://example.com/manifest.json'), true);
     assert.equal(isFeed('http://localhost:9/manifest.json'), true);
     assert.equal(isFeed('http://example.com/manifest.json'), false);
@@ -152,8 +152,17 @@ test('the feed setting is passed as --feed, and a feed the CLI would refuse is n
     assert.deepEqual(parseSettings(JSON.stringify({ feed: 'http://example.com/m.json', skills_deployed_for: '0.34.0-rc.1' })), {
         feed: null,
         skillsDeployedFor: '0.34.0-rc.1',
+        theme: null,
     });
-    assert.deepEqual(parseSettings('{'), { feed: null, skillsDeployedFor: null });
+    assert.deepEqual(parseSettings('{'), { feed: null, skillsDeployedFor: null, theme: null });
+});
+
+test('a theme is one of three words or nothing, and nothing is not Light', () => {
+    assert.equal(parseSettings(null).theme, null);
+    for (const choice of ['system', 'light', 'dark'] as const) assert.equal(parseSettings(JSON.stringify({ theme: choice })).theme, choice);
+    for (const word of ['sepia', '', 1, {}, null]) assert.equal(parseSettings(JSON.stringify({ theme: word })).theme, null);
+    assert.equal(isTheme('dark'), true);
+    assert.equal(isTheme('sepia'), false);
 });
 
 // ---- Finding and starting programs ---------------------------------------------------------------------------------

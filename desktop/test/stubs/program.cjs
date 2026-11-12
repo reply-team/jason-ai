@@ -54,8 +54,24 @@ if (process.env.STUB_HANG === name) {
     process.exit(0);
 } else if (name === 'reply' && said === 'auth login --with-token') {
     process.exit(stdin.trim() === '' ? 1 : 0);
-} else if (name === 'reply' && said === 'account list --json') {
-    process.stdout.write(JSON.stringify({ items: [] }));
+} else if (name === 'reply' && (said === 'account list --channel email --json' || said === 'account list --channel linkedin --json')) {
+    // Per channel, as reply-cli prints it: the items of that channel, or a refusal when the plan or role has none.
+    const channel = args[3];
+    const raw = process.env[`STUB_REPLY_ACCOUNTS_${channel.toUpperCase()}`];
+    // The endings reply-cli 0.20.0 has: JSON error line on stderr and exit 1 (--json), here the plan/role refusal, a
+    // network failure and an expired sign-in; an exit nobody explained; and an answer that is not a list.
+    const failing = { refused: 'access.feature_unavailable', network: 'reply.unavailable', expired: 'access.denied' };
+    if (Object.hasOwn(failing, raw ?? '')) {
+        process.stderr.write(JSON.stringify({ error: { code: failing[raw], title: 'Some words of the CLI that are never shown.' } }) + String.fromCharCode(10));
+        process.exitCode = 1;
+    } else if (raw === 'unexplained') {
+        process.stderr.write('something nobody explained' + String.fromCharCode(10));
+        process.exitCode = 7;
+    } else if (raw === 'garbage') {
+        process.stdout.write('not json');
+    } else {
+        process.stdout.write(JSON.stringify({ items: raw ? JSON.parse(raw) : [] }));
+    }
 } else if (name === 'reply' && said === 'skills install adapter --project --agent codex') {
     for (const skill of ['reply-cli', 'reply-api', 'campaign-launch']) {
         mkdirSync(join(process.cwd(), '.agents', 'skills', skill), { recursive: true });
