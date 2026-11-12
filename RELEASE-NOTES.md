@@ -30,6 +30,7 @@ The desktop's chat is fenced more tightly: it loads none of your own MCP servers
 - **The CLI refuses a person's word and changes to the installation inside a chat turn.** Every desktop chat turn carries `JASON_CONFINED`, and under it the CLI refuses, before any request, the commands that give your word or change this installation, with one sentence and exit 1. This is a higher bar, not a boundary: a program that holds the run token can still act as you.
 - **The desktop's Reply card acts on accounts through reply-cli's own `account` verbs**: connect, reconnect and the waiting list; an email account's daily limit; pause and resume of a LinkedIn account; unblock of a mailbox; and delete of either. Each change asks you first in a confirmation that names the account and the act; a connection link opens in your browser or is copied for you, and is never logged or kept. An agent's chat is refused these acts in every mode.
 - **A plugin's secret stays out of an AI role's agent.** A secret given through the runtime's environment, by either of the two ways the plugin guide offers, no longer reaches the agent a role starts.
+- **Full access** is a third mode in the desktop's chat, beside Ask first and Plan only, chosen from the menu beside the message box after a confirmation shown each time, with Cancel focused; Cancel keeps Ask first. In it the agent runs the commands Jason reads plainly without asking you. Anything else Jason holds as a card that waits thirty minutes and is then not run; what Ask first refuses is refused here too. Each grant works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes. It needs Claude Code 2.1.322 or later and is Claude Code only: Codex keeps its read-only sandbox. It is not offered for the Feed, whose turns carry lines that others wrote.
 
 ## Fixed since 0.36.0
 
@@ -81,8 +82,6 @@ a route names that account again, its reads and its stop are refused and it goes
 A search the provider had already ended when its campaign was archived ends as it ended, and through Reply its list
 stays at Reply with any people not yet read. A search whose start was under way when its campaign was archived has no
 record yet, so nothing stops it: whether Reply took the start is read at Reply.
-
-Full access, the chat's third mode, is not in this version: the menu shows it disabled. Its code is in the release, switched off, because in two readings its refusals did not hold against commands spelled another way.
 
 In Ask first, and in Plan only, the desktop's chat runs `jason audience preview`, `jason audience filter-values` and
 `jason audience availability` without a card, as in 0.36.0. Each one asks the provider, and nothing in Jason limits how
